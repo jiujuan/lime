@@ -869,6 +869,20 @@ describe("i18n namespace loader", () => {
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.canvasBreadcrumb.backHome",
       );
+      for (const key of [
+        "workspace.designCanvasSmoke.header.eyebrow",
+        "workspace.designCanvasSmoke.header.title",
+        "workspace.designCanvasSmoke.badge.artifactType",
+        "workspace.designCanvasSmoke.badge.workspaceBound",
+        "workspace.designCanvasSmoke.badge.workspaceUnbound",
+        "workspace.designCanvasSmoke.badge.imageTaskAutoRefresh",
+        "workspace.designCanvasSmoke.badge.imageTaskLive",
+        "workspace.designCanvasSmoke.badge.defaultProvider",
+        "workspace.designCanvasSmoke.badge.defaultModel",
+        "workspace.designCanvasSmoke.badge.analyzerConfidence",
+      ]) {
+        expect(resources[locale].workspace).toHaveProperty(key);
+      }
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.canvasAdapter.designPreview.visibleLayers",
       );

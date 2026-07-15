@@ -9,7 +9,7 @@ import type {
   AgentThreadItem,
   AgentThreadTurn,
 } from "../types";
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 

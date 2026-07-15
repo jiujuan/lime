@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import { ListChecks } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { AgentRuntimeEvidenceTaskIndex } from "@/lib/api/agentRuntime/evidenceTypes";
 import {
   buildModalityTaskIndexFacets,
@@ -11,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 const TASK_INDEX_FILTER_ALL_VALUE = "__all__";
+type AgentTranslate = TFunction<"agent", undefined>;
 
 function TaskIndexStatCard({
   title,
@@ -36,7 +39,13 @@ function TaskIndexStatCard({
   );
 }
 
-function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
+function TaskIndexItemCard({
+  item,
+  t,
+}: {
+  item: ModalityTaskIndexRow;
+  t: AgentTranslate;
+}) {
   return (
     <div className="min-w-0 rounded-lg border border-teal-200/80 bg-background/85 p-2.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -66,7 +75,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {item.threadId ? (
             <span className="min-w-0 break-all">
-              thread：
+              {t("agentChat.harness.taskIndex.field.thread")}
               <span className="ml-1 font-mono text-foreground">
                 {item.threadId}
               </span>
@@ -74,7 +83,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
           ) : null}
           {item.turnId ? (
             <span className="min-w-0 break-all">
-              turn：
+              {t("agentChat.harness.taskIndex.field.turn")}
               <span className="ml-1 font-mono text-foreground">
                 {item.turnId}
               </span>
@@ -82,7 +91,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
           ) : null}
           {item.contentId ? (
             <span className="min-w-0 break-all">
-              content：
+              {t("agentChat.harness.taskIndex.field.content")}
               <span className="ml-1 font-mono text-foreground">
                 {item.contentId}
               </span>
@@ -92,7 +101,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {item.skillId ? (
             <span className="min-w-0 break-all">
-              skill：
+              {t("agentChat.harness.taskIndex.field.skill")}
               <span className="ml-1 font-mono text-foreground">
                 {item.skillId}
               </span>
@@ -100,7 +109,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
           ) : null}
           {item.modelId ? (
             <span className="min-w-0 break-all">
-              model：
+              {t("agentChat.harness.taskIndex.field.model")}
               <span className="ml-1 font-mono text-foreground">
                 {item.modelId}
               </span>
@@ -108,7 +117,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
           ) : null}
           {item.executorBindingKey ? (
             <span className="min-w-0 break-all">
-              binding：
+              {t("agentChat.harness.taskIndex.field.binding")}
               <span className="ml-1 font-mono text-foreground">
                 {item.executorBindingKey}
               </span>
@@ -116,7 +125,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
           ) : null}
           {item.entryKey ? (
             <span className="min-w-0 break-all">
-              entry：
+              {t("agentChat.harness.taskIndex.field.entry")}
               <span className="ml-1 font-mono text-foreground">
                 {item.entryKey}
               </span>
@@ -125,7 +134,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
         </div>
         {item.estimatedCostClass || item.limitEventKind ? (
           <div className="break-all">
-            cost/limit：
+            {t("agentChat.harness.taskIndex.field.costLimit")}
             <span className="ml-1 font-mono text-foreground">
               {[item.estimatedCostClass, item.limitEventKind]
                 .filter(Boolean)
@@ -135,7 +144,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
         ) : null}
         {item.artifactPath ? (
           <div className="break-all">
-            artifact：
+            {t("agentChat.harness.taskIndex.field.artifact")}
             <span className="ml-1 font-mono text-foreground">
               {item.artifactPath}
             </span>
@@ -150,11 +159,13 @@ function TaskIndexFilterSelect({
   label,
   value,
   options,
+  allLabel,
   onChange,
 }: {
   label: string;
   value?: string;
   options: string[];
+  allLabel: string;
   onChange: (value?: string) => void;
 }) {
   return (
@@ -170,7 +181,7 @@ function TaskIndexFilterSelect({
           );
         }}
       >
-        <option value={TASK_INDEX_FILTER_ALL_VALUE}>全部</option>
+        <option value={TASK_INDEX_FILTER_ALL_VALUE}>{allLabel}</option>
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -186,6 +197,7 @@ export function HarnessTaskIndexSection({
 }: {
   index: AgentRuntimeEvidenceTaskIndex;
 }) {
+  const { t } = useTranslation("agent");
   const facets = buildModalityTaskIndexFacets(index);
   const rows = useMemo(() => buildModalityTaskIndexRows(index), [index]);
   const [filters, setFilters] = useState<ModalityTaskIndexQueryFilters>({});
@@ -221,40 +233,44 @@ export function HarnessTaskIndexSection({
     <div className="rounded-xl border border-teal-200 bg-teal-50/80 p-3">
       <div className="flex items-center gap-2 text-sm font-medium text-teal-950">
         <ListChecks className="h-4 w-4 text-teal-700" />
-        <span>多模态任务索引</span>
+        <span>{t("agentChat.harness.taskIndex.title")}</span>
       </div>
       <p className="mt-1 text-xs text-teal-800">
-        来自 modalityRuntimeContracts.snapshotIndex.taskIndex；用于按 thread /
-        turn / content / entry / executor / cost / limit 诊断非媒体任务，
-        不另建任务事实源。
+        {t("agentChat.harness.taskIndex.description")}
       </p>
 
       <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
         <TaskIndexStatCard
-          title="索引快照"
+          title={t("agentChat.harness.taskIndex.metric.snapshot.title")}
           value={`${index.snapshot_count}`}
-          hint={`items ${index.items.length}`}
+          hint={t("agentChat.harness.taskIndex.metric.snapshot.items", {
+            count: index.items.length,
+          })}
         />
         <TaskIndexStatCard
-          title="身份锚点"
+          title={t("agentChat.harness.taskIndex.metric.identity.title")}
           value={`${facets.identityAnchors.length}`}
           hint={
-            facets.identityAnchors.slice(0, 3).join(" / ") || "暂无 identity"
+            facets.identityAnchors.slice(0, 3).join(" / ") ||
+            t("agentChat.harness.taskIndex.metric.identity.empty")
           }
         />
         <TaskIndexStatCard
-          title="执行器维度"
+          title={t("agentChat.harness.taskIndex.metric.executor.title")}
           value={`${facets.executorDimensions.length}`}
           hint={
-            facets.executorDimensions.slice(0, 3).join(" / ") || "暂无 executor"
+            facets.executorDimensions.slice(0, 3).join(" / ") ||
+            t("agentChat.harness.taskIndex.metric.executor.empty")
           }
         />
         <TaskIndexStatCard
-          title="成本 / 限额"
+          title={t("agentChat.harness.taskIndex.metric.costLimit.title")}
           value={`${facets.costLimitDimensions.length}`}
           hint={
             facets.costLimitDimensions.slice(0, 3).join(" / ") ||
-            `quota low ${facets.quotaLowCount}`
+            t("agentChat.harness.taskIndex.metric.costLimit.quotaLow", {
+              count: facets.quotaLowCount,
+            })
           }
         />
       </div>
@@ -265,46 +281,53 @@ export function HarnessTaskIndexSection({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-medium text-teal-950">
-                  任务中心过滤列表
+                  {t("agentChat.harness.taskIndex.list.title")}
                 </div>
                 <p className="mt-0.5 text-xs text-teal-800">
-                  直接消费同一 taskIndex rows；用于把非媒体任务按身份、入口、
-                  执行器和成本/限额过滤，不另建索引。
+                  {t("agentChat.harness.taskIndex.list.description")}
                 </p>
               </div>
               <Badge variant="outline">
-                {filteredRows.length} / {rows.length}
+                {t("agentChat.harness.taskIndex.list.count", {
+                  filtered: filteredRows.length,
+                  total: rows.length,
+                })}
               </Badge>
             </div>
             <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
               <TaskIndexFilterSelect
-                label="入口"
+                label={t("agentChat.harness.taskIndex.filter.entry")}
                 value={filters.entryKey}
                 options={facets.entryKeys}
+                allLabel={t("agentChat.harness.taskIndex.filter.all")}
                 onChange={(value) => updateFilter("entryKey", value)}
               />
               <TaskIndexFilterSelect
-                label="内容"
+                label={t("agentChat.harness.taskIndex.filter.content")}
                 value={filters.contentId}
                 options={facets.contentIds}
+                allLabel={t("agentChat.harness.taskIndex.filter.all")}
                 onChange={(value) => updateFilter("contentId", value)}
               />
               <TaskIndexFilterSelect
-                label="执行器"
+                label={t("agentChat.harness.taskIndex.filter.executor")}
                 value={filters.executorKind}
                 options={facets.executorKinds}
+                allLabel={t("agentChat.harness.taskIndex.filter.all")}
                 onChange={(value) => updateFilter("executorKind", value)}
               />
               <TaskIndexFilterSelect
-                label="成本"
+                label={t("agentChat.harness.taskIndex.filter.cost")}
                 value={filters.costState}
                 options={facets.costStates}
+                allLabel={t("agentChat.harness.taskIndex.filter.all")}
                 onChange={(value) => updateFilter("costState", value)}
               />
               <TaskIndexFilterSelect
-                label="限额"
+                label={t("agentChat.harness.taskIndex.filter.limit")}
                 value={filters.limitState}
                 options={facets.limitStates}
+                allLabel={t("agentChat.harness.taskIndex.filter.all")}
                 onChange={(value) => updateFilter("limitState", value)}
               />
             </div>
@@ -314,7 +337,7 @@ export function HarnessTaskIndexSection({
                 className="mt-2 text-xs font-medium text-teal-800 underline-offset-4 hover:text-teal-950 hover:underline"
                 onClick={() => setFilters({})}
               >
-                清空过滤
+                {t("agentChat.harness.taskIndex.filter.clear")}
               </button>
             ) : null}
           </div>
@@ -324,16 +347,19 @@ export function HarnessTaskIndexSection({
               <TaskIndexItemCard
                 key={`${item.id}:${indexInList}`}
                 item={item}
+                t={t}
               />
             ))
           ) : (
             <div className="rounded-lg border border-dashed border-teal-200 bg-white p-3 text-xs text-teal-800">
-              当前过滤条件下没有匹配的任务索引行。
+              {t("agentChat.harness.taskIndex.list.empty")}
             </div>
           )}
           {filteredRows.length > visibleRows.length ? (
             <p className="text-xs text-teal-800">
-              仅展示前 {visibleRows.length} 条；请继续缩小过滤条件查看具体任务。
+              {t("agentChat.harness.taskIndex.list.truncated", {
+                count: visibleRows.length,
+              })}
             </p>
           ) : null}
         </div>

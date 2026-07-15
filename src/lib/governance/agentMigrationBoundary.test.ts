@@ -82,6 +82,28 @@ const DELETED_THREAD_STORE_PATHS = [
   "lime-rs/crates/thread-store/src/sqlite_runtime_store.rs",
 ];
 
+const DELETED_DEAD_SURFACE_PATHS = [
+  "lime-rs/crates/thread-store/src/subagent_tree.rs",
+  "lime-rs/crates/agent/src/team_runtime_governor.rs",
+];
+
+const RETIRED_AGENT_RUNTIME_TYPE_NAMES = [
+  "AgentRuntimeFrontmatterHookMatcher",
+  "AgentRuntimeFrontmatterHook",
+  "AgentRuntimeFrontmatterHooks",
+  "AgentRuntimeSpawnSubagentRequest",
+  "AgentRuntimeSpawnSubagentResponse",
+  "AgentRuntimeSendSubagentInputRequest",
+  "AgentRuntimeSendSubagentInputResponse",
+  "AgentRuntimeStatusSnapshot",
+  "AgentRuntimeWaitSubagentsRequest",
+  "AgentRuntimeWaitSubagentsResponse",
+  "AgentRuntimeResumeSubagentRequest",
+  "AgentRuntimeResumeSubagentResponse",
+  "AgentRuntimeCloseSubagentRequest",
+  "AgentRuntimeCloseSubagentResponse",
+];
+
 describe("Agent migration boundary", () => {
   it("agent-compat 必须保持物理删除", () => {
     expect(existsSync(repoPath("lime-rs/crates/agent-compat"))).toBe(false);
@@ -133,6 +155,43 @@ describe("Agent migration boundary", () => {
         (path) => /\/agent_[^/]+\.rs$/u.test(path),
       ),
     ).toEqual([]);
+  });
+
+  it("已删除的 dead roster/runtime surface 不得恢复", () => {
+    expect(
+      DELETED_DEAD_SURFACE_PATHS.filter((path) => existsSync(repoPath(path))),
+    ).toEqual([]);
+
+    const threadStoreSource = read("lime-rs/crates/thread-store/src/lib.rs");
+    expect(threadStoreSource).not.toContain("pub mod subagent_tree");
+
+    const agentSource = read("lime-rs/crates/agent/src/lib.rs");
+    expect(agentSource).not.toContain("team_runtime_governor");
+
+    const requestTypesSource = read("src/lib/api/agentRuntime/requestTypes.ts");
+    for (const typeName of RETIRED_AGENT_RUNTIME_TYPE_NAMES) {
+      expect(requestTypesSource, typeName).not.toContain(typeName);
+    }
+  });
+
+  it("Runtime session 不得恢复 app-data fallback 或 hydration helper", () => {
+    expect(
+      existsSync(
+        repoPath(
+          "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
+        ),
+      ),
+    ).toBe(false);
+
+    const runtimeFiles = filesUnder(
+      "lime-rs/crates/app-server/src/runtime",
+    ).filter((path) => path.endsWith(".rs"));
+    const leaks = runtimeFiles.filter((path) =>
+      /load_app_data_session|read_agent_session\(|\bmod session_hydration;/u.test(
+        read(path),
+      ),
+    );
+    expect(leaks).toEqual([]);
   });
 
   it("provider current owner 必须保留 OpenCode 风格中立 part 与集中 lowering", () => {

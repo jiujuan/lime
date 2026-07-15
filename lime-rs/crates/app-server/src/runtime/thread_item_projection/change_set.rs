@@ -213,11 +213,20 @@ fn merge_payload(
 
     match (previous, next) {
         (
-            ThreadItemPayload::AgentMessage { text: previous, .. },
-            ThreadItemPayload::AgentMessage { text, phase },
+            ThreadItemPayload::AgentMessage {
+                text: previous,
+                content_parts: previous_parts,
+                ..
+            },
+            ThreadItemPayload::AgentMessage {
+                text,
+                phase,
+                content_parts,
+            },
         ) => ThreadItemPayload::AgentMessage {
             text: merge_stream_text(previous, text),
             phase,
+            content_parts: merge_message_content_parts(previous_parts, content_parts),
         },
         (
             ThreadItemPayload::Plan {
@@ -392,6 +401,41 @@ fn merge_payload(
         },
         (_, next) => next,
     }
+}
+
+fn merge_message_content_parts(
+    mut previous: Vec<agent_protocol::MessageContentPart>,
+    next: Vec<agent_protocol::MessageContentPart>,
+) -> Vec<agent_protocol::MessageContentPart> {
+    for part in next {
+        match &part {
+            agent_protocol::MessageContentPart::Text { text } => {
+                if let Some(previous_text) = previous.iter_mut().find_map(|part| match part {
+                    agent_protocol::MessageContentPart::Text { text } => Some(text),
+                    _ => None,
+                }) {
+                    *previous_text = merge_stream_text(previous_text.clone(), text.clone());
+                    continue;
+                }
+            }
+            agent_protocol::MessageContentPart::Media { reference, .. } => {
+                if let Some(index) = previous.iter().position(|part| {
+                    matches!(
+                        part,
+                        agent_protocol::MessageContentPart::Media {
+                            reference: previous_reference,
+                            ..
+                        } if previous_reference.uri == reference.uri
+                    )
+                }) {
+                    previous[index] = part;
+                    continue;
+                }
+            }
+        }
+        previous.push(part);
+    }
+    previous
 }
 
 fn prefer_string(previous: String, next: String, placeholder: &str) -> String {

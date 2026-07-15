@@ -33,6 +33,12 @@ use tool_runtime::tool_executor::{
     RuntimeToolExecutorHandle, RuntimeToolPolicyErrorKind,
 };
 use tool_runtime::tool_lifecycle::ToolLifecycleEmitter;
+
+mod output_lifecycle;
+use output_lifecycle::{
+    end_output_item, finish_active_output_items, provider_output_item_id, start_output_item,
+    ProviderOutputFamily,
+};
 use tool_runtime::tool_result_projection::NormalizedToolOutput;
 
 const LOCAL_TOOL_ENVIRONMENT_ID: &str = "local";
@@ -107,11 +113,25 @@ pub enum CurrentProviderTurnEvent {
     ProviderTrace {
         event: ProviderTraceEvent,
     },
+    TextStart {
+        item_id: String,
+    },
     TextDelta {
+        item_id: String,
         text: String,
     },
+    TextEnd {
+        item_id: String,
+    },
+    ReasoningStart {
+        item_id: String,
+    },
     ReasoningDelta {
+        item_id: String,
         text: String,
+    },
+    ReasoningEnd {
+        item_id: String,
     },
     ToolInputDelta {
         tool_id: String,
@@ -175,9 +195,15 @@ where
                     text_output.push('\n');
                 }
                 text_output.push_str(MAX_REPLY_TURNS_REACHED_MESSAGE);
+                let item_id = format!("text-{turn_id}-max-turns");
+                on_event(CurrentProviderTurnEvent::TextStart {
+                    item_id: item_id.clone(),
+                });
                 on_event(CurrentProviderTurnEvent::TextDelta {
+                    item_id: item_id.clone(),
                     text: MAX_REPLY_TURNS_REACHED_MESSAGE.to_string(),
                 });
+                on_event(CurrentProviderTurnEvent::TextEnd { item_id });
                 return Ok(RuntimeReplyExecution::new(
                     text_output,
                     errors,
@@ -258,6 +284,8 @@ where
         let mut calls = Vec::new();
         let mut completed = false;
         let mut tool_arguments = HashMap::<String, String>::new();
+        let mut active_text_item_id = None;
+        let mut active_reasoning_item_id = None;
 
         loop {
             let event = next_provider_event(&mut stream, cancel_token.as_ref()).await;
@@ -304,7 +332,20 @@ where
                 emit_provider_trace(&mut on_event, provider_trace_metadata.as_ref(), event);
             }
             match event {
-                CanonicalLlmEvent::TextDelta { text, .. } => {
+                CanonicalLlmEvent::TextStart { id } => {
+                    let id =
+                        provider_output_item_id(&turn_id, attempt, ProviderOutputFamily::Text, &id);
+                    start_output_item(
+                        &mut active_text_item_id,
+                        id,
+                        ProviderOutputFamily::Text,
+                        &mut on_event,
+                        emitted_any,
+                    )?;
+                }
+                CanonicalLlmEvent::TextDelta { id, text } => {
+                    let id =
+                        provider_output_item_id(&turn_id, attempt, ProviderOutputFamily::Text, &id);
                     if let Some(event) = provider_trace_attempt
                         .as_mut()
                         .and_then(|trace| trace.first_text_delta_received(text.chars().count()))
@@ -314,12 +355,73 @@ where
                     emitted_any = true;
                     text_output.push_str(&text);
                     assistant_content.push(CurrentProviderContent::Text(text.clone()));
-                    on_event(CurrentProviderTurnEvent::TextDelta { text });
+                    start_output_item(
+                        &mut active_text_item_id,
+                        id.clone(),
+                        ProviderOutputFamily::Text,
+                        &mut on_event,
+                        emitted_any,
+                    )?;
+                    on_event(CurrentProviderTurnEvent::TextDelta { item_id: id, text });
                 }
-                CanonicalLlmEvent::ReasoningDelta { text, .. } => {
+                CanonicalLlmEvent::TextEnd { id } => {
+                    let id =
+                        provider_output_item_id(&turn_id, attempt, ProviderOutputFamily::Text, &id);
+                    end_output_item(
+                        &mut active_text_item_id,
+                        id,
+                        ProviderOutputFamily::Text,
+                        &mut on_event,
+                        emitted_any,
+                    )?;
+                }
+                CanonicalLlmEvent::ReasoningStart { id } => {
+                    let id = provider_output_item_id(
+                        &turn_id,
+                        attempt,
+                        ProviderOutputFamily::Reasoning,
+                        &id,
+                    );
+                    start_output_item(
+                        &mut active_reasoning_item_id,
+                        id,
+                        ProviderOutputFamily::Reasoning,
+                        &mut on_event,
+                        emitted_any,
+                    )?;
+                }
+                CanonicalLlmEvent::ReasoningDelta { id, text } => {
+                    let id = provider_output_item_id(
+                        &turn_id,
+                        attempt,
+                        ProviderOutputFamily::Reasoning,
+                        &id,
+                    );
                     emitted_any = true;
                     assistant_content.push(CurrentProviderContent::Reasoning(text.clone()));
-                    on_event(CurrentProviderTurnEvent::ReasoningDelta { text });
+                    start_output_item(
+                        &mut active_reasoning_item_id,
+                        id.clone(),
+                        ProviderOutputFamily::Reasoning,
+                        &mut on_event,
+                        emitted_any,
+                    )?;
+                    on_event(CurrentProviderTurnEvent::ReasoningDelta { item_id: id, text });
+                }
+                CanonicalLlmEvent::ReasoningEnd { id } => {
+                    let id = provider_output_item_id(
+                        &turn_id,
+                        attempt,
+                        ProviderOutputFamily::Reasoning,
+                        &id,
+                    );
+                    end_output_item(
+                        &mut active_reasoning_item_id,
+                        id,
+                        ProviderOutputFamily::Reasoning,
+                        &mut on_event,
+                        emitted_any,
+                    )?;
                 }
                 CanonicalLlmEvent::ToolInputDelta { id, name, text } => {
                     emitted_any = true;
@@ -346,7 +448,14 @@ where
                         usage: current_provider_usage(usage),
                     });
                 }
-                CanonicalLlmEvent::Finish { .. } => completed = true,
+                CanonicalLlmEvent::Finish { .. } => {
+                    finish_active_output_items(
+                        &mut active_reasoning_item_id,
+                        &mut active_text_item_id,
+                        &mut on_event,
+                    );
+                    completed = true;
+                }
                 CanonicalLlmEvent::ProviderError { message, .. } => {
                     if let Some(trace) = provider_trace_attempt.as_ref() {
                         emit_provider_trace(
@@ -362,10 +471,6 @@ where
                     return Err(RuntimeReplyAttemptError::new(message, emitted_any));
                 }
                 CanonicalLlmEvent::StepStart { .. }
-                | CanonicalLlmEvent::TextStart { .. }
-                | CanonicalLlmEvent::TextEnd { .. }
-                | CanonicalLlmEvent::ReasoningStart { .. }
-                | CanonicalLlmEvent::ReasoningEnd { .. }
                 | CanonicalLlmEvent::ToolInputStart { .. }
                 | CanonicalLlmEvent::ToolInputEnd { .. }
                 | CanonicalLlmEvent::ToolResult { .. }
@@ -373,6 +478,11 @@ where
                 | CanonicalLlmEvent::StepFinish { .. } => {}
             }
         }
+        finish_active_output_items(
+            &mut active_reasoning_item_id,
+            &mut active_text_item_id,
+            &mut on_event,
+        );
 
         if !assistant_content.is_empty() {
             initial_messages.push(CurrentProviderMessage::assistant(assistant_content));

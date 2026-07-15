@@ -244,7 +244,7 @@ describe("appServerEventStream", () => {
       request_id: "approval-1",
       action_type: "ask_user",
       approved: true,
-      permission_mode: "allow_once",
+      permission_mode: "approved",
     });
   });
 

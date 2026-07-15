@@ -385,7 +385,18 @@ fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
     let mut reasoning_state = reasoning_events::ReasoningEventState::default();
 
     emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        &RuntimeAgentEvent::ThinkingStart {
+            item_id: "reasoning-1".to_string(),
+        },
+        &mut sink,
+        &mut mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_state,
+    )
+    .expect("thinking start should emit");
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
         &RuntimeAgentEvent::ThinkingDelta {
+            item_id: "reasoning-1".to_string(),
             text: "先理解目标".to_string(),
         },
         &mut sink,
@@ -394,8 +405,16 @@ fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
         &mut reasoning_state,
     )
     .expect("thinking delta should emit");
-    emit_reasoning_finish(&mut reasoning_state, "completed", &mut sink)
-        .expect("reasoning finish should emit");
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        &RuntimeAgentEvent::ThinkingEnd {
+            item_id: "reasoning-1".to_string(),
+        },
+        &mut sink,
+        &mut mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_state,
+    )
+    .expect("thinking end should emit");
 
     let event_types = sink
         .events
@@ -411,7 +430,8 @@ fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
             "reasoning.ended",
         ]
     );
-    assert_eq!(sink.events[0].payload["reasoningId"], "runtime-thinking");
+    assert_eq!(sink.events[0].payload["reasoningId"], "reasoning-1");
+    assert_eq!(sink.events[1].payload["itemId"], "reasoning-1");
     assert_eq!(sink.events[1].payload["delta"], "先理解目标");
     assert_eq!(sink.events[2].payload["text"], "先理解目标");
     assert_eq!(sink.events[3].payload["status"], "completed");
@@ -425,7 +445,18 @@ fn runtime_agent_message_emits_its_own_terminal_before_turn_terminal() {
     let mut reasoning_state = reasoning_events::ReasoningEventState::default();
 
     emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        &RuntimeAgentEvent::TextStart {
+            item_id: "message-1".to_string(),
+        },
+        &mut sink,
+        &mut mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_state,
+    )
+    .expect("message start should emit");
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
         &RuntimeAgentEvent::TextDelta {
+            item_id: "message-1".to_string(),
             text: "answer".to_string(),
         },
         &mut sink,
@@ -434,10 +465,16 @@ fn runtime_agent_message_emits_its_own_terminal_before_turn_terminal() {
         &mut reasoning_state,
     )
     .expect("message delta should emit");
-    emit_proposed_plan_parser_flush(&mut proposed_plan_parser, &mut sink)
-        .expect("parser flush should emit");
-    emit_agent_message_finish(&proposed_plan_parser, "completed", &mut sink)
-        .expect("message completion should emit");
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        &RuntimeAgentEvent::TextEnd {
+            item_id: "message-1".to_string(),
+        },
+        &mut sink,
+        &mut mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_state,
+    )
+    .expect("message end should emit");
     sink.emit(RuntimeEvent::new("turn.completed", json!({})))
         .expect("turn completion should emit");
 
@@ -450,6 +487,108 @@ fn runtime_agent_message_emits_its_own_terminal_before_turn_terminal() {
     );
     assert_eq!(sink.events[1].payload["status"], "completed");
     assert_eq!(sink.events[1].payload["phase"], "final_answer");
+    assert_eq!(sink.events[1].payload["itemId"], "message-1");
+}
+
+#[test]
+fn runtime_output_items_keep_distinct_provider_identities() {
+    let mut sink = TestRuntimeEventSink::default();
+    let mut mirror = coding_events::CodingEventMirror::default();
+    let mut parser = proposed_plan_parser::ProposedPlanParser::default();
+    let mut reasoning_state = reasoning_events::ReasoningEventState::default();
+    let events = [
+        RuntimeAgentEvent::ThinkingStart {
+            item_id: "reasoning-1".to_string(),
+        },
+        RuntimeAgentEvent::ThinkingDelta {
+            item_id: "reasoning-1".to_string(),
+            text: "first reasoning".to_string(),
+        },
+        RuntimeAgentEvent::ThinkingEnd {
+            item_id: "reasoning-1".to_string(),
+        },
+        RuntimeAgentEvent::TextStart {
+            item_id: "message-1".to_string(),
+        },
+        RuntimeAgentEvent::TextDelta {
+            item_id: "message-1".to_string(),
+            text: "first answer".to_string(),
+        },
+        RuntimeAgentEvent::TextEnd {
+            item_id: "message-1".to_string(),
+        },
+        RuntimeAgentEvent::ThinkingStart {
+            item_id: "reasoning-2".to_string(),
+        },
+        RuntimeAgentEvent::ThinkingDelta {
+            item_id: "reasoning-2".to_string(),
+            text: "second reasoning".to_string(),
+        },
+        RuntimeAgentEvent::ThinkingEnd {
+            item_id: "reasoning-2".to_string(),
+        },
+        RuntimeAgentEvent::TextStart {
+            item_id: "message-2".to_string(),
+        },
+        RuntimeAgentEvent::TextDelta {
+            item_id: "message-2".to_string(),
+            text: "second answer".to_string(),
+        },
+        RuntimeAgentEvent::TextEnd {
+            item_id: "message-2".to_string(),
+        },
+    ];
+
+    for event in &events {
+        emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+            event,
+            &mut sink,
+            &mut mirror,
+            &mut parser,
+            &mut reasoning_state,
+        )
+        .expect("provider output item should map");
+    }
+
+    let item_events = sink
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.event_type.as_str(),
+                "reasoning.started"
+                    | "reasoning.delta"
+                    | "reasoning.final"
+                    | "reasoning.ended"
+                    | "message.delta"
+                    | "message.completed"
+            )
+        })
+        .map(|event| {
+            (
+                event.event_type.as_str(),
+                event.payload["itemId"].as_str().expect("itemId"),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        item_events,
+        vec![
+            ("reasoning.started", "reasoning-1"),
+            ("reasoning.delta", "reasoning-1"),
+            ("reasoning.final", "reasoning-1"),
+            ("reasoning.ended", "reasoning-1"),
+            ("message.delta", "message-1"),
+            ("message.completed", "message-1"),
+            ("reasoning.started", "reasoning-2"),
+            ("reasoning.delta", "reasoning-2"),
+            ("reasoning.final", "reasoning-2"),
+            ("reasoning.ended", "reasoning-2"),
+            ("message.delta", "message-2"),
+            ("message.completed", "message-2"),
+        ]
+    );
 }
 
 #[test]
@@ -463,7 +602,7 @@ fn canceled_runtime_agent_message_uses_interrupted_item_status() {
         sink.emit(event).expect("message delta should emit");
     }
 
-    emit_agent_message_finish(&parser, "interrupted", &mut sink)
+    emit_agent_message_finish(&mut parser, "interrupted", &mut sink)
         .expect("message interruption should emit");
 
     assert_eq!(sink.events[1].event_type, "message.completed");

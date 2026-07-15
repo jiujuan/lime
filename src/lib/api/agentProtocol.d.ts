@@ -1,5 +1,9 @@
 import { type QueuedTurnSnapshot } from "./queuedTurn";
+import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type {
+  AgentApprovalPolicy,
+  AgentExecutionStrategy,
+  AgentSandboxPolicy,
   AgentSessionExecutionRuntimeCostState,
   AgentSessionExecutionRuntimeLimitEvent,
   AgentSessionExecutionRuntimeLimitState,
@@ -8,14 +12,10 @@ import type {
   AgentTurnOutputSchemaRuntime,
 } from "./agentExecutionRuntime";
 import type {
-  AgentApprovalPolicy,
-  AgentExecutionStrategy,
-  AgentSandboxPolicy,
   AutoContinueRequestPayload,
   ImageInput,
-  RuntimeSearchMode,
   RuntimeProviderConfig,
-} from "./agentRuntime/types";
+} from "./agentRuntime/sessionTypes";
 import type { AppServerAgentSessionTurnStartParams } from "./appServer";
 export interface AgentContextTraceStep {
   stage: string;

@@ -48,9 +48,6 @@ import {
   LIVE_TAIL_COMMIT_TABLE_TAIL,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
-  MULTI_AGENT_TEAM_DONE_TEXT,
-  MULTI_AGENT_TEAM_PROMPT,
-  MULTI_AGENT_TEAM_SUMMARY_TEXT,
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
@@ -77,7 +74,6 @@ import {
   WEB_TOOLS_BROKEN_MARKDOWN_TEXT,
   WEB_TOOLS_RENDERING_DONE_TEXT,
   WEB_TOOLS_RENDERING_PROMPT,
-  renderMultiAgentTeamBackendEvents,
   renderSkillsRuntimeBackendEvents,
   SKILLS_RUNTIME_DONE_TEXT,
   SKILLS_RUNTIME_EXPLICIT_DONE_TEXT,
@@ -268,7 +264,6 @@ export function writeFixtureBackend(backendPath, options = {}) {
       ...EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
       promptFlagName: "isExpertPanelSkillsRuntimePrompt",
     });
-  const multiAgentTeamBackendEvents = renderMultiAgentTeamBackendEvents();
   fs.writeFileSync(
     backendPath,
     `#!/usr/bin/env node
@@ -441,7 +436,6 @@ if (input.kind === "turnStart") {
   const isWebToolsRenderingPrompt = inputText.includes("${WEB_TOOLS_RENDERING_PROMPT}");
   const isMcpStructuredContentPrompt = inputText.includes("${MCP_STRUCTURED_CONTENT_PROMPT}");
   const isMediaReferencePrompt = inputText.includes("${MEDIA_REFERENCE_PROMPT}");
-  const isMultiAgentTeamPrompt = inputText.includes("${MULTI_AGENT_TEAM_PROMPT}");
   const isManualEnableSkillsRuntimePrompt = inputText.includes("${SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT}");
   const isExpertPanelSkillsRuntimePrompt = inputText.includes("${EXPERT_SKILLS_RUNTIME_PANEL_PROMPT}");
   const isExpertSkillsRuntimePrompt =
@@ -476,9 +470,7 @@ if (input.kind === "turnStart") {
             ? "${MCP_STRUCTURED_CONTENT_DONE_TEXT}"
               : isMediaReferencePrompt
                 ? "${MEDIA_REFERENCE_DONE_TEXT}"
-                : isMultiAgentTeamPrompt
-                  ? "${MULTI_AGENT_TEAM_DONE_TEXT}"
-                  : isSkillsRuntimePrompt
+                : isSkillsRuntimePrompt
                     ? "${SKILLS_RUNTIME_DONE_TEXT}"
                     : isExplicitSkillsRuntimePrompt
                       ? "${SKILLS_RUNTIME_EXPLICIT_DONE_TEXT}"
@@ -500,7 +492,6 @@ if (input.kind === "turnStart") {
     isWebToolsRenderingPrompt ||
     isMcpStructuredContentPrompt ||
     isMediaReferencePrompt ||
-    isMultiAgentTeamPrompt ||
     isSkillsRuntimePrompt ||
     isExplicitSkillsRuntimePrompt ||
     isManualEnableSkillsRuntimePrompt ||
@@ -646,9 +637,7 @@ ${renderApprovalRequestResumeTurnStartScript()}
               ? "我先调用 MCP docs 诊断工具，并只把用户答案放在 structuredContent。\\n"
               : isMediaReferencePrompt
                 ? "${MEDIA_REFERENCE_SUMMARY_TEXT}：\\n"
-                : isMultiAgentTeamPrompt
-                  ? "我会在当前主线程内编排多 Agent 团队，不创建新的顶层历史分类。\\n"
-                  : isSkillsRuntimePrompt
+                : isSkillsRuntimePrompt
                     ? "我先搜索 Skills metadata，再按需加载单个 SKILL.md。\\n"
                     : isExplicitSkillsRuntimePrompt
                       ? "我识别到显式 Skill 提及，仍先检索 metadata，再按需加载单个 SKILL.md。\\n"
@@ -707,9 +696,7 @@ ${renderApprovalRequestResumeTurnStartScript()}
           ? "MCP structuredContent 展示验证完成。\\n"
             : isMediaReferencePrompt
               ? ""
-              : isMultiAgentTeamPrompt
-                ? "${MULTI_AGENT_TEAM_SUMMARY_TEXT}：研究、撰写、复核都记录为 parent Thread 的团队事实，子代理只作为当前回合执行上下文。\\n"
-                : isSkillsRuntimePrompt
+              : isSkillsRuntimePrompt
                   ? ${JSON.stringify(SKILLS_RUNTIME_SCENARIO.fixtureText)}
                   : isExplicitSkillsRuntimePrompt
                     ? ${JSON.stringify(SKILLS_RUNTIME_EXPLICIT_SCENARIO.fixtureText)}
@@ -771,6 +758,23 @@ ${renderApprovalRequestResumeTurnStartScript()}
       : initialEvents,
   );
   await sleep(120);
+  if (hasProcessPrelude && initialMessageText.length > 0) {
+    emitEvents([
+      {
+        type: "message.completed",
+        payload: {
+          ...messageDeltaPayload(
+            initialMessageText,
+            "commentary",
+            commentaryItemId
+          ),
+          role: "assistant",
+          status: "completed"
+        }
+      }
+    ]);
+    await sleep(80);
+  }
   if (isTerminalFailedAfterAnswerPrompt) {
     appendLedgerEntry({
       kind: "terminalFailedAfterAnswerTurnFailed",
@@ -941,6 +945,23 @@ ${renderApprovalRequestResumeTurnStartScript()}
   if (isMediaReferencePrompt) {
     emitEvents([
       {
+        type: "item.started",
+        payload: {
+          item: {
+            id: "agent-media-reference-1",
+            thread_id: currentThreadId(),
+            threadId: currentThreadId(),
+            turn_id: currentTurnId(),
+            turnId: currentTurnId(),
+            type: "agent_message",
+            role: "assistant",
+            phase: "final_answer",
+            status: "in_progress",
+            text: ""
+          }
+        }
+      },
+      {
         type: "item.completed",
         payload: {
           item: {
@@ -992,7 +1013,6 @@ ${renderApprovalRequestResumeTurnStartScript()}
     skillsRuntimeBackendEvents,
     explicitSkillsRuntimeBackendEvents,
     manualEnableSkillsRuntimeBackendEvents,
-    multiAgentTeamBackendEvents,
     expertSkillsRuntimeBackendEvents,
     expertPanelSkillsRuntimeBackendEvents,
   })}

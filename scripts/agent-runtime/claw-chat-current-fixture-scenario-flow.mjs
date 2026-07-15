@@ -26,10 +26,6 @@ import {
   LIVE_TAIL_COMMIT_SCENARIO,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
-  MULTI_AGENT_TEAM_DONE_TEXT,
-  MULTI_AGENT_TEAM_PROMPT,
-  MULTI_AGENT_TEAM_SCENARIO,
-  MULTI_AGENT_TEAM_SUMMARY_TEXT,
   NEWS_PROMPT,
   PLAIN_IMAGE_INTENT_SCENARIO,
   PLAN_DONE_TEXT,
@@ -103,7 +99,6 @@ import { verifyPlanHistoryHydrate } from "./claw-chat-current-fixture-plan-histo
 import { runRightSurfaceVisualMatrix } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import { runWebToolsRenderingScenario } from "./claw-chat-current-fixture-web-tools-rendering.mjs";
 import {
-  exportMultiAgentTeamEvidencePack,
   runEventReadProbe,
   waitForSessionReadCanceled,
   waitForSessionReadCompleted,
@@ -739,87 +734,6 @@ export async function executeScenarioFlow({
       );
     summary.readModelMcpStructuredContentCompleted =
       readModelMcpStructuredContentCompleted.summary;
-  } else if (options.scenario === MULTI_AGENT_TEAM_SCENARIO) {
-    logStage("send-multi-agent-team-prompt-from-gui");
-    summary.multiAgentTeamInputSend = sanitizeJson(
-      await sendPromptFromGui(page, options, MULTI_AGENT_TEAM_PROMPT),
-    );
-
-    logStage("wait-multi-agent-team-backend-turn-start");
-    const multiAgentTeamBackendTurn = await waitForBackendLedgerTurnStart(
-      runtimeEnv.backendLedgerPath,
-      MULTI_AGENT_TEAM_PROMPT,
-      options,
-    );
-    const multiAgentTeamSessionId =
-      multiAgentTeamBackendTurn.entry.sessionId ?? SESSION_ID;
-    const multiAgentTeamTurnId = multiAgentTeamBackendTurn.entry.turnId ?? null;
-
-    logStage("wait-gui-multi-agent-team-completed");
-    summary.guiMultiAgentTeamCompleted = sanitizeJson(
-      await waitForGuiChatCompleted(page, options, {
-        prompt: MULTI_AGENT_TEAM_PROMPT,
-        doneText: MULTI_AGENT_TEAM_DONE_TEXT,
-        summaryText: MULTI_AGENT_TEAM_SUMMARY_TEXT,
-      }),
-    );
-
-    logStage("wait-read-model-multi-agent-team-completed");
-    const readModelMultiAgentTeamCompleted = await waitForSessionReadCompleted(
-      page,
-      options,
-      appServerRequests,
-      {
-        sessionId: multiAgentTeamSessionId,
-        prompt: MULTI_AGENT_TEAM_PROMPT,
-        doneText: MULTI_AGENT_TEAM_DONE_TEXT,
-        summaryText: MULTI_AGENT_TEAM_SUMMARY_TEXT,
-      },
-    );
-    const serializedReadModel = JSON.stringify(
-      readModelMultiAgentTeamCompleted || {},
-    );
-    summary.readModelMultiAgentTeamCompleted = sanitizeJson({
-      detailItemCount: Array.isArray(
-        readModelMultiAgentTeamCompleted?.detail?.items,
-      )
-        ? readModelMultiAgentTeamCompleted.detail.items.length
-        : null,
-      latestTurnStatus:
-        readModelMultiAgentTeamCompleted?.detail?.thread_read?.runtime_summary
-          ?.latestTurnStatus ??
-        readModelMultiAgentTeamCompleted?.detail?.thread_read?.status ??
-        readModelMultiAgentTeamCompleted?.detail?.status ??
-        null,
-      includesPrompt: serializedReadModel.includes(MULTI_AGENT_TEAM_PROMPT),
-      includesAssistantDone: serializedReadModel.includes(
-        MULTI_AGENT_TEAM_DONE_TEXT,
-      ),
-      includesAssistantSummary: serializedReadModel.includes(
-        MULTI_AGENT_TEAM_SUMMARY_TEXT,
-      ),
-      includesTeamSummary: serializedReadModel.includes(
-        MULTI_AGENT_TEAM_SUMMARY_TEXT,
-      ),
-      includesChildThreads:
-        serializedReadModel.includes("fixture-team-child-researcher") ||
-        serializedReadModel.includes("fixture-team-child-reviewer"),
-      forbiddenAgentFirstHistory:
-        serializedReadModel.includes("subagentHistory") ||
-        serializedReadModel.includes("subagent_history") ||
-        serializedReadModel.includes("subagentSessionHistory"),
-    });
-
-    logStage("export-multi-agent-team-evidence-pack");
-    const evidencePackMultiAgentTeam = await exportMultiAgentTeamEvidencePack(
-      page,
-      appServerRequests,
-      {
-        sessionId: multiAgentTeamSessionId,
-        turnId: multiAgentTeamTurnId,
-      },
-    );
-    summary.evidencePackMultiAgentTeam = evidencePackMultiAgentTeam.summary;
   } else if (options.scenario === "skills-runtime") {
     Object.assign(
       summary,
@@ -972,7 +886,6 @@ export async function executeScenarioFlow({
     options.scenario !== APPROVAL_REQUEST_FULL_ACCESS_SCENARIO &&
     options.scenario !== "web-tools-rendering" &&
     options.scenario !== "mcp-structured-content" &&
-    options.scenario !== MULTI_AGENT_TEAM_SCENARIO &&
     options.scenario !== "skills-runtime" &&
     options.scenario !== "expert-skills-runtime" &&
     options.scenario !== "expert-plaza-skills-runtime" &&

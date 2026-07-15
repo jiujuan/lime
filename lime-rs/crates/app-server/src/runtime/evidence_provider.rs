@@ -240,7 +240,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
 #[derive(Debug, Default)]
 struct TeamFactsSummary {
     event_type_breakdown: BTreeMap<String, usize>,
-    parent_session_ids: Vec<String>,
+    parent_thread_ids: Vec<String>,
     child_session_ids: Vec<String>,
     thread_ids: Vec<String>,
     turn_ids: Vec<String>,
@@ -289,9 +289,9 @@ fn team_facts_summary(events: &[AgentEvent]) -> Value {
         }
 
         collect_team_fact_strings(
-            &mut summary.parent_session_ids,
+            &mut summary.parent_thread_ids,
             event,
-            &["parentSessionId", "parent_session_id"],
+            &["parentThreadId", "parent_thread_id"],
         );
         collect_team_fact_strings(
             &mut summary.child_session_ids,
@@ -354,7 +354,7 @@ fn team_facts_summary(events: &[AgentEvent]) -> Value {
         "handoffCount": summary.handoff_count,
         "workerNotificationCount": summary.worker_notification_count,
         "reviewLaneCount": summary.review_lane_count,
-        "parentSessionIds": summary.parent_session_ids,
+        "parentThreadIds": summary.parent_thread_ids,
         "childSessionIds": summary.child_session_ids,
         "threadIds": summary.thread_ids,
         "turnIds": summary.turn_ids,

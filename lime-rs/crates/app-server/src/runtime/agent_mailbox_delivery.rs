@@ -441,6 +441,9 @@ impl RuntimeCore {
             let Some(message) = expected_messages.get(message_id).copied() else {
                 continue;
             };
+            if record.event.event_type != mailbox_message_event_type(message.kind) {
+                continue;
+            }
             if !mailbox_event_matches_message(&record.event, message) {
                 return Err(RuntimeCoreError::Backend(format!(
                     "durable mailbox event {} conflicts with pending delivery",
@@ -553,11 +556,7 @@ fn mailbox_event_matches_message(
     };
     let message_kind = mailbox_message_kind_str(message.kind);
     let result_status = message.result_status.map(mailbox_result_status_str);
-    event.event_type
-        == match message.kind {
-            thread_store::AgentMailboxMessageKind::Message => "message.created",
-            thread_store::AgentMailboxMessageKind::Result => "message.delta",
-        }
+    event.event_type == mailbox_message_event_type(message.kind)
         && match message.delivery_mode {
             AgentMailboxDeliveryMode::QueueOnly => event.turn_id.is_some(),
             AgentMailboxDeliveryMode::TriggerTurn => {
@@ -602,6 +601,13 @@ fn mailbox_message_kind_str(kind: thread_store::AgentMailboxMessageKind) -> &'st
     match kind {
         thread_store::AgentMailboxMessageKind::Message => "message",
         thread_store::AgentMailboxMessageKind::Result => "result",
+    }
+}
+
+fn mailbox_message_event_type(kind: thread_store::AgentMailboxMessageKind) -> &'static str {
+    match kind {
+        thread_store::AgentMailboxMessageKind::Message => "message.created",
+        thread_store::AgentMailboxMessageKind::Result => "message.delta",
     }
 }
 

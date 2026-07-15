@@ -1,6 +1,6 @@
 import React from "react";
 import { ExternalLink, FolderOpen, RefreshCw } from "lucide-react";
-import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/types";
+import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/sessionTypes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ManagedObjectiveAutomationProjection } from "./managedObjectiveAutomationProjection";

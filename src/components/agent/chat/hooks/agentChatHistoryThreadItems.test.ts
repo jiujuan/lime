@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 
 import { hydrateSessionDetailMessages } from "./agentChatHistory";
 import { mergeThreadItemReasoningIntoMessages } from "./agentChatHistoryReasoning";
@@ -209,11 +209,13 @@ describe("agentChatHistoryThreadItems", () => {
       (message) => message.role === "assistant",
     );
     const thinkingParts =
-      assistantMessage?.contentParts?.filter((part) => part.type === "thinking") ??
-      [];
+      assistantMessage?.contentParts?.filter(
+        (part) => part.type === "thinking",
+      ) ?? [];
     const toolParts =
-      assistantMessage?.contentParts?.filter((part) => part.type === "tool_use") ??
-      [];
+      assistantMessage?.contentParts?.filter(
+        (part) => part.type === "tool_use",
+      ) ?? [];
 
     expect(thinkingParts).toHaveLength(1);
     expect(thinkingParts[0]).toMatchObject({

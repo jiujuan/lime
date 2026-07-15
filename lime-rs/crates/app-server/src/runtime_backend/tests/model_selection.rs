@@ -827,3 +827,87 @@ fn session_extension_data_provider_routing_is_used_as_session_default() {
     assert_eq!(selection.model, "claude-sonnet-4");
     assert_eq!(selection.source, "session_default");
 }
+
+#[test]
+fn effective_child_options_pin_session_default_without_copying_session_metadata() {
+    let request = request_with_session_metadata(json!({
+        "providerSelector": "session-provider",
+        "modelName": "session-model",
+        "unrelatedLegacyMetadata": "must-not-be-copied"
+    }));
+
+    let options = effective_runtime_options_for_turn(&request, false).expect("effective options");
+    let runtime_request = options.runtime_request.expect("effective runtime request");
+
+    assert_eq!(
+        runtime_request.provider_preference.as_deref(),
+        Some("session-provider")
+    );
+    assert_eq!(
+        runtime_request.model_preference.as_deref(),
+        Some("session-model")
+    );
+    assert_eq!(
+        runtime_request.workspace_id.as_deref(),
+        Some("workspace-main")
+    );
+    assert!(runtime_request
+        .metadata
+        .as_ref()
+        .is_none_or(|metadata| { metadata.get("unrelatedLegacyMetadata").is_none() }));
+}
+
+#[test]
+fn effective_child_options_pin_profile_route_reasoning_policy_and_workspace() {
+    let request = request_for_test(
+        "delegate",
+        Some(app_server_protocol::RuntimeRequest {
+            reasoning_effort: Some("minimal".to_string()),
+            working_dir: Some("/tmp/lime-profile-workspace/subdir".to_string()),
+            project_root: Some("/tmp/lime-profile-workspace".to_string()),
+            web_search: Some(true),
+            search_mode: Some(app_server_protocol::RuntimeSearchMode::Required),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
+        Some(json!({
+            "harness": {
+                "model_slots": {
+                    "coding": {
+                        "provider": "profile-provider",
+                        "model": "gpt-codex"
+                    }
+                }
+            }
+        })),
+    );
+
+    let options = effective_runtime_options_for_turn(&request, false).expect("effective options");
+    let runtime_request = options.runtime_request.expect("effective runtime request");
+
+    assert_eq!(
+        runtime_request.provider_preference.as_deref(),
+        Some("profile-provider")
+    );
+    assert_eq!(
+        runtime_request.model_preference.as_deref(),
+        Some("gpt-codex")
+    );
+    assert_eq!(runtime_request.reasoning_effort.as_deref(), Some("low"));
+    assert_eq!(
+        runtime_request.working_dir.as_deref(),
+        Some("/tmp/lime-profile-workspace/subdir")
+    );
+    assert_eq!(
+        runtime_request.workspace_root.as_deref(),
+        Some("/tmp/lime-profile-workspace")
+    );
+    assert_eq!(
+        runtime_request.project_root.as_deref(),
+        Some("/tmp/lime-profile-workspace")
+    );
+    assert_eq!(runtime_request.web_search, Some(true));
+    assert_eq!(
+        runtime_request.search_mode,
+        Some(app_server_protocol::RuntimeSearchMode::Required)
+    );
+}

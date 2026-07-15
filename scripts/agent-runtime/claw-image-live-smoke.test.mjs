@@ -115,6 +115,7 @@ describe("claw image live smoke guard", () => {
   it("does not revive the old presentation-unavailable half-success event", () => {
     const productionContent = [
       "lime-rs/crates/app-server/src/runtime_backend/image_command/mod.rs",
+      "lime-rs/crates/app-server/src/runtime_backend/image_command/events.rs",
       "src/lib/api/agentProtocol.ts",
       "src/lib/api/agentRuntime/appServerEventStream.ts",
       "src/components/agent/chat/hooks/agentStreamRuntimeHandler.ts",

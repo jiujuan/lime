@@ -1,4 +1,5 @@
 import type { MutableRefObject } from "react";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { normalizeQueuedTurnSnapshots } from "@/lib/api/queuedTurn";
@@ -45,7 +46,7 @@ interface RefreshAgentSessionDetailOptions {
   ) => void;
   markSessionExecutionStrategySynced: (
     sessionId: string,
-    executionStrategy: import("@/lib/api/agentRuntime").AgentExecutionStrategy,
+    executionStrategy: AgentExecutionStrategy,
   ) => void;
   persistSessionAccessMode?: (
     sessionId: string,

@@ -855,9 +855,7 @@ fn record_response_item_fidelity(
         Some("function_call")
         | Some("function_call_output")
         | Some("custom_tool_call")
-        | Some("custom_tool_call_output")
-        | Some("tool_search_call")
-        | Some("tool_search_output") => {
+        | Some("custom_tool_call_output") => {
             if mapped_runtime_events > 0 {
                 fidelity.tools += 1;
             }

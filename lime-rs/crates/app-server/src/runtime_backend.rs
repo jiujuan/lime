@@ -70,7 +70,7 @@ use app_server_protocol::AgentSessionActionType;
 #[cfg(test)]
 use event_mapper::emit_runtime_agent_event_with_coding_mirror;
 use event_mapper::{
-    emit_agent_message_finish, emit_proposed_plan_parser_flush, emit_reasoning_finish,
+    emit_agent_message_finish, emit_reasoning_finish,
     emit_runtime_agent_event_with_coding_mirror_and_plan_parser_with_soul_style,
 };
 
@@ -341,11 +341,9 @@ impl RuntimeBackend {
             route_resolution.service_model_slot(),
             &route_resolution.resolved_route.capability_snapshot,
         ))?;
-        emit_proposed_plan_parser_flush(&mut proposed_plan_parser, sink)?;
-
         if execution.cancelled {
             emit_reasoning_finish(&mut reasoning_event_state, "canceled", sink)?;
-            emit_agent_message_finish(&proposed_plan_parser, "interrupted", sink)?;
+            emit_agent_message_finish(&mut proposed_plan_parser, "interrupted", sink)?;
             sink.emit(RuntimeEvent::new(
                 "turn.canceled",
                 json!({
@@ -363,7 +361,7 @@ impl RuntimeBackend {
         }
 
         emit_reasoning_finish(&mut reasoning_event_state, "completed", sink)?;
-        emit_agent_message_finish(&proposed_plan_parser, "completed", sink)?;
+        emit_agent_message_finish(&mut proposed_plan_parser, "completed", sink)?;
         sink.emit(RuntimeEvent::new(
             "turn.completed",
             json!({

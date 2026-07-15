@@ -126,14 +126,12 @@ fn enrich_reasoning_payload(
     event: &RuntimeAgentEvent,
     payload_object: &mut serde_json::Map<String, Value>,
 ) {
-    let RuntimeAgentEvent::ThinkingDelta { text } = event else {
+    let RuntimeAgentEvent::ThinkingDelta { item_id, text } = event else {
         return;
     };
     payload_object.insert("delta".to_string(), Value::String(text.clone()));
-    payload_object.insert(
-        "reasoningId".to_string(),
-        Value::String("runtime-thinking".to_string()),
-    );
+    payload_object.insert("reasoningId".to_string(), Value::String(item_id.clone()));
+    payload_object.insert("itemId".to_string(), Value::String(item_id.clone()));
 }
 
 fn update_plan_event_from_completed_tool(event: &RuntimeAgentEvent) -> Option<RuntimeEvent> {
@@ -227,6 +225,7 @@ mod tests {
     #[test]
     fn thinking_delta_maps_to_standard_reasoning_delta_event() {
         let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ThinkingDelta {
+            item_id: "reasoning-1".to_string(),
             text: "先理解目标".to_string(),
         })
         .expect("thinking delta should emit");
@@ -235,7 +234,8 @@ mod tests {
         assert_eq!(events[0].event_type, "reasoning.delta");
         assert_eq!(events[0].payload["delta"], "先理解目标");
         assert_eq!(events[0].payload["text"], "先理解目标");
-        assert_eq!(events[0].payload["reasoningId"], "runtime-thinking");
+        assert_eq!(events[0].payload["reasoningId"], "reasoning-1");
+        assert_eq!(events[0].payload["itemId"], "reasoning-1");
     }
 
     #[test]

@@ -15,7 +15,7 @@ import type {
   AgentRuntimeSetObjectiveRequest,
   AgentRuntimeUpdateObjectiveStatusRequest,
   ManagedObjective,
-} from "./types";
+} from "./sessionTypes";
 
 export type AgentRuntimeObjectiveAppServerClient = Pick<
   AppServerClient,
@@ -51,7 +51,9 @@ function isRequiredString(value: unknown): value is string {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isOptionalString(value: unknown): value is string | null | undefined {
@@ -204,7 +206,11 @@ function projectAppServerContinueObjectiveResponse(
   }
   const result: AgentRuntimeContinueObjectiveResult = {
     submitted: value.submitted,
-    queued_turn_id: readField(value, "queuedTurnId", "queued_turn_id") as string,
+    queued_turn_id: readField(
+      value,
+      "queuedTurnId",
+      "queued_turn_id",
+    ) as string,
     objective: projectAppServerManagedObjective(command, value.objective),
   };
   assertContinueObjectiveResult(command, result);
@@ -327,7 +333,9 @@ function toAppServerSessionObjectiveParams(
   };
 }
 
-function toAppServerSetObjectiveParams(request: AgentRuntimeSetObjectiveRequest) {
+function toAppServerSetObjectiveParams(
+  request: AgentRuntimeSetObjectiveRequest,
+) {
   return {
     sessionId: request.sessionId,
     workspaceId: request.workspaceId ?? undefined,

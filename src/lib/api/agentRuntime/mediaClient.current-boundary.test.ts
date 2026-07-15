@@ -22,7 +22,6 @@ const PRODUCT_MEDIA_TASK_SOURCES = [
 ];
 
 const PUBLIC_AGENT_RUNTIME_SURFACES = [
-  "src/lib/api/agentRuntime/index.ts",
   "src/lib/api/agentRuntime/clientFactory.ts",
 ];
 
@@ -87,7 +86,7 @@ describe("agentRuntime mediaClient current boundary", () => {
     ).toBe(false);
   });
 
-  it("agentRuntime 公共聚合入口不再暴露 retired mediaClient surface", () => {
+  it("agentRuntime current client factory 不再暴露 retired mediaClient surface", () => {
     for (const filePath of PUBLIC_AGENT_RUNTIME_SURFACES) {
       const source = readRepoFile(filePath);
 

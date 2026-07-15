@@ -1,6 +1,6 @@
 import type { AutomationJobRecord } from "@/lib/api/automation";
 import type { AgentRun } from "@/lib/api/executionRun";
-import type { AgentRuntimeObjectiveSessionRequest } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeObjectiveSessionRequest } from "@/lib/api/agentRuntime/sessionTypes";
 import { resolveAbsoluteWorkspacePath } from "@/components/agent/chat/workspace/workspacePath";
 import { resolveRunSessionId } from "./automationPresentation";
 

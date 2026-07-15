@@ -1,7 +1,7 @@
 # Project / Thread-first 产品 PRD
 
 > 状态：current planning source
-> 更新时间：2026-07-05
+> 更新时间：2026-07-15
 > 作用：定义 Lime 为什么要完全对标 Codex 的 Project / Thread-first 产品形态、用户获得什么收益、用户如何使用，以及专家 / Skills / 插件 / 子代理 / 浏览器 / 自动化如何回到同一条 Project / Thread 主链。
 
 ## 1. 一句话目标
@@ -25,7 +25,7 @@ Lime 已经有较强的底座：
 | 专家                  | 降低 prompt / skill / workflow 配置门槛 | 如果按专家恢复固定会话，会变成 Agent-first。                 |
 | Skills                | 管理可复用能力                          | 如果从 Skill 直接开私有运行流，会脱离当前 Thread。           |
 | 插件                  | 提供应用级 UI 和领域能力                | 如果插件自带 Agent 会话体系，会形成第二套历史。              |
-| 子代理 / Team         | 支持分工和 review lane                  | 如果 child session 没有 parent lineage，会变成独立聊天列表。 |
+| Multi-Agent / SubAgent | 支持分工和 review lane                  | 如果 child Thread 没有 parent lineage，会变成独立聊天列表。  |
 | Browser Runtime       | 提供网页操作环境                        | 如果 Browser profile 成为第一分类，会掩盖任务上下文。        |
 | Automation / Workflow | 执行长任务和定时任务                    | 如果 job 历史不回到 Project / Thread，会变成任务孤岛。       |
 
@@ -99,7 +99,7 @@ Project / Workspace
 | PT-02 | 作为用户，我从专家广场点一个专家，希望它处理当前项目，而不是进入默认项目孤岛。       | 新会话绑定当前 project / workspace；没有当前项目时要求显式选择或创建。        |
 | PT-03 | 作为用户，我在当前对话里启用一个 Skill，希望它接着当前上下文工作。                   | Skill 作为 tool/context/workflow 注入当前 turn，不创建私有 session。          |
 | PT-04 | 作为插件用户，我从插件 UI 发起 Agent 任务，希望结果回到当前对话和证据包。            | 插件任务携带 current sessionId；缺失时在当前 project 下创建 session。         |
-| PT-05 | 作为开发者，我让子代理处理代码审查，希望它的结果能追溯到父对话。                     | child session / subagent turn 有 parent session / turn lineage。              |
+| PT-05 | 作为开发者，我让子代理处理代码审查，希望它的结果能追溯到父对话。                     | canonical child Thread / SubAgent Item 有 parent Thread / source Turn lineage。 |
 | PT-06 | 作为用户，我关闭 Lime 后重新打开，希望所有专家、插件、浏览器操作都能从项目历史恢复。 | session list / thread read / evidence 能恢复关键状态，不依赖入口私有缓存。    |
 | PT-07 | 作为维护者，我不希望未来有人给每个专家加一套长期记忆。                               | 治理测试禁止 agent/expert scoped memory root。                                |
 | PT-08 | 作为用户，我在当前对话里把一个 Skill 变成定时 workflow，希望它继续服务当前项目。     | workflow job 创建前物化当前 Thread，payload 显式携带 `session_id/thread_id`。 |
@@ -161,13 +161,13 @@ Project / Workspace
 
 | 字段     | 内容                                                                                                                                                               |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 参与者   | 用户、主 Agent、子代理 / Team runtime、Agent UI projection、Evidence service                                                                                       |
-| 前置条件 | 用户在某个 Project / Thread 中触发分工、handoff、review lane 或 worker notification。                                                                              |
-| 主流程   | 主 Agent 创建 child session -> child session 保存 `parent_session_id / created_from_turn_id` -> Team 状态投影为 parent Thread 的 timeline / team facts / handoff。 |
-| 结果     | 用户看到的是当前 Thread 的执行层状态，而不是一个新的子 Agent 历史列表；重开 Thread 后仍能从 parent read model / projection 恢复。                                  |
-| 失败处理 | 缺少 parent thread 或 parent turn 时，不生成独立子代理 timeline item；运行态可降级显示，但不得把 child session 提升为产品第一分类。                                |
-| 当前实现 | `SubagentParentContext` 保留 parent lineage、team preset 和 sibling sessions；Workspace timeline 使用 parent `threadRead.thread_id` 合成 child activity items。    |
-| 后端证据 | App Server `evidence/export` 已生成 `observability_summary.team_facts`，覆盖 roster、handoff、worker notification、review lane 和 parent session/thread/turn。     |
+| 参与者   | 用户、主 Agent、AgentControl、AgentGraph/identity/mailbox、canonical SubAgent GUI、Evidence service                                                                                      |
+| 前置条件 | 用户在某个 Project / Thread 中用自然语言触发分工、消息、followup、interrupt 或 wait。                                                                                                    |
+| 主流程   | `spawn_agent` 创建 canonical child Thread 并写 durable graph/identity -> `send_message` / `followup_task` 写 mailbox -> child Turn 与 activity Item 投影到 parent Thread -> `interrupt_agent` / `wait_agent` 返回结构化状态或 terminal Result。 |
+| 结果     | 用户看到的是当前 parent Thread 的 SubAgent 执行层状态，而不是新的子 Agent 历史列表；重开 Thread 后仍从 canonical ThreadStore / AgentGraph / mailbox 恢复。                                                        |
+| 失败处理 | 缺 parent Thread、source Turn、target identity 或 canonical Item identity 时 fail closed；不得回退 child-session roster、synthetic sidecar 或第二队列。                                                              |
+| 当前实现 | 六个 AgentControl 工具使用 durable AgentGraph/identity/mailbox；canonical child Thread family 与 Started/Interacted/Interrupted activity 进入同构 GUI，child terminal 只由 lifecycle + Result mailbox 表达。               |
+| 后端证据 | `.lime/qc/s4ae-agent-control-tools-gate-b-final.json` 与 S2o3 rerun 均为 `pass`、15/15 assertions，六工具全部 completed；旧 external `multi-agent-team` synthetic events 不计 current evidence。                              |
 
 ## 9. 产品信息架构
 
@@ -196,7 +196,7 @@ flowchart TB
   Capability --> Plugin[Plugin / Right Surface]
   Capability --> Browser[Browser Runtime]
   Capability --> Workflow[Automation / Workflow]
-  Capability --> Subagent[Subagent / Team]
+  Capability --> Subagent[Multi-Agent / SubAgent]
 
   Expert --> Turn
   Skill --> Turn
@@ -401,7 +401,7 @@ flowchart LR
 | `Turn`                    | 执行单元         | 拥有 input、runtime options、model route、tool policy。       |
 | `Item`                    | 渲染 / 证据单元  | 表达 message、tool、artifact、role switch、workflow event。   |
 | `Expert / Skill / Plugin` | 能力元数据       | 只能挂在 session / turn / item / evidence metadata。          |
-| `Subagent / Team`         | 执行层事实       | child session 必须有 parent session / turn lineage。          |
+| `Multi-Agent / SubAgent` | 执行层事实       | canonical child Thread / Item 必须有 parent Thread / source Turn lineage；控制只走六个 AgentControl 工具。 |
 | `Memory`                  | workspace/global | 不按 Agent / Expert / Skill / Plugin 拆 root。                |
 
 ## 14. 成功指标
@@ -414,7 +414,7 @@ flowchart LR
 | Agent-first schema 回流      | 0。                                                                                   |
 | 同 Thread 切换专家上下文保留 | P1 后必须有 GUI / fixture evidence。                                                  |
 | Evidence join 完整度         | 关键能力入口都能导出 source metadata、runtime events、artifact refs。                 |
-| Team facts 可追溯率          | 子代理 roster、worker notification、handoff、review lane 均可回到 parent Thread。     |
+| Multi-Agent facts 可追溯率   | child roster、mailbox、activity、terminal Result、review evidence 均可回到 parent Thread。 |
 
 ## 15. 风险与处理
 
@@ -423,7 +423,7 @@ flowchart LR
 | 专家广场产品心智仍像 Agent 市场 | 文案和主按钮改为“用于当前对话 / 当前项目”，避免“进入专家空间”。 |
 | 插件作者想自建 Agent runtime    | SDK 和 contract fail closed，要求使用 current session gateway。 |
 | 自动化天然是 job-first          | job 可以独立调度，但输出和证据必须回挂 Project / Thread。       |
-| 子代理需要独立执行上下文        | 允许 child session，但必须有 parent lineage 和 evidence join。  |
+| 子代理需要独立执行上下文        | 允许 canonical child Thread 执行，但必须有 AgentGraph lineage、mailbox 和 evidence join。 |
 | 没有当前项目时体验变重          | 提供明确 detached 模式，但 detached 不能伪装成默认项目。        |
 
 ## 16. 验收计划
@@ -441,7 +441,7 @@ flowchart LR
 3. 插件触发 Agent task 后能在 Thread / Evidence 中看到结果；`content-factory-article-workspace` 真实 Electron fixture 已覆盖插件 worker turn、runtime events、Right Surface、read model 和 artifact 投影。
 4. Browser 操作轨迹能回到当前 Thread；后端 Evidence Pack 已有 `export_evidence_pack_includes_browser_session_and_snapshot_artifacts` 定向证据，`right-surface-visual-matrix` 真实 Electron fixture 已证明 Browser right surface 可通过 App Server pending request 打开并消费完成。
 5. Automation 输出能从项目历史找回；`npm run smoke:managed-objective-automation -- --timeout-ms 180000` 已写出 `.lime/qc/managed-objective-automation-smoke.json`，其中 `status: "pass"`、`projectThreadStatus: "pass"`、`completionAuditStatus: "pass"`、latest run `status: "success"`、Evidence Pack `latestTurnStatus: "completed"`、`decision: "completed"`、`workspaceSkillToolCallCount: 1`、`artifactCount: 1`。该证据证明 App Server `agentSession/turn/start` + `workspace_skill_runtime_enable` + SkillTool + `evidence/export` current 链路已闭环。
-6. 子代理 Team facts 能从 parent Thread 恢复并导出 Evidence Pack；后端 `team_facts` 已有定向验证，前端恢复第一刀已能从 parent read model 回补 Team facts projection，`multi-agent-team` 真实 Electron 单项 smoke 已验证 GUI 用户触发路径、read model 和 evidence/export。
+6. Multi-Agent facts 能从 parent Thread 恢复并导出 Evidence Pack；两次 `agent-control-tools` fresh managed Gate B 均证明六工具、durable child/tree/mailbox/terminal Result 与 current runtime/evidence 闭环。该 batch 不含完整 visible-DOM 断言，GUI cold restart 仍需专项证据；旧 `multi-agent-team` synthetic scenario 不计 current pass。
 
 ## 17. 与现有路线图关系
 
@@ -456,8 +456,8 @@ flowchart LR
 
 ## 18. 下一步建议
 
-下一步不应先做大规模 UI 改版；P3 的多 Agent 团队真实 fixture、P2 Skills 工作台、插件内容工厂、Browser right surface 和 Automation ProjectThread + completion audit 均已有单项 smoke / fixture 证据。后续应把剩余工作切到插件 task compat cache 的长期事实源归属，或补更重 GUI 恢复验证。
+下一步不应先做大规模 UI 改版；P3 的六个 AgentControl 工具、P2 Skills 工作台、插件内容工厂、Browser right surface 和 Automation ProjectThread + completion audit 均已有真实 current fixture 证据。后续应补 canonical SubAgent GUI 的完整 visible-DOM + cold restart 验证，或处理插件 task compat cache 的长期事实源归属；不恢复旧 Team synthetic fixture。
 
 1. 处理 `agent-runtime/tasks/` compat task projection cache 的长期事实源归属，优先评估是否下沉到 App Server read model。
-2. 继续把已完成的 Team GUI 恢复第一刀并入更重的 GUI smoke，证明重开 Thread 后 Team 状态从 parent read model / projection 恢复。
+2. 把 canonical SubAgent GUI 恢复第一刀并入更重 GUI smoke，证明重开 Thread 后 child roster、activity 与 terminal Result 从 ThreadStore / AgentGraph / mailbox 恢复。
 3. Browser 后续只在真实浏览器操作语义扩大时补更细场景；当前 `right-surface-visual-matrix` Gate B 证据不再阻塞 P2。

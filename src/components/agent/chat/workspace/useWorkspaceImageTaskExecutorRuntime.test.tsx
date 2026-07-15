@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MediaTaskArtifactOutput } from "@/lib/api/mediaTasks";
+import type { MediaTaskArtifactOutput } from "@/lib/api/agentRuntime/mediaTaskTypes";
 import {
   createInitialSessionImageWorkbenchState,
   type SessionImageWorkbenchState,

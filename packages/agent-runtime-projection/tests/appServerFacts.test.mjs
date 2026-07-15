@@ -335,7 +335,7 @@ test("App Server collaboration events preserve Soul collaboration facts", () => 
       status: "running",
       subagentId: "child-1",
       taskId: "child-1",
-      parentSessionId: "session-1",
+      parentThreadId: "thread-1",
       transcriptRef: "child-1:turn-1",
       metadata: {
         soul_lifecycle: {
@@ -363,7 +363,7 @@ test("App Server collaboration events preserve Soul collaboration facts", () => 
     runtimeStatus: "running",
     taskId: "child-1",
     agentId: "child-1",
-    parentSessionId: "session-1",
+    parentThreadId: "thread-1",
     transcriptRef: "child-1:turn-1",
     styleLevel: "L1",
     riskLevel: "normal",

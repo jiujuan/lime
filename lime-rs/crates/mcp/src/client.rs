@@ -10,11 +10,12 @@ use crate::elicitation::{
     ElicitationOwnerGate, ElicitationOwnerGuard, ElicitationRequestRouter, ElicitationRouterError,
 };
 use crate::events::{McpResourceUpdatedPayload, McpResourcesUpdatedPayload};
+use crate::McpRuntimeOwner;
 use lime_core::DynEmitter;
 use rmcp::{
     model::{
-        ClientCapabilities, ClientInfo, CreateElicitationRequestParam, Implementation,
-        LoggingMessageNotification, LoggingMessageNotificationMethod,
+        ClientCapabilities, ClientInfo, CreateElicitationRequestParam, ElicitationCapability,
+        Implementation, LoggingMessageNotification, LoggingMessageNotificationMethod,
         LoggingMessageNotificationParam, ProgressNotification, ProgressNotificationMethod,
         ProgressNotificationParam, ProtocolVersion, ResourceUpdatedNotificationParam,
         ServerNotification,
@@ -25,7 +26,6 @@ use rmcp::{
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tool_runtime::mcp_connection::McpCallScope;
-use crate::McpRuntimeOwner;
 use tracing::{debug, info, warn};
 
 /// 进度通知事件 Payload
@@ -177,9 +177,19 @@ impl LimeMcpClient {
 
 impl ClientHandler for LimeMcpClient {
     fn get_info(&self) -> ClientInfo {
+        let supports_runtime_elicitation =
+            self.elicitation_router.is_some() && self.runtime_owner.is_some();
+        let mut capabilities = ClientCapabilities::default();
+        if supports_runtime_elicitation {
+            capabilities.elicitation = Some(ElicitationCapability::default());
+        }
         ClientInfo {
-            protocol_version: ProtocolVersion::V_2025_03_26,
-            capabilities: ClientCapabilities::default(),
+            protocol_version: if supports_runtime_elicitation {
+                ProtocolVersion::V_2025_06_18
+            } else {
+                ProtocolVersion::V_2025_03_26
+            },
+            capabilities,
             client_info: Implementation {
                 name: "lime".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
@@ -465,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    fn test_client_info_does_not_advertise_unimplemented_sampling() {
+    fn test_management_client_info_does_not_advertise_unimplemented_capabilities() {
         let client = LimeMcpClient::new("test-server".to_string(), None);
         let info = client.get_info();
 
@@ -473,6 +483,40 @@ mod tests {
         assert_eq!(info.client_info.title, Some("Lime MCP Client".to_string()));
         assert_eq!(info.protocol_version, ProtocolVersion::V_2025_03_26);
         assert!(info.capabilities.sampling.is_none());
+        assert!(info.capabilities.elicitation.is_none());
+    }
+
+    #[test]
+    fn test_runtime_client_info_advertises_form_elicitation() {
+        let client = LimeMcpClient::with_runtime_elicitation_router(
+            "test-server".to_string(),
+            None,
+            ElicitationRequestRouter::default(),
+            McpRuntimeOwner {
+                session_id: "session-1".to_string(),
+                thread_id: "thread-1".to_string(),
+            },
+        );
+        let info = client.get_info();
+
+        assert_eq!(info.protocol_version, ProtocolVersion::V_2025_06_18);
+        assert_eq!(
+            serde_json::to_value(&info.capabilities).expect("serialize client capabilities"),
+            serde_json::json!({ "elicitation": {} })
+        );
+        assert!(info.capabilities.sampling.is_none());
+    }
+
+    #[test]
+    fn test_management_router_without_runtime_owner_does_not_advertise_elicitation() {
+        let client = LimeMcpClient::with_elicitation_router(
+            "test-server".to_string(),
+            None,
+            ElicitationRequestRouter::default(),
+        );
+
+        let info = client.get_info();
+        assert_eq!(info.protocol_version, ProtocolVersion::V_2025_03_26);
         assert!(info.capabilities.elicitation.is_none());
     }
 

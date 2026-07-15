@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ItemId, SessionId, ThreadId, TurnId};
+use crate::{ItemId, MessageContentPart, SessionId, ThreadId, TurnId};
 
 /// Codex runtime status for a thread. Persistence operations such as archive or
 /// delete are commands, not runtime status values.
@@ -269,6 +269,8 @@ pub enum ThreadItemPayload {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         phase: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        content_parts: Vec<MessageContentPart>,
     },
     /// Proposed plan content. The completed snapshot is authoritative and may
     /// not equal the concatenation of preceding plan deltas.
@@ -708,6 +710,9 @@ mod tests {
             payload: ThreadItemPayload::AgentMessage {
                 text: "hello".to_string(),
                 phase: None,
+                content_parts: vec![MessageContentPart::Text {
+                    text: "hello".to_string(),
+                }],
             },
             metadata: Value::Null,
         }
@@ -750,6 +755,8 @@ mod tests {
         assert_eq!(encoded["kind"], "agentMessage");
         assert_eq!(encoded["payload"]["type"], "agentMessage");
         assert_eq!(encoded["payload"]["text"], "hello");
+        assert_eq!(encoded["payload"]["content_parts"][0]["type"], "text");
+        assert!(encoded["payload"].get("contentParts").is_none());
         assert_eq!(encoded["metadata"], Value::Null);
         assert!(serde_json::from_value::<ThreadItem>(encoded).is_ok());
     }

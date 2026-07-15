@@ -8,10 +8,8 @@ import {
   type SetStateAction,
 } from "react";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
-import {
-  getMediaTaskArtifact,
-  type MediaTaskArtifactOutput,
-} from "@/lib/api/mediaTasks";
+import { getMediaTaskArtifact } from "@/lib/api/mediaTasks";
+import type { MediaTaskArtifactOutput } from "@/lib/api/agentRuntime/mediaTaskTypes";
 import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime/sessionClient";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { logAgentDebug } from "@/lib/agentDebug";

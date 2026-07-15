@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   createAgentSessionReadModelSnapshot,
   refreshAgentSessionDetailState,

@@ -44,28 +44,34 @@ import {
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
 } from "./appServer";
 import {
+  generateAgentRuntimeTitleResult,
+  generateAgentRuntimeTitle,
+  generateAgentRuntimeSessionTitle,
+} from "./agentRuntime/agentClient";
+import {
   exportAgentRuntimeAnalysisHandoff,
-  createAgentRuntimeSession,
-  deleteAgentRuntimeSession,
   exportAgentRuntimeEvidencePack,
   exportAgentRuntimeHandoffBundle,
   exportAgentRuntimeReplayCase,
   exportAgentRuntimeReviewDecisionTemplate,
   saveAgentRuntimeReviewDecision,
-  generateAgentRuntimeTitleResult,
-  generateAgentRuntimeTitle,
-  generateAgentRuntimeSessionTitle,
+} from "./agentRuntime/exportClient";
+import { getAgentRuntimeToolInventory } from "./agentRuntime/inventoryClient";
+import {
+  createAgentRuntimeSession,
+  deleteAgentRuntimeSession,
   getAgentRuntimeSession,
-  getAgentRuntimeThreadRead,
-  getAgentRuntimeToolInventory,
   listAgentRuntimeSessions,
+  updateAgentRuntimeSession,
+} from "./agentRuntime/sessionClient";
+import {
+  getAgentRuntimeThreadRead,
   promoteAgentRuntimeQueuedTurn,
   replayAgentRuntimeRequest,
   resumeAgentRuntimeThread,
   respondAgentRuntimeAction,
   submitAgentRuntimeTurn,
-  updateAgentRuntimeSession,
-} from "./agentRuntime";
+} from "./agentRuntime/threadClient";
 
 function line(value: unknown): string {
   return `${JSON.stringify(value)}\n`;

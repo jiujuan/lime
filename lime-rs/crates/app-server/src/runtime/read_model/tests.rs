@@ -1,8 +1,9 @@
 use super::*;
 use agent_protocol::{
-    ItemId, ItemStatus, SessionId, SubAgentActivityKind, Thread, ThreadHistoryChangeSet, ThreadId,
-    ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn, TurnAdmissionState,
-    TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
+    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, ItemId, ItemStatus,
+    MessageContentPart, MessageContentReference, SessionId, SubAgentActivityKind, Thread,
+    ThreadHistoryChangeSet, ThreadId, ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView,
+    Turn, TurnAdmissionState, TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
 };
 use app_server_protocol::{AgentEvent, AgentSession, AgentTurn, AgentTurnStatus};
 use futures::executor::block_on;
@@ -49,6 +50,126 @@ fn stored_running_session(started_at: &str, latest_event_at: &str) -> StoredSess
 }
 
 #[test]
+fn workflow_respond_action_requires_matching_canonical_pending_action() {
+    let session_id = "sess_workflow_action_read".to_string();
+    let thread_id = "thread_workflow_action_read".to_string();
+    let turn_id = "turn_workflow_action_read".to_string();
+    let workflow_events = vec![AgentEvent {
+        event_id: "event-workflow-run".to_string(),
+        sequence: 1,
+        session_id: session_id.clone(),
+        thread_id: Some(thread_id.clone()),
+        turn_id: None,
+        event_type: "workflow.run.started".to_string(),
+        timestamp: "2026-07-15T05:00:00Z".to_string(),
+        payload: json!({
+            "workflowRunId": "run-review",
+            "workflowKey": "content_article_workflow",
+            "turnId": turn_id,
+            "status": "running",
+            "steps": [{
+                "stepId": "review",
+                "stepTitle": "Review",
+                "status": "waiting",
+                "requestId": "ask-review",
+                "actionType": "ask_user"
+            }]
+        }),
+    }];
+    let mut stored = StoredSession {
+        session: AgentSession {
+            session_id: session_id.clone(),
+            thread_id: thread_id.clone(),
+            app_id: "content-factory-app".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            status: app_server_protocol::AgentSessionStatus::Running,
+            created_at: "2026-07-15T05:00:00Z".to_string(),
+            updated_at: "2026-07-15T05:00:00Z".to_string(),
+        },
+        turns: Vec::new(),
+        turn_inputs: std::collections::HashMap::new(),
+        turn_runtime_options: std::collections::HashMap::new(),
+        events: workflow_events.clone(),
+        output_blobs: std::collections::HashMap::new(),
+    };
+
+    let without_pending = workflow_read_model_from_stored_session(&stored, &[]);
+    assert!(
+        without_pending
+            .actions
+            .iter()
+            .all(|action| action.action_type != "respond"),
+        "workflow step metadata must not manufacture a respond action"
+    );
+
+    stored.session.status = app_server_protocol::AgentSessionStatus::WaitingAction;
+    stored.turns.push(AgentTurn {
+        turn_id: turn_id.clone(),
+        session_id: session_id.clone(),
+        thread_id: thread_id.clone(),
+        status: AgentTurnStatus::WaitingAction,
+        started_at: Some("2026-07-15T05:00:00Z".to_string()),
+        completed_at: None,
+    });
+    let mut tool_confirmation_workflow_events = workflow_events.clone();
+    tool_confirmation_workflow_events[0].payload["steps"][0]["actionType"] =
+        json!("tool_confirmation");
+    stored.events = vec![AgentEvent {
+        event_id: "event-action-required-invalid-confirmation".to_string(),
+        sequence: 1,
+        session_id: session_id.clone(),
+        thread_id: Some(thread_id.clone()),
+        turn_id: Some(turn_id.clone()),
+        event_type: "action.required".to_string(),
+        timestamp: "2026-07-15T05:00:00Z".to_string(),
+        payload: json!({
+            "requestId": "ask-review",
+            "actionType": "tool_confirmation",
+            "toolCallId": "tool-review",
+            "prompt": "Review the draft",
+            "deadlineAtMs": 4_102_444_800_000_u64
+        }),
+    }];
+    stored.events.extend(tool_confirmation_workflow_events);
+
+    let without_restorable_confirmation = workflow_read_model_from_stored_session(&stored, &[]);
+    assert!(
+        without_restorable_confirmation
+            .actions
+            .iter()
+            .all(|action| action.action_type != "respond"),
+        "workflow/read must not publish a tool confirmation that cold restore rejects"
+    );
+
+    stored.events = vec![AgentEvent {
+        event_id: "event-action-required".to_string(),
+        sequence: 1,
+        session_id,
+        thread_id: Some(thread_id),
+        turn_id: Some(turn_id),
+        event_type: "action.required".to_string(),
+        timestamp: "2026-07-15T05:00:00Z".to_string(),
+        payload: json!({
+            "requestId": "ask-review",
+            "actionType": "ask_user",
+            "prompt": "Review the draft",
+            "deadlineAtMs": 4_102_444_800_000_u64
+        }),
+    }];
+    stored.events.extend(workflow_events);
+
+    let with_pending = workflow_read_model_from_stored_session(&stored, &[]);
+    assert!(with_pending.actions.iter().any(|action| {
+        action.action_type == "respond"
+            && action.workflow_run_id == "run-review"
+            && action.step_id.as_deref() == Some("review")
+            && action.request_id.as_deref() == Some("ask-review")
+            && action.agent_action_type.as_deref() == Some("ask_user")
+    }));
+}
+
+#[test]
 fn thread_read_downgrades_stale_orphan_running_turn() {
     let stored = stored_running_session("2026-03-29T00:00:00.000Z", "2026-03-29T00:00:01.000Z");
 
@@ -73,6 +194,91 @@ fn thread_read_keeps_recent_running_turn_active() {
         thread_read["active_turn_id"],
         "turn_read_model_orphan_running"
     );
+}
+
+#[test]
+fn canonical_approval_detail_uses_typed_terminal_response() {
+    let approval_item = |decision: Option<ApprovalDecision>| ThreadItem {
+        session_id: SessionId::new("session-approval-read"),
+        thread_id: ThreadId::new("thread-approval-read"),
+        turn_id: TurnId::new("turn-approval-read"),
+        item_id: ItemId::new("approval-read"),
+        sequence: 3,
+        ordinal: 2,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        completed_at_ms: decision.map(|_| 2),
+        kind: agent_protocol::ItemKind::Approval,
+        status: if decision.is_some() {
+            ItemStatus::Completed
+        } else {
+            ItemStatus::InProgress
+        },
+        payload: ThreadItemPayload::Approval {
+            request_id: "approval-read".to_string(),
+            action: ApprovalAction {
+                kind: "tool_confirmation".to_string(),
+                description: "Allow command?".to_string(),
+            },
+            scope: ApprovalScope::Session,
+            available_decisions: vec![ApprovalDecision::ApprovedForSession],
+            decision,
+            requested_at_ms: Some(1),
+            resolved_at_ms: decision.map(|_| 2),
+            reason_code: Some("user_decision".to_string()),
+            expires_at_ms: None,
+        },
+        metadata: json!({}),
+    };
+
+    let terminal =
+        canonical_item_to_agent_detail(&approval_item(Some(ApprovalDecision::ApprovedForSession)));
+    assert_eq!(
+        terminal["response"],
+        json!({
+            "decision": "approvedForSession",
+            "decision_scope": "session",
+            "reason_code": "user_decision",
+        })
+    );
+    assert!(terminal.get("reason_code").is_none());
+
+    let pending = canonical_item_to_agent_detail(&approval_item(None));
+    assert!(pending.get("response").is_none());
+}
+
+#[test]
+fn canonical_wait_collab_tool_projects_as_completed_tool_call() {
+    let item = ThreadItem {
+        session_id: SessionId::new("session-wait-read"),
+        thread_id: ThreadId::new("thread-wait-read"),
+        turn_id: TurnId::new("turn-wait-read"),
+        item_id: ItemId::new("wait-read"),
+        sequence: 1,
+        ordinal: 0,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        completed_at_ms: Some(2),
+        kind: agent_protocol::ItemKind::CollabAgentToolCall,
+        status: ItemStatus::Completed,
+        payload: ThreadItemPayload::CollabAgentToolCall {
+            call_id: "wait-read".to_string(),
+            operation: CollabAgentOperation::Wait,
+            target_thread_id: None,
+            message: None,
+            output: None,
+        },
+        metadata: json!({}),
+    };
+
+    let detail = canonical_item_to_agent_detail(&item);
+
+    assert_eq!(detail["type"], "tool_call");
+    assert_eq!(detail["status"], "completed");
+    assert_eq!(detail["call_id"], "wait-read");
+    assert_eq!(detail["tool_name"], "wait_agent");
+    assert_eq!(detail["arguments"], json!([]));
+    assert!(detail.get("status_label").is_none());
 }
 
 #[test]
@@ -248,6 +454,26 @@ fn read_detail_prefers_canonical_thread_store_items_after_restart() {
         payload: ThreadItemPayload::AgentMessage {
             text: "canonical item".to_string(),
             phase: None,
+            content_parts: vec![
+                MessageContentPart::Text {
+                    text: "canonical item".to_string(),
+                },
+                MessageContentPart::Media {
+                    kind: "image".to_string(),
+                    reference: MessageContentReference {
+                        uri: "sidecar://media/read-model".to_string(),
+                        mime_type: "image/png".to_string(),
+                        title: Some("read model image".to_string()),
+                        source_uri: None,
+                        source_path: Some("/tmp/media/read-model.png".to_string()),
+                        preview_url: None,
+                        sidecar_ref: None,
+                        sha256: Some("abc123".to_string()),
+                        byte_size: Some(4),
+                    },
+                    caption: Some("result image".to_string()),
+                },
+            ],
         },
         metadata: json!({}),
     };
@@ -314,6 +540,20 @@ fn read_detail_prefers_canonical_thread_store_items_after_restart() {
     assert_eq!(detail["items"][0]["type"], "agent_message");
     assert_eq!(detail["items"][0]["status"], "completed");
     assert_eq!(detail["items"][0]["text"], "canonical item");
+    assert_eq!(detail["items"][0]["contentParts"][0]["type"], "text");
+    assert_eq!(detail["items"][0]["contentParts"][1]["type"], "media");
+    assert_eq!(
+        detail["items"][0]["contentParts"][1]["reference"]["uri"],
+        "sidecar://media/read-model"
+    );
+    assert_eq!(
+        detail["items"][0]["contentParts"][1]["reference"]["mime_type"],
+        "image/png"
+    );
+    assert_eq!(
+        detail["items"][0]["contentParts"][1]["reference"]["source_path"],
+        "/tmp/media/read-model.png"
+    );
     assert_eq!(detail["items"][0]["started_at"], "1970-01-01T00:00:00.001Z");
     assert_ne!(detail["items"][0]["id"], "event-read-model-running");
     let activities = detail["items"]

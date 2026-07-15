@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 
 import {
   ACTIVE_SESSION_TRANSIENT_ITEMS_LIMIT,

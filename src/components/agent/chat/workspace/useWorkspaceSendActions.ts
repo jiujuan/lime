@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
-import type {
-  AutoContinueRequestPayload,
-  RuntimeSearchMode,
-} from "@/lib/api/agentRuntime";
+import type { RuntimeSearchMode } from "@limecloud/app-server-client";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
 import type { InstalledPluginState } from "@/features/plugin/types";
 import { getOrCreateDefaultProject } from "@/lib/api/project";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import { listInstalledPlugins } from "@/lib/api/plugins";
 import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";

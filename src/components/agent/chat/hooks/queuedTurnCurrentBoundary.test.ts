@@ -4,6 +4,11 @@ import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
 
 const CONSUMER_PATHS = [
+  "src/components/agent/chat/components/MessageList.types.ts",
+  "src/components/agent/chat/components/useMessageListTimelineState.ts",
+  "src/components/agent/chat/utils/agentTaskRuntime.ts",
+  "src/components/agent/chat/utils/inputbarRuntimeStatusLine.ts",
+  "src/components/agent/chat/workspace/useSessionRuntimeProjectionDeferral.ts",
   "src/components/agent/chat/hooks/agentStreamInputRestorePlan.ts",
   "src/components/agent/chat/hooks/agentStreamInputRestoreTypes.ts",
   "src/components/agent/chat/hooks/agentQueuedTurnProjection.ts",

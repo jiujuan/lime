@@ -71,10 +71,17 @@ export function readCanonicalThreadItem(
         content: readString(payload, "content") ?? "",
       };
     case "agentMessage":
+      if (
+        payload.content_parts !== undefined &&
+        !Array.isArray(payload.content_parts)
+      ) {
+        return null;
+      }
       return {
         ...base,
         type: "agent_message",
         text: readString(payload, "text") ?? "",
+        contentParts: payload.content_parts,
         phase: readString(payload, "phase"),
       };
     case "plan":
@@ -89,11 +96,7 @@ export function readCanonicalThreadItem(
           plan: payload.plan,
           explanation: readString(payload, "explanation"),
           tool_call_id: readString(payload, "tool_call_id", "toolCallId"),
-          source_item_id: readString(
-            payload,
-            "source_item_id",
-            "sourceItemId",
-          ),
+          source_item_id: readString(payload, "source_item_id", "sourceItemId"),
         },
       };
     case "reasoning": {

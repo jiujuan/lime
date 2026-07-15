@@ -56,7 +56,7 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain('type: "item.started"');
     expect(content).toContain('type: "item.completed"');
     expect(content).toContain("canonicalToolItem");
-    expect(content).toContain('call_id: "${TOOL_CALL_ID}"');
+    expect(content).toContain("call_id: toolCallId");
     expect(content).not.toContain('callId: "${TOOL_CALL_ID}"');
     expect(content).toContain("ordinal: 4");
     expect(content).not.toContain('type: "tool.started"');
@@ -184,6 +184,64 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     );
     expect(content).not.toContain("const sourceText =");
     expect(content).toContain('window.dispatchEvent(new Event("focus"))');
+  });
+
+  it("keeps recovery execution identities turn-scoped while preserving failure source refs", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("const turnScopedExecutionId = (baseId) =>");
+    expect(content).toContain(
+      'isRecoveryTurn ? baseId + ":" + turnId : baseId',
+    );
+    expect(content).toContain(
+      'const toolCallId = turnScopedExecutionId("${TOOL_CALL_ID}")',
+    );
+    expect(content).toContain(
+      'const fileChangeItemId = turnScopedExecutionId("${CODING_ARTIFACT_ID}")',
+    );
+    expect(content).toContain(
+      'const patchId = turnScopedExecutionId("${CODING_PATCH_ID}")',
+    );
+    expect(content).toContain(
+      'const commandId = turnScopedExecutionId("${CODING_COMMAND_ID}")',
+    );
+    expect(content).toContain(
+      'const testRunId = turnScopedExecutionId("${CODING_TEST_RUN_ID}")',
+    );
+    expect(content).toContain("itemId: toolCallId");
+    expect(content).toContain("call_id: toolCallId");
+    expect(content).toContain("itemId: fileChangeItemId");
+    expect(content).toContain("executionIds: {");
+    expect(content).toContain("recoveryExecutionIdsTurnScoped:");
+    expect(content).toContain("recoveryExecutionIds.length === 5");
+    expect(content).toContain(
+      "executionId.endsWith(`:${backendRecoveryTurnStart.turnId}`)",
+    );
+    expect(content).not.toContain('itemId: "${TOOL_CALL_ID}"');
+    expect(content).not.toContain('patchId: "${CODING_PATCH_ID}"');
+    expect(content).not.toContain('commandId: "${CODING_COMMAND_ID}"');
+    expect(content).not.toContain('testRunId: "${CODING_TEST_RUN_ID}"');
+    expect(content).toContain(
+      "summary.codingRecoveryEvidence?.recovery?.sourceIds?.commandId ===\n            CODING_COMMAND_ID",
+    );
+    expect(content).toContain(
+      "summary.codingRecoveryEvidence?.recovery?.sourceIds?.testRunId ===\n            CODING_TEST_RUN_ID",
+    );
+  });
+
+  it("always replaces backend ledger evidence on a failed Gate B run", () => {
+    const content = readSmokeScript();
+    const catchStart = content.lastIndexOf("  } catch (error) {");
+    const finallyStart = content.indexOf("  } finally {", catchStart);
+    const failureBranch = content.slice(catchStart, finallyStart);
+
+    expect(content).toContain("function persistBackendLedgerEvidence(");
+    expect(failureBranch).toContain("persistBackendLedgerEvidence(");
+    expect(failureBranch).toContain("summary.backendKinds =");
+    expect(failureBranch).toContain("summary.backendEmittedEventTypes =");
+    expect(failureBranch.indexOf("persistBackendLedgerEvidence(")).toBeLessThan(
+      failureBranch.indexOf("writeJsonFile(summaryPath, summary)"),
+    );
   });
 
   it("does not use legacy commands or renderer mock fallback as success evidence", () => {

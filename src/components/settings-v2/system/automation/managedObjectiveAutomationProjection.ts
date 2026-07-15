@@ -1,5 +1,5 @@
 import type { AutomationJobRecord } from "@/lib/api/automation";
-import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/types";
+import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/sessionTypes";
 
 const AUTOMATION_OBJECTIVE_OWNER_KIND = "automation_job";
 const ARTIFACT_OR_EVIDENCE_COMPLETION_AUDIT = "artifact_or_evidence_required";

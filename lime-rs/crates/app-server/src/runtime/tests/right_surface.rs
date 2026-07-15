@@ -250,9 +250,7 @@ async fn workspace_right_surface_pending_dismiss_removes_registered_request() {
 
 #[tokio::test]
 async fn workspace_right_surface_pending_recovers_from_app_data_source() {
-    let app_data_source = Arc::new(TestSessionDataSource::new(
-        empty_agent_session_read_response("right_surface_recovery"),
-    ));
+    let app_data_source = Arc::new(TestSessionDataSource::new());
     let core1 = RuntimeCore::default().with_app_data_source(app_data_source.clone());
     let response = core1
         .request_workspace_right_surface(WorkspaceRightSurfaceRequestParams {
@@ -313,9 +311,7 @@ async fn workspace_right_surface_pending_recovers_from_app_data_source() {
 
 #[tokio::test]
 async fn workspace_right_surface_persist_requested_saves_object_canvas_snapshot() {
-    let app_data_source = Arc::new(TestSessionDataSource::new(
-        empty_agent_session_read_response("right_surface_snapshot"),
-    ));
+    let app_data_source = Arc::new(TestSessionDataSource::new());
     let core = RuntimeCore::default().with_app_data_source(app_data_source.clone());
 
     let response = core
@@ -425,9 +421,7 @@ async fn workspace_right_surface_persist_requested_saves_object_canvas_snapshot(
 
 #[tokio::test]
 async fn workspace_right_surface_non_persist_object_canvas_request_does_not_save_snapshot() {
-    let app_data_source = Arc::new(TestSessionDataSource::new(
-        empty_agent_session_read_response("right_surface_non_snapshot"),
-    ));
+    let app_data_source = Arc::new(TestSessionDataSource::new());
     let core = RuntimeCore::default().with_app_data_source(app_data_source.clone());
 
     core.request_workspace_right_surface(WorkspaceRightSurfaceRequestParams {

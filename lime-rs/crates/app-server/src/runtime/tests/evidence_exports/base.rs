@@ -68,15 +68,27 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
     assert_eq!(response.session.session_id, "sess_evidence");
     assert_eq!(response.turns.len(), 1);
     assert_eq!(response.turns[0].turn_id, "turn_evidence");
-    assert_eq!(response.events.len(), 4);
-    assert_eq!(response.events[0].event_type, "message.created");
-    assert_eq!(response.events[0].payload["input"]["text"], "生成 evidence");
-    assert_eq!(response.events[2].event_type, "message.delta");
+    assert_eq!(response.events.len(), 7);
+    let user_message = response
+        .events
+        .iter()
+        .find(|event| event.event_type == "message.created")
+        .expect("user message event");
+    assert_eq!(user_message.payload["input"]["text"], "生成 evidence");
+    assert!(response
+        .events
+        .iter()
+        .any(|event| event.event_type == "message.delta"));
     assert_eq!(response.artifacts.len(), 1);
     assert_eq!(response.artifacts[0].artifact_ref, "artifact-report");
     assert_eq!(response.artifacts[0].content, None);
-    assert!(response.events[3].payload["content"].as_str().is_none());
-    assert!(response.events[3].payload["sidecarRef"]["sha256"]
+    let artifact_event = response
+        .events
+        .iter()
+        .find(|event| event.event_type == "artifact.snapshot")
+        .expect("artifact snapshot event");
+    assert!(artifact_event.payload["content"].as_str().is_none());
+    assert!(artifact_event.payload["sidecarRef"]["sha256"]
         .as_str()
         .is_some_and(|value| value.starts_with("sha256:")));
     assert_eq!(
@@ -91,7 +103,7 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
         Some("accepted")
     );
     assert_eq!(evidence_pack.turn_count, 1);
-    assert_eq!(evidence_pack.item_count, 4);
+    assert_eq!(evidence_pack.item_count, 7);
     assert_eq!(evidence_pack.recent_artifact_count, 1);
     assert_eq!(
         evidence_pack
@@ -373,9 +385,7 @@ async fn export_evidence_repairs_and_reads_jsonl_projection() {
         .clear_session("sess_evidence_projection")
         .expect("simulate missing projection");
 
-    let app_data_source = Arc::new(TestSessionDataSource::new(
-        empty_agent_session_read_response("legacy_unexpected"),
-    ));
+    let app_data_source = Arc::new(TestSessionDataSource::new());
     let restarted_core = RuntimeCore::default()
         .with_event_log_writer(event_log_writer)
         .with_projection_store(projection_store)
@@ -398,12 +408,19 @@ async fn export_evidence_repairs_and_reads_jsonl_projection() {
     assert_eq!(response.turns.len(), 1);
     assert_eq!(response.turns[0].turn_id, "turn_evidence_projection");
     assert_eq!(response.turns[0].status, AgentTurnStatus::Completed);
-    assert_eq!(response.events.len(), 4);
-    assert_eq!(response.events[0].event_type, "message.created");
+    assert_eq!(response.events.len(), 7);
+    let user_message = response
+        .events
+        .iter()
+        .find(|event| event.event_type == "message.created")
+        .expect("user message event");
     assert_eq!(
-        response.events[0].payload["input"]["text"],
+        user_message.payload["input"]["text"],
         "生成 projection evidence"
     );
-    assert_eq!(response.events[2].event_type, "message.delta");
+    assert!(response
+        .events
+        .iter()
+        .any(|event| event.event_type == "message.delta"));
     assert!(response.evidence_pack.is_some());
 }

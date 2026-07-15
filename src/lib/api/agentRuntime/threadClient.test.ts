@@ -30,7 +30,7 @@ import type {
   AgentRuntimeFileCheckpointListResult,
   AgentRuntimeFileCheckpointRestoreResult,
   AgentRuntimeFileCheckpointSummary,
-} from "./types";
+} from "./sessionTypes";
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),

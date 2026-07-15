@@ -4,7 +4,7 @@ import type {
   AgentRuntimeEvidenceMcpToolResult,
   AgentRuntimeEvidenceSkillInvocation,
   AgentRuntimeEvidenceSkillSearch,
-} from "./types";
+} from "./evidenceTypes";
 import { normalizeEvidenceModalityRuntimeContracts } from "./evidenceIndexNormalizers";
 import { normalizeEvidenceVerificationSummary } from "./evidenceVerificationNormalizers";
 import {

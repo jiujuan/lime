@@ -60,8 +60,8 @@ async fn append_external_runtime_events_accepts_coding_lifecycle() {
     assert_eq!(appended.len(), 8);
     assert_eq!(appended[0].event_type, "file.changed");
     assert_eq!(appended[7].event_type, "test.completed");
-    assert_eq!(appended[0].sequence, 3);
-    assert_eq!(appended[7].sequence, 10);
+    assert_eq!(appended[0].sequence, 5);
+    assert_eq!(appended[7].sequence, 12);
 }
 
 #[tokio::test]

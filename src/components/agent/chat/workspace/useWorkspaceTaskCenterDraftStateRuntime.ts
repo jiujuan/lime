@@ -21,7 +21,6 @@ interface UseWorkspaceTaskCenterDraftStateRuntimeParams {
   messagesLength: number;
   normalizedInitialSessionId: string | null;
   sessionId?: string | null;
-  turnsLength: number;
 }
 
 interface WorkspaceTaskCenterDraftStateRuntime {
@@ -52,7 +51,6 @@ export function useWorkspaceTaskCenterDraftStateRuntime({
   messagesLength,
   normalizedInitialSessionId,
   sessionId,
-  turnsLength,
 }: UseWorkspaceTaskCenterDraftStateRuntimeParams): WorkspaceTaskCenterDraftStateRuntime {
   const [taskCenterDraftSendRequest, setTaskCenterDraftSendRequest] =
     useState<TaskCenterDraftSendRequest | null>(null);
@@ -93,7 +91,6 @@ export function useWorkspaceTaskCenterDraftStateRuntime({
     Boolean(normalizedInitialSessionId) &&
     normalizedInitialSessionId === (sessionId?.trim() || null) &&
     messagesLength === 0 &&
-    turnsLength === 0 &&
     effectiveThreadItemCount === 0 &&
     (!hasInitialSessionTopic || (initialSessionMessagesCount ?? 0) > 0);
 

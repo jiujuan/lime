@@ -17,6 +17,7 @@ import {
 export { expandWithWorkspaceDependents, resolveRustPathSelection };
 
 const MANIFEST_PATH = "lime-rs/Cargo.toml";
+const DEFAULT_DARWIN_RUST_MIN_STACK = "8388608";
 const CARGO_OPTIONS_WITH_VALUE = new Set([
   "-j",
   "-p",
@@ -43,6 +44,17 @@ function liveProviderSmokeAllowed() {
     process.env.LIME_REAL_API_TEST === "1" ||
     process.env.PROXYCAST_REAL_API_TEST === "1"
   );
+}
+
+export function resolveRustTestEnv(
+  env = process.env,
+  platform = process.platform,
+) {
+  const resolved = { ...env };
+  if (platform === "darwin" && !resolved.RUST_MIN_STACK?.trim()) {
+    resolved.RUST_MIN_STACK = DEFAULT_DARWIN_RUST_MIN_STACK;
+  }
+  return resolved;
 }
 
 function looksLikeGitRef(value) {
@@ -77,6 +89,7 @@ Options:
   --list 会遵循相同的 Cargo package scope；默认只列 lime，传 --workspace 列全 workspace，传 -p <crate> 列目标 crate。
   --changed / --related 会先映射所属 crate，再用 cargo metadata 扩展反向依赖；Cargo.toml / Cargo.lock 等 workspace 边界会扩大到 --workspace。
   若 Rust 路径无法映射到当前 workspace crate，命令会失败，避免静默通过 0 个测试。
+  macOS Cargo test worker 默认使用 8 MiB 栈；显式 RUST_MIN_STACK 会覆盖该默认值。
 
 Examples:
   npm run test:rust:unit
@@ -304,7 +317,7 @@ function runCargo(layer, cargoArgs, testArgs) {
   );
   const result = spawnSync("cargo", args, {
     encoding: failOnZeroExecutedTests ? "utf8" : undefined,
-    env: process.env,
+    env: resolveRustTestEnv(),
     maxBuffer: 50 * 1024 * 1024,
     stdio: failOnZeroExecutedTests ? "pipe" : "inherit",
   });

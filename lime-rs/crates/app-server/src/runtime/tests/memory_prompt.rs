@@ -85,7 +85,7 @@ async fn start_memory_prompt_turn_with_core(
 #[tokio::test]
 async fn start_turn_injects_workspace_memory_summary_context() {
     let data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("missing"))
+        TestSessionDataSource::new()
             .with_memory_store_read_response(Ok(read_response("Prefer concise answers.\n", false))),
     );
     let runtime_options = Some(RuntimeOptions {
@@ -174,7 +174,7 @@ async fn start_turn_injects_workspace_memory_summary_context() {
 #[tokio::test]
 async fn start_turn_skips_empty_memory_summary() {
     let data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("missing"))
+        TestSessionDataSource::new()
             .with_memory_store_read_response(Ok(read_response("   \n", false))),
     );
 
@@ -196,7 +196,7 @@ async fn start_turn_skips_empty_memory_summary() {
 #[tokio::test]
 async fn start_turn_does_not_block_when_memory_summary_read_fails() {
     let data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("missing"))
+        TestSessionDataSource::new()
             .with_memory_store_read_response(Err("memory unavailable".to_string())),
     );
 
@@ -220,11 +220,10 @@ async fn start_turn_does_not_block_when_memory_summary_read_fails() {
 #[tokio::test]
 async fn start_turn_rejects_secret_like_memory_summary_packet() {
     let data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("missing"))
-            .with_memory_store_read_response(Ok(read_response(
-                "api_key = abcdefghijklmnop\n",
-                false,
-            ))),
+        TestSessionDataSource::new().with_memory_store_read_response(Ok(read_response(
+            "api_key = abcdefghijklmnop\n",
+            false,
+        ))),
     );
 
     let backend = start_memory_prompt_turn(data_source, None).await;
@@ -249,11 +248,10 @@ async fn start_turn_rejects_secret_like_memory_summary_packet() {
 #[tokio::test]
 async fn start_turn_rejects_secret_like_memory_summary_without_sidecar() {
     let data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("missing"))
-            .with_memory_store_read_response(Ok(read_response(
-                "api_key = abcdefghijklmnop\n",
-                false,
-            ))),
+        TestSessionDataSource::new().with_memory_store_read_response(Ok(read_response(
+            "api_key = abcdefghijklmnop\n",
+            false,
+        ))),
     );
 
     let (backend, sidecar_store, _sidecar_root) =

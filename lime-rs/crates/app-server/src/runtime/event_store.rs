@@ -1,5 +1,10 @@
+mod canonical_message_lifecycle;
 mod canonical_notifications;
 
+pub(in crate::runtime) use self::canonical_message_lifecycle::CanonicalMessageLifecycleState;
+use self::canonical_message_lifecycle::{
+    attach_canonical_item_entity, with_canonical_message_reasoning_lifecycle,
+};
 use self::canonical_notifications::notification_events_with_canonical_entities;
 use super::status::{agent_turn_is_terminal, session_status_from_turn_status};
 use super::trace;
@@ -51,6 +56,7 @@ impl RuntimeCoreEventAppender {
             &thread_id,
             turn_id,
             runtime_events,
+            None,
         )
     }
 }
@@ -197,6 +203,7 @@ impl RuntimeCore {
             &thread_id,
             Some(turn_id),
             vec![runtime_event],
+            None,
         )?;
         stored.session.status = session_status;
         stored.session.updated_at = session_updated_at;
@@ -288,6 +295,42 @@ pub(in crate::runtime) fn append_runtime_events_to_state(
         thread_id,
         turn_id,
         runtime_events,
+        None,
+    )
+}
+
+pub(in crate::runtime) fn append_runtime_events_to_state_with_message_lifecycle(
+    state: &Arc<Mutex<RuntimeCoreState>>,
+    file_checkpoint_snapshot_store: &dyn crate::file_checkpoint_snapshot::FileCheckpointSnapshotStore,
+    output_snapshot_store: &dyn output_refs::OutputSnapshotStore,
+    sidecar_store: Option<&SidecarStore>,
+    event_log_writer: Option<&EventLogWriter>,
+    trace_event_writer: Option<&TraceEventWriter>,
+    projection_store: Option<&ProjectionStore>,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    runtime_events: Vec<RuntimeEvent>,
+    message_lifecycle: &mut CanonicalMessageLifecycleState,
+) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
+    let mut state = state.lock().expect("runtime core state mutex poisoned");
+    let stored = state
+        .sessions
+        .get_mut(session_id)
+        .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+    append_runtime_events_to_stored_session(
+        stored,
+        file_checkpoint_snapshot_store,
+        output_snapshot_store,
+        sidecar_store,
+        event_log_writer,
+        trace_event_writer,
+        projection_store,
+        session_id,
+        thread_id,
+        Some(turn_id),
+        runtime_events,
+        Some(message_lifecycle),
     )
 }
 
@@ -303,12 +346,20 @@ fn append_runtime_events_to_stored_session(
     thread_id: &str,
     turn_id: Option<&str>,
     runtime_events: Vec<RuntimeEvent>,
+    message_lifecycle: Option<&mut CanonicalMessageLifecycleState>,
 ) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
     if is_terminal_turn(stored, turn_id) {
         return Ok(Vec::new());
     }
     let runtime_events = deduplicate_mailbox_runtime_events(stored, runtime_events);
     let runtime_events = runtime_events_with_turn_input(stored, turn_id, runtime_events);
+    let runtime_events = with_canonical_message_reasoning_lifecycle(
+        &stored.events,
+        turn_id,
+        runtime_events,
+        message_lifecycle,
+    )
+    .map_err(RuntimeCoreError::Backend)?;
     if let Some(retired_event) = runtime_events.iter().find(|event| {
         is_retired_tool_wire_event_class(normalized_runtime_event_class(&event.event_type))
     }) {
@@ -445,6 +496,8 @@ fn append_runtime_events_to_stored_session(
             )?;
         }
         attach_session_projection_metadata(&mut event, stored);
+        attach_canonical_item_entity(stored, &events, &mut event)
+            .map_err(RuntimeCoreError::Backend)?;
         agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?;
         if needs_sequence_context && !is_approval_session_cache_auto_resolved(&event) {
             let validation_events = validation_events
@@ -529,14 +582,13 @@ fn append_runtime_events_to_stored_session(
             );
         }
         if !requires_canonical_persistence {
-            if let Err(error) = projection_store.apply_canonical_events(stored, &appended_events) {
-                tracing::warn!(
-                    "[canonical-thread-store] failed to apply {} events for session {}: {}",
-                    appended_events.len(),
-                    session_id,
-                    error
-                );
-            }
+            projection_store
+                .apply_canonical_events(stored, &appended_events)
+                .map_err(|error| {
+                    RuntimeCoreError::Backend(format!(
+                        "canonical ThreadStore projection failed after EventLog append: {error}"
+                    ))
+                })?;
         }
         if terminal_result_required {
             projection_store

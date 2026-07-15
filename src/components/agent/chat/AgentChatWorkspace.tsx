@@ -17,7 +17,6 @@ import { useDeveloperFeatureFlags } from "@/hooks/useDeveloperFeatureFlags";
 import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
 import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoiceGenerationBrief";
 import { useSoulInteractionCopy } from "@/hooks/useSoulInteractionCopy";
-import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
 import { type TaskFile } from "./components/TaskFiles";
 import {
   type CanvasState as GeneralCanvasState,
@@ -40,7 +39,6 @@ import { useWorkspaceProjectSelection } from "./hooks/useWorkspaceProjectSelecti
 import { useWorkbenchStore } from "@/stores/useWorkbenchStore";
 import { useWorkspaceHarnessInventoryRuntime } from "./workspace/useWorkspaceHarnessInventoryRuntime";
 import { useWorkspaceCanvasSceneRuntime } from "./workspace/useWorkspaceCanvasSceneRuntime";
-import { useWorkspaceCanvasMessageSyncRuntime } from "./workspace/useWorkspaceCanvasMessageSyncRuntime";
 import { useWorkspaceInputbarSceneRuntime } from "./workspace/useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceNavigationActions } from "./workspace/useWorkspaceNavigationActions";
 import { useWorkspaceArtifactActionRuntime } from "./workspace/useWorkspaceArtifactActionRuntime";
@@ -48,25 +46,18 @@ import { useWorkspaceCanvasSurfaceRuntime } from "./workspace/useWorkspaceCanvas
 import { useSessionRecentMetadataSyncRuntime } from "./workspace/useSessionRecentMetadataSyncRuntime";
 import { useWorkspaceTaskCenterInteractionRuntime } from "./workspace/useWorkspaceTaskCenterInteractionRuntime";
 import { useWorkspaceTaskCenterSendRuntime } from "./workspace/useWorkspaceTaskCenterSendRuntime";
-import { useWorkspaceTaskCenterNavigationRuntime } from "./workspace/useWorkspaceTaskCenterNavigationRuntime";
 import { useWorkspaceTaskCenterSurfaceRuntime } from "./workspace/useWorkspaceTaskCenterSurfaceRuntime";
 import { useWorkspaceImageWorkbenchSessionRuntime } from "./workspace/useWorkspaceImageWorkbenchSessionRuntime";
-import { useWorkspaceSessionRestore } from "./workspace/useWorkspaceSessionRestore";
-import { useWorkspaceResetRuntime } from "./workspace/useWorkspaceResetRuntime";
-import { useWorkspaceSendSurfaceRuntime } from "./workspace/useWorkspaceSendSurfaceRuntime";
-import { useGeneralWorkbenchInitialDispatchRuntime } from "./workspace/useGeneralWorkbenchInitialDispatchRuntime";
 import { useWorkspaceWorkbenchSideEffectRuntime } from "./workspace/useWorkspaceWorkbenchSideEffectRuntime";
 import { useWorkspaceSystemPromptRuntime } from "./workspace/useWorkspaceSystemPromptRuntime";
 import { useWorkspaceGeneralWorkbenchScaffoldRuntime } from "./workspace/useWorkspaceGeneralWorkbenchScaffoldRuntime";
 import { useWorkspacePlanDecisionRuntime } from "./workspace/useWorkspacePlanDecisionRuntime";
-import { useWorkspaceTaskCenterDraftStateRuntime } from "./workspace/useWorkspaceTaskCenterDraftStateRuntime";
 import { useWorkspaceGeneralWorkbenchSidebarHostRuntime } from "./workspace/useWorkspaceGeneralWorkbenchSidebarHostRuntime";
 import { useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime } from "./workspace/useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime";
 import { useWorkspaceGeneralWorkbenchRuntime } from "./workspace/useWorkspaceGeneralWorkbenchRuntime";
 import { useWorkspaceTeamRuntime } from "./workspace/useWorkspaceTeamRuntime";
 import { useWorkspaceGeneralWorkbenchDocumentPersistenceRuntime } from "./workspace/useWorkspaceGeneralWorkbenchDocumentPersistenceRuntime";
 import { useWorkspaceServiceSkillEntryActions } from "./workspace/useWorkspaceServiceSkillEntryActions";
-import { useWorkspaceWorkbenchActionSurfaceRuntime } from "./workspace/useWorkspaceWorkbenchActionSurfaceRuntime";
 import { useWorkspaceImageWorkbenchProviderRuntime } from "./workspace/useWorkspaceImageWorkbenchProviderRuntime";
 import { useWorkspaceMessageKnowledgeSaveRuntime } from "./workspace/useWorkspaceMessageKnowledgeSaveRuntime";
 import { useWorkspaceMessageSkillSaveRuntime } from "./workspace/useWorkspaceMessageSkillSaveRuntime";
@@ -113,11 +104,11 @@ import {
   useWorkspaceTaskFilesRefSyncRuntime,
 } from "./workspace/useWorkspaceEntrySideEffectsRuntime";
 import { useWorkspaceHarnessRequestMetadataRuntime } from "./workspace/useWorkspaceHarnessRequestMetadataRuntime";
-import { useWorkspacePersistenceRuntime } from "./workspace/useWorkspacePersistenceRuntime";
 import { useWorkspaceHarnessNavigationRuntime } from "./workspace/useWorkspaceHarnessNavigationRuntime";
 import { useWorkspaceEntryProjectionRuntime } from "./workspace/useWorkspaceEntryProjectionRuntime";
 import { useWorkspacePendingInputRuntime } from "./workspace/useWorkspacePendingInputRuntime";
 import { useAgentChatWorkspaceLocalDisplayState } from "./workspace/useAgentChatWorkspaceLocalDisplayState";
+import { useAgentChatWorkspaceCommandWiring } from "./workspace/useAgentChatWorkspaceCommandWiring";
 import { useAgentChatWorkspaceSceneComposition } from "./workspace/useAgentChatWorkspaceSceneComposition";
 import {
   GENERAL_BROWSER_ASSIST_PROFILE_KEY,
@@ -196,6 +187,13 @@ export function AgentChatWorkspace({
     Boolean(contentId) && isSpecializedWorkbenchTheme(normalizedEntryTheme);
   const shouldKeepNewTaskHomeSessionRestoreDisabled =
     agentEntry === "new-task" && !contentId;
+  const localDisplayRuntime = useAgentChatWorkspaceLocalDisplayState({
+    defaultTopicSidebarVisible,
+    entryBannerMessage,
+    initialCreationMode,
+    normalizedEntryTheme,
+    shouldBootstrapCanvasOnEntry,
+  });
   const {
     activeTheme,
     artifactPreviewSize,
@@ -227,13 +225,7 @@ export function AgentChatWorkspace({
     setSelectedText,
     setShowSidebar,
     showSidebar,
-  } = useAgentChatWorkspaceLocalDisplayState({
-    defaultTopicSidebarVisible,
-    entryBannerMessage,
-    initialCreationMode,
-    normalizedEntryTheme,
-    shouldBootstrapCanvasOnEntry,
-  });
+  } = localDisplayRuntime;
   const {
     pathReferences,
     addPathReferences: handleAddPathReferences,
@@ -298,6 +290,13 @@ export function AgentChatWorkspace({
       previous.subagent ? previous : { ...previous, subagent: true },
     );
   }, [setChatToolPreferences]);
+  const projectSelectionRuntime = useWorkspaceProjectSelection({
+    externalProjectId,
+    initialSessionId,
+    keepNewChatSessionRestoreDisabled:
+      shouldKeepNewTaskHomeSessionRestoreDisabled,
+    newChatAt,
+  });
   const {
     projectId,
     shouldDisableSessionRestore,
@@ -312,13 +311,7 @@ export function AgentChatWorkspace({
     finishTopicProjectResolution,
     deferTopicSwitch,
     consumePendingTopicSwitch,
-  } = useWorkspaceProjectSelection({
-    externalProjectId,
-    initialSessionId,
-    keepNewChatSessionRestoreDisabled:
-      shouldKeepNewTaskHomeSessionRestoreDisabled,
-    newChatAt,
-  });
+  } = projectSelectionRuntime;
   const taskCenterWorkspaceId = normalizeProjectId(projectId);
   const normalizedInitialSessionId =
     typeof initialSessionId === "string" && initialSessionId.trim().length > 0
@@ -590,6 +583,34 @@ export function AgentChatWorkspace({
     });
 
   // 使用 Agent Chat Hook（传递系统提示词）
+  const agentChatRuntime = useAgentChatUnified({
+    systemPrompt,
+    onWriteFile: (content, fileName, context) => {
+      // 使用 ref 调用最新的 handleWriteFile
+      handleWriteFileRef.current?.(content, fileName, context);
+    },
+    workspaceId: runtimeWorkspaceId,
+    workingDir: project?.rootPath || null,
+    disableSessionRestore: shouldDisableSessionRestore,
+    sessionRestorePresentation,
+    initialTopicsLoadMode: shouldDeferInitialTopicsLoad
+      ? "deferred"
+      : "immediate",
+    initialTopicsDeferredDelayMs: shouldDeferInitialTopicsLoad
+      ? deferredInitialTopicsLoadMs
+      : undefined,
+    initialRuntimeWarmupLoadMode: shouldDeferInitialRuntimeWarmup
+      ? "deferred"
+      : "immediate",
+    initialRuntimeWarmupDeferredDelayMs: shouldDeferInitialRuntimeWarmup
+      ? deferredInitialRuntimeWarmupMs
+      : undefined,
+    getSyncedSessionRecentPreferences,
+    onOpenSubagents: handleOpenSubagents,
+    onRestoreInterruptedInput: handleRestoreInterruptedInput,
+    clawTraceEnabled,
+    soulCopy: soulInteractionCopy,
+  });
   const {
     providerType,
     setProviderType,
@@ -640,34 +661,7 @@ export function AgentChatWorkspace({
     workspacePathMissing = false,
     fixWorkspacePathAndRetry,
     dismissWorkspacePathError,
-  } = useAgentChatUnified({
-    systemPrompt,
-    onWriteFile: (content, fileName, context) => {
-      // 使用 ref 调用最新的 handleWriteFile
-      handleWriteFileRef.current?.(content, fileName, context);
-    },
-    workspaceId: runtimeWorkspaceId,
-    workingDir: project?.rootPath || null,
-    disableSessionRestore: shouldDisableSessionRestore,
-    sessionRestorePresentation,
-    initialTopicsLoadMode: shouldDeferInitialTopicsLoad
-      ? "deferred"
-      : "immediate",
-    initialTopicsDeferredDelayMs: shouldDeferInitialTopicsLoad
-      ? deferredInitialTopicsLoadMs
-      : undefined,
-    initialRuntimeWarmupLoadMode: shouldDeferInitialRuntimeWarmup
-      ? "deferred"
-      : "immediate",
-    initialRuntimeWarmupDeferredDelayMs: shouldDeferInitialRuntimeWarmup
-      ? deferredInitialRuntimeWarmupMs
-      : undefined,
-    getSyncedSessionRecentPreferences,
-    onOpenSubagents: handleOpenSubagents,
-    onRestoreInterruptedInput: handleRestoreInterruptedInput,
-    clawTraceEnabled,
-    soulCopy: soulInteractionCopy,
-  });
+  } = agentChatRuntime;
   const { workspaceHealthError, setWorkspaceHealthError } =
     useWorkspaceHealthRuntime({
       enabled:
@@ -1101,139 +1095,169 @@ export function AgentChatWorkspace({
     harnessPendingCount,
   });
 
+  const commandWiring = useAgentChatWorkspaceCommandWiring({
+    navigationProjectId: validatedRuntimeProjectId ?? undefined,
+    trayActiveTheme: mappedTheme,
+    consumePendingSkill,
+    pendingSkillKey,
+    sceneGateResumeHandlerRef,
+    scope: {
+      ...agentChatRuntime,
+      ...localDisplayRuntime,
+      ...projectSelectionRuntime,
+      accessMode,
+      agentResponseLanguage,
+      agentEntry,
+      autoCollapsedTopicSidebarRef,
+      autoRunInitialPromptOnMount,
+      autoSyncEnabled: false,
+      browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
+      browserAssistPreferredBackend: browserAssistRequestPreferredBackend,
+      browserAssistProfileKey: browserAssistRequestProfileKey,
+      browserAssistSessionState,
+      cancelImageTask: cancelMediaTaskArtifact,
+      canvasState,
+      chatToolPreferences: effectiveChatToolPreferences,
+      clearPendingEntryA2UI: clearEntryPendingA2UI,
+      contentId,
+      contextWorkspace: {
+        enabled: contextWorkspace.generalWorkbenchEnabled,
+        activeContextPrompt: contextWorkspace.activeContextPrompt,
+        prepareActiveContextPrompt: contextWorkspace.prepareActiveContextPrompt,
+      },
+      createImageGenerationTask: createImageGenerationTaskArtifact,
+      currentGateKey: currentGate.key,
+      currentImageWorkbenchState,
+      currentSessionId: sessionId,
+      defaultTopicSidebarVisible,
+      deferInitialSync: true,
+      deferSessionRecentMetadataSyncForNavigation,
+      effectiveThreadItemCount: threadItems.length,
+      externalProjectId,
+      getImageTask: getMediaTaskArtifact,
+      hasInitialSessionTopic: normalizedInitialSessionId
+        ? topicById.has(normalizedInitialSessionId)
+        : false,
+      initialCreationMode,
+      initialSessionId,
+      initialSessionMessagesCount: normalizedInitialSessionId
+        ? (topicById.get(normalizedInitialSessionId)?.messagesCount ?? null)
+        : null,
+      initialTheme,
+      initialUserImages,
+      initialUserPrompt,
+      isAutoRestoringSession,
+      isSessionHydrating,
+      isSpecializedThemeMode,
+      isThemeWorkbench,
+      imageWorkbenchPreferredModelId:
+        effectiveImageWorkbenchPreference.preferredModelId,
+      imageWorkbenchPreferredProviderId:
+        effectiveImageWorkbenchPreference.preferredProviderId,
+      imageWorkbenchPreferredProviderUnavailable,
+      imageWorkbenchProvidersLoading,
+      imageWorkbenchSelectedModelId,
+      imageWorkbenchSelectedProviderId,
+      imageWorkbenchSelectedSize,
+      imageWorkbenchSessionKey,
+      ensureImageWorkbenchProvidersLoaded,
+      ensureBrowserAssistCanvas,
+      ensureSessionForCommandMetadata: ensureSession,
+      executionStrategy,
+      handleAutoLaunchMatchedSiteSkill:
+        workspaceServiceSkillEntryActions.handleAutoLaunchMatchedSiteSkill,
+      lastCanvasSyncRequestRef,
+      lockTheme,
+      mappedTheme,
+      mentionedCharacters,
+      messages,
+      messagesLength: messages.length,
+      newChatAt,
+      normalizedInitialSessionId,
+      normalizedInitialTheme: normalizedEntryTheme,
+      onInitialUserPromptConsumed,
+      onNavigate: _onNavigate,
+      openRuntimeSceneGate,
+      originalSwitchTopic,
+      preserveSessionRestoreOnNewChat:
+        shouldKeepNewTaskHomeSessionRestoreDisabled &&
+        !shouldDisableSessionRestore,
+      processedMessageIdsRef: processedMessageIds,
+      preferredTeamPresetId,
+      projectImageGenerationPreference: project?.settings?.imageGeneration,
+      projectName: project?.name,
+      projectRootPath: project?.rootPath || null,
+      queuedTurnCount: queuedTurns.length,
+      queuedTurnsLength: queuedTurns.length,
+      resolveServiceModelsBeforeSend: shouldDeferWorkspaceAuxiliaryLoads
+        ? refreshServiceModelsConfig
+        : undefined,
+      savedSoulArtifactVoiceGenerationBrief: soulArtifactVoiceGenerationBrief,
+      saveImageWorkbenchImagesToResource,
+      selectedTeam,
+      selectedTeamLabel,
+      selectedTeamSummary,
+      serviceModels,
+      serviceSkills: activeTheme === "general" ? serviceSkills : [],
+      setCanvasState,
+      setDocumentVersionStatusMap,
+      setChatMessages,
+      setChatToolPreferences,
+      setGeneralCanvasState,
+      setMentionedCharacters,
+      setOnDemandMediaDefaults,
+      setSelectedFileId,
+      setSoulArtifactVoiceEnabledForTurn,
+      setTaskFiles,
+      setTopicStatus,
+      shouldUseCompactGeneralWorkbench,
+      syncContent,
+      taskCenterWorkspaceId,
+      taskFilesLength: taskFiles.length,
+      themeWorkbenchLatestTerminal:
+        themeWorkbenchBackendRunState?.latest_terminal ?? null,
+      themeWorkbenchRunState,
+      themeWorkbenchActiveQueueTitle: themeWorkbenchActiveQueueItem?.title,
+      teamMemoryShadowSnapshot: resolvedTeamMemoryShadowSnapshot,
+      threadItemsLength: threadItems.length,
+      topicById,
+      topics,
+      turnsLength: turns.length,
+      updateCurrentImageWorkbenchState,
+      workspaceRequestMetadataBase:
+        workspaceRequestMetadataWithExpertSkills ?? undefined,
+      workspaceSkillBindings,
+      workspaceSkillRuntimeEnable: expertWorkspaceSkillRuntimeEnableInput,
+      soulArtifactVoiceEnabledForTurn,
+    },
+  });
   const {
     activeTaskCenterDraftTabId,
-    handleBeforeTopicSwitch,
     homePendingPreviewRequest,
     setActiveTaskCenterDraftTabId,
     setHomePendingPreviewRequest,
     setTaskCenterDraftSendRequest,
     setTaskCenterDraftTabs,
-    shouldHydrateEmptyMatchedInitialSession,
-    shouldPauseInitialSessionNavigationForTaskCenterDraft,
     taskCenterDraftSendRequest,
     taskCenterDraftSurfaceActiveRef,
     taskCenterDraftTabs,
-  } = useWorkspaceTaskCenterDraftStateRuntime({
-    agentEntry,
-    deferSessionRecentMetadataSyncForNavigation,
-    effectiveThreadItemCount: threadItems.length,
-    hasInitialSessionTopic: normalizedInitialSessionId
-      ? topicById.has(normalizedInitialSessionId)
-      : false,
-    initialSessionMessagesCount: normalizedInitialSessionId
-      ? (topicById.get(normalizedInitialSessionId)?.messagesCount ?? null)
-      : null,
-    messagesLength: messages.length,
-    normalizedInitialSessionId,
-    sessionId,
-    turnsLength: turns.length,
-  });
-
+  } = commandWiring.taskCenterDraftState;
   const {
     readSessionFile,
     saveSessionFile,
     sessionFiles,
-    sessionMeta,
     syncGeneralArtifactToResource,
-  } = useWorkspacePersistenceRuntime({
-    activeTheme,
-    canvasState,
-    contentId,
-    creationMode,
-    currentTurnId,
-    draftSendInFlight: Boolean(
-      taskCenterDraftSendRequest || homePendingPreviewRequest,
-    ),
-    isSending,
-    isThemeWorkbench,
-    lastCanvasSyncRequestRef,
-    mappedTheme,
-    projectId,
-    projectRootPath: project?.rootPath || null,
-    queuedTurnCount: queuedTurns.length,
-    sessionId,
-    setDocumentVersionStatusMap,
-    syncContent,
-    themeWorkbenchLatestTerminal:
-      themeWorkbenchBackendRunState?.latest_terminal ?? null,
-    themeWorkbenchRunState,
-  });
-
+  } = commandWiring.persistence;
   const {
     bootstrapDispatchPreview,
-    consumeInitialPrompt,
     consumedInitialPromptRef,
-    dismissGeneralWorkbenchEntryPrompt,
-    finalizeAfterSendSuccess,
     generalWorkbenchEntryCheckPending,
     generalWorkbenchEntryPrompt,
     hasTriggeredGuideRef,
     initialDispatchKey,
     isBootstrapDispatchPending,
-    resetGuideState,
-    resolveSendBoundary,
-    rollbackAfterSendFailure,
-  } = useGeneralWorkbenchInitialDispatchRuntime({
-    activeTheme,
-    autoRunInitialPromptOnMount,
-    contentId,
-    initialUserPrompt,
-    initialUserImages,
-    isSending,
-    isThemeWorkbench,
-    mappedTheme,
-    messagesLength: messages.length,
-    onInitialUserPromptConsumed,
-    queuedTurnsLength: queuedTurns.length,
-    sessionId,
-    setInput,
-    setSoulArtifactVoiceEnabledForTurn,
-    shouldUseCompactGeneralWorkbench,
-  });
-  const { resetRestoredSessionState } = useWorkspaceSessionRestore({
-    sessionId,
-    sessionMeta,
-    lockTheme,
-    initialTheme,
-    sessionFiles,
-    taskFilesLength: taskFiles.length,
-    setActiveTheme,
-    setCreationMode,
-    setTaskFiles,
-  });
-  const { handleBackHome, resetTopicLocalState } = useWorkspaceResetRuntime({
-    clearMessages,
-    clearPendingEntryA2UI: clearEntryPendingA2UI,
-    clearProjectSelectionRuntime,
-    resetProjectSelection,
-    resetRestoredSessionState,
-    resetGuideState,
-    hasHandledNewChatRequest,
-    markNewChatRequestHandled,
-    defaultTopicSidebarVisible,
-    normalizedInitialTheme: normalizedEntryTheme,
-    initialCreationMode,
-    newChatAt,
-    externalProjectId,
-    preserveSessionRestoreOnNewChat:
-      shouldKeepNewTaskHomeSessionRestoreDisabled &&
-      !shouldDisableSessionRestore,
-    onNavigate: _onNavigate,
-    autoCollapsedTopicSidebarRef,
-    processedMessageIdsRef: processedMessageIds,
-    setInput,
-    setSelectedText,
-    setLayoutMode,
-    setShowSidebar,
-    setCanvasState,
-    setGeneralCanvasState,
-    setTaskFiles,
-    setSelectedFileId,
-    setMentionedCharacters,
-    setActiveTheme,
-    setCreationMode,
-  });
+  } = commandWiring.initialDispatch;
+  const { handleBackHome, resetTopicLocalState } = commandWiring.reset;
   const {
     clearTaskCenterEmbeddedHomeSession,
     isTaskCenterEntry,
@@ -1253,59 +1277,7 @@ export function AgentChatWorkspace({
     taskCenterTransitionTopicId,
     upsertTaskCenterOpenTab,
     switchTopic,
-  } = useWorkspaceTaskCenterNavigationRuntime({
-    agentEntry,
-    consumePendingTopicSwitch,
-    currentSessionId: sessionId,
-    deferTopicSwitch,
-    externalProjectId,
-    finishTopicProjectResolution,
-    getRememberedProjectId,
-    initialSessionId,
-    isAutoRestoringSession,
-    isSessionHydrating,
-    messagesLength: messages.length,
-    normalizedInitialSessionId,
-    newChatAt,
-    onBeforeTopicSwitch: handleBeforeTopicSwitch,
-    originalSwitchTopic,
-    projectId: validatedRuntimeProjectId ?? undefined,
-    rememberProjectId,
-    resetTopicLocalState,
-    taskCenterDraftSurfaceActiveRef,
-    taskCenterWorkspaceId,
-    setActiveTaskCenterDraftTabId,
-    setHomePendingPreviewRequest,
-    setTaskCenterDraftSendRequest,
-    setTaskCenterDraftTabs,
-    shouldHydrateEmptyMatchedInitialSession,
-    shouldPauseInitialSessionNavigationForTaskCenterDraft,
-    startTopicProjectResolution,
-    threadItemsLength: threadItems.length,
-    topicById,
-    topics,
-    turnsLength: turns.length,
-  });
-
-  useTrayModelShortcuts({
-    providerType,
-    setProviderType,
-    model,
-    setModel,
-    activeTheme: mappedTheme,
-    autoSyncEnabled: false,
-    deferInitialSync: true,
-  });
-
-  useWorkspaceCanvasMessageSyncRuntime({
-    canvasState,
-    isSpecializedThemeMode,
-    isThemeWorkbench,
-    mappedTheme,
-    messages,
-    processedMessageIdsRef: processedMessageIds,
-    setCanvasState,
-  });
+  } = commandWiring.taskCenterNavigation;
 
   const {
     handleSend,
@@ -1316,98 +1288,7 @@ export function AgentChatWorkspace({
     handleImageWorkbenchCommand,
     imageWorkbenchActionRuntime,
     latestAssistantMessageId,
-  } = useWorkspaceSendSurfaceRuntime({
-    imageWorkbench: {
-      cancelImageTask: cancelMediaTaskArtifact,
-      contentId,
-      createImageGenerationTask: createImageGenerationTaskArtifact,
-      currentImageWorkbenchState,
-      ensureImageWorkbenchProvidersLoaded,
-      getImageTask: getMediaTaskArtifact,
-      imageWorkbenchPreferredModelId:
-        effectiveImageWorkbenchPreference.preferredModelId,
-      imageWorkbenchPreferredProviderId:
-        effectiveImageWorkbenchPreference.preferredProviderId,
-      imageWorkbenchPreferredProviderUnavailable,
-      imageWorkbenchProvidersLoading,
-      imageWorkbenchSelectedModelId,
-      imageWorkbenchSelectedProviderId,
-      imageWorkbenchSelectedSize,
-      imageWorkbenchSessionKey,
-      projectId,
-      projectImageGenerationPreference: project?.settings?.imageGeneration,
-      projectRootPath: project?.rootPath || null,
-      saveImageWorkbenchImagesToResource,
-      setCanvasState,
-      setInput,
-      setOnDemandMediaDefaults,
-      updateCurrentImageWorkbenchState,
-    },
-    pendingSkill: {
-      consumePendingSkill,
-      isThemeWorkbench,
-      key: pendingSkillKey,
-    },
-    sceneGateResumeHandlerRef,
-    sendActions: {
-      input,
-      setInput,
-      mentionedCharacters,
-      setMentionedCharacters,
-      chatToolPreferences: effectiveChatToolPreferences,
-      setChatToolPreferences,
-      serviceSkills: activeTheme === "general" ? serviceSkills : [],
-      activeTheme,
-      mappedTheme,
-      isThemeWorkbench,
-      contextWorkspace: {
-        enabled: contextWorkspace.generalWorkbenchEnabled,
-        activeContextPrompt: contextWorkspace.activeContextPrompt,
-        prepareActiveContextPrompt: contextWorkspace.prepareActiveContextPrompt,
-      },
-      projectId,
-      projectRootPath: project?.rootPath || null,
-      sessionId,
-      executionStrategy,
-      accessMode,
-      providerType,
-      preferredTeamPresetId,
-      selectedTeam,
-      selectedTeamLabel,
-      selectedTeamSummary,
-      teamMemoryShadowSnapshot: resolvedTeamMemoryShadowSnapshot,
-      workspaceSkillBindings,
-      workspaceSkillRuntimeEnable: expertWorkspaceSkillRuntimeEnableInput,
-      currentGateKey: currentGate.key,
-      themeWorkbenchActiveQueueTitle: themeWorkbenchActiveQueueItem?.title,
-      contentId,
-      browserAssistProfileKey: browserAssistRequestProfileKey,
-      browserAssistPreferredBackend: browserAssistRequestPreferredBackend,
-      browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
-      browserAssistSessionState,
-      workspaceRequestMetadataBase:
-        workspaceRequestMetadataWithExpertSkills ?? undefined,
-      savedSoulArtifactVoiceGenerationBrief: soulArtifactVoiceGenerationBrief,
-      soulArtifactVoiceEnabledForTurn,
-      serviceModels,
-      agentResponseLanguage,
-      resolveServiceModelsBeforeSend: shouldDeferWorkspaceAuxiliaryLoads
-        ? refreshServiceModelsConfig
-        : undefined,
-      messages,
-      setChatMessages,
-      bootstrapDispatchPreview,
-      sendMessage,
-      resolveSendBoundary,
-      finalizeAfterSendSuccess,
-      rollbackAfterSendFailure,
-      ensureBrowserAssistCanvas,
-      handleAutoLaunchMatchedSiteSkill:
-        workspaceServiceSkillEntryActions.handleAutoLaunchMatchedSiteSkill,
-      openRuntimeSceneGate,
-      ensureSessionForCommandMetadata: ensureSession,
-    },
-  });
+  } = commandWiring.send;
 
   const {
     applyWorkbenchFollowUpActionPayload,
@@ -1422,32 +1303,7 @@ export function AgentChatWorkspace({
     handleSetBranchStatus,
     handleAddImage,
     handleImportDocument,
-  } = useWorkspaceWorkbenchActionSurfaceRuntime({
-    canvasWorkflow: {
-      sendRef: handleSendRef,
-      setCanvasState,
-      setTopicStatus,
-      projectId,
-      projectName: project?.name,
-      canvasState,
-      contentId,
-      selectedText,
-      onRunImageWorkbenchCommand: handleImageWorkbenchCommand,
-    },
-    entryPrompt: {
-      consumeInitialPrompt,
-      dismissGeneralWorkbenchEntryPrompt,
-      entryBannerMessage,
-      generalWorkbenchEntryPrompt,
-      handleSendRef,
-      initialDispatchKey,
-      input,
-      setEntryBannerVisible,
-      setInput,
-      setRuntimeEntryBannerMessage,
-      setRuntimeInitialInputCapability,
-    },
-  });
+  } = commandWiring.workbenchActions;
 
   const {
     isTaskCenterDraftTabActive,

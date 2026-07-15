@@ -1,9 +1,9 @@
 use super::request_context::{
-    apply_app_server_turn_policy, host_reasoning_effort, host_thinking_enabled,
-    request_workspace_scope, resolve_runtime_model_selection, selection_from_explicit_preferences,
-    selection_from_host_provider_config, selection_from_session_default,
-    selection_with_effective_reasoning, should_use_compact_tool_surface, turn_context_from_request,
-    RuntimeModelSelection,
+    apply_app_server_turn_policy, effective_runtime_options_for_turn, host_reasoning_effort,
+    host_thinking_enabled, request_workspace_scope, resolve_runtime_model_selection,
+    selection_from_explicit_preferences, selection_from_host_provider_config,
+    selection_from_session_default, selection_with_effective_reasoning,
+    should_use_compact_tool_surface, turn_context_from_request, RuntimeModelSelection,
 };
 use super::*;
 use crate::runtime::ToolInventoryReadRequest;

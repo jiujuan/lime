@@ -19,29 +19,7 @@ import type {
   ListMediaTaskArtifactsRequest,
   MediaTaskArtifactOutput,
   MediaTaskLookupRequest,
-} from "./agentRuntime/types";
-
-export type {
-  CompleteAudioGenerationTaskArtifactRequest,
-  CompleteImageGenerationTaskArtifactRequest,
-  CompletedImageGenerationTaskInput,
-  CreateAudioGenerationTaskArtifactRequest,
-  CreateImageGenerationTaskArtifactRequest,
-  CreateVideoGenerationTaskArtifactRequest,
-  ListMediaTaskArtifactsOutput,
-  ListMediaTaskArtifactsRequest,
-  MediaTaskModalityRuntimeContractIndex,
-  MediaTaskModalityRuntimeContractIndexEntry,
-  MediaTaskArtifactOutput,
-  MediaTaskArtifactRecord,
-  MediaTaskAudioOutputStatusCount,
-  MediaTaskLimeCorePolicyEvaluationStatusCount,
-  MediaTaskLimeCorePolicySnapshotStatusCount,
-  MediaTaskListFilters,
-  MediaTaskRoutingOutcomeCount,
-  MediaTaskTranscriptStatusCount,
-  MediaTaskLookupRequest,
-} from "./agentRuntime/types";
+} from "./agentRuntime/mediaTaskTypes";
 
 export {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,

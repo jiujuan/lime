@@ -15,7 +15,7 @@ import {
   getCurrentSkillCatalogSnapshot,
   subscribeSkillCatalogChanged,
 } from "@/lib/api/skillCatalog";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type { Skill } from "@/lib/api/skills";
 import type { SkillScaffoldDraft } from "@/types/page";
@@ -166,7 +166,12 @@ export function ExpertSkillsSection({
     }
   });
   const candidates = useMemo(
-    () => buildSkillCandidates({ localSkills, serviceSkills, catalog: skillCatalog }),
+    () =>
+      buildSkillCandidates({
+        localSkills,
+        serviceSkills,
+        catalog: skillCatalog,
+      }),
     [localSkills, serviceSkills, skillCatalog],
   );
   const filteredCandidates = useMemo(
@@ -450,7 +455,9 @@ export function ExpertSkillsSection({
                 }),
               ],
               fallbackStrategy: [
-                t("agentExperts.info.skills.registrationDraft.fallbackStrategy"),
+                t(
+                  "agentExperts.info.skills.registrationDraft.fallbackStrategy",
+                ),
               ],
               sourceExcerpt: item.ref,
             }
@@ -494,14 +501,8 @@ export function ExpertSkillsSection({
   const replacingSkill = Boolean(skillPickerReplacementRef);
   const skillPickerDialogTitle = replacingSkill
     ? skillPickerRecoveryKind === "map_skill_ref"
-      ? t(
-          "agentExperts.info.skills.mapDialogTitle",
-          "补齐技能目录映射",
-        )
-      : t(
-          "agentExperts.info.skills.replaceDialogTitle",
-          "替换当前技能引用",
-        )
+      ? t("agentExperts.info.skills.mapDialogTitle", "补齐技能目录映射")
+      : t("agentExperts.info.skills.replaceDialogTitle", "替换当前技能引用")
     : t("agentExperts.info.skills.dialogTitle", "为当前 Agent 添加技能");
   const skillPickerDialogSubtitle = replacingSkill
     ? skillPickerRecoveryKind === "map_skill_ref"

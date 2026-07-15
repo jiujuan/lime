@@ -9,7 +9,7 @@ import type {
   AgentRuntimeProfileStatus,
   AgentRuntimeThreadReadModel,
   AgentRuntimeThreadTurnProfileView,
-} from "./types";
+} from "./sessionTypes";
 
 export type AppServerAgentSessionReadProjectionInput =
   AppServerAgentSessionReadResponse & {
@@ -84,9 +84,7 @@ function inferActiveTurnId(turns: AppServerAgentTurn[]): string | undefined {
 
 function isActiveTurnStatus(status: AppServerAgentTurnStatus): boolean {
   return (
-    status === "accepted" ||
-    status === "running" ||
-    status === "waitingAction"
+    status === "accepted" || status === "running" || status === "waitingAction"
   );
 }
 

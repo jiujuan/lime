@@ -13,6 +13,8 @@ use tool_runtime::agent_control::{
     AgentControlCaller, AgentControlCommand, AgentControlGatewayRequest, SubAgentProjectionActivity,
 };
 
+#[path = "agent_control/effective_route.rs"]
+mod effective_route;
 #[path = "agent_control/restart.rs"]
 mod restart;
 
@@ -23,6 +25,26 @@ struct BlockingChildBackend {
 
 #[async_trait::async_trait]
 impl ExecutionBackend for BlockingChildBackend {
+    fn effective_turn_runtime_options(
+        &self,
+        request: &ExecutionRequest,
+        _first_sampling_turn: bool,
+    ) -> Option<app_server_protocol::RuntimeOptions> {
+        let mut options = request.runtime_options.clone()?;
+        if request
+            .runtime_metadata()
+            .and_then(|metadata| metadata.get("fixture").and_then(serde_json::Value::as_str))
+            == Some("effective-child-route")
+        {
+            let runtime_request = options.runtime_request_mut();
+            runtime_request.provider_preference = Some("resolved-provider".to_string());
+            runtime_request.model_preference = Some("resolved-model".to_string());
+            runtime_request.reasoning_effort = Some("high".to_string());
+            runtime_request.working_dir = Some("/tmp/effective-child-route".to_string());
+        }
+        Some(options)
+    }
+
     async fn start_turn(
         &self,
         request: ExecutionRequest,

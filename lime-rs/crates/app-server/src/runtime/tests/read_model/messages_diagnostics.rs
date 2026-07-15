@@ -19,11 +19,27 @@ impl ExecutionBackend for PhasedAgentMessagesBackend {
             }),
         ))?;
         sink.emit(RuntimeEvent::new(
+            "message.completed",
+            json!({
+                "itemId": "agent-commentary-1",
+                "phase": "commentary",
+                "status": "completed"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
             "message.delta",
             json!({
                 "itemId": "agent-final-1",
                 "text": "最终答复。",
                 "phase": "final_answer"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "message.completed",
+            json!({
+                "itemId": "agent-final-1",
+                "phase": "final_answer",
+                "status": "completed"
             }),
         ))?;
         sink.emit(RuntimeEvent::new("turn.completed", json!({})))

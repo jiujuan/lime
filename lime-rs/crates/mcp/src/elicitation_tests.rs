@@ -481,6 +481,11 @@ async fn raw_wire_response_preserves_result_meta() {
     let initialize: serde_json::Value =
         serde_json::from_str(&initialize).expect("valid initialize request");
     assert_eq!(initialize["method"], "initialize");
+    assert_eq!(initialize["params"]["protocolVersion"], "2025-06-18");
+    assert_eq!(
+        initialize["params"]["capabilities"],
+        json!({ "elicitation": {} })
+    );
     raw_writer
         .write_all(
             format!(
@@ -489,7 +494,7 @@ async fn raw_wire_response_preserves_result_meta() {
                     "jsonrpc": "2.0",
                     "id": initialize["id"],
                     "result": {
-                        "protocolVersion": "2025-03-26",
+                        "protocolVersion": "2025-06-18",
                         "capabilities": {},
                         "serverInfo": { "name": "raw-server", "version": "1.0.0" }
                     }

@@ -2,7 +2,7 @@ import type { StepStatus } from "@/lib/workspace/workbenchContract";
 import type {
   AgentRuntimeThreadReadModel,
   AgentTodoItem,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type { Message, MessageTaskPreview } from "../types";
 import type {

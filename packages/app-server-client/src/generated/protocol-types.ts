@@ -8288,6 +8288,30 @@ export type ItemStatus =
   | "interrupted"
   | "pending";
 
+export type MessageContentPart =
+  | {
+      text: string;
+      type: "text";
+    }
+  | {
+      caption?: null | string;
+      kind: string;
+      reference: MessageContentReference;
+      type: "media";
+    };
+
+export interface MessageContentReference {
+  byte_size?: number | null;
+  mime_type: string;
+  preview_url?: null | string;
+  sha256?: null | string;
+  sidecar_ref?: unknown;
+  source_path?: null | string;
+  source_uri?: null | string;
+  title?: null | string;
+  uri: string;
+}
+
 export interface PlanStep {
   status: PlanStepStatus;
   step: string;
@@ -8346,6 +8370,7 @@ export type ThreadItemPayload =
       type: "userMessage";
     }
   | {
+      content_parts?: MessageContentPart[];
       phase?: null | string;
       text: string;
       type: "agentMessage";

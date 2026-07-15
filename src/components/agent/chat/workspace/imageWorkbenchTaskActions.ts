@@ -2,7 +2,7 @@ import type { AgentRuntimeGeneratedTitleResult } from "@/lib/api/agentRuntime/se
 import type {
   CreateImageGenerationTaskArtifactRequest,
   MediaTaskArtifactOutput,
-} from "@/lib/api/mediaTasks";
+} from "@/lib/api/agentRuntime/mediaTaskTypes";
 import type { SessionImageWorkbenchState } from "./imageWorkbenchHelpers";
 
 type ImageWorkbenchTask = SessionImageWorkbenchState["tasks"][number];

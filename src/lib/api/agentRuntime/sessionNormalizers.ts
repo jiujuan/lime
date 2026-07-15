@@ -1,5 +1,5 @@
 import { normalizeQueuedTurnSnapshots } from "../queuedTurn";
-import type { AgentRuntimeThreadReadModel } from "./types";
+import type { AgentRuntimeThreadReadModel } from "./sessionTypes";
 
 export function normalizeThreadReadModel(
   threadRead?: AgentRuntimeThreadReadModel | null,

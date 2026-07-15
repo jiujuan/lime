@@ -19,7 +19,7 @@ import type { SidebarActivityLog } from "../hooks/useThemeContextWorkspace";
 import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
 import type { GeneralWorkbenchTaskRailContextInput } from "../components/generalWorkbenchTaskRailViewModel";
 import type { ConfirmResponse } from "../types";
-import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurfaceBanner";
 import { EmptyState } from "../components/EmptyState";
 import { MessageList } from "../components/MessageList";

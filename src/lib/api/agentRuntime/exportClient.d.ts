@@ -7,7 +7,7 @@ import type {
   AgentRuntimeReplayCase,
   AgentRuntimeReviewDecisionTemplate,
   AgentRuntimeSaveReviewDecisionRequest,
-} from "./types";
+} from "./evidenceTypes";
 export type AgentRuntimeEvidenceExportAppServerClient = Pick<
   AppServerClient,
   | "exportEvidence"

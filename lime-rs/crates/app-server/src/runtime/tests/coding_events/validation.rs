@@ -153,7 +153,9 @@ async fn start_turn_accepts_backend_emitted_coding_lifecycle() {
     assert_eq!(
         event_types,
         vec![
+            "item.started",
             "message.created",
+            "item.completed",
             "file.changed",
             "patch.started",
             "patch.applied",

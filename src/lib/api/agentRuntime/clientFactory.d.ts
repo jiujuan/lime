@@ -28,37 +28,39 @@ export declare function createAgentRuntimeClient({
   isAppServerTurnLifecycleAvailable,
 }?: AgentRuntimeClientDeps): {
   compactAgentRuntimeSession: (
-    request: import("./types").AgentRuntimeCompactSessionRequest,
+    request: import("./requestTypes").AgentRuntimeCompactSessionRequest,
   ) => Promise<void>;
   diffAgentRuntimeFileCheckpoint: (
-    request: import("./types").AgentRuntimeDiffFileCheckpointRequest,
-  ) => Promise<import("./types").AgentRuntimeFileCheckpointDiffResult>;
+    request: import("./requestTypes").AgentRuntimeDiffFileCheckpointRequest,
+  ) => Promise<import("./sessionTypes").AgentRuntimeFileCheckpointDiffResult>;
   getAgentRuntimeFileCheckpoint: (
-    request: import("./types").AgentRuntimeGetFileCheckpointRequest,
-  ) => Promise<import("./types").AgentRuntimeFileCheckpointDetail>;
+    request: import("./requestTypes").AgentRuntimeGetFileCheckpointRequest,
+  ) => Promise<import("./sessionTypes").AgentRuntimeFileCheckpointDetail>;
   getAgentRuntimeThreadRead: (
     sessionId: string,
-  ) => Promise<import("./types").AgentRuntimeThreadReadModel>;
+  ) => Promise<import("./sessionTypes").AgentRuntimeThreadReadModel>;
   interruptAgentRuntimeTurn: (
-    request: import("./types").AgentRuntimeInterruptTurnRequest,
+    request: import("./requestTypes").AgentRuntimeInterruptTurnRequest,
   ) => Promise<boolean>;
   listAgentRuntimeFileCheckpoints: (
-    request: import("./types").AgentRuntimeListFileCheckpointsRequest,
-  ) => Promise<import("./types").AgentRuntimeFileCheckpointListResult>;
+    request: import("./requestTypes").AgentRuntimeListFileCheckpointsRequest,
+  ) => Promise<import("./sessionTypes").AgentRuntimeFileCheckpointListResult>;
   promoteAgentRuntimeQueuedTurn: (
-    request: import("./types").AgentRuntimePromoteQueuedTurnRequest,
+    request: import("./requestTypes").AgentRuntimePromoteQueuedTurnRequest,
   ) => Promise<boolean>;
   removeAgentRuntimeQueuedTurn: (
-    request: import("./types").AgentRuntimeRemoveQueuedTurnRequest,
+    request: import("./requestTypes").AgentRuntimeRemoveQueuedTurnRequest,
   ) => Promise<boolean>;
   replayAgentRuntimeRequest: (
-    request: import("./types").AgentRuntimeReplayRequestRequest,
-  ) => Promise<import("./types").AgentRuntimeReplayedActionRequiredView | null>;
+    request: import("./requestTypes").AgentRuntimeReplayRequestRequest,
+  ) => Promise<
+    import("./requestTypes").AgentRuntimeReplayedActionRequiredView | null
+  >;
   respondAgentRuntimeAction: (
-    request: import("./types").AgentRuntimeRespondActionRequest,
+    request: import("./requestTypes").AgentRuntimeRespondActionRequest,
   ) => Promise<void>;
   resumeAgentRuntimeThread: (
-    request: import("./types").AgentRuntimeResumeThreadRequest,
+    request: import("./requestTypes").AgentRuntimeResumeThreadRequest,
   ) => Promise<boolean>;
   submitAgentRuntimeTurn: (
     request: import("@/lib/api/appServer").AppServerAgentSessionTurnStartParams,
@@ -66,69 +68,71 @@ export declare function createAgentRuntimeClient({
   createAgentRuntimeSession: (
     workspaceId?: string,
     name?: string,
-    executionStrategy?: import("./types").AgentExecutionStrategy,
-    options?: import("./types").AgentRuntimeCreateSessionOptions,
+    executionStrategy?: import("../agentExecutionRuntime").AgentExecutionStrategy,
+    options?: import("./requestTypes").AgentRuntimeCreateSessionOptions,
   ) => Promise<string>;
   deleteAgentRuntimeSession: (sessionId: string) => Promise<void>;
   getAgentRuntimeSession: (
     sessionId: string,
-    options?: import("./types").AgentRuntimeGetSessionOptions,
-  ) => Promise<import("./types").AgentSessionDetail>;
+    options?: import("./requestTypes").AgentRuntimeGetSessionOptions,
+  ) => Promise<import("./sessionTypes").AgentSessionDetail>;
   listAgentRuntimeSessions: (
-    options?: import("./types").AgentRuntimeListSessionsOptions,
-  ) => Promise<import("./types").AgentSessionInfo[]>;
+    options?: import("./sessionTypes").AgentRuntimeListSessionsOptions,
+  ) => Promise<import("./sessionTypes").AgentSessionInfo[]>;
   updateAgentRuntimeSession: (
-    request: import("./types").AgentRuntimeUpdateSessionRequest,
+    request: import("./requestTypes").AgentRuntimeUpdateSessionRequest,
   ) => Promise<void>;
   getAgentRuntimeToolInventory: (
-    request?: import("./types").AgentRuntimeToolInventoryRequest,
-  ) => Promise<import("./types").AgentRuntimeToolInventory>;
+    request?: import("./toolInventoryTypes").AgentRuntimeToolInventoryRequest,
+  ) => Promise<import("./toolInventoryTypes").AgentRuntimeToolInventory>;
   listWorkspaceSkillBindings: (
-    request: import("./types").AgentRuntimeListWorkspaceSkillBindingsRequest,
-  ) => Promise<import("./types").AgentRuntimeWorkspaceSkillBindings>;
+    request: import("./toolInventoryTypes").AgentRuntimeListWorkspaceSkillBindingsRequest,
+  ) => Promise<
+    import("./toolInventoryTypes").AgentRuntimeWorkspaceSkillBindings
+  >;
   auditAgentRuntimeObjective: (
-    request: import("./types").AgentRuntimeObjectiveSessionRequest,
-  ) => Promise<import("./types").ManagedObjective>;
+    request: import("./sessionTypes").AgentRuntimeObjectiveSessionRequest,
+  ) => Promise<import("./sessionTypes").ManagedObjective>;
   clearAgentRuntimeObjective: (
-    request: import("./types").AgentRuntimeObjectiveSessionRequest,
-  ) => Promise<import("./types").AgentRuntimeClearObjectiveResult>;
+    request: import("./sessionTypes").AgentRuntimeObjectiveSessionRequest,
+  ) => Promise<import("./sessionTypes").AgentRuntimeClearObjectiveResult>;
   continueAgentRuntimeObjective: (
-    request: import("./types").AgentRuntimeObjectiveSessionRequest,
-  ) => Promise<import("./types").AgentRuntimeContinueObjectiveResult>;
+    request: import("./sessionTypes").AgentRuntimeObjectiveSessionRequest,
+  ) => Promise<import("./sessionTypes").AgentRuntimeContinueObjectiveResult>;
   getAgentRuntimeObjective: (
     sessionId: string,
-  ) => Promise<import("./types").ManagedObjective | null>;
+  ) => Promise<import("./sessionTypes").ManagedObjective | null>;
   setAgentRuntimeObjective: (
-    request: import("./types").AgentRuntimeSetObjectiveRequest,
-  ) => Promise<import("./types").ManagedObjective>;
+    request: import("./sessionTypes").AgentRuntimeSetObjectiveRequest,
+  ) => Promise<import("./sessionTypes").ManagedObjective>;
   updateAgentRuntimeObjectiveStatus: (
-    request: import("./types").AgentRuntimeUpdateObjectiveStatusRequest,
-  ) => Promise<import("./types").ManagedObjective | null>;
+    request: import("./sessionTypes").AgentRuntimeUpdateObjectiveStatusRequest,
+  ) => Promise<import("./sessionTypes").ManagedObjective | null>;
   exportAgentRuntimeAnalysisHandoff: (
     sessionId: string,
     options?: import("./exportClient").AgentRuntimeExportOptions,
-  ) => Promise<import("./types").AgentRuntimeAnalysisHandoff>;
+  ) => Promise<import("./evidenceTypes").AgentRuntimeAnalysisHandoff>;
   exportAgentRuntimeEvidencePack: (
     sessionId: string,
-  ) => Promise<import("./types").AgentRuntimeEvidencePack>;
+  ) => Promise<import("./evidenceTypes").AgentRuntimeEvidencePack>;
   exportAgentRuntimeHandoffBundle: (
     sessionId: string,
     options?: import("./exportClient").AgentRuntimeExportOptions,
-  ) => Promise<import("./types").AgentRuntimeHandoffBundle>;
+  ) => Promise<import("./evidenceTypes").AgentRuntimeHandoffBundle>;
   exportAgentRuntimeReplayCase: (
     sessionId: string,
     options?: import("./exportClient").AgentRuntimeExportOptions,
-  ) => Promise<import("./types").AgentRuntimeReplayCase>;
+  ) => Promise<import("./evidenceTypes").AgentRuntimeReplayCase>;
   exportAgentRuntimeReviewDecisionTemplate: (
     sessionId: string,
     options?: import("./exportClient").AgentRuntimeExportOptions,
-  ) => Promise<import("./types").AgentRuntimeReviewDecisionTemplate>;
+  ) => Promise<import("./evidenceTypes").AgentRuntimeReviewDecisionTemplate>;
   saveAgentRuntimeReviewDecision: (
-    request: import("./types").AgentRuntimeSaveReviewDecisionRequest,
-  ) => Promise<import("./types").AgentRuntimeReviewDecisionTemplate>;
+    request: import("./evidenceTypes").AgentRuntimeSaveReviewDecisionRequest,
+  ) => Promise<import("./evidenceTypes").AgentRuntimeReviewDecisionTemplate>;
   generateAgentRuntimeTitleResult: (
     request: import("./agentClient").GenerateAgentRuntimeTitleRequest,
-  ) => Promise<import("./types").AgentRuntimeGeneratedTitleResult>;
+  ) => Promise<import("./sessionTypes").AgentRuntimeGeneratedTitleResult>;
   generateAgentRuntimeTitle: (
     request: import("./agentClient").GenerateAgentRuntimeTitleRequest,
   ) => Promise<string>;
@@ -136,6 +140,8 @@ export declare function createAgentRuntimeClient({
     sessionId: string,
     previewText?: string,
   ) => Promise<string>;
-  getRuntimeProviderSelection: () => Promise<import("./types").RuntimeProviderSelection>;
+  getRuntimeProviderSelection: () => Promise<
+    import("./sessionTypes").RuntimeProviderSelection
+  >;
 };
 export type AgentRuntimeClient = ReturnType<typeof createAgentRuntimeClient>;

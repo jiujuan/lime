@@ -11,8 +11,8 @@ import {
 import {
   getMediaTaskArtifact,
   listMediaTaskArtifacts,
-  type MediaTaskArtifactOutput,
 } from "@/lib/api/mediaTasks";
+import type { MediaTaskArtifactOutput } from "@/lib/api/agentRuntime/mediaTaskTypes";
 import { safeListen } from "@/lib/dev-bridge";
 import {
   hasDesktopHostInvokeCapability,
@@ -165,9 +165,9 @@ function renderHook(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  let setMessagesForTest:
-    | React.Dispatch<React.SetStateAction<Message[]>>
-    | null = null;
+  let setMessagesForTest: React.Dispatch<
+    React.SetStateAction<Message[]>
+  > | null = null;
   let latestValue: {
     messages: Message[];
     imageWorkbenchState: SessionImageWorkbenchState;
@@ -832,19 +832,19 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       toolCalls: undefined,
       contentParts: undefined,
       runtimeStatus: undefined,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-1",
-          status: "complete",
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-1",
+        status: "complete",
+        prompt: "未来感实验室里的青柠主视觉",
+        imageUrl: "https://example.com/generated-lime.png",
+        imageCount: 1,
+        size: "1024x1024",
+        caption: buildImageWorkbenchCaption({
           prompt: "未来感实验室里的青柠主视觉",
-          imageUrl: "https://example.com/generated-lime.png",
+          status: "complete",
           imageCount: 1,
-          size: "1024x1024",
-          caption: buildImageWorkbenchCaption({
-            prompt: "未来感实验室里的青柠主视觉",
-            status: "complete",
-            imageCount: 1,
-          }),
         }),
+      }),
     });
     expect(getValue().imageWorkbenchState.tasks).toEqual([
       expect.objectContaining({
@@ -1270,17 +1270,17 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
           name: "lime_create_image_generation_task",
         }),
       ],
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-skill-1",
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-skill-1",
+        status: "complete",
+        imageUrl: "https://example.com/skill-preview.png",
+        caption: buildImageWorkbenchCaption({
+          prompt: "春日咖啡馆插画",
           status: "complete",
-          imageUrl: "https://example.com/skill-preview.png",
-          caption: buildImageWorkbenchCaption({
-            prompt: "春日咖啡馆插画",
-            status: "complete",
-            imageCount: 1,
-          }),
-          providerName: "openai",
-          modelName: "gpt-image-2",
+          imageCount: 1,
+        }),
+        providerName: "openai",
+        modelName: "gpt-image-2",
         runtimeContract: expect.objectContaining({
           contractKey: "image_generation",
           routingSlot: "image_generation_model",
@@ -1659,18 +1659,18 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       runtimeStatus: undefined,
       toolCalls: undefined,
       contentParts: undefined,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-status-only-1",
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-status-only-1",
+        status: "complete",
+        phase: "succeeded",
+        statusMessage: null,
+        imageUrl: "https://example.com/three-kingdoms-collage.png",
+        caption: buildImageWorkbenchCaption({
+          prompt: "三国主要人物聚合图",
           status: "complete",
-          phase: "succeeded",
-          statusMessage: null,
-          imageUrl: "https://example.com/three-kingdoms-collage.png",
-          caption: buildImageWorkbenchCaption({
-            prompt: "三国主要人物聚合图",
-            status: "complete",
-            imageCount: 1,
-          }),
+          imageCount: 1,
         }),
+      }),
     });
   });
 

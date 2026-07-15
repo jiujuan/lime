@@ -4,11 +4,16 @@ import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
 
 const CONSUMER_PATHS = [
+  "src/components/agent/chat/components/generalWorkbenchTaskRailContextViewModel.ts",
+  "src/components/agent/chat/components/harnessStatusPanelViewModel.ts",
+  "src/components/agent/chat/components/MessageList.types.ts",
+  "src/components/agent/chat/components/useMessageListTimelineState.ts",
   "src/components/agent/chat/components/Inputbar/inputbarSendPayload.ts",
   "src/components/agent/chat/hooks/agentChatHistoryArtifacts.ts",
   "src/components/agent/chat/hooks/agentChatHistoryHydrate.ts",
   "src/components/agent/chat/hooks/agentChatHistoryNormalize.ts",
   "src/components/agent/chat/hooks/agentChatHistoryReadModel.ts",
+  "src/components/agent/chat/hooks/agentChatHistoryThreadItems.ts",
   "src/components/agent/chat/hooks/agentChatHistoryTimelineBasics.ts",
   "src/components/agent/chat/hooks/agentChatHistoryTimelineMerge.ts",
   "src/components/agent/chat/hooks/agentChatHistoryTypes.ts",
@@ -30,9 +35,12 @@ const CONSUMER_PATHS = [
   "src/components/agent/chat/hooks/agentStreamRequestStartController.ts",
   "src/components/agent/chat/hooks/agentStreamSend.ts",
   "src/components/agent/chat/utils/importedSourceProcess.ts",
+  "src/components/agent/chat/utils/agentTaskRuntime.ts",
+  "src/components/agent/chat/utils/inputbarRuntimeStatusLine.ts",
   "src/components/agent/chat/hooks/agentSessionTopicViewModel.ts",
   "src/components/agent/chat/utils/submitOpRuntimeCompaction.ts",
   "src/components/agent/chat/workspace/useWorkspaceArticleEditorRightSurfaceRuntime.ts",
+  "src/components/agent/chat/workspace/useSessionRuntimeProjectionDeferral.ts",
   "src/components/agent/chat/workspace/workspaceConversationCodingViews.tsx",
   "src/components/agent/chat/hooks/agentChatShared.ts",
   "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
@@ -49,9 +57,7 @@ describe("session types current owner boundary", () => {
       expect(source, relativePath).toContain(
         'from "@/lib/api/agentRuntime/sessionTypes"',
       );
-      expect(source, relativePath).not.toContain(
-        'from "@/lib/api/agentRuntime"',
-      );
+      expect(source, relativePath).not.toContain('"@/lib/api/agentRuntime"');
     }
   });
 });

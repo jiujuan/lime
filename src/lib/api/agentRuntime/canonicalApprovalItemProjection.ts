@@ -136,27 +136,10 @@ function projectApprovalResponse(payload: CanonicalApprovalPayload): unknown {
     return undefined;
   }
   return {
-    decision: projectApprovalDecision(payload.decision),
-    decision_scope: payload.scope,
-    reason_code: payload.reason_code,
+    decision: payload.decision,
+    decision_scope: payload.scope ?? "once",
+    reason_code: payload.reason_code ?? null,
   };
-}
-
-function projectApprovalDecision(
-  decision: NonNullable<CanonicalApprovalPayload["decision"]>,
-): string {
-  switch (decision) {
-    case "approved":
-      return "allow_once";
-    case "approvedForSession":
-      return "allow_for_session";
-    case "denied":
-      return "decline";
-    case "abort":
-      return "cancel";
-    case "timedOut":
-      return "expired";
-  }
 }
 
 function projectAvailableDecision(

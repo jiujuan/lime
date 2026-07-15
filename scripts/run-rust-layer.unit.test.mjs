@@ -9,6 +9,7 @@ import {
   expandWithWorkspaceDependents,
   findCargoTestFilters,
   parseArgs,
+  resolveRustTestEnv,
   resolveRustPathSelection,
   shouldFailOnZeroExecutedTests,
 } from "./run-rust-layer.mjs";
@@ -66,6 +67,25 @@ version = "0.0.0"
 }
 
 describe("run-rust-layer unit helpers", () => {
+  it("macOS 默认使用 8 MiB test worker 栈并保留显式覆盖", () => {
+    expect(resolveRustTestEnv({ PATH: "/bin" }, "darwin")).toEqual({
+      PATH: "/bin",
+      RUST_MIN_STACK: "8388608",
+    });
+    expect(
+      resolveRustTestEnv(
+        { PATH: "/bin", RUST_MIN_STACK: "16777216" },
+        "darwin",
+      ),
+    ).toEqual({
+      PATH: "/bin",
+      RUST_MIN_STACK: "16777216",
+    });
+    expect(resolveRustTestEnv({ PATH: "/bin" }, "linux")).toEqual({
+      PATH: "/bin",
+    });
+  });
+
   it("解析 --changed 和 --related runner 参数", () => {
     expect(
       parseArgs(["unit", "--changed", "origin/main", "request_tool_policy"]),
@@ -198,10 +218,7 @@ describe("run-rust-layer unit helpers", () => {
     try {
       expect(
         resolveRustPathSelection(
-          [
-            "lime-rs/Cargo.lock",
-            "lime-rs/crates/agent-rust/Cargo.lock",
-          ],
+          ["lime-rs/Cargo.lock", "lime-rs/crates/agent-rust/Cargo.lock"],
           { repoRoot },
         ),
       ).toMatchObject({

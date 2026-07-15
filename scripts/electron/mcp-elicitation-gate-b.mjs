@@ -65,7 +65,8 @@ MCP Elicitation Gate B
 边界:
   使用 APP_SERVER_BACKEND_MODE=runtime 与真实 Electron preload/JSONL bridge。
   不使用显式管理面工具调用证明、通用 action 回答、mock backend、renderer mock
-  或 legacy MCP facade 作为成功路径。fixture 不广告 elicitation capability。
+  或 legacy MCP facade 作为成功路径。Gate B 同时校验 runtime MCP client 在 initialize
+  请求中广告 form elicitation capability。
 
 用法:
   npm run smoke:mcp-elicitation-gate-b
@@ -160,6 +161,8 @@ import readline from "node:readline";
 const ledgerPath = process.argv[2];
 const pending = new Map();
 let nextElicitationId = 1;
+let initializedProtocolVersion = null;
+let initializedCapabilities = null;
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 
 function send(message) {
@@ -174,14 +177,38 @@ function record(value) {
   fs.appendFileSync(ledgerPath, JSON.stringify(value) + "\n");
 }
 
+function isExactEmptyObject(value) {
+  return value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 0;
+}
+
+function supportsFormElicitation() {
+  return initializedProtocolVersion === "2025-06-18" &&
+    initializedCapabilities !== null &&
+    typeof initializedCapabilities === "object" &&
+    !Array.isArray(initializedCapabilities) &&
+    Object.keys(initializedCapabilities).length === 1 &&
+    isExactEmptyObject(initializedCapabilities.elicitation);
+}
+
 rl.on("line", (line) => {
   if (!line.trim()) return;
   const message = JSON.parse(line);
   const { id, method, params } = message;
 
   if (method === "initialize") {
+    initializedProtocolVersion = params?.protocolVersion ?? null;
+    initializedCapabilities = params?.capabilities ?? null;
+    record({
+      type: "initialize",
+      pid: process.pid,
+      protocolVersion: initializedProtocolVersion,
+      clientCapabilities: initializedCapabilities,
+    });
     result(id, {
-      protocolVersion: "2025-03-26",
+      protocolVersion: initializedProtocolVersion ?? "2025-03-26",
       capabilities: { tools: {} },
       serverInfo: { name: "elicitation-gate-b-fixture", version: "1.0.0" },
     });
@@ -209,6 +236,19 @@ rl.on("line", (line) => {
     return;
   }
   if (method === "tools/call") {
+    if (!supportsFormElicitation()) {
+      record({
+        type: "capability_missing",
+        pid: process.pid,
+        protocolVersion: initializedProtocolVersion,
+        clientCapabilities: initializedCapabilities,
+      });
+      result(id, {
+        content: [{ type: "text", text: "runtime client did not advertise form elicitation" }],
+        isError: true,
+      });
+      return;
+    }
     const elicitationId = "elicitation-" + nextElicitationId;
     nextElicitationId += 1;
     pending.set(elicitationId, { toolCallId: id, release: params?.arguments?.release ?? null });
@@ -233,7 +273,7 @@ rl.on("line", (line) => {
     pending.delete(String(id));
     const action = message?.result?.action ?? "missing";
     const content = message?.result?.content ?? null;
-    record({ action, content, release: request.release });
+    record({ type: "elicitation_result", pid: process.pid, action, content, release: request.release });
     result(request.toolCallId, {
       content: [{ type: "text", text: "release_check:" + action }],
       structuredContent: { action, confirmed: content?.confirmed ?? null },
@@ -377,6 +417,58 @@ function providerRequestSummary(requests) {
   }));
 }
 
+function isExactEmptyObject(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 0
+  );
+}
+
+function mcpInitializeCapabilityEvidence(ledger) {
+  const accepted = ledger.find(
+    (entry) =>
+      entry?.type === "elicitation_result" &&
+      entry?.action === "accept" &&
+      entry?.content?.confirmed === true,
+  );
+  const runtimeInitialize = ledger.find(
+    (entry) => entry?.type === "initialize" && entry?.pid === accepted?.pid,
+  );
+  const runtimeCapabilities = runtimeInitialize?.clientCapabilities;
+  const runtimeCapabilityExact =
+    runtimeCapabilities !== null &&
+    typeof runtimeCapabilities === "object" &&
+    !Array.isArray(runtimeCapabilities) &&
+    Object.keys(runtimeCapabilities).length === 1 &&
+    isExactEmptyObject(runtimeCapabilities.elicitation);
+  const managementInitialize = ledger.find(
+    (entry) =>
+      entry?.type === "initialize" &&
+      entry?.pid !== accepted?.pid &&
+      entry?.clientCapabilities !== null &&
+      typeof entry.clientCapabilities === "object" &&
+      !Array.isArray(entry.clientCapabilities) &&
+      !Object.prototype.hasOwnProperty.call(
+        entry.clientCapabilities,
+        "elicitation",
+      ),
+  );
+  const capabilityMissingCount = ledger.filter(
+    (entry) => entry?.type === "capability_missing",
+  ).length;
+  return {
+    acceptedPid: accepted?.pid ?? null,
+    capabilityMissingCount,
+    managementInitialize: managementInitialize ?? null,
+    managementElicitationCapabilityAbsent: Boolean(managementInitialize),
+    runtimeCapabilityExact,
+    runtimeInitialize: runtimeInitialize ?? null,
+    runtimeProtocolCurrent: runtimeInitialize?.protocolVersion === "2025-06-18",
+  };
+}
+
 async function waitForCompletion(
   page,
   runtime,
@@ -394,16 +486,17 @@ async function waitForCompletion(
     });
     observedMethods.add(latestRead.method);
     const ledger = readJsonLines(ledgerPath);
+    const capabilityEvidence = mcpInitializeCapabilityEvidence(ledger);
     const serialized = JSON.stringify(latestRead.result || {});
     if (
       fixture.requests.length >= 2 &&
-      ledger.some(
-        (entry) =>
-          entry?.action === "accept" && entry?.content?.confirmed === true,
-      ) &&
+      capabilityEvidence.runtimeProtocolCurrent &&
+      capabilityEvidence.runtimeCapabilityExact &&
+      capabilityEvidence.managementElicitationCapabilityAbsent &&
+      capabilityEvidence.capabilityMissingCount === 0 &&
       serialized.includes(FINAL_TEXT)
     ) {
-      return { ledger, read: latestRead };
+      return { capabilityEvidence, ledger, read: latestRead };
     }
     await sleep(options.intervalMs);
   }
@@ -459,7 +552,11 @@ async function run() {
     checkedAt: new Date().toISOString(),
     backendMode: "runtime",
     proofLevel: "Gate B",
-    capabilityAdvertisementRequired: false,
+    capabilityAdvertisementRequired: true,
+    capabilityMissingCount: null,
+    managementElicitationCapabilityAbsent: false,
+    runtimeClientCapabilities: null,
+    runtimeInitializeProtocolVersion: null,
     electronPreloadBridge: false,
     appServerHandleJsonLinesSeen: false,
     rendererFormVisible: false,
@@ -578,6 +675,14 @@ async function run() {
     );
     raw.completion = sanitizeJson(completion.read);
     raw.mcpLedger = sanitizeJson(completion.ledger);
+    raw.mcpInitializeCapabilityEvidence = sanitizeJson(completion.capabilityEvidence);
+    summary.capabilityMissingCount = completion.capabilityEvidence.capabilityMissingCount;
+    summary.managementElicitationCapabilityAbsent =
+      completion.capabilityEvidence.managementElicitationCapabilityAbsent;
+    summary.runtimeClientCapabilities =
+      completion.capabilityEvidence.runtimeInitialize?.clientCapabilities ?? null;
+    summary.runtimeInitializeProtocolVersion =
+      completion.capabilityEvidence.runtimeInitialize?.protocolVersion ?? null;
     const providerRequests = providerRequestSummary(fixture.requests);
     raw.providerRequests = sanitizeJson(providerRequests);
     summary.providerRequestCount = providerRequests.length;
@@ -615,6 +720,19 @@ async function run() {
     assert(summary.mcpLedgerAccepted, "MCP fixture 未收到 accept confirmed=true");
     assert(summary.providerFinalTextObserved, "provider final text 未进入 current read model");
     assert(summary.dialogClosedAfterResolved, "serverRequest/resolved 后表单未关闭");
+    assert(
+      completion.capabilityEvidence.runtimeProtocolCurrent &&
+        completion.capabilityEvidence.runtimeCapabilityExact,
+      `runtime MCP initialize capability 非 current shape: ${JSON.stringify(summary.runtimeClientCapabilities)}`,
+    );
+    assert(
+      summary.managementElicitationCapabilityAbsent,
+      "management MCP initialize 不得广告 elicitation capability",
+    );
+    assert(
+      summary.capabilityMissingCount === 0,
+      `存在未广告 capability 的 runtime tool call: ${summary.capabilityMissingCount}`,
+    );
     assert(consoleErrors.length === 0, `Renderer console error: ${JSON.stringify(consoleErrors)}`);
     summary.ok = true;
   } catch (error) {

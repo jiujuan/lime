@@ -15,7 +15,7 @@ import type {
   AgentRuntimeClearObjectiveResult,
   AgentRuntimeContinueObjectiveResult,
   ManagedObjective,
-} from "./types";
+} from "./sessionTypes";
 
 const managedObjective: ManagedObjective = {
   objective_id: "objective-1",
@@ -223,9 +223,9 @@ describe("agentRuntime objectiveClient", () => {
       appServerClient,
     });
 
-    await expect(client.getAgentRuntimeObjective("session-empty")).resolves.toBe(
-      null,
-    );
+    await expect(
+      client.getAgentRuntimeObjective("session-empty"),
+    ).resolves.toBe(null);
     await expect(
       client.updateAgentRuntimeObjectiveStatus({
         sessionId: "session-empty",

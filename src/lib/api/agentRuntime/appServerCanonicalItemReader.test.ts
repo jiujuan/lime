@@ -43,8 +43,42 @@ describe("readCanonicalThreadItem", () => {
     ],
     [
       "agentMessage",
-      { type: "agentMessage", text: "answer", phase: "final" },
-      { type: "agent_message", text: "answer", phase: "final" },
+      {
+        type: "agentMessage",
+        text: "answer",
+        content_parts: [
+          { type: "text", text: "answer" },
+          {
+            type: "media",
+            kind: "image",
+            caption: "结果图",
+            reference: {
+              uri: "sidecar://media/image-1",
+              mime_type: "image/png",
+              source_path: "/tmp/media/image-1.png",
+            },
+          },
+        ],
+        phase: "final",
+      },
+      {
+        type: "agent_message",
+        text: "answer",
+        contentParts: [
+          { type: "text", text: "answer" },
+          {
+            type: "media",
+            kind: "image",
+            caption: "结果图",
+            reference: {
+              uri: "sidecar://media/image-1",
+              mime_type: "image/png",
+              source_path: "/tmp/media/image-1.png",
+            },
+          },
+        ],
+        phase: "final",
+      },
     ],
     [
       "plan",
@@ -113,9 +147,9 @@ describe("readCanonicalThreadItem", () => {
     "projects canonical %s without raw payload inference",
     (_name, payload, expected) => {
       const expectedRecord = expected as Record<string, unknown>;
-      const expectedMetadata =
-        (expectedRecord.metadata as Record<string, unknown> | undefined) ??
-        { source: "canonical" };
+      const expectedMetadata = (expectedRecord.metadata as
+        | Record<string, unknown>
+        | undefined) ?? { source: "canonical" };
       expect(readCanonicalThreadItem(item(payload), event)).toMatchObject({
         id: "item-1",
         thread_id: "thread-1",
@@ -176,6 +210,19 @@ describe("readCanonicalThreadItem", () => {
       output: "done",
       metadata: { callId: "call-1", durationMs: 12 },
     });
+  });
+
+  it("fails closed on malformed canonical AgentMessage contentParts", () => {
+    expect(
+      readCanonicalThreadItem(
+        item({
+          type: "agentMessage",
+          text: "answer",
+          content_parts: { type: "media" },
+        }),
+        event,
+      ),
+    ).toBeNull();
   });
 
   it("fails closed on missing durable fields or identity conflicts", () => {

@@ -16,7 +16,7 @@ import {
   type ExpertCatalog,
   type ExpertProfile,
 } from "@/features/experts";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type { Skill } from "@/lib/api/skills";
 import type { AgentThreadItem } from "../types";

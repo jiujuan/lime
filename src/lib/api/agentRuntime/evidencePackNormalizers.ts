@@ -3,7 +3,7 @@ import type {
   AgentRuntimeCompletionAuditSummary,
   AgentRuntimeEvidenceArtifact,
   AgentRuntimeEvidencePack,
-} from "./types";
+} from "./evidenceTypes";
 import { normalizeEvidenceObservabilitySummary } from "./evidenceObservabilityNormalizers";
 import {
   isRecord,

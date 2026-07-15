@@ -1,5 +1,9 @@
 # S6n raw SubAgent type/package/fixture retirement evidence
 
+> 2026-07-15 后续纠正：本文件记录的 `multi-agent-team` Electron run 包装了 external
+> synthetic Team events，只是当时 fixture 结果，不再作为产品 Gate B。current canonical
+> AgentControl visible DOM Gate B 见 S4ah evidence；S6n 物理删除与 focused 结论仍有效。
+
 ## 结论
 
 raw SubAgent status 侧链已经完整退出生产实现和正向测试口径：

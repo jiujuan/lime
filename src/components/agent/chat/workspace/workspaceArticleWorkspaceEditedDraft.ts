@@ -1,4 +1,4 @@
-import type { AgentRuntimeUpdateSessionRequest } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeUpdateSessionRequest } from "@/lib/api/agentRuntime/requestTypes";
 import type {
   WorkspaceArticleObject,
   WorkspaceArticleObjectRef,

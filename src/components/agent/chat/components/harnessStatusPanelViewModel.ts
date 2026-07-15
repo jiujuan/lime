@@ -1,4 +1,4 @@
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { StepStatus } from "@/lib/workspace/workbenchContract";
 import type { ActionRequired } from "../types";
 import type { HarnessSessionState } from "../utils/harnessState";

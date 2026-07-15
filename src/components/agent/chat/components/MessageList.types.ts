@@ -1,10 +1,8 @@
 import type React from "react";
 import type { Artifact } from "@/lib/artifact/types";
 import type { A2UIFormData } from "@/components/workspace/a2ui/types";
-import type {
-  AgentRuntimeThreadReadModel,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import type { buildMessageRenderGroupsProjection } from "../projection/messageTimelineRenderProjection";

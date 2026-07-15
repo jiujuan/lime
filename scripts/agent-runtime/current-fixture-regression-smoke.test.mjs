@@ -10,6 +10,27 @@ function readSmokeScript() {
     .join("\n");
 }
 
+function readContentFactoryFixture() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/claw-chat-current-fixture-content-factory-article-workspace.mjs",
+    "utf8",
+  );
+}
+
+function readContentFactoryAssertions() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/claw-chat-current-fixture-content-factory-assertions.mjs",
+    "utf8",
+  );
+}
+
+function readFixtureConstants() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/claw-chat-current-fixture-constants.mjs",
+    "utf8",
+  );
+}
+
 describe("agent runtime current fixture regression smoke guard", () => {
   it("runs current Agent Runtime regression tests through Vitest smoke runner", () => {
     const content = readSmokeScript();
@@ -110,7 +131,9 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain(
       "claw-chat-current-fixture-approval-request-resume-regression",
     );
-    expect(content).toContain("Claw approval decline-continue Electron fixture");
+    expect(content).toContain(
+      "Claw approval decline-continue Electron fixture",
+    );
     expect(content).toContain("approval-request-decline");
     expect(content).toContain(
       "claw-chat-current-fixture-approval-request-decline-regression",
@@ -216,6 +239,34 @@ describe("agent runtime current fixture regression smoke guard", () => {
     );
     expect(content).toContain(
       "内容工厂文章 Article Editor / articleDraft 右侧产物闭环 Electron fixture",
+    );
+  });
+
+  it("does not synthesize Content Factory workflow response or contract probe", () => {
+    const content = readContentFactoryFixture();
+    const assertions = readContentFactoryAssertions();
+    const constants = readFixtureConstants();
+
+    expect(content).not.toContain("APP_SERVER_METHOD_WORKFLOW_RESPOND");
+    expect(content).not.toContain('type: "action.required"');
+    expect(content).not.toContain(
+      "startContentFactoryWorkflowRespondActionTurn",
+    );
+    expect(content).not.toContain("runRuntimeContractRejectionProbe");
+    expect(constants).not.toContain(
+      "CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_",
+    );
+    expect(constants).not.toContain(
+      "CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_",
+    );
+    expect(assertions).not.toContain(
+      "contentFactoryArticleWorkspaceWorkflowRespondProjected",
+    );
+    expect(assertions).not.toContain(
+      "contentFactoryArticleWorkspaceRuntimeContractFailClosed",
+    );
+    expect(assertions).toContain(
+      "contentFactoryArticleWorkspaceWorkflowRespondHiddenWithoutPendingAction",
     );
   });
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { MediaTaskArtifactOutput } from "@/lib/api/mediaTasks";
+import type { MediaTaskArtifactOutput } from "@/lib/api/agentRuntime/mediaTaskTypes";
 import type {
   ImageWorkbenchTask,
   SessionImageWorkbenchState,

@@ -1,14 +1,36 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  AGENT_CONTROL_FINAL_TEXT,
+  AGENT_CONTROL_SUBAGENT_ACTIVITY_KINDS,
+  AGENT_CONTROL_TOOL_NAMES,
+  buildAgentControlVisibleDomAssertions,
+} from "./agent-control-visible-dom-gate-b.mjs";
+import {
+  buildDeferredMcpVisibleDomAssertions,
   buildDeferredMcpToolSearchAssertions,
   buildDeferredMcpToolSearchFixtureResponses,
+  DEFERRED_MCP_TOOL_CALL_ID,
+  DEFERRED_MCP_TOOL_SEARCH_FINAL_TEXT,
+  DEFERRED_MCP_TOOL_SEARCH_CALL_ID,
 } from "./deferred-mcp-tool-search-gate-b.mjs";
 
 function readDeferredGateBSources() {
   return [
     "scripts/agent-runtime/tool-execution-smoke.mjs",
+    "scripts/agent-runtime/tool-execution-managed-smoke.mjs",
     "scripts/agent-runtime/deferred-mcp-tool-search-gate-b.mjs",
+  ]
+    .map((filePath) => fs.readFileSync(filePath, "utf8"))
+    .join("\n");
+}
+
+function readAgentControlGateBSources() {
+  return [
+    "scripts/agent-runtime/tool-execution-smoke.mjs",
+    "scripts/agent-runtime/tool-execution-managed-smoke.mjs",
+    "scripts/agent-runtime/agent-control-visible-dom-gate-b.mjs",
+    "src/components/agent/chat/components/AgentThreadTimelineItemRenderers.tsx",
   ]
     .map((filePath) => fs.readFileSync(filePath, "utf8"))
     .join("\n");
@@ -40,6 +62,37 @@ describe("agent runtime tool execution smoke guard", () => {
     ]) {
       expect(content).not.toContain(`"${retiredName}"`);
     }
+
+    expect(content).toContain("usesAppServerToolInventoryCurrent: true");
+    expect(content).not.toContain("usesCompatToolInventoryCommand");
+    expect(content).not.toContain("collabOperationToToolName");
+    expect(content).not.toContain(
+      'item?.type === "subagent_activity" ? item?.status_label',
+    );
+  });
+
+  it("requires six completed AgentControl rows and canonical SubAgent activity in visible DOM", () => {
+    const content = readAgentControlGateBSources();
+
+    expect(content).toContain(AGENT_CONTROL_FINAL_TEXT);
+    expect(content).toContain('method === "agentSession/read"');
+    expect(content).toContain('transport === "electron-ipc"');
+    expect(content).toContain("stage=cold-restart-electron");
+    expect(content).toContain("--cold-restart");
+    expect(content).toContain("visibleDomRestoredAfterColdRestart");
+    expect(content).toContain("visibleDomToolIdentityStableAcrossRestart");
+    expect(content).toContain("visibleDomSubAgentIdentityStableAcrossRestart");
+    expect(content).toContain("visibleDomChildThreadStableAcrossRestart");
+    expect(content).toContain('data-testid="subagent-activity-row"');
+    expect(content).toContain('data-testid$=":subagent"');
+    expect(content).toContain("visibleDomAllAgentControlToolRowsCompleted");
+    expect(content).toContain("visibleDomCanonicalSubAgentActivitiesVisible");
+    for (const toolName of AGENT_CONTROL_TOOL_NAMES) {
+      expect(content).toContain(`"${toolName}"`);
+    }
+    for (const activityKind of AGENT_CONTROL_SUBAGENT_ACTIVITY_KINDS) {
+      expect(content).toContain(`"${activityKind}"`);
+    }
   });
 
   it("keeps the deferred MCP Gate B on the current Electron/App Server path", () => {
@@ -64,6 +117,20 @@ describe("agent runtime tool execution smoke guard", () => {
     expect(content).toContain("sameTurnNextStepExposesDeferredTool");
     expect(content).toContain("newTurnDoesNotLeakDeferredTool");
     expect(content).toContain("runDeferredMcpNewTurnIsolation");
+    expect(content).toContain("visibleDomToolSearchCompletedInReadModel");
+    expect(content).toContain("visibleDomToolSearchStaysInternal");
+    expect(content).not.toContain("visibleDomToolSearchRowCompleted");
+    expect(content).toContain("visibleDomDeferredToolRowCompleted");
+    expect(content).toContain(DEFERRED_MCP_TOOL_SEARCH_FINAL_TEXT);
+    expect(content).toContain('method === "agentSession/read"');
+    expect(content).toContain('transport === "electron-ipc"');
+    expect(content).toContain('getAttribute("data-tool-name")');
+    expect(content).toContain('getAttribute("data-tool-status")');
+    expect(content).not.toContain("humanizeDeferredToolName");
+    expect(content).not.toContain("tool-call-tool-search-result");
+    expect(content).not.toContain("completedProcessIndicator");
+    expect(content).toContain("message-list-historical-timeline-preview:");
+    expect(content).toContain("agent-thread-block:");
   });
 
   it("accepts only the next-step and Turn-local deferred tool lifecycle", () => {
@@ -96,11 +163,205 @@ describe("agent runtime tool execution smoke guard", () => {
     expect(scriptedResponses).toHaveLength(3);
     expect(scriptedResponses[0]).toMatchObject({
       name: "tool_search",
+      id: DEFERRED_MCP_TOOL_SEARCH_CALL_ID,
       arguments: { query: `select:${deferredToolName}` },
     });
-    expect(scriptedResponses[1]).toMatchObject({ name: deferredToolName });
+    expect(scriptedResponses[1]).toMatchObject({
+      name: deferredToolName,
+      id: DEFERRED_MCP_TOOL_CALL_ID,
+    });
     expect(Object.values(assertions)).toEqual(
       Array(Object.keys(assertions).length).fill(true),
     );
+  });
+
+  it("requires internal tool discovery, the completed deferred Tool row, final text, and current read trace", () => {
+    const deferredToolName = "mcp__fixture__deferred_echo";
+    const evidence = {
+      runtime: {
+        matrix: [
+          { tool: "tool_search", status: "completed", success: true },
+          { tool: deferredToolName, status: "completed", success: true },
+        ],
+      },
+    };
+    const snapshot = {
+      electron: true,
+      hasInvokeBridge: true,
+      supportsAppServer: true,
+      sessionId: "session-deferred",
+      activeSessionId: "session-deferred",
+      appServerCalls: [
+        {
+          method: "agentSession/read",
+          transport: "electron-ipc",
+          status: "success",
+        },
+      ],
+      typedToolRows: [
+        {
+          id: "item-deferred",
+          name: deferredToolName,
+          status: "completed",
+          visible: true,
+        },
+      ],
+      deferredToolRow: {
+        visible: true,
+        completed: true,
+        toolName: deferredToolName,
+        toolStatus: "completed",
+      },
+      finalAssistantTextVisible: true,
+      invokeErrorCount: 0,
+      consoleErrorCount: 0,
+    };
+
+    const passing = buildDeferredMcpVisibleDomAssertions({
+      deferredToolName,
+      evidence,
+      snapshot,
+    });
+    expect(Object.values(passing)).toEqual(
+      Array(Object.keys(passing).length).fill(true),
+    );
+
+    const failing = buildDeferredMcpVisibleDomAssertions({
+      deferredToolName,
+      evidence,
+      snapshot: {
+        ...snapshot,
+        activeSessionId: "session-other",
+        finalAssistantTextVisible: false,
+        deferredToolRow: {
+          ...snapshot.deferredToolRow,
+          toolStatus: "failed",
+        },
+      },
+    });
+    expect(failing.visibleDomNavigatedToTargetSession).toBe(false);
+    expect(failing.visibleDomFinalAssistantTextVisible).toBe(false);
+    expect(failing.visibleDomDeferredToolRowCompleted).toBe(false);
+
+    const leakingInternalSearch = buildDeferredMcpVisibleDomAssertions({
+      deferredToolName,
+      evidence,
+      snapshot: {
+        ...snapshot,
+        typedToolRows: [
+          ...snapshot.typedToolRows,
+          {
+            id: "item-tool-search",
+            name: "tool_search",
+            status: "completed",
+            visible: true,
+          },
+        ],
+      },
+    });
+    expect(leakingInternalSearch.visibleDomToolSearchStaysInternal).toBe(false);
+  });
+
+  it("fails AgentControl visible DOM when a canonical row or activity identity is missing", () => {
+    const evidence = {
+      runtime: {
+        matrix: AGENT_CONTROL_TOOL_NAMES.map((tool) => ({
+          tool,
+          status: "completed",
+          success: true,
+        })),
+      },
+    };
+    const snapshot = {
+      electron: true,
+      hasInvokeBridge: true,
+      supportsAppServer: true,
+      coldRestart: {
+        electronProcessReplaced: true,
+      },
+      sessionId: "session-agent-control",
+      activeSessionId: "session-agent-control",
+      appServerCalls: [
+        {
+          method: "agentSession/read",
+          transport: "electron-ipc",
+          status: "success",
+        },
+        {
+          method: "thread/list",
+          transport: "electron-ipc",
+          status: "success",
+        },
+      ],
+      typedToolRows: AGENT_CONTROL_TOOL_NAMES.map((name, index) => ({
+        id: `tool-${index}`,
+        name,
+        status: "completed",
+        visible: true,
+      })),
+      subagentActivityRows: AGENT_CONTROL_SUBAGENT_ACTIVITY_KINDS.map(
+        (activityKind, index) => ({
+          itemId: `activity-${index}`,
+          activityKind,
+          threadId: "thread-child",
+          visible: true,
+        }),
+      ),
+      finalAssistantTextVisible: true,
+      invokeErrorCount: 0,
+      consoleErrorCount: 0,
+    };
+    snapshot.preRestart = {
+      activeSessionId: snapshot.activeSessionId,
+      typedToolRows: snapshot.typedToolRows,
+      subagentActivityRows: snapshot.subagentActivityRows,
+      finalAssistantTextVisible: true,
+    };
+
+    const passing = buildAgentControlVisibleDomAssertions({
+      evidence,
+      snapshot,
+    });
+    expect(Object.values(passing)).toEqual(
+      Array(Object.keys(passing).length).fill(true),
+    );
+
+    const missingTool = buildAgentControlVisibleDomAssertions({
+      evidence,
+      snapshot: {
+        ...snapshot,
+        typedToolRows: snapshot.typedToolRows.slice(1),
+      },
+    });
+    expect(missingTool.visibleDomAllAgentControlToolRowsPresentOnce).toBe(
+      false,
+    );
+    expect(missingTool.visibleDomAllAgentControlToolRowsVisible).toBe(false);
+    expect(missingTool.visibleDomToolIdentityStableAcrossRestart).toBe(false);
+
+    const hotReloadOnly = buildAgentControlVisibleDomAssertions({
+      evidence,
+      snapshot: {
+        ...snapshot,
+        coldRestart: null,
+      },
+    });
+    expect(hotReloadOnly.visibleDomRestoredAfterColdRestart).toBe(false);
+
+    const missingIdentity = buildAgentControlVisibleDomAssertions({
+      evidence,
+      snapshot: {
+        ...snapshot,
+        subagentActivityRows: snapshot.subagentActivityRows.map((row, index) =>
+          index === 0 ? { ...row, threadId: "" } : row,
+        ),
+      },
+    });
+    expect(missingIdentity.visibleDomCanonicalSubAgentActivitiesVisible).toBe(
+      false,
+    );
+    expect(
+      missingIdentity.visibleDomSubAgentActivitiesUseCanonicalIdentity,
+    ).toBe(false);
   });
 });

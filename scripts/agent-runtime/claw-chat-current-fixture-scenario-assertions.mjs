@@ -36,7 +36,6 @@ import {
   buildLiveTailCommitScenarioAssertions,
   buildMcpStructuredContentScenarioAssertions,
   buildMediaReferenceScenarioAssertions,
-  buildMultiAgentTeamScenarioAssertions,
   buildReasoningFirstVisibleScenarioAssertions,
 } from "./claw-chat-current-fixture-runtime-surface-assertions.mjs";
 import {
@@ -312,7 +311,6 @@ export function buildScenarioAssertions(context) {
     isInputbarRichRestoreScenario,
     isMcpStructuredContentScenario,
     isMediaReferenceScenario,
-    isMultiAgentTeamScenario,
     isPlanScenario,
     isReasoningFirstVisibleScenario,
     isTerminalCanceledAfterAnswerScenario,
@@ -329,7 +327,6 @@ export function buildScenarioAssertions(context) {
     manualEnableRuntimeMetadata,
     mcpStructuredContentTurnStart,
     mediaReferenceTurnStart,
-    multiAgentTeamTurnStart,
     newsTurnStart,
     pageText,
     planImplementationTurnStart,
@@ -976,13 +973,7 @@ export function buildScenarioAssertions(context) {
                                         pageText,
                                         summary,
                                       })
-                                    : isMultiAgentTeamScenario
-                                      ? buildMultiAgentTeamScenarioAssertions({
-                                          multiAgentTeamTurnStart,
-                                          pageText,
-                                          summary,
-                                        })
-                                      : isSkillsRuntimeScenario
+                                    : isSkillsRuntimeScenario
                                         ? buildSkillsRuntimeScenarioAssertions({
                                             explicitSkillsRuntimeTurnStart,
                                             manualEnableRuntimeBinding,

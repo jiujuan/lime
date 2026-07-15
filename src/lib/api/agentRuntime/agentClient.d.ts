@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeGeneratedTitleResult,
   RuntimeProviderSelection,
-} from "./types";
+} from "./sessionTypes";
 import { type AgentRuntimeBridgeInvoke } from "./transport";
 export interface AgentRuntimeAgentClientDeps {
   bridgeInvoke?: AgentRuntimeBridgeInvoke;

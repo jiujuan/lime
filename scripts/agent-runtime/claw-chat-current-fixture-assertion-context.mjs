@@ -26,8 +26,6 @@ import {
   LIVE_TAIL_COMMIT_PROMPT,
   LIVE_TAIL_COMMIT_SCENARIO,
   MCP_STRUCTURED_CONTENT_PROMPT,
-  MULTI_AGENT_TEAM_PROMPT,
-  MULTI_AGENT_TEAM_SCENARIO,
   NEWS_PROMPT,
   PLAIN_IMAGE_INTENT_ROUTED_PROMPT,
   PLAIN_IMAGE_INTENT_SCENARIO,
@@ -211,10 +209,6 @@ export function buildAssertionContext({
     (entry) =>
       entry.kind === "turnStart" && entry.inputText === MEDIA_REFERENCE_PROMPT,
   );
-  const multiAgentTeamTurnStart = backendLedger.find(
-    (entry) =>
-      entry.kind === "turnStart" && entry.inputText === MULTI_AGENT_TEAM_PROMPT,
-  );
   const skillsRuntimeTurnStart = backendLedger.find(
     (entry) =>
       entry.kind === "turnStart" && entry.inputText === SKILLS_RUNTIME_PROMPT,
@@ -297,8 +291,6 @@ export function buildAssertionContext({
     options.scenario === "mcp-structured-content";
   const isMediaReferenceScenario =
     options.scenario === MEDIA_REFERENCE_SCENARIO;
-  const isMultiAgentTeamScenario =
-    options.scenario === MULTI_AGENT_TEAM_SCENARIO;
   const isSkillsRuntimeScenario = options.scenario === "skills-runtime";
   const isSoulStyleScenario = options.scenario === SOUL_STYLE_SCENARIO;
   const isExpertSkillsRuntimeScenario =
@@ -354,9 +346,7 @@ export function buildAssertionContext({
                               ? mcpStructuredContentTurnStart?.runtimeRequest
                               : isMediaReferenceScenario
                                 ? mediaReferenceTurnStart?.runtimeRequest
-                                : isMultiAgentTeamScenario
-                                  ? multiAgentTeamTurnStart?.runtimeRequest
-                                  : isSkillsRuntimeScenario
+                                : isSkillsRuntimeScenario
                                     ? skillsRuntimeTurnStart?.runtimeRequest
                                     : isAnyExpertSkillsRuntimeScenario
                                       ? expertRuntimeTurnStartForAssertions?.runtimeRequest
@@ -457,10 +447,7 @@ export function buildAssertionContext({
                               : isMediaReferenceScenario
                                 ? mediaReferenceTurnStart?.inputText ===
                                   MEDIA_REFERENCE_PROMPT
-                                : isMultiAgentTeamScenario
-                                  ? multiAgentTeamTurnStart?.inputText ===
-                                    MULTI_AGENT_TEAM_PROMPT
-                                  : isSkillsRuntimeScenario
+                                : isSkillsRuntimeScenario
                                     ? skillsRuntimeTurnStart?.inputText ===
                                         SKILLS_RUNTIME_PROMPT &&
                                       explicitSkillsRuntimeTurnStart?.inputText ===
@@ -519,7 +506,6 @@ export function buildAssertionContext({
     terminalStaleGuardSecondTurnStart,
     mcpStructuredContentTurnStart,
     mediaReferenceTurnStart,
-    multiAgentTeamTurnStart,
     skillsRuntimeTurnStart,
     explicitSkillsRuntimeTurnStart,
     manualEnableSkillsRuntimeTurnStart,
@@ -552,7 +538,6 @@ export function buildAssertionContext({
     isTerminalStaleGuardScenario,
     isMcpStructuredContentScenario,
     isMediaReferenceScenario,
-    isMultiAgentTeamScenario,
     isSkillsRuntimeScenario,
     isSoulStyleScenario,
     isExpertSkillsRuntimeScenario,

@@ -3,10 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AgentThreadItem } from "../types";
-import type {
-  AgentRuntimeEvidencePack,
-  AgentRuntimeWorkspaceSkillBinding,
-} from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/evidenceTypes";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { Skill } from "@/lib/api/skills";
 import {
   clearHarnessEvidencePackStore,

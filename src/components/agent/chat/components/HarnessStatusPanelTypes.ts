@@ -1,10 +1,8 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import type {
-  AgentRuntimeThreadReadModel,
-  AgentRuntimeToolInventory,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type {

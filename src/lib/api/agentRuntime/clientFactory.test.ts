@@ -67,6 +67,16 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
           updatedAt: "2026-06-06T00:00:00.000Z",
         },
         turns: [],
+        detail: {
+          id: "session-1",
+          thread_id: "thread-1",
+          name: "Session 1",
+          created_at: 1780704000000,
+          updated_at: 1780704000000,
+          workspace_id: "workspace-1",
+          messages_count: 0,
+          messages: [],
+        },
       },
       response: {
         id: 1,
@@ -80,6 +90,16 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
             updatedAt: "2026-06-06T00:00:00.000Z",
           },
           turns: [],
+          detail: {
+            id: "session-1",
+            thread_id: "thread-1",
+            name: "Session 1",
+            created_at: 1780704000000,
+            updated_at: 1780704000000,
+            workspace_id: "workspace-1",
+            messages_count: 0,
+            messages: [],
+          },
         },
       },
       messages: [],
@@ -1069,7 +1089,7 @@ describe("agentRuntime clientFactory", () => {
     });
 
     await expect(
-      client.exportAgentRuntimeHandoffBundle("session-1"),
+      client.exportAgentRuntimeHandoffBundle("session-1", { locale: "en-US" }),
     ).resolves.toMatchObject({
       session_id: "session-1",
       thread_id: "thread-1",

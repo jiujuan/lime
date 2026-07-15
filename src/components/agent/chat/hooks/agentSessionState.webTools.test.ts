@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
   buildMessageGroupsProjection,
@@ -362,9 +362,12 @@ describe("agentSessionState WebTools hydrate", () => {
       "我先联网核实目标页面来源。",
     );
     expect(result.snapshot.messages[1]?.content).toContain("网页搜索渲染结论");
-    expect(result.snapshot.messages[1]?.contentParts?.map((part) => part.type))
-      .toEqual(["text", "tool_use", "thinking", "tool_use", "text"]);
-    const messageGroups = buildMessageGroupsProjection(result.snapshot.messages);
+    expect(
+      result.snapshot.messages[1]?.contentParts?.map((part) => part.type),
+    ).toEqual(["text", "tool_use", "thinking", "tool_use", "text"]);
+    const messageGroups = buildMessageGroupsProjection(
+      result.snapshot.messages,
+    );
     const timelineByMessageId = buildTimelineByMessageIdProjection({
       canBuildHistoricalTimeline: true,
       renderedMessages: result.snapshot.messages,

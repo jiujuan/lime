@@ -1,9 +1,6 @@
 import {
   LIVE_TAIL_COMMIT_PROMPT,
   MCP_STRUCTURED_CONTENT_PROMPT,
-  MULTI_AGENT_TEAM_DONE_TEXT,
-  MULTI_AGENT_TEAM_PROMPT,
-  MULTI_AGENT_TEAM_SUMMARY_TEXT,
   REASONING_FIRST_VISIBLE_PROMPT,
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
@@ -217,63 +214,5 @@ export function buildMediaReferenceScenarioAssertions({
       pageText.includes(MEDIA_REFERENCE_SUMMARY_TEXT) &&
       pageText.includes(MEDIA_REFERENCE_URI) &&
       pageText.includes(MEDIA_REFERENCE_MIME_TYPE),
-  };
-}
-
-export function buildMultiAgentTeamScenarioAssertions({
-  multiAgentTeamTurnStart,
-  pageText,
-  summary,
-}) {
-  return {
-    multiAgentTeamPromptReachedBackend:
-      multiAgentTeamTurnStart?.inputText === MULTI_AGENT_TEAM_PROMPT,
-    guiMultiAgentTeamInputSubmitted:
-      summary.multiAgentTeamInputSend?.afterFill?.promptVisibleInTextarea ===
-        true && summary.multiAgentTeamInputSend?.clicked?.clicked === true,
-    guiMultiAgentTeamCompleted:
-      summary.guiMultiAgentTeamCompleted?.hasPrompt === true &&
-      (summary.guiMultiAgentTeamCompleted?.hasAssistantSummary === true ||
-        summary.guiMultiAgentTeamCompleted?.hasDoneText === true) &&
-      summary.guiMultiAgentTeamCompleted?.textareaVisible === true &&
-      summary.guiMultiAgentTeamCompleted?.textareaDisabled === false &&
-      summary.guiMultiAgentTeamCompleted?.stopButtonVisible === false &&
-      pageText.includes(MULTI_AGENT_TEAM_PROMPT) &&
-      (pageText.includes(MULTI_AGENT_TEAM_SUMMARY_TEXT) ||
-        pageText.includes(MULTI_AGENT_TEAM_DONE_TEXT)),
-    readModelMultiAgentTeamCompleted:
-      summary.readModelMultiAgentTeamCompleted?.includesPrompt === true &&
-      (summary.readModelMultiAgentTeamCompleted?.includesAssistantDone ===
-        true ||
-        summary.readModelMultiAgentTeamCompleted?.includesAssistantSummary ===
-          true) &&
-      summary.readModelMultiAgentTeamCompleted?.latestTurnStatus ===
-        "completed",
-    readModelMultiAgentTeamFactsObserved:
-      summary.readModelMultiAgentTeamCompleted?.includesTeamSummary === true &&
-      summary.readModelMultiAgentTeamCompleted?.includesChildThreads === true,
-    evidencePackMultiAgentTeamExported:
-      summary.evidencePackMultiAgentTeam?.exported === true &&
-      summary.evidencePackMultiAgentTeam?.teamFactsStatus === "exported",
-    evidencePackMultiAgentTeamParentThreadBound:
-      summary.evidencePackMultiAgentTeam?.includesParentSession === true &&
-      summary.evidencePackMultiAgentTeam?.includesThread === true &&
-      summary.evidencePackMultiAgentTeam?.includesTurn === true &&
-      summary.evidencePackMultiAgentTeam?.includesResearcher === true &&
-      summary.evidencePackMultiAgentTeam?.includesReviewer === true,
-    evidencePackMultiAgentTeamHandoffObserved:
-      summary.evidencePackMultiAgentTeam?.includesHandoff === true &&
-      summary.evidencePackMultiAgentTeam?.handoffCount >= 1,
-    evidencePackMultiAgentTeamWorkerNotificationObserved:
-      summary.evidencePackMultiAgentTeam?.includesWorkerNotification === true &&
-      summary.evidencePackMultiAgentTeam?.workerNotificationCount >= 1,
-    evidencePackMultiAgentTeamReviewLaneObserved:
-      summary.evidencePackMultiAgentTeam?.includesReview === true &&
-      summary.evidencePackMultiAgentTeam?.reviewLaneCount >= 1 &&
-      summary.evidencePackMultiAgentTeam?.includesQueuedPhase === true,
-    multiAgentTeamNoAgentFirstHistory:
-      summary.readModelMultiAgentTeamCompleted?.forbiddenAgentFirstHistory ===
-        false &&
-      summary.evidencePackMultiAgentTeam?.forbiddenAgentFirstHistory === false,
   };
 }

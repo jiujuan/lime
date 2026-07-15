@@ -352,13 +352,10 @@ async fn list_agent_sessions_filters_projection_by_workspace_or_workspace_root()
     )
     .await;
 
-    let app_data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("legacy_unexpected"))
-            .with_workspace(json!({
-                "id": "workspace-current",
-                "rootPath": "/tmp/projection-root",
-            })),
-    );
+    let app_data_source = Arc::new(TestSessionDataSource::new().with_workspace(json!({
+        "id": "workspace-current",
+        "rootPath": "/tmp/projection-root",
+    })));
     let restarted_core = RuntimeCore::default()
         .with_event_log_writer(harness.event_log_writer)
         .with_projection_store(harness.projection_store)

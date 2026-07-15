@@ -1,43 +1,46 @@
-## Lime v1.103.0
+## Lime v1.104.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Moved the Agent Workspace SubAgent experience fully onto the canonical child Thread family. Parent-child identity, seven runtime states, task statistics, navigation, and history recovery now read App Server `thread/list|read`, AgentGraph, and Thread identity.
-- Preserved the original Codex Item ID for imported completed Plans as the canonical item, revision, and source identity. Restarts retain a typed Plan lifecycle without degrading it into a tool event or synthesized identity.
-- Codex-imported User and Agent Messages now preserve source identity and source ordinals while emitting the complete canonical `item.started` / `item.completed` lifecycle. Turn completion no longer synthesizes Messages through a side path.
-- Migrated Managed Objective, Skills, Evidence, Tool Inventory, queued-turn, execution-strategy, stream-runtime, and thread-read consumers to their current owners, with guards preventing legacy root barrels and session rosters from returning.
+- Moved Messages, Reasoning, and Plans fully onto the Codex-aligned canonical Item lifecycle. Start/Delta/End share stable identities, provider output is scoped by canonical Turn and sampling attempt, and Turn completion no longer synthesizes content through a side path.
+- Added typed `content_parts` to canonical AgentMessages. Text and reference-only Media preserve their order and references from ThreadStore through `thread/read`, `agentSession/read`, and live GUI projection while rejecting inline data URIs and raw provider payloads.
+- Established `agentSession/read` as the current ThreadStore-backed product presentation endpoint. Approval cold and live reads now emit the same typed terminal response, with GUI decision aliases lowered only at the view-model boundary.
+- AgentControl children now inherit the resolved provider, model, reasoning, workspace, and search policy from the parent Turn. Warm `followup_task` calls retain the target child's effective route, using the caller snapshot only for cold targets.
+- Runtime-owned MCP clients now use `2025-06-18` and advertise the exact form elicitation capability. Management connections without a trusted Thread owner continue to keep that capability absent.
+- Completed current-owner, stable DOM identity, and five-language UI coverage for Agent Chat task indexing, review decisions, tool processes, and media workbenches. Empty timelines now trigger canonical history recovery.
 
 ### Fixes
 
-- Fixed stable canonical timeline ordering for live and historical reasoning, Messages, and Plans by consistently using Item ordinals, and completed the EventLog-to-canonical-Thread history repair path.
-- Fixed SubAgent parent identity, child roster, and terminal-state visibility after cold start, paginated reads, and zero-child cases without falling back to legacy session detail.
-- Fixed Plugin runtime start/get/cancel, capability-dispatcher, and host-bridge fixtures that omitted the canonical `threadId`.
-- Fixed targeted Vitest and batch-list commands overwriting the default resume state, so local diagnostics no longer corrupt later resumed runs.
+- Fixed provider raw IDs being reused across later sampling attempts or Turns. Reasoning, Messages, Plans, and Tools now order only by their first canonical outer sequence, and terminal Items reject late deltas.
+- Fixed producer ordinals colliding with the ThreadStore unique index, imported Reasoning losing its source ordinal, and canonical projection failures still notifying the GUI or advancing in-memory history.
+- Fixed same-session navigation skipping history hydration when Turn metadata was present but Messages and Items were still empty. Missing canonical detail now fails explicitly.
+- Fixed Approval terminal wire values using GUI aliases, Coding recovery reusing execution identities across Turns, synthetic Content Factory actions and contract probes, and blank Project Shell color variables bypassing defaults.
 
 ### Improvements and Refactors
 
-- Physically removed Renderer Team formation, the Team runtime sidecar, raw SubAgent channels and parsers, legacy roster DTOs/state/normalizers, roster memory shadowing, and synthetic worker notifications. Historical compatibility remains read-only where required.
-- Consolidated canonical SubAgent activity into `Started`, `Interacted`, and `Interrupted`, keeping current six-tool names, lineage, and GUI status consistent end to end while excluding V1 aliases from current capability coverage.
-- Split App Server runtime value helpers, image-command event projection, and the RuntimeBackend execution adapter, tightening file-size and ownership guards without adding parallel facades.
-- Updated Agent Workspace, AgentUI, Project Thread, and SubAgent roadmaps so current documentation references only canonical Thread family, AgentGraph, and AgentUI projection facts.
+- Removed the app-data session fallback, the 681-line `session_hydration` module, the old Team runtime governor and SubAgent tree, Renderer Agent Runtime root barrels, and stale type aggregators. RuntimeCore, EventLog, and ProjectionStore/ThreadStore are now the sole session fact source.
+- Physically removed RuntimeCore's second provider-neutral request/event algebra and generic Model Provider chat/Gemini/Ollama lowering, deleting roughly 1,500 net lines. The current path accepts only canonical requests/events and media body builders.
+- Split provider output lifecycle, conversation-import Plan, canonical message lifecycle, Approval, and read-model workflow ownership into focused modules while preserving existing file-size limits without new facades or compatibility tracks.
+- Migrated media DTOs, Workspace requests, Evidence/Inventory/Expert/Plugin types, and Agent client/session/thread consumers to their current owners, with guards preventing dead barrels from returning.
 
 ### Tests and Quality
 
-- Expanded Rust and TypeScript regressions for canonical Messages, Plans, SubAgents, child Threads, session reads, and export metrics, together with App Server schema, generated-client, and Electron contract fixtures.
-- Added static guards for Agent runtime current owners, legacy surfaces, roadmaps, Electron IPC ordering, App Server file boundaries, and production sources.
-- Added real Electron GUI smoke, history-fixture, Claw cancel/continue, canonical-roster, and Inputbar/Task Rail recovery evidence while keeping five-language Agent Workspace strings and regressions synchronized.
-- Made the history-replay Electron oracle wait for the complete Reasoning summary, image attachments, and MCP tool row before asserting, eliminating race false positives from the transient “thinking” shell.
-- Improved smart Vitest targeted-state isolation so focused fixes can continue a large resumed suite without resetting completed batches.
+- Expanded Rust and TypeScript regressions for canonical lifecycle, typed media parts, Approval, session history, projection failure, provider lowering, and current-owner boundaries while synchronizing App Server schemas and the generated client.
+- Added real Electron and Gate B evidence for all six AgentControl tools, visible Reasoning order, image media references, Content Factory, Coding recovery, and history replay.
+- AgentControl visible-DOM Gate B now verifies six completed Tool rows and Started/Interacted/Interrupted activity, while MCP elicitation Gate B proves both runtime capability advertisement and management capability absence.
+- Made the history replay oracle wait for complete Reasoning summaries, image attachments, and MCP tool rows. Tool rows now expose stable name/status DOM attributes, reducing transient races and brittle text selectors.
+- Standardized the macOS Rust test-worker minimum stack in the shared layer runner while preserving explicit caller settings. The candidate includes passing evidence for the smart frontend suite, changed Rust scope, legacy governance, and GUI smoke.
+- Covered Task Index and Runtime Review Decision strings across `zh-CN`, `zh-TW`, `en-US`, `ja-JP`, and `ko-KR`, with stable locale regressions.
 
 ### Documentation
 
-- Updated the Refactor V2 central plan, architecture confirmations, and per-slice evidence for canonical child Threads, Agent Chat current owners, App Server module ownership, and deletion exit criteria.
-- Synchronized Agent Workspace, AgentUI, Project Thread, Skills, and SubAgent roadmaps, removing descriptions that treated legacy session rosters or the Team sidecar as current.
+- Updated the global architecture, Refactor V2 central plan, Agent Workspace, Project Thread, and per-slice evidence for the sole canonical lifecycle, ThreadStore ordinal/projection, AgentSession presentation, and provider algebra owners.
+- Recorded the app-data fallback, old provider lowering, root barrels, and Team/synthetic fixtures as `dead / deleted / forbidden-to-restore`, together with their validation, handoff, and exit criteria.
 
 ### Other
 
-- Bumped version facts to `1.103.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and release notes.
+- Bumped version facts to `1.104.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and release notes.
 
-**Full changes**: `v1.102.0` -> `v1.103.0`
+**Full changes**: `v1.103.0` -> `v1.104.0`

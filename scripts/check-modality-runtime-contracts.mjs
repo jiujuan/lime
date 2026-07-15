@@ -1541,7 +1541,7 @@ function validateTaskIndexPresentationGuard() {
   );
   pushIf(
     errors,
-    !sectionSource.includes("任务中心过滤列表"),
+    !sectionSource.includes('t("agentChat.harness.taskIndex.list.title")'),
     `${HARNESS_TASK_INDEX_SECTION_PATH} must keep the task center filter surface attached to shared taskIndex rows`,
   );
   pushIf(

@@ -37,9 +37,6 @@ import {
   LIVE_TAIL_COMMIT_PROMPT,
   LIVE_TAIL_COMMIT_TABLE_TAIL,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
-  MULTI_AGENT_TEAM_DONE_TEXT,
-  MULTI_AGENT_TEAM_PROMPT,
-  MULTI_AGENT_TEAM_SUMMARY_TEXT,
   NEWS_PROMPT,
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
@@ -97,7 +94,6 @@ export function buildCommonAssertions(context) {
     isElectronResizeReflowScenario,
     isMcpStructuredContentScenario,
     isMediaReferenceScenario,
-    isMultiAgentTeamScenario,
     isReasoningFirstVisibleScenario,
     isTerminalCanceledAfterAnswerScenario,
     isTerminalFailedAfterAnswerScenario,
@@ -355,11 +351,7 @@ export function buildCommonAssertions(context) {
                                                   ? summary
                                                       .guiMediaReferenceCompleted
                                                       ?.hasPrompt === true
-                                                  : isMultiAgentTeamScenario
-                                                    ? summary
-                                                        .guiMultiAgentTeamCompleted
-                                                        ?.hasPrompt === true
-                                                    : isSkillsRuntimeScenario
+                                                  : isSkillsRuntimeScenario
                                                       ? summary
                                                           .guiSkillsRuntimeCompleted
                                                           ?.hasPrompt ===
@@ -509,15 +501,7 @@ export function buildCommonAssertions(context) {
                                                     summary
                                                       .guiMediaReferenceSnapshot
                                                       ?.hasUri === true
-                                                  : isMultiAgentTeamScenario
-                                                    ? summary
-                                                        .guiMultiAgentTeamCompleted
-                                                        ?.hasAssistantSummary ===
-                                                        true ||
-                                                      summary
-                                                        .guiMultiAgentTeamCompleted
-                                                        ?.hasDoneText === true
-                                                    : isSkillsRuntimeScenario
+                                                  : isSkillsRuntimeScenario
                                                       ? summary
                                                           .guiSkillsRuntimeCompleted
                                                           ?.hasAssistantSummary ===
@@ -685,16 +669,7 @@ export function buildCommonAssertions(context) {
                                                       .guiMediaReferenceCompleted
                                                       ?.textareaDisabled ===
                                                       false
-                                                  : isMultiAgentTeamScenario
-                                                    ? summary
-                                                        .guiMultiAgentTeamCompleted
-                                                        ?.textareaVisible ===
-                                                        true &&
-                                                      summary
-                                                        .guiMultiAgentTeamCompleted
-                                                        ?.textareaDisabled ===
-                                                        false
-                                                    : isSkillsRuntimeScenario
+                                                  : isSkillsRuntimeScenario
                                                       ? summary
                                                           .guiSkillsRuntimeCompleted
                                                           ?.textareaVisible ===
@@ -812,12 +787,7 @@ export function buildCommonAssertions(context) {
                                                       .guiMediaReferenceCompleted
                                                       ?.stopButtonVisible ===
                                                     false
-                                                  : isMultiAgentTeamScenario
-                                                    ? summary
-                                                        .guiMultiAgentTeamCompleted
-                                                        ?.stopButtonVisible ===
-                                                      false
-                                                    : isSkillsRuntimeScenario
+                                                  : isSkillsRuntimeScenario
                                                       ? summary
                                                           .guiSkillsRuntimeCompleted
                                                           ?.stopButtonVisible ===
@@ -1083,17 +1053,7 @@ export function buildCommonAssertions(context) {
                                                     pageText.includes(
                                                       MEDIA_REFERENCE_URI,
                                                     )
-                                                  : isMultiAgentTeamScenario
-                                                    ? pageText.includes(
-                                                        MULTI_AGENT_TEAM_PROMPT,
-                                                      ) &&
-                                                      (pageText.includes(
-                                                        MULTI_AGENT_TEAM_SUMMARY_TEXT,
-                                                      ) ||
-                                                        pageText.includes(
-                                                          MULTI_AGENT_TEAM_DONE_TEXT,
-                                                        ))
-                                                    : isSkillsRuntimeScenario
+                                                  : isSkillsRuntimeScenario
                                                       ? summary
                                                           .guiSkillsRuntimeCompleted
                                                           ?.hasPrompt ===

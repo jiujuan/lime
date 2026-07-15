@@ -633,13 +633,10 @@ async fn list_agent_sessions_projects_runtime_core_sessions_only() {
 
 #[tokio::test]
 async fn list_agent_sessions_keeps_workspace_id_filter_when_workspace_root_is_available() {
-    let app_data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("legacy_unexpected"))
-            .with_workspace(json!({
-                "id": "workspace-current",
-                "rootPath": "/tmp/current",
-            })),
-    );
+    let app_data_source = Arc::new(TestSessionDataSource::new().with_workspace(json!({
+        "id": "workspace-current",
+        "rootPath": "/tmp/current",
+    })));
     let core = RuntimeCore::default().with_app_data_source(app_data_source);
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_workspace_only".to_string()),
@@ -927,9 +924,7 @@ async fn read_session_current_repairs_and_reads_jsonl_projection() {
         .clear_session("sess_projection_read")
         .expect("simulate missing projection");
 
-    let app_data_source = Arc::new(TestSessionDataSource::new(
-        empty_agent_session_read_response("legacy_unexpected"),
-    ));
+    let app_data_source = Arc::new(TestSessionDataSource::new());
     let restarted_core = RuntimeCore::default()
         .with_event_log_writer(event_log_writer)
         .with_projection_store(projection_store.clone())
@@ -958,7 +953,7 @@ async fn read_session_current_repairs_and_reads_jsonl_projection() {
         .read_session("sess_projection_read")
         .expect("read repaired projection")
         .expect("projection row");
-    assert_eq!(projected.last_event_sequence, 4);
+    assert_eq!(projected.last_event_sequence, 7);
 }
 
 #[tokio::test]

@@ -8,18 +8,22 @@ import {
   listenAgentRuntimeEvent,
   type AgentRuntimeEventListener,
 } from "@/lib/api/agentRuntimeEvents";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import {
   createAgentRuntimeClient,
-  type AgentRuntimeCreateSessionOptions,
-  type AgentRuntimeGetSessionOptions,
-  type AgentRuntimeListSessionsOptions,
-  type AgentRuntimeReplayedActionRequiredView,
   type AgentRuntimeClient,
-  type AgentExecutionStrategy,
-  type AgentSessionDetail,
-  type AgentSessionInfo,
-  type RuntimeProviderSelection,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/clientFactory";
+import type {
+  AgentRuntimeCreateSessionOptions,
+  AgentRuntimeGetSessionOptions,
+  AgentRuntimeReplayedActionRequiredView,
+} from "@/lib/api/agentRuntime/requestTypes";
+import type {
+  AgentRuntimeListSessionsOptions,
+  AgentSessionDetail,
+  AgentSessionInfo,
+  RuntimeProviderSelection,
+} from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentAccessMode } from "./agentChatStorage";
 import type { ActionRequiredScope, ApprovalDecision } from "../types";
 import {

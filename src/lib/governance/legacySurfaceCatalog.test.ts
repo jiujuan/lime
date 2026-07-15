@@ -3806,7 +3806,6 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
       "lime-rs/crates/app-server/src/runtime/session_media_reader.rs",
       "lime-rs/crates/app-server/src/runtime/session_media_refs.rs",
-      "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
     ]);
     expect(monitor?.patterns).toEqual([
       '"outputSnapshotFile"',
@@ -3817,6 +3816,24 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.includePathPrefixes).toEqual([
       "lime-rs/crates/app-server/src",
     ]);
+  });
+
+  it("应禁止 app-data session fallback 和 hydration helper 回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-runtime-session-app-data-fallback",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.patterns).toEqual([
+      "load_app_data_session",
+      "read_agent_session(",
+      "mod session_hydration;",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/app-server/src/runtime",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
   });
 
   it("应禁止 generated artifact 正文继续内联在 runtime event 中", () => {
@@ -3870,7 +3887,6 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
       "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
       "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
-      "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
       "lime-rs/crates/app-server/src/runtime/tests/coding_events.rs",
       "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs",
     ]);

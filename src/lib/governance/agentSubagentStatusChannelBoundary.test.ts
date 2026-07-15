@@ -42,7 +42,6 @@ const RAW_STATUS_PRODUCTION_FILES = [
   "packages/agent-runtime-projection/src/index.js",
   "packages/agent-runtime-projection/src/index.d.ts",
   "packages/agent-runtime-projection/src/runtimeFacts.ts",
-  "scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs",
 ] as const;
 
 const RETIRED_RAW_STATUS_PATTERNS = [

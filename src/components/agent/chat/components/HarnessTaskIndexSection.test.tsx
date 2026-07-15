@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AgentRuntimeEvidenceTaskIndex } from "@/lib/api/agentRuntime/evidenceTypes";
 import { HarnessTaskIndexSection } from "./HarnessTaskIndexSection";
 
@@ -14,6 +15,10 @@ interface RenderResult {
 }
 
 const mountedRoots: RenderResult[] = [];
+
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
+});
 
 function createTaskIndex(): AgentRuntimeEvidenceTaskIndex {
   return {

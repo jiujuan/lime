@@ -445,13 +445,24 @@ mod tests {
             .await
             .expect("turn");
 
-        assert_eq!(output.events.len(), 2);
-        assert_eq!(output.events[0].event_type, "message.created");
-        assert_eq!(output.events[0].payload["input"]["text"], "draft");
-        assert_eq!(output.events[1].event_type, "message.delta");
-        assert_eq!(output.events[1].payload["backend"], "external");
-        assert_eq!(output.events[1].payload["kind"], "turnStart");
-        assert_eq!(output.events[1].payload["inputTextLength"], 5);
+        assert_eq!(
+            output
+                .events
+                .iter()
+                .map(|event| event.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "item.started",
+                "message.created",
+                "item.completed",
+                "item.started",
+                "message.delta",
+            ]
+        );
+        assert_eq!(output.events[1].payload["input"]["text"], "draft");
+        assert_eq!(output.events[4].payload["backend"], "external");
+        assert_eq!(output.events[4].payload["kind"], "turnStart");
+        assert_eq!(output.events[4].payload["inputTextLength"], 5);
     }
 
     #[tokio::test]
@@ -494,14 +505,25 @@ mod tests {
         )
         .await;
 
-        assert_eq!(output.events.len(), 4);
-        assert_eq!(output.events[0].event_type, "message.created");
-        assert_eq!(output.events[1].event_type, "message.delta");
-        assert_eq!(output.events[1].payload["chunk"], 1);
-        assert_eq!(output.events[2].event_type, "message.delta");
-        assert_eq!(output.events[2].payload["chunk"], 2);
-        assert_eq!(output.events[3].event_type, "artifact.snapshot");
-        assert_eq!(output.events[3].payload["artifactId"], "stream-artifact");
+        assert_eq!(
+            output
+                .events
+                .iter()
+                .map(|event| event.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "item.started",
+                "message.created",
+                "item.completed",
+                "item.started",
+                "message.delta",
+                "message.delta",
+                "artifact.snapshot",
+            ]
+        );
+        assert_eq!(output.events[4].payload["chunk"], 1);
+        assert_eq!(output.events[5].payload["chunk"], 2);
+        assert_eq!(output.events[6].payload["artifactId"], "stream-artifact");
     }
 
     #[tokio::test]

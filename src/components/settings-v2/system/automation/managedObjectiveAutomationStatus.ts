@@ -1,4 +1,4 @@
-import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/types";
+import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/sessionTypes";
 
 export const MANAGED_OBJECTIVE_AUTOMATION_STATUS_TONE: Record<
   ManagedObjectiveStatus,

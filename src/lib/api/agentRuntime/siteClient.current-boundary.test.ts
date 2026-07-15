@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -34,19 +34,14 @@ function expectRetiredSiteClientTopLevelExportsAbsent(source: string): void {
 }
 
 describe("agentRuntime siteClient current boundary", () => {
-  it("agentRuntime 公共聚合入口不再暴露 retired Site Adapter 函数", () => {
-    const indexSource = readRepoFile("src/lib/api/agentRuntime/index.ts");
-    const indexDeclarations = readRepoFile(
+  it("agentRuntime 公共聚合入口已删除且不得恢复", () => {
+    for (const path of [
+      "src/lib/api/agentRuntime.ts",
+      "src/lib/api/agentRuntime.d.ts",
+      "src/lib/api/agentRuntime/index.ts",
       "src/lib/api/agentRuntime/index.d.ts",
-    );
-
-    expect(indexSource).not.toContain("./siteClient");
-    expect(indexDeclarations).not.toContain("./siteClient");
-    expect(indexSource).not.toContain("createSiteClient");
-    expect(indexDeclarations).not.toContain("createSiteClient");
-    for (const symbol of SITE_ADAPTER_SYMBOLS) {
-      expect(indexSource).not.toContain(symbol);
-      expect(indexDeclarations).not.toContain(symbol);
+    ]) {
+      expect(existsSync(resolve(cwd(), path)), path).toBe(false);
     }
   });
 

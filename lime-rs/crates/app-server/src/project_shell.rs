@@ -75,21 +75,12 @@ impl ProjectShellManager {
         }
         command.cwd(&cwd);
         command.env("TERM", "xterm-256color");
-        command.env(
-            "COLORTERM",
-            env::var("COLORTERM").unwrap_or_else(|_| "truecolor".to_string()),
-        );
-        command.env(
-            "CLICOLOR",
-            env::var("CLICOLOR").unwrap_or_else(|_| "1".to_string()),
-        );
-        command.env(
-            "FORCE_COLOR",
-            env::var("FORCE_COLOR").unwrap_or_else(|_| "1".to_string()),
-        );
+        command.env("COLORTERM", env_or_default("COLORTERM", "truecolor"));
+        command.env("CLICOLOR", env_or_default("CLICOLOR", "1"));
+        command.env("FORCE_COLOR", env_or_default("FORCE_COLOR", "1"));
         command.env(
             "LSCOLORS",
-            env::var("LSCOLORS").unwrap_or_else(|_| "ExFxBxDxCxegedabagacad".to_string()),
+            env_or_default("LSCOLORS", "ExFxBxDxCxegedabagacad"),
         );
         command.env("COLUMNS", cols.to_string());
         command.env("LINES", rows.to_string());
@@ -324,6 +315,13 @@ fn resolve_shell_command() -> ResolvedShellCommand {
     // 嵌入式 Shell 优先快速进入可交互态，避免 login profile 拖慢底部面板启动。
     let args = vec!["-i".to_string()];
     ResolvedShellCommand { executable, args }
+}
+
+fn env_or_default(name: &str, fallback: &str) -> String {
+    env::var(name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 fn validate_root_path(root_path: &str) -> Result<std::path::PathBuf, ProjectShellError> {

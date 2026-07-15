@@ -84,7 +84,6 @@ mod right_surface;
 mod service_projection;
 mod session_control;
 mod session_files;
-pub(crate) mod session_hydration;
 mod session_lifecycle;
 pub(crate) mod session_list_scope;
 mod session_media_reader;
@@ -387,6 +386,14 @@ pub trait ExecutionBackend: Send + Sync {
         _app_data_source: Arc<dyn AppDataSource>,
     ) -> Result<(), RuntimeCoreError> {
         Ok(())
+    }
+
+    fn effective_turn_runtime_options(
+        &self,
+        request: &ExecutionRequest,
+        _first_sampling_turn: bool,
+    ) -> Option<app_server_protocol::RuntimeOptions> {
+        request.runtime_options.clone()
     }
 
     async fn start_turn(

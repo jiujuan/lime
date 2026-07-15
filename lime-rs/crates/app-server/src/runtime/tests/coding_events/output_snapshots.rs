@@ -544,199 +544,86 @@ async fn tool_terminal_large_output_persists_to_filesystem_snapshot_owner() {
 }
 
 #[tokio::test]
-async fn start_turn_hydrates_persisted_coding_snapshot_refs_into_runtime_state() {
-    let snapshot_root = unique_temp_dir("lime-runtime-hydrated-snapshots");
-    let session_id = "sess_coding_hydrate";
-    let turn_id = "turn_coding_hydrate";
-    let output_ref = "output://hydrated-tool";
-    let output_snapshot_file = "runtime-outputs/hydrated-tool.txt";
-    let checkpoint_snapshot_file = "runtime-file-checkpoints/hydrated-app.txt";
-    let output_content = "hydrated output\n".repeat(1024);
+async fn restart_reads_coding_snapshot_refs_from_event_log_projection() {
+    let snapshot_root = unique_temp_dir("lime-runtime-current-snapshots");
+    let session_id = "sess_coding_current";
+    let turn_id = "turn_coding_current";
+    let output_content = "current output\n".repeat(1024);
     let previous_content = "export function App() {\n  return null;\n}";
-    let workspace_root = unique_temp_dir("lime-runtime-hydrated-workspace");
-    let hydrated_started_payload = canonical_output_item_payload(
+    let workspace_root = unique_temp_dir("lime-runtime-current-workspace");
+    let mut current_started_payload = canonical_output_item_payload(
         session_id,
-        "thread_coding_hydrate",
+        "thread_coding_current",
         turn_id,
-        "tool_hydrated",
+        "tool_current",
         CanonicalOutputFamily::Tool,
         None,
         None,
     );
-    let mut hydrated_completed_payload = canonical_output_item_payload(
+    let mut current_completed_payload = canonical_output_item_payload(
         session_id,
-        "thread_coding_hydrate",
+        "thread_coding_current",
         turn_id,
-        "tool_hydrated",
+        "tool_current",
         CanonicalOutputFamily::Tool,
-        Some("hydrated output".to_string()),
-        Some(output_ref),
+        Some(output_content.clone()),
+        None,
     );
-    let hydrated_completed = hydrated_completed_payload
+    current_started_payload["item"]["ordinal"] = json!(2);
+    current_completed_payload["item"]["ordinal"] = json!(2);
+    let current_completed = current_completed_payload
         .as_object_mut()
-        .expect("hydrated canonical payload");
-    hydrated_completed.insert(
-        "outputRef".to_string(),
-        serde_json::Value::String(output_ref.to_string()),
-    );
-    hydrated_completed.insert("refIds".to_string(), json!([output_ref]));
-    hydrated_completed.insert(
+        .expect("current canonical payload");
+    current_completed.insert(
         "outputPreview".to_string(),
-        serde_json::Value::String("hydrated output".to_string()),
+        serde_json::Value::String("current output".to_string()),
     );
-    hydrated_completed.insert("outputTruncated".to_string(), serde_json::Value::Bool(true));
-    hydrated_completed.insert("outputBytes".to_string(), json!(output_content.len()));
-    hydrated_completed.insert(
-        "outputSnapshotFile".to_string(),
-        serde_json::Value::String(output_snapshot_file.to_string()),
-    );
-    std::fs::create_dir_all(
-        snapshot_root
-            .join("sessions")
-            .join(session_id)
-            .join("runtime-outputs"),
-    )
-    .expect("output snapshot dir");
-    std::fs::create_dir_all(
-        snapshot_root
-            .join("sessions")
-            .join(session_id)
-            .join("runtime-file-checkpoints"),
-    )
-    .expect("checkpoint snapshot dir");
-    std::fs::write(
-        snapshot_root
-            .join("sessions")
-            .join(session_id)
-            .join(output_snapshot_file),
-        output_content.as_str(),
-    )
-    .expect("output snapshot");
-    std::fs::write(
-        snapshot_root
-            .join("sessions")
-            .join(session_id)
-            .join(checkpoint_snapshot_file),
-        previous_content,
-    )
-    .expect("checkpoint snapshot");
+    current_completed.insert("outputTruncated".to_string(), serde_json::Value::Bool(true));
+    current_completed.insert("outputBytes".to_string(), json!(output_content.len()));
     std::fs::create_dir_all(workspace_root.join("src")).expect("workspace src");
     std::fs::write(workspace_root.join("src").join("App.tsx"), "<main />").expect("live file");
 
-    let persisted_session = AgentSession {
-        session_id: session_id.to_string(),
-        thread_id: "thread_coding_hydrate".to_string(),
+    let business_object_ref = Some(app_server_protocol::BusinessObjectRef {
+        kind: "agent.session".to_string(),
+        id: session_id.to_string(),
+        title: Some("Current Coding".to_string()),
+        uri: None,
+        metadata: Some(json!({
+            "workingDir": workspace_root.to_string_lossy(),
+            "executionStrategy": "runtime-core"
+        })),
+    });
+    let roots = StorageRoots::initialize(unique_temp_dir("lime-runtime-current-roots"))
+        .expect("storage roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let output_snapshot_store = Arc::new(FilesystemOutputSnapshotStore::with_base_dir(
+        snapshot_root.clone(),
+    ));
+    let checkpoint_snapshot_store = Arc::new(FilesystemFileCheckpointSnapshotStore::with_base_dir(
+        snapshot_root.clone(),
+    ));
+    let core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone())
+        .with_output_snapshot_store(output_snapshot_store.clone())
+        .with_file_checkpoint_snapshot_store(checkpoint_snapshot_store.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some(session_id.to_string()),
+        thread_id: Some("thread_coding_current".to_string()),
         app_id: "agent-runtime".to_string(),
         workspace_id: Some("workspace-main".to_string()),
-        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
-            kind: "agent.session".to_string(),
-            id: session_id.to_string(),
-            title: Some("Hydrated Coding".to_string()),
-            uri: None,
-            metadata: Some(json!({
-                "workingDir": workspace_root.to_string_lossy(),
-                "executionStrategy": "runtime-core"
-            })),
-        }),
-        status: AgentSessionStatus::Completed,
-        created_at: "2026-06-12T00:00:00.000Z".to_string(),
-        updated_at: "2026-06-12T00:00:05.000Z".to_string(),
-    };
-    let persisted_turn = AgentTurn {
-        turn_id: turn_id.to_string(),
-        session_id: session_id.to_string(),
-        thread_id: "thread_coding_hydrate".to_string(),
-        status: AgentTurnStatus::Completed,
-        started_at: Some("2026-06-12T00:00:01.000Z".to_string()),
-        completed_at: Some("2026-06-12T00:00:05.000Z".to_string()),
-    };
-    let persisted = AgentSessionReadResponse {
-        session: persisted_session,
-        turns: vec![persisted_turn],
-        detail: Some(json!({
-            "id": session_id,
-            "session_id": session_id,
-            "thread_id": "thread_coding_hydrate",
-            "working_dir": workspace_root.to_string_lossy(),
-            "events": [
-                {
-                    "eventId": "evt_hydrated_output_started",
-                    "sequence": 1,
-                    "sessionId": session_id,
-                    "threadId": "thread_coding_hydrate",
-                    "turnId": turn_id,
-                    "eventType": "item.started",
-                    "timestamp": "2026-06-12T00:00:01.500Z",
-                    "payload": hydrated_started_payload
-                },
-                {
-                    "eventId": "evt_hydrated_output_completed",
-                    "sequence": 3,
-                    "sessionId": session_id,
-                    "threadId": "thread_coding_hydrate",
-                    "turnId": turn_id,
-                    "eventType": "item.completed",
-                    "timestamp": "2026-06-12T00:00:02.000Z",
-                    "payload": hydrated_completed_payload
-                }
-            ],
-            "outputs": [
-                {
-                    "outputRef": output_ref,
-                    "refIds": [output_ref],
-                    "preview": "hydrated output",
-                    "outputBytes": output_content.len(),
-                    "eventId": "evt_hydrated_output_completed",
-                    "sequence": 3,
-                    "turnId": turn_id,
-                    "timestamp": "2026-06-12T00:00:02.000Z",
-                    "toolCallId": "tool_hydrated",
-                    "outputSnapshotFile": output_snapshot_file
-                }
-            ],
-            "items": [
-                {
-                    "id": "checkpoint_hydrated_app",
-                    "type": "file_artifact",
-                    "thread_id": "thread_coding_hydrate",
-                    "turn_id": turn_id,
-                    "path": "src/App.tsx",
-                    "source": "runtime",
-                    "status": "completed",
-                    "updated_at": "2026-06-12T00:00:03.000Z",
-                    "metadata": {
-                        "artifactId": "artifact_hydrated_app",
-                        "artifactRequestId": "evt_hydrated_file",
-                        "artifactVersionId": "checkpoint_hydrated_app",
-                        "artifactVersionNo": 2,
-                        "artifactKind": "code_file",
-                        "artifactStatus": "ready",
-                        "checkpointRef": "checkpoint_hydrated_app",
-                        "checkpointSnapshotFile": checkpoint_snapshot_file,
-                        "file_change": {
-                            "previousContentSnapshotFile": checkpoint_snapshot_file
-                        }
-                    }
-                }
-            ]
-        })),
-    };
-    let app_data_source = Arc::new(TestSessionDataSource::new(persisted));
-    let core = RuntimeCore::with_backend(Arc::new(CodingLifecycleBackend))
-        .with_app_data_source(app_data_source)
-        .with_output_snapshot_store(Arc::new(FilesystemOutputSnapshotStore::with_base_dir(
-            snapshot_root.clone(),
-        )))
-        .with_file_checkpoint_snapshot_store(Arc::new(
-            FilesystemFileCheckpointSnapshotStore::with_base_dir(snapshot_root.clone()),
-        ));
-
+        business_object_ref,
+        locale: None,
+    })
+    .expect("session");
     core.start_turn(
         AgentSessionTurnStartParams {
             session_id: session_id.to_string(),
-            turn_id: Some("turn_after_hydrate".to_string()),
+            turn_id: Some(turn_id.to_string()),
             input: AgentInput {
-                text: "继续 coding".to_string(),
+                text: "current coding".to_string(),
                 attachments: Vec::new(),
             },
             runtime_options: None,
@@ -746,26 +633,79 @@ async fn start_turn_hydrates_persisted_coding_snapshot_refs_into_runtime_state()
         RuntimeHostContext::default(),
     )
     .await
-    .expect("hydrate then continue");
+    .expect("current turn");
+    core.append_external_runtime_events(
+        session_id,
+        Some(turn_id),
+        vec![
+            RuntimeEvent::new("item.started", current_started_payload),
+            RuntimeEvent::new("item.completed", current_completed_payload),
+            RuntimeEvent::new(
+                "file.changed",
+                json!({
+                    "path": "src/App.tsx",
+                    "artifactId": "artifact_current_app",
+                    "checkpointRef": "checkpoint_current_app",
+                    "change": { "previousContent": previous_content },
+                    "preview": "current app checkpoint"
+                }),
+            ),
+            RuntimeEvent::new("turn.completed", json!({})),
+        ],
+    )
+    .expect("persist current canonical events");
+    let current_events = core.events_for_session(session_id).expect("current events");
+    let output_ref = current_events
+        .iter()
+        .find(|event| {
+            event.event_type == "item.completed" && event.payload["outputRef"].is_string()
+        })
+        .and_then(|event| event.payload["outputRef"].as_str())
+        .expect("output ref")
+        .to_string();
+    let output_snapshot_file = current_events
+        .iter()
+        .find(|event| {
+            event.event_type == "item.completed" && event.payload["outputSnapshotFile"].is_string()
+        })
+        .and_then(|event| event.payload["outputSnapshotFile"].as_str())
+        .expect("output snapshot file")
+        .to_string();
+    let checkpoint_snapshot_file = current_events
+        .iter()
+        .find(|event| event.event_type == "file.changed")
+        .and_then(|event| event.payload["checkpointSnapshotFile"].as_str())
+        .expect("checkpoint snapshot file")
+        .to_string();
+
+    let core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store)
+        .with_output_snapshot_store(output_snapshot_store)
+        .with_file_checkpoint_snapshot_store(checkpoint_snapshot_store);
+
+    core.ensure_current_session_hydrated(session_id)
+        .await
+        .expect("restore current projection session");
 
     let read = read_session(&core, session_id);
-    let detail = read.detail.expect("hydrated detail");
+    let detail = read.detail.expect("current detail");
     assert!(detail["outputs"]
         .as_array()
         .expect("outputs")
         .iter()
-        .any(|output| output["outputRef"].as_str() == Some(output_ref)
-            && output["outputSnapshotFile"].as_str() == Some(output_snapshot_file)
-            && output["eventType"].as_str() == Some("item.completed")));
+        .any(
+            |output| output["outputRef"].as_str() == Some(output_ref.as_str())
+                && output["outputSnapshotFile"].as_str() == Some(output_snapshot_file.as_str())
+                && output["eventType"].as_str() == Some("item.completed")
+        ));
     assert!(detail["items"]
         .as_array()
         .expect("items")
         .iter()
-        .any(
-            |item| item["id"].as_str() == Some("checkpoint_hydrated_app")
-                && item["metadata"]["checkpointSnapshotFile"].as_str()
-                    == Some(checkpoint_snapshot_file)
-        ));
+        .any(|item| item["id"].as_str() == Some("checkpoint_current_app")
+            && item["metadata"]["checkpointSnapshotFile"].as_str()
+                == Some(checkpoint_snapshot_file.as_str())));
 
     let artifact_read = core
         .read_artifacts(ArtifactReadParams {
@@ -776,19 +716,10 @@ async fn start_turn_hydrates_persisted_coding_snapshot_refs_into_runtime_state()
             cursor: None,
             limit: None,
         })
-        .expect("read hydrated output artifact");
+        .expect("read current output artifact");
     assert_eq!(artifact_read.artifacts.len(), 1);
     assert_eq!(
         artifact_read.artifacts[0].content.as_deref(),
         Some(output_content.as_str())
     );
-
-    let checkpoint = core
-        .get_agent_session_file_checkpoint(AgentSessionFileCheckpointGetParams {
-            session_id: session_id.to_string(),
-            checkpoint_id: "checkpoint_hydrated_app".to_string(),
-        })
-        .await
-        .expect("hydrated file checkpoint");
-    assert_eq!(checkpoint.content.as_deref(), Some(previous_content));
 }

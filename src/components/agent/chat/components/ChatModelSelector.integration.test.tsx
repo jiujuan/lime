@@ -45,14 +45,24 @@ const {
   mockWechatChannelSetRuntimeModel: vi.fn(async () => undefined),
 }));
 
-vi.mock("@/lib/api/agentRuntime", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/agentRuntime")>(
-    "@/lib/api/agentRuntime",
-  );
+vi.mock("@/lib/api/agentRuntime/agentClient", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/agentRuntime/agentClient")
+  >("@/lib/api/agentRuntime/agentClient");
 
   return {
     ...actual,
     getRuntimeProviderSelection: mockGetRuntimeProviderSelection,
+  };
+});
+
+vi.mock("@/lib/api/agentRuntime/sessionClient", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/agentRuntime/sessionClient")
+  >("@/lib/api/agentRuntime/sessionClient");
+
+  return {
+    ...actual,
     createAgentRuntimeSession: mockCreateAgentRuntimeSession,
     listAgentRuntimeSessions: mockListAgentRuntimeSessions,
     getAgentRuntimeSession: mockGetAgentRuntimeSession,

@@ -223,12 +223,23 @@ impl ToolLifecycleEmitter for RecordingLifecycleEmitter {
     }
 }
 
+#[test]
+fn provider_output_item_id_is_turn_and_attempt_scoped() {
+    let first_turn = provider_output_item_id("turn-1", 1, ProviderOutputFamily::Text, "text-0");
+    let second_turn = provider_output_item_id("turn-2", 1, ProviderOutputFamily::Text, "text-0");
+    let second_attempt = provider_output_item_id("turn-1", 2, ProviderOutputFamily::Text, "text-0");
+
+    assert_eq!(first_turn, "provider:turn-1:1:text:text-0");
+    assert_ne!(first_turn, second_turn);
+    assert_ne!(first_turn, second_attempt);
+}
+
 #[tokio::test]
 async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
     let provider = Arc::new(ScriptedProvider::new(vec![
         vec![
             Ok(CanonicalLlmEvent::TextDelta {
-                id: "text-1".to_string(),
+                id: "text-0".to_string(),
                 text: "working".to_string(),
             }),
             Ok(CanonicalLlmEvent::ToolCall {
@@ -245,7 +256,7 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
         ],
         vec![
             Ok(CanonicalLlmEvent::TextDelta {
-                id: "text-2".to_string(),
+                id: "text-0".to_string(),
                 text: "done".to_string(),
             }),
             Ok(CanonicalLlmEvent::Finish {
@@ -295,10 +306,33 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
     .await
     .expect("turn execution");
 
-    let traces = events
-        .into_iter()
+    let text_lifecycle = events
+        .iter()
         .filter_map(|event| match event {
-            CurrentProviderTurnEvent::ProviderTrace { event } => Some(event),
+            CurrentProviderTurnEvent::TextStart { item_id } => Some(("start", item_id.as_str())),
+            CurrentProviderTurnEvent::TextDelta { item_id, .. } => {
+                Some(("delta", item_id.as_str()))
+            }
+            CurrentProviderTurnEvent::TextEnd { item_id } => Some(("end", item_id.as_str())),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        text_lifecycle,
+        vec![
+            ("start", "provider:turn-1:1:text:text-0"),
+            ("delta", "provider:turn-1:1:text:text-0"),
+            ("end", "provider:turn-1:1:text:text-0"),
+            ("start", "provider:turn-1:2:text:text-0"),
+            ("delta", "provider:turn-1:2:text:text-0"),
+            ("end", "provider:turn-1:2:text:text-0"),
+        ]
+    );
+
+    let traces = events
+        .iter()
+        .filter_map(|event| match event {
+            CurrentProviderTurnEvent::ProviderTrace { event } => Some(event.clone()),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -733,6 +767,7 @@ async fn turn_fails_when_provider_completes_with_reasoning_but_no_user_visible_o
         }),
     ]]));
 
+    let mut events = Vec::new();
     let error = run_current_provider_turn(
         CurrentProviderTurnInput {
             provider,
@@ -754,10 +789,33 @@ async fn turn_fails_when_provider_completes_with_reasoning_but_no_user_visible_o
             working_directory: PathBuf::from("."),
             cancel_token: None,
         },
-        |_| {},
+        |event| events.push(event),
     )
     .await
     .expect_err("reasoning-only completion must fail the turn");
+
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| match event {
+                CurrentProviderTurnEvent::ReasoningStart { item_id } => {
+                    Some(("start", item_id.as_str()))
+                }
+                CurrentProviderTurnEvent::ReasoningDelta { item_id, .. } => {
+                    Some(("delta", item_id.as_str()))
+                }
+                CurrentProviderTurnEvent::ReasoningEnd { item_id } => {
+                    Some(("end", item_id.as_str()))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            ("start", "provider:turn-1:1:reasoning:reasoning-1"),
+            ("delta", "provider:turn-1:1:reasoning:reasoning-1"),
+            ("end", "provider:turn-1:1:reasoning:reasoning-1"),
+        ]
+    );
 
     assert_eq!(
         error.message,

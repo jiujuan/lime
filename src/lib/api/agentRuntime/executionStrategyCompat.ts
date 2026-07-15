@@ -1,4 +1,4 @@
-import type { AgentExecutionStrategy } from "./types";
+import type { AgentExecutionStrategy } from "../agentExecutionRuntime";
 
 export function normalizeExecutionStrategyToReact(
   value: unknown,

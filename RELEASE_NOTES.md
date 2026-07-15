@@ -1,41 +1,44 @@
-## Lime v1.103.0
+## Lime v1.104.0
 
 ### 新功能
 
-- Agent Workspace 的 SubAgent 视图全面切到 canonical child Thread family：父子关系、七态运行状态、任务统计、导航和历史恢复统一读取 App Server `thread/list|read`、AgentGraph 与 Thread identity。
-- Codex 导入的 completed Plan 以原始 Item ID 同时作为 canonical item、revision 和 source identity，重启后仍保持 typed Plan lifecycle，不再退化为工具事件或合成身份。
-- Codex 导入的 User / Agent Message 现在保留 source identity 与 source ordinal，并写入完整 canonical `item.started` / `item.completed` lifecycle；Turn 终态不再旁路合成消息。
-- Agent Chat 的 Managed Objective、Skills、Evidence、Tool Inventory、queued turn、execution strategy、stream runtime 与 thread read 消费面迁到各自 current owner，并增加禁止旧 root barrel 与 session roster 回流的边界守卫。
+- Message、Reasoning 与 Plan 全面进入 Codex 对齐的 canonical Item lifecycle：Start/Delta/End 共享稳定 identity，provider 输出按 canonical Turn 与 sampling attempt 隔离，Turn 终态不再旁路补造内容。
+- canonical AgentMessage 新增 typed `content_parts`，Text 与 reference-only Media 从 ThreadStore、`thread/read`、`agentSession/read` 到 live GUI 保持同一顺序与引用，拒绝 inline data URI 和 provider raw payload。
+- `agentSession/read` 明确为 ThreadStore-backed 的 current 产品展示端点；Approval cold/live read 统一输出 typed terminal response，GUI 决策别名只在 view-model 边界转换。
+- AgentControl child 从 parent Turn 继承已解析的 provider、model、reasoning、workspace 与 search policy；warm `followup_task` 保持目标 child 的有效 route，cold target 才使用 caller snapshot。
+- runtime-owned MCP client 使用 `2025-06-18` 并精确广告 form elicitation capability；没有可信 Thread owner 的 management connection 继续保持 capability absent。
+- Agent Chat 的任务索引、审核决策、工具过程与媒体工作台补齐 current owner、稳定 DOM identity 和五语言用户界面，空时间线会主动恢复 canonical history。
 
 ### 修复
 
-- 修复 canonical timeline 在 live/history reasoning、Message 与 Plan 混排时的稳定顺序，统一使用 Item ordinal，并补齐 EventLog 到 canonical Thread 的历史修复路径。
-- 修复 SubAgent parent identity、child roster 与 terminal 状态在冷启动、分页读取和无 child 场景下的可见性，避免 Workspace 回退 legacy session detail。
-- 修复 Plugin runtime start/get/cancel、capability dispatcher 与 host bridge 测试夹具缺少 canonical `threadId` 的错误语义。
-- 修复定向 Vitest 与 batch 列表命令覆盖默认 resume state 的问题，局部诊断不再污染后续续跑事实源。
+- 修复同一 provider raw ID 在后续 sampling attempt 或 Turn 被复用的问题；Reasoning、Message、Plan 与 Tool 只按首次 canonical outer sequence 排序，terminal Item 拒绝 late delta。
+- 修复 producer ordinal 与 ThreadStore 唯一索引碰撞、imported Reasoning source ordinal 丢失，以及 canonical projection 失败仍继续通知 GUI/推进内存历史的问题。
+- 修复已有 Turn 元数据但 Message/Item 尚未加载时，同 session 导航错误跳过 history hydrate 而显示空对话的问题；缺失 canonical detail 现在显式失败。
+- 修复 Approval terminal wire 使用 GUI alias、Coding recovery 跨 Turn 复用执行 identity、Content Factory 合成 action/contract probe，以及 Project Shell 空白颜色环境变量不回落默认值的问题。
 
 ### 优化与重构
 
-- 物理删除 Renderer Team formation、Team runtime sidecar、raw SubAgent channel/status parser、legacy roster DTO/state/normalizer、memory shadow 与 synthetic worker notification；历史兼容只保留只读解码所需边界。
-- canonical SubAgent activity 收敛到 `Started`、`Interacted`、`Interrupted`，current 六工具名称、lineage 和 GUI 状态保持端到端一致，旧 V1 alias 不再计入 current capability。
-- 拆分 App Server runtime value helpers、image command event projection 与 RuntimeBackend execution adapter，收紧文件行数和 owner guard，不引入 facade 双轨。
-- 更新 Agent Workspace、AgentUI、Project Thread 与 SubAgent roadmap，使 current 文档只引用 canonical Thread family、AgentGraph 和 AgentUI projection。
+- 删除 app-data session fallback、681 行 `session_hydration`、旧 Team runtime governor/SubAgent tree、Renderer Agent Runtime root barrel 与 stale 类型聚合；RuntimeCore、EventLog、ProjectionStore/ThreadStore 成为唯一 session 事实源。
+- 物理删除 RuntimeCore 第二套 provider-neutral request/event algebra 与 Model Provider generic chat/gemini/ollama lowering，共净删约 1,500 行；current 链只接受 canonical request/event 与 media body builder。
+- 拆分 provider output lifecycle、conversation import Plan、canonical message lifecycle、Approval/read-model workflow 等 owner 模块，保持主文件低于既有体量门槛，不新增 facade 或兼容双轨。
+- 媒体 DTO、Workspace request、Evidence/Inventory/Expert/Plugin 类型和 Agent client/session/thread 消费面迁到各自 current owner，并补 dead barrel 回流守卫。
 
 ### 测试与质量
 
-- 扩展 Rust/TypeScript canonical Message、Plan、SubAgent、child Thread、session read 与 export metrics 回归，并同步 App Server schema、generated client 与 Electron contract fixtures。
-- 增加 Agent runtime current owner、legacy surface、roadmap、Electron IPC ordering、App Server 文件边界和 production source 的静态守卫。
-- 补充真实 Electron GUI smoke、history fixture、Claw cancel/continue、canonical roster 与 Inputbar/Task Rail 恢复证据；五语言 Agent Workspace 文案与稳定回归保持同步。
-- history replay Electron oracle 等待 Reasoning summary、图片附件与 MCP tool row 的完整 DOM 后再断言，消除瞬态“思考中”节点导致的 E2E 竞态误报。
-- 改进 smart Vitest 的 targeted state isolation，支持在大候选集上定向修复后继续 resume，而不重置已完成批次。
+- 扩展 Rust/TypeScript canonical lifecycle、typed media parts、Approval、session history、projection fail-closed、provider lowering 与 current owner 回归，并同步 App Server schema 和 generated client。
+- 补齐六个 AgentControl 工具、Reasoning 可见顺序、图片 media reference、Content Factory、Coding recovery 和 history replay 的真实 Electron / Gate B 证据。
+- AgentControl visible-DOM Gate B 验证六个 completed Tool row 与 Started/Interacted/Interrupted activity；MCP elicitation Gate B 同时验证 runtime capability 与 management absence。
+- history replay oracle 只在 Reasoning summary、图片附件与 MCP tool row 完整可见后断言；工具行新增稳定 name/status DOM 属性，减少瞬态竞态与脆弱文本定位。
+- 统一 Rust layer runner 在 macOS 测试进程中的最小栈默认值，同时保留显式调用者配置；smart frontend suite、changed Rust、legacy governance 与 GUI smoke 均有本轮候选证据。
+- 任务索引与 Runtime Review Decision 文案覆盖 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`ko-KR`，并补 locale 稳定回归。
 
 ### 文档
 
-- 更新 Refactor V2 中央执行计划、架构确认与逐切片 evidence，记录 canonical child Thread、Agent Chat current owner、App Server 模块 owner 和删除退出条件。
-- 同步 Agent Workspace、AgentUI、Project Thread、Skills 与 SubAgent roadmap，移除把 legacy session roster 或 Team sidecar 描述为 current 的口径。
+- 更新全局架构、Refactor V2 中央计划、Agent Workspace、Project Thread 与逐切片 evidence，明确 canonical lifecycle、ThreadStore ordinal/projection、AgentSession presentation 和 provider algebra 的唯一 owner。
+- 记录 app-data fallback、旧 provider lowering、root barrel、Team/synthetic fixture 等 `dead / deleted / forbidden-to-restore` 分类及其验证、handoff 与退出条件。
 
 ### 其他
 
-- 版本事实源更新到 `1.103.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.104.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.102.0` -> `v1.103.0`
+**完整变更**: `v1.103.0` -> `v1.104.0`

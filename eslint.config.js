@@ -139,7 +139,7 @@ const generalChatRestrictedPaths = [
   {
     name: "@/lib/api/agent",
     message:
-      "agent.ts 已删除；请直接使用 @/lib/api/agentRuntime 或 @/lib/api/agentStream。",
+      "agent.ts 与 agentRuntime root aggregate 已删除；请直接使用 @/lib/api/agentRuntime/<domain> client 或 @/lib/api/agentStream。",
   },
   {
     name: LEGACY_DESKTOP_HOST_AGGREGATE_HOOK_PATH,
@@ -412,7 +412,7 @@ const generalChatRestrictedPaths = [
     name: "@/lib/api/agentRuntime",
     importNames: deprecatedAgentRuntimeHelperNames,
     message:
-      "agentRuntime 中这些旧命名 helper 只允许留在兼容层或兼容测试；业务层请改用 agent_runtime_* 对应 API 或 useAgentChat。",
+      "agentRuntime root aggregate 已删除；业务层请直连对应分域 client 或 useAgentChat。",
   },
   {
     name: "@/hooks/useUnifiedChat",
@@ -1218,12 +1218,17 @@ export default [
             {
               name: "../agentRuntime",
               message:
-                "agentRuntime 目录内部已收敛到 `./types` + 分域 client；禁止再回绕 compat 根入口 `../agentRuntime`。",
+                "agentRuntime 目录内部必须直连 session/request/evidence/media/tool/execution owner；禁止回绕已退役根入口 `../agentRuntime`。",
             },
             {
               name: "@/lib/api/agentRuntime",
               message:
-                "agentRuntime 目录内部已收敛到 `./types` + 分域 client；禁止再通过 alias 根入口回绕 compat barrel。",
+                "agentRuntime 目录内部必须直连分域 owner；禁止通过 alias 回绕已退役根入口。",
+            },
+            {
+              name: "./types",
+              message:
+                "agentRuntime/types 已退役；请直接依赖 sessionTypes、requestTypes、evidenceTypes、mediaTaskTypes、toolInventoryTypes 或 agentExecutionRuntime。",
             },
           ],
         },
@@ -1232,7 +1237,7 @@ export default [
   },
   {
     files: ["src/lib/api/*.ts"],
-    ignores: ["src/lib/api/agentRuntime.ts", "src/lib/api/agent.test.ts"],
+    ignores: ["src/lib/api/agent.test.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -1241,7 +1246,12 @@ export default [
             {
               name: "./agentRuntime",
               message:
-                "src/lib/api 根层如需复用 agent runtime，请直接依赖 `./agentRuntime/types` 或具体分域 client，不要回绕 compat barrel `./agentRuntime`。",
+                "src/lib/api 根层如需复用 agent runtime，请直接依赖具体分域 client/type owner；禁止恢复已删除的 `./agentRuntime` root aggregate。",
+            },
+            {
+              name: "./agentRuntime/types",
+              message:
+                "agentRuntime/types 已退役；请直接依赖 sessionTypes、requestTypes、evidenceTypes、mediaTaskTypes、toolInventoryTypes 或 agentExecutionRuntime。",
             },
           ],
         },
@@ -1334,7 +1344,11 @@ export default [
   },
   // === R-40：业务代码禁止直接 import dev-bridge ===
   {
-    files: ["src/components/**/*.{ts,tsx}", "src/features/**/*.{ts,tsx}", "src/hooks/**/*.ts"],
+    files: [
+      "src/components/**/*.{ts,tsx}",
+      "src/features/**/*.{ts,tsx}",
+      "src/hooks/**/*.ts",
+    ],
     ignores: ["**/*.test.ts", "**/*.test.tsx", "**/*.d.ts", "src/lib/**"],
     rules: {
       "no-restricted-imports": [

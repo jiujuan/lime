@@ -16,7 +16,7 @@ export interface AgentUiCollaborationPayloadMetadataInput {
   latestTurnStatus?: string | null;
   taskId?: string | null;
   agentId?: string | null;
-  parentSessionId?: string | null;
+  parentThreadId?: string | null;
   transcriptRef?: string | null;
   handoffId?: string | null;
   styleLevel?: string | null;
@@ -47,7 +47,10 @@ export function buildAgentUiCollaborationPayloadMetadata(
     "collaborationFacts",
     "collaboration_facts",
   ]);
-  const soulLifecycle = firstRecord(records, ["soulLifecycle", "soul_lifecycle"]);
+  const soulLifecycle = firstRecord(records, [
+    "soulLifecycle",
+    "soul_lifecycle",
+  ]);
   const surface =
     definedString(input.surface) ??
     readStringField(collaborationFacts, [
@@ -93,8 +96,10 @@ export function buildAgentUiCollaborationPayloadMetadata(
     readStringField(soulLifecycle, ["packId", "pack_id"]);
   const facts = compactProjectionFields({
     ...(collaborationFacts ?? {}),
-    source: readStringField(collaborationFacts, ["source"]) ?? "projection_facts",
-    surface: readStringField(collaborationFacts, ["surface"]) ?? "collaboration",
+    source:
+      readStringField(collaborationFacts, ["source"]) ?? "projection_facts",
+    surface:
+      readStringField(collaborationFacts, ["surface"]) ?? "collaboration",
     collaborationSurface: surface,
     collaborationPhase: phase,
     collaborationKind:
@@ -127,11 +132,11 @@ export function buildAgentUiCollaborationPayloadMetadata(
     agentId:
       definedString(input.agentId) ??
       readStringField(collaborationFacts, ["agentId", "agent_id"]),
-    parentSessionId:
-      definedString(input.parentSessionId) ??
+    parentThreadId:
+      definedString(input.parentThreadId) ??
       readStringField(collaborationFacts, [
-        "parentSessionId",
-        "parent_session_id",
+        "parentThreadId",
+        "parent_thread_id",
       ]),
     transcriptRef:
       definedString(input.transcriptRef) ??
@@ -158,7 +163,9 @@ export function buildAgentUiCollaborationPayloadMetadata(
   });
 }
 
-function collectMetadataRecords(...sources: unknown[]): Record<string, unknown>[] {
+function collectMetadataRecords(
+  ...sources: unknown[]
+): Record<string, unknown>[] {
   return sources.flatMap((source) => {
     const record = readRecord(source);
     if (!record) {

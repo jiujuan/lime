@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  CompleteImageGenerationTaskArtifactRequest,
+  CreateAudioGenerationTaskArtifactRequest,
+  CreateImageGenerationTaskArtifactRequest,
+  CreateVideoGenerationTaskArtifactRequest,
+  ListMediaTaskArtifactsRequest,
+  MediaTaskLookupRequest,
+} from "./agentRuntime/mediaTaskTypes";
 import {
-  type CompleteImageGenerationTaskArtifactRequest,
-  type CreateAudioGenerationTaskArtifactRequest,
-  type CreateImageGenerationTaskArtifactRequest,
-  type CreateVideoGenerationTaskArtifactRequest,
-  type ListMediaTaskArtifactsRequest,
-  type MediaTaskLookupRequest,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL,

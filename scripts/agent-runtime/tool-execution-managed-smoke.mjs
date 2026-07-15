@@ -11,6 +11,16 @@ import { _electron as electron } from "playwright";
 
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
+import {
+  AGENT_CONTROL_FINAL_TEXT,
+  AGENT_CONTROL_VISIBLE_DOM_GATE_B_BATCH_ID,
+  buildAgentControlVisibleDomAssertions,
+} from "./agent-control-visible-dom-gate-b.mjs";
+import {
+  buildDeferredMcpVisibleDomAssertions,
+  DEFERRED_MCP_TOOL_SEARCH_FINAL_TEXT,
+  DEFERRED_MCP_TOOL_SEARCH_GATE_B_BATCH_ID,
+} from "./deferred-mcp-tool-search-gate-b.mjs";
 
 const LOG_PREFIX = "[smoke:agent-runtime-tool-execution:managed]";
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -18,6 +28,12 @@ const INTERVAL_MS = 500;
 const TEMP_CLEANUP_RETRY_COUNT = 8;
 const TEMP_CLEANUP_RETRY_DELAY_MS = 250;
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const DEFAULT_EVIDENCE_OUTPUT = path.resolve(
+  ".lime/qc/agent-runtime-tool-execution-smoke.json",
+);
+const NAVIGATION_RESTORE_STORAGE_KEY = "lime.appNavigation.restore.v1";
+const INVOKE_TRACE_STORAGE_KEY = "lime_invoke_trace_buffer_v1";
+const INVOKE_ERROR_STORAGE_KEY = "lime_invoke_error_buffer_v1";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,6 +58,35 @@ function timeoutFromArgs(args) {
     }
   }
   return DEFAULT_TIMEOUT_MS;
+}
+
+function valueFromArgs(args, name) {
+  const index = args.indexOf(name);
+  return index >= 0 && args[index + 1] ? String(args[index + 1]) : null;
+}
+
+function visibleDomGateBKindFromArgs(args) {
+  const batchId = valueFromArgs(args, "--batch");
+  if (batchId === AGENT_CONTROL_VISIBLE_DOM_GATE_B_BATCH_ID) {
+    return "agent-control";
+  }
+  if (batchId === DEFERRED_MCP_TOOL_SEARCH_GATE_B_BATCH_ID) {
+    return "deferred-mcp";
+  }
+  return null;
+}
+
+function evidenceOutputFromArgs(args) {
+  const explicitOutput = valueFromArgs(args, "--output");
+  return explicitOutput
+    ? path.resolve(process.cwd(), explicitOutput)
+    : DEFAULT_EVIDENCE_OUTPUT;
+}
+
+function screenshotPathForEvidence(outputPath, stage = "visible-dom") {
+  const extension = path.extname(outputPath);
+  const stem = extension ? outputPath.slice(0, -extension.length) : outputPath;
+  return `${stem}-${stage}.png`;
 }
 
 function createTempRuntimeEnv() {
@@ -100,22 +145,25 @@ async function waitForRendererReady(page, timeoutMs) {
   let lastSnapshot = null;
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const snapshot = await page.evaluate((command) => ({
-        url: window.location.href,
-        title: document.title || "",
-        electron: window.__LIME_ELECTRON__ === true,
-        hasInvokeBridge: typeof window.electronAPI?.invoke === "function",
-        supportsAppServer:
-          typeof window.electronAPI?.supportsCommand === "function" &&
-          window.electronAPI.supportsCommand(command),
-        startupVisible: Boolean(
-          document.querySelector("[data-lime-startup-shell]"),
-        ),
-        appSidebarVisible: Boolean(
-          document.querySelector('[data-testid="app-sidebar"]'),
-        ),
-        bodyText: document.body?.innerText || "",
-      }), APP_SERVER_HANDLE_JSON_LINES_COMMAND);
+      const snapshot = await page.evaluate(
+        (command) => ({
+          url: window.location.href,
+          title: document.title || "",
+          electron: window.__LIME_ELECTRON__ === true,
+          hasInvokeBridge: typeof window.electronAPI?.invoke === "function",
+          supportsAppServer:
+            typeof window.electronAPI?.supportsCommand === "function" &&
+            window.electronAPI.supportsCommand(command),
+          startupVisible: Boolean(
+            document.querySelector("[data-lime-startup-shell]"),
+          ),
+          appSidebarVisible: Boolean(
+            document.querySelector('[data-testid="app-sidebar"]'),
+          ),
+          bodyText: document.body?.innerText || "",
+        }),
+        APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+      );
       lastSnapshot = snapshot;
       if (
         snapshot.electron &&
@@ -134,6 +182,44 @@ async function waitForRendererReady(page, timeoutMs) {
   throw new Error(
     `Electron renderer / App Server bridge 未就绪: ${JSON.stringify(lastSnapshot)}`,
   );
+}
+
+async function launchManagedElectron({
+  appServerEnv,
+  consoleErrors,
+  runtimeEnv,
+  timeoutMs,
+}) {
+  const app = await electron.launch({
+    executablePath: electronPath,
+    args: ["--use-mock-keychain", "."],
+    cwd: process.cwd(),
+    env: {
+      ...runtimeEnv.env,
+      ...appServerEnv,
+      ELECTRON_E2E_USER_DATA_DIR: runtimeEnv.electronUserDataDir,
+      LIME_ELECTRON_E2E: "1",
+      LIME_ELECTRON_BRAND_DEV_APP: "0",
+      LIME_ELECTRON_CLEAR_RENDERER_CACHE: "0",
+      LIME_ELECTRON_DEV_HTTP_BRIDGE: "0",
+    },
+    timeout: timeoutMs,
+  });
+  const page = await app.firstWindow({ timeout: timeoutMs });
+  page.setDefaultTimeout(timeoutMs);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      const sourceUrl = String(message.location()?.url || "").trim();
+      consoleErrors.push(
+        sanitizeText(
+          sourceUrl ? `${message.text()} source=${sourceUrl}` : message.text(),
+        ).slice(0, 700),
+      );
+    }
+  });
+  const rendererSnapshot = await waitForRendererReady(page, timeoutMs);
+  return { app, page, rendererSnapshot };
 }
 
 function readJsonBody(request) {
@@ -160,6 +246,370 @@ function writeJson(response, status, payload) {
     "access-control-allow-methods": "GET,POST,OPTIONS",
   });
   response.end(`${JSON.stringify(payload)}\n`);
+}
+
+function readEvidence(outputPath) {
+  const evidence = JSON.parse(fs.readFileSync(outputPath, "utf8"));
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    throw new Error(`tool execution evidence 结构非法: ${outputPath}`);
+  }
+  return evidence;
+}
+
+function writeEvidence(outputPath, evidence) {
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(
+    outputPath,
+    `${JSON.stringify(evidence, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+async function readInvokeDiagnostics(page) {
+  return await page.evaluate(
+    ({ errorKey, traceKey }) => {
+      const readArray = (key) => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      };
+      const calls = [];
+      for (const entry of readArray(traceKey)) {
+        if (entry?.command !== "app_server_handle_json_lines") continue;
+        const lines = Array.isArray(entry?.args_preview?.request?.lines)
+          ? entry.args_preview.request.lines
+          : [];
+        for (const line of lines) {
+          try {
+            const message = typeof line === "string" ? JSON.parse(line) : line;
+            if (typeof message?.method !== "string") continue;
+            calls.push({
+              method: message.method,
+              transport: String(entry?.transport || ""),
+              status: String(entry?.status || ""),
+            });
+          } catch {
+            // Ignore malformed diagnostic previews; the product request already failed elsewhere.
+          }
+        }
+      }
+      return {
+        appServerCalls: calls,
+        invokeErrorCount: readArray(errorKey).length,
+      };
+    },
+    {
+      errorKey: INVOKE_ERROR_STORAGE_KEY,
+      traceKey: INVOKE_TRACE_STORAGE_KEY,
+    },
+  );
+}
+
+async function restoreAgentSessionRoute(page, sessionId, timeoutMs) {
+  await page.evaluate(
+    ({ errorKey, navigationKey, sessionId, traceKey }) => {
+      localStorage.removeItem(errorKey);
+      localStorage.removeItem(traceKey);
+      sessionStorage.setItem(
+        navigationKey,
+        JSON.stringify({
+          page: "agent",
+          params: { initialSessionId: sessionId },
+        }),
+      );
+    },
+    {
+      errorKey: INVOKE_ERROR_STORAGE_KEY,
+      navigationKey: NAVIGATION_RESTORE_STORAGE_KEY,
+      sessionId,
+      traceKey: INVOKE_TRACE_STORAGE_KEY,
+    },
+  );
+  await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
+  return await waitForRendererReady(page, timeoutMs);
+}
+
+async function waitForDomCountToDrop(page, selector, previousCount, timeoutMs) {
+  await page.waitForFunction(
+    ({ previousCount, selector }) =>
+      document.querySelectorAll(selector).length < previousCount,
+    { previousCount, selector },
+    { timeout: Math.min(timeoutMs, 30_000) },
+  );
+}
+
+async function expandHistoricalToolRows(page, timeoutMs) {
+  const historicalPreviewSelector =
+    '[data-testid^="message-list-historical-timeline-preview:"]';
+  const historicalPreviews = page.locator(historicalPreviewSelector);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const previousCount = await historicalPreviews.count();
+    if (previousCount === 0) break;
+    await historicalPreviews.first().click();
+    await waitForDomCountToDrop(
+      page,
+      historicalPreviewSelector,
+      previousCount,
+      timeoutMs,
+    );
+  }
+
+  const closedProcessSelector =
+    'details[data-testid*="agent-thread-block:"][data-testid$=":process"]:not([open])';
+  await page.waitForFunction(
+    ({ closedProcessSelector }) =>
+      document.querySelector('[data-testid="tool-call-row"]') !== null ||
+      document.querySelector(closedProcessSelector) !== null,
+    { closedProcessSelector },
+    { timeout: Math.min(timeoutMs, 30_000) },
+  );
+
+  const closedProcessBlocks = page.locator(closedProcessSelector);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const previousCount = await closedProcessBlocks.count();
+    if (previousCount === 0) break;
+    await closedProcessBlocks.first().locator("summary").click();
+    await waitForDomCountToDrop(
+      page,
+      closedProcessSelector,
+      previousCount,
+      timeoutMs,
+    );
+  }
+
+  const closedSubagentSelector =
+    'details[data-testid*="agent-thread-block:"][data-testid$=":subagent"]:not([open])';
+  const closedSubagentBlocks = page.locator(closedSubagentSelector);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const previousCount = await closedSubagentBlocks.count();
+    if (previousCount === 0) break;
+    await closedSubagentBlocks.first().locator("summary").click();
+    await waitForDomCountToDrop(
+      page,
+      closedSubagentSelector,
+      previousCount,
+      timeoutMs,
+    );
+  }
+}
+
+async function findTypedToolRow(page, toolName, timeoutMs) {
+  const handle = await page.waitForFunction(
+    (expectedToolName) =>
+      Array.from(
+        document.querySelectorAll('[data-testid="tool-call-row"]'),
+      ).find(
+        (node) => node.getAttribute("data-tool-name") === expectedToolName,
+      ) || null,
+    toolName,
+    { timeout: Math.min(timeoutMs, 30_000) },
+  );
+  const row = handle.asElement();
+  if (!row) {
+    await handle.dispose();
+    throw new Error(`目标会话缺少 typed Tool row: ${toolName}`);
+  }
+  await row.waitForElementState("visible", { timeout: timeoutMs });
+  return row;
+}
+
+async function listTypedToolRows(page) {
+  return await page
+    .locator('[data-testid="tool-call-row"]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: node.getAttribute("data-tool-call-id"),
+        name: node.getAttribute("data-tool-name"),
+        status: node.getAttribute("data-tool-status"),
+        visible:
+          window.getComputedStyle(node).display !== "none" &&
+          window.getComputedStyle(node).visibility !== "hidden" &&
+          node.getBoundingClientRect().height > 0,
+      })),
+    );
+}
+
+async function listSubagentActivityRows(page) {
+  return await page
+    .locator('[data-testid="subagent-activity-row"]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        itemId: node.getAttribute("data-subagent-activity-item-id"),
+        activityKind: node.getAttribute("data-subagent-activity-kind"),
+        threadId: node.getAttribute("data-subagent-thread-id"),
+        visible:
+          window.getComputedStyle(node).display !== "none" &&
+          window.getComputedStyle(node).visibility !== "hidden" &&
+          node.getBoundingClientRect().height > 0,
+        text: (node.textContent || "").trim().slice(0, 240),
+      })),
+    );
+}
+
+async function snapshotToolRow(row) {
+  return await row.evaluate((node) => {
+    const style = window.getComputedStyle(node);
+    const toolName = node.getAttribute("data-tool-name");
+    const toolStatus = node.getAttribute("data-tool-status");
+    return {
+      visible:
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        node.getBoundingClientRect().height > 0,
+      completed: toolStatus === "completed",
+      toolName,
+      toolStatus,
+      text: (node.textContent || "").trim().slice(0, 240),
+    };
+  });
+}
+
+async function readAgentControlDomState({ page, sessionId, timeoutMs }) {
+  const input = page.locator(
+    `textarea[name="agent-chat-message"][data-session-id="${sessionId}"]`,
+  );
+  await input.waitFor({ state: "visible", timeout: timeoutMs });
+  const finalText = page.getByText(AGENT_CONTROL_FINAL_TEXT, { exact: false });
+  await finalText.first().waitFor({ state: "visible", timeout: timeoutMs });
+
+  await expandHistoricalToolRows(page, timeoutMs);
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="subagent-activity-row"]') !== null,
+    undefined,
+    { timeout: Math.min(timeoutMs, 30_000) },
+  );
+  return {
+    activeSessionId: await input.getAttribute("data-session-id"),
+    typedToolRows: await listTypedToolRows(page),
+    subagentActivityRows: await listSubagentActivityRows(page),
+    finalAssistantTextVisible: await finalText.first().isVisible(),
+  };
+}
+
+async function collectDeferredMcpVisibleDomGateB({
+  consoleErrors,
+  evidence,
+  outputPath,
+  page,
+  rendererSnapshot,
+  timeoutMs,
+}) {
+  const sessionId = String(evidence?.runtime?.sessionId || "").trim();
+  const deferredToolName = String(
+    evidence?.scenarioRuntimeContext?.deferredToolName || "",
+  ).trim();
+  if (!sessionId || !deferredToolName) {
+    throw new Error("deferred MCP evidence 缺少 sessionId 或 deferredToolName");
+  }
+
+  const input = page.locator(
+    `textarea[name="agent-chat-message"][data-session-id="${sessionId}"]`,
+  );
+  await input.waitFor({ state: "visible", timeout: timeoutMs });
+  const finalText = page.getByText(DEFERRED_MCP_TOOL_SEARCH_FINAL_TEXT, {
+    exact: false,
+  });
+  await finalText.first().waitFor({ state: "visible", timeout: timeoutMs });
+
+  await expandHistoricalToolRows(page, timeoutMs);
+  const typedToolRows = await listTypedToolRows(page);
+  console.log(`${LOG_PREFIX} typed-tool-rows=${JSON.stringify(typedToolRows)}`);
+  const deferredRow = await findTypedToolRow(page, deferredToolName, timeoutMs);
+
+  const diagnostics = await readInvokeDiagnostics(page);
+  const screenshotPath = screenshotPathForEvidence(outputPath);
+  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+  await page.screenshot({ path: screenshotPath, fullPage: true });
+  const snapshot = {
+    proofLevel: "Gate B",
+    claimBoundary:
+      "real Electron host/preload/App Server/runtime/read-model to visible DOM; localhost provider fixture, not live-provider proof",
+    url: page.url(),
+    electron: rendererSnapshot.electron === true,
+    hasInvokeBridge: rendererSnapshot.hasInvokeBridge === true,
+    supportsAppServer: rendererSnapshot.supportsAppServer === true,
+    sessionId,
+    activeSessionId: await input.getAttribute("data-session-id"),
+    typedToolRows,
+    deferredToolRow: await snapshotToolRow(deferredRow),
+    finalAssistantTextVisible: await finalText.first().isVisible(),
+    appServerCalls: diagnostics.appServerCalls,
+    invokeErrorCount: diagnostics.invokeErrorCount,
+    consoleErrorCount: consoleErrors.length,
+    consoleErrors: consoleErrors.slice(0, 10),
+    screenshotPath: path.relative(process.cwd(), screenshotPath),
+  };
+  const assertions = buildDeferredMcpVisibleDomAssertions({
+    deferredToolName,
+    evidence,
+    snapshot,
+  });
+  return { assertions, snapshot };
+}
+
+async function collectAgentControlVisibleDomGateB({
+  coldRestart,
+  consoleErrors,
+  evidence,
+  outputPath,
+  page,
+  preRestart,
+  rendererSnapshot,
+  timeoutMs,
+}) {
+  const sessionId = String(evidence?.runtime?.sessionId || "").trim();
+  if (!sessionId) {
+    throw new Error("AgentControl evidence 缺少 sessionId");
+  }
+
+  const domState = await readAgentControlDomState({
+    page,
+    sessionId,
+    timeoutMs,
+  });
+  const { subagentActivityRows, typedToolRows } = domState;
+  console.log(`${LOG_PREFIX} typed-tool-rows=${JSON.stringify(typedToolRows)}`);
+  console.log(
+    `${LOG_PREFIX} subagent-activity-rows=${JSON.stringify(subagentActivityRows)}`,
+  );
+
+  const diagnostics = await readInvokeDiagnostics(page);
+  const screenshotPath = screenshotPathForEvidence(
+    outputPath,
+    "cold-restart-visible-dom",
+  );
+  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+  await page.screenshot({ path: screenshotPath, fullPage: true });
+  const snapshot = {
+    proofLevel: "Gate B",
+    claimBoundary:
+      "real Electron host/preload/App Server/runtime/read-model to six AgentControl Tool rows and canonical SubAgent activity DOM; localhost provider fixture, not live-provider proof",
+    url: page.url(),
+    electron: rendererSnapshot.electron === true,
+    hasInvokeBridge: rendererSnapshot.hasInvokeBridge === true,
+    supportsAppServer: rendererSnapshot.supportsAppServer === true,
+    coldRestart,
+    preRestart,
+    sessionId,
+    activeSessionId: domState.activeSessionId,
+    typedToolRows,
+    subagentActivityRows,
+    finalAssistantTextVisible: domState.finalAssistantTextVisible,
+    appServerCalls: diagnostics.appServerCalls,
+    invokeErrorCount: diagnostics.invokeErrorCount,
+    consoleErrorCount: consoleErrors.length,
+    consoleErrors: consoleErrors.slice(0, 10),
+    screenshotPath: path.relative(process.cwd(), screenshotPath),
+  };
+  const assertions = buildAgentControlVisibleDomAssertions({
+    evidence,
+    snapshot,
+  });
+  return { assertions, snapshot };
 }
 
 async function invokeElectron(page, command, args) {
@@ -258,9 +708,45 @@ async function closeServer(server) {
   await new Promise((resolve) => server.close(resolve));
 }
 
+async function closeElectronApp(app) {
+  if (!app) {
+    return;
+  }
+  try {
+    await app.close();
+  } catch (error) {
+    console.warn(
+      `${LOG_PREFIX} electron close skipped: ${sanitizeText(error)}`,
+    );
+    try {
+      const childProcess =
+        typeof app.process === "function" ? app.process() : null;
+      if (childProcess && !childProcess.killed) {
+        childProcess.kill("SIGTERM");
+      }
+    } catch {
+      // best effort cleanup
+    }
+  }
+}
+
 async function main() {
   const childArgs = process.argv.slice(2);
   const timeoutMs = timeoutFromArgs(childArgs);
+  const visibleDomGateBKind = visibleDomGateBKindFromArgs(childArgs);
+  const coldRestartRequested = childArgs.includes("--cold-restart");
+  if (coldRestartRequested && visibleDomGateBKind !== "agent-control") {
+    throw new Error("--cold-restart 只允许用于 agent-control-tools batch");
+  }
+  if (visibleDomGateBKind === "agent-control" && !coldRestartRequested) {
+    throw new Error(
+      "agent-control-tools visible DOM Gate B 必须显式启用 --cold-restart",
+    );
+  }
+  if (visibleDomGateBKind && childArgs.includes("--no-write")) {
+    throw new Error("visible-DOM Gate B 需要写入结构化 evidence");
+  }
+  const outputPath = evidenceOutputFromArgs(childArgs);
   const runtimeEnv = createTempRuntimeEnv();
   const appServerBinary = resolveDevAppServerBinary({
     env: runtimeEnv.env,
@@ -273,58 +759,167 @@ async function main() {
     },
   });
   let app = null;
+  let page = null;
   let bridge = null;
+  const consoleErrors = [];
   try {
     console.log(`${LOG_PREFIX} stage=launch-electron`);
-    app = await electron.launch({
-      executablePath: electronPath,
-      args: ["--use-mock-keychain", "."],
-      cwd: process.cwd(),
-      env: {
-        ...runtimeEnv.env,
-        ...appServerEnv,
-        ELECTRON_E2E_USER_DATA_DIR: runtimeEnv.electronUserDataDir,
-        LIME_ELECTRON_E2E: "1",
-        LIME_ELECTRON_BRAND_DEV_APP: "0",
-        LIME_ELECTRON_CLEAR_RENDERER_CACHE: "0",
-        LIME_ELECTRON_DEV_HTTP_BRIDGE: "0",
-      },
-      timeout: timeoutMs,
+    const launched = await launchManagedElectron({
+      appServerEnv,
+      consoleErrors,
+      runtimeEnv,
+      timeoutMs,
     });
-    const page = await app.firstWindow({ timeout: timeoutMs });
-    page.setDefaultTimeout(timeoutMs);
-    await page.setViewportSize({ width: 1440, height: 1000 });
+    app = launched.app;
+    page = launched.page;
+    const initialElectronPid = app.process().pid;
 
-    console.log(`${LOG_PREFIX} stage=wait-renderer`);
-    const snapshot = await waitForRendererReady(page, timeoutMs);
     console.log(
-      `${LOG_PREFIX} renderer ready url=${snapshot.url} title=${snapshot.title}`,
+      `${LOG_PREFIX} renderer ready url=${launched.rendererSnapshot.url} title=${launched.rendererSnapshot.title}`,
     );
 
     console.log(`${LOG_PREFIX} stage=start-bridge-proxy`);
     bridge = await startBridgeProxy(page);
     console.log(`${LOG_PREFIX} bridge=${bridge.baseUrl}`);
 
-    const result = await runChild(childArgs, bridge.baseUrl);
-    process.exitCode = result.code;
+    const result = await runChild(
+      childArgs.filter((arg) => arg !== "--cold-restart"),
+      bridge.baseUrl,
+    );
+    if (result.code !== 0) {
+      process.exitCode = result.code;
+      return;
+    }
+    if (visibleDomGateBKind) {
+      console.log(`${LOG_PREFIX} stage=visible-dom-gate-b`);
+      const evidence = readEvidence(outputPath);
+      const sessionId = String(evidence?.runtime?.sessionId || "").trim();
+      consoleErrors.length = 0;
+      let coldRestart = null;
+      let preRestart = null;
+      let rendererSnapshot = null;
+      if (visibleDomGateBKind === "agent-control") {
+        rendererSnapshot = await restoreAgentSessionRoute(
+          page,
+          sessionId,
+          timeoutMs,
+        );
+        const preRestartDomState = await readAgentControlDomState({
+          page,
+          sessionId,
+          timeoutMs,
+        });
+        const preRestartScreenshotPath = screenshotPathForEvidence(
+          outputPath,
+          "pre-restart-visible-dom",
+        );
+        fs.mkdirSync(path.dirname(preRestartScreenshotPath), {
+          recursive: true,
+        });
+        await page.screenshot({
+          path: preRestartScreenshotPath,
+          fullPage: true,
+        });
+        preRestart = {
+          ...preRestartDomState,
+          screenshotPath: path.relative(
+            process.cwd(),
+            preRestartScreenshotPath,
+          ),
+        };
+        consoleErrors.length = 0;
+        console.log(`${LOG_PREFIX} stage=cold-restart-electron`);
+        await closeServer(bridge?.server);
+        bridge = null;
+        await closeElectronApp(app);
+        app = null;
+        const restarted = await launchManagedElectron({
+          appServerEnv,
+          consoleErrors,
+          runtimeEnv,
+          timeoutMs,
+        });
+        app = restarted.app;
+        page = restarted.page;
+        const restartedElectronPid = app.process().pid;
+        coldRestart = {
+          initialElectronPid,
+          restartedElectronPid,
+          electronProcessReplaced:
+            Number.isInteger(initialElectronPid) &&
+            Number.isInteger(restartedElectronPid) &&
+            initialElectronPid !== restartedElectronPid,
+        };
+        rendererSnapshot = await restoreAgentSessionRoute(
+          page,
+          sessionId,
+          timeoutMs,
+        );
+      } else {
+        rendererSnapshot = await restoreAgentSessionRoute(
+          page,
+          sessionId,
+          timeoutMs,
+        );
+      }
+      const visibleDomGateB =
+        visibleDomGateBKind === "agent-control"
+          ? await collectAgentControlVisibleDomGateB({
+              coldRestart,
+              consoleErrors,
+              evidence,
+              outputPath,
+              page,
+              preRestart,
+              rendererSnapshot,
+              timeoutMs,
+            })
+          : await collectDeferredMcpVisibleDomGateB({
+              consoleErrors,
+              evidence,
+              outputPath,
+              page,
+              rendererSnapshot,
+              timeoutMs,
+            });
+      const failedAssertions = Object.entries(visibleDomGateB.assertions)
+        .filter(([, passed]) => passed !== true)
+        .map(([name]) => name);
+      evidence.gui = {
+        ...(evidence.gui && typeof evidence.gui === "object"
+          ? evidence.gui
+          : {}),
+        [visibleDomGateBKind === "agent-control"
+          ? "agentControlVisibleDomGateB"
+          : "visibleDomGateB"]: visibleDomGateB.snapshot,
+      };
+      evidence.assertions = {
+        ...(evidence.assertions && typeof evidence.assertions === "object"
+          ? evidence.assertions
+          : {}),
+        ...visibleDomGateB.assertions,
+      };
+      evidence.failedAssertions = [
+        ...(Array.isArray(evidence.failedAssertions)
+          ? evidence.failedAssertions
+          : []),
+        ...failedAssertions,
+      ];
+      evidence.status = evidence.failedAssertions.length > 0 ? "fail" : "pass";
+      writeEvidence(outputPath, evidence);
+      if (failedAssertions.length > 0) {
+        throw new Error(
+          `${visibleDomGateBKind} visible-DOM Gate B 失败: ${failedAssertions.join(", ")}`,
+        );
+      }
+      console.log(
+        `${LOG_PREFIX} visible-dom-gate-b=pass evidence=${outputPath} screenshot=${visibleDomGateB.snapshot.screenshotPath}`,
+      );
+    }
+    process.exitCode = 0;
   } finally {
     await closeServer(bridge?.server);
-    if (app) {
-      try {
-        await app.close();
-      } catch (error) {
-        console.warn(`${LOG_PREFIX} electron close skipped: ${sanitizeText(error)}`);
-        try {
-          const childProcess =
-            typeof app.process === "function" ? app.process() : null;
-          if (childProcess && !childProcess.killed) {
-            childProcess.kill("SIGTERM");
-          }
-        } catch {
-          // best effort cleanup
-        }
-      }
-    }
+    await closeElectronApp(app);
     cleanupTempRoot(runtimeEnv.tempRoot);
   }
 }

@@ -1,5 +1,8 @@
 import { useEffect, useMemo } from "react";
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type {
+  AgentRuntimeThreadReadModel,
+  AgentTodoItem,
+} from "@/lib/api/agentRuntime/sessionTypes";
 import type { ProjectMemory } from "@/lib/api/projectMemory";
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
 import type { AgentThreadItem, Message } from "../types";
@@ -9,7 +12,6 @@ import {
   deriveHarnessSessionState,
   type HarnessSessionState,
 } from "../utils/harnessState";
-import type { AgentTodoItem } from "@/lib/api/agentRuntime";
 import {
   resolveHarnessRuntimeVisible,
   shouldBuildFullThreadTimeline,

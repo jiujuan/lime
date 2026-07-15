@@ -85,6 +85,7 @@ fn coalesces_message_delta_into_one_stable_typed_item() {
         ThreadItemPayload::AgentMessage {
             text: "hello".to_string(),
             phase: None,
+            content_parts: Vec::new(),
         }
     );
     assert_eq!(changes.changed_turns.len(), 1);
@@ -143,6 +144,7 @@ fn user_and_agent_messages_have_explicit_terminal_item_lifecycle() {
         ThreadItemPayload::AgentMessage {
             text: "answer".to_string(),
             phase: Some("final_answer".to_string()),
+            content_parts: Vec::new(),
         }
     );
 }
@@ -358,6 +360,7 @@ fn coalesces_message_delta_batch_into_the_same_typed_item() {
         ThreadItemPayload::AgentMessage {
             text: "hello world!".to_string(),
             phase: Some("commentary".to_string()),
+            content_parts: Vec::new(),
         }
     );
 }
@@ -431,16 +434,13 @@ fn maps_core_families_to_typed_payloads() {
         item.payload,
         ThreadItemPayload::Approval { decision: None, .. }
     )));
-    assert!(changes
-        .changed_items
-        .iter()
-        .any(|item| matches!(
-            item.payload,
-            ThreadItemPayload::SubAgent {
-                activity: agent_protocol::SubAgentActivityKind::Started,
-                ..
-            }
-        )));
+    assert!(changes.changed_items.iter().any(|item| matches!(
+        item.payload,
+        ThreadItemPayload::SubAgent {
+            activity: agent_protocol::SubAgentActivityKind::Started,
+            ..
+        }
+    )));
     assert!(changes
         .changed_items
         .iter()

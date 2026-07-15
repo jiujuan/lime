@@ -36,7 +36,7 @@ vi.mock("@/lib/api/agentRuntimeEvents", () => ({
   listenAgentRuntimeEvent: vi.fn(),
 }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/clientFactory", () => ({
   createAgentRuntimeClient: mockCreateAgentRuntimeClient,
 }));
 

@@ -34,11 +34,6 @@ import type {
   AgentRuntimeCapabilityManifestRequest,
   AgentRuntimeCompactSessionRequest,
   AgentRuntimeDiffFileCheckpointRequest,
-  AgentRuntimeFileCheckpointDetail,
-  AgentRuntimeFileCheckpointDiffResult,
-  AgentRuntimeFileCheckpointListResult,
-  AgentRuntimeFileCheckpointRestoreResult,
-  AgentRuntimeFileCheckpointSummary,
   AgentRuntimeGetFileCheckpointRequest,
   AgentRuntimeInterruptTurnRequest,
   AgentRuntimeListFileCheckpointsRequest,
@@ -49,8 +44,15 @@ import type {
   AgentRuntimeRespondActionRequest,
   AgentRuntimeRestoreFileCheckpointRequest,
   AgentRuntimeResumeThreadRequest,
+} from "./requestTypes";
+import type {
+  AgentRuntimeFileCheckpointDetail,
+  AgentRuntimeFileCheckpointDiffResult,
+  AgentRuntimeFileCheckpointListResult,
+  AgentRuntimeFileCheckpointRestoreResult,
+  AgentRuntimeFileCheckpointSummary,
   AgentRuntimeThreadReadModel,
-} from "./types";
+} from "./sessionTypes";
 import type { AgentRuntimeCapabilityManifest } from "@limecloud/agent-ui-contracts";
 
 export type AgentRuntimeAppServerClient = Pick<

@@ -5303,9 +5303,20 @@
         "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/tests.rs",
         "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
         "lime-rs/crates/app-server/src/runtime/session_media_reader.rs",
-        "lime-rs/crates/app-server/src/runtime/session_media_refs.rs",
-        "lime-rs/crates/app-server/src/runtime/session_hydration.rs"
+        "lime-rs/crates/app-server/src/runtime/session_media_refs.rs"
       ]
+    },
+    {
+      "id": "rust-runtime-session-app-data-fallback",
+      "classification": "dead",
+      "description": "Runtime session identity、读取和恢复只能来自 RuntimeCore + EventLog + ProjectionStore；已删除的 app-data session DTO fallback、hydration helper 和 read_agent_session 入口不得回流",
+      "patterns": [
+        "load_app_data_session",
+        "read_agent_session(",
+        "mod session_hydration;"
+      ],
+      "includePathPrefixes": ["lime-rs/crates/app-server/src/runtime"],
+      "allowedPaths": []
     },
     {
       "id": "rust-runtime-artifact-generated-content-inline-leak",
@@ -5338,7 +5349,6 @@
         "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
         "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
         "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
-        "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
         "lime-rs/crates/app-server/src/runtime/tests/coding_events.rs",
         "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs"
       ]

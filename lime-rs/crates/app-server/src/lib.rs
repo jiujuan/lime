@@ -1,6 +1,6 @@
-mod agent_runtime_registry;
 mod agent_identity_store;
 mod agent_mailbox_store;
+mod agent_runtime_registry;
 mod agent_ui_event_schema;
 mod agent_ui_sequence_verifier;
 mod automation_execution;
@@ -258,6 +258,7 @@ pub struct AppServerEventBridge {
 }
 
 impl AppServer {
+    #[cfg(test)]
     pub fn new() -> Self {
         Self::with_runtime(RuntimeCore::default())
     }
@@ -900,7 +901,18 @@ mod tests {
             .runtime()
             .events_for_session(&session_id)
             .expect("stored events");
-        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "item.started",
+                "message.created",
+                "item.completed",
+                "turn.accepted"
+            ]
+        );
     }
 
     #[tokio::test]
@@ -1236,22 +1248,45 @@ mod tests {
             .await
             .expect("handle");
 
-        assert_eq!(messages.len(), 3);
-        match &messages[1] {
-            JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                assert_eq!(
-                    notification.params.as_ref().expect("params")["event"]["type"],
-                    "message.created"
-                );
-                assert_eq!(
-                    notification.params.as_ref().expect("params")["event"]["payload"]["input"]
-                        ["text"],
-                    "生成草稿"
-                );
-            }
-            other => panic!("expected notification, got {other:?}"),
-        }
+        assert_eq!(messages.len(), 5);
+        let event_types = messages
+            .iter()
+            .skip(1)
+            .map(|message| match message {
+                JsonRpcMessage::Notification(notification) => {
+                    assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
+                    notification.params.as_ref().expect("params")["event"]["type"]
+                        .as_str()
+                        .expect("event type")
+                }
+                other => panic!("expected notification, got {other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            event_types,
+            vec![
+                "item.started",
+                "message.created",
+                "item.completed",
+                "turn.accepted"
+            ]
+        );
+        let user_message = messages
+            .iter()
+            .find_map(|message| match message {
+                JsonRpcMessage::Notification(notification)
+                    if notification.params.as_ref().expect("params")["event"]["type"]
+                        == "message.created" =>
+                {
+                    notification.params.as_ref()
+                }
+                _ => None,
+            })
+            .expect("user message notification");
+        assert_eq!(
+            user_message["event"]["payload"]["input"]["text"],
+            "生成草稿"
+        );
     }
     #[tokio::test]
     async fn append_external_runtime_events_returns_json_rpc_notifications() {
@@ -1294,12 +1329,22 @@ mod tests {
             )
             .expect("notifications");
 
-        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications.len(), 2);
         match &notifications[0] {
             JsonRpcMessage::Notification(notification) => {
                 assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
                 let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sequence"], 3);
+                assert_eq!(event["sequence"], 5);
+                assert_eq!(event["type"], "item.started");
+                assert_eq!(event["payload"]["item"]["kind"], "agentMessage");
+            }
+            other => panic!("expected notification, got {other:?}"),
+        }
+        match &notifications[1] {
+            JsonRpcMessage::Notification(notification) => {
+                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
+                let event = &notification.params.as_ref().expect("params")["event"];
+                assert_eq!(event["sequence"], 6);
                 assert_eq!(event["sessionId"], "sess_external");
                 assert_eq!(event["threadId"], "thread_external");
                 assert_eq!(event["turnId"], turn_id);
@@ -1352,12 +1397,28 @@ mod tests {
             )
             .expect("notifications");
 
-        let message =
+        let lifecycle_message =
             tokio::time::timeout(std::time::Duration::from_secs(1), outbound_messages.recv())
                 .await
-                .expect("outbound message")
-                .expect("broadcast message");
-        match message {
+                .expect("outbound lifecycle message")
+                .expect("broadcast lifecycle message");
+        match lifecycle_message {
+            JsonRpcMessage::Notification(notification) => {
+                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
+                let event = &notification.params.as_ref().expect("params")["event"];
+                assert_eq!(event["sessionId"], "sess_external");
+                assert_eq!(event["turnId"], turn_id);
+                assert_eq!(event["type"], "item.started");
+                assert_eq!(event["payload"]["item"]["kind"], "agentMessage");
+            }
+            other => panic!("expected outbound lifecycle notification, got {other:?}"),
+        }
+        let delta_message =
+            tokio::time::timeout(std::time::Duration::from_secs(1), outbound_messages.recv())
+                .await
+                .expect("outbound delta message")
+                .expect("broadcast delta message");
+        match delta_message {
             JsonRpcMessage::Notification(notification) => {
                 assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
                 let event = &notification.params.as_ref().expect("params")["event"];
@@ -1446,25 +1507,33 @@ mod tests {
             )),
         )
         .await;
-        let event_turn_id = match next_json_message(&mut output_lines).await {
-            JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["type"], "message.created");
-                assert_eq!(event["payload"]["input"]["text"], "draft");
-                event["turnId"].as_str().expect("event turn id").to_string()
+        let mut event_turn_id = None;
+        for expected_type in [
+            "item.started",
+            "message.created",
+            "item.completed",
+            "turn.accepted",
+        ] {
+            match next_json_message(&mut output_lines).await {
+                JsonRpcMessage::Notification(notification) => {
+                    assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
+                    let event = &notification.params.as_ref().expect("params")["event"];
+                    assert_eq!(event["type"], expected_type);
+                    if expected_type == "message.created" {
+                        assert_eq!(event["payload"]["input"]["text"], "draft");
+                    }
+                    let current_turn_id =
+                        event["turnId"].as_str().expect("event turn id").to_string();
+                    if let Some(event_turn_id) = event_turn_id.as_ref() {
+                        assert_eq!(&current_turn_id, event_turn_id);
+                    } else {
+                        event_turn_id = Some(current_turn_id);
+                    }
+                }
+                other => panic!("expected sync turn notification, got {other:?}"),
             }
-            other => panic!("expected sync turn notification, got {other:?}"),
-        };
-        match next_json_message(&mut output_lines).await {
-            JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["type"], "turn.accepted");
-                assert_eq!(event["turnId"], event_turn_id);
-            }
-            other => panic!("expected turn.accepted notification, got {other:?}"),
         }
+        let event_turn_id = event_turn_id.expect("turn event identity");
         let turn_id = match next_json_message(&mut output_lines).await {
             JsonRpcMessage::Response(response) => response.result["turn"]["turnId"]
                 .as_str()
@@ -1485,17 +1554,15 @@ mod tests {
             )
             .expect("append external event");
 
-        match next_json_message(&mut output_lines).await {
-            JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sessionId"], "sess_external");
-                assert_eq!(event["turnId"], turn_id);
-                assert_eq!(event["type"], "message.delta");
-                assert_eq!(event["payload"]["text"], "stdio async delta");
-            }
-            other => panic!("expected outbound notification, got {other:?}"),
-        }
+        assert_next_scoped_agent_event_notification(
+            &mut output_lines,
+            "sess_external",
+            "thread_external",
+            "message.delta",
+            &turn_id,
+            json!({ "text": "stdio async delta" }),
+        )
+        .await;
 
         drop(input_client);
         runner.await.expect("runner join").expect("runner result");

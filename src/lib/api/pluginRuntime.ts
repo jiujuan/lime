@@ -1,5 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
-import type { AgentRuntimeRespondActionRequest } from "./agentRuntime/types";
+import type { AgentRuntimeRespondActionRequest } from "./agentRuntime/requestTypes";
 import type { RuntimeRequest } from "@limecloud/app-server-client";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 

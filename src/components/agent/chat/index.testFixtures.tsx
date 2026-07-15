@@ -84,11 +84,7 @@ const {
   mockCreateAutomationJob,
   mockSkillsGetAll,
   mockSkillsGetLocal,
-  mockCloseAgentRuntimeSubagent,
   mockGetAgentRuntimeToolInventory,
-  mockResumeAgentRuntimeSubagent,
-  mockSendAgentRuntimeSubagentInput,
-  mockWaitAgentRuntimeSubagents,
   mockCanvasWorkbenchLayoutState,
   mockCanvasWorkbenchLayout,
   mockLaunchBrowserSession,
@@ -207,11 +203,7 @@ const {
   mockCreateAutomationJob: vi.fn(),
   mockSkillsGetAll: vi.fn(),
   mockSkillsGetLocal: vi.fn(),
-  mockCloseAgentRuntimeSubagent: vi.fn(),
   mockGetAgentRuntimeToolInventory: vi.fn(),
-  mockResumeAgentRuntimeSubagent: vi.fn(),
-  mockSendAgentRuntimeSubagentInput: vi.fn(),
-  mockWaitAgentRuntimeSubagents: vi.fn(),
   mockCanvasWorkbenchLayoutState: {
     renderPreviewProbe: false,
   },
@@ -319,11 +311,7 @@ export function getIndexTestMocks() {
     mockCreateAutomationJob,
     mockSkillsGetAll,
     mockSkillsGetLocal,
-    mockCloseAgentRuntimeSubagent,
     mockGetAgentRuntimeToolInventory,
-    mockResumeAgentRuntimeSubagent,
-    mockSendAgentRuntimeSubagentInput,
-    mockWaitAgentRuntimeSubagents,
     mockCanvasWorkbenchLayoutState,
     mockCanvasWorkbenchLayout,
     mockLaunchBrowserSession,
@@ -961,20 +949,6 @@ vi.mock("@/lib/api/browserRuntime", async () => {
   };
 });
 
-vi.mock("@/lib/api/agentRuntime", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/agentRuntime")>(
-    "@/lib/api/agentRuntime",
-  );
-
-  return {
-    ...actual,
-    closeAgentRuntimeSubagent: mockCloseAgentRuntimeSubagent,
-    resumeAgentRuntimeSubagent: mockResumeAgentRuntimeSubagent,
-    sendAgentRuntimeSubagentInput: mockSendAgentRuntimeSubagentInput,
-    waitAgentRuntimeSubagents: mockWaitAgentRuntimeSubagents,
-  };
-});
-
 vi.mock("@/lib/api/agentRuntime/inventoryClient", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/api/agentRuntime/inventoryClient")
@@ -1463,14 +1437,6 @@ beforeEach(async () => {
   });
   mockSkillsGetAll.mockResolvedValue([]);
   mockSkillsGetLocal.mockResolvedValue([]);
-  mockCloseAgentRuntimeSubagent.mockResolvedValue({
-    previous_status: {
-      session_id: "child-session-1",
-      kind: "running",
-    },
-    cascade_session_ids: [],
-    changed_session_ids: ["child-session-1"],
-  });
   mockGetAgentRuntimeToolInventory.mockResolvedValue({
     surface: {
       workbench: false,
@@ -1493,21 +1459,6 @@ beforeEach(async () => {
       mcp_total: 0,
       visible_total: 0,
     },
-  });
-  mockResumeAgentRuntimeSubagent.mockResolvedValue({
-    status: {
-      session_id: "child-session-1",
-      kind: "closed",
-    },
-    cascade_session_ids: [],
-    changed_session_ids: [],
-  });
-  mockSendAgentRuntimeSubagentInput.mockResolvedValue({
-    submission_id: "submission-1",
-  });
-  mockWaitAgentRuntimeSubagents.mockResolvedValue({
-    status: {},
-    timed_out: false,
   });
   mockLaunchBrowserSession.mockResolvedValue({
     profile: {

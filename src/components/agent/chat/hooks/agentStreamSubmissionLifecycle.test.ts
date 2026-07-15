@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { Message } from "../types";
 import { buildWaitingAgentRuntimeStatus } from "../utils/agentRuntimeStatus";
 import {

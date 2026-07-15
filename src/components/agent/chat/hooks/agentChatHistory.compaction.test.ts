@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 
-import {
-  hydrateSessionDetailMessages,
-} from "./agentChatHistory";
+import { hydrateSessionDetailMessages } from "./agentChatHistory";
 
 describe("agentChatHistory compaction and previews", () => {
   it("分页历史消息应使用历史窗口绝对位置生成稳定 ID", () => {
@@ -106,8 +104,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("历史恢复时应去重 reasoning delta 与 final 的同文 thinking", () => {
-    const thinkingText =
-      "采用暖色调，聚焦阳光穿透树叶的光斑与远处高楼轮廓。";
+    const thinkingText = "采用暖色调，聚焦阳光穿透树叶的光斑与远处高楼轮廓。";
     const detail: AgentSessionDetail = {
       id: "session-reasoning-duplicate",
       created_at: 1,

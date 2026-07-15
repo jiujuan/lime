@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { readThreadSessionId } from "@/lib/api/agentRuntime";
+import { readThreadSessionId } from "@/lib/api/agentRuntime/threadClient";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 
 interface UseWorkspaceSubagentNavigationRuntimeParams {

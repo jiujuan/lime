@@ -4,8 +4,8 @@ import type {
   AgentRuntimeAnalysisHandoff,
   AgentRuntimeReplayCase,
   AgentRuntimeReviewDecisionTemplate,
-  AgentRuntimeThreadReadModel,
-} from "./types";
+} from "./evidenceTypes";
+import type { AgentRuntimeThreadReadModel } from "./sessionTypes";
 export declare function normalizeAnalysisHandoff(
   value: unknown,
 ): AgentRuntimeAnalysisHandoff;

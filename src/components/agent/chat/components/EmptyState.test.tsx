@@ -127,9 +127,11 @@ vi.mock("@/lib/api/channelsRuntime", () => ({
   gatewayChannelStatus: mockGatewayChannelStatus,
 }));
 
-vi.mock("@/lib/api/agentRuntime", async (importOriginal) => {
+vi.mock("@/lib/api/agentRuntime/objectiveClient", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/api/agentRuntime")>();
+    await importOriginal<
+      typeof import("@/lib/api/agentRuntime/objectiveClient")
+    >();
   return {
     ...actual,
     getAgentRuntimeObjective: mockGetAgentRuntimeObjective,
@@ -769,12 +771,10 @@ describe("EmptyState", () => {
     expect(
       container.querySelector('[data-testid="home-scroll-cue"]'),
     ).toBeNull();
-    expect(
-      container.textContent,
-    ).not.toContain("向下滑，看看 Lime 可以帮你做什么");
-    expect(
-      container.textContent,
-    ).not.toContain(
+    expect(container.textContent).not.toContain(
+      "向下滑，看看 Lime 可以帮你做什么",
+    );
+    expect(container.textContent).not.toContain(
       "往下看更多任务样例；真正执行仍会回到生成里继续补充。",
     );
     expect(

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentThreadTurn } from "@/lib/api/agentProtocol";
 import { projectCodingWorkbenchViewFromEvents } from "@limecloud/agent-runtime-projection";
 import {

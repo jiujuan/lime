@@ -15,7 +15,7 @@ import {
   buildApprovalRequestResumeScenarioAssertions,
 } from "./claw-chat-current-fixture-approval-assertions.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
-import { registerImageContentAndTeamSmokeGuards } from "./claw-chat-current-fixture-smoke-domain-guards.mjs";
+import { registerImageContentSmokeGuards } from "./claw-chat-current-fixture-smoke-domain-guards.mjs";
 import { registerSkillsRuntimeSmokeGuards } from "./claw-chat-current-fixture-smoke-skills-runtime-guards.mjs";
 import {
   buildSoulStyleTranscriptGoldenReport,
@@ -38,7 +38,6 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-agent-ui-trace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-read-model-core.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-read-model-waits.mjs",
-  "scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-session.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-input-modes.mjs",
@@ -175,11 +174,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     });
 
     const returnedHome = analyzeHomeHotpathSubmitToConversationSamples(
-      [
-        homeSample(16),
-        conversationSample(32),
-        homeSample(48),
-      ],
+      [homeSample(16), conversationSample(32), homeSample(48)],
       mainAreaBounds,
     );
     expect(returnedHome.stable).toBe(false);
@@ -199,9 +194,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
       mainAreaBounds,
     );
     expect(blankIntermediate.stable).toBe(false);
-    expect(blankIntermediate.firstInvalidBeforeConversationSamples).toHaveLength(
-      1,
-    );
+    expect(
+      blankIntermediate.firstInvalidBeforeConversationSamples,
+    ).toHaveLength(1);
   });
 
   it("drives the real Electron Desktop Host bridge and App Server JSON-RPC", () => {
@@ -823,6 +818,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     const backendEventSources = [
       "scripts/agent-runtime/claw-chat-current-fixture-approval-backend-events.mjs",
       "scripts/agent-runtime/claw-chat-current-fixture-backend-tool-skill-events.mjs",
+      "scripts/agent-runtime/skills-runtime-fixture-scenario.mjs",
     ].map((file) => fs.readFileSync(file, "utf8"));
     const retiredToolWire =
       /type: "tool\.(?:started|args|result|failed|args\.delta|input\.delta)"/u;
@@ -1032,9 +1028,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS",
     );
-    expect(content).toContain(
-      "inputbarPendingSteerQueuedProjectionCleared",
-    );
+    expect(content).toContain("inputbarPendingSteerQueuedProjectionCleared");
     expect(content).toContain(
       "options.scenario !== INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO",
     );
@@ -1425,6 +1419,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
   it("covers media contentParts references in Agent Chat and Workbench preview", () => {
     const content = readSmokeScript();
+    const backendContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-backend-script.mjs",
+      "utf8",
+    );
 
     expect(content).toContain("media-reference");
     expect(content).toContain("MEDIA_REFERENCE_PROMPT");
@@ -1447,15 +1445,31 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("source_path");
     expect(content).toContain("hasSourceOwner");
     expect(content).toContain("preview-artifact-image");
+    const mediaBranchIndex = backendContent.indexOf(
+      "if (isMediaReferencePrompt)",
+    );
+    const mediaStartedIndex = backendContent.indexOf(
+      'type: "item.started"',
+      mediaBranchIndex,
+    );
+    const mediaCompletedIndex = backendContent.indexOf(
+      'type: "item.completed"',
+      mediaStartedIndex,
+    );
+    expect(mediaBranchIndex).toBeGreaterThan(-1);
+    expect(mediaStartedIndex).toBeGreaterThan(mediaBranchIndex);
+    expect(mediaCompletedIndex).toBeGreaterThan(mediaStartedIndex);
+    expect(
+      backendContent.slice(mediaStartedIndex, mediaCompletedIndex),
+    ).toContain('id: "agent-media-reference-1"');
     expect(content).toContain("!isMediaReferenceScenario");
     expect(content).not.toContain("data:image/png;base64,fixture-image-1");
   });
 
-  registerImageContentAndTeamSmokeGuards({
+  registerImageContentSmokeGuards({
     expect,
     it,
     readSmokeScript,
-    readCurrentFixtureRegressionSmokeScript,
     removeContentFactoryForbiddenMarkerGuard,
   });
   registerSkillsRuntimeSmokeGuards({

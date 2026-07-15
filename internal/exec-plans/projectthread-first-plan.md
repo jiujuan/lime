@@ -1,7 +1,7 @@
 # Project / Thread-first 对标 Codex 执行计划
 
 > 状态：active
-> 更新时间：2026-07-05
+> 更新时间：2026-07-15
 > 路线图：`internal/roadmap/projectthread/README.md`
 > PRD：`internal/roadmap/projectthread/prd.md`
 
@@ -314,41 +314,26 @@ npm run test:rust:related -- lime-rs/crates/app-server lime-rs/crates/core
   - 证据：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`，`ok: true`，`scenario: right-surface-visual-matrix`。
   - 该场景证明 App Server pending requests 可以驱动真实 Electron toolbar 打开 `files / objectCanvas / expertInfo / browser / appSurface` 五类右侧面板；Browser surface 可见并显示 `fixture-browser-session`，`pendingAfterClicks.count = 0`。
   - 断言通过：`rightSurfaceVisualMatrixRequestedThroughAppServer`、`rightSurfaceVisualMatrixBrowserSurfaceVisible`、`rightSurfaceVisualMatrixAppSurfaceVisible`、`rightSurfaceVisualMatrixAppSurfaceMultiInstanceTabs`、`rightSurfaceVisualMatrixSurfacesMutuallyExclusive`、`rightSurfaceVisualMatrixPendingConsumeKeepsSurfaceOpen`、`rightSurfaceVisualMatrixDoesNotUseModelTurn` 等。
-- P3-A 子代理 parent thread lineage 第一刀：
-  - 盘点结论：`subagent / team session` 仍是 `compat` 执行上下文；`SubagentParentContext`、真实 child session timeline item、`subagent_status_changed` / `team_control_projection` 的 Agent UI events 是 `current` parent Thread facts。
-  - `AgentChatWorkspace` 合成真实子代理 timeline item 时，`threadId` 改为优先使用 `threadRead.thread_id`，再回落当前 `sessionId`，避免 Project/Thread 拆分后把 child activity 错挂到 session 旧命名。
-  - `subagentTimeline` 单测补断言：真实 child session item 必须写入 parent `thread_id`；缺 parent thread 或 parent turn 时不得生成独立子代理历史项。
-  - `agentUiEventProjection` 单测补断言：Team control 和 subagent status events 必须继承 parent thread / turn context，并保留 `parentSessionId`、team counters、handoff / worker notification 等 projection facts。
-  - Rust `session_store_tests` 补 lineage 断言：child summary 和 parent context 必须保留 `created_from_turn_id`、`team_preset_id`、`parent_session_id` 与 parent name。
-  - `projectThreadFirstBoundary.test.ts` 增加 P3 守卫，禁止 `subagentHistory` / `subagent_history` / `childSubagentHistory` / `subagentSessionHistory` 这类独立子代理历史入口回流，并要求 current P3 surface 保留 parent context、parent thread timeline、subagent status projection 和 team control projection 接线。
-- P3-A 验证记录：
-  - 通过：`npx vitest run "src/components/agent/chat/utils/subagentTimeline.test.ts" "src/components/agent/chat/projection/agentUiEventProjection.test.ts" "src/lib/governance/projectThreadFirstBoundary.test.ts"`，3 个文件 / 34 个测试通过。
-  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent subagent`，14 个相关 Rust 测试通过。
+- P3-A historical lineage implementation correction：
+  - 早期 `SubagentParentContext`、`subagentTimeline`、raw `subagent_status_changed` 和本地 Team runtime 曾作为过渡实现；这些 session-first projection 已由 S6j-S6x 物理删除，不再是 `compat` 或 current owner。
+  - current parent/child lineage 只来自 AgentGraph/AgentIdentity、canonical parent/child Thread、SubAgent Item 与 `thread/list` typed roster；GUI 导航使用 child ThreadId -> sessionId，不从旧 session metadata 或 raw status event恢复。
+  - 原 P3-A 34 个 Renderer 测试和 14 个 Rust 测试只保留为当时历史验证记录，不能作为当前产品证明；current 回归见 S4ad-S4ah 与 S6k-S6x evidence。
 - P3-B Team facts evidence/export 第一刀：
   - 盘点结论：App Server `evidence/export` 的 Basic Evidence Pack 是 P3 后端证据 current owner；前端 Agent UI projection 和 child session 兼容上下文不能替代后端导出事实。
   - `runtime/evidence_provider.rs` 增加 `team_facts` observability summary，从现有 `AgentEvent` 汇总 `team.changed / task.changed / agent.* / agent.handoff / worker.notification / subagent.activity`，输出 parent session、child session、thread、turn、handoff、worker notification、review lane、team phase 和 source event ids。
   - 新增 `runtime/tests/evidence_exports/team_facts.rs`，构造 parent session/thread/turn 下的 team roster、task capsule、handoff、worker notification、review lane 和 worker result artifact，导出 Evidence Pack 后断言 raw events、artifact 和 `observability_summary.team_facts` 均可追溯到同一 parent Thread。
   - `projectThreadFirstBoundary.test.ts` 扩展 P3 守卫，要求 current P3 surface 包含 App Server `team_facts` evidence summary 和对应 evidence export 测试，防止多 Agent 团队事实只停留在前端 projection。
-- P3-B Team facts GUI 恢复第一刀：
-  - 新增 `restoredTeamFactsProjection`，从 parent `childSubagentSessions` / child `subagentParentContext.sibling_subagent_sessions` 构造同构 `subagent_status_changed` Agent UI projection events，让重开 Thread 后 roster、handoff、worker notification 等 Team facts 仍绑定 parent session / thread / turn。
-  - `useTeamWorkspaceRuntime` 接入恢复投影并用 fingerprint 去重，避免每次 render 重复灌 Agent UI projection store；`useWorkspaceTeamSessionRuntime` 和 `AgentChatWorkspace` 只透传已有 `threadRead.thread_id` / `currentTurnId`，不新增 session-first schema。
-  - `projectThreadFirstBoundary.test.ts` 把恢复投影 helper 纳入 P3 守卫，要求恢复链继续写 `root_session_id: parentSessionId`、`parent_session_id: parentSessionId` 和 `threadId: parentThreadId`。
+- P3-B Team facts GUI recovery correction：
+  - `restoredTeamFactsProjection`、`useTeamWorkspaceRuntime` 与 `useWorkspaceTeamSessionRuntime` 已随第二套 Team runtime 删除；禁止从 child session sidecar 重新灌 Agent UI projection store。
+  - cold/live GUI 现在只消费 ThreadStore-backed `agentSession/read`、canonical SubAgent Item 与 `thread/list` child roster；重启恢复不得再合成 `subagent_status_changed`。
 - P3-B 后端 evidence 验证记录：
   - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server export_evidence_pack_includes_multi_agent_team_facts`，1 个 Team facts evidence/export 定向测试通过。
-- P3-B GUI 恢复验证记录：
-  - 通过：`npx vitest run "src/components/agent/chat/team-workspace-runtime/restoredTeamFactsProjection.unit.test.ts" "src/components/agent/chat/hooks/useTeamWorkspaceRuntime.test.tsx" "src/components/agent/chat/workspace/useWorkspaceTeamSessionRuntime.test.tsx"`，3 个文件 / 13 个测试通过。
-  - 通过：`npx vitest run "src/lib/governance/projectThreadFirstBoundary.test.ts"`，P3 回流守卫通过。
-- P3-B 真实 `multi-agent-team` fixture / 用户触发链：
-  - 新增 `scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs`，在现有 Claw current Electron fixture backend 中通过真实 GUI prompt 触发 `subagent_status_changed`、`team.changed`、`task.changed`、`agent.handoff`、`agent.completed`、`worker.notification` 与 `artifact.snapshot`。
-  - `claw-chat-current-fixture-smoke.mjs --scenario multi-agent-team` 已接入 GUI 发送、read model 完成等待和 App Server `evidence/export`，断言 Team facts 绑定 parent `sessionId / threadId / turnId`，且不出现 `subagentHistory / subagentSessionHistory` 这类 Agent-first 历史字段。
-  - 聚合入口 `npm run smoke:agent-runtime-current-fixture` 已纳入 `Claw Multi-Agent Team parent Thread Evidence Pack Electron fixture`，后续主回归会覆盖该场景。
-- P3-B fixture guard 验证记录：
-  - 通过：`node --check "scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs"` 等相关 fixture 脚本语法检查。
-  - 通过：`npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" "scripts/agent-runtime/current-fixture-regression-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept`，2 个脚本守卫文件 / 36 个测试通过。
-- P3-B 真实 Electron 单项 smoke 验证记录：
-  - 通过：`npm run smoke:claw-chat-current-fixture -- --scenario multi-agent-team`，真实 Electron fixture 通过。
-  - 断言通过：`multiAgentTeamPromptReachedBackend`、`guiMultiAgentTeamInputSubmitted`、`guiMultiAgentTeamCompleted`、`readModelMultiAgentTeamCompleted`、`readModelMultiAgentTeamFactsObserved`、`evidencePackMultiAgentTeamExported`、`evidencePackMultiAgentTeamParentThreadBound`、`evidencePackMultiAgentTeamHandoffObserved`、`evidencePackMultiAgentTeamWorkerNotificationObserved`、`evidencePackMultiAgentTeamReviewLaneObserved`、`multiAgentTeamNoAgentFirstHistory`。
-  - GUI 证据显示同一 Thread 中可见“多 Agent 团队已回到同一主线程”，并渲染 worker result artifact；read model 显示 `latestTurnStatus: completed`，包含 team summary 和 subagent status facts，且未出现 `subagentHistory / subagent_history / subagentSessionHistory`。
+- P3-B GUI 恢复验证记录：原 3 文件 / 13 测试对应已删除实现，不再作为 current 门禁；当前使用 canonical SubAgent focused tests、AgentControl visible DOM Gate B 与 Team runtime boundary negative guard。
+- P3-B historical correction / canonical Multi-Agent evidence：
+  - 旧 `multi-agent-team` scenario 只是在 external fixture backend 伪造 `subagent_status_changed`、`team.changed`、`task.changed`、`agent.handoff`、`agent.completed` 与 `worker.notification`，不能证明 RuntimeCore AgentControl、durable graph/mailbox 或 canonical SubAgent Item，因此已判 `dead / deleted / forbidden-to-restore`。
+  - `scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs`、scenario CLI/flow/constants/assertions、read-model/evidence summary 与 regression consumer 已物理删除；聚合 current fixture 不再运行该场景。
+  - current 证据改为 `.lime/qc/s4ah-agent-control-visible-dom-gate-b.json`：六个 AgentControl 工具 runtime 与 visible DOM 均 completed，Started/Interacted/Interrupted SubAgent activity 绑定真实 child Thread，`agentSession/read` 走 `electron-ipc`，console/invoke error 为 0。
+  - remote task 等真实 structured source 的 `worker.notification` 继续保留；本次只删除 synthetic Team producer，不把合法领域事件一并清空。
 - P2-G Automation 真实 fixture Gate B + completion audit 闭环：
   - `smoke:managed-objective-automation` 现在先通过 App Server `agentSession/start` 物化 Automation owner session/thread，再把显式 `session_id / thread_id` 写入 `automationJob/create` 的 `agent_turn` payload；`buildAutomationJobRequest` 缺 lineage 时 fail closed。
   - Automation smoke evidence 继续分成两层：`projectThreadStatus` 证明 Project / Thread lineage、run history、runtime completion 和 `evidence/export`；`status / completionAuditStatus` 代表 Managed Objective completion audit。本轮已用真实 workspace SkillTool invocation 和 artifact 证据把两层同时打到 pass。

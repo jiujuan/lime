@@ -1,7 +1,7 @@
 # Project / Thread-first 产品架构路线图
 
 > 状态：current planning source
-> 更新时间：2026-07-05
+> 更新时间：2026-07-15
 > 主目标：完全对标 Codex 的 `Project / Thread / Turn / Item` 判断，把 Lime 的专家、Skills、插件、子代理、浏览器、自动化等能力都收敛为当前项目和当前对话里的执行能力，避免 Yi-One 早期 `Agent-first` 造成的上下文断流、记忆分裂和会话孤岛。
 
 ## 1. 本路线图回答什么
@@ -83,9 +83,11 @@ Lime 当前主链没有完全踩 Yi-One 的坑：`agentSession` 协议和 memory
 | 插件 / App Center                                           | `compat`     | 插件可以有独立 UI，但 Agent 任务必须绑定 current session / thread / evidence。                                                                         |
 | 插件 `lime.agent.startTask` App Server runtime host         | `current`    | 只允许显式 `workspaceId/projectId/sessionId` 驱动；缺 Project/Thread workspace 时 fail closed，不再自动创建默认项目。                                  |
 | 插件 `agent-runtime/tasks/` 本地 task 投影缓存              | `compat`     | 只用于刷新后恢复 task projection；长期事实源仍必须回到 App Server session/thread/turn/evidence。                                                       |
-| subagent / team session                                     | `compat`     | 允许 child session 作为执行上下文，但必须挂 parent thread lineage，不得进入独立聊天列表。                                                              |
-| canonical SubAgent Thread family / AgentGraph projection    | `current`    | `Thread.parentThreadId / agentState` 与 `CanonicalChildThreadSummary[]` 必须回到 parent Thread 的 timeline、team facts 和 projection。              |
-| Evidence Pack `team_facts`                                  | `current`    | App Server `evidence/export` 汇总 Team facts，证明 roster、handoff、worker notification、review lane 可从 parent session/thread/turn 导出。            |
+| canonical SubAgent Thread family / AgentGraph projection    | `current`    | `Thread.parentThreadId / agentState`、durable identity 与 `CanonicalChildThreadSummary[]` 回到 parent Thread 的 timeline、SubAgent GUI 和 projection。  |
+| AgentControl graph / identity / mailbox                     | `current`    | `spawn_agent`、`list_agents`、`send_message`、`followup_task`、`interrupt_agent`、`wait_agent` 是唯一 Multi-Agent 工具面。                              |
+| Evidence Pack canonical Multi-Agent facts                   | `current`    | `evidence/export` 只汇总 AgentControl、AgentGraph、mailbox、child lifecycle 与 canonical Thread/Turn/Item 的结构化事实。                                |
+| child session roster / parent-session 产品 identity         | `dead`       | Multi-Agent 产品 identity 只认 canonical Thread / AgentGraph；session 只可作为内部 transport identity，不得恢复旧 roster owner。                       |
+| external `multi-agent-team` synthetic events                | `dead`       | 伪造 `team.changed`、`task.changed`、`agent.completed`、`worker.notification` 的 backend scenario 已退役，不得作为 current Electron evidence；remote task 的真实结构化通知不受此分类影响。 |
 | Browser profile / runtime session                           | `compat`     | 只能是工具运行环境或 right surface，不得成为用户任务第一分类。                                                                                         |
 | Automation / workflow job                                   | `compat`     | 可以后台运行，但输出、证据和继续动作必须回到 Project / Thread。                                                                                        |
 | Thread 内 service skill automation draft                    | `current`    | 从 Agent Workspace 当前 Thread 里创建 workflow job；创建前必须物化 session/thread，并把 `session_id / thread_id` 写入 `agent_turn` payload。           |
@@ -152,9 +154,9 @@ Agent / Expert / Skill / Plugin 的正确位置是：
 多 Agent 的价值在于：
 
 1. 分工。
-2. handoff。
-3. review lane。
-4. worker notification。
+2. durable message / followup。
+3. interrupt / wait。
+4. terminal Result 与 review lane。
 5. 工具和策略选择。
 
 不是在首页堆角色卡。
@@ -245,15 +247,16 @@ Agent / Expert / Skill / Plugin 的正确位置是：
 
 工作项：
 
-1. subagent / team roster 统一挂在 parent thread。
-2. handoff / worker notification / review lane 投影为 thread items。
-3. GUI 中多 Agent 状态进入运行控制区和 evidence 层，不抢占导航首层。
+1. canonical child Thread family 与 AgentGraph roster 统一挂在 parent Thread。
+2. 六个 AgentControl 工具只读写 durable graph / identity / mailbox 与 canonical Thread/Turn/Item。
+3. GUI 中 SubAgent activity、terminal Result 和 review lane 进入运行控制区与 evidence 层，不抢占导航首层。
 
 退出条件：
 
-1. Agent Workspace P0 `multi-agent-team` evidence 证明 team facts 可见、可恢复、可导出。
+1. `agent-control-tools` current Gate B 证明六工具、durable child/tree/mailbox/terminal Result 与 Evidence Pack 闭环。
 2. 没有独立的“子 Agent 会话历史列表”绕开 parent thread。
 3. 已完成 canonical Thread family 恢复：`thread/list|read` join AgentGraph/identity 后生成 `CanonicalChildThreadSummary[]`，同构 Agent UI SubAgent projection 绑定 parent thread、child thread/session 与来源 turn item。
+4. 完整 visible-DOM + cold restart GUI 证据证明 roster、activity、interrupt 与 wait terminal Result 可见且可恢复。
 
 ## 8. P0 回归场景
 
@@ -299,10 +302,10 @@ npm run test:rust:related -- lime-rs/crates/app-server lime-rs/crates/core
 
 ## 11. 下一刀
 
-P3-B 的 `multi-agent-team` fixture 已通过真实 Electron 单项 smoke；P2 的 Skills、插件、Browser right surface 和 Automation 真实入口也已各有 Gate B fixture 证据。Managed Objective completion audit 已由真实 workspace SkillTool invocation + artifact 产出打到 pass，下一刀不再围绕 Automation 补洞，应优先处理 `agent-runtime/tasks/` compat task projection cache 的长期事实源归属，或把 Team GUI 恢复并入更重 GUI smoke。
+P3-B 的六个 AgentControl 工具已通过真实 Electron managed Gate B；旧 external `multi-agent-team` fixture 只产生 synthetic Team events，已从 current evidence 退役。P2 的 Skills、插件、Browser right surface 和 Automation 真实入口也已各有 Gate B fixture 证据。Managed Objective completion audit 已由真实 workspace SkillTool invocation + artifact 产出打到 pass，下一刀不再围绕 Automation 补洞，应优先给 canonical SubAgent GUI 补完整 visible-DOM + cold restart 证据，或处理 `agent-runtime/tasks/` compat task projection cache 的长期事实源归属。
 
 1. Automation：`npm run smoke:managed-objective-automation -- --timeout-ms 180000` 已通过 ProjectThread Gate B 和 Managed Objective completion audit；证据 `.lime/qc/managed-objective-automation-smoke.json` 显示 `status: "pass"`、`projectThreadStatus: "pass"`、`completionAuditStatus: "pass"`、latest run `status: "success"`、Evidence Pack `latestTurnStatus: "completed"`、`workspaceSkillToolCallCount: 1`、`artifactCount: 1`、`decision: "completed"`。
 2. Browser：`right-surface-visual-matrix` 已通过 `npm run smoke:claw-chat-current-fixture -- --scenario right-surface-visual-matrix --timeout-ms 180000`；证据在 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`，五类 right surface 均通过 App Server pending -> toolbar -> right surface 打开，`pendingAfterClicks.count = 0`。
-3. P3-B：多 Agent 团队已有真实 Electron 单项 smoke 证据，可继续把重开 Thread 后的 Team 状态恢复并入更重 GUI smoke，但不再阻塞 P3-B 当前闭环。
+3. P3-B：`.lime/qc/s4ae-agent-control-tools-gate-b-final.json` 与 S2o3 rerun 均为 `pass`、15/15 assertions，六工具全部 completed；该 managed batch 未包含完整 visible-DOM 断言，因此运行主链已闭环，GUI 深水位证据仍待补。
 
-这一步直接服务主线：P1 已封住专家 Agent-first 回流；P2 已完成 Skills、插件、Browser、Automation 的第一批入口收口、后端 evidence/export 证据、真实 fixture Gate B 和 Managed Objective audit 闭环；P3-A 已封住子代理 parent thread lineage，P3-B 后端 `team_facts`、前端恢复第一刀和真实 `multi-agent-team` Electron smoke 均已证明团队事实能回到 parent Thread。剩余高杠杆问题集中在 compat task projection cache 与更重 GUI 恢复验证，不再是 Automation completion audit。
+这一步直接服务主线：P1 已封住专家 Agent-first 回流；P2 已完成 Skills、插件、Browser、Automation 的第一批入口收口、后端 evidence/export 证据、真实 fixture Gate B 和 Managed Objective audit 闭环；P3-A 已封住 canonical parent Thread lineage，P3-B 已由六工具、AgentGraph/identity/mailbox、canonical Thread/Turn/Item/SubAgent projection 证明运行事实能回到 parent Thread。剩余高杠杆问题集中在 canonical SubAgent visible-DOM/cold restart 与 compat task projection cache，不再是 synthetic Team scenario 或 Automation completion audit。

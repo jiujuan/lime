@@ -4,17 +4,13 @@ import {
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_START,
-  APP_SERVER_METHOD_SESSION_TURN_START,
   APP_SERVER_METHOD_SESSION_UPDATE,
   APP_SERVER_METHOD_WORKFLOW_CANCEL,
   APP_SERVER_METHOD_WORKFLOW_READ,
-  APP_SERVER_METHOD_WORKFLOW_RESPOND,
   APP_SERVER_METHOD_WORKFLOW_RETRY,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_THREAD_ID,
@@ -26,9 +22,6 @@ import {
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
   FIXTURE_MODEL,
@@ -244,33 +237,6 @@ export async function runContentFactoryArticleWorkspaceScenario({
     const workflowReadSummary = summarizeContentFactoryWorkflowRead(
       workflowRead.result,
     );
-    const workflowRespond = await invokeAppServerFromPage(
-      page,
-      APP_SERVER_METHOD_WORKFLOW_RESPOND,
-      {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        workflowRunId:
-          CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
-        stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
-        requestId:
-          CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
-        confirmed: false,
-        response: {
-          answer: "暂不进入交付检查",
-        },
-      },
-      appServerRequests,
-    );
-    const workflowRespondSummary = summarizeContentFactoryWorkflowControl(
-      workflowRespond.result,
-      {
-        workflowRunId:
-          CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
-        stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
-        requestId:
-          CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
-      },
-    );
     const workflowCancel = await invokeAppServerFromPage(
       page,
       APP_SERVER_METHOD_WORKFLOW_CANCEL,
@@ -308,13 +274,6 @@ export async function runContentFactoryArticleWorkspaceScenario({
         stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
       },
     );
-    const runtimeContractRejection = await runRuntimeContractRejectionProbe({
-      page,
-      workspace,
-      options,
-      requestLog: appServerRequests,
-    });
-
     return sanitizeJson({
       contentFactoryArticleWorkspaceSessionCreation: sessionCreation,
       contentFactoryArticleWorkspaceInstalledStateSave: installedStateSave,
@@ -323,8 +282,6 @@ export async function runContentFactoryArticleWorkspaceScenario({
       contentFactoryArticleWorkspaceWorkerTurnStart: workerTurnStart,
       contentFactoryArticleWorkspaceWorkerHostGenerationFixture:
         hostGenerationFixture.summary(),
-      contentFactoryArticleWorkspaceRuntimeContractRejection:
-        runtimeContractRejection,
       contentFactoryArticleWorkspaceActionResultRuntimeEventsAppend:
         summarizeRuntimeEventsAppend(actionResultRuntimeEventsAppend.result),
       contentFactoryArticleWorkspaceRightSurfaceRequest:
@@ -350,7 +307,6 @@ export async function runContentFactoryArticleWorkspaceScenario({
       contentFactoryArticleWorkspaceReadModel: readModelSummary,
       contentFactoryArticleWorkspaceArtifactRead: artifactReadSummary,
       contentFactoryArticleWorkspaceWorkflowRead: workflowReadSummary,
-      contentFactoryArticleWorkspaceWorkflowRespond: workflowRespondSummary,
       contentFactoryArticleWorkspaceWorkflowCancel: workflowCancelSummary,
       contentFactoryArticleWorkspaceWorkflowRetry: workflowRetrySummary,
     });
@@ -1000,45 +956,6 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
               CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID,
             actionType: "ask_user",
             progressMessage: "等待用户确认文章可进入交付检查",
-          },
-        },
-        {
-          type: "action.required",
-          payload: {
-            requestId:
-              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
-            actionType: "ask_user",
-            prompt: "请确认是否进入交付检查",
-          },
-        },
-        {
-          type: "workflow.run.started",
-          payload: {
-            workflowRunId:
-              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
-            workflowKey: "content_article_workflow",
-            workflowTitle: "内容工厂响应控制验证",
-            appId: CONTENT_FACTORY_APP_ID,
-            sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-            workspaceId: workspace.workspaceId,
-            taskId: "article_respond_job_1",
-            taskKind: "content.article.generate",
-            status: "running",
-            sourceKind: "plugin_worker",
-            steps: [
-              {
-                stepId:
-                  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
-                stepTitle: "响应人工复核",
-                stepIndex: 0,
-                stepCount: 1,
-                status: "waiting",
-                requestId:
-                  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
-                actionType: "ask_user",
-                progressMessage: "等待用户决定是否继续交付",
-              },
-            ],
           },
         },
         {
@@ -1737,143 +1654,6 @@ async function selectContentFactoryArticleWorkspaceObject(
   );
 }
 
-async function runRuntimeContractRejectionProbe({
-  page,
-  workspace,
-  options,
-  requestLog,
-}) {
-  const response = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_SESSION_TURN_START,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID,
-      input: {
-        text: "尝试运行 outputArtifactKind 不匹配的 Article Editor action。",
-      },
-      runtimeOptions: {
-        metadata: {
-          plugin: {
-            source: "right_surface_article_workspace",
-            app_id: CONTENT_FACTORY_APP_ID,
-            workspace_id: workspace.workspaceId,
-            article_workspace_action: {
-              key: "contract_mismatch",
-              intent: "regenerate",
-              risk: "write",
-              task_kind: "content.image.generate",
-              output_artifact_kind: "other.workspace_patch",
-              prompt: "Regenerate with a mismatched output artifact kind.",
-              object: {
-                app_id: CONTENT_FACTORY_APP_ID,
-                kind: "imageGenerationSet",
-                id: "image-set-contract-mismatch",
-                session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-                artifact_ids: ["artifact-contract-mismatch-1"],
-              },
-            },
-          },
-          right_surface: {
-            surface_kind: "articleWorkspace",
-            source: "article_workspace",
-            action_key: "contract_mismatch",
-          },
-        },
-      },
-      queueIfBusy: false,
-      skipPreSubmitResume: true,
-    },
-    requestLog,
-  );
-
-  const events = response.messages
-    .filter((message) => message?.method === "agentSession/event")
-    .map((message) => message?.params?.event)
-    .filter(Boolean);
-  const payloads = events.map((event) => event?.payload ?? {});
-  const runtimeErrorPayload =
-    payloads.find(
-      (payload) =>
-        readString(payload?.errorCode, payload?.error_code) ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE,
-    ) ?? {};
-  const turn =
-    response.result?.turn && typeof response.result.turn === "object"
-      ? response.result.turn
-      : {};
-  const readModelRejection = await waitForRuntimeContractRejectionReadModel(
-    page,
-    options,
-    requestLog,
-  );
-
-  return sanitizeJson({
-    method: APP_SERVER_METHOD_SESSION_TURN_START,
-    turnId: turn.turnId ?? turn.turn_id ?? null,
-    turnStatus: turn.status ?? null,
-    eventTypes: events.map((event) => readString(event?.type)).filter(Boolean),
-    errorCode:
-      readString(
-        runtimeErrorPayload.errorCode,
-        runtimeErrorPayload.error_code,
-      ) || readModelRejection.errorCode,
-    failureCategory:
-      readString(
-        runtimeErrorPayload.failureCategory,
-        runtimeErrorPayload.failure_category,
-      ) || readModelRejection.failureCategory,
-    appId:
-      readString(runtimeErrorPayload.appId, runtimeErrorPayload.app_id) ||
-      readModelRejection.appId,
-    outputArtifactKind:
-      readString(
-        runtimeErrorPayload.outputArtifactKind,
-        runtimeErrorPayload.output_artifact_kind,
-      ) || readModelRejection.outputArtifactKind,
-    readModel: readModelRejection,
-    hasRuntimeError: events.some((event) => event?.type === "runtime.error"),
-    hasTurnFailed: events.some((event) => event?.type === "turn.failed"),
-  });
-}
-
-async function waitForRuntimeContractRejectionReadModel(
-  page,
-  options,
-  requestLog,
-) {
-  const startedAt = Date.now();
-  let lastSummary = null;
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const readModel = await invokeAppServerFromPage(
-      page,
-      APP_SERVER_METHOD_SESSION_READ,
-      {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        historyLimit: 20,
-      },
-      requestLog,
-    );
-    const summary = summarizeRuntimeContractRejectionReadModel(
-      readModel.result,
-    );
-    lastSummary = summary;
-    if (
-      summary.errorCode ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE &&
-      summary.status === "failed"
-    ) {
-      return summary;
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error(
-    `Plugin runtime contract 拒绝证据未进入 read model: ${JSON.stringify(
-      sanitizeJson(lastSummary),
-    )}`,
-  );
-}
-
 function summarizeRuntimeEventsAppend(result) {
   const events = Array.isArray(result?.events) ? result.events : [];
   return sanitizeJson({
@@ -2423,45 +2203,6 @@ function summarizeArticleRefRecord(ref) {
     sourceTurnId: readString(ref.sourceTurnId, ref.source_turn_id),
     sourceTaskId: readString(ref.sourceTaskId, ref.source_task_id),
     version: readString(ref.version),
-  });
-}
-
-function summarizeRuntimeContractRejectionReadModel(result) {
-  const detail = asRecord(result?.detail) ?? asRecord(result);
-  const threadRead =
-    asRecord(detail?.threadRead) ?? asRecord(detail?.thread_read) ?? {};
-  const articleWorkspace =
-    asRecord(threadRead.articleWorkspace) ??
-    asRecord(threadRead.article_workspace) ??
-    asRecord(detail?.articleWorkspace) ??
-    asRecord(detail?.article_workspace) ??
-    {};
-  const workerEvidence = readArray(
-    articleWorkspace.workerEvidence,
-    articleWorkspace.worker_evidence,
-  );
-  const rejectionEvidence = workerEvidence.find(
-    (evidence) =>
-      readString(evidence?.errorCode, evidence?.error_code) ===
-      CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE,
-  );
-  return sanitizeJson({
-    status: readString(rejectionEvidence?.status),
-    appId: readString(rejectionEvidence?.appId, rejectionEvidence?.app_id),
-    taskId: readString(rejectionEvidence?.taskId, rejectionEvidence?.task_id),
-    turnId: readString(rejectionEvidence?.turnId, rejectionEvidence?.turn_id),
-    errorCode: readString(
-      rejectionEvidence?.errorCode,
-      rejectionEvidence?.error_code,
-    ),
-    failureCategory: readString(
-      rejectionEvidence?.failureCategory,
-      rejectionEvidence?.failure_category,
-    ),
-    outputArtifactKind: readString(
-      rejectionEvidence?.outputArtifactKind,
-      rejectionEvidence?.output_artifact_kind,
-    ),
   });
 }
 

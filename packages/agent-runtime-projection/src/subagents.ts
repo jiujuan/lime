@@ -83,7 +83,11 @@ function collaborationForEvent(
       "collaborationKind",
       "collaboration_kind",
     ),
-    surface: payloadString(event, "collaborationSurface", "collaboration_surface"),
+    surface: payloadString(
+      event,
+      "collaborationSurface",
+      "collaboration_surface",
+    ),
     phase:
       event.phase ??
       payloadString(event, "collaborationPhase", "collaboration_phase"),
@@ -97,7 +101,7 @@ function collaborationForEvent(
     ),
     taskId: event.taskId ?? payloadString(event, "taskId", "task_id"),
     agentId: event.subagentId ?? event.workerId,
-    parentSessionId: parentThreadId(event),
+    parentThreadId: parentThreadId(event),
     transcriptRef: payloadString(event, "transcriptRef", "transcript_ref"),
     handoffId: event.handoffId,
     metadata,
@@ -142,13 +146,7 @@ function subagentThreadId(
 
 function parentThreadId(event: AgentRuntimeExecutionEvent): string | undefined {
   return (
-    payloadString(
-      event,
-      "parentThreadId",
-      "parent_thread_id",
-      "parentSessionId",
-      "parent_session_id",
-    ) ?? event.threadId
+    payloadString(event, "parentThreadId", "parent_thread_id") ?? event.threadId
   );
 }
 

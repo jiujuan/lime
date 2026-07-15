@@ -3,7 +3,7 @@ import type {
   AgentRuntimeToolInventoryCatalogEntry,
   AgentRuntimeToolInventoryNativeEntry,
   AgentRuntimeToolInventoryRuntimeEntry,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type {
   HarnessActiveFileWrite,
   HarnessFileEvent,

@@ -36,7 +36,7 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
                 "team.changed",
                 json!({
                     "teamEvent": "teammate_status_changed",
-                    "parentSessionId": "sess_team_evidence",
+                    "parentThreadId": "thread_team_evidence",
                     "childSessionId": "child-researcher",
                     "status": "running",
                     "teamPhase": "queued",
@@ -51,7 +51,7 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
                     "taskEvent": "team_control",
                     "taskId": "child-researcher",
                     "agentId": "child-researcher",
-                    "parentSessionId": "sess_team_evidence",
+                    "parentThreadId": "thread_team_evidence",
                     "runtimeEntity": "subagent_turn",
                     "runtimeStatus": "running",
                     "latestTurnStatus": "queued"
@@ -61,7 +61,7 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
                 "agent.handoff",
                 json!({
                     "handoffId": "sess_team_evidence:handoff:child-researcher",
-                    "parentSessionId": "sess_team_evidence",
+                    "parentThreadId": "thread_team_evidence",
                     "childSessionId": "child-researcher",
                     "status": "accepted",
                     "from": "sess_team_evidence",
@@ -75,7 +75,7 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
                 json!({
                     "workerNotificationId": "child-researcher:completed",
                     "notificationKind": "worker_completed",
-                    "parentSessionId": "sess_team_evidence",
+                    "parentThreadId": "thread_team_evidence",
                     "childSessionId": "child-researcher",
                     "status": "completed",
                     "resultRef": "artifact://team/worker-result",
@@ -89,7 +89,7 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
                     "surface": "review_lane",
                     "reviewId": "review-team-1",
                     "workItemId": "review-team-1",
-                    "parentSessionId": "sess_team_evidence",
+                    "parentThreadId": "thread_team_evidence",
                     "childSessionId": "child-reviewer",
                     "runtimeEntity": "work_item",
                     "runtimeStatus": "waiting"
@@ -102,7 +102,7 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
                     "path": ".lime/artifacts/team/worker-result.json",
                     "kind": "team_worker_result",
                     "metadata": {
-                        "parentSessionId": "sess_team_evidence",
+                        "parentThreadId": "thread_team_evidence",
                         "childSessionId": "child-researcher",
                         "threadId": "thread_team_evidence",
                         "turnId": "turn_team_evidence"
@@ -131,7 +131,7 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
             && event.session_id == "sess_team_evidence"
             && event.thread_id.as_deref() == Some("thread_team_evidence")
             && event.turn_id.as_deref() == Some("turn_team_evidence")
-            && event.payload["parentSessionId"] == "sess_team_evidence"
+            && event.payload["parentThreadId"] == "thread_team_evidence"
             && event.payload["childSessionId"] == "child-researcher"
     }));
     assert!(response.events.iter().any(|event| {
@@ -161,7 +161,7 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
     assert_eq!(team_facts["handoffCount"], json!(1));
     assert_eq!(team_facts["workerNotificationCount"], json!(1));
     assert_eq!(team_facts["reviewLaneCount"], json!(1));
-    assert_json_array_contains(&team_facts, "parentSessionIds", "sess_team_evidence");
+    assert_json_array_contains(&team_facts, "parentThreadIds", "thread_team_evidence");
     assert_json_array_contains(&team_facts, "childSessionIds", "child-researcher");
     assert_json_array_contains(&team_facts, "childSessionIds", "child-reviewer");
     assert_json_array_contains(&team_facts, "threadIds", "thread_team_evidence");

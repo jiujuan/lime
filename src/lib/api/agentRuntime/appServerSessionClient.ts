@@ -8,17 +8,19 @@ import {
   type AppServerBusinessObjectRef,
 } from "@/lib/api/appServer";
 import { METHOD_AGENT_SESSION_LIST } from "../../../../packages/app-server-client/src/protocol";
+import type { AgentExecutionStrategy } from "../agentExecutionRuntime";
 import type { AgentThreadTurn, AgentThreadTurnStatus } from "../agentProtocol";
 import { projectAppServerSessionReadToThreadReadModel } from "./appServerReadModelProjection";
 import type {
-  AgentExecutionStrategy,
-  AgentSessionDetail,
-  AgentSessionInfo,
   AgentRuntimeCreateSessionOptions,
   AgentRuntimeGetSessionOptions,
-  AgentRuntimeListSessionsOptions,
   AgentRuntimeUpdateSessionRequest,
-} from "./types";
+} from "./requestTypes";
+import type {
+  AgentSessionDetail,
+  AgentSessionInfo,
+  AgentRuntimeListSessionsOptions,
+} from "./sessionTypes";
 import { projectCanonicalApprovalItem } from "./canonicalApprovalItemProjection";
 
 const DEFAULT_APP_ID = "desktop";
@@ -126,10 +128,13 @@ export function createAppServerSessionClient({
     if (!readResponse) {
       throw new Error("agentSession/read did not return session detail");
     }
-    return (
-      readSessionDetail(readResponse) ??
-      appServerSessionReadToRuntimeDetail(readResponse)
-    );
+    const detail = readSessionDetail(readResponse);
+    if (!detail) {
+      throw new Error(
+        "agentSession/read did not return canonical session detail",
+      );
+    }
+    return detail;
   }
 
   async function updateAgentRuntimeSession(
@@ -733,9 +738,7 @@ function readSessionDetail(
   if (!isRecord(response.detail)) {
     return null;
   }
-  const detail = omitLegacyRosterFields(
-    response.detail as Partial<AgentSessionDetail>,
-  );
+  const detail = response.detail as Partial<AgentSessionDetail>;
   const fallback = appServerSessionReadToRuntimeDetail(response);
   const detailExecutionRuntime = isRecord(detail.execution_runtime)
     ? detail.execution_runtime
@@ -793,16 +796,6 @@ function readSessionDetail(
       ? detail.todo_items
       : fallback.todo_items,
   };
-}
-
-function omitLegacyRosterFields(
-  detail: Partial<AgentSessionDetail>,
-): Partial<AgentSessionDetail> {
-  const current = { ...detail } as Partial<AgentSessionDetail> &
-    Record<string, unknown>;
-  delete current["child_subagent_sessions"];
-  delete current["subagent_parent_context"];
-  return current;
 }
 
 function mergeThreadReadDetail(

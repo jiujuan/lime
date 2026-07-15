@@ -607,9 +607,7 @@ function buildAgentControlFixtureResponse(context) {
     };
   }
 
-  const calledTools = new Set(
-    requestToolCallNamesFromFixtureContext(context),
-  );
+  const calledTools = new Set(requestToolCallNamesFromFixtureContext(context));
   if (!calledTools.has("spawn_agent")) {
     return toolCall("spawn_agent", "call-tool-exec-spawn-agent", {
       task_name: "tool_smoke_child",
@@ -1520,33 +1518,24 @@ function getToolCalls(threadRead) {
     : Array.isArray(threadRead?.threadItems)
       ? threadRead.threadItems
       : [];
-  const collabOperationToToolName = {
-    spawn: "spawn_agent",
-    sendMessage: "send_message",
-    followUp: "followup_task",
-    wait: "wait_agent",
-    interrupt: "interrupt_agent",
-  };
   const seenCallIds = new Set(
     toolCalls
       .map((call) => String(call?.call_id || call?.callId || "").trim())
       .filter(Boolean),
   );
-  const canonicalCollabCalls = threadItems.flatMap((item) => {
-    const operation = String(
-      item?.operation ||
-        (item?.type === "subagent_activity" ? item?.status_label : "") ||
-        "",
-    ).trim();
-    const toolName = collabOperationToToolName[operation];
+  const canonicalToolCalls = threadItems.flatMap((item) => {
+    if (item?.type !== "tool_call") {
+      return [];
+    }
+    const canonicalToolName = toolName(item);
     const callId = String(item?.call_id || item?.callId || "").trim();
-    if (!toolName || !callId || seenCallIds.has(callId)) {
+    if (!canonicalToolName || !callId || seenCallIds.has(callId)) {
       return [];
     }
     seenCallIds.add(callId);
     return [
       {
-        tool_name: toolName,
+        tool_name: canonicalToolName,
         call_id: callId,
         status: item?.status,
         success: item?.metadata?.success ?? null,
@@ -1554,7 +1543,7 @@ function getToolCalls(threadRead) {
       },
     ];
   });
-  return [...toolCalls, ...canonicalCollabCalls];
+  return [...toolCalls, ...canonicalToolCalls];
 }
 
 function toolName(toolCall) {
@@ -2304,7 +2293,7 @@ async function runSmoke(options) {
         verifiesRuntimeInventoryTools: true,
         verifiesRuntimeToolExecution: true,
         verifiesEvidencePack: true,
-        usesCompatToolInventoryCommand: true,
+        usesAppServerToolInventoryCurrent: true,
         usesAppServerEvidenceExportCurrent: true,
         batchId: scenario.id,
         targetTools,

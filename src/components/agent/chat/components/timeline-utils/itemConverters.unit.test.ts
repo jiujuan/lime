@@ -309,6 +309,42 @@ describe("timeline item converters", () => {
     });
   });
 
+  it.each([
+    ["approved", "allow_once", "approved_once"],
+    ["approvedForSession", "allow_for_session", "approved_for_session"],
+    ["denied", "decline", "declined"],
+    ["timedOut", "expired", "expired"],
+    ["abort", "cancel", "cancelled"],
+  ] as const)(
+    "approval_request 应在 GUI 边界映射 canonical decision %s",
+    (wireDecision, decision, status) => {
+      const item: Extract<AgentThreadItem, { type: "approval_request" }> = {
+        id: `approval-canonical-${wireDecision}`,
+        thread_id: "thread-approval-canonical",
+        turn_id: "turn-approval-canonical",
+        sequence: 11,
+        type: "approval_request",
+        status: "completed",
+        request_id: `approval-canonical-${wireDecision}`,
+        action_type: "tool_confirmation",
+        response: {
+          decision: wireDecision,
+          decision_scope: "session",
+          reason_code: "user_decision",
+        },
+        started_at: "2026-06-21T13:10:00.000Z",
+        completed_at: "2026-06-21T13:10:01.000Z",
+        updated_at: "2026-06-21T13:10:01.000Z",
+      };
+
+      expect(toApprovalRecordFromThreadItem(item)).toMatchObject({
+        decision,
+        status,
+        decisionScope: "session",
+      });
+    },
+  );
+
   it("approval_request 在 full-access 策略下不生成只读记录", () => {
     const baseItem: Extract<AgentThreadItem, { type: "approval_request" }> = {
       id: "approval-full-access",

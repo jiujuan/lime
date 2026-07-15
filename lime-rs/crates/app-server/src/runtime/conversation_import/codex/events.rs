@@ -3,15 +3,16 @@ use app_server_protocol::{ConversationImportSourceClient, ConversationImportSour
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
+mod plan;
 #[cfg(test)]
 mod tests;
 mod tool_draft;
 
+use plan::{completed_plan_event, plan_final_from_response_item};
 use tool_draft::{
     completed_turn_item_tool_event, imported_tool_started, imported_tool_terminal,
     response_item_web_search_event, tool_finish_events_from_response_item,
-    tool_finished_from_response_item, tool_start_events_from_response_item,
-    tool_started_from_response_item,
+    tool_start_events_from_response_item,
 };
 pub(in crate::runtime::conversation_import) use tool_draft::{
     ImportedRuntimeEvent, ImportedToolDraft, ImportedToolPhase, ImportedToolSource,
@@ -29,8 +30,6 @@ pub(super) fn response_item_runtime_events(
         Some("function_call_output") => tool_finish_events_from_response_item(payload, false),
         Some("custom_tool_call") => tool_start_events_from_response_item(payload),
         Some("custom_tool_call_output") => tool_finish_events_from_response_item(payload, false),
-        Some("tool_search_call") => vec![tool_started_from_response_item(payload)],
-        Some("tool_search_output") => vec![tool_finished_from_response_item(payload, false)],
         Some("web_search_call") => response_item_web_search_event(payload)
             .into_iter()
             .collect(),
@@ -195,31 +194,6 @@ fn response_item_reasoning_event(payload: &Value) -> Option<ImportedRuntimeEvent
     ))
 }
 
-fn plan_final_from_response_item(payload: &Value) -> Option<ImportedRuntimeEvent> {
-    let arguments = parsed_arguments(payload)?;
-    let plan = plan_steps(&arguments);
-    if plan.is_empty() {
-        return None;
-    }
-    let text = plan_markdown(&plan);
-    Some(ImportedRuntimeEvent::new(
-        "plan.final",
-        compact_json(json!({
-            "planId": call_id(payload),
-            "toolCallId": call_id(payload),
-            "toolName": "update_plan",
-            "name": "update_plan",
-            "status": "completed",
-            "text": text,
-            "explanation": string_field(&arguments, &["explanation"]),
-            "plan": plan,
-            "arguments": arguments,
-            "sourceClient": "codex",
-            "sourceEventType": payload.get("type").and_then(Value::as_str),
-        })),
-    ))
-}
-
 fn item_completed_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
     let item = payload.get("item")?;
     if !item
@@ -229,21 +203,7 @@ fn item_completed_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
     {
         return completed_turn_item_tool_event(payload);
     }
-    let item_id = string_field(item, &["id"])?;
-    let text = string_field(item, &["text"])?;
-    Some(ImportedRuntimeEvent::new(
-        "plan.final",
-        compact_json(json!({
-            "itemId": item_id,
-            "planId": item_id,
-            "revisionId": item_id,
-            "sourceItemId": item_id,
-            "status": "completed",
-            "text": text,
-            "sourceClient": "codex",
-            "sourceEventType": "item_completed",
-        })),
-    ))
+    completed_plan_event(item)
 }
 
 fn mcp_tool_call_begin_event(payload: &Value) -> ImportedRuntimeEvent {
@@ -854,50 +814,6 @@ fn collab_tool_output(payload: &Value) -> Option<String> {
         .or_else(|| payload.get("status").map(Value::to_string))
 }
 
-fn plan_steps(arguments: &Value) -> Vec<Value> {
-    arguments
-        .get("plan")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|item| {
-            let step = string_field(item, &["step"])?;
-            let status = plan_step_status(item)?;
-            Some(json!({
-                "step": step,
-                "status": status,
-            }))
-        })
-        .collect()
-}
-
-fn plan_step_status(item: &Value) -> Option<&'static str> {
-    match item.get("status").and_then(Value::as_str)?.trim() {
-        "pending" => Some("pending"),
-        "in_progress" | "in-progress" | "inProgress" => Some("in_progress"),
-        "completed" => Some("completed"),
-        _ => None,
-    }
-}
-
-fn plan_markdown(plan: &[Value]) -> String {
-    plan.iter()
-        .filter_map(|item| {
-            let step = item.get("step").and_then(Value::as_str)?.trim();
-            if step.is_empty() {
-                return None;
-            }
-            let status = item
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("pending");
-            let marker = if status == "completed" { "[x]" } else { "[ ]" };
-            Some(format!("- {marker} {step}"))
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 fn call_id(payload: &Value) -> Option<String> {
     string_field(
         payload,
@@ -918,9 +834,6 @@ fn tool_name(payload: &Value) -> Option<String> {
         match payload.get("type").and_then(Value::as_str) {
             Some("function_call") => string_field(payload, &["name"]),
             Some("custom_tool_call") => string_field(payload, &["name"]),
-            Some("tool_search_call") | Some("tool_search_output") => {
-                Some("tool_search".to_string())
-            }
             Some("web_search_call") => Some("web_search".to_string()),
             _ => None,
         }

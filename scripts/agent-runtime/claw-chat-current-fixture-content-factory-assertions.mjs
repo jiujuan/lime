@@ -19,9 +19,6 @@ import {
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
@@ -36,25 +33,17 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
   const readModel = summary.contentFactoryArticleWorkspaceReadModel ?? {};
   const artifactRead = summary.contentFactoryArticleWorkspaceArtifactRead ?? {};
   const workflowRead = summary.contentFactoryArticleWorkspaceWorkflowRead ?? {};
-  const workflowRespond =
-    summary.contentFactoryArticleWorkspaceWorkflowRespond ?? {};
   const workflowCancel =
     summary.contentFactoryArticleWorkspaceWorkflowCancel ?? {};
   const workflowRetry =
     summary.contentFactoryArticleWorkspaceWorkflowRetry ?? {};
   const storyboardRendererContract =
     readModel.storyboardArtifact?.rendererContract ?? {};
-  const runtimeContractRejection =
-    summary.contentFactoryArticleWorkspaceRuntimeContractRejection ?? {};
-
   return {
     contentFactoryArticleWorkspaceRuntimeEventsAppended:
       appServerRequestMethods.includes(
         APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
       ) &&
-      summary.contentFactoryArticleWorkspaceRuntimeEventsAppend?.eventTypes?.includes(
-        "action.required",
-      ) === true &&
       summary.contentFactoryArticleWorkspaceRuntimeEventsAppend?.eventTypes?.includes(
         "artifact.snapshot",
       ) === true &&
@@ -136,25 +125,10 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       workflowRead.waitingStep?.requestId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID &&
       workflowRead.waitingStep?.agentActionType === "ask_user" &&
-      workflowRead.respondAction?.actionType === "respond" &&
-      workflowRead.respondAction?.stepId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID &&
-      workflowRead.respondAction?.requestId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID &&
-      workflowRead.respondAction?.agentActionType === "ask_user",
-    contentFactoryArticleWorkspaceWorkflowRespondProjected:
-      appServerRequestMethods.includes(APP_SERVER_METHOD_WORKFLOW_RESPOND) &&
-      workflowRespond.sessionId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
-      workflowRespond.run?.workflowRunId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID &&
-      workflowRespond.run?.status === "running" &&
-      workflowRespond.step?.stepId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID &&
-      workflowRespond.step?.status === "running" &&
-      workflowRespond.step?.requestId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID &&
-      workflowRespond.step?.agentActionType === "ask_user",
+      workflowRead.respondAction == null,
+    contentFactoryArticleWorkspaceWorkflowRespondHiddenWithoutPendingAction:
+      !appServerRequestMethods.includes(APP_SERVER_METHOD_WORKFLOW_RESPOND) &&
+      workflowRead.respondAction == null,
     contentFactoryArticleWorkspaceWorkflowCancelProjected:
       appServerRequestMethods.includes(APP_SERVER_METHOD_WORKFLOW_CANCEL) &&
       workflowCancel.sessionId ===
@@ -402,16 +376,6 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       storyboardRendererContract.allowedOutputArtifactKinds?.includes(
         "content_factory.workspace_patch",
       ) === true,
-    contentFactoryArticleWorkspaceRuntimeContractFailClosed:
-      appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) &&
-      runtimeContractRejection.turnStatus === "accepted" &&
-      runtimeContractRejection.appId === "content-factory-app" &&
-      runtimeContractRejection.errorCode ===
-        "PLUGIN_WORKER_CONTRACT_UNSUPPORTED" &&
-      runtimeContractRejection.failureCategory === "configuration" &&
-      runtimeContractRejection.readModel?.status === "failed" &&
-      runtimeContractRejection.readModel?.errorCode ===
-        "PLUGIN_WORKER_CONTRACT_UNSUPPORTED",
     contentFactoryArticleWorkspaceDoesNotUseModelTurn: backendLedger.every(
       (entry) => entry.kind !== "turnStart",
     ),

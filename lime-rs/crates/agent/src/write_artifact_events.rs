@@ -69,7 +69,7 @@ impl WriteArtifactEventEmitter {
                 };
                 self.handle_tool_start(name, call_id, arguments)
             }
-            RuntimeAgentEvent::TextDelta { text } => self.handle_text_delta(text),
+            RuntimeAgentEvent::TextDelta { text, .. } => self.handle_text_delta(text),
             RuntimeAgentEvent::ItemCompleted { item } => self.handle_tool_completed(item),
             _ => Vec::new(),
         }
@@ -999,9 +999,11 @@ mod tests {
     fn text_delta_write_file_stream_emits_incremental_snapshots() {
         let mut emitter = WriteArtifactEventEmitter::new("session-1");
         let mut first = RuntimeAgentEvent::TextDelta {
+            item_id: "text-1".to_string(),
             text: "开始 <write_file path=\"notes/demo.md\">Hello".to_string(),
         };
         let mut second = RuntimeAgentEvent::TextDelta {
+            item_id: "text-1".to_string(),
             text: " world</write_file> 完成".to_string(),
         };
 

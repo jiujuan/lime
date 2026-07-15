@@ -3218,8 +3218,8 @@ const checks = [
       'APP_SERVER_BACKEND_MODE: "external"',
       "APP_SERVER_BACKEND_COMMAND: process.execPath",
       "writeFixtureBackend(",
-      "readJsonl(runtimeEnv.backendLedgerPath)",
-      "writeJsonFile(backendLedgerEvidencePath",
+      "function persistBackendLedgerEvidence(",
+      "writeJsonFile(evidencePath",
       'LIME_ELECTRON_DEV_HTTP_BRIDGE: "0"',
       "window.__LIME_ELECTRON__ === true",
       "window.electronAPI.supportsCommand",
@@ -8401,14 +8401,23 @@ function checkRetiredAppServerAgentBackendCrate() {
 }
 
 function checkRetiredRuntimeCoreMapperSurface() {
-  const mapperRoot = path.join(
-    repoRoot,
+  const retiredPaths = [
     "lime-rs/crates/runtime-core/src/llm_protocol/mapper",
-  );
-  if (fs.existsSync(mapperRoot)) {
-    failures.push(
-      "retired runtime-core llm_protocol mapper directory must stay deleted; provider lowering belongs to model-provider",
-    );
+    "lime-rs/crates/runtime-core/src/llm_protocol/types.rs",
+    "lime-rs/crates/runtime-core/src/llm_protocol/events.rs",
+    "lime-rs/crates/runtime-core/src/llm_protocol/tests.rs",
+    "lime-rs/crates/model-provider/src/lowering/anthropic_messages.rs",
+    "lime-rs/crates/model-provider/src/lowering/gemini.rs",
+    "lime-rs/crates/model-provider/src/lowering/ollama_chat.rs",
+    "lime-rs/crates/model-provider/src/lowering/openai_chat.rs",
+    "lime-rs/crates/model-provider/src/lowering/openai_responses.rs",
+  ];
+  for (const relativePath of retiredPaths) {
+    if (fs.existsSync(path.join(repoRoot, relativePath))) {
+      failures.push(
+        `retired provider dual-algebra path must stay deleted: ${relativePath}`,
+      );
+    }
   }
 
   const protocolFiles = [
@@ -8421,10 +8430,36 @@ function checkRetiredRuntimeCoreMapperSurface() {
       "mod mapper",
       "pub use mapper",
       "build_provider_wire_request",
+      "runtime_event_from_llm_event",
+      "ProviderWireRequest",
+      "LlmRuntimeEvent",
     ]) {
       if (content.includes(snippet)) {
         failures.push(
           `retired runtime-core mapper export must stay absent: ${relativePath} contains ${JSON.stringify(snippet)}`,
+        );
+      }
+    }
+  }
+
+  const loweringRoot = path.join(
+    repoRoot,
+    "lime-rs/crates/model-provider/src/lowering",
+  );
+  for (const relativePath of walkSourceFiles(loweringRoot)) {
+    if (!relativePath.endsWith(".rs")) {
+      continue;
+    }
+    const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+    for (const snippet of [
+      "LlmRequest",
+      "ProviderWireRequest",
+      "build_provider_wire_request",
+      "build_responses_image_generation_wire_request",
+    ]) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired provider dual algebra must stay absent: ${relativePath} contains ${JSON.stringify(snippet)}`,
         );
       }
     }
@@ -8617,10 +8652,7 @@ function checkRetiredToolWireSurface() {
 
   const nativeOverlayProduction = fs
     .readFileSync(
-      path.join(
-        repoRoot,
-        "lime-rs/crates/tool-runtime/src/native_overlay.rs",
-      ),
+      path.join(repoRoot, "lime-rs/crates/tool-runtime/src/native_overlay.rs"),
       "utf8",
     )
     .split("#[cfg(test)]", 1)[0];
@@ -8744,6 +8776,12 @@ function checkRetiredToolWireSurface() {
 
 function checkRetiredAgentRuntimeClientShells() {
   for (const relativePath of [
+    "src/lib/api/agentRuntime.ts",
+    "src/lib/api/agentRuntime.d.ts",
+    "src/lib/api/agentRuntime/index.ts",
+    "src/lib/api/agentRuntime/index.d.ts",
+    "src/lib/api/agentRuntime/types.ts",
+    "src/lib/api/agentRuntime/types.d.ts",
     "src/lib/api/agentRuntime/mediaClient.ts",
     "src/lib/api/agentRuntime/mediaClient.d.ts",
     "src/lib/api/agentRuntime/subagentClient.ts",
@@ -8751,7 +8789,7 @@ function checkRetiredAgentRuntimeClientShells() {
   ]) {
     if (fs.existsSync(path.join(repoRoot, relativePath))) {
       failures.push(
-        `retired Agent Runtime client shell must stay deleted: ${relativePath}`,
+        `retired Agent Runtime client shell or root barrel must stay deleted: ${relativePath}`,
       );
     }
   }

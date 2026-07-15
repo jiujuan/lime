@@ -8,7 +8,7 @@ import type {
   AgentRuntimeToolInventory,
   AgentRuntimeToolInventoryRequest,
   AgentRuntimeWorkspaceSkillBindings,
-} from "./types";
+} from "./toolInventoryTypes";
 
 export type AgentRuntimeWorkspaceSkillBindingsAppServerClient = Pick<
   AppServerClient,

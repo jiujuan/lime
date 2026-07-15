@@ -1,4 +1,5 @@
 use super::*;
+use agent_protocol::MessageContentPart;
 
 #[test]
 fn canonical_nested_item_uses_outer_event_identity_time_and_lifecycle_status() {
@@ -41,7 +42,7 @@ fn canonical_nested_item_uses_outer_event_identity_time_and_lifecycle_status() {
     assert_eq!(failed.turn_id.as_str(), "outer-turn");
     assert_eq!(failed.item_id.as_str(), "nested-failed");
     assert_eq!(failed.sequence, 3);
-    assert_eq!(failed.ordinal, 103);
+    assert_eq!(failed.ordinal, 3);
     assert_eq!(failed.created_at_ms, 1_783_814_403_000);
     assert_eq!(failed.updated_at_ms, 1_783_814_403_000);
     assert_eq!(failed.completed_at_ms, Some(1_783_814_403_000));
@@ -99,7 +100,7 @@ fn canonical_nested_tool_output_and_metadata_are_preserved_across_lifecycle() {
     let item = &changes.changed_items[0];
     assert_eq!(item.item_id.as_str(), "nested-tool");
     assert_eq!(item.sequence, 2);
-    assert_eq!(item.ordinal, 7);
+    assert_eq!(item.ordinal, 1);
     assert_eq!(item.created_at_ms, 1_783_814_401_000);
     assert_eq!(item.updated_at_ms, 1_783_814_402_000);
     assert_eq!(item.completed_at_ms, Some(1_783_814_402_000));
@@ -134,6 +135,180 @@ fn canonical_nested_tool_output_and_metadata_are_preserved_across_lifecycle() {
     assert_eq!(output.duration_ms, Some(42));
     assert!(output.truncated);
     assert_eq!(output.output_ref.as_deref(), Some("sidecar://nested-tool"));
+}
+
+#[test]
+fn current_codex_import_uses_lime_event_log_ordinal() {
+    let changes = materialize_events(
+        &[event(
+            "imported-tool-start",
+            11,
+            "item.started",
+            "outer-turn",
+            json!({
+                "imported": true,
+                "sourceClient": "codex",
+                "importVersion": 2,
+                "item": canonical_tool_item("imported-tool", "inProgress", 7)
+            }),
+        )],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize current Codex import");
+
+    assert_eq!(changes.changed_items.len(), 1);
+    assert_eq!(changes.changed_items[0].ordinal, 11);
+}
+
+#[test]
+fn canonical_agent_message_merges_typed_content_parts_across_lifecycle() {
+    let changes = materialize_events(
+        &[
+            event(
+                "media-message-started",
+                1,
+                "item.started",
+                "turn-media",
+                json!({
+                    "item": {
+                        "id": "media-message",
+                        "type": "agent_message",
+                        "text": "result",
+                        "contentParts": [{"type": "text", "text": "result"}]
+                    }
+                }),
+            ),
+            event(
+                "media-message-updated",
+                2,
+                "item.updated",
+                "turn-media",
+                json!({
+                    "item": {
+                        "id": "media-message",
+                        "type": "agent_message",
+                        "text": "result",
+                        "contentParts": [
+                            {"type": "text", "text": "result"},
+                            {
+                                "type": "media",
+                                "kind": "image",
+                                "caption": "draft image",
+                                "reference": {
+                                    "uri": "sidecar://media/result",
+                                    "mime_type": "image/png",
+                                    "source_path": "/tmp/media/draft.png"
+                                }
+                            }
+                        ]
+                    }
+                }),
+            ),
+            event(
+                "media-message-completed",
+                3,
+                "item.completed",
+                "turn-media",
+                json!({
+                    "item": {
+                        "id": "media-message",
+                        "type": "agent_message",
+                        "text": "result",
+                        "phase": "final_answer",
+                        "contentPart": {
+                            "type": "media",
+                            "kind": "image",
+                            "caption": "result image",
+                            "reference": {
+                                "uri": "sidecar://media/result",
+                                "mime_type": "image/png",
+                                "source_path": "/tmp/media/result.png"
+                            }
+                        }
+                    }
+                }),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize canonical media message");
+
+    assert_eq!(changes.changed_items.len(), 1);
+    let item = &changes.changed_items[0];
+    assert_eq!(item.status, ItemStatus::Completed);
+    let ThreadItemPayload::AgentMessage {
+        text,
+        phase,
+        content_parts,
+    } = &item.payload
+    else {
+        panic!("canonical agent message payload");
+    };
+    assert_eq!(text, "result");
+    assert_eq!(phase.as_deref(), Some("final_answer"));
+    assert_eq!(content_parts.len(), 2);
+    assert!(matches!(
+        &content_parts[0],
+        MessageContentPart::Text { text } if text == "result"
+    ));
+    assert!(matches!(
+        &content_parts[1],
+        MessageContentPart::Media { kind, reference, .. }
+            if kind == "image"
+                && reference.uri == "sidecar://media/result"
+                && reference.mime_type == "image/png"
+                && reference.source_path.as_deref() == Some("/tmp/media/result.png")
+    ));
+}
+
+#[test]
+fn malformed_or_inline_agent_message_content_parts_are_rejected() {
+    let changes = materialize_events(
+        &[
+            event(
+                "malformed-content-parts",
+                1,
+                "item.started",
+                "turn-media",
+                json!({
+                    "item": {
+                        "id": "malformed-message",
+                        "type": "agent_message",
+                        "text": "must not downgrade",
+                        "contentParts": {"type": "media"}
+                    }
+                }),
+            ),
+            event(
+                "inline-content-part",
+                2,
+                "item.started",
+                "turn-media",
+                json!({
+                    "item": {
+                        "id": "inline-message",
+                        "type": "agent_message",
+                        "text": "must not persist",
+                        "contentParts": [{
+                            "type": "media",
+                            "kind": "image",
+                            "reference": {
+                                "uri": "data:image/png;base64,AAAA",
+                                "mime_type": "image/png"
+                            }
+                        }]
+                    }
+                }),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("reject invalid content parts without failing unrelated turn projection");
+
+    assert!(changes.changed_items.is_empty());
 }
 
 #[test]

@@ -1,3 +1,4 @@
+use super::output_refs;
 use super::projection_repair::ProjectionRepair;
 use super::projection_store::ProjectionReadSession;
 use super::projection_store::ProjectionReadWindow;
@@ -41,11 +42,6 @@ impl RuntimeCore {
             return Ok(context);
         }
         if let Some(mut context) = self.load_projection_session(&params).await? {
-            self.enrich_session_load_context_with_media_task_results(&mut context)
-                .await;
-            return Ok(context);
-        }
-        if let Some(mut context) = self.load_app_data_session(params.clone()).await? {
             self.enrich_session_load_context_with_media_task_results(&mut context)
                 .await;
             return Ok(context);
@@ -139,24 +135,6 @@ impl RuntimeCore {
         ))
     }
 
-    async fn load_app_data_session(
-        &self,
-        params: AgentSessionReadParams,
-    ) -> Result<Option<SessionLoadContext>, RuntimeCoreError> {
-        let session_id = params.session_id.clone();
-        let Some(response) = self.app_data_source.read_agent_session(params).await? else {
-            return Ok(None);
-        };
-        let stored =
-            super::session_hydration::hydrated_stored_session_from_response(response.clone());
-        let workflow_audit_events = self.read_workflow_audit_events_for_session(&session_id)?;
-        Ok(Some(SessionLoadContext {
-            response,
-            stored,
-            workflow_audit_events,
-        }))
-    }
-
     pub(in crate::runtime) fn read_workflow_audit_events_for_session(
         &self,
         session_id: &str,
@@ -232,8 +210,12 @@ pub(in crate::runtime) async fn projection_load_context(
         turns: projection.turns.clone(),
         turn_inputs: turn_input_events::turn_inputs_from_events(&events),
         turn_runtime_options: HashMap::new(),
-        events,
-        output_blobs: HashMap::new(),
+        events: events.clone(),
+        output_blobs: events
+            .iter()
+            .filter_map(output_refs::output_record_from_event)
+            .map(|record| (record.output_ref.clone(), record))
+            .collect(),
     };
     let mut detail = if stored.events.is_empty() && params.history_limit.is_some() {
         let mut usage_events = projection_usage_events;

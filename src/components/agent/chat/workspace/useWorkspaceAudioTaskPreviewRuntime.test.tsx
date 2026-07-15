@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getMediaTaskArtifact,
   listMediaTaskArtifacts,
-  type ListMediaTaskArtifactsOutput,
-  type MediaTaskArtifactOutput,
 } from "@/lib/api/mediaTasks";
+import type {
+  ListMediaTaskArtifactsOutput,
+  MediaTaskArtifactOutput,
+} from "@/lib/api/agentRuntime/mediaTaskTypes";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { safeListen } from "@/lib/dev-bridge";
 import type { Message } from "../types";

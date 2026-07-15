@@ -32,16 +32,6 @@ import {
   SKILLS_RUNTIME_SKILL_NAME,
   summarizeSkillsRuntimeEvidenceExport,
 } from "./skills-runtime-fixture-scenario.mjs";
-import {
-  MULTI_AGENT_TEAM_ASSERTION_KEYS,
-  MULTI_AGENT_TEAM_DONE_TEXT,
-  MULTI_AGENT_TEAM_PROMPT,
-  MULTI_AGENT_TEAM_SCENARIO,
-  MULTI_AGENT_TEAM_SUMMARY_TEXT,
-  renderMultiAgentTeamBackendEvents,
-  summarizeMultiAgentTeamEvidenceExport,
-} from "./multi-agent-team-fixture-scenario.mjs";
-
 export {
   buildExpertSkillsRuntimeCatalog,
   buildExpertSkillsRuntimeMetadata,
@@ -72,13 +62,6 @@ export {
   SKILLS_RUNTIME_QUERY,
   SKILLS_RUNTIME_SKILL_NAME,
   summarizeSkillsRuntimeEvidenceExport,
-  MULTI_AGENT_TEAM_ASSERTION_KEYS,
-  MULTI_AGENT_TEAM_DONE_TEXT,
-  MULTI_AGENT_TEAM_PROMPT,
-  MULTI_AGENT_TEAM_SCENARIO,
-  MULTI_AGENT_TEAM_SUMMARY_TEXT,
-  renderMultiAgentTeamBackendEvents,
-  summarizeMultiAgentTeamEvidenceExport,
 };
 
 export const DEFAULTS = {
@@ -267,8 +250,7 @@ export const APPROVAL_REQUEST_DECLINE_RESULT_TEXT =
   "approval decline fixture 已拒绝当前浏览器动作，并改用无浏览器路径继续。";
 export const APPROVAL_REQUEST_DECLINE_DONE_TEXT =
   "APPROVAL_REQUEST_DECLINE_DONE";
-export const APPROVAL_REQUEST_CANCEL_DONE_TEXT =
-  "APPROVAL_REQUEST_CANCEL_DONE";
+export const APPROVAL_REQUEST_CANCEL_DONE_TEXT = "APPROVAL_REQUEST_CANCEL_DONE";
 export const APPROVAL_REQUEST_RESUME_SECOND_RESULT_TEXT =
   "approval session cache second request 已经自动通过。";
 export const APPROVAL_REQUEST_RESUME_SECOND_DONE_TEXT =
@@ -354,19 +336,12 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID = `${CONTENT_FACT
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID =
   "human_review";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:review`;
-export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:respond`;
-export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID =
-  "respond_review";
-export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:respond-review`;
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:cancel`;
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID =
   "cancel_draft";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:retry`;
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID =
   "retry_draft";
-export const CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}-contract-reject-turn`;
-export const CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE =
-  "PLUGIN_WORKER_CONTRACT_UNSUPPORTED";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID =
   "artifact-article-1";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID =
@@ -687,7 +662,7 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS = [
   "contentFactoryArticleWorkspaceReadModelProjected",
   "contentFactoryArticleWorkspaceWorkflowFactsHidden",
   "contentFactoryArticleWorkspaceWorkflowReadModelProjected",
-  "contentFactoryArticleWorkspaceWorkflowRespondProjected",
+  "contentFactoryArticleWorkspaceWorkflowRespondHiddenWithoutPendingAction",
   "contentFactoryArticleWorkspaceWorkflowCancelProjected",
   "contentFactoryArticleWorkspaceWorkflowRetryProjected",
   "contentFactoryArticleWorkspaceArtifactsProjected",
@@ -700,6 +675,5 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS = [
   "contentFactoryArticleWorkspaceWorkerAuditFactsHidden",
   "contentFactoryArticleWorkspaceActionResultPatchProjected",
   "contentFactoryArticleWorkspaceStoryboardRendererContractPreserved",
-  "contentFactoryArticleWorkspaceRuntimeContractFailClosed",
   "contentFactoryArticleWorkspaceDoesNotUseModelTurn",
 ];

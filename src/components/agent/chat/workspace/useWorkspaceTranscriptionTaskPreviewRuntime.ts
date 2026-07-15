@@ -2,11 +2,13 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   getMediaTaskArtifact,
   listMediaTaskArtifacts,
-  type ListMediaTaskArtifactsOutput,
-  type MediaTaskModalityRuntimeContractIndexEntry,
-  type MediaTaskArtifactOutput,
-  type MediaTaskLookupRequest,
 } from "@/lib/api/mediaTasks";
+import type {
+  ListMediaTaskArtifactsOutput,
+  MediaTaskModalityRuntimeContractIndexEntry,
+  MediaTaskArtifactOutput,
+  MediaTaskLookupRequest,
+} from "@/lib/api/agentRuntime/mediaTaskTypes";
 import { readFilePreview } from "@/lib/api/fileBrowser";
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
 import { safeListen } from "@/lib/api/bridgeEvents";

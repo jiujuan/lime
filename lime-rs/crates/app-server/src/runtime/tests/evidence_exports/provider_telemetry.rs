@@ -129,7 +129,7 @@ async fn export_evidence_uses_injected_evidence_pack_provider() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].session.session_id, "sess_evidence");
     assert_eq!(requests[0].turns[0].turn_id, "turn_evidence");
-    assert_eq!(requests[0].events.len(), 3);
+    assert_eq!(requests[0].events.len(), 5);
     assert_eq!(requests[0].artifacts[0].artifact_ref, "artifact-report");
 
     let evidence_pack = response.evidence_pack.expect("evidence pack");

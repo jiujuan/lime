@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { AgentRuntimeUpdateSessionRequest } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeUpdateSessionRequest } from "@/lib/api/agentRuntime/requestTypes";
 import type { Artifact } from "@/lib/artifact/types";
 import {
   normalizeArtifactProtocolPath,
@@ -272,10 +272,7 @@ export function shouldAutoInitWorkspaceSessionFiles({
   }
 
   return (
-    !draftSendInFlight &&
-    !isSending &&
-    !currentTurnId &&
-    queuedTurnCount === 0
+    !draftSendInFlight && !isSending && !currentTurnId && queuedTurnCount === 0
   );
 }
 

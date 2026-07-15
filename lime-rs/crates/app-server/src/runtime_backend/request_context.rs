@@ -1,7 +1,8 @@
 use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use app_server_protocol::{
-    RuntimeProviderConfig, RuntimeRequest, RuntimeSearchMode, RuntimeToolCallStrategy,
+    RuntimeOptions, RuntimeProviderConfig, RuntimeRequest, RuntimeSearchMode,
+    RuntimeToolCallStrategy,
 };
 use lime_agent::{
     request_tool_policy_with_additional_required_tools, resolve_request_tool_policy_with_mode,
@@ -126,6 +127,52 @@ pub(super) fn selection_with_effective_reasoning(
             super::model_capability::ReasoningLevel::XHigh => Some("xhigh".to_string()),
         }),
     }
+}
+
+pub(super) fn effective_runtime_options_for_turn(
+    request: &ExecutionRequest,
+    first_sampling_turn: bool,
+) -> Option<RuntimeOptions> {
+    let mut effective_request = request.clone();
+    let initial_host_request = runtime_request_from_request(&effective_request);
+    let initial_tool_policy = request_tool_policy_from_request(initial_host_request.as_ref());
+    apply_app_server_turn_policy(
+        &mut effective_request,
+        first_sampling_turn,
+        &initial_tool_policy,
+    );
+
+    let selection = selection_with_effective_reasoning(
+        &resolve_runtime_model_selection(&effective_request).ok()?,
+    );
+    let scope = session_scope_from_request(&effective_request).ok()?;
+    let workspace_scope = request_workspace_scope(
+        &effective_request,
+        runtime_request_from_request(&effective_request).as_ref(),
+    );
+    let request_tool_policy =
+        request_tool_policy_from_request(runtime_request_from_request(&effective_request).as_ref());
+    let mut options = effective_request.runtime_options.unwrap_or_default();
+    let runtime_request = options.runtime_request_mut();
+    runtime_request.provider_preference = Some(selection.provider);
+    runtime_request.model_preference = Some(selection.model);
+    runtime_request.reasoning_effort = selection.reasoning_effort;
+    runtime_request.workspace_id = scope.workspace_id;
+    if let Some(working_dir) = workspace_scope.working_dir {
+        runtime_request.working_dir = Some(working_dir.to_string_lossy().into_owned());
+    }
+    if let Some(project_root) = workspace_scope.project_root {
+        let project_root = project_root.to_string_lossy().into_owned();
+        runtime_request.workspace_root = Some(project_root.clone());
+        runtime_request.project_root = Some(project_root);
+    }
+    runtime_request.web_search = Some(request_tool_policy.allows_web_search());
+    runtime_request.search_mode = Some(match request_tool_policy.search_mode {
+        RequestToolPolicyMode::Disabled => RuntimeSearchMode::Disabled,
+        RequestToolPolicyMode::Auto => RuntimeSearchMode::Auto,
+        RequestToolPolicyMode::Required => RuntimeSearchMode::Required,
+    });
+    Some(options)
 }
 
 pub(super) fn resolve_runtime_model_selection(

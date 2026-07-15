@@ -9,9 +9,11 @@ import {
   createVideoGenerationTaskArtifact,
   getMediaTaskArtifact,
   listMediaTaskArtifacts,
-  type CreateVideoGenerationTaskArtifactRequest,
-  type MediaTaskArtifactOutput,
 } from "./mediaTasks";
+import type {
+  CreateVideoGenerationTaskArtifactRequest,
+  MediaTaskArtifactOutput,
+} from "./agentRuntime/mediaTaskTypes";
 
 export type VideoTaskStatus =
   | "pending"

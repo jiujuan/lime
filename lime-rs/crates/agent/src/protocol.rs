@@ -267,8 +267,24 @@ pub enum AgentEvent {
     #[serde(rename = "turn_failed")]
     TurnFailed { turn: AgentThreadTurn },
 
+    #[serde(rename = "text_start")]
+    TextStart {
+        #[serde(rename = "itemId")]
+        item_id: String,
+    },
+
     #[serde(rename = "text_delta")]
-    TextDelta { text: String },
+    TextDelta {
+        #[serde(rename = "itemId")]
+        item_id: String,
+        text: String,
+    },
+
+    #[serde(rename = "text_end")]
+    TextEnd {
+        #[serde(rename = "itemId")]
+        item_id: String,
+    },
 
     #[serde(rename = "text_delta_batch")]
     TextDeltaBatch {
@@ -277,8 +293,24 @@ pub enum AgentEvent {
         boundary: TextDeltaBatchBoundary,
     },
 
+    #[serde(rename = "thinking_start")]
+    ThinkingStart {
+        #[serde(rename = "itemId")]
+        item_id: String,
+    },
+
     #[serde(rename = "thinking_delta")]
-    ThinkingDelta { text: String },
+    ThinkingDelta {
+        #[serde(rename = "itemId")]
+        item_id: String,
+        text: String,
+    },
+
+    #[serde(rename = "thinking_end")]
+    ThinkingEnd {
+        #[serde(rename = "itemId")]
+        item_id: String,
+    },
 
     #[serde(rename = "tool_progress")]
     ToolProgress {
@@ -895,5 +927,38 @@ mod tests {
         assert_eq!(value["text"], "第一段\n");
         assert_eq!(value["chunks"][0], "第一段");
         assert_eq!(value["boundary"], "newline");
+    }
+
+    #[test]
+    fn agent_output_lifecycle_serializes_required_item_identity() {
+        let events = [
+            AgentEvent::TextStart {
+                item_id: "message-1".to_string(),
+            },
+            AgentEvent::TextDelta {
+                item_id: "message-1".to_string(),
+                text: "answer".to_string(),
+            },
+            AgentEvent::TextEnd {
+                item_id: "message-1".to_string(),
+            },
+            AgentEvent::ThinkingDelta {
+                item_id: "reasoning-1".to_string(),
+                text: "inspect".to_string(),
+            },
+        ];
+        let values = events
+            .into_iter()
+            .map(|event| serde_json::to_value(event).expect("serialize output lifecycle"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(values[0]["type"], "text_start");
+        assert_eq!(values[0]["itemId"], "message-1");
+        assert_eq!(values[1]["type"], "text_delta");
+        assert_eq!(values[1]["itemId"], "message-1");
+        assert_eq!(values[2]["type"], "text_end");
+        assert_eq!(values[2]["itemId"], "message-1");
+        assert_eq!(values[3]["type"], "thinking_delta");
+        assert_eq!(values[3]["itemId"], "reasoning-1");
     }
 }

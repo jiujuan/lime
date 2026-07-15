@@ -32,7 +32,6 @@ export function renderBackendToolAndSkillEventScript({
   skillsRuntimeBackendEvents,
   explicitSkillsRuntimeBackendEvents,
   manualEnableSkillsRuntimeBackendEvents,
-  multiAgentTeamBackendEvents,
   expertSkillsRuntimeBackendEvents,
   expertPanelSkillsRuntimeBackendEvents,
 }) {
@@ -288,7 +287,6 @@ export function renderBackendToolAndSkillEventScript({
 ${skillsRuntimeBackendEvents}
 ${explicitSkillsRuntimeBackendEvents}
 ${manualEnableSkillsRuntimeBackendEvents}
-${multiAgentTeamBackendEvents}
   if (isExpertSkillsRuntimePrompt) {
     emitEvents([
       {

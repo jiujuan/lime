@@ -150,7 +150,7 @@ fn collect_model_text(
     usage: &mut Option<AgentTokenUsage>,
 ) {
     match event {
-        AgentEvent::TextDelta { text } => output.push_str(text),
+        AgentEvent::TextDelta { text, .. } => output.push_str(text),
         AgentEvent::TextDeltaBatch { text, .. } => output.push_str(text),
         AgentEvent::Done { usage: event_usage } => {
             if event_usage.is_some() {
@@ -172,6 +172,7 @@ mod tests {
 
         collect_model_text(
             &AgentEvent::TextDelta {
+                item_id: "text-1".to_string(),
                 text: "好啊，".to_string(),
             },
             &mut text,

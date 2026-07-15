@@ -779,15 +779,18 @@ async fn commit_imports_user_and_agent_items_with_canonical_lifecycle() {
     .expect("commit");
     let session_id = response.session.session_id.clone();
     let stored_events = core.events_for_session(&session_id).expect("stored events");
-    for item_id in ["imported-user_2", "msg_agent_4"] {
+    let user_item_id = agent_protocol::ItemId::new("imported-user_2").to_string();
+    let agent_item_id = agent_protocol::ItemId::new("msg_agent_4").to_string();
+    for item_id in [&user_item_id, &agent_item_id] {
         assert!(stored_events.iter().any(|event| {
-            event.event_type == "item.started" && event.payload["item"]["itemId"] == item_id
+            event.event_type == "item.started"
+                && event.payload["item"]["itemId"] == item_id.as_str()
         }));
         assert!(stored_events.iter().any(|event| {
-            event.event_type == "item.completed" && event.payload["item"]["itemId"] == item_id
+            event.event_type == "item.completed"
+                && event.payload["item"]["itemId"] == item_id.as_str()
         }));
     }
-
     let current = core
         .read_session_current(AgentSessionReadParams {
             session_id,
@@ -803,7 +806,7 @@ async fn commit_imports_user_and_agent_items_with_canonical_lifecycle() {
         .expect("canonical thread items");
     let user = items
         .iter()
-        .find(|item| item["id"] == "imported-user_2")
+        .find(|item| item["id"].as_str() == Some(user_item_id.as_str()))
         .expect("canonical user item");
     let reasoning = items
         .iter()
@@ -811,16 +814,18 @@ async fn commit_imports_user_and_agent_items_with_canonical_lifecycle() {
         .expect("canonical reasoning item");
     let agent = items
         .iter()
-        .find(|item| item["id"] == "msg_agent_4")
+        .find(|item| item["id"].as_str() == Some(agent_item_id.as_str()))
         .expect("canonical agent item");
 
     assert_eq!(user["type"], "user_message");
     assert_eq!(user["status"], "completed");
-    assert_eq!(user["ordinal"], 2);
-    assert_eq!(reasoning["ordinal"], 3);
     assert_eq!(agent["type"], "agent_message");
     assert_eq!(agent["status"], "completed");
-    assert_eq!(agent["ordinal"], 4);
+    let user_ordinal = user["ordinal"].as_u64().expect("user ordinal");
+    let reasoning_ordinal = reasoning["ordinal"].as_u64().expect("reasoning ordinal");
+    let agent_ordinal = agent["ordinal"].as_u64().expect("agent ordinal");
+    assert!(user_ordinal < reasoning_ordinal);
+    assert!(reasoning_ordinal < agent_ordinal);
 }
 
 #[tokio::test]
@@ -887,15 +892,28 @@ async fn commit_avoids_source_and_runtime_ordinal_collision() {
         items.len(),
         "canonical ordinals must be unique"
     );
-    assert!(items
+    let tool = items
         .iter()
-        .any(|item| { item["id"] == "imported-tool-call_collision" && item["ordinal"] == 6 }));
-    assert!(items.iter().any(|item| {
-        item["id"] == "imported-user_9" && item["ordinal"] == 9 && item["status"] == "completed"
-    }));
-    assert!(items.iter().any(|item| {
-        item["id"] == "imported-agent_10" && item["ordinal"] == 10 && item["status"] == "completed"
-    }));
+        .find(|item| item["id"] == "imported-tool-call_collision")
+        .expect("imported tool");
+    let user = items
+        .iter()
+        .find(|item| item["id"] == "imported-user_9")
+        .expect("imported user");
+    let agent = items
+        .iter()
+        .find(|item| item["id"] == "imported-agent_10")
+        .expect("imported agent");
+    assert_eq!(user["status"], "completed");
+    assert_eq!(agent["status"], "completed");
+    assert!(
+        tool["ordinal"].as_u64().expect("tool ordinal")
+            < user["ordinal"].as_u64().expect("user ordinal")
+    );
+    assert!(
+        user["ordinal"].as_u64().expect("user ordinal")
+            < agent["ordinal"].as_u64().expect("agent ordinal")
+    );
 }
 
 #[test]

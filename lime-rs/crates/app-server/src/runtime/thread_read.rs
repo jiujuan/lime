@@ -213,6 +213,7 @@ mod tests {
             payload: ThreadItemPayload::AgentMessage {
                 text: "canonical".to_string(),
                 phase: None,
+                content_parts: Vec::new(),
             },
             metadata: json!({}),
         };

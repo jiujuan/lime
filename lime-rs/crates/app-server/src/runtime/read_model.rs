@@ -1,3 +1,4 @@
+mod approval;
 mod messages;
 mod model_routing;
 mod queued_turns;
@@ -5,6 +6,7 @@ mod runtime_items;
 mod session_metadata;
 #[cfg(test)]
 mod tests;
+mod workflow;
 
 use super::article_workspace_action_projection;
 use super::article_workspace_projection;
@@ -297,10 +299,17 @@ fn canonical_payload_to_agent_detail(
             }
             "user_message"
         }
-        ThreadItemPayload::AgentMessage { text, phase } => {
+        ThreadItemPayload::AgentMessage {
+            text,
+            phase,
+            content_parts,
+        } => {
             detail.insert("text".to_string(), json!(text));
             if let Some(phase) = phase {
                 detail.insert("phase".to_string(), json!(phase));
+            }
+            if !content_parts.is_empty() {
+                detail.insert("contentParts".to_string(), json!(content_parts));
             }
             "agent_message"
         }
@@ -351,17 +360,23 @@ fn canonical_payload_to_agent_detail(
             output,
         } => {
             detail.insert("call_id".to_string(), json!(call_id));
-            detail.insert("status_label".to_string(), json!(operation));
-            if let Some(target_thread_id) = target_thread_id {
-                detail.insert("session_id".to_string(), json!(target_thread_id.as_str()));
-            }
-            if let Some(message) = message {
-                detail.insert("summary".to_string(), json!(message));
-            }
             if let Some(output) = output {
                 insert_tool_output(&mut detail, output);
             }
-            "subagent_activity"
+            if matches!(operation, agent_protocol::CollabAgentOperation::Wait) {
+                detail.insert("tool_name".to_string(), json!("wait_agent"));
+                detail.insert("arguments".to_string(), json!([]));
+                "tool_call"
+            } else {
+                detail.insert("status_label".to_string(), json!(operation));
+                if let Some(target_thread_id) = target_thread_id {
+                    detail.insert("session_id".to_string(), json!(target_thread_id.as_str()));
+                }
+                if let Some(message) = message {
+                    detail.insert("summary".to_string(), json!(message));
+                }
+                "subagent_activity"
+            }
         }
         ThreadItemPayload::Approval {
             request_id,
@@ -382,15 +397,16 @@ fn canonical_payload_to_agent_detail(
                 "available_decisions".to_string(),
                 json!(available_decisions),
             );
-            detail.insert("response".to_string(), json!(decision));
+            if let Some(response) =
+                approval::read_response(*decision, *scope, reason_code.as_deref())
+            {
+                detail.insert("response".to_string(), response);
+            }
             if let Some(requested_at_ms) = requested_at_ms {
                 detail.insert("requested_at_ms".to_string(), json!(requested_at_ms));
             }
             if let Some(resolved_at_ms) = resolved_at_ms {
                 detail.insert("resolved_at_ms".to_string(), json!(resolved_at_ms));
-            }
-            if let Some(reason_code) = reason_code {
-                detail.insert("reason_code".to_string(), json!(reason_code));
             }
             if let Some(expires_at_ms) = expires_at_ms {
                 detail.insert("expires_at_ms".to_string(), json!(expires_at_ms));
@@ -688,13 +704,16 @@ pub(in crate::runtime) fn workflow_read_model_from_stored_session(
     stored: &StoredSession,
     workflow_audit_events: &[AgentEvent],
 ) -> WorkflowReadModel {
-    if workflow_audit_events.is_empty() {
-        return workflow_read_model_from_events(&stored.events);
-    }
-    let mut events = Vec::with_capacity(stored.events.len() + workflow_audit_events.len());
-    events.extend(stored.events.iter().cloned());
-    events.extend(workflow_audit_events.iter().cloned());
-    workflow_read_model_from_events(&events)
+    let mut read_model = if workflow_audit_events.is_empty() {
+        workflow_read_model_from_events(&stored.events)
+    } else {
+        let mut events = Vec::with_capacity(stored.events.len() + workflow_audit_events.len());
+        events.extend(stored.events.iter().cloned());
+        events.extend(workflow_audit_events.iter().cloned());
+        workflow_read_model_from_events(&events)
+    };
+    workflow::retain_canonical_respond_actions(stored, &mut read_model);
+    read_model
 }
 
 pub(super) fn replayed_action_required_from_stored_session(

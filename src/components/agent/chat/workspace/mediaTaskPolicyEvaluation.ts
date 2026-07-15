@@ -1,4 +1,4 @@
-import type { MediaTaskModalityRuntimeContractIndexEntry } from "@/lib/api/mediaTasks";
+import type { MediaTaskModalityRuntimeContractIndexEntry } from "@/lib/api/agentRuntime/mediaTaskTypes";
 import { getLimeI18n } from "@/i18n/createI18n";
 
 const LIMECORE_POLICY_META_PREFIX = "LimeCore";

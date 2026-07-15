@@ -21,7 +21,7 @@ import {
   mergeRequestMetadataWithArtifact,
   mergeSoulArtifactVoiceDiagnostics,
 } from "../utils/artifactGenerationBriefMetadata";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";

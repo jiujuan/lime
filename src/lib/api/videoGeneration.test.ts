@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
-import type { MediaTaskModalityRuntimeContractIndex } from "./mediaTasks";
+import type { MediaTaskModalityRuntimeContractIndex } from "./agentRuntime/mediaTaskTypes";
 import {
   cancelMediaTaskArtifact,
   createVideoGenerationTaskArtifact,

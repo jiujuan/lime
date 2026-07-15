@@ -355,44 +355,45 @@ export function renderSkillsRuntimeBackendEvents({
   if (${promptFlagName}) {
     emitEvents([
       {
-        type: "tool.started",
-        payload: {
-          toolCallId: "${searchToolCallId}",
-          tool_call_id: "${searchToolCallId}",
-          toolId: "${searchToolCallId}",
-          tool_id: "${searchToolCallId}",
-          id: "${searchToolCallId}",
-          toolName: "skill_search",
-          tool_name: "skill_search",
+        type: "item.started",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${searchToolCallId}",
+          ordinal: 2,
+          callId: "${searchToolCallId}",
           name: "skill_search",
           arguments: {
             query: "${SKILLS_RUNTIME_QUERY}"
-          }
-        }
+          },
+          status: "inProgress"
+        })
       }
     ]);
     await sleep(80);
     emitEvents([
       {
-        type: "tool.result",
-        payload: {
-          toolCallId: "${searchToolCallId}",
-          tool_call_id: "${searchToolCallId}",
-          toolId: "${searchToolCallId}",
-          tool_id: "${searchToolCallId}",
-          id: "${searchToolCallId}",
-          toolName: "skill_search",
-          tool_name: "skill_search",
-          outputPreview: ${JSON.stringify(searchOutput)},
-          output: ${JSON.stringify(searchOutput)},
-          success: true,
+        type: "item.completed",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${searchToolCallId}",
+          ordinal: 2,
+          callId: "${searchToolCallId}",
+          name: "skill_search",
+          status: "completed",
+          output: {
+            text: ${JSON.stringify(searchOutput)}
+          },
           metadata: {
             tool_family: "skill_search",
             skill_search_query: "${SKILLS_RUNTIME_QUERY}",
             skill_search_snapshot_skill_count: 9,
             skill_search_result_count: 1
           }
-        }
+        })
       }
     ]);
     await sleep(80);
@@ -454,37 +455,38 @@ export function renderSkillsRuntimeBackendEvents({
     await sleep(80);
     emitEvents([
       {
-        type: "tool.started",
-        payload: {
-          toolCallId: "${skillToolCallId}",
-          tool_call_id: "${skillToolCallId}",
-          toolId: "${skillToolCallId}",
-          tool_id: "${skillToolCallId}",
-          id: "${skillToolCallId}",
-          toolName: "Skill",
-          tool_name: "Skill",
+        type: "item.started",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${skillToolCallId}",
+          ordinal: 3,
+          callId: "${skillToolCallId}",
           name: "Skill",
           arguments: {
             skill: "${SKILLS_RUNTIME_SKILL_NAME}"
-          }
-        }
+          },
+          status: "inProgress"
+        })
       }
     ]);
     await sleep(80);
     emitEvents([
       {
-        type: "tool.result",
-        payload: {
-          toolCallId: "${skillToolCallId}",
-          tool_call_id: "${skillToolCallId}",
-          toolId: "${skillToolCallId}",
-          tool_id: "${skillToolCallId}",
-          id: "${skillToolCallId}",
-          toolName: "Skill",
-          tool_name: "Skill",
-          outputPreview: ${JSON.stringify(skillOutput)},
-          output: ${JSON.stringify(skillOutput)},
-          success: true,
+        type: "item.completed",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${skillToolCallId}",
+          ordinal: 3,
+          callId: "${skillToolCallId}",
+          name: "Skill",
+          status: "completed",
+          output: {
+            text: ${JSON.stringify(skillOutput)}
+          },
           metadata: {
             tool_family: "skill",
             skill_name: "${SKILLS_RUNTIME_SKILL_NAME}",
@@ -496,7 +498,7 @@ export function renderSkillsRuntimeBackendEvents({
               skill: "${SKILLS_RUNTIME_SKILL_NAME}"
             }
           }
-        }
+        })
       }
     ]);
     await sleep(120);
@@ -524,15 +526,29 @@ function evidenceExportEventPayload(event) {
   return readRecord(event?.payload) ?? {};
 }
 
+function evidenceExportEventItem(event) {
+  return readRecord(evidenceExportEventPayload(event).item);
+}
+
 function evidenceExportPayloadMetadata(event) {
   const payload = evidenceExportEventPayload(event);
-  return readRecord(payload.metadata) ?? {};
+  return (
+    readRecord(evidenceExportEventItem(event)?.metadata) ??
+    readRecord(payload.metadata) ??
+    {}
+  );
 }
 
 function evidenceExportEventToolCallId(event) {
   const payload = evidenceExportEventPayload(event);
+  const item = evidenceExportEventItem(event);
+  const itemPayload = readRecord(item?.payload) ?? {};
   return String(
-    payload.toolCallId ??
+    itemPayload.call_id ??
+      itemPayload.callId ??
+      item?.itemId ??
+      item?.item_id ??
+      payload.toolCallId ??
       payload.tool_call_id ??
       payload.toolId ??
       payload.tool_id ??
@@ -602,12 +618,12 @@ export function summarizeSkillsRuntimeEvidenceExport(
   const events = collectEvidenceExportEvents(evidenceExportResult);
   const skillSearchEventIndex = events.findIndex(
     (event) =>
-      evidenceExportEventType(event) === "tool.result" &&
+      evidenceExportEventType(event) === "item.completed" &&
       evidenceExportEventToolCallId(event) === searchToolCallId,
   );
   const skillInvocationEventIndex = events.findIndex(
     (event) =>
-      evidenceExportEventType(event) === "tool.result" &&
+      evidenceExportEventType(event) === "item.completed" &&
       evidenceExportEventToolCallId(event) === skillToolCallId,
   );
   const eventBelongsToCurrentSkillInvocation = (_event, eventIndex) =>
@@ -627,6 +643,9 @@ export function summarizeSkillsRuntimeEvidenceExport(
   );
   const skillGateEvent =
     skillGateEventIndex >= 0 ? events[skillGateEventIndex] : null;
+  const skillBodyReadBeforeGate =
+    skillBodyReadEventIndex >= 0 &&
+    skillGateEventIndex > skillBodyReadEventIndex;
   const skillGateRuntime = skillGateEvent
     ? evidenceExportEventSkillRuntime(skillGateEvent)
     : {};
@@ -690,7 +709,8 @@ export function summarizeSkillsRuntimeEvidenceExport(
     hasSkillSearchSummary,
     hasSkillInvocationSummary,
     skillBodyReadObserved: skillBodyReadEventIndex >= 0,
-    skillGateObserved: skillGateEventIndex >= 0,
+    skillGateObserved: skillBodyReadBeforeGate,
+    skillBodyReadBeforeGate,
     skillGateMode: skillGateRuntime.mode ?? null,
     skillGateWorkspaceRuntimeEnable:
       skillGateRuntime.workspaceRuntimeEnable ??

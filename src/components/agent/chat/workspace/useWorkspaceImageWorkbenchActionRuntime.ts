@@ -12,7 +12,7 @@ import type {
   CreateImageGenerationTaskArtifactRequest,
   MediaTaskArtifactOutput,
   MediaTaskLookupRequest,
-} from "@/lib/api/mediaTasks";
+} from "@/lib/api/agentRuntime/mediaTaskTypes";
 import { emitCanvasImageInsertRequest } from "@/lib/canvasImageInsertBus";
 import { onImageWorkbenchTaskAction } from "@/lib/imageWorkbenchEvents";
 import { buildImageTaskLookupRequest } from "./imageTaskLocator";

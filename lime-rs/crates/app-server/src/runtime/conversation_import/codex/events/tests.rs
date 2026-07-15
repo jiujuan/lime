@@ -1,4 +1,4 @@
-use super::{event_msg_runtime_events, ImportedRuntimeEvent};
+use super::{event_msg_runtime_events, response_item_runtime_events, ImportedRuntimeEvent};
 use serde_json::json;
 
 #[test]
@@ -52,5 +52,23 @@ fn codex_subagent_activity_preserves_current_kind() {
         };
         assert_eq!(*event_type, "subagent.activity");
         assert_eq!(payload["activity"], kind);
+    }
+}
+
+#[test]
+fn codex_tool_search_stays_in_provider_history() {
+    for payload in [
+        json!({
+            "type": "tool_search_call",
+            "call_id": "search-1",
+            "query": "deferred tools"
+        }),
+        json!({
+            "type": "tool_search_output",
+            "call_id": "search-1",
+            "output": "selected tools"
+        }),
+    ] {
+        assert!(response_item_runtime_events(Some(&payload), None).is_empty());
     }
 }

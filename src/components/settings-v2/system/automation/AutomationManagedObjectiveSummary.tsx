@@ -1,5 +1,5 @@
 import React from "react";
-import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/types";
+import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/sessionTypes";
 import { Badge } from "@/components/ui/badge";
 import type { ManagedObjectiveAutomationProjection } from "./managedObjectiveAutomationProjection";
 import { MANAGED_OBJECTIVE_AUTOMATION_STATUS_TONE } from "./managedObjectiveAutomationStatus";

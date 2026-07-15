@@ -234,7 +234,7 @@ App Client
 29. `AppServerRuntimeQueueEventPort` 已接入 Desktop in-process App Server：runtime events 直接 append 到 App Server read model / outbound JSON-RPC notification，并继续委托 Tauri port 保持 Desktop GUI 事件兼容。
 30. `TauriRuntimeBackendHost` 对 direct event port 场景登记 `event_name -> session_id / turn_id` scope，并禁用旧 Tauri listener 回填，避免同一事件重复写入 App Server；旧 listener 只保留给未使用 direct port 的 compat 构造路径。
 31. `AgentRuntimeQueueContext` 已从单一 `RuntimeQueueEventPort` 扩展为 `RuntimeQueueHostPorts`，按 Codex app-server 的 processor / outbound / host boundary 思路拆出 event、execution、projection、managed objective continuation 四类 host port。
-32. `runtime_turn/queue.rs::execute_queued_request_with_team_runtime_governor(...)` 不再直接调用 `execute_agent_chat_request(...)`、`emit_subagent_status_changed_events(...)` 或 managed objective continuation 函数；真实执行、Desktop 投影和自动续跑提交均通过 ports 委托。
+32. queue 调度不再直接调用 Desktop 执行、subagent 投影或 managed objective continuation；真实执行、Desktop 投影和自动续跑提交均通过 `RuntimeQueueHostPorts` 委托。
 33. Desktop 现有行为保留在 `DesktopRuntimeQueueExecutionPort`、`DesktopRuntimeQueueProjectionPort`、`DesktopManagedObjectiveContinuationPort` 内，属于 compat adapter；queue 调度函数只保留 provider/team guard 编排和公共 runtime status 输出。
 34. `RuntimeCommandContext` 持有 `RuntimeQueueHostPorts`；in-process App Server direct bridge 只替换 event port，不重建 execution/projection/objective ports，避免 App Server event bridge 破坏 Desktop runtime host 组合。
 35. `runtime_turn` 新增 `RuntimeTurnHostContext`，把 `AppHandle / AgentState / DbConnection / ApiKeyProviderServiceState / LogState / GlobalConfigManagerState / McpManagerState / AutomationServiceState` 从 `execute_runtime_turn_pipeline(...)`、`execute_runtime_turn_with_session_scope(...)`、`execute_runtime_turn_submit(...)` 的散装参数收成一个 Desktop host context。

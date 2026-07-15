@@ -33,12 +33,40 @@ function readSessionScript() {
   );
 }
 
+function readBackendScript() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/claw-chat-current-fixture-backend-script.mjs",
+    "utf8",
+  );
+}
+
 function expectAllToContain(expect, content, fragments) {
   for (const fragment of fragments) expect(content).toContain(fragment);
 }
 
 function expectAllNotToContain(expect, content, fragments) {
   for (const fragment of fragments) expect(content).not.toContain(fragment);
+}
+
+function canonicalToolCompletedEvent(
+  toolCallId,
+  { eventTypeKey = "type", callIdKey = "call_id" } = {},
+) {
+  return {
+    [eventTypeKey]: "item.completed",
+    payload: {
+      item: {
+        itemId: toolCallId,
+        kind: "tool",
+        status: "completed",
+        payload: {
+          type: "tool",
+          [callIdKey]: toolCallId,
+        },
+        metadata: {},
+      },
+    },
+  };
 }
 
 export function registerSkillsRuntimeSmokeGuards({
@@ -51,6 +79,7 @@ export function registerSkillsRuntimeSmokeGuards({
 }) {
   it("covers Skills runtime search, on-demand body load, gate, and Evidence Pack in the real Electron fixture", () => {
     const content = readSmokeScript();
+    const backendScriptContent = readBackendScript();
     const scenarioContent = readSkillsRuntimeFixtureScenario();
     const expertActionsContent = readExpertActionsScript();
     const sessionContent = readSessionScript();
@@ -249,7 +278,7 @@ export function registerSkillsRuntimeSmokeGuards({
       "sourceAllowlist",
       "searchToolCallId",
       "skillToolCallId",
-      'toolName: "skill_search"',
+      'name: "skill_search"',
       'tool_family: "skill_search"',
       "skill_search_query",
       "skill_search_snapshot_skill_count",
@@ -257,7 +286,7 @@ export function registerSkillsRuntimeSmokeGuards({
       "skillRuntime",
       "skill_body_read",
       "skill_gate_decision",
-      'toolName: "Skill"',
+      'name: "Skill"',
       'tool_family: "skill"',
       "workspace_skill_runtime_enable",
       "expertSkillsRuntime",
@@ -282,6 +311,34 @@ export function registerSkillsRuntimeSmokeGuards({
       expect(content).toContain(assertionKey);
       expect(scenarioContent).toContain(assertionKey);
     }
+    expectAllToContain(expect, scenarioContent, [
+      'type: "item.started"',
+      'type: "item.completed"',
+      "buildCanonicalToolItem({",
+    ]);
+    expectAllNotToContain(expect, scenarioContent, [
+      'type: "tool.started"',
+      'type: "tool.result"',
+    ]);
+    expectAllToContain(expect, backendScriptContent, [
+      "if (hasProcessPrelude && initialMessageText.length > 0)",
+      'type: "message.completed"',
+      '"commentary",',
+      "commentaryItemId",
+    ]);
+    const commentaryCompletedIndex = backendScriptContent.indexOf(
+      "if (hasProcessPrelude && initialMessageText.length > 0)",
+    );
+    const skillEventsIndex = backendScriptContent.indexOf(
+      "${renderBackendToolAndSkillEventScript({",
+    );
+    const finalMessageIndex = backendScriptContent.indexOf(
+      'messageDeltaPayload(followupText, "final_answer", finalAnswerItemId)',
+      skillEventsIndex,
+    );
+    expect(commentaryCompletedIndex).toBeGreaterThan(-1);
+    expect(skillEventsIndex).toBeGreaterThan(commentaryCompletedIndex);
+    expect(finalMessageIndex).toBeGreaterThan(skillEventsIndex);
     expect(scenarioContent).not.toContain("agent_runtime_");
   });
 
@@ -311,12 +368,10 @@ export function registerSkillsRuntimeSmokeGuards({
         },
       },
       events: [
-        {
-          event_type: "tool.result",
-          payload: {
-            toolCallId: scenario.searchToolCallId,
-          },
-        },
+        canonicalToolCompletedEvent(scenario.searchToolCallId, {
+          eventTypeKey: "event_type",
+          callIdKey: "callId",
+        }),
         {
           type: "runtime.status",
           payload: {
@@ -338,12 +393,9 @@ export function registerSkillsRuntimeSmokeGuards({
             },
           },
         },
-        {
-          eventType: "tool.result",
-          payload: {
-            tool_call_id: scenario.skillToolCallId,
-          },
-        },
+        canonicalToolCompletedEvent(scenario.skillToolCallId, {
+          eventTypeKey: "eventType",
+        }),
       ],
     };
 
@@ -358,6 +410,7 @@ export function registerSkillsRuntimeSmokeGuards({
       hasSkillInvocationSummary: true,
       skillBodyReadObserved: true,
       skillGateObserved: true,
+      skillBodyReadBeforeGate: true,
       skillGateMode: "selected_skills",
       skillGateWorkspaceRuntimeEnable: null,
       skillGateSourceAllowlist: [],
@@ -368,6 +421,57 @@ export function registerSkillsRuntimeSmokeGuards({
       skillSearchBeforeSkillInvocation: true,
       searchQuery: SKILLS_RUNTIME_QUERY,
       invocationSkillName: SKILLS_RUNTIME_SKILL_NAME,
+    });
+  });
+
+  it("rejects Skills runtime gate evidence that precedes the skill body read", () => {
+    const scenario = createSkillsRuntimeFixtureScenario(
+      "skills-runtime-unit-session",
+    );
+    const evidenceExportResult = {
+      evidencePack: {
+        observabilitySummary: {
+          skillSearches: [
+            {
+              query: SKILLS_RUNTIME_QUERY,
+              toolCallId: scenario.searchToolCallId,
+            },
+          ],
+          skillInvocations: [
+            {
+              skillName: SKILLS_RUNTIME_SKILL_NAME,
+              toolCallId: scenario.skillToolCallId,
+              workspaceSkillRuntimeEnable: { source: "manual_session_enable" },
+            },
+          ],
+        },
+      },
+      events: [
+        canonicalToolCompletedEvent(scenario.searchToolCallId),
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: { skillRuntime: { event: "skill_gate_decision" } },
+          },
+        },
+        {
+          type: "runtime.status",
+          payload: {
+            metadata: { skillRuntime: { event: "skill_body_read" } },
+          },
+        },
+        canonicalToolCompletedEvent(scenario.skillToolCallId),
+      ],
+    };
+
+    expect(
+      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, scenario),
+    ).toMatchObject({
+      skillBodyReadObserved: true,
+      skillGateObserved: false,
+      skillBodyReadBeforeGate: false,
+      skillBodyReadEventIndex: 2,
+      skillGateEventIndex: 1,
     });
   });
 
@@ -402,10 +506,7 @@ export function registerSkillsRuntimeSmokeGuards({
         },
       },
       events: [
-        {
-          type: "tool.result",
-          payload: { toolCallId: natural.searchToolCallId },
-        },
+        canonicalToolCompletedEvent(natural.searchToolCallId),
         {
           type: "runtime.status",
           payload: {
@@ -418,18 +519,9 @@ export function registerSkillsRuntimeSmokeGuards({
             metadata: { skillRuntime: { event: "skill_gate_decision" } },
           },
         },
-        {
-          type: "tool.result",
-          payload: { toolCallId: natural.skillToolCallId },
-        },
-        {
-          type: "tool.result",
-          payload: { toolCallId: explicit.searchToolCallId },
-        },
-        {
-          type: "tool.result",
-          payload: { toolCallId: explicit.skillToolCallId },
-        },
+        canonicalToolCompletedEvent(natural.skillToolCallId),
+        canonicalToolCompletedEvent(explicit.searchToolCallId),
+        canonicalToolCompletedEvent(explicit.skillToolCallId),
       ],
     };
 
@@ -438,6 +530,7 @@ export function registerSkillsRuntimeSmokeGuards({
     ).toMatchObject({
       skillBodyReadObserved: true,
       skillGateObserved: true,
+      skillBodyReadBeforeGate: true,
       skillSearchBeforeSkillInvocation: true,
     });
     expect(
@@ -474,10 +567,7 @@ export function registerSkillsRuntimeSmokeGuards({
         },
       },
       events: [
-        {
-          type: "tool.result",
-          payload: { toolCallId: scenario.searchToolCallId },
-        },
+        canonicalToolCompletedEvent(scenario.searchToolCallId),
         {
           type: "runtime.status",
           payload: {
@@ -497,10 +587,7 @@ export function registerSkillsRuntimeSmokeGuards({
             },
           },
         },
-        {
-          type: "tool.result",
-          payload: { toolCallId: scenario.skillToolCallId },
-        },
+        canonicalToolCompletedEvent(scenario.skillToolCallId),
       ],
     };
 
@@ -511,6 +598,7 @@ export function registerSkillsRuntimeSmokeGuards({
       hasSkillInvocationSummary: true,
       skillBodyReadObserved: true,
       skillGateObserved: true,
+      skillBodyReadBeforeGate: true,
       skillGateMode: "workspace_runtime_enable",
       skillGateWorkspaceRuntimeEnable: true,
       skillGateSourceAllowlist: [SKILLS_RUNTIME_SKILL_NAME],
@@ -556,10 +644,9 @@ export function registerSkillsRuntimeSmokeGuards({
             },
           },
         },
-        {
-          event_type: "tool.result",
-          payload: { tool_call_id: scenario.searchToolCallId },
-        },
+        canonicalToolCompletedEvent(scenario.searchToolCallId, {
+          eventTypeKey: "event_type",
+        }),
         {
           type: "runtime.status",
           payload: {
@@ -590,10 +677,10 @@ export function registerSkillsRuntimeSmokeGuards({
             },
           },
         },
-        {
-          eventType: "tool.result",
-          payload: { toolCallId: scenario.skillToolCallId },
-        },
+        canonicalToolCompletedEvent(scenario.skillToolCallId, {
+          eventTypeKey: "eventType",
+          callIdKey: "callId",
+        }),
         {
           type: "runtime.status",
           payload: {
@@ -617,6 +704,7 @@ export function registerSkillsRuntimeSmokeGuards({
       hasSkillInvocationSummary: true,
       skillBodyReadObserved: true,
       skillGateObserved: true,
+      skillBodyReadBeforeGate: true,
       skillGateMode: "selected_skills",
       expertDeclaredObserved: true,
       expertSelectedObserved: true,

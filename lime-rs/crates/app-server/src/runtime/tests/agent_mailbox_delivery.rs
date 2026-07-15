@@ -217,9 +217,19 @@ async fn trigger_turn_appends_canonical_item_before_ack_and_starts_recipient() {
         .into_iter()
         .filter(|event| event.payload["mailbox"]["messageId"] == "trigger-1")
         .collect::<Vec<_>>();
-    assert_eq!(mailbox_events.len(), 1);
     assert_eq!(
-        mailbox_events[0].payload["itemId"],
+        mailbox_events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["item.started", "message.created"]
+    );
+    let mailbox_message = mailbox_events
+        .iter()
+        .find(|event| event.event_type == "message.created")
+        .expect("mailbox message event");
+    assert_eq!(
+        mailbox_message.payload["itemId"],
         mailbox_item_id("trigger-1")
     );
 }
@@ -351,7 +361,13 @@ async fn existing_canonical_item_is_acknowledged_without_a_duplicate_visible_ite
         .into_iter()
         .filter(|event| event.payload["mailbox"]["messageId"] == "retry-1")
         .collect::<Vec<_>>();
-    assert_eq!(mailbox_events.len(), 1);
+    assert_eq!(
+        mailbox_events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["item.started", "message.created"]
+    );
 }
 
 #[tokio::test]
@@ -441,7 +457,7 @@ async fn event_log_first_queue_only_retry_recovers_canonical_item_before_ack() {
             .read_session_events("child-session")
             .expect("durable mailbox event")
             .len(),
-        2
+        6
     );
 
     connection
@@ -486,7 +502,13 @@ async fn event_log_first_queue_only_retry_recovers_canonical_item_before_ack() {
         .iter()
         .filter(|event| event.payload["mailbox"]["messageId"] == "event-log-retry")
         .collect::<Vec<_>>();
-    assert_eq!(mailbox_events.len(), 1);
+    assert_eq!(
+        mailbox_events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["item.started", "message.created"]
+    );
     assert!(child_events.iter().any(|event| {
         event.turn_id.as_deref() == Some("second-user-turn")
             && event.payload.pointer("/input/text") == Some(&json!("second user input"))
@@ -533,7 +555,7 @@ async fn event_log_first_trigger_retry_recovers_the_deterministic_turn_before_ac
             .read_session_events("child-session")
             .expect("durable mailbox event")
             .len(),
-        1
+        3
     );
 
     connection

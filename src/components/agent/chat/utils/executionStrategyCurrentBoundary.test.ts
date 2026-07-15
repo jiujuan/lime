@@ -17,6 +17,7 @@ const CONSUMER_PATHS = [
   "src/components/agent/chat/hooks/sessionFinalizeController.ts",
   "src/components/agent/chat/hooks/sessionMetadataSyncController.ts",
   "src/components/agent/chat/hooks/useAgentContext.ts",
+  "src/components/agent/chat/hooks/useAgentChat.ts",
   "src/components/agent/chat/components/Inputbar/components/InputbarModelExtra.tsx",
   "src/components/agent/chat/hooks/agentStreamRuntimeContextController.ts",
   "src/components/agent/chat/hooks/agentStreamRuntimeHandlerActions.ts",
@@ -27,6 +28,7 @@ const CONSUMER_PATHS = [
   "src/components/agent/chat/components/Inputbar/index.tsx",
   "src/components/agent/chat/hooks/agentStreamRequestStartController.ts",
   "src/components/agent/chat/hooks/agentStreamSend.ts",
+  "src/components/agent/chat/workspace/WorkspaceConversationScene.tsx",
   "src/components/agent/chat/utils/importedSourceProcess.ts",
   "src/components/agent/chat/hooks/agentSessionTopicViewModel.ts",
   "src/components/agent/chat/hooks/agentStreamPreparedSendEnv.ts",
@@ -48,9 +50,7 @@ describe("execution runtime current owner boundary", () => {
       expect(source, relativePath).toContain(
         'from "@/lib/api/agentExecutionRuntime"',
       );
-      expect(source, relativePath).not.toContain(
-        'from "@/lib/api/agentRuntime"',
-      );
+      expect(source, relativePath).not.toContain('"@/lib/api/agentRuntime"');
     }
   });
 });

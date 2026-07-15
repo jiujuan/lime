@@ -129,6 +129,8 @@ npm run test:rust:layers:stats
 
 `test:rust:changed` 默认比较 `HEAD`，也可通过 `npm run test:rust:unit -- --changed=<ref>` 指定 ref；`test:rust:related -- <paths...>` 按显式路径推导受影响 crate。二者都会把 `lime-rs/crates/**` 路径映射到 workspace package，再通过 `cargo metadata` 扩展反向依赖；触碰根 `Cargo.toml`、`Cargo.lock` 或 workspace 配置时自动扩大到 `--workspace`；命中 Rust 路径但无法映射 current workspace crate 时失败，避免静默通过 0 个测试。
 
+macOS 上统一 Rust runner 会在调用者未设置时为 Cargo test worker 提供 `RUST_MIN_STACK=8388608`，与 App Server 大型 async fixture 的仓库验证口径一致；调用者显式设置的非空值始终优先。
+
 新增 Rust 测试治理脚本优先进入 `scripts/lib/` 或未来已登记的 `scripts/governance/` / Rust 领域目录；不要继续向 `scripts/` 根目录添加平级 runner。
 
 ### Browser Runtime 脚本
@@ -165,7 +167,7 @@ npm run smoke:mcp-elicitation-gate-b
 
 `npm run smoke:mcp-context7-live-electron-fixture` 是真实 Electron + 远程 Context7 live fixture：复用设置页 GUI 创建 Context7 配置，经 `app_server_handle_json_lines` 启动 server、通过 `mcpTool/search` 找到 `resolve-library-id` / `query-docs`，再调用 `mcpTool/call` 查询 “AI Agent 是什么”。该入口会访问远程 Context7；summary 只记录 host、工具名、header 名、env var 名、content 类型 / 数量和 `isError`，不记录 key、header value 或工具正文。
 
-`npm run smoke:mcp-elicitation-gate-b` 是 server-originated elicitation 的真实 Electron Gate B：临时 localhost OpenAI-compatible provider 先请求 `mcp__<server>__release_check`，临时 stdio MCP server 在 scoped tools/call 内发出 `elicitation/create`，App Server 将其转为 typed reverse JSON-RPC，Renderer 主窗口表单提交 `{ confirmed: true }`，随后断言 MCP ledger 收到 accept、provider 第二次请求获得最终文本且 dialog 在 `serverRequest/resolved` 后关闭。fixture 不广告 elicitation capability；该入口禁止以 `mcpTool/callWithCaller`、`agentSession/action/respond`、mock backend 或 renderer mock 作为成功路径。
+`npm run smoke:mcp-elicitation-gate-b` 是 server-originated elicitation 的真实 Electron Gate B：临时 localhost OpenAI-compatible provider 先请求 `mcp__<server>__release_check`，临时 stdio MCP server 在 scoped tools/call 内发出 `elicitation/create`，App Server 将其转为 typed reverse JSON-RPC，Renderer 主窗口表单提交 `{ confirmed: true }`，随后断言 MCP ledger 收到 accept、provider 第二次请求获得最终文本且 dialog 在 `serverRequest/resolved` 后关闭。Gate B 还要求实际接受 elicitation 的 runtime stdio 连接以 MCP `2025-06-18` 广告精确 `{"elicitation": {}}`，management 连接保持 capability absent；该入口禁止以 `mcpTool/callWithCaller`、`agentSession/action/respond`、mock backend 或 renderer mock 作为成功路径。
 
 新增 MCP control-plane 脚本继续进入 `scripts/mcp/` 或复用现有 `smoke:mcp-current` npm script；涉及真实 Electron Desktop Host GUI 的 MCP fixture 进入 `scripts/electron/`。共享实现仍放在领域子目录或 `scripts/lib/`。
 

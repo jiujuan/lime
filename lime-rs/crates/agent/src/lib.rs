@@ -45,7 +45,6 @@ mod session_execution_runtime;
 mod session_record_sql;
 mod session_usage_projection;
 pub mod skill_execution;
-pub mod team_runtime_governor;
 pub mod tool_io_offload;
 pub mod tools;
 mod turn_context_configuration;
@@ -148,12 +147,6 @@ pub use skill_execution::{
     execute_skill_prompt, execute_skill_workflow, SkillEventEmitter, SkillExecutionError,
     SkillExecutionResult, SkillInputImage, SkillPromptExecution, SkillWorkflowExecution,
     StepResult,
-};
-pub use team_runtime_governor::{
-    acquire_team_runtime_permit, default_team_runtime_parallel_budget,
-    normalize_team_runtime_provider_group, preview_team_runtime_wait_snapshot,
-    release_team_runtime_permit, resolve_team_runtime_provider_parallel_budget,
-    snapshot_team_runtime_session, TeamRuntimeGovernorSnapshot, TeamRuntimePermit,
 };
 pub use turn_context_configuration::{
     agent_turn_approval_policy, agent_turn_context_metadata, agent_turn_sandbox_policy,

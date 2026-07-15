@@ -224,26 +224,6 @@ async fn load_session_current_enriches_completed_media_task_store_results() {
         created_at: timestamp.to_string(),
         updated_at: timestamp.to_string(),
     };
-    let persisted = AgentSessionReadResponse {
-        session: session.clone(),
-        turns: vec![AgentTurn {
-            turn_id: turn_id.to_string(),
-            session_id: session_id.to_string(),
-            thread_id: thread_id.to_string(),
-            status: AgentTurnStatus::Completed,
-            started_at: Some(timestamp.to_string()),
-            completed_at: Some("2026-07-07T00:00:02.000Z".to_string()),
-        }],
-        detail: Some(json!({
-            "id": session_id,
-            "session_id": session_id,
-            "thread_id": thread_id,
-            "working_dir": workspace.path().to_string_lossy(),
-            "items": [],
-            "messages": [],
-            "turns": [],
-        })),
-    };
     let media_task = media_task_artifact_response(json!({
         "task_id": "task-image-read-model",
         "task_type": "image_generate",
@@ -276,8 +256,17 @@ async fn load_session_current_enriches_completed_media_task_store_results() {
         }
     }));
     let data_source =
-        Arc::new(TestSessionDataSource::new(persisted).with_media_task_artifacts(vec![media_task]));
+        Arc::new(TestSessionDataSource::new().with_media_task_artifacts(vec![media_task]));
     let core = RuntimeCore::default().with_app_data_source(data_source.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some(session.session_id.clone()),
+        thread_id: Some(session.thread_id.clone()),
+        app_id: session.app_id.clone(),
+        workspace_id: session.workspace_id.clone(),
+        business_object_ref: session.business_object_ref.clone(),
+        locale: None,
+    })
+    .expect("session");
 
     let loaded = core
         .load_session_current(AgentSessionReadParams {

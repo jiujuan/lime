@@ -26,7 +26,6 @@ import {
   SESSION_ID,
   SKILLS_RUNTIME_SCENARIO,
   THREAD_ID,
-  summarizeMultiAgentTeamEvidenceExport,
   summarizeSkillsRuntimeEvidenceExport,
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
@@ -445,34 +444,6 @@ export async function exportSkillsRuntimeEvidencePack(
     result: exportResult.result,
     summary: sanitizeJson(
       summarizeSkillsRuntimeEvidenceExport(exportResult.result, scenario),
-    ),
-  };
-}
-
-export async function exportMultiAgentTeamEvidencePack(
-  page,
-  requestLog,
-  { sessionId = SESSION_ID, threadId = THREAD_ID, turnId = null } = {},
-) {
-  const exportResult = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_EVIDENCE_EXPORT,
-    {
-      sessionId,
-      includeEvents: true,
-      includeArtifacts: true,
-      includeEvidencePack: true,
-    },
-    requestLog,
-  );
-  return {
-    result: exportResult.result,
-    summary: sanitizeJson(
-      summarizeMultiAgentTeamEvidenceExport(exportResult.result, {
-        sessionId,
-        threadId,
-        turnId,
-      }),
     ),
   };
 }

@@ -7,7 +7,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type {
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
+} from "@/lib/api/agentExecutionRuntime";
 import { getDefaultProvider } from "@/lib/api/appConfig";
 import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
@@ -26,7 +29,6 @@ import {
   type SendMessageFn,
   type UseAgentChatOptions,
 } from "./agentChatShared";
-import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { useAgentTopicSnapshot } from "./useAgentTopicSnapshot";
 import { hasRunningThreadReadActivity } from "../projection/threadReadActivity";
 import { resolveClawWorkspaceProviderSelection } from "../utils/clawWorkspaceProviderSelection";

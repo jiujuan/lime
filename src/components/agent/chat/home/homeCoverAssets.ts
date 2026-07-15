@@ -1,26 +1,33 @@
-// 首页封面走 public 绝对路径，保持与 logo 一致，避免桌面 WebView 中 CSS import URL 失效。
+import accountPerformanceTrackingCover from "./assets/home-cover-account-performance-tracking.webp";
+import articleToSlideVideoOutlineCover from "./assets/home-cover-article-to-slide-video-outline.webp";
+import carouselPostReplicationCover from "./assets/home-cover-carousel-post-replication.webp";
+import cloudVideoDubbingCover from "./assets/home-cover-cloud-video-dubbing.webp";
+import draftCover from "./assets/home-cover-draft.webp";
+import reviewCover from "./assets/home-cover-review.webp";
+import rewriteCover from "./assets/home-cover-rewrite.webp";
+import shortVideoScriptReplicationCover from "./assets/home-cover-short-video-script-replication.webp";
+import trendCover from "./assets/home-cover-trend.webp";
+import videoDubbingLanguageCover from "./assets/home-cover-video-dubbing-language.webp";
+import viralCover from "./assets/home-cover-viral.webp";
+import voiceCover from "./assets/home-cover-voice.webp";
+
 const HOME_COVER_ASSETS: Record<string, string> = {
-  "account-performance-tracking":
-    "/home-covers/home-cover-account-performance-tracking.jpg",
-  "article-to-slide-video-outline":
-    "/home-covers/home-cover-article-to-slide-video-outline.jpg",
-  "carousel-post-replication":
-    "/home-covers/home-cover-carousel-post-replication.jpg",
-  "cloud-video-dubbing": "/home-covers/home-cover-cloud-video-dubbing.jpg",
-  "daily-trend-briefing": "/home-covers/home-cover-trend.jpg",
-  draft: "/home-covers/home-cover-draft.jpg",
-  review: "/home-covers/home-cover-review.jpg",
-  rewrite: "/home-covers/home-cover-rewrite.jpg",
-  scene: "/home-covers/home-cover-short-video-script-replication.jpg",
-  service: "/home-covers/home-cover-review.jpg",
-  sky: "/home-covers/home-cover-article-to-slide-video-outline.jpg",
-  "short-video-script-replication":
-    "/home-covers/home-cover-short-video-script-replication.jpg",
-  trend: "/home-covers/home-cover-trend.jpg",
-  "video-dubbing-language":
-    "/home-covers/home-cover-video-dubbing-language.jpg",
-  viral: "/home-covers/home-cover-viral.jpg",
-  voice: "/home-covers/home-cover-voice.jpg",
+  "account-performance-tracking": accountPerformanceTrackingCover,
+  "article-to-slide-video-outline": articleToSlideVideoOutlineCover,
+  "carousel-post-replication": carouselPostReplicationCover,
+  "cloud-video-dubbing": cloudVideoDubbingCover,
+  "daily-trend-briefing": trendCover,
+  draft: draftCover,
+  review: reviewCover,
+  rewrite: rewriteCover,
+  scene: shortVideoScriptReplicationCover,
+  service: reviewCover,
+  sky: articleToSlideVideoOutlineCover,
+  "short-video-script-replication": shortVideoScriptReplicationCover,
+  trend: trendCover,
+  "video-dubbing-language": videoDubbingLanguageCover,
+  viral: viralCover,
+  voice: voiceCover,
 };
 
 export function resolveHomeCoverAsset(token: string): string | undefined {

@@ -121,7 +121,7 @@ Owner 侧对应测试文档：
 | AR-TASK-001 | attempt failed 保留历史 | `task.attempt.started -> task.attempt.failed` | `TaskSnapshot.attempts[]` 保留失败 attempt，`currentRunId` 不被误覆盖 |
 | AR-TASK-002 | retry 后 currentRunId 更新 | failed attempt 后 `task.retrying -> task.attempt.started(run_2)` | `currentRunId = run_2`，attempts 同时包含 run_1/run_2 |
 | AR-TASK-003 | parent-child graph 可追踪 | `subagent.spawned` 或 job item event | child task/subagent 能回挂 parent task/turn |
-| AR-SUB-001 | 子代理 profile event 保留 parent-child 关联 | `subagent-parent-child-event.json` | 必含 `subagentSessionId/parentSessionId/parentThreadId/parentTaskId/createdFromTurnId/runtimeStatus`，终态输出 `subagent.completed/failed/closed` |
+| AR-SUB-001 | 子代理 profile event 保留 parent-child 关联 | `subagent-parent-child-event.json` | 必含 `subagentSessionId/parentThreadId/parentTaskId/createdFromTurnId/runtimeStatus`，终态输出 `subagent.completed/failed/closed` |
 | AR-JOB-001 | owner run 进入 job profile event | `job-owner-run-event.json` | 必含 `jobId/source/sourceRef/runtimeStatus`，终态输出 `job.completed` 或 `job.failed` |
 | AR-JOB-002 | owner run metadata 进入 job item event | `job-owner-run-event.json` | 必含 `jobId/itemId/itemKind/sourceRef`，失败时输出 `job.item.failed` 且保留 `failureCategory/errorCode/retryable` |
 | AR-REMOTE-001 | remote channel resume / repair 进入 profile event | `remote-channel-resume-event.json` | 必含 `remoteTaskId/channel/accountId/runId`，断开输出 `channel.disconnected`，恢复输出 `channel.resumed`，修复输出 `snapshot.repaired` |

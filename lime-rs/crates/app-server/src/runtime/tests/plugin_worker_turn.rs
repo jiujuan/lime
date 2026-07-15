@@ -98,8 +98,8 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
         return;
     };
     let installed_state = content_factory_installed_state(&fixture_root);
-    let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-        .with_plugin_installed_states(vec![installed_state]);
+    let data_source =
+        TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
     let session = core
@@ -143,7 +143,9 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
     assert_eq!(
         event_types,
         vec![
+            "item.started",
             "message.created",
+            "item.completed",
             "turn.accepted",
             "artifact.snapshot",
             "turn.completed"
@@ -228,8 +230,8 @@ async fn plugin_activation_turn_uses_regular_agent_backend() {
         return;
     };
     let installed_state = content_factory_installed_state(&fixture_root);
-    let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-        .with_plugin_installed_states(vec![installed_state]);
+    let data_source =
+        TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
     let event_log_root = tempfile::tempdir().expect("event log root");
     let event_log_writer =
         Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
@@ -377,8 +379,8 @@ async fn article_workspace_worker_blocks_cloud_release_without_verified_signatur
         "manifestHashMatched": true,
         "packageVerificationStatus": "verified"
     }));
-    let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-        .with_plugin_installed_states(vec![installed_state]);
+    let data_source =
+        TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
     let core = RuntimeCore::default().with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
@@ -421,7 +423,9 @@ async fn article_workspace_worker_blocks_cloud_release_without_verified_signatur
     assert_eq!(
         event_types,
         vec![
+            "item.started",
             "message.created",
+            "item.completed",
             "turn.accepted",
             "runtime.error",
             "turn.failed"
@@ -450,8 +454,8 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
         return;
     };
     let installed_state = content_factory_installed_state(&fixture_root);
-    let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-        .with_plugin_installed_states(vec![installed_state]);
+    let data_source =
+        TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
     let core = RuntimeCore::default().with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
@@ -494,7 +498,9 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
     assert_eq!(
         event_types,
         vec![
+            "item.started",
             "message.created",
+            "item.completed",
             "turn.accepted",
             "runtime.error",
             "turn.failed"
@@ -565,6 +571,22 @@ async fn article_workspace_worker_fails_closed_when_output_artifact_kind_is_miss
         .expect("article workspace worker missing output turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Failed);
+    let event_types = output
+        .events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "item.started",
+            "message.created",
+            "item.completed",
+            "turn.accepted",
+            "runtime.error",
+            "turn.failed"
+        ]
+    );
     let runtime_error = output
         .events
         .iter()
@@ -586,8 +608,8 @@ async fn article_workspace_worker_retries_retryable_failure_and_completes() {
     let temp = tempfile::tempdir().expect("temp worker package");
     fs::write(temp.path().join("worker.mjs"), RETRY_THEN_COMPLETE_WORKER).expect("worker script");
     let installed_state = retry_worker_installed_state(temp.path());
-    let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-        .with_plugin_installed_states(vec![installed_state]);
+    let data_source =
+        TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let event_log_root = tempfile::tempdir().expect("event log root");
     let event_log_writer =
@@ -637,7 +659,9 @@ async fn article_workspace_worker_retries_retryable_failure_and_completes() {
     assert_eq!(
         event_types,
         vec![
+            "item.started",
             "message.created",
+            "item.completed",
             "turn.accepted",
             "plugin_worker.retry",
             "artifact.snapshot",
@@ -743,8 +767,8 @@ async fn article_workspace_worker_stops_after_retry_budget_is_exhausted() {
     )
     .expect("worker script");
     let installed_state = retry_worker_installed_state(temp.path());
-    let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-        .with_plugin_installed_states(vec![installed_state]);
+    let data_source =
+        TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let event_log_root = tempfile::tempdir().expect("event log root");
     let event_log_writer =
@@ -794,7 +818,9 @@ async fn article_workspace_worker_stops_after_retry_budget_is_exhausted() {
     assert_eq!(
         event_types,
         vec![
+            "item.started",
             "message.created",
+            "item.completed",
             "turn.accepted",
             "plugin_worker.retry",
             "runtime.error",

@@ -43,11 +43,14 @@ RUST_MIN_STACK=8388608 cargo test -p app-server \
 => 1/1 passed
 ```
 
-- App Server shared related suite：1097/1097 passed（当前 S2m/S2n 共享工作树）。
+- complete conversation import suite：53/53 passed。
+- App Server shared related suite：1098/1098 passed（当前 S2m/S2n 共享工作树）。
 - exact `rustfmt --check` passed。
 - claimed Rust write set `git diff --check` passed。
 - history replay Electron fixture 已验证 imported Message / Reasoning / Tool 的完整 DOM 恢复，
   reasoning summary 单实例、2 个图片附件、1 个 MCP tool row，console error 为 0。
+- `npm run verify:gui-smoke` passed；真实 Electron/preload/App Server sidecar 与 Workbench shell 正常。
+- `npm run governance:legacy-report` passed：零引用候选 0、分类漂移候选 0、边界违规 0。
 
 ## 路线图关系
 

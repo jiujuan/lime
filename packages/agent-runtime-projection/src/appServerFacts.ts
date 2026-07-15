@@ -278,9 +278,9 @@ function projectAppServerEventToExecutionEvent(
         runtimeStatus: projectedStatus,
         taskId,
         agentId: subagentId,
-        parentSessionId: readStringField(payload, [
-          "parentSessionId",
-          "parent_session_id",
+        parentThreadId: readStringField(payload, [
+          "parentThreadId",
+          "parent_thread_id",
         ]),
         transcriptRef: readStringField(payload, [
           "transcriptRef",

@@ -16,11 +16,6 @@ pub use llm_protocol::canonical::{
     Request as CanonicalRequest, Role as CanonicalRole, ToolDefinition as CanonicalToolDefinition,
     ToolResultValue, Usage,
 };
-pub use llm_protocol::{
-    runtime_event_from_llm_event, LlmEvent, LlmInputPart, LlmMessage, LlmOutputPart, LlmRequest,
-    LlmRole, LlmRuntimeEvent, LlmToolDefinition, ProviderWireRequest,
-    ResponsesImageGenerationInputShape, ResponsesImageGenerationOptions,
-};
 pub use model_route::{
     resolved_route_from_task, route_evidence_payload, route_resolution_evidence_payloads,
     DirectRouteConfig, ModelRouteProvider, ModelRouteSelection, RouteResolutionEvidencePayloads,

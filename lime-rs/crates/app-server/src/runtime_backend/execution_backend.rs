@@ -1,6 +1,7 @@
 use super::{
     action_response, current_agent_runtime_config_metadata, initialize_runtime_database,
-    plugin_worker_generation, tool_inventory, workspace_patch_host_execution, RuntimeBackend,
+    plugin_worker_generation, request_context::effective_runtime_options_for_turn, tool_inventory,
+    workspace_patch_host_execution, RuntimeBackend,
 };
 use crate::runtime::ToolInventoryReadRequest;
 use crate::{
@@ -24,6 +25,15 @@ impl ExecutionBackend for RuntimeBackend {
         })?;
         *guard = Some(app_data_source);
         Ok(())
+    }
+
+    fn effective_turn_runtime_options(
+        &self,
+        request: &ExecutionRequest,
+        first_sampling_turn: bool,
+    ) -> Option<app_server_protocol::RuntimeOptions> {
+        effective_runtime_options_for_turn(request, first_sampling_turn)
+            .or_else(|| request.runtime_options.clone())
     }
 
     async fn start_turn(

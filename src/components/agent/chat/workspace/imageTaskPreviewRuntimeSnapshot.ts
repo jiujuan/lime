@@ -1,5 +1,5 @@
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
-import type { MediaTaskArtifactOutput } from "@/lib/api/mediaTasks";
+import type { MediaTaskArtifactOutput } from "@/lib/api/agentRuntime/mediaTaskTypes";
 import type {
   ImageStoryboardSlot,
   Message,

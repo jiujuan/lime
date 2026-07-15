@@ -447,43 +447,52 @@ function renderGroupItemDetails(
       resolveTimelineSubagentDefaultTitle();
 
     return (
-      <SurfaceCard
-        icon={Bot}
-        title={resolveTimelineSubagentTitle(displayTitle)}
-        badge={
-          <Badge
-            variant={resolveSubagentStatusBadgeVariant(
-              item.status_label,
-              item.status,
-            )}
-          >
-            {resolveSubagentStatusLabel(item.status_label, item.status)}
-          </Badge>
-        }
-        timestamp={timestamp}
+      <div
+        data-testid="subagent-activity-row"
+        data-subagent-activity-item-id={item.id}
+        data-subagent-activity-kind={item.status_label?.trim().toLowerCase()}
+        data-subagent-thread-id={subagentThreadId || undefined}
       >
-        {item.summary ? (
-          <div className="text-sm text-muted-foreground">{item.summary}</div>
-        ) : null}
-        {item.role || item.model ? (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {item.role ? <Badge variant="outline">{item.role}</Badge> : null}
-            {item.model ? <Badge variant="outline">{item.model}</Badge> : null}
-          </div>
-        ) : null}
-        {subagentThreadId && onOpenSubagentSession ? (
-          <div className="mt-3">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => onOpenSubagentSession(subagentThreadId)}
+        <SurfaceCard
+          icon={Bot}
+          title={resolveTimelineSubagentTitle(displayTitle)}
+          badge={
+            <Badge
+              variant={resolveSubagentStatusBadgeVariant(
+                item.status_label,
+                item.status,
+              )}
             >
-              {options?.openSubagentLabel}
-            </Button>
-          </div>
-        ) : null}
-      </SurfaceCard>
+              {resolveSubagentStatusLabel(item.status_label, item.status)}
+            </Badge>
+          }
+          timestamp={timestamp}
+        >
+          {item.summary ? (
+            <div className="text-sm text-muted-foreground">{item.summary}</div>
+          ) : null}
+          {item.role || item.model ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {item.role ? <Badge variant="outline">{item.role}</Badge> : null}
+              {item.model ? (
+                <Badge variant="outline">{item.model}</Badge>
+              ) : null}
+            </div>
+          ) : null}
+          {subagentThreadId && onOpenSubagentSession ? (
+            <div className="mt-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => onOpenSubagentSession(subagentThreadId)}
+              >
+                {options?.openSubagentLabel}
+              </Button>
+            </div>
+          ) : null}
+        </SurfaceCard>
+      </div>
     );
   }
 

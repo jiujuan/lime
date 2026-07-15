@@ -2,7 +2,6 @@ use super::super::*;
 use crate::MemoryBackend;
 
 pub(in crate::runtime::tests) struct TestSessionDataSource {
-    persisted: Option<AgentSessionReadResponse>,
     workspace: Option<serde_json::Value>,
     memory_store_read_response: Mutex<Option<Result<MemoryStoreReadResponse, String>>>,
     memory_store_read_requests: Mutex<Vec<MemoryStoreReadParams>>,
@@ -18,9 +17,8 @@ pub(in crate::runtime::tests) struct TestSessionDataSource {
 }
 
 impl TestSessionDataSource {
-    pub(in crate::runtime::tests) fn new(persisted: AgentSessionReadResponse) -> Self {
+    pub(in crate::runtime::tests) fn new() -> Self {
         Self {
-            persisted: Some(persisted),
             workspace: None,
             memory_store_read_response: Mutex::new(None),
             memory_store_read_requests: Mutex::new(Vec::new()),
@@ -145,25 +143,6 @@ impl TestSessionDataSource {
     }
 }
 
-pub(in crate::runtime::tests) fn empty_agent_session_read_response(
-    session_id: &str,
-) -> AgentSessionReadResponse {
-    AgentSessionReadResponse {
-        session: AgentSession {
-            session_id: session_id.to_string(),
-            thread_id: session_id.to_string(),
-            app_id: "agent-runtime".to_string(),
-            workspace_id: None,
-            business_object_ref: None,
-            status: AgentSessionStatus::Idle,
-            created_at: timestamp(),
-            updated_at: timestamp(),
-        },
-        turns: Vec::new(),
-        detail: None,
-    }
-}
-
 pub(in crate::runtime::tests) fn managed_objective(session_id: &str) -> ManagedObjective {
     ManagedObjective {
         objective_id: "objective-1".to_string(),
@@ -188,17 +167,6 @@ pub(in crate::runtime::tests) fn managed_objective(session_id: &str) -> ManagedO
 
 #[async_trait]
 impl SessionAppDataSource for TestSessionDataSource {
-    async fn read_agent_session(
-        &self,
-        params: AgentSessionReadParams,
-    ) -> Result<Option<AgentSessionReadResponse>, RuntimeCoreError> {
-        Ok(self
-            .persisted
-            .as_ref()
-            .filter(|response| response.session.session_id == params.session_id)
-            .cloned())
-    }
-
     async fn read_agent_session_objective(
         &self,
         _params: AgentSessionObjectiveReadParams,

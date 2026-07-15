@@ -83,6 +83,7 @@ fn item(thread: &Thread, turn_id: &str, id: &str, sequence: u64, ordinal: u64) -
         payload: ThreadItemPayload::AgentMessage {
             text: id.to_string(),
             phase: None,
+            content_parts: Vec::new(),
         },
         metadata: json!({}),
     }
@@ -385,6 +386,135 @@ fn production_event_batches_create_and_incrementally_update_canonical_history() 
         &thread.turns[0].items[0].payload,
         ThreadItemPayload::AgentMessage { text, .. } if text == "hello world"
     ));
+}
+
+#[test]
+fn imported_and_live_items_share_event_log_ordinal_domain() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let database_path = temp.path().join("projection.sqlite");
+    let store = ProjectionStore::initialize(database_path.clone()).expect("projection store");
+    let stored = StoredSession {
+        session: app_server_protocol::AgentSession {
+            session_id: "session-live-ordinal".to_string(),
+            thread_id: "thread-live-ordinal".to_string(),
+            app_id: "agent-chat".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            status: app_server_protocol::AgentSessionStatus::Running,
+            created_at: "2026-07-15T00:00:00Z".to_string(),
+            updated_at: "2026-07-15T00:00:03Z".to_string(),
+        },
+        turns: Vec::new(),
+        turn_inputs: HashMap::new(),
+        turn_runtime_options: HashMap::new(),
+        events: Vec::new(),
+        output_blobs: HashMap::new(),
+    };
+    let event = |sequence: u64, event_type: &str, payload| app_server_protocol::AgentEvent {
+        event_id: format!("live-ordinal-event-{sequence}"),
+        sequence,
+        session_id: stored.session.session_id.clone(),
+        thread_id: Some(stored.session.thread_id.clone()),
+        turn_id: Some("turn-live-ordinal".to_string()),
+        event_type: event_type.to_string(),
+        timestamp: format!("2026-07-15T00:00:{sequence:02}Z"),
+        payload,
+    };
+    let tool_item = |status: &str| {
+        json!({
+            "sessionId": "producer-session",
+            "threadId": "producer-thread",
+            "turnId": "producer-turn",
+            "itemId": "tool-live-ordinal",
+            "sequence": 1,
+            "ordinal": 1,
+            "createdAtMs": 1,
+            "updatedAtMs": 1,
+            "completedAtMs": if status == "completed" { Some(1) } else { None },
+            "kind": "tool",
+            "status": status,
+            "payload": {
+                "type": "tool",
+                "call_id": "tool-live-ordinal",
+                "name": "read_file",
+                "arguments": [],
+                "output": null
+            },
+            "metadata": {}
+        })
+    };
+
+    store
+        .apply_canonical_events(
+            &stored,
+            &[event(
+                1,
+                "item.completed",
+                json!({
+                    "imported": true,
+                    "sourceClient": "codex",
+                    "importVersion": 2,
+                    "sourceEventSeq": 20,
+                    "item": {
+                        "sessionId": "producer-session",
+                        "threadId": "producer-thread",
+                        "turnId": "producer-turn",
+                        "itemId": "message-imported-ordinal",
+                        "sequence": 0,
+                        "ordinal": 20,
+                        "createdAtMs": 0,
+                        "updatedAtMs": 0,
+                        "completedAtMs": 0,
+                        "kind": "agentMessage",
+                        "status": "completed",
+                        "payload": {
+                            "type": "agentMessage",
+                            "text": "imported",
+                            "content_parts": []
+                        },
+                        "metadata": {"source_event_seq": 20}
+                    }
+                }),
+            )],
+        )
+        .expect("imported Item must use Lime EventLog ordinal");
+    store
+        .apply_canonical_events(
+            &stored,
+            &[event(
+                20,
+                "item.started",
+                json!({"item": tool_item("inProgress")}),
+            )],
+        )
+        .expect("live Item must not collide with imported source ordinal");
+    store
+        .apply_canonical_events(
+            &stored,
+            &[event(
+                21,
+                "item.completed",
+                json!({"item": tool_item("completed")}),
+            )],
+        )
+        .expect("tool completion must preserve the first live ordinal");
+    drop(store);
+
+    let store = ProjectionStore::initialize(database_path).expect("reopen projection store");
+    let thread = block_on(store.read_thread(ReadThreadParams {
+        thread_id: ThreadId::new("thread-live-ordinal"),
+        include_archived: false,
+        turns_view: ThreadTurnsView::Full,
+    }))
+    .expect("read live ordinal thread")
+    .expect("live ordinal thread");
+    let items = &thread.turns[0].items;
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].ordinal, 1);
+    assert_eq!(items[0].item_id.as_str(), "message-imported-ordinal");
+    assert_eq!(items[1].ordinal, 20);
+    assert_eq!(items[1].item_id.as_str(), "tool-live-ordinal");
+    assert_eq!(items[1].status, ItemStatus::Completed);
 }
 
 #[test]

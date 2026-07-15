@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeGeneratedTitleResult,
   RuntimeProviderSelection,
-} from "./types";
+} from "./sessionTypes";
 import {
   invokeAgentRuntimeBridge,
   type AgentRuntimeBridgeInvoke,

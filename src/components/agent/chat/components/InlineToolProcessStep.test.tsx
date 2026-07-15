@@ -5,6 +5,20 @@ import { changeLimeLocale } from "@/i18n/createI18n";
 import { renderTool } from "./InlineToolProcessStep.testHarness";
 
 describe("InlineToolProcessStep", () => {
+  it("工具行应暴露 canonical typed Tool identity", () => {
+    const { container } = renderTool({
+      id: "tool-row-identity-1",
+      name: "tool_search",
+      status: "completed",
+      startTime: new Date("2026-07-15T01:30:00.000Z"),
+      endTime: new Date("2026-07-15T01:30:01.000Z"),
+    });
+
+    const row = container.querySelector('[data-testid="tool-call-row"]');
+    expect(row?.getAttribute("data-tool-name")).toBe("tool_search");
+    expect(row?.getAttribute("data-tool-status")).toBe("completed");
+  });
+
   it("内联工具过程节点应消费 Soul lifecycle descriptor metadata", () => {
     const { container } = renderTool({
       id: "tool-soul-lifecycle-inline-1",

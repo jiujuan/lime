@@ -195,7 +195,7 @@
 
 退出条件：
 
-- `subagent-parent-child-event.json` 有对应实现测试，且 profile event 能回挂 `parentSessionId/parentThreadId/parentTaskId/createdFromTurnId`。
+- `subagent-parent-child-event.json` 有对应实现测试，且 profile event 能回挂 `parentThreadId/parentTaskId/createdFromTurnId`。
 - `job-owner-run-event.json` 有对应实现测试，且 automation owner run 能输出 `job.created/job.status/job.item.started/job.item.failed/job.completed|job.failed`。
 - `remote-channel-resume-event.json` 有对应实现测试，且 remote task owner run 能输出 `channel.connected/channel.disconnected/channel.resumed/snapshot.repaired`。
 - 子代理失败能回挂 parent task。

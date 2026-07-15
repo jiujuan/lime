@@ -366,9 +366,7 @@ describe("Project / Thread-first boundary", () => {
       "utf8",
     );
     const canonicalReaderSource = readFileSync(
-      repoPath(
-        "src/lib/api/agentRuntime/appServerCanonicalItemReader.ts",
-      ),
+      repoPath("src/lib/api/agentRuntime/appServerCanonicalItemReader.ts"),
       "utf8",
     );
     const threadClientSource = readFileSync(
@@ -382,9 +380,7 @@ describe("Project / Thread-first boundary", () => {
       "utf8",
     );
     const threadItemProjectionSource = readFileSync(
-      repoPath(
-        "src/components/agent/chat/projection/threadItemProjection.ts",
-      ),
+      repoPath("src/components/agent/chat/projection/threadItemProjection.ts"),
       "utf8",
     );
     const sharedProjectionSource = readFileSync(
@@ -406,7 +402,7 @@ describe("Project / Thread-first boundary", () => {
     expect(teamFactsEvidenceTestSource).toContain(
       "export_evidence_pack_includes_multi_agent_team_facts",
     );
-    expect(teamFactsEvidenceTestSource).toContain("parentSessionIds");
+    expect(teamFactsEvidenceTestSource).toContain("parentThreadIds");
     expect(workspaceSource).toContain(
       "useWorkspaceSubagentNavigationRuntime({",
     );
@@ -423,7 +419,9 @@ describe("Project / Thread-first boundary", () => {
     expect(navigationSource).toContain(
       ".find((child) => child.threadId.trim() === normalizedTargetId)",
     );
-    expect(navigationSource).toContain("await readSessionId(normalizedTargetId)");
+    expect(navigationSource).toContain(
+      "await readSessionId(normalizedTargetId)",
+    );
     expect(navigationSource).toContain("await switchTopic(sessionId)");
     expect(navigationSource).not.toContain("isKnownSession");
     expect(threadItemProjectionSource).toContain(
@@ -439,6 +437,8 @@ describe("Project / Thread-first boundary", () => {
     expect(teamControlSource).toContain(
       "threadId: definedString(context.threadId)",
     );
-    expect(teamControlSource).toContain("parentSessionId: sessionId");
+    expect(teamControlSource).toContain(
+      "parentThreadId: definedString(context.threadId)",
+    );
   });
 });

@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 
 const CONTRACT_SOURCES = [
   "src/lib/api/agentRuntime/sessionTypes.ts",
-  "src/lib/api/agentRuntime/types.d.ts",
   "src/lib/api/agentRuntime/sessionNormalizers.ts",
   "src/lib/api/agentRuntime/normalizers.ts",
   "src/lib/api/agentRuntime/normalizers.d.ts",
@@ -31,17 +30,16 @@ describe("retired session roster contract boundary", () => {
     expect(combined).not.toContain("subagent_parent_context");
   });
 
-  it("两个 session read 边界只允许删除 retired key，不得透传", () => {
+  it("两个 production session read 边界不得包含 retired key 或 sanitizer", () => {
     for (const sourcePath of [
       "src/lib/api/agentRuntime/appServerSessionClient.ts",
       "src/lib/api/agentRuntime/sessionClient.ts",
     ]) {
       const source = readSource(sourcePath);
 
-      expect(source.match(/child_subagent_sessions/g)).toHaveLength(1);
-      expect(source.match(/subagent_parent_context/g)).toHaveLength(1);
-      expect(source).toContain('delete current["child_subagent_sessions"]');
-      expect(source).toContain('delete current["subagent_parent_context"]');
+      expect(source).not.toContain("child_subagent_sessions");
+      expect(source).not.toContain("subagent_parent_context");
+      expect(source).not.toContain("omitLegacyRosterFields");
     }
   });
 });

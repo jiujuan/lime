@@ -3,7 +3,7 @@ import type {
   AppServerEvidencePackSummary,
 } from "@/lib/api/appServer";
 import { normalizeEvidencePack } from "./normalizers";
-import type { AgentRuntimeEvidencePack } from "./types";
+import type { AgentRuntimeEvidencePack } from "./evidenceTypes";
 
 export function projectAppServerEvidenceExportToRuntimeEvidencePack(
   response: AppServerEvidenceExportResponse,

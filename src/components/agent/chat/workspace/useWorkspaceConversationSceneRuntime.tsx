@@ -18,10 +18,8 @@ import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNaviga
 import { buildStepProgressProps } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 import { buildWorkspaceConversationCodingViews } from "./workspaceConversationCodingViews";
-import type {
-  AgentSessionExecutionRuntime,
-  AgentTodoItem,
-} from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
+import type { AgentTodoItem } from "@/lib/api/agentRuntime/sessionTypes";
 import type { CodingWorkbenchRecoveryContext } from "./codingWorkbenchRecovery";
 import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
 import type { GeneralWorkbenchTaskRailContextInput } from "../components/generalWorkbenchTaskRailViewModel";

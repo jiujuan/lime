@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import {
   applyAgentStreamModelChangeExecutionRuntime,
   applyAgentStreamTurnContextExecutionRuntime,

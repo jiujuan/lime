@@ -4,7 +4,7 @@ import type {
   SkillCatalogSkillLocator,
 } from "@/lib/api/skillCatalog";
 import { listSkillCatalogSkillEntries } from "@/lib/api/skillCatalog";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type { Skill } from "@/lib/api/skills";
 
@@ -77,7 +77,10 @@ function findCatalogSkillEntry(
   );
 }
 
-function findLocalSkill(refName: string, localSkills?: Skill[] | null): Skill | null {
+function findLocalSkill(
+  refName: string,
+  localSkills?: Skill[] | null,
+): Skill | null {
   if (!localSkills) {
     return null;
   }
@@ -140,18 +143,16 @@ function nativeServiceSkillLocator(
     BuildExpertSkillRuntimeCandidatesOptions,
     "catalog" | "localSkills"
   >,
-):
-  | {
-      locator: SkillCatalogSkillLocator;
-      displayTitle: string;
-      reason: string;
-    }
-  | null {
+): {
+  locator: SkillCatalogSkillLocator;
+  displayTitle: string;
+  reason: string;
+} | null {
   if (skill.defaultExecutorBinding !== "native_skill") {
     return null;
   }
-  const names = [skill.skillKey, skill.id].filter(
-    (value): value is string => Boolean(value),
+  const names = [skill.skillKey, skill.id].filter((value): value is string =>
+    Boolean(value),
   );
   for (const name of names) {
     const catalogEntry = findCatalogSkillEntry(name, options.catalog);
@@ -253,12 +254,14 @@ function buildSkillRefCandidate(
     ref,
     kind: "catalog_skill",
     readiness:
-      catalogEntry?.skillLocator || localSkillLocator ? "ready" : "needs_mapping",
+      catalogEntry?.skillLocator || localSkillLocator
+        ? "ready"
+        : "needs_mapping",
     reason: catalogEntry?.skillLocator
       ? "expert skill ref matched SkillCatalog skillLocator"
       : localSkillLocator
         ? "expert skill ref matched installed local Skill"
-      : "expert skill ref has no SkillCatalog locator yet",
+        : "expert skill ref has no SkillCatalog locator yet",
     displayTitle: catalogEntry?.title ?? localSkill?.name ?? titleFromRef(ref),
     source: options.source,
     riskLevel: "low",

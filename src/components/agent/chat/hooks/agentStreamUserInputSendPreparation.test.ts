@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
-import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 import type { Message, MessageImage } from "../types";
 import {

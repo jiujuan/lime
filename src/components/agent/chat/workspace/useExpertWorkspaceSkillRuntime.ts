@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import { asRecord, readFirstString } from "./browserAssistArtifact";
 import { useWorkspaceSkillBindingsRuntime } from "./useWorkspaceSkillBindingsRuntime";
 

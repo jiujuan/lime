@@ -8,10 +8,8 @@ use thread_store::ThreadSpawnEdgeStatus;
 async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
     let temp = tempfile::tempdir().expect("workspace");
     let workspace_root = temp.path().to_string_lossy().to_string();
-    let app_data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-            .with_memory_data_root(temp.path().join("data-root")),
-    );
+    let app_data_source =
+        Arc::new(TestSessionDataSource::new().with_memory_data_root(temp.path().join("data-root")));
     let projection_store = Arc::new(
         ProjectionStore::initialize(temp.path().join("projection.sqlite"))
             .expect("projection store"),
@@ -174,10 +172,8 @@ async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
 async fn export_runtime_review_residuals_write_current_session_artifacts() {
     let temp = tempfile::tempdir().expect("workspace");
     let workspace_root = temp.path().to_string_lossy().to_string();
-    let app_data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-            .with_memory_data_root(temp.path().join("data-root")),
-    );
+    let app_data_source =
+        Arc::new(TestSessionDataSource::new().with_memory_data_root(temp.path().join("data-root")));
     let core = RuntimeCore::default().with_app_data_source(app_data_source);
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_review_export".to_string()),
@@ -310,10 +306,8 @@ async fn export_runtime_review_residuals_write_current_session_artifacts() {
 async fn export_runtime_handoff_residuals_apply_locale_copy_and_generation_brief_boundary() {
     let temp = tempfile::tempdir().expect("workspace");
     let workspace_root = temp.path().to_string_lossy().to_string();
-    let app_data_source = Arc::new(
-        TestSessionDataSource::new(empty_agent_session_read_response("unused"))
-            .with_memory_data_root(temp.path().join("data-root")),
-    );
+    let app_data_source =
+        Arc::new(TestSessionDataSource::new().with_memory_data_root(temp.path().join("data-root")));
     let core = RuntimeCore::default().with_app_data_source(app_data_source);
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_locale_export".to_string()),

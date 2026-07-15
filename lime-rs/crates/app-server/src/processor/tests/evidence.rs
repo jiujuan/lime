@@ -126,7 +126,7 @@ async fn evidence_export_requires_initialized_and_returns_read_model_snapshot() 
     match &messages[0] {
         JsonRpcMessage::Response(response) => {
             assert_eq!(response.result["session"]["sessionId"], "sess_evidence");
-            assert_eq!(response.result["events"].as_array().unwrap().len(), 4);
+            assert_eq!(response.result["events"].as_array().unwrap().len(), 7);
             assert_eq!(
                 response.result["artifacts"][0]["artifactRef"],
                 "artifact-report"

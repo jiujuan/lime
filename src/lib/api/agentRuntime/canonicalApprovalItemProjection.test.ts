@@ -52,8 +52,9 @@ describe("projectCanonicalApprovalItem", () => {
         "cancel",
       ],
       response: {
-        decision: "allow_for_session",
+        decision: "approvedForSession",
         decision_scope: "session",
+        reason_code: null,
       },
     });
   });
@@ -82,15 +83,9 @@ describe("projectCanonicalApprovalItem", () => {
     });
   });
 
-  it.each([
-    ["approved", "allow_once"],
-    ["approvedForSession", "allow_for_session"],
-    ["denied", "decline"],
-    ["abort", "cancel"],
-    ["timedOut", "expired"],
-  ])(
-    "将 canonical decision %s 映射为 GUI decision %s",
-    (decision, expected) => {
+  it.each(["approved", "approvedForSession", "denied", "abort", "timedOut"])(
+    "保留 canonical decision %s 供 GUI 边界显式映射",
+    (decision) => {
       const item = approvalItem({
         payload: {
           ...approvalItem().payload,
@@ -98,7 +93,7 @@ describe("projectCanonicalApprovalItem", () => {
         },
       });
       expect(projectCanonicalApprovalItem(item)?.response).toMatchObject({
-        decision: expected,
+        decision,
       });
     },
   );

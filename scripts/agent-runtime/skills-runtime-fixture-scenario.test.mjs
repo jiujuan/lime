@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { createExpertPanelSkillsRuntimeFixtureScenario } from "./skills-runtime-fixture-scenario.mjs";
+import {
+  createExpertPanelSkillsRuntimeFixtureScenario,
+  createSkillsRuntimeFixtureScenario,
+  renderSkillsRuntimeBackendEvents,
+} from "./skills-runtime-fixture-scenario.mjs";
 
 describe("skills runtime fixture scenario", () => {
+  it("emits canonical Tool Item lifecycles for search and Skill invocation", () => {
+    const backendEvents = renderSkillsRuntimeBackendEvents({
+      ...createSkillsRuntimeFixtureScenario("session-a"),
+    });
+
+    expect(backendEvents.match(/type: "item\.started"/g)).toHaveLength(2);
+    expect(backendEvents.match(/type: "item\.completed"/g)).toHaveLength(2);
+    expect(backendEvents).toContain("payload: buildCanonicalToolItem({");
+    expect(backendEvents).not.toContain('type: "tool.started"');
+    expect(backendEvents).not.toContain('type: "tool.result"');
+  });
+
   it("expert panel scenario carries duplicate rendering guard text", () => {
     const scenario = createExpertPanelSkillsRuntimeFixtureScenario("session-a");
 

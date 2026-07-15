@@ -1,6 +1,7 @@
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { normalizeLegacyThreadItem } from "../agentTextNormalization";
+import type { AgentExecutionStrategy } from "../agentExecutionRuntime";
 import type { AgentThreadItem } from "../agentProtocol";
 import { normalizeQueuedTurnSnapshots } from "../queuedTurn";
 import {
@@ -10,14 +11,15 @@ import {
 } from "./appServerSessionClient";
 import { normalizeThreadReadModel } from "./normalizers";
 import type {
-  AgentExecutionStrategy,
-  AgentSessionDetail,
-  AgentSessionInfo,
   AgentRuntimeCreateSessionOptions,
-  AgentRuntimeListSessionsOptions,
   AgentRuntimeGetSessionOptions,
   AgentRuntimeUpdateSessionRequest,
-} from "./types";
+} from "./requestTypes";
+import type {
+  AgentSessionDetail,
+  AgentSessionInfo,
+  AgentRuntimeListSessionsOptions,
+} from "./sessionTypes";
 
 function isTransientSessionReadError(error: unknown): boolean {
   const message =
@@ -281,11 +283,8 @@ export function createSessionClient({
         },
       );
       const normalizedDetail = detail as AgentSessionDetail | null | undefined;
-      const detailWithoutLegacyRoster = omitLegacyRosterFields(
-        detail as AgentSessionDetail,
-      );
       const normalizedSessionDetail: AgentSessionDetail = {
-        ...detailWithoutLegacyRoster,
+        ...detail,
         messages: Array.isArray(normalizedDetail?.messages)
           ? normalizedDetail.messages
           : [],
@@ -396,15 +395,6 @@ export function createSessionClient({
     listAgentRuntimeSessions,
     updateAgentRuntimeSession,
   };
-}
-
-function omitLegacyRosterFields(
-  detail: AgentSessionDetail,
-): AgentSessionDetail {
-  const current = { ...detail } as AgentSessionDetail & Record<string, unknown>;
-  delete current["child_subagent_sessions"];
-  delete current["subagent_parent_context"];
-  return current;
 }
 
 export const {

@@ -38,7 +38,7 @@ src/hooks/
 
 - 统一入口：`src/components/agent/chat/hooks/index.ts`
 - Hook 实现：`src/components/agent/chat/hooks/useAgentChat.ts`
-- API 封装：`src/lib/api/agentRuntime.ts`
+- API 封装：按职责直接使用 `src/lib/api/agentRuntime/*Client.ts`
 
 ### useConfiguredProviders
 

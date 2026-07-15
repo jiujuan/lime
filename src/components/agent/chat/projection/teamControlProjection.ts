@@ -352,7 +352,7 @@ export function buildAgentUiTeamControlProjectionEvents(
         taskId,
         agentId: taskId,
         handoffId: `${sessionId ?? "session"}:handoff:${taskId}`,
-        parentSessionId: sessionId,
+        parentThreadId: definedString(context.threadId),
         owner: "agent",
         scope: "agent",
         phase: normalizeHandoffProjectionPhase("resumed"),

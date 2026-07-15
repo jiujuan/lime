@@ -1,4 +1,4 @@
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentThreadItem } from "../types";
 import {
   summarizeCanonicalChildThreads,

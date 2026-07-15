@@ -3,7 +3,7 @@ import {
   type AppServerAgentSessionReadResponse,
 } from "@/lib/api/appServer";
 import { projectAppServerSessionReadToThreadReadModel } from "./appServerReadModelProjection";
-import type { AgentRuntimeThreadReadModel } from "./types";
+import type { AgentRuntimeThreadReadModel } from "./sessionTypes";
 
 export type AppServerSessionReadClient = Pick<AppServerClient, "readSession">;
 

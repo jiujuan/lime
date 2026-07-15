@@ -5,7 +5,8 @@ use super::fields::{
 use super::lifecycle::{approval_decision, is_action_resolution_event};
 use agent_protocol::{
     ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChangeStatus,
-    PlanStep, PlanStepStatus, SubAgentActivityKind, ThreadId, ThreadItemPayload, ToolOutput,
+    MessageContentPart, PlanStep, PlanStepStatus, SubAgentActivityKind, ThreadId,
+    ThreadItemPayload, ToolOutput,
 };
 use serde_json::{Map, Value};
 
@@ -209,8 +210,8 @@ pub(super) fn typed_payload(
     payload: &Map<String, Value>,
     fallback_call_id: &str,
     timestamp_ms: i64,
-) -> ThreadItemPayload {
-    match family {
+) -> Option<ThreadItemPayload> {
+    Some(match family {
         ItemFamily::UserMessage => ThreadItemPayload::UserMessage {
             content: message_text(payload),
             client_id: map_string(payload, &["clientId", "client_id"]),
@@ -218,6 +219,7 @@ pub(super) fn typed_payload(
         ItemFamily::AgentMessage => ThreadItemPayload::AgentMessage {
             text: message_text(payload),
             phase: map_string(payload, &["phase", "messagePhase", "message_phase"]),
+            content_parts: message_content_parts(payload)?,
         },
         ItemFamily::Plan => ThreadItemPayload::Plan {
             text: message_text(payload),
@@ -340,6 +342,43 @@ pub(super) fn typed_payload(
             summary: map_string(payload, &["summary", "message", "text"]),
             window_id: map_string(payload, &["windowId", "window_id", "contextWindowId"]),
         },
+    })
+}
+
+fn message_content_parts(payload: &Map<String, Value>) -> Option<Vec<MessageContentPart>> {
+    let list_value = matching_alias(payload, "contentParts", "content_parts")?;
+    let single_value = matching_alias(payload, "contentPart", "content_part")?;
+    let mut parts = list_value
+        .map(|value| serde_json::from_value::<Vec<MessageContentPart>>(value.clone()))
+        .transpose()
+        .ok()?
+        .unwrap_or_default();
+    let single = single_value
+        .map(|value| serde_json::from_value::<MessageContentPart>(value.clone()))
+        .transpose()
+        .ok()?;
+    if let Some(single) = single {
+        if parts.is_empty() {
+            parts.push(single);
+        } else if parts.first() != Some(&single) {
+            return None;
+        }
+    }
+    parts
+        .iter()
+        .all(MessageContentPart::is_safe)
+        .then_some(parts)
+}
+
+fn matching_alias<'a>(
+    payload: &'a Map<String, Value>,
+    first: &str,
+    second: &str,
+) -> Option<Option<&'a Value>> {
+    match (payload.get(first), payload.get(second)) {
+        (Some(first), Some(second)) if first != second => None,
+        (Some(value), _) | (_, Some(value)) => Some(Some(value)),
+        (None, None) => Some(None),
     }
 }
 

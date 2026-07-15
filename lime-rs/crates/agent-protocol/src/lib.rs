@@ -1,6 +1,7 @@
 pub mod action_required;
 pub mod anthropic;
 pub mod context_trace;
+pub mod message_content;
 pub mod model_context;
 pub mod openai;
 pub mod provider_trace;
@@ -259,6 +260,7 @@ pub struct RuntimeSnapshot {
     pub metadata: Value,
 }
 
+pub use message_content::{MessageContentPart, MessageContentReference};
 pub use thread::{
     ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, CollabAgentState,
     CollabAgentStatus, FileChangeStatus, ItemKind, ItemStatus, PageCursor, PlanStep,

@@ -110,7 +110,7 @@ describe("canonical App Server Tool Item projection", () => {
         type: "approval_request",
         request_id: "approval-1",
         status: "completed",
-        response: { decision: "decline" },
+        response: { decision: "denied" },
       },
     });
   });

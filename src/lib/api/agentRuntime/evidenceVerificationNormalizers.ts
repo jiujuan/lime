@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeRequestedFixExecutionResult,
   AgentRuntimeRequestedFixExecutionStatus,
-} from "./types";
+} from "./evidenceTypes";
 import {
   isRecord,
   readNumberField,

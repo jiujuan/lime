@@ -2,6 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+export const DEFERRED_MCP_TOOL_SEARCH_GATE_B_BATCH_ID =
+  "mcp-deferred-tool-search-gate-b";
+export const DEFERRED_MCP_TOOL_SEARCH_FINAL_TEXT =
+  "AGENT_RUNTIME_DEFERRED_MCP_TOOLSEARCH_DONE";
+export const DEFERRED_MCP_TOOL_SEARCH_CALL_ID =
+  "call-tool-exec-deferred-tool-search";
+export const DEFERRED_MCP_TOOL_CALL_ID = "call-tool-exec-deferred-mcp-tool";
+
 export function makeDeferredMcpToolSearchServerName() {
   return `DeferredToolSearch${Date.now().toString(36)}${process.pid.toString(36)}`;
 }
@@ -11,16 +19,16 @@ export function buildDeferredMcpToolSearchFixtureResponses({
   toolCall,
 }) {
   return [
-    toolCall("tool_search", "call-tool-exec-deferred-tool-search", {
+    toolCall("tool_search", DEFERRED_MCP_TOOL_SEARCH_CALL_ID, {
       query: `select:${deferredToolName}`,
       max_results: 10,
     }),
-    toolCall(deferredToolName, "call-tool-exec-deferred-mcp-tool", {
+    toolCall(deferredToolName, DEFERRED_MCP_TOOL_CALL_ID, {
       message: "LIME_DEFERRED_MCP_TOOL_OK",
     }),
     {
       type: "text",
-      content: "AGENT_RUNTIME_DEFERRED_MCP_TOOLSEARCH_DONE",
+      content: DEFERRED_MCP_TOOL_SEARCH_FINAL_TEXT,
     },
   ];
 }
@@ -355,5 +363,60 @@ export function buildDeferredMcpToolSearchAssertions({
     evidencePackMentionsDeferredMcpTool:
       evidencePackText.includes(deferredToolName) ||
       toolOutputText.includes("LIME_DEFERRED_MCP_TOOL_OK"),
+  };
+}
+
+export function buildDeferredMcpVisibleDomAssertions({
+  deferredToolName,
+  evidence,
+  snapshot,
+}) {
+  const matrix = Array.isArray(evidence?.runtime?.matrix)
+    ? evidence.runtime.matrix
+    : [];
+  const completedToolNames = new Set(
+    matrix
+      .filter(
+        (entry) => entry?.status === "completed" && entry?.success !== false,
+      )
+      .map((entry) => String(entry?.tool || "").trim())
+      .filter(Boolean),
+  );
+  const appServerCalls = Array.isArray(snapshot?.appServerCalls)
+    ? snapshot.appServerCalls
+    : [];
+  const currentReadObserved = appServerCalls.some(
+    (call) =>
+      call?.method === "agentSession/read" &&
+      call?.transport === "electron-ipc" &&
+      call?.status === "success",
+  );
+
+  return {
+    visibleDomUsesRealElectronHost:
+      snapshot?.electron === true &&
+      snapshot?.hasInvokeBridge === true &&
+      snapshot?.supportsAppServer === true,
+    visibleDomNavigatedToTargetSession:
+      Boolean(snapshot?.sessionId) &&
+      snapshot?.activeSessionId === snapshot?.sessionId,
+    visibleDomCurrentReadModelObserved: currentReadObserved,
+    visibleDomToolSearchCompletedInReadModel:
+      completedToolNames.has("tool_search"),
+    visibleDomToolSearchStaysInternal:
+      Array.isArray(snapshot?.typedToolRows) &&
+      !snapshot.typedToolRows.some((row) => row?.name === "tool_search"),
+    visibleDomDeferredToolCompletedInReadModel:
+      completedToolNames.has(deferredToolName),
+    visibleDomDeferredToolIdentity:
+      snapshot?.deferredToolRow?.toolName === deferredToolName,
+    visibleDomDeferredToolRowVisible:
+      snapshot?.deferredToolRow?.visible === true,
+    visibleDomDeferredToolRowCompleted:
+      snapshot?.deferredToolRow?.toolStatus === "completed",
+    visibleDomFinalAssistantTextVisible:
+      snapshot?.finalAssistantTextVisible === true,
+    visibleDomInvokeErrorsClear: snapshot?.invokeErrorCount === 0,
+    visibleDomConsoleErrorsClear: snapshot?.consoleErrorCount === 0,
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SkillCatalog } from "@/lib/api/skillCatalog";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type { Skill } from "@/lib/api/skills";
 import { buildExpertSkillRuntimeCandidates } from "./expertSkillRuntimeCandidates";
@@ -215,7 +215,9 @@ describe("buildExpertSkillRuntimeCandidates", () => {
         name: "missing-native",
       },
     });
-    expect(candidate?.reason).toContain("no SkillCatalog or local Skill locator");
+    expect(candidate?.reason).toContain(
+      "no SkillCatalog or local Skill locator",
+    );
   });
 
   it("把已安装本地 skill:* ref 解析成可运行候选", () => {

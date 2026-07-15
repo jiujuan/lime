@@ -1,4 +1,5 @@
 import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
 import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type {
   AssistantDraftState,
@@ -48,7 +49,7 @@ interface PrepareAgentStreamUserInputSendOptions {
   skipUserMessage: boolean;
   executionStrategyOverride?: AgentExecutionStrategy;
   modelOverride?: string;
-  autoContinue?: import("@/lib/api/agentRuntime").AutoContinueRequestPayload;
+  autoContinue?: AutoContinueRequestPayload;
   systemPrompt?: string;
   options?: SendMessageOptions;
   env: AgentStreamUserInputSendPreparationEnv;
@@ -66,7 +67,7 @@ export interface PreparedAgentStreamUserInputSend {
   effectiveModel: string;
   modelOverride?: string;
   reasoningEffort?: string;
-  autoContinue?: import("@/lib/api/agentRuntime").AutoContinueRequestPayload;
+  autoContinue?: AutoContinueRequestPayload;
   systemPrompt?: string;
   syncedSessionModelPreference: SessionModelPreference | null;
   observer?: SendMessageObserver;

@@ -1,5 +1,9 @@
 # S6l Thread-first SubAgent navigation and guards evidence
 
+> 2026-07-15 后续纠正：本文件记录的 `multi-agent-team` Electron run 包装了 external
+> synthetic Team events，只是当时 fixture 结果，不再作为产品 Gate B。current canonical
+> AgentControl visible DOM Gate B 见 S4ah evidence；S6l navigation/guard 结论仍有效。
+
 日期：2026-07-14
 
 ## 结论

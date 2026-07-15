@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MediaTaskArtifactOutput } from "@/lib/api/mediaTasks";
+import type { MediaTaskArtifactOutput } from "@/lib/api/agentRuntime/mediaTaskTypes";
 import type { ImageWorkbenchOutput } from "./imageWorkbenchHelpers";
 import {
   buildImageTaskSnapshotFromArtifactOutput,

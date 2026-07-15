@@ -91,7 +91,7 @@ export {
   mockScheduleMinimumDelayIdleTask,
 };
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/clientFactory", () => ({
   createAgentRuntimeClient: () => ({
     getRuntimeProviderSelection: mockGetRuntimeProviderSelection,
     submitAgentRuntimeTurn: mockSubmitAgentRuntimeTurn,

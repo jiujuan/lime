@@ -675,6 +675,8 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
         className="flex items-start gap-2"
         data-testid="tool-call-row"
         data-tool-call-id={toolCall.id}
+        data-tool-name={toolCall.name}
+        data-tool-status={toolCall.status}
       >
         {grouped ? (
           <span className="pt-0.5 font-mono text-xs text-slate-400">

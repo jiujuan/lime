@@ -1,14 +1,18 @@
-import { createRuntimeRequest } from "@limecloud/app-server-client";
+import {
+  createRuntimeRequest,
+  type RuntimeSearchMode,
+} from "@limecloud/app-server-client";
 import type { AppServerAgentSessionTurnStartParams } from "./appServer";
 import type {
   AgentApprovalPolicy,
   AgentExecutionStrategy,
   AgentSandboxPolicy,
+} from "./agentExecutionRuntime";
+import type {
   AutoContinueRequestPayload,
   ImageInput,
-  RuntimeSearchMode,
   RuntimeProviderConfig,
-} from "./agentRuntime/types";
+} from "./agentRuntime/sessionTypes";
 
 export interface AgentUserPreferences {
   providerConfig?: RuntimeProviderConfig;

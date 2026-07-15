@@ -7,7 +7,7 @@ import type {
   AgentRuntimeSetObjectiveRequest,
   AgentRuntimeUpdateObjectiveStatusRequest,
   ManagedObjective,
-} from "./types";
+} from "./sessionTypes";
 export type AgentRuntimeObjectiveAppServerClient = Pick<
   AppServerClient,
   | "readAgentSessionObjective"

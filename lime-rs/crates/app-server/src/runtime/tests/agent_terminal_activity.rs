@@ -362,7 +362,10 @@ async fn completed_child_result_is_durable_consumed_once_and_visible_to_wait() {
         .events_for_session("root-session")
         .expect("root events")
         .into_iter()
-        .find(|event| event.payload["itemId"] == mailbox_item_id(&result.message_id))
+        .find(|event| {
+            event.event_type == "message.delta"
+                && event.payload["itemId"] == mailbox_item_id(&result.message_id)
+        })
         .expect("parent result event");
     assert_eq!(parent_result_event.event_type, "message.delta");
     assert_eq!(parent_result_event.payload["role"], "assistant");

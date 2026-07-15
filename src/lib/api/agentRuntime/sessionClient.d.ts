@@ -2,15 +2,17 @@ import type {
   AppServerSessionClient,
   AppServerSessionRpcClient,
 } from "./appServerSessionClient";
+import type { AgentExecutionStrategy } from "../agentExecutionRuntime";
 import type {
-  AgentExecutionStrategy,
-  AgentSessionDetail,
-  AgentSessionInfo,
   AgentRuntimeCreateSessionOptions,
-  AgentRuntimeListSessionsOptions,
   AgentRuntimeGetSessionOptions,
   AgentRuntimeUpdateSessionRequest,
-} from "./types";
+} from "./requestTypes";
+import type {
+  AgentRuntimeListSessionsOptions,
+  AgentSessionDetail,
+  AgentSessionInfo,
+} from "./sessionTypes";
 export interface AgentRuntimeSessionClientDeps {
   appServerClient?: AppServerSessionRpcClient;
   appServerSessionClient?: AppServerSessionClient;

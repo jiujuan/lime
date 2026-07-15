@@ -5,7 +5,6 @@ pub mod runtime_snapshot;
 pub mod session_record;
 pub mod session_repository;
 pub mod store;
-pub mod subagent_tree;
 pub mod task_board;
 pub mod types;
 

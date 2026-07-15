@@ -1,9 +1,5 @@
 import fs from "node:fs";
 import { CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS } from "./claw-chat-current-fixture-constants.mjs";
-import {
-  MULTI_AGENT_TEAM_PROMPT,
-  summarizeMultiAgentTeamEvidenceExport,
-} from "./multi-agent-team-fixture-scenario.mjs";
 
 function expectAllToContain(expect, content, fragments) {
   for (const fragment of fragments) expect(content).toContain(fragment);
@@ -34,18 +30,10 @@ function readContentFactoryArticleWorkspaceScript() {
   );
 }
 
-function readMultiAgentTeamFixtureScenario() {
-  return fs.readFileSync(
-    "scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs",
-    "utf8",
-  );
-}
-
-export function registerImageContentAndTeamSmokeGuards({
+export function registerImageContentSmokeGuards({
   expect,
   it,
   readSmokeScript,
-  readCurrentFixtureRegressionSmokeScript,
   removeContentFactoryForbiddenMarkerGuard,
 }) {
   it("covers Claw @配图 through ImageCommandWorkflow and current task artifact", () => {
@@ -203,7 +191,7 @@ export function registerImageContentAndTeamSmokeGuards({
       "contentFactoryArticleWorkspaceWorkerAuditFactsHidden",
       "contentFactoryArticleWorkspaceWorkflowRead",
       "contentFactoryArticleWorkspaceWorkflowReadModelProjected",
-      "contentFactoryArticleWorkspaceWorkflowRespondProjected",
+      "contentFactoryArticleWorkspaceWorkflowRespondHiddenWithoutPendingAction",
       "contentFactoryArticleWorkspaceWorkflowCancelProjected",
       "contentFactoryArticleWorkspaceWorkflowRetryProjected",
       "content.article.generate",
@@ -216,11 +204,6 @@ export function registerImageContentAndTeamSmokeGuards({
       "mediaTaskArtifact/image/complete",
       "readModel.workerArticleObject?.hostManagedGenerationStatus ===",
       '"completed"',
-      "CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID",
-      "PLUGIN_WORKER_CONTRACT_UNSUPPORTED",
-      "runRuntimeContractRejectionProbe",
-      "contentFactoryArticleWorkspaceRuntimeContractRejection",
-      "contentFactoryArticleWorkspaceRuntimeContractFailClosed",
       "contentFactoryArticleWorkspaceStoryboardObjectSelection",
       "contentFactoryArticleWorkspaceArticleObjectSelection",
       "contentFactoryArticleWorkspaceArticleCanvasSurface",
@@ -312,116 +295,4 @@ export function registerImageContentAndTeamSmokeGuards({
     ]);
   });
 
-  it("covers multi-agent Team facts as parent Thread Evidence Pack data instead of Agent-first history", () => {
-    const content = readSmokeScript();
-    const scenarioContent = readMultiAgentTeamFixtureScenario();
-    const regressionContent = readCurrentFixtureRegressionSmokeScript();
-
-    expectAllToContain(expect, content, [
-      "multi-agent-team",
-      "MULTI_AGENT_TEAM_SCENARIO",
-      MULTI_AGENT_TEAM_PROMPT,
-      "renderMultiAgentTeamBackendEvents",
-      "summarizeMultiAgentTeamEvidenceExport",
-      "send-multi-agent-team-prompt-from-gui",
-      "wait-gui-multi-agent-team-completed",
-      "wait-read-model-multi-agent-team-completed",
-      "export-multi-agent-team-evidence-pack",
-      "evidencePackMultiAgentTeam",
-      "readModelMultiAgentTeamCompleted",
-      "multiAgentTeamPromptReachedBackend",
-      "guiMultiAgentTeamInputSubmitted",
-      "guiMultiAgentTeamCompleted",
-      "readModelMultiAgentTeamFactsObserved",
-      "evidencePackMultiAgentTeamExported",
-      "evidencePackMultiAgentTeamParentThreadBound",
-      "evidencePackMultiAgentTeamHandoffObserved",
-      "evidencePackMultiAgentTeamWorkerNotificationObserved",
-      "evidencePackMultiAgentTeamReviewLaneObserved",
-      "multiAgentTeamNoAgentFirstHistory",
-    ]);
-    expectAllToContain(expect, scenarioContent, [
-      'type: "team.changed"',
-      'type: "task.changed"',
-      'type: "agent.handoff"',
-      'type: "agent.completed"',
-      'type: "worker.notification"',
-      'type: "artifact.snapshot"',
-      "parentSessionId",
-      "currentThreadId()",
-      "currentTurnId()",
-      "parent_thread",
-      "review_lane",
-      "parentSessionIds",
-      "threadIds",
-      "turnIds",
-      "handoffIds",
-      "workerNotificationIds",
-      "reviewIds",
-    ]);
-    expect(scenarioContent).not.toContain('type: "subagent_status_changed"');
-    expectAllToContain(expect, regressionContent, [
-      "Claw Multi-Agent Team parent Thread Evidence Pack Electron fixture",
-      '"multi-agent-team"',
-      "claw-chat-current-fixture-multi-agent-team-regression",
-      "Multi-Agent Team parent Thread Evidence Pack Electron fixture",
-    ]);
-
-    const summary = summarizeMultiAgentTeamEvidenceExport(
-      {
-        evidencePack: {
-          observabilitySummary: {
-            team_facts: {
-              status: "exported",
-              parentSessionIds: ["sess-team"],
-              childSessionIds: [
-                "fixture-team-child-researcher",
-                "fixture-team-child-reviewer",
-              ],
-              threadIds: ["thread-team"],
-              turnIds: ["turn-team"],
-              handoffIds: ["sess-team:handoff:fixture-team-child-researcher"],
-              workerNotificationIds: [
-                "fixture-team-child-researcher:completed",
-              ],
-              reviewIds: ["fixture-team-review-1"],
-              teamPhases: ["running", "queued", "completed"],
-              handoffCount: 1,
-              workerNotificationCount: 1,
-              reviewLaneCount: 1,
-            },
-          },
-        },
-        events: [
-          { eventType: "team.changed" },
-          { eventType: "worker.notification" },
-        ],
-        artifacts: [{ artifactRef: "fixture-team-worker-result" }],
-      },
-      {
-        sessionId: "sess-team",
-        threadId: "thread-team",
-        turnId: "turn-team",
-      },
-    );
-
-    expect(summary.exported).toBe(true);
-    expect(summary.includesParentSession).toBe(true);
-    expect(summary.includesThread).toBe(true);
-    expect(summary.includesTurn).toBe(true);
-    expect(summary.includesResearcher).toBe(true);
-    expect(summary.includesReviewer).toBe(true);
-    expect(summary.includesHandoff).toBe(true);
-    expect(summary.includesWorkerNotification).toBe(true);
-    expect(summary.includesReview).toBe(true);
-    expect(summary.includesRunningPhase).toBe(true);
-    expect(summary.includesQueuedPhase).toBe(true);
-    expect(summary.includesCompletedPhase).toBe(true);
-    expect(summary.hasTeamChangedEvent).toBe(true);
-    expect(summary.hasWorkerNotificationEvent).toBe(true);
-    expect(summary.hasWorkerResultArtifact).toBe(true);
-    expect(summary.forbiddenAgentFirstHistory).toBe(false);
-    expect(scenarioContent).not.toContain("subagentSessionHistory:");
-    expect(scenarioContent).not.toContain("childSubagentHistory:");
-  });
 }

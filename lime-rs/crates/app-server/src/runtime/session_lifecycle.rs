@@ -458,18 +458,6 @@ impl RuntimeCore {
                 return Ok(projection.session.thread_id);
             }
         }
-        if let Some(response) = self
-            .app_data_source
-            .read_agent_session(AgentSessionReadParams {
-                session_id: session_id.to_string(),
-                history_limit: None,
-                history_offset: None,
-                history_before_message_id: None,
-            })
-            .await?
-        {
-            return Ok(response.session.thread_id);
-        }
         Err(RuntimeCoreError::SessionNotFound(session_id.to_string()))
     }
 

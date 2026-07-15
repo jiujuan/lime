@@ -379,10 +379,12 @@ impl RuntimeCore {
             )
             .await?;
         if delivery_mode == AgentMailboxDeliveryMode::TriggerTurn {
+            let runtime_options = self
+                .agent_control_followup_runtime_options(&target.session_id, child_runtime_options);
             self.schedule_pending_agent_mailbox_triggers(
                 target.session_id.clone(),
                 host.clone(),
-                child_runtime_options,
+                runtime_options,
             )
             .await;
         }
@@ -628,6 +630,28 @@ impl RuntimeCore {
             })?;
         self.agent_control_target_from_identity(&store, identity)
             .await
+    }
+
+    fn agent_control_followup_runtime_options(
+        &self,
+        target_session_id: &str,
+        cold_target_options: Option<RuntimeOptions>,
+    ) -> Option<RuntimeOptions> {
+        let target_options = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .sessions
+            .get(target_session_id)
+            .and_then(|stored| {
+                stored
+                    .turns
+                    .iter()
+                    .rev()
+                    .find_map(|turn| stored.turn_runtime_options.get(&turn.turn_id).cloned())
+            })
+            .map(agent_control_child_runtime_options);
+        target_options.or(cold_target_options)
     }
 
     async fn open_agent_control_thread_ids(

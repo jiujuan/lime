@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MediaTaskArtifactOutput } from "@/lib/api/mediaTasks";
+import type { MediaTaskArtifactOutput } from "@/lib/api/agentRuntime/mediaTaskTypes";
 import {
   applyLayeredDesignImageTaskOutput,
   createGeneratedDesignAssetFromImageTaskOutput,

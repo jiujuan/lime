@@ -97,7 +97,7 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                     "tool-search-sequence",
                     "thread_canonical_item_sequence",
                     &turn.turn_id,
-                    3,
+                    5,
                     "inProgress",
                     "WebSearch",
                     json!({ "query": "Lime WebSearch rendering" }),
@@ -111,12 +111,29 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                     "tool-search-sequence",
                     "thread_canonical_item_sequence",
                     &turn.turn_id,
-                    3,
+                    5,
                     "completed",
                     "WebSearch",
                     json!({ "query": "Lime WebSearch rendering" }),
                     Some(json!({ "text": "search result" })),
                 ),
+            ),
+            RuntimeEvent::new(
+                "item.started",
+                json!({
+                    "item": {
+                        "id": "reasoning-sequence",
+                        "thread_id": "thread_canonical_item_sequence",
+                        "turn_id": turn.turn_id,
+                        "sequence": 7,
+                        "ordinal": 7,
+                        "type": "reasoning",
+                        "text": "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+                        "status": "in_progress",
+                        "started_at": "2026-06-20T11:00:00.500Z",
+                        "updated_at": "2026-06-20T11:00:00.500Z"
+                    }
+                }),
             ),
             RuntimeEvent::new(
                 "item.updated",
@@ -125,7 +142,8 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                         "id": "reasoning-sequence",
                         "thread_id": "thread_canonical_item_sequence",
                         "turn_id": turn.turn_id,
-                        "sequence": 5,
+                        "sequence": 7,
+                        "ordinal": 7,
                         "type": "reasoning",
                         "text": "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
                         "status": "in_progress",
@@ -141,7 +159,7 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                     "tool-fetch-sequence",
                     "thread_canonical_item_sequence",
                     &turn.turn_id,
-                    6,
+                    9,
                     "inProgress",
                     "WebFetch",
                     json!({ "url": "https://example.com/lime-websearch-rendering" }),
@@ -155,7 +173,7 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                     "tool-fetch-sequence",
                     "thread_canonical_item_sequence",
                     &turn.turn_id,
-                    6,
+                    9,
                     "completed",
                     "WebFetch",
                     json!({ "url": "https://example.com/lime-websearch-rendering" }),
@@ -203,21 +221,21 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
             .iter()
             .find(|item| item["id"] == "tool-search-sequence")
             .expect("search item")["sequence"],
-        3
+        5
     );
     assert_eq!(
         items
             .iter()
             .find(|item| item["id"] == "reasoning-sequence")
             .expect("reasoning item")["sequence"],
-        5
+        7
     );
     assert_eq!(
         items
             .iter()
             .find(|item| item["id"] == "tool-fetch-sequence")
             .expect("fetch item")["sequence"],
-        6
+        9
     );
 }
 
@@ -288,6 +306,22 @@ async fn read_session_projects_item_lifecycle_reasoning_into_thread_items() {
         "sess_item_reasoning",
         Some(&turn.turn_id),
         vec![
+            RuntimeEvent::new(
+                "item.started",
+                json!({
+                    "item": {
+                        "id": "reasoning-web-tools",
+                        "thread_id": "thread_item_reasoning",
+                        "turn_id": turn.turn_id,
+                        "sequence": 3,
+                        "type": "reasoning",
+                        "text": "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
+                        "status": "in_progress",
+                        "started_at": "2026-06-20T11:00:00.500Z",
+                        "updated_at": "2026-06-20T11:00:00.500Z"
+                    }
+                }),
+            ),
             RuntimeEvent::new(
                 "item.updated",
                 json!({

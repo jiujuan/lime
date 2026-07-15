@@ -26,7 +26,7 @@ import type {
   AgentRuntimeReviewDecisionArtifact,
   AgentRuntimeReviewDecisionTemplate,
   AgentRuntimeSaveReviewDecisionRequest,
-} from "./types";
+} from "./evidenceTypes";
 
 export type AgentRuntimeEvidenceExportAppServerClient = Pick<
   AppServerClient,
@@ -85,7 +85,9 @@ function hasRequiredFiniteNumber(
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isArtifact(
@@ -110,8 +112,14 @@ function isArtifact(
   );
 }
 
-function isArtifactList(value: unknown, allowedKinds: readonly string[]): boolean {
-  return Array.isArray(value) && value.every((item) => isArtifact(item, allowedKinds));
+function isArtifactList(
+  value: unknown,
+  allowedKinds: readonly string[],
+): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => isArtifact(item, allowedKinds))
+  );
 }
 
 function hasRuntimeExportBaseFields(
@@ -193,7 +201,12 @@ function isHandoffBundle(value: unknown): boolean {
     hasRequiredFiniteNumber(value, "todoPending", "todo_pending") &&
     hasRequiredFiniteNumber(value, "todoInProgress", "todo_in_progress") &&
     hasRequiredFiniteNumber(value, "todoCompleted", "todo_completed") &&
-    isArtifactList(value.artifacts, ["plan", "progress", "handoff", "review_summary"])
+    isArtifactList(value.artifacts, [
+      "plan",
+      "progress",
+      "handoff",
+      "review_summary",
+    ])
   );
 }
 
@@ -244,7 +257,12 @@ function isReplayCase(value: unknown): boolean {
       "recentArtifactCount",
       "recent_artifact_count",
     ) &&
-    isArtifactList(value.artifacts, ["input", "expected", "grader", "evidence_links"])
+    isArtifactList(value.artifacts, [
+      "input",
+      "expected",
+      "grader",
+      "evidence_links",
+    ])
   );
 }
 
@@ -496,9 +514,7 @@ export function createExportClient({
   ): Promise<AgentRuntimeReplayCase> {
     const normalizedSessionId = sessionId.trim();
     if (!normalizedSessionId) {
-      throw new Error(
-        "sessionId is required to export App Server replay case",
-      );
+      throw new Error("sessionId is required to export App Server replay case");
     }
     const response = await appServerClient.exportReplayCase({
       sessionId: normalizedSessionId,

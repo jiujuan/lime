@@ -10,7 +10,7 @@ import type {
   AgentRuntimeReviewDecisionRiskLevel,
   AgentRuntimeReviewDecisionStatus,
   AgentRuntimeReviewDecisionTemplate,
-} from "./types";
+} from "./evidenceTypes";
 import { normalizeEvidenceVerificationSummary } from "./evidenceVerificationNormalizers";
 import {
   isRecord,

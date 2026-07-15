@@ -4,7 +4,7 @@ import type {
   PluginRuntimeStartTaskRequest,
   PluginRuntimeTaskSnapshot,
 } from "@/lib/api/pluginRuntime";
-import type { AgentRuntimeRespondActionRequest } from "@/lib/api/agentRuntime/types";
+import type { AgentRuntimeRespondActionRequest } from "@/lib/api/agentRuntime/requestTypes";
 import type {
   PluginTaskLookup,
   CapabilityHost,
@@ -361,7 +361,11 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       this.tasks.get(lookup.taskId) ??
       this.loadPersistedRuntimeTaskState(lookup.taskId);
     const lookupThreadId = threadIdFromLookup(lookup);
-    if (state?.threadId && lookupThreadId && state.threadId !== lookupThreadId) {
+    if (
+      state?.threadId &&
+      lookupThreadId &&
+      state.threadId !== lookupThreadId
+    ) {
       throw new Error(
         `Plugin task ${lookup.taskId} lookup threadId conflicts with persisted state`,
       );

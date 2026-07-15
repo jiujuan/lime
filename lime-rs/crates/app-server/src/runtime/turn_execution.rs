@@ -1,4 +1,7 @@
-use super::event_store::{append_runtime_events_to_state, append_workflow_audit_runtime_events};
+use super::event_store::{
+    append_runtime_events_to_state, append_runtime_events_to_state_with_message_lifecycle,
+    append_workflow_audit_runtime_events, CanonicalMessageLifecycleState,
+};
 use super::plugin_worker_workflow_cancel::workflow_cancel_events_from_audit_records;
 use super::status::{agent_turn_blocks_queue_resume, agent_turn_is_active, agent_turn_is_terminal};
 use super::workflow::events::{WORKFLOW_RUN_RESUMING, WORKFLOW_STEP_RESUMING};
@@ -212,6 +215,7 @@ pub(in crate::runtime) struct AppendingRuntimeEventSink<'a> {
     turn_id: String,
     callback: &'a mut RuntimeEventCallback<'a>,
     events: Vec<AgentEvent>,
+    message_lifecycle: CanonicalMessageLifecycleState,
 }
 
 impl<'a> AppendingRuntimeEventSink<'a> {
@@ -228,6 +232,13 @@ impl<'a> AppendingRuntimeEventSink<'a> {
         turn_id: String,
         callback: &'a mut RuntimeEventCallback<'a>,
     ) -> Self {
+        let message_lifecycle = state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .sessions
+            .get(&session_id)
+            .map(|stored| CanonicalMessageLifecycleState::from_events(&stored.events, &turn_id))
+            .unwrap_or_default();
         Self {
             state,
             file_checkpoint_snapshot_store,
@@ -241,6 +252,7 @@ impl<'a> AppendingRuntimeEventSink<'a> {
             turn_id,
             callback,
             events: Vec::new(),
+            message_lifecycle,
         }
     }
 
@@ -267,7 +279,8 @@ impl RuntimeEventSink for AppendingRuntimeEventSink<'_> {
         if self.is_duplicate_accepted_event(&event) {
             return Ok(());
         }
-        let mut events = append_runtime_events_to_state(
+        let mut next_message_lifecycle = self.message_lifecycle.clone();
+        let mut events = append_runtime_events_to_state_with_message_lifecycle(
             &self.state,
             self.file_checkpoint_snapshot_store.as_ref(),
             self.output_snapshot_store.as_ref(),
@@ -277,9 +290,11 @@ impl RuntimeEventSink for AppendingRuntimeEventSink<'_> {
             self.projection_store.as_deref(),
             &self.session_id,
             &self.thread_id,
-            Some(&self.turn_id),
+            &self.turn_id,
             vec![event],
+            &mut next_message_lifecycle,
         )?;
+        self.message_lifecycle = next_message_lifecycle;
         for event in events.drain(..) {
             (self.callback)(event.clone())?;
             self.events.push(event);
@@ -544,7 +559,7 @@ impl RuntimeCore {
         let runtime_options = params.runtime_options.clone();
         let request_host = host.clone();
         let agent_control_host = host.clone();
-        let request = ExecutionRequest {
+        let mut request = ExecutionRequest {
             host,
             session: session.clone(),
             turn: turn.clone(),
@@ -569,11 +584,35 @@ impl RuntimeCore {
             runtime_options: params.runtime_options,
             queue_if_busy: params.queue_if_busy,
             skip_pre_submit_resume: params.skip_pre_submit_resume,
-            agent_control_gateway: self
-                .projection_store
-                .as_ref()
-                .map(|_| self.agent_control_gateway_for_turn(&session, &turn, agent_control_host)),
+            agent_control_gateway: None,
         };
+        let effective_runtime_options = self
+            .backend
+            .effective_turn_runtime_options(&request, provider_history.is_empty());
+        {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get_mut(&session.session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(session.session_id.clone()))?;
+            match effective_runtime_options {
+                Some(options) => {
+                    stored
+                        .turn_runtime_options
+                        .insert(turn.turn_id.clone(), options);
+                }
+                None => {
+                    stored.turn_runtime_options.remove(&turn.turn_id);
+                }
+            }
+        }
+        request.agent_control_gateway = self
+            .projection_store
+            .as_ref()
+            .map(|_| self.agent_control_gateway_for_turn(&session, &turn, agent_control_host));
 
         let backend_events = if let Some(event_callback) = event_callback {
             let mut sink = AppendingRuntimeEventSink::new(

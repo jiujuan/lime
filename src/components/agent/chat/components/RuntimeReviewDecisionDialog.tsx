@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import type {
   AgentRuntimeReviewDecisionRiskLevel,
   AgentRuntimeReviewDecisionStatus,
@@ -56,19 +58,26 @@ const DEFAULT_RISK_LEVEL_OPTIONS: AgentRuntimeReviewDecisionRiskLevel[] = [
 
 const selectClassName =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/30";
+const USER_LOCKED_CAPABILITY_GAP = "user_locked_capability_gap";
+const CAPABILITY_GAP_LABEL = "capabilityGap=";
+const REQUEST_ID_LABEL = "request_id=";
+type AgentTranslate = TFunction<"agent", undefined>;
 
-function formatStatusLabel(status: AgentRuntimeReviewDecisionStatus): string {
+function formatStatusLabel(
+  status: AgentRuntimeReviewDecisionStatus,
+  t: AgentTranslate,
+): string {
   switch (status) {
     case "accepted":
-      return "接受";
+      return t("agentChat.runtimeReviewDecision.status.accepted");
     case "deferred":
-      return "延后";
+      return t("agentChat.runtimeReviewDecision.status.deferred");
     case "rejected":
-      return "拒绝";
+      return t("agentChat.runtimeReviewDecision.status.rejected");
     case "needs_more_evidence":
-      return "需要更多证据";
+      return t("agentChat.runtimeReviewDecision.status.needsMoreEvidence");
     case "pending_review":
-      return "待人工审核";
+      return t("agentChat.runtimeReviewDecision.status.pendingReview");
     default:
       return status;
   }
@@ -76,35 +85,44 @@ function formatStatusLabel(status: AgentRuntimeReviewDecisionStatus): string {
 
 function formatRiskLevelLabel(
   riskLevel: AgentRuntimeReviewDecisionRiskLevel,
+  t: AgentTranslate,
 ): string {
   switch (riskLevel) {
     case "low":
-      return "低";
+      return t("agentChat.runtimeReviewDecision.risk.low");
     case "medium":
-      return "中";
+      return t("agentChat.runtimeReviewDecision.risk.medium");
     case "high":
-      return "高";
+      return t("agentChat.runtimeReviewDecision.risk.high");
     case "unknown":
-      return "未定";
+      return t("agentChat.runtimeReviewDecision.risk.unknown");
     default:
       return riskLevel;
   }
 }
 
-function formatPermissionConfirmationStatusLabel(status?: string): string {
+function formatPermissionConfirmationStatusLabel(
+  status: string | undefined,
+  t: AgentTranslate,
+): string {
   switch (status?.trim()) {
     case "not_required":
-      return "无需确认";
+      return t("agentChat.runtimeReviewDecision.permission.status.notRequired");
     case "not_requested":
-      return "尚未发起";
+      return t(
+        "agentChat.runtimeReviewDecision.permission.status.notRequested",
+      );
     case "requested":
-      return "等待确认";
+      return t("agentChat.runtimeReviewDecision.permission.status.requested");
     case "resolved":
-      return "已确认";
+      return t("agentChat.runtimeReviewDecision.permission.status.resolved");
     case "denied":
-      return "已拒绝";
+      return t("agentChat.runtimeReviewDecision.permission.status.denied");
     default:
-      return status?.trim() || "未导出";
+      return (
+        status?.trim() ||
+        t("agentChat.runtimeReviewDecision.permission.status.unexported")
+      );
   }
 }
 
@@ -166,6 +184,8 @@ export function RuntimeReviewDecisionDialog({
   onOpenChange,
   onSave,
 }: RuntimeReviewDecisionDialogProps) {
+  const { t } = useTranslation("agent");
+  const { t: tCommon } = useTranslation("common");
   const [formState, setFormState] = useState<ReviewDecisionFormState | null>(
     template ? createFormState(template) : null,
   );
@@ -193,13 +213,15 @@ export function RuntimeReviewDecisionDialog({
   const permissionConfirmationSummary =
     template?.permission_confirmation_summary ||
     template?.permission_confirmation_request_id ||
-    "未导出权限确认摘要";
+    t("agentChat.runtimeReviewDecision.permission.summary.unavailable");
   const limitStatus = template?.limit_status?.trim();
   const userLockedCapabilitySummary =
     template?.user_locked_capability_summary ||
     (template?.capability_gap
-      ? `显式用户模型锁定不满足当前 execution profile（capabilityGap=${template.capability_gap}），不能作为成功交付证据。`
-      : "未导出模型锁定能力缺口摘要");
+      ? t("agentChat.runtimeReviewDecision.capability.summary.withGap", {
+          capabilityGap: template.capability_gap,
+        })
+      : t("agentChat.runtimeReviewDecision.capability.summary.unavailable"));
   const userLockedCapabilityBlocksReviewAccepted =
     userLockedCapabilityBlocksAccepted(limitStatus);
   const permissionConfirmationBlocksAccepted = blocksAcceptedReviewDecision(
@@ -245,12 +267,12 @@ export function RuntimeReviewDecisionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxWidth="max-w-3xl" className="p-0">
         <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle>填写人工审核结果</DialogTitle>
+          <DialogTitle>
+            {t("agentChat.runtimeReviewDecision.dialog.title")}
+          </DialogTitle>
           <DialogDescription className="space-y-1 text-xs leading-5">
             <span className="block">
-              当前会话会把最终审核结果写回
-              `review-decision.md/json`，继续沿用现有 analysis / handoff /
-              evidence / replay 主链。
+              {t("agentChat.runtimeReviewDecision.dialog.description")}
             </span>
             {template ? (
               <span className="block font-mono text-[11px] text-muted-foreground">
@@ -272,10 +294,10 @@ export function RuntimeReviewDecisionDialog({
               <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold">
-                    模型锁定能力缺口
+                    {t("agentChat.runtimeReviewDecision.capability.title")}
                   </span>
                   <span className="rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-medium text-rose-700">
-                    user_locked_capability_gap
+                    {USER_LOCKED_CAPABILITY_GAP}
                   </span>
                 </div>
                 <p className="mt-2 text-xs leading-5">
@@ -283,12 +305,12 @@ export function RuntimeReviewDecisionDialog({
                 </p>
                 {template.capability_gap ? (
                   <p className="mt-1 font-mono text-[11px] opacity-80">
-                    capabilityGap={template.capability_gap}
+                    {CAPABILITY_GAP_LABEL}
+                    {template.capability_gap}
                   </p>
                 ) : null}
                 <p className="mt-2 text-xs font-medium">
-                  请切换到满足 routingSlot
-                  的模型或取消显式模型锁定后，再保存“接受”结论。
+                  {t("agentChat.runtimeReviewDecision.capability.resolveHint")}
                 </p>
               </div>
             ) : null}
@@ -302,7 +324,9 @@ export function RuntimeReviewDecisionDialog({
                 }`}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold">权限确认</span>
+                  <span className="text-xs font-semibold">
+                    {t("agentChat.runtimeReviewDecision.permission.title")}
+                  </span>
                   <span
                     className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                       permissionConfirmationBlocksAccepted
@@ -312,6 +336,7 @@ export function RuntimeReviewDecisionDialog({
                   >
                     {formatPermissionConfirmationStatusLabel(
                       permissionConfirmationStatus,
+                      t,
                     )}
                   </span>
                 </div>
@@ -320,13 +345,15 @@ export function RuntimeReviewDecisionDialog({
                 </p>
                 {template.permission_confirmation_request_id ? (
                   <p className="mt-1 font-mono text-[11px] opacity-80">
-                    request_id={template.permission_confirmation_request_id}
+                    {REQUEST_ID_LABEL}
+                    {template.permission_confirmation_request_id}
                   </p>
                 ) : null}
                 {permissionConfirmationBlocksAccepted ? (
                   <p className="mt-2 text-xs font-medium">
-                    当前 review decision
-                    不能作为成功交付证据，请先处理真实权限确认。
+                    {t(
+                      "agentChat.runtimeReviewDecision.permission.deliveryBlocked",
+                    )}
                   </p>
                 ) : null}
               </div>
@@ -338,11 +365,13 @@ export function RuntimeReviewDecisionDialog({
                   htmlFor="review-decision-status"
                   className="text-xs font-medium text-foreground"
                 >
-                  决策状态
+                  {t("agentChat.runtimeReviewDecision.field.decisionStatus")}
                 </label>
                 <select
                   id="review-decision-status"
-                  aria-label="决策状态"
+                  aria-label={t(
+                    "agentChat.runtimeReviewDecision.field.decisionStatus",
+                  )}
                   className={selectClassName}
                   value={formState.decision_status}
                   onChange={(event) =>
@@ -367,18 +396,22 @@ export function RuntimeReviewDecisionDialog({
                         status === "accepted"
                       }
                     >
-                      {formatStatusLabel(status)}
+                      {formatStatusLabel(status, t)}
                     </option>
                   ))}
                 </select>
                 {permissionConfirmationBlocksAccepted ? (
                   <p className="text-xs leading-5 text-rose-700">
-                    权限确认未解决时不能保存“接受”，请选择拒绝、延后或需要更多证据。
+                    {t(
+                      "agentChat.runtimeReviewDecision.warning.permissionBlocksAccepted",
+                    )}
                   </p>
                 ) : null}
                 {userLockedCapabilityBlocksReviewAccepted ? (
                   <p className="text-xs leading-5 text-rose-700">
-                    模型锁定能力缺口未解决时不能保存“接受”，请先切换模型、取消显式锁定，或选择拒绝、延后、需要更多证据。
+                    {t(
+                      "agentChat.runtimeReviewDecision.warning.capabilityBlocksAccepted",
+                    )}
                   </p>
                 ) : null}
               </div>
@@ -388,11 +421,13 @@ export function RuntimeReviewDecisionDialog({
                   htmlFor="review-risk-level"
                   className="text-xs font-medium text-foreground"
                 >
-                  风险等级
+                  {t("agentChat.runtimeReviewDecision.field.riskLevel")}
                 </label>
                 <select
                   id="review-risk-level"
-                  aria-label="风险等级"
+                  aria-label={t(
+                    "agentChat.runtimeReviewDecision.field.riskLevel",
+                  )}
                   className={selectClassName}
                   value={formState.risk_level}
                   onChange={(event) =>
@@ -409,7 +444,7 @@ export function RuntimeReviewDecisionDialog({
                 >
                   {riskLevelOptions.map((riskLevel) => (
                     <option key={riskLevel} value={riskLevel}>
-                      {formatRiskLevelLabel(riskLevel)}
+                      {formatRiskLevelLabel(riskLevel, t)}
                     </option>
                   ))}
                 </select>
@@ -422,11 +457,13 @@ export function RuntimeReviewDecisionDialog({
                   htmlFor="review-human-reviewer"
                   className="text-xs font-medium text-foreground"
                 >
-                  审核人
+                  {t("agentChat.runtimeReviewDecision.field.reviewer")}
                 </label>
                 <Input
                   id="review-human-reviewer"
-                  aria-label="审核人"
+                  aria-label={t(
+                    "agentChat.runtimeReviewDecision.field.reviewer",
+                  )}
                   value={formState.human_reviewer}
                   onChange={(event) =>
                     setFormState((current) =>
@@ -438,7 +475,9 @@ export function RuntimeReviewDecisionDialog({
                         : current,
                     )
                   }
-                  placeholder="例如：Lime Maintainer"
+                  placeholder={t(
+                    "agentChat.runtimeReviewDecision.placeholder.reviewer",
+                  )}
                 />
               </div>
 
@@ -447,11 +486,13 @@ export function RuntimeReviewDecisionDialog({
                   htmlFor="review-risk-tags"
                   className="text-xs font-medium text-foreground"
                 >
-                  风险标签
+                  {t("agentChat.runtimeReviewDecision.field.riskTags")}
                 </label>
                 <Input
                   id="review-risk-tags"
-                  aria-label="风险标签"
+                  aria-label={t(
+                    "agentChat.runtimeReviewDecision.field.riskTags",
+                  )}
                   value={formState.risk_tags_text}
                   onChange={(event) =>
                     setFormState((current) =>
@@ -463,7 +504,9 @@ export function RuntimeReviewDecisionDialog({
                         : current,
                     )
                   }
-                  placeholder="用英文逗号分隔，例如：runtime, ui"
+                  placeholder={t(
+                    "agentChat.runtimeReviewDecision.placeholder.riskTags",
+                  )}
                 />
               </div>
             </div>
@@ -473,11 +516,13 @@ export function RuntimeReviewDecisionDialog({
                 htmlFor="review-decision-summary"
                 className="text-xs font-medium text-foreground"
               >
-                决策摘要
+                {t("agentChat.runtimeReviewDecision.field.decisionSummary")}
               </label>
               <Textarea
                 id="review-decision-summary"
-                aria-label="决策摘要"
+                aria-label={t(
+                  "agentChat.runtimeReviewDecision.field.decisionSummary",
+                )}
                 value={formState.decision_summary}
                 onChange={(event) =>
                   setFormState((current) =>
@@ -490,7 +535,9 @@ export function RuntimeReviewDecisionDialog({
                   )
                 }
                 rows={4}
-                placeholder="说明为什么接受、延后、拒绝，或为什么还需要更多证据。"
+                placeholder={t(
+                  "agentChat.runtimeReviewDecision.placeholder.decisionSummary",
+                )}
               />
             </div>
 
@@ -499,11 +546,13 @@ export function RuntimeReviewDecisionDialog({
                 htmlFor="review-fix-strategy"
                 className="text-xs font-medium text-foreground"
               >
-                采用的修复策略
+                {t("agentChat.runtimeReviewDecision.field.fixStrategy")}
               </label>
               <Textarea
                 id="review-fix-strategy"
-                aria-label="采用的修复策略"
+                aria-label={t(
+                  "agentChat.runtimeReviewDecision.field.fixStrategy",
+                )}
                 value={formState.chosen_fix_strategy}
                 onChange={(event) =>
                   setFormState((current) =>
@@ -516,7 +565,9 @@ export function RuntimeReviewDecisionDialog({
                   )
                 }
                 rows={4}
-                placeholder="记录最终采用的最小修复方案，以及为什么不继续扩散范围。"
+                placeholder={t(
+                  "agentChat.runtimeReviewDecision.placeholder.fixStrategy",
+                )}
               />
             </div>
 
@@ -526,11 +577,15 @@ export function RuntimeReviewDecisionDialog({
                   htmlFor="review-regressions"
                   className="text-xs font-medium text-foreground"
                 >
-                  回归要求
+                  {t(
+                    "agentChat.runtimeReviewDecision.field.regressionRequirements",
+                  )}
                 </label>
                 <Textarea
                   id="review-regressions"
-                  aria-label="回归要求"
+                  aria-label={t(
+                    "agentChat.runtimeReviewDecision.field.regressionRequirements",
+                  )}
                   value={formState.regression_requirements_text}
                   onChange={(event) =>
                     setFormState((current) =>
@@ -543,7 +598,9 @@ export function RuntimeReviewDecisionDialog({
                     )
                   }
                   rows={5}
-                  placeholder="每行一条，例如：npm run test:contracts"
+                  placeholder={t(
+                    "agentChat.runtimeReviewDecision.placeholder.regressionRequirements",
+                  )}
                 />
               </div>
 
@@ -552,11 +609,13 @@ export function RuntimeReviewDecisionDialog({
                   htmlFor="review-followups"
                   className="text-xs font-medium text-foreground"
                 >
-                  后续动作
+                  {t("agentChat.runtimeReviewDecision.field.followupActions")}
                 </label>
                 <Textarea
                   id="review-followups"
-                  aria-label="后续动作"
+                  aria-label={t(
+                    "agentChat.runtimeReviewDecision.field.followupActions",
+                  )}
                   value={formState.followup_actions_text}
                   onChange={(event) =>
                     setFormState((current) =>
@@ -569,7 +628,9 @@ export function RuntimeReviewDecisionDialog({
                     )
                   }
                   rows={5}
-                  placeholder="每行一条，例如：补充 HarnessStatusPanel 回归"
+                  placeholder={t(
+                    "agentChat.runtimeReviewDecision.placeholder.followupActions",
+                  )}
                 />
               </div>
             </div>
@@ -579,11 +640,11 @@ export function RuntimeReviewDecisionDialog({
                 htmlFor="review-notes"
                 className="text-xs font-medium text-foreground"
               >
-                审核备注
+                {t("agentChat.runtimeReviewDecision.field.notes")}
               </label>
               <Textarea
                 id="review-notes"
-                aria-label="审核备注"
+                aria-label={t("agentChat.runtimeReviewDecision.field.notes")}
                 value={formState.notes}
                 onChange={(event) =>
                   setFormState((current) =>
@@ -596,7 +657,9 @@ export function RuntimeReviewDecisionDialog({
                   )
                 }
                 rows={4}
-                placeholder="补充未决风险、边界判断或暂不处理的原因。"
+                placeholder={t(
+                  "agentChat.runtimeReviewDecision.placeholder.notes",
+                )}
               />
             </div>
           </div>
@@ -609,7 +672,7 @@ export function RuntimeReviewDecisionDialog({
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
-            取消
+            {tCommon("common.cancel")}
           </Button>
           <Button
             type="button"
@@ -622,7 +685,9 @@ export function RuntimeReviewDecisionDialog({
               acceptanceBlockedByUserLockedCapability
             }
           >
-            {saving ? "保存中..." : "保存审核结果"}
+            {saving
+              ? t("agentChat.runtimeReviewDecision.action.saving")
+              : t("agentChat.runtimeReviewDecision.action.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

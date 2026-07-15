@@ -323,9 +323,7 @@ describe("AgentThreadTimeline", () => {
     expect(block?.open).toBe(false);
     expect(container.textContent).toContain(summaryText);
     expect(container.textContent).not.toContain(rawReasoningText);
-    expect((container.textContent?.split(summaryText).length ?? 1) - 1).toBe(
-      1,
-    );
+    expect((container.textContent?.split(summaryText).length ?? 1) - 1).toBe(1);
 
     act(() => {
       summary?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -333,9 +331,7 @@ describe("AgentThreadTimeline", () => {
 
     expect(block?.open).toBe(true);
     expect(container.textContent).toContain(rawReasoningText);
-    expect((container.textContent?.split(summaryText).length ?? 1) - 1).toBe(
-      1,
-    );
+    expect((container.textContent?.split(summaryText).length ?? 1) - 1).toBe(1);
     expect(
       (container.textContent?.split(rawReasoningText).length ?? 1) - 1,
     ).toBe(1);
@@ -423,6 +419,19 @@ describe("AgentThreadTimeline", () => {
     expect(container.textContent).toContain("图片任务 1");
     expect(container.textContent).not.toContain("Image #1");
     expect(container.textContent).toContain("子任务：图片任务 1");
+
+    const activityRow = container.querySelector(
+      '[data-testid="subagent-activity-row"]',
+    );
+    expect(activityRow?.getAttribute("data-subagent-activity-item-id")).toBe(
+      "subagent-1",
+    );
+    expect(activityRow?.getAttribute("data-subagent-activity-kind")).toBe(
+      "interacted",
+    );
+    expect(activityRow?.getAttribute("data-subagent-thread-id")).toBe(
+      "thread-child",
+    );
 
     const button = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button"),

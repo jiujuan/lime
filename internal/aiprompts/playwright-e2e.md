@@ -315,15 +315,16 @@ Runtime prompt 层的禁止证据：
 7. 如工作台模式开启自动保存，再确认执行成功后保存态文案与打开入口正常
 8. 打开控制台并确认浏览器资料 / 环境预设读取没有落回 renderer mock fallback，尤其不应出现 `[Mock] invoke: list_browser_profiles_cmd` 或 `[Mock] invoke: list_browser_environment_presets_cmd`
 
-### Team runtime 工具面验证
+### AgentControl 工具面验证
 
 1. 进入 `Claw` 或带有 `HarnessStatusPanel` 的运行时页面
 2. 打开工具库存 / runtime inventory 面板
-3. 确认 current 协作工具面至少包含 `Agent`、`TeamCreate`、`TeamDelete`、`SendMessage`、`ListPeers`
-4. 同时确认主线程 current 工具面包含 `SendUserMessage`，且 tool display 不会退回通用图标或泛化文案
-5. 如果页面当前走的是显式测试夹具，也要确认 fixture inventory 与 tool display 仍显示同一组工具，而不是只出现一部分协作工具或退回通用图标；生产 GUI 路径不能靠 fixture 通过
-6. 如果页面同时展示 MCP bridge 工具，确认 current 命名为 `mcp__<server>__<tool>`，对应 extension surface key 为 `mcp__<server>`；若仍出现裸 `server__tool`、混合前缀或 extension/tool 各自一套命名，判定为协议漂移
-7. 如出现缺失、重复图标或文案回退，优先检查 App Server tool catalog / RuntimeCore 注册、Agent backend tool registry、`src/lib/desktop-host/` 测试夹具与 `toolDisplayInfo.ts` 是否同步；不要把旧 Tauri / Rust facade registry 当 current owner
+3. 确认 current AgentControl 工具面包含且只使用六个 canonical 名称：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`interrupt_agent`、`wait_agent`
+4. 确认六个工具的 tool display 使用对应 AgentControl 语义，不会退回通用图标、泛化文案或旧 Team 文案
+5. `Agent`、`TeamCreate`、`TeamDelete`、`SendMessage`、`ListPeers`、`SendUserMessage` 及其 `*Tool` alias 均为 `dead / deleted / forbidden-to-restore`；若它们重新出现在 current inventory、prompt、catalog 或 GUI 正向断言中，直接判定为旧路回流，不得增加 compat 映射
+6. 如果页面当前走的是显式测试夹具，也要确认 fixture inventory 与 tool display 仍显示同一组六个 canonical 工具，而不是只出现一部分 AgentControl 工具或旧 Team alias；生产 GUI 路径不能靠 fixture 通过
+7. 如果页面同时展示 MCP bridge 工具，确认 current 命名为 `mcp__<server>__<tool>`，对应 extension surface key 为 `mcp__<server>`；若仍出现裸 `server__tool`、混合前缀或 extension/tool 各自一套命名，判定为协议漂移
+8. 如出现缺失、重复图标或文案回退，优先检查 App Server tool catalog / RuntimeCore 注册、Agent backend tool registry、`src/lib/desktop-host/` 测试夹具与 `toolDisplayInfo.ts` 是否同步；不要把旧 Tauri / Rust facade registry 当 current owner
 
 ### Claw 计划模式与计划轨验证
 

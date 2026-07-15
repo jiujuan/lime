@@ -390,6 +390,17 @@ if (input.kind === "turnStart") {
   const sessionId = String(input.request?.session?.sessionId || "");
   const threadId = String(input.request?.session?.threadId || sessionId);
   const turnId = String(input.request?.turn?.turnId || "");
+  const turnScopedExecutionId = (baseId) =>
+    isRecoveryTurn ? baseId + ":" + turnId : baseId;
+  const toolCallId = turnScopedExecutionId("${TOOL_CALL_ID}");
+  const fileChangeItemId = turnScopedExecutionId("${CODING_ARTIFACT_ID}");
+  const patchId = turnScopedExecutionId("${CODING_PATCH_ID}");
+  const commandId = turnScopedExecutionId("${CODING_COMMAND_ID}");
+  const testRunId = turnScopedExecutionId("${CODING_TEST_RUN_ID}");
+  const checkpointRef = turnScopedExecutionId("checkpoint://code-artifact-workbench/coding-target");
+  const contentRef = turnScopedExecutionId("content://code-artifact-workbench/coding-target");
+  const diffRef = turnScopedExecutionId("diff://code-artifact-workbench/coding-target");
+  const commandOutputRef = turnScopedExecutionId("output://code-artifact-workbench/coding-target-test");
   const toolStartedAtMs = Date.now();
   const canonicalToolItem = (status, sequence, output = null) => {
     const updatedAtMs = Date.now();
@@ -397,7 +408,7 @@ if (input.kind === "turnStart") {
       sessionId,
       threadId,
       turnId,
-      itemId: "${TOOL_CALL_ID}",
+      itemId: toolCallId,
       sequence,
       ordinal: 4,
       createdAtMs: toolStartedAtMs,
@@ -407,7 +418,7 @@ if (input.kind === "turnStart") {
       status,
       payload: {
         type: "tool",
-        call_id: "${TOOL_CALL_ID}",
+        call_id: toolCallId,
         name: "${TOOL_NAME}",
         arguments: [
           { name: "url", value: "https://example.com/lime-workbench-tool" },
@@ -466,13 +477,14 @@ if (input.kind === "turnStart") {
       {
         type: "file.changed",
         payload: {
+          itemId: fileChangeItemId,
           path: "${CODING_FILE_PATH}",
           artifactId: "${CODING_ARTIFACT_ID}",
           artifactRefs: ["${CODING_ARTIFACT_ID}"],
           changeKind: "modified",
-          checkpointRef: "checkpoint://code-artifact-workbench/coding-target",
-          contentRef: "content://code-artifact-workbench/coding-target",
-          diffRef: "diff://code-artifact-workbench/coding-target",
+          checkpointRef,
+          contentRef,
+          diffRef,
           preview: "${CODING_FILE_PREVIEW}",
           change: {
             diff: [
@@ -486,22 +498,22 @@ if (input.kind === "turnStart") {
       {
         type: "patch.started",
         payload: {
-          patchId: "${CODING_PATCH_ID}",
+          patchId,
           path: "${CODING_FILE_PATH}"
         }
       },
       {
         type: "patch.applied",
         payload: {
-          patchId: "${CODING_PATCH_ID}",
+          patchId,
           path: "${CODING_FILE_PATH}",
-          diffRef: "diff://code-artifact-workbench/coding-target"
+          diffRef
         }
       },
       {
         type: "command.started",
         payload: {
-          commandId: "${CODING_COMMAND_ID}",
+          commandId,
           command: "${CODING_COMMAND_TEXT}",
           cwd: "."
         }
@@ -509,39 +521,39 @@ if (input.kind === "turnStart") {
       {
         type: "command.output",
         payload: {
-          commandId: "${CODING_COMMAND_ID}",
-          outputRef: "output://code-artifact-workbench/coding-target-test",
+          commandId,
+          outputRef: commandOutputRef,
           preview: commandPreview
         }
       },
       {
         type: "command.exited",
         payload: {
-          commandId: "${CODING_COMMAND_ID}",
+          commandId,
           command: "${CODING_COMMAND_TEXT}",
           exitCode: commandExitCode,
-          outputRef: "output://code-artifact-workbench/coding-target-test",
+          outputRef: commandOutputRef,
           preview: commandPreview
         }
       },
       {
         type: "test.started",
         payload: {
-          testRunId: "${CODING_TEST_RUN_ID}",
-          commandId: "${CODING_COMMAND_ID}",
+          testRunId,
+          commandId,
           suite: "${CODING_TEST_SUITE}"
         }
       },
       {
         type: "test.completed",
         payload: {
-          testRunId: "${CODING_TEST_RUN_ID}",
-          commandId: "${CODING_COMMAND_ID}",
+          testRunId,
+          commandId,
           suite: "${CODING_TEST_SUITE}",
           result: testResult,
           passed: testPassed,
           failed: testFailed,
-          outputRef: "output://code-artifact-workbench/coding-target-test"
+          outputRef: commandOutputRef
         }
       },
       {
@@ -557,6 +569,13 @@ if (input.kind === "turnStart") {
       kind: "backendEvents",
       sessionId: input.request?.session?.sessionId,
       turnId: input.request?.turn?.turnId,
+      executionIds: {
+        toolCallId,
+        fileChangeItemId,
+        patchId,
+        commandId,
+        testRunId
+      },
       eventTypes: events.map((event) => event.type),
       recordedAt: new Date().toISOString()
     }) + "\\n");
@@ -581,6 +600,20 @@ function readJsonl(filePath) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+function persistBackendLedgerEvidence(sourcePath, evidencePath) {
+  let backendLedger = [];
+  let readError = null;
+  try {
+    backendLedger = readJsonl(sourcePath);
+  } catch (error) {
+    readError = sanitizeText(
+      error instanceof Error ? error.stack || error.message : String(error),
+    );
+  }
+  writeJsonFile(evidencePath, backendLedger.map(sanitizeJson));
+  return { backendLedger, readError };
 }
 
 function parseJsonRpcLine(line) {
@@ -2810,8 +2843,16 @@ async function run() {
       );
     }
 
-    const backendLedger = readJsonl(runtimeEnv.backendLedgerPath);
-    writeJsonFile(backendLedgerEvidencePath, backendLedger.map(sanitizeJson));
+    const backendLedgerEvidence = persistBackendLedgerEvidence(
+      runtimeEnv.backendLedgerPath,
+      backendLedgerEvidencePath,
+    );
+    if (backendLedgerEvidence.readError) {
+      throw new Error(
+        `读取 backend ledger 失败: ${backendLedgerEvidence.readError}`,
+      );
+    }
+    const { backendLedger } = backendLedgerEvidence;
     const pageText = await withTimeout(
       page.evaluate(() => document.body?.innerText || ""),
       FINAL_PAGE_OPERATION_TIMEOUT_MS,
@@ -2846,6 +2887,14 @@ async function run() {
         entry.requestMetadata?.harness?.coding_workbench_recovery
           ?.schemaVersion === "coding-workbench-recovery/v1",
     );
+    const backendRecoveryEvents = backendLedger.find(
+      (entry) =>
+        entry.kind === "backendEvents" &&
+        entry.turnId === backendRecoveryTurnStart?.turnId,
+    );
+    const recoveryExecutionIds = Object.values(
+      backendRecoveryEvents?.executionIds || {},
+    ).filter((value) => typeof value === "string" && value.trim());
     const traceRecoveryTurnStart = findCodingRecoveryTurnStart(
       collectTraceJsonRpcMessages(traceMessages),
     );
@@ -2963,6 +3012,13 @@ async function run() {
           "coding-workbench-recovery/v1" &&
           traceRecoveryContext?.sourceIds?.commandId === CODING_COMMAND_ID &&
           traceRecoveryContext?.sourceIds?.testRunId === CODING_TEST_RUN_ID),
+      recoveryExecutionIdsTurnScoped:
+        typeof backendRecoveryTurnStart?.turnId === "string" &&
+        backendRecoveryTurnStart.turnId.length > 0 &&
+        recoveryExecutionIds.length === 5 &&
+        recoveryExecutionIds.every((executionId) =>
+          executionId.endsWith(`:${backendRecoveryTurnStart.turnId}`),
+        ),
       guiPromptSubmitted:
         options.scenario !== "gui-coding-input" ||
         summary.sessionCreation?.guiPromptSubmitted === true,
@@ -3007,6 +3063,29 @@ async function run() {
     console.log(`${LOG_PREFIX} summary=${summaryPath}`);
     console.log(`${LOG_PREFIX} pass session=${SESSION_ID}`);
   } catch (error) {
+    try {
+      const backendLedgerEvidence = persistBackendLedgerEvidence(
+        runtimeEnv.backendLedgerPath,
+        backendLedgerEvidencePath,
+      );
+      summary.backendKinds = backendLedgerEvidence.backendLedger.map(
+        (entry) => entry.kind,
+      );
+      summary.backendEmittedEventTypes = Array.from(
+        new Set(
+          backendLedgerEvidence.backendLedger
+            .filter((entry) => entry.kind === "backendEvents")
+            .flatMap((entry) =>
+              Array.isArray(entry.eventTypes) ? entry.eventTypes : [],
+            ),
+        ),
+      );
+      if (backendLedgerEvidence.readError) {
+        summary.backendLedgerReadError = backendLedgerEvidence.readError;
+      }
+    } catch (backendLedgerError) {
+      summary.backendLedgerEvidenceError = sanitizeText(backendLedgerError);
+    }
     try {
       if (page) {
         const traceRaw = await withTimeout(

@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 
-import {
-  hydrateSessionDetailMessages,
-} from "./agentChatHistory";
+import { hydrateSessionDetailMessages } from "./agentChatHistory";
 
 describe("agentChatHistory imported Codex timeline", () => {
   it("timeline 已有工具过程时不应再注入 thread_read.tool_calls 兼容摘要", () => {

@@ -126,6 +126,25 @@ function normalizeDecision(value: string | undefined): ApprovalRecordDecision {
   }
 }
 
+function canonicalDecisionFromResponse(
+  response: Record<string, unknown> | undefined,
+): ApprovalRecordDecision | undefined {
+  switch (response?.decision) {
+    case "approved":
+      return "allow_once";
+    case "approvedForSession":
+      return "allow_for_session";
+    case "denied":
+      return "decline";
+    case "timedOut":
+      return "expired";
+    case "abort":
+      return "cancel";
+    default:
+      return undefined;
+  }
+}
+
 function decisionFromEventType(
   sourceEventType: string | undefined,
 ): ApprovalRecordDecision | undefined {
@@ -266,6 +285,7 @@ export function toApprovalRecordFromThreadItem(
     false;
   const decision =
     decisionFromEventType(sourceEventType) ??
+    canonicalDecisionFromResponse(response) ??
     normalizeDecision(stringValue(response, ["decision", "status"]));
 
   return {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
 import {
@@ -128,9 +128,7 @@ describe("agentChatHistory missing user recovery", () => {
     expect(messages[1]?.content).toBe(
       `执行失败：${internalRuntimeErrorMessage}`,
     );
-    expect(messages[1]?.content).not.toContain(
-      "token-plan-cn.xiaomimimo.com",
-    );
+    expect(messages[1]?.content).not.toContain("token-plan-cn.xiaomimimo.com");
     expect(messages[1]?.contentParts).toEqual([
       {
         type: "text",

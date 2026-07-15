@@ -261,7 +261,6 @@ export interface AgentUiProjectionEvent {
   surface?: AgentUiSurface;
   persistence?: AgentUiPersistence;
   control?: AgentUiControl;
-  parentSessionId?: string;
   parentThreadId?: string;
   agentName?: string;
   teamName?: string;

@@ -1,12 +1,12 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-  AutoContinueRequestPayload,
-  QueuedTurnSnapshot,
-  RuntimeSearchMode,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime/objectiveClient";
 import { modelRegistryApi } from "@/lib/api/modelRegistry";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";

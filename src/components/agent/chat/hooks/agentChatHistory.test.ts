@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 
 import {
   appendTextToParts,

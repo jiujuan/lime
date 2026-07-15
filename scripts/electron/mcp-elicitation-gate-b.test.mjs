@@ -17,7 +17,25 @@ describe("MCP elicitation Gate B guard", () => {
     expect(content).toContain('"mcpServer/start"');
     expect(content).toContain("mcp__${serverName}__${TOOL_SUFFIX}");
     expect(content).toContain('method: "elicitation/create"');
+    expect(content).toContain('type: "initialize"');
     expect(content).toContain("startOpenAiCompatibleFixtureServer");
+  });
+
+  it("requires exact runtime capability advertisement and management capability absence", () => {
+    const content = readGateB();
+
+    expect(content).toContain("capabilityAdvertisementRequired: true");
+    expect(content).toContain('initializedProtocolVersion === "2025-06-18"');
+    expect(content).toContain(
+      "Object.keys(initializedCapabilities).length === 1",
+    );
+    expect(content).toContain(
+      "isExactEmptyObject(initializedCapabilities.elicitation)",
+    );
+    expect(content).toContain('type: "capability_missing"');
+    expect(content).toContain("runtimeCapabilityExact");
+    expect(content).toContain("managementElicitationCapabilityAbsent");
+    expect(content).toContain("summary.capabilityMissingCount === 0");
   });
 
   it("requires the renderer boolean form, exact MCP accept ledger, and second provider response", () => {

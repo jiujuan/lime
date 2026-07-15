@@ -15,6 +15,60 @@ struct StreamingCallbackOrderBackend {
     observed_events: Arc<Mutex<Vec<String>>>,
 }
 
+struct CanonicalMessageReasoningLifecycleBackend;
+
+#[async_trait]
+impl ExecutionBackend for CanonicalMessageReasoningLifecycleBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new(
+            "reasoning.started",
+            json!({"reasoningId": "reasoning-1"}),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "reasoning.delta",
+            json!({"reasoningId": "reasoning-1", "delta": "先检查顺序。"}),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "message.delta",
+            json!({"text": "最终回答。"}),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "message.completed",
+            json!({"role": "assistant", "phase": "final_answer", "status": "completed"}),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "reasoning.final",
+            json!({"reasoningId": "reasoning-1", "text": "先检查顺序。"}),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "reasoning.ended",
+            json!({"reasoningId": "reasoning-1", "status": "completed"}),
+        ))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl ExecutionBackend for StreamingCallbackOrderBackend {
     async fn start_turn(
@@ -29,7 +83,12 @@ impl ExecutionBackend for StreamingCallbackOrderBackend {
             .clone();
         assert_eq!(
             observed_events,
-            vec!["message.created".to_string(), "turn.accepted".to_string()],
+            vec![
+                "item.started".to_string(),
+                "message.created".to_string(),
+                "item.completed".to_string(),
+                "turn.accepted".to_string(),
+            ],
             "streaming turn/start must publish input and accepted lifecycle before backend progress"
         );
         sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
@@ -114,14 +173,28 @@ async fn mock_backend_emits_public_runtime_event() {
     let events = core
         .events_for_session(&session.session_id)
         .expect("runtime events");
-    assert_eq!(events.len(), 2);
-    assert_eq!(output.events.len(), 2);
-    assert_eq!(events[0].event_type, "message.created");
-    assert_eq!(events[0].payload["role"], "user");
-    assert_eq!(events[0].payload["input"]["text"], "hello");
-    assert_eq!(events[1].event_type, "turn.accepted");
-    assert_eq!(events[1].payload["backend"], "mock");
-    assert_eq!(events[1].payload["clientName"], "test-client");
+    assert_eq!(events.len(), 4);
+    assert_eq!(output.events.len(), 4);
+    assert_eq!(events[0].event_type, "item.started");
+    assert_eq!(events[0].payload["item"]["kind"], "userMessage");
+    assert_eq!(events[0].payload["item"]["status"], "inProgress");
+    assert_eq!(events[1].event_type, "message.created");
+    assert_eq!(events[1].payload["role"], "user");
+    assert_eq!(events[1].payload["input"]["text"], "hello");
+    assert_eq!(events[2].event_type, "item.completed");
+    assert_eq!(events[2].payload["item"]["kind"], "userMessage");
+    assert_eq!(events[2].payload["item"]["status"], "completed");
+    assert_eq!(
+        events[2].payload["item"]["itemId"],
+        events[0].payload["item"]["itemId"]
+    );
+    assert_eq!(
+        events[2].payload["item"]["ordinal"],
+        events[0].payload["item"]["ordinal"]
+    );
+    assert_eq!(events[3].event_type, "turn.accepted");
+    assert_eq!(events[3].payload["backend"], "mock");
+    assert_eq!(events[3].payload["clientName"], "test-client");
 }
 
 #[tokio::test]
@@ -176,7 +249,9 @@ async fn streaming_turn_start_emits_lifecycle_before_backend_progress() {
             .expect("observed events mutex poisoned")
             .as_slice(),
         [
+            "item.started",
             "message.created",
+            "item.completed",
             "turn.accepted",
             "turn.started",
             "turn.completed"
@@ -237,6 +312,103 @@ async fn streaming_agent_message_notification_includes_canonical_item() {
 }
 
 #[tokio::test]
+async fn message_and_reasoning_emit_stable_canonical_item_lifecycle() {
+    let core = RuntimeCore::with_backend(Arc::new(CanonicalMessageReasoningLifecycleBackend));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_message_reasoning_lifecycle".to_string()),
+            thread_id: Some("thread_message_reasoning_lifecycle".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_message_reasoning_lifecycle".to_string()),
+                input: AgentInput {
+                    text: "请先思考再回答。".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+
+    let lifecycle_items = output
+        .events
+        .iter()
+        .filter(|event| matches!(event.event_type.as_str(), "item.started" | "item.completed"))
+        .filter_map(|event| {
+            let item = event.payload.get("item")?;
+            Some((event.event_type.as_str(), item))
+        })
+        .collect::<Vec<_>>();
+    for kind in ["userMessage", "reasoning", "agentMessage"] {
+        let started = lifecycle_items
+            .iter()
+            .find(|(event_type, item)| *event_type == "item.started" && item["kind"] == kind)
+            .unwrap_or_else(|| panic!("missing {kind} item.started"));
+        let completed = lifecycle_items
+            .iter()
+            .find(|(event_type, item)| *event_type == "item.completed" && item["kind"] == kind)
+            .unwrap_or_else(|| panic!("missing {kind} item.completed"));
+        assert_eq!(started.1["itemId"], completed.1["itemId"]);
+        assert_eq!(started.1["ordinal"], completed.1["ordinal"]);
+        assert_eq!(started.1["status"], "inProgress");
+        assert_eq!(completed.1["status"], "completed");
+    }
+
+    let reasoning = lifecycle_items
+        .iter()
+        .find(|(event_type, item)| *event_type == "item.completed" && item["kind"] == "reasoning")
+        .expect("reasoning completion");
+    let answer = lifecycle_items
+        .iter()
+        .find(|(event_type, item)| {
+            *event_type == "item.completed" && item["kind"] == "agentMessage"
+        })
+        .expect("agent completion");
+    assert!(
+        reasoning.1["ordinal"].as_u64().expect("reasoning ordinal")
+            < answer.1["ordinal"].as_u64().expect("agent ordinal")
+    );
+    assert!(
+        reasoning.1["sequence"]
+            .as_u64()
+            .expect("reasoning completion sequence")
+            > answer.1["sequence"]
+                .as_u64()
+                .expect("agent completion sequence")
+    );
+
+    let durable_event_types = core
+        .events_for_session(&session.session_id)
+        .expect("durable lifecycle events")
+        .into_iter()
+        .map(|event| event.event_type)
+        .collect::<Vec<_>>();
+    assert!(!durable_event_types.iter().any(|event_type| {
+        matches!(
+            event_type.as_str(),
+            "reasoning.started" | "reasoning.ended" | "message.completed"
+        )
+    }));
+    assert!(durable_event_types.contains(&"reasoning.delta".to_string()));
+    assert!(durable_event_types.contains(&"reasoning.final".to_string()));
+    assert!(durable_event_types.contains(&"message.delta".to_string()));
+}
+
+#[tokio::test]
 async fn runtime_events_are_appended_to_jsonl_event_log() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
@@ -280,31 +452,58 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
         json!("userMessage")
     );
     assert_eq!(
-        output.events[1].payload["turn"]["status"],
+        output.events[2].payload["item"]["status"],
+        json!("completed")
+    );
+    assert_eq!(
+        output.events[2].payload["item"]["itemId"],
+        output.events[0].payload["item"]["itemId"]
+    );
+    assert_eq!(
+        output.events[2].payload["item"]["ordinal"],
+        output.events[0].payload["item"]["ordinal"]
+    );
+    assert_eq!(
+        output.events[3].payload["turn"]["status"],
         json!("inProgress")
     );
 
     let records = event_log_writer
         .read_session_events("sess_jsonl")
         .expect("jsonl records");
-    assert_eq!(records.len(), 2);
+    assert_eq!(records.len(), 4);
     assert!(records[0]
         .path
         .ends_with("events/sessions/session_sess_jsonl.jsonl"));
     assert_eq!(records[0].event.session_id, "sess_jsonl");
     assert_eq!(records[0].event.thread_id.as_deref(), Some("thread_jsonl"));
     assert_eq!(records[0].event.turn_id.as_deref(), Some("turn_jsonl"));
-    assert_eq!(records[0].event.event_type, "message.created");
-    assert_eq!(records[0].event.payload["input"]["text"], "hello");
-    assert!(records[0].event.payload.get("item").is_none());
-    assert_eq!(records[1].event.event_type, "turn.accepted");
-    assert!(records[1].event.payload.get("turn").is_none());
+    assert_eq!(records[0].event.event_type, "item.started");
+    assert_eq!(records[0].event.payload["item"]["kind"], "userMessage");
+    assert_eq!(records[0].event.payload["item"]["status"], "inProgress");
+    assert_eq!(records[1].event.event_type, "message.created");
+    assert_eq!(records[1].event.payload["input"]["text"], "hello");
+    assert!(records[1].event.payload.get("item").is_none());
+    assert_eq!(records[2].event.event_type, "item.completed");
+    assert_eq!(records[2].event.payload["item"]["status"], "completed");
+    assert_eq!(
+        records[2].event.payload["item"]["itemId"],
+        records[0].event.payload["item"]["itemId"]
+    );
+    assert_eq!(
+        records[2].event.payload["item"]["ordinal"],
+        records[0].event.payload["item"]["ordinal"]
+    );
+    assert_eq!(records[3].event.event_type, "turn.accepted");
+    assert!(records[3].event.payload.get("turn").is_none());
 
     let stored = core
         .events_for_session("sess_jsonl")
         .expect("stored runtime events");
-    assert!(stored[0].payload.get("item").is_none());
-    assert!(stored[1].payload.get("turn").is_none());
+    assert_eq!(stored[0].event_type, "item.started");
+    assert_eq!(stored[2].event_type, "item.completed");
+    assert_eq!(stored[3].event_type, "turn.accepted");
+    assert!(stored[3].payload.get("turn").is_none());
 
     let projected = projection_store
         .read_session("sess_jsonl")
@@ -312,7 +511,7 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
         .expect("projected session");
     assert_eq!(projected.thread_id, "thread_jsonl");
     assert_eq!(projected.status, "running");
-    assert_eq!(projected.last_event_sequence, 2);
+    assert_eq!(projected.last_event_sequence, 4);
 }
 
 #[tokio::test]

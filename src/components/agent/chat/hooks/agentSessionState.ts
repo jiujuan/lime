@@ -1,11 +1,15 @@
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
+} from "@/lib/api/agentExecutionRuntime";
+import type {
   AgentRuntimeThreadReadModel,
   AgentTodoItem,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
-import { normalizeQueuedTurnSnapshots } from "@/lib/api/queuedTurn";
+} from "@/lib/api/agentRuntime/sessionTypes";
+import {
+  normalizeQueuedTurnSnapshots,
+  type QueuedTurnSnapshot,
+} from "@/lib/api/queuedTurn";
 import { resolveRestorableSessionId } from "@/lib/agentSessionRecovery";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import type { Topic } from "./agentChatShared";

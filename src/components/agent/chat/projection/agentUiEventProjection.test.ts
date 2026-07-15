@@ -597,7 +597,7 @@ describe("agentUiEventProjection", () => {
       taskId: "child-1",
       agentId: "child-1",
       handoffId: "session-team-1:handoff:child-1",
-      parentSessionId: "session-team-1",
+      parentThreadId: "thread-team-1",
       owner: "agent",
       scope: "agent",
       phase: "completed",

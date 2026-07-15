@@ -1,5 +1,6 @@
 import type { QueuedTurnSnapshot } from "./queuedTurn";
 import type {
+  AgentExecutionStrategy,
   AgentSessionExecutionRuntimeCostState,
   AgentSessionExecutionRuntimeLimitEvent,
   AgentSessionExecutionRuntimeLimitState,
@@ -7,7 +8,6 @@ import type {
   AgentSessionExecutionRuntimeTaskProfile,
   AgentTurnOutputSchemaRuntime,
 } from "./agentExecutionRuntime";
-import type { AgentExecutionStrategy } from "./agentRuntime/types";
 import type {
   AgentActionRequiredQuestion,
   AgentActionRequiredScope,

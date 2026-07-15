@@ -14,7 +14,7 @@ import type {
   CreateImageGenerationTaskArtifactRequest,
   MediaTaskArtifactOutput,
   MediaTaskLookupRequest,
-} from "@/lib/api/mediaTasks";
+} from "@/lib/api/agentRuntime/mediaTaskTypes";
 import type {
   ReadLayeredDesignProjectExportOutput,
   ReadLayeredDesignProjectExportRequest,
