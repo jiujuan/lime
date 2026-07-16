@@ -3,7 +3,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
-import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
 import {
   clearAgentUiProjectionEvents,
@@ -76,27 +75,6 @@ const DEFAULT_CHAT_TOOL_PREFERENCES: ChatToolPreferences = {
   task: false,
   subagent: false,
 };
-const DEFAULT_SELECTED_TEAM: TeamDefinition = {
-  id: "team-research-duo",
-  source: "builtin",
-  label: "研究双人组",
-  description: "负责检索和整理结果。",
-  roles: [
-    {
-      id: "researcher",
-      label: "研究员",
-      summary: "负责检索线索。",
-      skillIds: ["web-search"],
-    },
-    {
-      id: "analyst",
-      label: "分析员",
-      summary: "负责整理结论。",
-      roleKey: "analyst",
-    },
-  ],
-};
-
 function createProject(id = "project-1") {
   return {
     id,
@@ -579,15 +557,11 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
     });
   });
 
-  it("站点型技能进入工作区时应把当前 Team 注入自动发送 metadata", async () => {
+  it("站点型技能进入工作区时应保留真实 service skill metadata", async () => {
     const onNavigate = vi.fn();
     const { render, getValue } = renderHook({
       onNavigate,
       recordServiceSkillUsage: vi.fn(),
-      preferredTeamPresetId: "research-duo",
-      selectedTeam: DEFAULT_SELECTED_TEAM,
-      selectedTeamLabel: "研究双人组",
-      selectedTeamSummary: "研究员负责检索，分析员负责整理。",
     });
     await render();
 
@@ -605,23 +579,6 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
             service_skill_launch: expect.objectContaining({
               adapter_name: "github/search",
             }),
-            preferred_team_preset_id: "research-duo",
-            selected_team_id: "team-research-duo",
-            selected_team_source: "builtin",
-            selected_team_label: "研究双人组",
-            selected_team_description: "负责检索和整理结果。",
-            selected_team_summary: "研究员负责检索，分析员负责整理。",
-            selected_team_roles: [
-              expect.objectContaining({
-                id: "researcher",
-                label: "研究员",
-              }),
-              expect.objectContaining({
-                id: "analyst",
-                label: "分析员",
-                role_key: "analyst",
-              }),
-            ],
           }),
         },
       }),
@@ -800,15 +757,11 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
     expect(mockToastSuccess).not.toHaveBeenCalled();
   });
 
-  it("普通技能进入工作区时应在保留 seed metadata 的同时注入当前 Team", async () => {
+  it("普通技能进入工作区时应保留 seed metadata", async () => {
     const onNavigate = vi.fn();
     const { render, getValue } = renderHook({
       onNavigate,
       recordServiceSkillUsage: vi.fn(),
-      preferredTeamPresetId: "research-duo",
-      selectedTeam: DEFAULT_SELECTED_TEAM,
-      selectedTeamLabel: "研究双人组",
-      selectedTeamSummary: "研究员负责检索，分析员负责整理。",
     });
     await render();
 
@@ -830,25 +783,6 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
             artifact_kind: "analysis",
             workbench_surface: "right_panel",
           },
-          harness: expect.objectContaining({
-            preferred_team_preset_id: "research-duo",
-            selected_team_id: "team-research-duo",
-            selected_team_source: "builtin",
-            selected_team_label: "研究双人组",
-            selected_team_description: "负责检索和整理结果。",
-            selected_team_summary: "研究员负责检索，分析员负责整理。",
-            selected_team_roles: [
-              expect.objectContaining({
-                id: "researcher",
-                label: "研究员",
-              }),
-              expect.objectContaining({
-                id: "analyst",
-                label: "分析员",
-                role_key: "analyst",
-              }),
-            ],
-          }),
         },
       }),
     );

@@ -1,5 +1,5 @@
 use super::*;
-use agent_protocol::ThreadTurnsView;
+use agent_protocol::{ItemKind, ItemStatus, ThreadItemPayload, ThreadTurnsView};
 use app_server_protocol::{AgentSessionReadParams, AgentSessionTurnStartParams};
 use futures::executor::block_on;
 use serde_json::json;
@@ -10,7 +10,8 @@ use thread_store::{
     ReadThreadParams, ThreadSpawnEdgeStatus, ThreadStore,
 };
 use tool_runtime::agent_control::{
-    AgentControlCaller, AgentControlCommand, AgentControlGatewayRequest, SubAgentProjectionActivity,
+    AgentControlCaller, AgentControlCommand, AgentControlGatewayRequest, SpawnAgentForkMode,
+    SubAgentProjectionActivity,
 };
 
 #[path = "agent_control/effective_route.rs"]
@@ -105,6 +106,78 @@ fn core() -> (tempfile::TempDir, RuntimeCore, Arc<ProjectionStore>) {
     (temp, core, store)
 }
 
+async fn append_completed_parent_turn(
+    core: &RuntimeCore,
+    session: &AgentSession,
+    turn_id: &str,
+    user_text: &str,
+    assistant_text: &str,
+) {
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: session.session_id.clone(),
+            turn_id: Some(turn_id.to_string()),
+            input: AgentInput {
+                text: user_text.to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("start parent turn");
+    core.append_external_runtime_events(
+        &session.session_id,
+        Some(turn_id),
+        vec![
+            RuntimeEvent::new(
+                "message.delta",
+                json!({
+                    "itemId": format!("commentary-{turn_id}"),
+                    "phase": "commentary",
+                    "text": format!("commentary for {assistant_text}"),
+                    "trace_id": format!("parent-trace-{turn_id}"),
+                }),
+            ),
+            RuntimeEvent::new(
+                "message.completed",
+                json!({
+                    "itemId": format!("commentary-{turn_id}"),
+                    "phase": "commentary",
+                    "status": "completed",
+                    "text": format!("commentary for {assistant_text}"),
+                    "trace_id": format!("parent-trace-{turn_id}"),
+                }),
+            ),
+            RuntimeEvent::new("reasoning.delta", json!({ "text": "private reasoning" })),
+            RuntimeEvent::new(
+                "message.delta",
+                json!({
+                    "itemId": format!("final-{turn_id}"),
+                    "phase": "final_answer",
+                    "text": assistant_text,
+                    "request_id": format!("parent-request-{turn_id}"),
+                }),
+            ),
+            RuntimeEvent::new(
+                "message.completed",
+                json!({
+                    "itemId": format!("final-{turn_id}"),
+                    "phase": "final_answer",
+                    "status": "completed",
+                    "text": assistant_text,
+                    "request_id": format!("parent-request-{turn_id}"),
+                }),
+            ),
+            RuntimeEvent::new("turn.completed", json!({})),
+        ],
+    )
+    .expect("complete parent turn");
+}
+
 async fn spawned_child_identity(
     store: &ProjectionStore,
     root_thread_id: &str,
@@ -191,6 +264,7 @@ async fn spawn_gateway_returns_before_child_terminal_and_inherits_runtime_reques
             command: AgentControlCommand::SpawnAgent {
                 task_name: "research".to_string(),
                 message: "inspect the current owner".to_string(),
+                fork_mode: SpawnAgentForkMode::None,
             },
             cancel_token: None,
         }),
@@ -289,11 +363,14 @@ fn spawn_creates_canonical_child_and_open_edge() {
     core.start_session(start_params("parent-session", "parent-thread"))
         .expect("parent");
 
-    let response = block_on(core.spawn_agent_controlled(AgentControlSpawnRequest {
-        parent_session_id: "parent-session".to_string(),
-        child_session_id: Some("child-session".to_string()),
-        child_thread_id: Some("child-thread".to_string()),
-    }))
+    let response = block_on(core.create_open_agent_control_child_for_test(
+        AgentControlSpawnRequest {
+            parent_session_id: "parent-session".to_string(),
+            child_session_id: Some("child-session".to_string()),
+            child_thread_id: Some("child-thread".to_string()),
+            fork_mode: SpawnAgentForkMode::None,
+        },
+    ))
     .expect("spawn child");
 
     assert_eq!(response.parent_thread_id, "parent-thread");
@@ -309,17 +386,306 @@ fn spawn_creates_canonical_child_and_open_edge() {
     );
 }
 
+#[tokio::test]
+async fn spawn_forks_all_last_n_or_no_parent_turns_into_canonical_history() {
+    let (_temp, core, store) = core();
+    let parent = core
+        .start_session(start_params("parent-session", "parent-thread"))
+        .expect("parent")
+        .session;
+    for (index, user, assistant) in [
+        (1, "user one", "assistant one"),
+        (2, "user two", "assistant two"),
+        (3, "user three", "assistant three"),
+    ] {
+        append_completed_parent_turn(
+            &core,
+            &parent,
+            &format!("parent-turn-{index}"),
+            user,
+            assistant,
+        )
+        .await;
+    }
+
+    for (session_id, thread_id, fork_mode, expected_users) in [
+        (
+            "child-all-session",
+            "child-all-thread",
+            SpawnAgentForkMode::FullHistory,
+            vec!["user one", "user two", "user three"],
+        ),
+        (
+            "child-last-session",
+            "child-last-thread",
+            SpawnAgentForkMode::LastNTurns(2),
+            vec!["user two", "user three"],
+        ),
+        (
+            "child-none-session",
+            "child-none-thread",
+            SpawnAgentForkMode::None,
+            Vec::new(),
+        ),
+    ] {
+        let expects_fork_lineage = fork_mode != SpawnAgentForkMode::None;
+        core.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
+            parent_session_id: parent.session_id.clone(),
+            child_session_id: Some(session_id.to_string()),
+            child_thread_id: Some(thread_id.to_string()),
+            fork_mode,
+        })
+        .await
+        .expect("spawn forked child");
+
+        let child = core
+            .read_session(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("read forked child");
+        assert_eq!(child.turns.len(), expected_users.len());
+        let actual_users = {
+            let state = core
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state.sessions.get(session_id).expect("stored child");
+            child
+                .turns
+                .iter()
+                .map(|turn| {
+                    stored
+                        .turn_inputs
+                        .get(&turn.turn_id)
+                        .expect("forked turn input")
+                        .text
+                        .as_str()
+                })
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(actual_users, expected_users);
+        let provider_history = {
+            let state = core
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state.sessions.get(session_id).expect("stored child");
+            crate::runtime::provider_history::provider_history_excluding_current_turn_input(
+                stored,
+                core.output_snapshot_store.as_ref(),
+                "future-child-turn",
+            )
+        };
+        let provider_text = provider_history
+            .iter()
+            .flat_map(|message| message.content.iter())
+            .filter_map(|content| match content {
+                model_provider::current_client::CurrentProviderContent::Text(text) => {
+                    Some(text.as_str())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let expected_provider_text = expected_users
+            .iter()
+            .flat_map(|user| {
+                let suffix = user.strip_prefix("user ").expect("user fixture prefix");
+                [
+                    *user,
+                    match suffix {
+                        "one" => "assistant one",
+                        "two" => "assistant two",
+                        "three" => "assistant three",
+                        _ => unreachable!("known fixture suffix"),
+                    },
+                ]
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(provider_text, expected_provider_text);
+        assert!(provider_history
+            .iter()
+            .flat_map(|message| message.content.iter())
+            .all(|content| !matches!(
+                content,
+                model_provider::current_client::CurrentProviderContent::Reasoning(_)
+                    | model_provider::current_client::CurrentProviderContent::ToolCall(_)
+                    | model_provider::current_client::CurrentProviderContent::ToolResult(_)
+            )));
+
+        let canonical = store
+            .read_thread(ReadThreadParams {
+                thread_id: ThreadId::new(thread_id),
+                include_archived: true,
+                turns_view: ThreadTurnsView::Full,
+            })
+            .await
+            .expect("read canonical child")
+            .expect("canonical child");
+        assert_eq!(canonical.turns.len(), expected_users.len());
+        assert_eq!(
+            canonical.parent_thread_id,
+            Some(ThreadId::new("parent-thread"))
+        );
+        assert_eq!(
+            canonical.forked_from_id,
+            expects_fork_lineage.then(|| ThreadId::new("parent-thread"))
+        );
+        assert!(canonical
+            .turns
+            .iter()
+            .all(|turn| turn.turn_id.as_str().starts_with("fork-")));
+        assert!(canonical
+            .turns
+            .iter()
+            .flat_map(|turn| turn.items.iter())
+            .all(|item| matches!(item.kind, ItemKind::UserMessage | ItemKind::AgentMessage)));
+        assert!(canonical
+            .turns
+            .iter()
+            .flat_map(|turn| turn.items.iter())
+            .all(|item| item.status == ItemStatus::Completed));
+        let assistant_items = canonical
+            .turns
+            .iter()
+            .flat_map(|turn| turn.items.iter())
+            .filter(|item| item.kind == ItemKind::AgentMessage)
+            .collect::<Vec<_>>();
+        assert_eq!(assistant_items.len(), expected_users.len());
+        assert!(assistant_items.iter().all(|item| {
+            matches!(
+                &item.payload,
+                ThreadItemPayload::AgentMessage { phase, .. }
+                    if phase.as_deref() == Some("final_answer")
+            )
+        }));
+        assert!(assistant_items
+            .iter()
+            .all(|item| item.item_id.as_str().starts_with("item_fork-")));
+        assert_eq!(
+            assistant_items
+                .iter()
+                .map(|item| {
+                    item.metadata["forkedFromTurnId"]
+                        .as_str()
+                        .expect("source Turn metadata")
+                })
+                .collect::<Vec<_>>(),
+            expected_users
+                .iter()
+                .map(|user| match *user {
+                    "user one" => "parent-turn-1",
+                    "user two" => "parent-turn-2",
+                    "user three" => "parent-turn-3",
+                    _ => unreachable!("known fork user"),
+                })
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[tokio::test]
+async fn spawn_forks_each_completed_final_answer_in_source_order() {
+    let (_temp, core, store) = core();
+    let parent = core
+        .start_session(start_params("multi-parent-session", "multi-parent-thread"))
+        .expect("parent")
+        .session;
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: parent.session_id.clone(),
+            turn_id: Some("multi-parent-turn".to_string()),
+            input: AgentInput {
+                text: "user input".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("start parent turn");
+    core.append_external_runtime_events(
+        &parent.session_id,
+        Some("multi-parent-turn"),
+        vec![
+            RuntimeEvent::new(
+                "message.delta",
+                json!({"itemId": "final-one", "phase": "final_answer", "text": "first"}),
+            ),
+            RuntimeEvent::new(
+                "message.completed",
+                json!({"itemId": "final-one", "phase": "final_answer", "status": "completed", "text": "first"}),
+            ),
+            RuntimeEvent::new(
+                "message.delta",
+                json!({"itemId": "final-two", "phase": "final_answer", "text": "second"}),
+            ),
+            RuntimeEvent::new(
+                "message.completed",
+                json!({"itemId": "final-two", "phase": "final_answer", "status": "completed", "text": "second"}),
+            ),
+            RuntimeEvent::new("turn.completed", json!({})),
+        ],
+    )
+    .expect("complete parent turn");
+
+    core.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
+        parent_session_id: parent.session_id,
+        child_session_id: Some("multi-child-session".to_string()),
+        child_thread_id: Some("multi-child-thread".to_string()),
+        fork_mode: SpawnAgentForkMode::FullHistory,
+    })
+    .await
+    .expect("spawn forked child");
+
+    let canonical = store
+        .read_thread(ReadThreadParams {
+            thread_id: ThreadId::new("multi-child-thread"),
+            include_archived: true,
+            turns_view: ThreadTurnsView::Full,
+        })
+        .await
+        .expect("read child")
+        .expect("child thread");
+    let assistant_items = canonical.turns[0]
+        .items
+        .iter()
+        .filter(|item| item.kind == ItemKind::AgentMessage)
+        .collect::<Vec<_>>();
+    assert_eq!(assistant_items.len(), 2);
+    assert_eq!(
+        assistant_items[0].metadata["forkedFromItemId"],
+        "item_final-one"
+    );
+    assert_eq!(
+        assistant_items[1].metadata["forkedFromItemId"],
+        "item_final-two"
+    );
+    assert!(assistant_items
+        .iter()
+        .all(|item| item.status == ItemStatus::Completed));
+}
+
 #[test]
 fn spawn_fails_closed_without_projection_store() {
     let core = RuntimeCore::default();
     core.start_session(start_params("parent-session", "parent-thread"))
         .expect("parent");
 
-    let error = block_on(core.spawn_agent_controlled(AgentControlSpawnRequest {
-        parent_session_id: "parent-session".to_string(),
-        child_session_id: None,
-        child_thread_id: None,
-    }))
+    let error = block_on(
+        core.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
+            parent_session_id: "parent-session".to_string(),
+            child_session_id: None,
+            child_thread_id: None,
+            fork_mode: SpawnAgentForkMode::None,
+        }),
+    )
     .expect_err("projection store is required");
     assert!(error
         .to_string()
@@ -327,7 +693,7 @@ fn spawn_fails_closed_without_projection_store() {
 }
 
 #[test]
-fn spawn_graph_failure_removes_unlinked_child_session_and_thread() {
+fn spawn_reservation_failure_never_creates_child_session_or_thread() {
     let (_temp, core, store) = core();
     core.start_session(start_params("parent-session", "parent-thread"))
         .expect("parent");
@@ -338,15 +704,18 @@ fn spawn_graph_failure_removes_unlinked_child_session_and_thread() {
     ))
     .expect("precondition edge");
 
-    let error = block_on(core.spawn_agent_controlled(AgentControlSpawnRequest {
-        parent_session_id: "parent-session".to_string(),
-        child_session_id: Some("unlinked-child-session".to_string()),
-        child_thread_id: Some("ancestor-thread".to_string()),
-    }))
+    let error = block_on(
+        core.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
+            parent_session_id: "parent-session".to_string(),
+            child_session_id: Some("unlinked-child-session".to_string()),
+            child_thread_id: Some("ancestor-thread".to_string()),
+            fork_mode: SpawnAgentForkMode::None,
+        }),
+    )
     .expect_err("cyclic graph must reject child edge");
     assert!(error
         .to_string()
-        .contains("failed to persist canonical child thread edge"));
+        .contains("failed to reserve canonical child thread spawn"));
     assert!(matches!(
         core.read_session(AgentSessionReadParams {
             session_id: "unlinked-child-session".to_string(),
@@ -379,10 +748,11 @@ fn unloaded_parent_fails_without_legacy_session_fallback() {
         ProjectionStore::initialize(path).expect("reopen store"),
     ));
     assert!(matches!(
-        block_on(restarted.spawn_agent_controlled(AgentControlSpawnRequest {
+        block_on(restarted.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
             parent_session_id: "parent-session".to_string(),
             child_session_id: None,
             child_thread_id: None,
+            fork_mode: SpawnAgentForkMode::None,
         })),
         Err(RuntimeCoreError::SessionNotFound(session_id)) if session_id == "parent-session"
     ));
@@ -478,6 +848,7 @@ async fn spawn_gateway_projects_and_starts_the_initial_child_task_before_success
             command: AgentControlCommand::SpawnAgent {
                 task_name: "research".to_string(),
                 message: "inspect the current owner".to_string(),
+                fork_mode: SpawnAgentForkMode::None,
             },
             cancel_token: None,
         })
@@ -498,7 +869,8 @@ async fn spawn_gateway_projects_and_starts_the_initial_child_task_before_success
         .session_id
         .to_string();
     let message_id = result.output["message_id"].as_str().expect("message id");
-    assert_eq!(result.output["task_name"], "research");
+    assert_eq!(result.output["task_name"], "/root/research");
+    assert!(result.output.get("nickname").is_none());
     assert_eq!(result.projection_facts.len(), 1);
     assert_eq!(result.projection_facts[0].target_thread_id, child_thread_id);
     assert_eq!(
@@ -723,10 +1095,11 @@ async fn gateway_persists_root_identity_and_hides_closed_child_targets() {
         "/root"
     );
 
-    core.spawn_agent_controlled(AgentControlSpawnRequest {
+    core.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
         parent_session_id: session.session_id.clone(),
         child_session_id: Some("child-session".to_string()),
         child_thread_id: Some("child-thread".to_string()),
+        fork_mode: SpawnAgentForkMode::None,
     })
     .await
     .expect("child");
@@ -812,6 +1185,7 @@ async fn gateway_queue_followup_and_interrupt_keep_the_durable_contract() {
             command: AgentControlCommand::SpawnAgent {
                 task_name: "research".to_string(),
                 message: "inspect the current owner".to_string(),
+                fork_mode: SpawnAgentForkMode::None,
             },
             cancel_token: None,
         })
@@ -1006,10 +1380,11 @@ async fn list_gateway_sorts_prefixes_and_isolates_root_trees() {
         ("zeta", "zeta-session", "zeta-thread"),
         ("alpha", "alpha-session", "alpha-thread"),
     ] {
-        core.spawn_agent_controlled(AgentControlSpawnRequest {
+        core.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
             parent_session_id: session.session_id.clone(),
             child_session_id: Some(child_session_id.to_string()),
             child_thread_id: Some(child_thread_id.to_string()),
+            fork_mode: SpawnAgentForkMode::None,
         })
         .await
         .expect("child");

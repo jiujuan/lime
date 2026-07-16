@@ -913,27 +913,19 @@ function isDeniedSubmittedAnswer(value: string | undefined): boolean {
   );
 }
 
-function isReadOnlyImportedDecision(value: string | undefined): boolean {
-  const normalized = value
-    ?.trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-  return normalized === "imported_read_only";
-}
-
 function resolveSubmittedPermissionDecisionLabel(
   decision: string | undefined,
   labels: {
     allowed: string;
     denied: string;
-    importedReadOnly: string;
+    handled: string;
   },
 ): string {
+  if (!decision?.trim()) {
+    return labels.handled;
+  }
   if (isDeniedSubmittedAnswer(decision)) {
     return labels.denied;
-  }
-  if (isReadOnlyImportedDecision(decision)) {
-    return labels.importedReadOnly;
   }
   return labels.allowed;
 }
@@ -978,17 +970,13 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
   const submittedAnswer = resolveSubmittedAnswerText(request);
   const submittedDecision = readSubmittedDecision(request);
   const isToolConfirmation = request.actionType === "tool_confirmation";
-  const isImportedReadOnlyToolConfirmation =
-    isToolConfirmation && isReadOnlyImportedDecision(submittedDecision);
   const isRuntimeActionConfirmation = isRuntimeActionConfirmationRequestId(
     request.requestId,
   );
   const permissionDecisionLabels = {
     allowed: String(t("agentChat.decisionPanel.permission.result.allowed")),
     denied: String(t("agentChat.decisionPanel.permission.result.denied")),
-    importedReadOnly: String(
-      t("agentChat.decisionPanel.permission.result.importedReadOnly"),
-    ),
+    handled: String(t("generalWorkbench.taskRail.approval.status.resolved")),
   };
   const toolConfirmationArgumentRows = resolveToolConfirmationArgumentRows(
     request.arguments,
@@ -1183,16 +1171,12 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
       ? t("agentChat.decisionPanel.queuedTitle")
       : isRuntimeActionConfirmation
         ? t("agentChat.decisionPanel.runtimePermission.submittedTitle")
-        : isImportedReadOnlyToolConfirmation
-          ? t("agentChat.decisionPanel.permission.importedReadOnlyTitle")
-          : request.actionType === "tool_confirmation"
+        : request.actionType === "tool_confirmation"
             ? t("agentChat.decisionPanel.permissionHandledTitle")
             : t("agentChat.decisionPanel.submittedTitle");
     const submittedClassName = isQueued
       ? "border-sky-200 bg-sky-50/50 dark:border-sky-800 dark:bg-sky-950/20"
-      : isImportedReadOnlyToolConfirmation
-        ? "border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/20"
-        : request.actionType === "tool_confirmation"
+      : request.actionType === "tool_confirmation"
           ? "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
           : request.actionType === "elicitation"
             ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20"
@@ -1225,33 +1209,7 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
               </div>
             )}
 
-          {isImportedReadOnlyToolConfirmation ? (
-            <div className="space-y-2 rounded-md border bg-background/80 px-3 py-2 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-muted-foreground">
-                  {t("agentChat.decisionPanel.permission.resultLabel")}
-                </span>
-                <span className="font-medium text-foreground">
-                  {resolveSubmittedPermissionDecisionLabel(
-                    submittedDecision,
-                    permissionDecisionLabels,
-                  )}
-                </span>
-              </div>
-              <div className="rounded-lg border border-border bg-background px-3 py-2">
-                <div className="text-xs font-medium text-muted-foreground">
-                  {t(
-                    "agentChat.decisionPanel.permission.importedReadOnlyRecordLabel",
-                  )}
-                </div>
-                <div className="mt-1 text-xs text-foreground">
-                  {t(
-                    "agentChat.decisionPanel.permission.importedReadOnlyRecordValue",
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : isToolConfirmation ? (
+          {isToolConfirmation ? (
             <div className="space-y-2 rounded-md border bg-background/80 px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-muted-foreground">
@@ -1318,11 +1276,7 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
                   : t(
                       "agentChat.decisionPanel.runtimePermission.submittedDescription",
                     )
-                : isImportedReadOnlyToolConfirmation
-                  ? t(
-                      "agentChat.decisionPanel.permission.importedReadOnlyDescription",
-                    )
-                  : t("agentChat.decisionPanel.submittedDescription")}
+                : t("agentChat.decisionPanel.submittedDescription")}
           </p>
         </CardContent>
       </Card>

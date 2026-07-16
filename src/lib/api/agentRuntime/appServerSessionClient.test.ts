@@ -561,6 +561,100 @@ describe("appServerSessionClient", () => {
     );
   });
 
+  it("queued turn 只保留在 queued read model，不伪装成 running ThreadTurn", async () => {
+    const appServerClient = appServerClientMock();
+    const readSessionResult = {
+      session: {
+        sessionId: "session-queued",
+        threadId: "thread-queued",
+        appId: "desktop",
+        workspaceId: "workspace-1",
+        status: "running" as const,
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:03.000Z",
+      },
+      turns: [
+        {
+          turnId: "turn-completed",
+          sessionId: "session-queued",
+          threadId: "thread-queued",
+          status: "completed" as const,
+          startedAt: "2026-06-06T00:00:01.000Z",
+          completedAt: "2026-06-06T00:00:02.000Z",
+        },
+        {
+          turnId: "turn-queued",
+          sessionId: "session-queued",
+          threadId: "thread-queued",
+          status: "queued" as const,
+          startedAt: "2026-06-06T00:00:03.000Z",
+        },
+      ],
+      detail: {
+        id: "session-queued",
+        thread_id: "thread-queued",
+        messages: [],
+        queued_turns: [
+          {
+            queued_turn_id: "turn-queued",
+            message_text: "稍后继续",
+            status: "queued",
+            position: 0,
+          },
+        ],
+        thread_read: {
+          thread_id: "thread-queued",
+          status: "running",
+          active_turn_id: null,
+          turns: [
+            { turn_id: "turn-completed", status: "completed" },
+            { turn_id: "turn-queued", status: "queued" },
+          ],
+          queued_turns: [
+            {
+              queued_turn_id: "turn-queued",
+              message_text: "稍后继续",
+              status: "queued",
+              position: 0,
+            },
+          ],
+        },
+      },
+    };
+    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+      id: 3,
+      result: readSessionResult,
+      response: { id: 3, result: readSessionResult },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    const detail = await client.getAgentRuntimeSession("session-queued");
+
+    expect(detail.turns).toEqual([
+      expect.objectContaining({
+        id: "turn-completed",
+        status: "completed",
+      }),
+    ]);
+    expect(detail.queued_turns).toEqual([
+      expect.objectContaining({
+        queued_turn_id: "turn-queued",
+        status: "queued",
+      }),
+    ]);
+    expect(detail.thread_read).toMatchObject({
+      active_turn_id: null,
+      queued_turns: [
+        expect.objectContaining({
+          queued_turn_id: "turn-queued",
+          status: "queued",
+        }),
+      ],
+    });
+  });
+
   it("get 有 detail 时应补齐缺省数组并保留 current timeline items", async () => {
     const appServerClient = appServerClientMock();
     const readSessionResult = {
@@ -873,7 +967,7 @@ describe("appServerSessionClient", () => {
         },
         executionRuntime: {
           session_id: "session-snake",
-          source_client: "claude_code",
+          source_client: "codex",
           imported_thread_settings: {
             cwd: "/tmp/imported-project",
           },
@@ -928,7 +1022,7 @@ describe("appServerSessionClient", () => {
       }),
       execution_runtime: {
         session_id: "session-snake",
-        source_client: "claude_code",
+        source_client: "codex",
         imported_thread_settings: {
           cwd: "/tmp/imported-project",
         },
@@ -1041,9 +1135,6 @@ describe("appServerSessionClient", () => {
           task: true,
           subagent: false,
         },
-        recent_team_selection: {
-          disabled: true,
-        },
         article_workspace_selected_object_ref: {
           appId: "content-factory-app",
           sessionId: "session-1",
@@ -1076,9 +1167,6 @@ describe("appServerSessionClient", () => {
       recentPreferences: {
         task: true,
         subagent: false,
-      },
-      recentTeamSelection: {
-        disabled: true,
       },
       articleWorkspaceSelectedObjectRef: {
         appId: "content-factory-app",

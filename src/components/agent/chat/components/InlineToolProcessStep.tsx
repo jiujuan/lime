@@ -56,7 +56,6 @@ import {
   isLimeTaskProtocolFailure,
   resolveLimeTaskProtocolFailureDisplayText,
 } from "../utils/limeTaskProtocolNoise";
-import { resolveImportedSourceToolPresentation } from "./ToolCallDisplayViewModel";
 import { MemoryToolEvidencePanel } from "./MemoryToolEvidencePanel";
 import {
   asRecord,
@@ -230,28 +229,15 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
         })
       : null;
   }, [rawResultText, toolCall.name, toolCall.status]);
-  const importedSourcePresentation = useMemo(
-    () => resolveImportedSourceToolPresentation(toolCall),
-    [toolCall],
-  );
   const headline = useMemo(
     () =>
-      importedSourcePresentation
-        ? t("agentChat.toolCall.importedCommandRecord.title")
-        : limeTaskProtocolFailureText ||
-          buildToolHeadline({
-            toolDisplay,
-            subject,
-            toolName: toolCall.name,
-          }),
-    [
-      importedSourcePresentation,
-      limeTaskProtocolFailureText,
-      subject,
-      t,
-      toolCall.name,
-      toolDisplay,
-    ],
+      limeTaskProtocolFailureText ||
+      buildToolHeadline({
+        toolDisplay,
+        subject,
+        toolName: toolCall.name,
+      }),
+    [limeTaskProtocolFailureText, subject, toolCall.name, toolDisplay],
   );
   const processNarrative = useMemo(
     () => resolveToolProcessNarrative(toolCall),
@@ -271,10 +257,6 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       processNarrative.summary ||
       processNarrative.preSummary ||
       "";
-
-    if (importedSourcePresentation) {
-      return t("agentChat.toolCall.importedCommandRecord.description");
-    }
 
     if (shouldSuppressResultText) {
       return "";
@@ -336,7 +318,6 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       ""
     );
   }, [
-    importedSourcePresentation,
     isMcpStructuredToolResult,
     metadata,
     processNarrative.postSummary,
@@ -372,15 +353,13 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       !rawResultText ||
       isSkillLikeTool ||
       toolDisplay.family === "vision" ||
-      shouldHideResultEnvelope ||
-      importedSourcePresentation
+      shouldHideResultEnvelope
     ) {
       return null;
     }
 
     return summarizeResultText(normalizeToolResultDetailText(rawResultText));
   }, [
-    importedSourcePresentation,
     isSkillLikeTool,
     rawResultText,
     shouldHideResultEnvelope,
@@ -519,12 +498,10 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
         (toolDisplay.family === "command" &&
           (processNarrative.postSource === "generic" ||
             processNarrative.postSource === "none")));
-    const preferredSummary = importedSourcePresentation
-      ? t("agentChat.toolCall.importedCommandRecord.description")
-      : transientSummary
-        ? transientSummary
-        : shouldPreferResultPreview
-          ? structuredResultPreview
+    const preferredSummary = transientSummary
+      ? transientSummary
+      : shouldPreferResultPreview
+        ? structuredResultPreview
         : toolCall.status === "running"
           ? isSkillLikeTool
             ? progressSummary || processNarrative.preSummary
@@ -540,7 +517,6 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     return normalizeSummaryLine(preferredSummary, headline);
   }, [
     headline,
-    importedSourcePresentation,
     isSkillLikeTool,
     isMcpStructuredToolResult,
     liveResultPreview,

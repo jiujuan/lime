@@ -472,10 +472,7 @@ export function AppSidebarConversationImportDialog({
                   {t("navigation.sidebar.importDialog.meta.source", "Source")}
                 </span>
                 <strong className="mt-1 block text-sm text-slate-950">
-                  {resolveImportSourceClientLabel(
-                    preview?.source.sourceClient,
-                    t,
-                  )}
+                  {resolveImportSourceClientLabel(t)}
                 </strong>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-3">

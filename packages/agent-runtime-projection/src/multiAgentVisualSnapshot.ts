@@ -1,11 +1,5 @@
-import type {
-  AgentUiPhase,
-  AgentUiProjectionContext,
-  AgentUiProjectionEvent,
-  AgentUiRuntimeStatus,
-} from "@limecloud/agent-ui-contracts";
+import type { AgentUiRuntimeStatus } from "@limecloud/agent-ui-contracts";
 
-import { buildAgentUiProjectionBase } from "./envelope.js";
 import {
   isLegacyMultiAgentToolName,
   type AgentUiMultiAgentToolName,
@@ -226,27 +220,6 @@ function runtimeStatus(value: string | undefined): AgentUiRuntimeStatus {
       return "not_found";
     default:
       return "unknown";
-  }
-}
-
-function phaseForStatus(status: AgentUiRuntimeStatus): AgentUiPhase {
-  switch (status) {
-    case "completed":
-      return "completed";
-    case "failed":
-    case "not_found":
-      return "failed";
-    case "aborted":
-    case "cancelled":
-    case "closed":
-      return "cancelled";
-    case "waiting":
-    case "queued":
-      return "waiting";
-    case "running":
-      return "acting";
-    default:
-      return "acting";
   }
 }
 
@@ -647,51 +620,4 @@ export function extractCodexMultiAgentVisualSnapshot(
     ...base,
     validationIssues: validateSnapshot(input, items, base),
   };
-}
-
-function projectionStatus(
-  snapshot: AgentUiMultiAgentVisualSnapshot,
-): AgentUiRuntimeStatus {
-  if (snapshot.validationIssues.length > 0) return "failed";
-  if (snapshot.workerNotifications.length > 0) {
-    return snapshot.workerNotifications.some((item) => item.status === "failed")
-      ? "failed"
-      : "completed";
-  }
-  return "running";
-}
-
-export function buildCodexMultiAgentVisualSnapshotProjectionEvent(
-  input: AgentUiMultiAgentVisualSnapshotInput,
-  context: AgentUiProjectionContext = {},
-): AgentUiProjectionEvent {
-  const snapshot = extractCodexMultiAgentVisualSnapshot(input);
-  const status = projectionStatus(snapshot);
-  const base = buildAgentUiProjectionBase(
-    { sourceType: "multi_agent_visual_snapshot_projection" },
-    {
-      ...context,
-      threadId: input.threadId ?? context.threadId,
-      runtimeEntity: "work_item",
-    },
-  );
-
-  return compactProjectionFields({
-    ...base,
-    type: "team.changed",
-    sequence: context.sequence,
-    owner: "team",
-    scope: "team",
-    phase: snapshot.validationIssues.length > 0 ? "failed" : phaseForStatus(status),
-    surface: "delegation_graph",
-    persistence: "snapshot",
-    control: "open_detail",
-    topology: "coordinator_team",
-    runtimeEntity: "work_item",
-    runtimeStatus: status,
-    payload: {
-      teamEvent: "multi_agent_visual_snapshot",
-      ...snapshot,
-    },
-  } satisfies AgentUiProjectionEvent);
 }

@@ -420,10 +420,10 @@ async function extractClickThroughSummary(
         hasImportedAssistantMessage: bodyText.includes(importedAssistantText),
         hasReasoningVisible: bodyText.includes(importedReasoningText),
         hasReasoningItem: readModelSummary?.hasReasoningItem === true,
+        hasCommandExecutionVisible: bodyText.includes("npm test"),
         hasCommandText:
-          bodyText.includes("导入的命令记录") ||
-          bodyText.includes("Imported command record") ||
-          readModelSummary?.hasCommandItem === true,
+          bodyText.includes("npm test") || readModelSummary?.hasCommandItem === true,
+        hasCommandOutput: bodyText.includes("ok"),
         hidesRawImportedCommand:
           !bodyText.includes("Approve imported command") &&
           !bodyText.includes("imported_read_only"),
@@ -431,7 +431,8 @@ async function extractClickThroughSummary(
           bodyText.includes("补丁") ||
           bodyText.includes("已编辑") ||
           bodyText.includes("Patch") ||
-          bodyText.includes("patch"),
+          bodyText.includes("patch") ||
+          (bodyText.includes("lib.rs") && bodyText.includes("打开文件")),
         hasSearchEvidence:
           bodyText.includes("搜索") ||
           bodyText.includes("Search") ||
@@ -440,6 +441,7 @@ async function extractClickThroughSummary(
         hasApprovalText:
           bodyText.includes("导入的权限记录") ||
           bodyText.includes("已导入，只读记录") ||
+          bodyText.includes("权限记录") ||
           bodyText.includes("审批") ||
           bodyText.includes("确认") ||
           bodyText.includes("权限请求") ||
@@ -777,9 +779,10 @@ async function run() {
       "read model 未保留导入图片附件",
     );
     assert(
-      importedDetailsSummary.hasCommandRecordVisible,
-      "页面未显示导入 command 的友好记录",
+      importedDetailsSummary.hasCommandExecutionVisible,
+      "页面未显示 canonical npm test 命令卡",
     );
+    assert(importedDetailsSummary.hasCommandOutput, "页面未显示命令输出 ok");
     assert(
       importedDetailsSummary.hidesRawImportedCommand,
       "页面暴露了原始审批命令或导入内部字段",

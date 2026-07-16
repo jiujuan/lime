@@ -61,7 +61,6 @@
     "conversationImport/source/scan",
     "conversationImport/thread/commit",
     "conversationImport/thread/preview",
-    "conversationImport/thread/runtimeEvents/read",
     "diagnostics/logStorage/read",
     "diagnostics/server/read",
     "diagnostics/supportBundle/export",

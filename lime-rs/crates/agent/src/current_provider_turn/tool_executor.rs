@@ -146,6 +146,42 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                 ..request
             };
 
+            if tool_runtime::unified_exec::is_unified_exec_tool_name(request.tool_name) {
+                let identity = request.context.tool_identity().ok_or_else(|| {
+                    RuntimeToolExecutionError::new(
+                        "unified exec requires canonical tool identity",
+                        Some(RuntimeToolPolicyErrorKind::ExecutionFailed(
+                            "unified_exec_identity_missing".to_string(),
+                        )),
+                    )
+                })?;
+                let gateway = self
+                    .state
+                    .live_execution_process_gateway()
+                    .await
+                    .ok_or_else(|| {
+                        RuntimeToolExecutionError::new(
+                            "unified exec process gateway is unavailable",
+                            Some(RuntimeToolPolicyErrorKind::ExecutionFailed(
+                                "unified_exec_gateway_unavailable".to_string(),
+                            )),
+                        )
+                    })?;
+                return tool_runtime::unified_exec::execute_runtime_unified_exec_tool(
+                    gateway,
+                    tool_runtime::unified_exec::RuntimeUnifiedExecToolRequest {
+                        tool_name: request.tool_name,
+                        params: request.params,
+                        working_directory: request.context.working_directory().clone(),
+                        environment: request.context.environment().clone(),
+                        tool_call_id: identity.call_id().to_string(),
+                        cancel_token: request.context.cancel_token().cloned(),
+                        turn_context: request.turn_context,
+                    },
+                )
+                .await;
+            }
+
             if let Some(agent_control_gateway) = self.agent_control_gateway.as_ref() {
                 if let Some(result) = tool_runtime::agent_control::execute_agent_control_tool(
                     agent_control_gateway.gateway(),

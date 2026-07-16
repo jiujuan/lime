@@ -41,6 +41,10 @@
     "toolName": {
       "type": "string"
     },
+    "tty": {
+      "default": false,
+      "type": "boolean"
+    },
     "workingDirectory": {
       "type": "string"
     }

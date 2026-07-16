@@ -26,7 +26,7 @@ describe("AgentChatWorkspace context surface runtime boundary", () => {
       "resolveHarnessRuntimeVisible(",
       "shouldBuildFullThreadTimeline(",
       "deriveHarnessSessionState(",
-      "hasRunningThreadReadActivity(",
+      "hasActiveThreadReadActivity(",
       "onAgentStreamingChange?.(inputbarIsSending);",
     ]) {
       expect(workspaceSource).not.toContain(retiredWorkspaceContextSurfaceGlue);

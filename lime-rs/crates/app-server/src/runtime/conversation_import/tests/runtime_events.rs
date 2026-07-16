@@ -1,11 +1,23 @@
 use super::*;
-use crate::runtime::SidecarStore;
 use crate::ProjectionStore;
-use app_server_protocol::{
-    AgentSessionReadParams, ConversationImportThreadRuntimeEventsReadParams,
-};
+use app_server_protocol::{AgentSessionReadParams, AgentSessionReadResponse};
 use std::fs;
+use std::path::Path;
 use std::sync::Arc;
+
+fn current_import_core(root: &Path) -> RuntimeCore {
+    RuntimeCore::default().with_projection_store(Arc::new(
+        ProjectionStore::initialize(root.join("projection.sqlite"))
+            .expect("canonical projection store"),
+    ))
+}
+
+fn read_current_session(
+    core: &RuntimeCore,
+    params: AgentSessionReadParams,
+) -> Result<AgentSessionReadResponse, RuntimeCoreError> {
+    futures::executor::block_on(core.read_session_current(params))
+}
 
 #[test]
 fn commit_preserves_codex_tool_command_and_patch_timeline() {
@@ -60,9 +72,7 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
         .join("\n"),
     )
     .expect("write rollout");
-    let sidecar_root = tempfile::tempdir().expect("sidecar root");
-    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
-    let core = RuntimeCore::default().with_sidecar_store(sidecar_store.clone());
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -102,14 +112,16 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
         "tool.started" | "tool.result" | "tool.failed"
     )));
 
-    let read = core
-        .read_session(AgentSessionReadParams {
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
             session_id,
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
-        })
-        .expect("read imported session");
+        },
+    )
+    .expect("read imported session");
     assert_eq!(read.turns.len(), 2);
     let detail = read.detail.expect("detail");
     let messages = detail["messages"].as_array().expect("messages");
@@ -123,11 +135,7 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
 
     let thread_read = &detail["thread_read"];
     let tool_calls = thread_read["tool_calls"].as_array().expect("tool calls");
-    assert!(tool_calls.iter().any(|tool| {
-        tool["id"] == "call_exec"
-            && tool["tool_name"] == "exec_command"
-            && tool["status"] == "completed"
-    }));
+    assert!(!tool_calls.iter().any(|tool| tool["id"] == "call_exec"));
     let commands = thread_read["commands"].as_array().expect("commands");
     assert!(commands.iter().any(|command| {
         command["command_id"] == "call_exec"
@@ -147,7 +155,9 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
     assert_eq!(
         items
             .iter()
-            .filter(|item| { item["type"] == "command_execution" && item["id"] == "call_exec" })
+            .filter(|item| {
+                item["type"] == "command_execution" && item["command_id"] == "call_exec"
+            })
             .count(),
         1
     );
@@ -165,18 +175,16 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
                 .is_some_and(|output| output.contains("ok"))
     }));
     assert!(items.iter().any(|item| {
-        item["type"] == "patch"
+        item["type"] == "file_artifact"
             && item["turn_id"] == first_turn_id
-            && item["text"]
-                .as_str()
-                .is_some_and(|text| text.contains("/workspace/app/src/lib.rs"))
-            && item["paths"][0] == "/workspace/app/src/lib.rs"
-            && item["success"] == true
+            && item["path"] == "/workspace/app/src/lib.rs"
+            && item["file_status"] == "applied"
+            && item["status"] == "completed"
     }));
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
             && item["turn_id"] == first_turn_id
-            && item["id"] == "call_read_file"
+            && item["call_id"] == "call_read_file"
             && item["tool_name"] == "read_file"
             && tool_argument_value(item, "path") == Some("/workspace/app/docs/imported-preview.md")
             && item["output"] == "imported preview"
@@ -184,7 +192,7 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
             && item["turn_id"] == first_turn_id
-            && item["id"] == "call_read_html"
+            && item["call_id"] == "call_read_html"
             && item["tool_name"] == "read_file"
             && tool_argument_value(item, "path")
                 == Some("/workspace/app/docs/imported-preview.html")
@@ -193,7 +201,7 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
             && item["turn_id"] == first_turn_id
-            && item["id"] == "call_read_docx"
+            && item["call_id"] == "call_read_docx"
             && item["tool_name"] == "read_file"
             && tool_argument_value(item, "path")
                 == Some("/workspace/app/docs/imported-preview.docx")
@@ -202,7 +210,7 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
     assert!(items.iter().any(|item| {
         item["type"] == "web_search"
             && item["turn_id"] == first_turn_id
-            && item["id"] == "call_search"
+            && item["call_id"] == "call_search"
             && item["action"] == "search_query"
             && item["query"] == "imported query"
             && item["output"]
@@ -215,7 +223,8 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
             && item["turn_id"] == first_turn_id
             && item["request_id"] == "call_exec"
             && item["status"] == "completed"
-            && item["response"]["decision"] == "imported_read_only"
+            && item.get("response").is_none()
+            && item["metadata"]["imported_read_only"] == true
     }));
     assert!(items.iter().any(|item| {
         item["type"] == "agent_message"
@@ -225,8 +234,8 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
     assert!(read.turns.iter().any(|turn| turn.turn_id == first_turn_id));
 }
 
-#[tokio::test]
-async fn commit_preserves_high_volume_codex_tool_events_with_bounded_default_projection() {
+#[test]
+fn commit_preserves_high_volume_codex_tool_events_in_canonical_projection() {
     let temp = tempfile::tempdir().expect("tempdir");
     let rollout_path = temp.path().join("rollout-runtime-event-budget.jsonl");
     let mut lines = vec![
@@ -248,9 +257,7 @@ async fn commit_preserves_high_volume_codex_tool_events_with_bounded_default_pro
     lines.push(event_patch_apply_end("call_patch_budget", true));
     lines.push(event_agent_message("done"));
     fs::write(&rollout_path, lines.join("\n")).expect("write rollout");
-    let sidecar_root = tempfile::tempdir().expect("sidecar root");
-    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
-    let core = RuntimeCore::default().with_sidecar_store(sidecar_store.clone());
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -271,41 +278,30 @@ async fn commit_preserves_high_volume_codex_tool_events_with_bounded_default_pro
     assert_eq!(response.summary.fidelity.budget_dropped, 0);
     assert_eq!(response.summary.fidelity.commands, 90);
     assert_eq!(response.summary.fidelity.patches, 1);
-    let projection = response
+    let metadata = response
         .session
         .business_object_ref
         .as_ref()
         .and_then(|reference| reference.metadata.as_ref())
-        .and_then(|metadata| metadata.get("importedRuntimeProjection"))
-        .expect("imported runtime projection metadata");
-    assert_eq!(projection["mode"], "default_window");
-    assert_eq!(projection["sourceRuntimeEvents"], 454);
-    assert_eq!(projection["materializedCommandToolCalls"], 80);
-    assert_eq!(projection["skippedCommandToolCalls"], 10);
-    assert_eq!(projection["fullFidelity"], "source_rollout_or_sidecar");
-    let sidecar_relative_path = projection["sidecar"]["relativePath"]
-        .as_str()
-        .expect("sidecar relative path");
-    let sidecar_content = sidecar_store
-        .read_text(sidecar_relative_path)
-        .expect("sidecar content");
-    assert_eq!(sidecar_content.lines().count(), 454);
-    assert!(sidecar_content.contains("\"eventType\":\"command.started\""));
+        .expect("import provenance metadata");
+    assert!(metadata.get("importedRuntimeProjection").is_none());
     let session_id = response.session.session_id.clone();
 
-    let read = core
-        .read_session(AgentSessionReadParams {
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
             session_id: session_id.clone(),
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
-        })
-        .expect("read imported session");
+        },
+    )
+    .expect("read imported session");
     let detail = read.detail.expect("detail");
     let thread_read = &detail["thread_read"];
     assert_eq!(
         thread_read["commands"].as_array().expect("commands").len(),
-        80
+        90
     );
     assert_eq!(thread_read["change_summary"]["applied_patch_count"], 1);
     let items = detail["items"].as_array().expect("timeline items");
@@ -314,50 +310,15 @@ async fn commit_preserves_high_volume_codex_tool_events_with_bounded_default_pro
             .iter()
             .filter(|item| item["type"] == "command_execution")
             .count(),
-        80
+        90
     );
-
-    let first_page = core
-        .read_conversation_import_runtime_events(ConversationImportThreadRuntimeEventsReadParams {
-            session_id: session_id.clone(),
-            offset: Some(0),
-            limit: Some(5),
-            turn_index: None,
-            event_type: None,
-        })
-        .await
-        .expect("read imported event detail");
-    assert_eq!(first_page.total_events, 454);
-    assert_eq!(first_page.events.len(), 5);
-    assert_eq!(first_page.next_offset, Some(5));
-    assert_eq!(first_page.source_runtime_events, 454);
-    assert_eq!(first_page.materialized_runtime_events, 404);
-    assert_eq!(first_page.sidecar_runtime_events, 50);
-    assert_eq!(first_page.events[0].source_event_index, 0);
-    assert_eq!(first_page.events[0].turn_index, 0);
-    assert_eq!(first_page.events[0].event_index, 0);
-
-    let command_output_page = core
-        .read_conversation_import_runtime_events(ConversationImportThreadRuntimeEventsReadParams {
-            session_id,
-            offset: Some(80),
-            limit: Some(20),
-            turn_index: Some(0),
-            event_type: Some("command.started".to_string()),
-        })
-        .await
-        .expect("read filtered imported event detail");
-    assert_eq!(command_output_page.total_events, 90);
-    assert_eq!(command_output_page.events.len(), 10);
-    assert!(command_output_page.next_offset.is_none());
-    assert!(command_output_page
-        .events
+    assert!(items
         .iter()
-        .all(|event| event.event_type == "command.started"));
+        .any(|item| item["type"] == "command_execution" && item["command_id"] == "call_exec_89"));
 }
 
-#[tokio::test]
-async fn commit_applies_import_runtime_projection_budget_per_thread() {
+#[test]
+fn commit_preserves_imported_commands_across_turns_without_projection_budget() {
     let temp = tempfile::tempdir().expect("tempdir");
     let rollout_path = temp
         .path()
@@ -394,9 +355,7 @@ async fn commit_applies_import_runtime_projection_budget_per_thread() {
     }
     lines.push(event_agent_message("second done"));
     fs::write(&rollout_path, lines.join("\n")).expect("write rollout");
-    let sidecar_root = tempfile::tempdir().expect("sidecar root");
-    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
-    let core = RuntimeCore::default().with_sidecar_store(sidecar_store.clone());
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -411,59 +370,41 @@ async fn commit_applies_import_runtime_projection_budget_per_thread() {
 
     assert_eq!(response.imported_turns, 2);
     assert_eq!(response.summary.fidelity.commands, 120);
-    let projection = response
+    let metadata = response
         .session
         .business_object_ref
         .as_ref()
         .and_then(|reference| reference.metadata.as_ref())
-        .and_then(|metadata| metadata.get("importedRuntimeProjection"))
-        .expect("imported runtime projection metadata");
-    // 每个 exec_command 会规范化为 tool start/result + command start/output/exited。
-    assert_eq!(projection["sourceRuntimeEvents"], 604);
-    assert_eq!(projection["materializedCommandToolCalls"], 80);
-    assert_eq!(projection["skippedCommandToolCalls"], 40);
+        .expect("import provenance metadata");
+    assert!(metadata.get("importedRuntimeProjection").is_none());
 
     let session_id = response.session.session_id.clone();
-    let read = core
-        .read_session(AgentSessionReadParams {
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
             session_id: session_id.clone(),
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
-        })
-        .expect("read imported session");
+        },
+    )
+    .expect("read imported session");
     let detail = read.detail.expect("detail");
     let thread_read = &detail["thread_read"];
     assert_eq!(
         thread_read["commands"].as_array().expect("commands").len(),
-        80
+        120
     );
     assert!(thread_read["commands"]
         .as_array()
         .expect("commands")
         .iter()
-        .any(|command| command["command_id"] == "call_exec_second_19"));
-    assert!(!thread_read["commands"]
+        .any(|command| command["command_id"] == "call_exec_second_59"));
+    assert!(thread_read["commands"]
         .as_array()
         .expect("commands")
         .iter()
-        .any(|command| command["command_id"] == "call_exec_second_20"));
-
-    let second_turn_page = core
-        .read_conversation_import_runtime_events(ConversationImportThreadRuntimeEventsReadParams {
-            session_id,
-            offset: Some(0),
-            limit: Some(200),
-            turn_index: Some(1),
-            event_type: Some("command.started".to_string()),
-        })
-        .await
-        .expect("read second turn full imported event detail");
-    assert_eq!(second_turn_page.total_events, 60);
-    assert!(second_turn_page
-        .events
-        .iter()
-        .any(|event| event.payload["commandId"] == "call_exec_second_59"));
+        .any(|command| command["command_id"] == "call_exec_first_59"));
 }
 
 #[test]
@@ -491,7 +432,7 @@ fn commit_preserves_imported_assistant_message_order_between_runtime_events() {
         .join("\n"),
     )
     .expect("write rollout");
-    let core = RuntimeCore::default();
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -504,14 +445,16 @@ fn commit_preserves_imported_assistant_message_order_between_runtime_events() {
     )
     .expect("commit");
 
-    let read = core
-        .read_session(AgentSessionReadParams {
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
             session_id: response.session.session_id,
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
-        })
-        .expect("read imported session");
+        },
+    )
+    .expect("read imported session");
     let detail = read.detail.expect("detail");
     let items = detail["items"].as_array().expect("timeline items");
     let ordered_types_and_text = items
@@ -549,13 +492,13 @@ fn commit_preserves_imported_assistant_message_order_between_runtime_events() {
     assert!(command_index < second_assistant_index);
     assert!(items.iter().any(|item| {
         item["type"] == "command_execution"
-            && item["id"] == "call_exec_order"
+            && item["command_id"] == "call_exec_order"
             && item["status"] == "completed"
             && item["exit_code"] == 0
     }));
     assert!(!items.iter().any(|item| {
         item["type"] == "command_execution"
-            && item["id"] == "call_exec_order"
+            && item["command_id"] == "call_exec_order"
             && item["status"] == "failed"
     }));
 }
@@ -586,9 +529,7 @@ async fn commit_delays_imported_turn_terminal_until_after_late_runtime_events() 
         .join("\n"),
     )
     .expect("write rollout");
-    let sidecar_root = tempfile::tempdir().expect("sidecar root");
-    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
-    let core = RuntimeCore::default().with_sidecar_store(sidecar_store.clone());
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -603,19 +544,21 @@ async fn commit_delays_imported_turn_terminal_until_after_late_runtime_events() 
 
     assert_eq!(response.imported_turns, 1);
     let session_id = response.session.session_id.clone();
-    let read = core
-        .read_session(AgentSessionReadParams {
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
             session_id: session_id.clone(),
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
-        })
-        .expect("read imported session");
+        },
+    )
+    .expect("read imported session");
     let detail = read.detail.expect("detail");
     let items = detail["items"].as_array().expect("timeline items");
     assert!(items.iter().any(|item| {
         item["type"] == "command_execution"
-            && item["id"] == "call_late_exec"
+            && item["command_id"] == "call_late_exec"
             && item["status"] == "completed"
             && item["aggregated_output"]
                 .as_str()
@@ -625,36 +568,37 @@ async fn commit_delays_imported_turn_terminal_until_after_late_runtime_events() 
         .iter()
         .any(|item| { item["type"] == "agent_message" && item["text"] == "late answer" }));
 
-    let detail_page = core
-        .read_conversation_import_runtime_events(ConversationImportThreadRuntimeEventsReadParams {
-            session_id,
-            offset: Some(0),
-            limit: Some(32),
-            turn_index: Some(0),
-            event_type: None,
-        })
-        .await
-        .expect("read imported event detail");
-    let event_types = detail_page
+    let stored_events = core
+        .state
+        .lock()
+        .expect("runtime core state mutex poisoned")
+        .sessions
+        .get(&session_id)
+        .expect("imported stored session")
         .events
         .iter()
-        .map(|event| event.event_type.as_str())
+        .map(|event| (event.event_type.clone(), event.payload.clone()))
         .collect::<Vec<_>>();
-    let terminal_index = event_types
+    let terminal_index = stored_events
         .iter()
-        .rposition(|event_type| *event_type == "turn.completed")
+        .rposition(|(event_type, _)| event_type == "turn.completed")
         .expect("turn completed event");
-    let command_index = event_types
+    let command_item_id =
+        agent_protocol::ItemId::new("codex-command-call_late_exec").to_string();
+    let command_index = stored_events
         .iter()
-        .position(|event_type| *event_type == "command.started")
-        .expect("command started event");
-    let message_index = event_types
+        .position(|(event_type, payload)| {
+            event_type == "item.started"
+                && payload["item"]["itemId"] == command_item_id.as_str()
+        })
+        .expect("canonical command item started event");
+    let message_index = stored_events
         .iter()
-        .rposition(|event_type| *event_type == "message.delta")
+        .rposition(|(event_type, _)| event_type == "message.delta")
         .expect("assistant message event");
     assert!(command_index < terminal_index);
     assert!(message_index < terminal_index);
-    assert_eq!(terminal_index, event_types.len() - 1);
+    assert_eq!(terminal_index, stored_events.len() - 1);
 }
 
 #[test]
@@ -684,7 +628,7 @@ fn commit_preserves_imported_update_plan_timeline_item() {
         .join("\n"),
     )
     .expect("write rollout");
-    let core = RuntimeCore::default();
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -697,14 +641,16 @@ fn commit_preserves_imported_update_plan_timeline_item() {
     )
     .expect("commit");
 
-    let read = core
-        .read_session(AgentSessionReadParams {
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
             session_id: response.session.session_id,
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
-        })
-        .expect("read imported session");
+        },
+    )
+    .expect("read imported session");
     let detail = read.detail.expect("detail");
     let items = detail["items"].as_array().expect("timeline items");
     let plan = items
@@ -742,7 +688,7 @@ fn commit_preserves_imported_update_plan_timeline_item() {
         .expect("plan item");
     assert!(!items
         .iter()
-        .any(|item| item["type"] == "tool_call" && item["id"] == "call_update_plan"));
+        .any(|item| item["type"] == "tool_call" && item["call_id"] == "call_update_plan"));
     assert!(reasoning_index < plan_index);
 }
 
@@ -894,7 +840,7 @@ async fn commit_avoids_source_and_runtime_ordinal_collision() {
     );
     let tool = items
         .iter()
-        .find(|item| item["id"] == "imported-tool-call_collision")
+        .find(|item| item["call_id"] == "call_collision")
         .expect("imported tool");
     let user = items
         .iter()
@@ -1156,7 +1102,7 @@ fn commit_projects_codex_runtime_specialized_items_into_existing_timeline_types(
         .join("\n"),
     )
     .expect("write rollout");
-    let core = RuntimeCore::default();
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -1169,39 +1115,42 @@ fn commit_projects_codex_runtime_specialized_items_into_existing_timeline_types(
     )
     .expect("commit");
 
-    let read = core
-        .read_session(AgentSessionReadParams {
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
             session_id: response.session.session_id,
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
-        })
-        .expect("read imported session");
+        },
+    )
+    .expect("read imported session");
     let detail = read.detail.expect("detail");
     let items = detail["items"].as_array().expect("timeline items");
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
-            && item["id"] == "call_mcp"
-            && item["tool_name"] == "mcp__filesystem__read_file"
+            && item["call_id"] == "call_mcp"
+            && item["mcp_server"] == "filesystem"
+            && item["tool_name"] == "read_file"
             && item["status"] == "completed"
             && tool_argument_value(item, "path") == Some("src/lib.rs")
             && item["metadata"]["source_client"] == "codex"
     }));
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
-            && item["id"] == "call_dynamic"
+            && item["call_id"] == "call_dynamic"
             && item["tool_name"] == "docs.lookup"
             && item["output"] == "dynamic result"
     }));
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
-            && item["id"] == "call_image_view"
+            && item["call_id"] == "call_image_view"
             && item["tool_name"] == "view_image"
             && tool_argument_value(item, "path") == Some("/workspace/app/assets/input.png")
     }));
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
-            && item["id"] == "call_image_gen"
+            && item["call_id"] == "call_image_gen"
             && item["tool_name"] == "image_generation"
             && item["output"] == "/workspace/app/assets/result.png"
     }));
@@ -1223,19 +1172,102 @@ fn commit_projects_codex_runtime_specialized_items_into_existing_timeline_types(
                 .is_some_and(|text| text.contains("Review findings"))
             && item["metadata"]["source_client"] == "codex"
     }));
-    assert!(items.iter().any(|item| {
-        item["type"] == "subagent_activity"
-            && item["id"] == "subagent-event-1"
-            && item["status_label"] == "running"
-            && item["session_id"] == "subagent-thread-1"
-    }));
+    assert!(
+        items.iter().any(|item| {
+            item["type"] == "subagent_activity"
+                && item["metadata"]["source_event_id"] == "subagent-event-1"
+                && item["status_label"] == "started"
+                && item["session_id"] == "subagent-thread-1"
+        }),
+        "missing canonical Codex subagent activity: {}",
+        serde_json::to_string_pretty(items).expect("serialize timeline items")
+    );
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
-            && item["id"] == "call_collab"
+            && item["call_id"] == "call_collab"
             && item["tool_name"] == "agent"
             && item["status"] == "completed"
             && item["output"] == "subagent-thread-2"
     }));
+}
+
+#[test]
+fn commit_only_lowers_wait_agent_to_collab_agent_tool_call() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp.path().join("rollout-collab-producer-boundary.jsonl");
+    let non_wait_tools = [
+        "spawn_agent",
+        "send_message",
+        "followup_task",
+        "interrupt_agent",
+        "resume_agent",
+        "close_agent",
+    ];
+    let mut lines = vec![
+        session_meta("thread-collab-producer-boundary"),
+        event_user_message("exercise collaboration tools"),
+        response_function_call("call_wait", "wait_agent", serde_json::json!({})),
+        response_function_call_output("call_wait", "ready"),
+    ];
+    for tool_name in non_wait_tools {
+        let call_id = format!("call_{tool_name}");
+        lines.push(response_function_call(
+            &call_id,
+            tool_name,
+            serde_json::json!({
+                "target_thread_id": "thread-child",
+                "message": "continue"
+            }),
+        ));
+        lines.push(response_function_call_output(&call_id, "done"));
+    }
+    lines.push(event_agent_message("Collaboration tools imported."));
+    fs::write(&rollout_path, lines.join("\n")).expect("write rollout");
+    let core = current_import_core(temp.path());
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
+            session_id: response.session.session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        },
+    )
+    .expect("read imported session");
+    let detail = read.detail.expect("detail");
+    let items = detail["thread_read"]["thread_items"]
+        .as_array()
+        .expect("canonical thread items");
+    let wait = items
+        .iter()
+        .find(|item| item["call_id"] == "call_wait")
+        .expect("wait agent item");
+    assert_eq!(wait["id"], "codex-collab-call_wait");
+    assert_eq!(wait["type"], "tool_call");
+    assert_eq!(wait["tool_name"], "wait_agent");
+
+    for tool_name in non_wait_tools {
+        let call_id = format!("call_{tool_name}");
+        let item = items
+            .iter()
+            .find(|item| item["call_id"] == call_id)
+            .unwrap_or_else(|| panic!("missing ordinary tool item for {tool_name}"));
+        assert_eq!(item["id"], format!("codex-tool-{call_id}"));
+        assert_eq!(item["type"], "tool_call");
+        assert_eq!(item["tool_name"], tool_name);
+    }
 }
 
 #[test]
@@ -1253,7 +1285,7 @@ fn commit_merges_duplicate_user_messages_when_response_item_precedes_event_msg()
         .join("\n"),
     )
     .expect("write rollout");
-    let core = RuntimeCore::default();
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -1291,7 +1323,7 @@ fn commit_merges_duplicate_user_messages_when_response_item_precedes_event_msg()
 }
 
 #[test]
-fn commit_closes_incomplete_imported_lifecycles_without_failed_timeline_items() {
+fn commit_closes_incomplete_imported_lifecycles_as_failed_timeline_items() {
     let temp = tempfile::tempdir().expect("tempdir");
     let rollout_path = temp.path().join("rollout-incomplete-lifecycle.jsonl");
     fs::write(
@@ -1315,7 +1347,7 @@ fn commit_closes_incomplete_imported_lifecycles_without_failed_timeline_items() 
         .join("\n"),
     )
     .expect("write rollout");
-    let core = RuntimeCore::default();
+    let core = current_import_core(temp.path());
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -1328,35 +1360,45 @@ fn commit_closes_incomplete_imported_lifecycles_without_failed_timeline_items() 
     )
     .expect("commit");
 
-    let read = core
-        .read_session(AgentSessionReadParams {
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
             session_id: response.session.session_id,
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
-        })
-        .expect("read imported session");
+        },
+    )
+    .expect("read imported session");
     let detail = read.detail.expect("detail");
     let items = detail["items"].as_array().expect("timeline items");
     let command = items
         .iter()
-        .find(|item| item["type"] == "command_execution" && item["id"] == "call_incomplete")
+        .find(|item| item["type"] == "command_execution" && item["command_id"] == "call_incomplete")
         .expect("command item");
-    assert_eq!(command["status"], "completed");
+    assert_eq!(command["status"], "failed");
     assert_eq!(command["metadata"]["imported_incomplete"], true);
     let tool = items
         .iter()
-        .find(|item| item["type"] == "tool_call" && item["id"] == "call_tool_incomplete")
+        .find(|item| item["type"] == "tool_call" && item["call_id"] == "call_tool_incomplete")
         .expect("tool item");
-    assert_eq!(tool["status"], "completed");
+    assert_eq!(tool["status"], "failed");
     assert_eq!(tool["metadata"]["imported_incomplete"], true);
     let patch = items
         .iter()
-        .find(|item| item["type"] == "patch" && item["id"] == "patch_incomplete")
+        .find(|item| {
+            item["type"] == "file_artifact" && item["metadata"]["imported_incomplete"] == true
+        })
         .expect("patch item");
-    assert_eq!(patch["status"], "completed");
+    assert_eq!(patch["status"], "failed");
     assert_eq!(patch["metadata"]["imported_incomplete"], true);
-    assert!(!items.iter().any(|item| item["status"] == "failed"));
+    assert_eq!(
+        items
+            .iter()
+            .filter(|item| item["status"] == "failed")
+            .count(),
+        3
+    );
 }
 
 fn session_meta(thread_id: &str) -> String {

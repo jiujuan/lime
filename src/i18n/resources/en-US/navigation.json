@@ -189,7 +189,6 @@
   "navigation.sidebar.importDialog.empty.noThreads": "No importable local history found",
   "navigation.sidebar.importDialog.meta.source": "Source",
   "navigation.sidebar.importDialog.source.localHistory": "Local history",
-  "navigation.sidebar.importDialog.source.claudeCode": "Claude Code",
   "navigation.sidebar.importDialog.target.standalone": "Standalone conversation",
   "navigation.sidebar.importDialog.preview.loading": "Generating preview",
   "navigation.sidebar.importDialog.preview.empty": "Select a local history conversation to preview",

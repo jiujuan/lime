@@ -193,12 +193,6 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
     params: "required",
   },
   {
-    name: "readConversationImportRuntimeEvents",
-    method:
-      constants.APP_SERVER_METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
-    params: "required",
-  },
-  {
     name: "readAgentSessionToolInventory",
     method: constants.APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
     params: "optional-empty",

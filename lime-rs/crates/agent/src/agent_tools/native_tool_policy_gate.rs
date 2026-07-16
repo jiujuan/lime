@@ -43,8 +43,8 @@ mod tests {
     fn gate_defaults_to_allowing_native_tools_without_policy() {
         let gate = NativeToolPolicyGate::from_request_metadata(None);
 
-        assert!(gate.allows_tool_name("Bash"));
-        assert!(gate.allows_tool_name("PowerShellTool"));
+        assert!(gate.allows_tool_name("exec_command"));
+        assert!(gate.allows_tool_name("write_stdin"));
         assert!(gate.allows_tool_name("apply_patch"));
     }
 
@@ -63,8 +63,8 @@ mod tests {
         });
         let gate = NativeToolPolicyGate::from_request_metadata(Some(&metadata));
 
-        assert!(!gate.allows_tool_name("Bash"));
-        assert!(!gate.allows_tool_name("PowerShellTool"));
+        assert!(!gate.allows_tool_name("exec_command"));
+        assert!(!gate.allows_tool_name("write_stdin"));
         assert!(gate.allows_tool_name("apply_patch"));
     }
 
@@ -82,7 +82,7 @@ mod tests {
         });
         let gate = NativeToolPolicyGate::from_request_metadata(Some(&metadata));
 
-        assert!(gate.allows_tool_name("BashTool"));
+        assert!(gate.allows_tool_name("exec_command"));
         assert!(!gate.allows_tool_name("ApplyPatchTool"));
     }
 }

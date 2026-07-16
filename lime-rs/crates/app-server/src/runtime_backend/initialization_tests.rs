@@ -98,47 +98,6 @@ impl RuntimeEventSink for BridgeRuntimeEventSink {
     }
 }
 
-struct OpenAiEnvSnapshot {
-    values: Vec<(&'static str, Option<String>)>,
-}
-
-impl OpenAiEnvSnapshot {
-    fn capture() -> Self {
-        Self {
-            values: [
-                "OPENAI_API_KEY",
-                "OPENAI_HOST",
-                "OPENAI_BASE_PATH",
-                "OPENAI_FORCE_RESPONSES_API",
-                "OPENAI_CUSTOM_HEADERS",
-                "LIME_AGENT_RUNTIME_ROOT",
-            ]
-            .into_iter()
-            .map(|key| (key, std::env::var(key).ok()))
-            .collect(),
-        }
-    }
-
-    fn capture_and_clear() -> Self {
-        let snapshot = Self::capture();
-        for (key, _) in &snapshot.values {
-            std::env::remove_var(key);
-        }
-        snapshot
-    }
-}
-
-impl Drop for OpenAiEnvSnapshot {
-    fn drop(&mut self) {
-        for (key, value) in &self.values {
-            match value {
-                Some(value) => std::env::set_var(key, value),
-                None => std::env::remove_var(key),
-            }
-        }
-    }
-}
-
 struct LocalOpenAiFixture {
     base_url: String,
     requests: Arc<Mutex<Vec<Value>>>,
@@ -560,18 +519,20 @@ fn action_response_error_preserves_stable_jsonrpc_data() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
-    let _env_snapshot = OpenAiEnvSnapshot::capture_and_clear();
     let workspace = TempDir::new().expect("workspace");
-    std::env::set_var("LIME_AGENT_RUNTIME_ROOT", workspace.path().join("agent"));
     let provider = LocalOpenAiFixture::start().await;
     let db = test_db();
     let db = provider_config::initialize_runtime_database(Some(&db)).expect("runtime database");
     let backend = Arc::new(RuntimeBackend::with_db_and_execution_process_server(
-        db,
+        db.clone(),
         ExecutionProcessServer::default(),
     ));
+    backend
+        .ensure_agent_initialized(&db)
+        .await
+        .expect("initialize runtime before confirmation scenario");
     let run_id = uuid::Uuid::new_v4().simple().to_string();
     let request = execution_request_for_tool_confirmation_bridge_test(
         &provider.base_url,
@@ -682,17 +643,12 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
         else {
             return false;
         };
-        let ThreadItemPayload::Tool {
-            call_id, output, ..
-        } = item.payload
-        else {
+        let ThreadItemPayload::Command { output, .. } = item.payload else {
             return false;
         };
         item.status == ItemStatus::Completed
-            && call_id == "req-runtime-confirm"
-            && output
-                .and_then(|output| output.text)
-                .is_some_and(|output| output.contains("runtime-confirmed"))
+            && item.item_id == agent_protocol::ItemId::new("req-runtime-confirm")
+            && output.is_some_and(|output| output.contains("runtime-confirmed"))
     }));
     assert!(events.iter().any(|event| {
         event.event_type == "message.delta"
@@ -703,6 +659,21 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
     assert!(events
         .iter()
         .any(|event| event.event_type == "turn.completed"));
+    let provider_steps = events
+        .iter()
+        .filter(|event| event.event_type == "provider.step")
+        .collect::<Vec<_>>();
+    assert_eq!(provider_steps.len(), 2);
+    assert_eq!(provider_steps[0].payload["attempt"], 1);
+    assert_eq!(provider_steps[0].payload["tool_call_count"], 1);
+    assert_eq!(provider_steps[1].payload["attempt"], 2);
+    assert_eq!(provider_steps[1].payload["finish_reason"], "stop");
+    let turn_completed = events
+        .iter()
+        .find(|event| event.event_type == "turn.completed")
+        .expect("turn completed event");
+    assert_eq!(turn_completed.payload["usage"]["input_tokens"], 20);
+    assert_eq!(turn_completed.payload["usage"]["output_tokens"], 8);
     assert!(provider
         .requests
         .lock()
@@ -897,7 +868,7 @@ fn streaming_response_for_request(body: &Value) -> String {
                         "id": "req-runtime-confirm",
                         "type": "function",
                         "function": {
-                            "name": "Bash",
+                            "name": "exec_command",
                             "arguments": ""
                         }
                     }]
@@ -917,7 +888,7 @@ fn streaming_response_for_request(body: &Value) -> String {
                     "tool_calls": [{
                         "index": 0,
                         "function": {
-                            "arguments": "{\"command\":\"printf runtime-confirmed\"}"
+                            "arguments": "{\"cmd\":\"printf runtime-confirmed\"}"
                         }
                     }]
                 },

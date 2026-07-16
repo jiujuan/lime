@@ -8,6 +8,7 @@ import {
   CONTINUE_PROMPT,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
   EXPERT_SKILLS_RUNTIME_PROMPT,
   EXPERT_SKILLS_RUNTIME_SKILL_REF,
@@ -51,6 +52,7 @@ import {
   collectTraceRequestMethods,
   decodeJsonRpcLines,
 } from "./claw-chat-current-fixture-rpc.mjs";
+import { buildGateBContractEvidence } from "./claw-chat-current-fixture-gate-b-contract.mjs";
 import {
   readHarnessMetadataFromTurnStart,
   readObjectiveTextFromHarness,
@@ -60,6 +62,138 @@ import {
   MEDIA_REFERENCE_PROMPT,
   MEDIA_REFERENCE_SCENARIO,
 } from "./claw-chat-current-fixture-media-reference.mjs";
+
+export function resolveGateBExpectedIdentity({
+  summary,
+  options,
+  backendLedger,
+  appServerRequests,
+}) {
+  const isHomeHotpathScenario =
+    options?.scenario === HOME_HOTPATH_SCENARIO ||
+    options?.scenario === HOME_HOTPATH_GREETING_SCENARIO;
+  const pendingSteerTurn =
+    options?.scenario === INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO
+      ? summary?.inputbarPendingSteerPopFrontRichBackendTurnStart
+      : options?.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO ||
+          options?.scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO
+        ? summary?.inputbarPendingSteerActiveBackendTurnStart
+        : null;
+  if (!isHomeHotpathScenario && !pendingSteerTurn) {
+    const scenarioTurnStart = resolveScenarioTurnStart(summary, options);
+    if (scenarioTurnStart) {
+      return resolveTurnIdentity({
+        sessionId: scenarioTurnStart.sessionId,
+        turnId: scenarioTurnStart.turnId,
+        requireBackendTurn: scenarioTurnStart.requireBackendTurn,
+        backendLedger,
+        appServerRequests,
+      });
+    }
+    return {
+      sessionId: summary?.sessionId ?? null,
+      threadId: summary?.threadId ?? null,
+    };
+  }
+
+  const sessionId =
+    pendingSteerTurn?.sessionId ??
+    summary?.homeHotpath?.backendTurnStart?.sessionId ??
+    null;
+  const turnId =
+    pendingSteerTurn?.turnId ??
+    summary?.homeHotpath?.backendTurnStart?.turnId ??
+    null;
+  return resolveTurnIdentity({
+    sessionId,
+    turnId,
+    backendLedger,
+    appServerRequests,
+  });
+}
+
+function resolveScenarioTurnStart(summary, options) {
+  if (options?.scenario === "skills-runtime") {
+    return summary?.manualEnableSkillsRuntimeTurnStart?.backend ?? null;
+  }
+  if (options?.scenario === "expert-panel-skills-runtime") {
+    return summary?.expertPanelSkillsRuntimeTurnStart ?? null;
+  }
+  if (
+    options?.scenario === "expert-skills-runtime" ||
+    options?.scenario === "expert-plaza-skills-runtime"
+  ) {
+    return summary?.expertSkillsRuntimeTurnStart ?? null;
+  }
+  if (
+    options?.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO ||
+    options?.scenario ===
+      CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
+  ) {
+    const turnStart = summary?.contentFactoryArticleWorkspaceWorkerTurnStart;
+    if (typeof turnStart?.turnId === "string" && turnStart.turnId.trim()) {
+      return {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        turnId: turnStart.turnId,
+        requireBackendTurn: false,
+      };
+    }
+  }
+  return null;
+}
+
+function resolveTurnIdentity({
+  sessionId,
+  turnId,
+  requireBackendTurn = true,
+  backendLedger,
+  appServerRequests,
+}) {
+  const matchingBackendTurnStart = (
+    Array.isArray(backendLedger) ? backendLedger : []
+  ).find(
+    (entry) =>
+      entry?.kind === "turnStart" &&
+      entry?.sessionId === sessionId &&
+      entry?.turnId === turnId,
+  );
+  const matchingAppServerTurnStart = (
+    Array.isArray(appServerRequests) ? appServerRequests : []
+  ).find(
+    (request) =>
+      request?.method === "agentSession/turn/start" &&
+      request?.params?.sessionId === sessionId &&
+      request?.params?.turnId === turnId &&
+      request?.response?.sessionId === sessionId &&
+      request?.response?.turnId === turnId,
+  );
+  const matchingSessionRead = (
+    Array.isArray(appServerRequests) ? appServerRequests : []
+  ).find(
+    (request) =>
+      request?.method === "agentSession/read" &&
+      request?.params?.sessionId === sessionId &&
+      request?.response?.sessionId === sessionId &&
+      request?.response?.turns?.some((turn) => turn?.turnId === turnId) ===
+        true &&
+      typeof request?.response?.threadId === "string" &&
+      request.response.threadId.trim().length > 0,
+  );
+  const turnStartObserved = requireBackendTurn
+    ? Boolean(matchingBackendTurnStart)
+    : Boolean(matchingBackendTurnStart || matchingAppServerTurnStart);
+  if (!sessionId || !turnId || !turnStartObserved || !matchingSessionRead) {
+    throw new Error(
+      "Gate B scenario identity requires matching backend turnStart and agentSession/read evidence for one session and turn",
+    );
+  }
+
+  return {
+    sessionId,
+    threadId: matchingSessionRead.response.threadId,
+    turnId,
+  };
+}
 
 export function buildAssertionContext({
   backendLedger,
@@ -94,6 +228,28 @@ export function buildAssertionContext({
       ].filter(Boolean),
     ),
   );
+  const gateBExpectedIdentity = resolveGateBExpectedIdentity({
+    summary,
+    options,
+    backendLedger,
+    appServerRequests,
+  });
+  const gateBContract = buildGateBContractEvidence({
+    traceMessages,
+    rendererSnapshot,
+    pageErrors: summary.pageErrors,
+    pageLifecycleEvents: summary.pageLifecycleEvents,
+    runId: summary.runId,
+    artifacts: {
+      summary: summary.summary,
+      backendLedger: summary.backendLedger,
+      screenshot: summary.screenshot,
+    },
+    appServerRequests,
+    backendLedger,
+    guiEvidence: summary.gateBGuiEvidence,
+    expectedIdentity: gateBExpectedIdentity,
+  });
   const latestTurnStart = backendLedger
     .filter((entry) => entry.kind === "turnStart")
     .at(-1);
@@ -338,15 +494,15 @@ export function buildAssertionContext({
                         ? approvalRequestResumeTurnStart?.runtimeRequest
                         : isApprovalRequestFullAccessScenario
                           ? approvalRequestFullAccessTurnStart?.runtimeRequest
-                        : isTerminalCanceledAfterAnswerScenario
-                          ? terminalCanceledAfterAnswerTurnStart?.runtimeRequest
-                          : isTerminalFailedAfterAnswerScenario
-                            ? terminalFailedAfterAnswerTurnStart?.runtimeRequest
-                            : isMcpStructuredContentScenario
-                              ? mcpStructuredContentTurnStart?.runtimeRequest
-                              : isMediaReferenceScenario
-                                ? mediaReferenceTurnStart?.runtimeRequest
-                                : isSkillsRuntimeScenario
+                          : isTerminalCanceledAfterAnswerScenario
+                            ? terminalCanceledAfterAnswerTurnStart?.runtimeRequest
+                            : isTerminalFailedAfterAnswerScenario
+                              ? terminalFailedAfterAnswerTurnStart?.runtimeRequest
+                              : isMcpStructuredContentScenario
+                                ? mcpStructuredContentTurnStart?.runtimeRequest
+                                : isMediaReferenceScenario
+                                  ? mediaReferenceTurnStart?.runtimeRequest
+                                  : isSkillsRuntimeScenario
                                     ? skillsRuntimeTurnStart?.runtimeRequest
                                     : isAnyExpertSkillsRuntimeScenario
                                       ? expertRuntimeTurnStartForAssertions?.runtimeRequest
@@ -372,12 +528,10 @@ export function buildAssertionContext({
     ? manualEnableRuntimeMetadata.bindings[0]
     : null;
   const expertRuntimeMetadata =
-    expertRuntimeTurnStartForAssertions?.runtimeRequest?.metadata?.expert ??
-    {};
+    expertRuntimeTurnStartForAssertions?.runtimeRequest?.metadata?.expert ?? {};
   const expertHarnessMetadata =
     expertRuntimeTurnStartForAssertions?.runtimeRequest?.metadata?.harness
-      ?.expert ??
-    {};
+      ?.expert ?? {};
   const rawExpertHarnessSkillRefs =
     expertHarnessMetadata?.skill_refs ?? expertHarnessMetadata?.skillRefs ?? [];
   const expertHarnessSkillRefs = Array.isArray(rawExpertHarnessSkillRefs)
@@ -403,71 +557,71 @@ export function buildAssertionContext({
         ? homeHotpathTurnStart?.inputText === homeHotpathPrompt ||
           homeHotpathTraceTurnStart?.inputText === homeHotpathPrompt
         : isImageCommandScenario
-        ? imageCommandTurnStart?.inputText === expectedImageIntentRoutedPrompt
-        : isInputbarRichRestoreScenario
-          ? String(inputbarRichRestoreTurnStart?.inputText || "").includes(
-              INPUTBAR_RICH_RESTORE_PROMPT,
-            )
-          : isInputbarPendingSteerScenario
-            ? inputbarPendingSteerActiveTurnStart?.inputText ===
-              INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
-            : isWebToolsRenderingScenario
-              ? webToolsRenderingTurnStart?.inputText ===
-                WEB_TOOLS_RENDERING_PROMPT
-              : isReasoningFirstVisibleScenario
-                ? reasoningFirstVisibleTurnStart?.inputText ===
-                  REASONING_FIRST_VISIBLE_PROMPT
-                : isLiveTailCommitScenario
-                  ? liveTailCommitTurnStart?.inputText ===
-                    LIVE_TAIL_COMMIT_PROMPT
-                  : isElectronResizeReflowScenario
-                    ? electronResizeReflowTurnStart?.inputText ===
+          ? imageCommandTurnStart?.inputText === expectedImageIntentRoutedPrompt
+          : isInputbarRichRestoreScenario
+            ? String(inputbarRichRestoreTurnStart?.inputText || "").includes(
+                INPUTBAR_RICH_RESTORE_PROMPT,
+              )
+            : isInputbarPendingSteerScenario
+              ? inputbarPendingSteerActiveTurnStart?.inputText ===
+                INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
+              : isWebToolsRenderingScenario
+                ? webToolsRenderingTurnStart?.inputText ===
+                  WEB_TOOLS_RENDERING_PROMPT
+                : isReasoningFirstVisibleScenario
+                  ? reasoningFirstVisibleTurnStart?.inputText ===
+                    REASONING_FIRST_VISIBLE_PROMPT
+                  : isLiveTailCommitScenario
+                    ? liveTailCommitTurnStart?.inputText ===
                       LIVE_TAIL_COMMIT_PROMPT
-                    : isApprovalRequestResumeScenario ||
-                        isApprovalRequestDecisionScenario
-                      ? approvalRequestResumeTurnStart?.inputText ===
-                        APPROVAL_REQUEST_RESUME_PROMPT
-                      : isApprovalRequestFullAccessScenario
-                        ? approvalRequestFullAccessTurnStart?.inputText ===
-                          APPROVAL_REQUEST_FULL_ACCESS_PROMPT
-                      : isTerminalCanceledAfterAnswerScenario
-                        ? terminalCanceledAfterAnswerTurnStart?.inputText ===
-                          TERMINAL_CANCELED_AFTER_ANSWER_PROMPT
-                        : isTerminalFailedAfterAnswerScenario
-                          ? terminalFailedAfterAnswerTurnStart?.inputText ===
-                            TERMINAL_FAILED_AFTER_ANSWER_PROMPT
-                          : isTerminalStaleGuardScenario
-                            ? terminalStaleGuardFirstTurnStart?.inputText ===
-                                TERMINAL_STALE_GUARD_FIRST_PROMPT &&
-                              terminalStaleGuardSecondTurnStart?.inputText ===
-                                TERMINAL_STALE_GUARD_SECOND_PROMPT
-                            : isMcpStructuredContentScenario
-                              ? mcpStructuredContentTurnStart?.inputText ===
-                                MCP_STRUCTURED_CONTENT_PROMPT
-                              : isMediaReferenceScenario
-                                ? mediaReferenceTurnStart?.inputText ===
-                                  MEDIA_REFERENCE_PROMPT
-                                : isSkillsRuntimeScenario
-                                    ? skillsRuntimeTurnStart?.inputText ===
-                                        SKILLS_RUNTIME_PROMPT &&
-                                      explicitSkillsRuntimeTurnStart?.inputText ===
-                                        SKILLS_RUNTIME_EXPLICIT_PROMPT &&
-                                      manualEnableSkillsRuntimeTurnStart?.inputText ===
-                                        SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT
-                                    : isAnyExpertSkillsRuntimeScenario
-                                      ? isExpertPanelSkillsRuntimeScenario
-                                        ? expertPanelSkillsRuntimeTurnStart?.inputText ===
-                                          EXPERT_SKILLS_RUNTIME_PANEL_PROMPT
-                                        : expertSkillsRuntimeTurnStart?.inputText?.includes(
-                                            EXPERT_SKILLS_RUNTIME_PROMPT,
-                                          ) === true
-                                      : isContentFactoryArticleWorkspaceScenario
-                                        ? true
-                                        : isSoulStyleScenario
-                                          ? newsTraceTurnStart?.inputText ===
-                                            NEWS_PROMPT
-                                          : newsTurnStart?.inputText ===
-                                            NEWS_PROMPT;
+                    : isElectronResizeReflowScenario
+                      ? electronResizeReflowTurnStart?.inputText ===
+                        LIVE_TAIL_COMMIT_PROMPT
+                      : isApprovalRequestResumeScenario ||
+                          isApprovalRequestDecisionScenario
+                        ? approvalRequestResumeTurnStart?.inputText ===
+                          APPROVAL_REQUEST_RESUME_PROMPT
+                        : isApprovalRequestFullAccessScenario
+                          ? approvalRequestFullAccessTurnStart?.inputText ===
+                            APPROVAL_REQUEST_FULL_ACCESS_PROMPT
+                          : isTerminalCanceledAfterAnswerScenario
+                            ? terminalCanceledAfterAnswerTurnStart?.inputText ===
+                              TERMINAL_CANCELED_AFTER_ANSWER_PROMPT
+                            : isTerminalFailedAfterAnswerScenario
+                              ? terminalFailedAfterAnswerTurnStart?.inputText ===
+                                TERMINAL_FAILED_AFTER_ANSWER_PROMPT
+                              : isTerminalStaleGuardScenario
+                                ? terminalStaleGuardFirstTurnStart?.inputText ===
+                                    TERMINAL_STALE_GUARD_FIRST_PROMPT &&
+                                  terminalStaleGuardSecondTurnStart?.inputText ===
+                                    TERMINAL_STALE_GUARD_SECOND_PROMPT
+                                : isMcpStructuredContentScenario
+                                  ? mcpStructuredContentTurnStart?.inputText ===
+                                    MCP_STRUCTURED_CONTENT_PROMPT
+                                  : isMediaReferenceScenario
+                                    ? mediaReferenceTurnStart?.inputText ===
+                                      MEDIA_REFERENCE_PROMPT
+                                    : isSkillsRuntimeScenario
+                                      ? skillsRuntimeTurnStart?.inputText ===
+                                          SKILLS_RUNTIME_PROMPT &&
+                                        explicitSkillsRuntimeTurnStart?.inputText ===
+                                          SKILLS_RUNTIME_EXPLICIT_PROMPT &&
+                                        manualEnableSkillsRuntimeTurnStart?.inputText ===
+                                          SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT
+                                      : isAnyExpertSkillsRuntimeScenario
+                                        ? isExpertPanelSkillsRuntimeScenario
+                                          ? expertPanelSkillsRuntimeTurnStart?.inputText ===
+                                            EXPERT_SKILLS_RUNTIME_PANEL_PROMPT
+                                          : expertSkillsRuntimeTurnStart?.inputText?.includes(
+                                              EXPERT_SKILLS_RUNTIME_PROMPT,
+                                            ) === true
+                                        : isContentFactoryArticleWorkspaceScenario
+                                          ? true
+                                          : isSoulStyleScenario
+                                            ? newsTraceTurnStart?.inputText ===
+                                              NEWS_PROMPT
+                                            : newsTurnStart?.inputText ===
+                                              NEWS_PROMPT;
   return {
     backendLedger,
     traceMessages,
@@ -480,6 +634,7 @@ export function buildAssertionContext({
     workspace,
     options,
     appServerRequestMethods,
+    gateBContract,
     latestTurnStart,
     traceTurnStarts,
     planImplementationTurnStart,

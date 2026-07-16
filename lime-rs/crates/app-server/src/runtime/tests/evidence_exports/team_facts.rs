@@ -33,19 +33,6 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
         Some("turn_team_evidence"),
         vec![
             RuntimeEvent::new(
-                "team.changed",
-                json!({
-                    "teamEvent": "teammate_status_changed",
-                    "parentThreadId": "thread_team_evidence",
-                    "childSessionId": "child-researcher",
-                    "status": "running",
-                    "teamPhase": "queued",
-                    "teamParallelBudget": 2,
-                    "teamActiveCount": 1,
-                    "teamQueuedCount": 1
-                }),
-            ),
-            RuntimeEvent::new(
                 "task.changed",
                 json!({
                     "taskEvent": "team_control",
@@ -54,7 +41,8 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
                     "parentThreadId": "thread_team_evidence",
                     "runtimeEntity": "subagent_turn",
                     "runtimeStatus": "running",
-                    "latestTurnStatus": "queued"
+                    "latestTurnStatus": "queued",
+                    "teamPhase": "queued"
                 }),
             ),
             RuntimeEvent::new(
@@ -156,7 +144,6 @@ async fn export_evidence_pack_includes_multi_agent_team_facts() {
         .cloned()
         .expect("team facts summary");
     assert_eq!(team_facts["status"], "exported");
-    assert_eq!(team_facts["teamEventCount"], json!(1));
     assert_eq!(team_facts["taskEventCount"], json!(2));
     assert_eq!(team_facts["handoffCount"], json!(1));
     assert_eq!(team_facts["workerNotificationCount"], json!(1));

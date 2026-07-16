@@ -234,6 +234,12 @@ impl AgentRuntimeState {
         Ok(())
     }
 
+    pub(crate) async fn live_execution_process_gateway(
+        &self,
+    ) -> Option<Arc<dyn crate::live_execution_process::LiveExecutionProcessGateway>> {
+        self.live_execution_gateway.read().await.clone()
+    }
+
     pub async fn create_cancel_token(&self, session_id: &str) -> CancellationToken {
         let token = CancellationToken::new();
         self.cancel_tokens

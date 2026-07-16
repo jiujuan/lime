@@ -124,6 +124,7 @@ fn tool_definitions(
         .collect::<HashSet<_>>();
     let native_dispatch = tool_runtime::native_dispatch::runtime_native_dispatch();
     let mut definitions = native_dispatch.definitions();
+    definitions.extend(tool_runtime::unified_exec::unified_exec_tool_definitions());
     definitions.push(tool_runtime::request_user_input::request_user_input_tool_definition());
     if agent_control_gateway.is_some() {
         definitions.extend(tool_runtime::agent_control::agent_control_tool_definitions());
@@ -265,7 +266,8 @@ mod tests {
 
         assert!(compact.len() < full.len());
         assert!(compact.iter().any(|tool| tool.name == "WebSearch"));
-        assert!(compact.iter().any(|tool| tool.name == "Bash"));
+        assert!(compact.iter().any(|tool| tool.name == "exec_command"));
+        assert!(compact.iter().any(|tool| tool.name == "write_stdin"));
         assert!(compact.iter().any(|tool| tool.name == "apply_patch"));
         assert!(compact.iter().any(|tool| tool.name == "request_user_input"));
         assert!(!compact.iter().any(|tool| tool.name == "update_plan"));

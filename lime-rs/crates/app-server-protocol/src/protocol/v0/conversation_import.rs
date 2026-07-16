@@ -9,7 +9,6 @@ use super::{AgentAttachment, AgentSession};
 pub enum ConversationImportSourceClient {
     #[default]
     Codex,
-    ClaudeCode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -17,8 +16,6 @@ pub enum ConversationImportSourceClient {
 pub enum ConversationImportSourceStatus {
     Ready,
     Missing,
-    Unsupported,
-    Error,
 }
 
 impl Default for ConversationImportSourceStatus {
@@ -271,46 +268,4 @@ pub struct ConversationImportThreadCommitResponse {
     pub can_continue: bool,
     #[serde(default)]
     pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ConversationImportThreadRuntimeEventsReadParams {
-    pub session_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub offset: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_index: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_type: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ConversationImportRuntimeEventDetail {
-    pub source_event_index: usize,
-    pub turn_index: usize,
-    pub event_index: usize,
-    pub event_type: String,
-    pub payload: Value,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ConversationImportThreadRuntimeEventsReadResponse {
-    pub session_id: String,
-    pub offset: usize,
-    pub limit: usize,
-    pub total_events: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub next_offset: Option<usize>,
-    pub source_runtime_events: usize,
-    pub materialized_runtime_events: usize,
-    pub sidecar_runtime_events: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub projection: Option<Value>,
-    #[serde(default)]
-    pub events: Vec<ConversationImportRuntimeEventDetail>,
 }

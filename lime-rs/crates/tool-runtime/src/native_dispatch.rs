@@ -463,8 +463,6 @@ mod tests {
                 "Read",
                 "Glob",
                 "Grep",
-                "Bash",
-                "PowerShell",
             ]
         );
     }

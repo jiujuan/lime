@@ -1,19 +1,15 @@
 use super::{RuntimeCore, RuntimeCoreError};
 use app_server_protocol::{
-    ConversationImportSourceClient, ConversationImportSourceScanParams,
-    ConversationImportSourceScanResponse, ConversationImportSourceStatus,
-    ConversationImportSourceSummary, ConversationImportThreadCommitParams,
+    ConversationImportSourceScanParams, ConversationImportSourceScanResponse,
+    ConversationImportThreadCommitParams,
     ConversationImportThreadCommitResponse, ConversationImportThreadPreviewParams,
-    ConversationImportThreadPreviewResponse, ConversationImportThreadRuntimeEventsReadParams,
-    ConversationImportThreadRuntimeEventsReadResponse,
+    ConversationImportThreadPreviewResponse,
 };
 
 mod codex;
 mod commit;
-mod commit_events;
 mod import_status;
 mod provenance;
-mod runtime_event_detail;
 
 impl RuntimeCore {
     pub async fn scan_conversation_import_source(
@@ -40,67 +36,18 @@ impl RuntimeCore {
     ) -> Result<ConversationImportThreadCommitResponse, RuntimeCoreError> {
         commit::commit_conversation_import_thread(self, params)
     }
-
-    pub async fn read_conversation_import_runtime_events(
-        &self,
-        params: ConversationImportThreadRuntimeEventsReadParams,
-    ) -> Result<ConversationImportThreadRuntimeEventsReadResponse, RuntimeCoreError> {
-        runtime_event_detail::read_conversation_import_runtime_events(self, params).await
-    }
 }
 
 fn scan_conversation_import_source(
     params: ConversationImportSourceScanParams,
 ) -> Result<ConversationImportSourceScanResponse, RuntimeCoreError> {
-    match params
-        .source_client
-        .unwrap_or(ConversationImportSourceClient::Codex)
-    {
-        ConversationImportSourceClient::Codex => codex::scan_source(params),
-        ConversationImportSourceClient::ClaudeCode => Ok(unsupported_source(
-            ConversationImportSourceClient::ClaudeCode,
-            params.source_root,
-            "Claude Code conversation import is not implemented in this milestone.",
-        )),
-    }
+    codex::scan_source(params)
 }
 
 fn preview_conversation_import_thread(
     params: ConversationImportThreadPreviewParams,
 ) -> Result<ConversationImportThreadPreviewResponse, RuntimeCoreError> {
-    match params
-        .source_client
-        .unwrap_or(ConversationImportSourceClient::Codex)
-    {
-        ConversationImportSourceClient::Codex => codex::preview_thread(params),
-        ConversationImportSourceClient::ClaudeCode => Err(RuntimeCoreError::Backend(
-            "Claude Code conversation preview is not implemented in this milestone.".to_string(),
-        )),
-    }
-}
-
-fn unsupported_source(
-    source_client: ConversationImportSourceClient,
-    source_root: Option<String>,
-    message: &str,
-) -> ConversationImportSourceScanResponse {
-    ConversationImportSourceScanResponse {
-        source: ConversationImportSourceSummary {
-            source_client,
-            status: ConversationImportSourceStatus::Unsupported,
-            source_root,
-            readable: false,
-            thread_count: 0,
-            source_home_exists: false,
-            state_db_readable: false,
-            rollout_file_count: 0,
-            indexed_at: Some(codex::now_timestamp()),
-            state_path: None,
-            message: Some(message.to_string()),
-        },
-        threads: Vec::new(),
-        next_cursor: None,
-    }
+    codex::preview_thread(params)
 }
 
 #[cfg(test)]

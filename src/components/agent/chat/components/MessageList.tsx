@@ -411,12 +411,19 @@ const MessageListInner: React.FC<MessageListProps> = ({
               group.messages.find((message) => message.runtimeTurnId)
                 ?.runtimeTurnId ||
               "";
+            const groupRuntimeTurnStatus =
+              group.timeline?.turn?.status ||
+              timelineState.renderedTurns.find(
+                (turn) => turn.id === groupRuntimeTurnId,
+              )?.status ||
+              "";
             return (
               <section
                 key={group.id}
                 data-testid="message-turn-group"
                 data-group-index={groupIndex + 1}
                 data-runtime-turn-id={groupRuntimeTurnId}
+                data-runtime-turn-status={groupRuntimeTurnStatus}
                 data-last-assistant-message-id={group.lastAssistantId || ""}
                 data-timeline-message-id={group.timelineMessageId || ""}
                 className="py-2"

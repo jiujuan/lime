@@ -9,6 +9,13 @@ describe("AgentChatWorkspace Task Center navigation runtime boundary", () => {
       join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
       "utf8",
     );
+    const commandWiringSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
+      ),
+      "utf8",
+    );
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -17,7 +24,11 @@ describe("AgentChatWorkspace Task Center navigation runtime boundary", () => {
       "utf8",
     );
 
-    expect(workspaceSource).toContain(
+    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceTaskCenterNavigationRuntime({",
+    );
+    expect(commandWiringSource).toContain(
       "useWorkspaceTaskCenterNavigationRuntime({",
     );
     expect(ownerSource.split("\n").length).toBeLessThan(180);

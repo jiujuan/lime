@@ -33,20 +33,12 @@ import {
 } from "./mainWindowLoadErrors";
 import { installMainWindowMediaPermissionHandler } from "./mainWindowMediaPermissions";
 import { ElectronUpdateHost } from "./updateHost";
-import { waitForElectronSmokeMemorySettingsReady } from "./smokeMemorySettings";
+import { createElectronSmokeRunner } from "./smokeChecks";
 import {
   buildUpdateNotificationWindowBounds,
   type RectangleLike,
 } from "./updateNotificationWindowPosition";
 import { buildUpdateNotificationWindowUrl } from "./updateNotificationWindowUrl";
-import {
-  AppServerClient,
-  decodeMessage,
-  encodeMessage,
-  PROTOCOL_VERSION,
-  SERVER_NAME,
-  type InitializeResponse,
-} from "@limecloud/app-server-client";
 import {
   app,
   BrowserWindow,
@@ -163,6 +155,13 @@ function createMainWindow(): BrowserWindow {
   installMainWindowNavigationGuard(window, devServerUrl);
   installDevRendererContextMenu(window, devServerUrl);
   installDevRendererShortcuts(window, devServerUrl);
+  const smokeRunner = isElectronSmokeMode()
+    ? createElectronSmokeRunner({
+        window,
+        appServerHost,
+        appVersion: app.getVersion(),
+      })
+    : null;
   void showStartupScreenBeforeRenderer(window, devServerUrl).catch((error) => {
     if (
       isMainWindowRendererLoadInterruption(error, mainWindowLoadState(window))
@@ -176,14 +175,16 @@ function createMainWindow(): BrowserWindow {
     );
   });
 
-  if (process.env.LIME_ELECTRON_SMOKE === "1") {
+  if (smokeRunner) {
     const runSmokeAfterRendererLoad = () => {
       const loadedUrl = window.webContents.getURL();
-      if (loadedUrl.startsWith("data:text/html")) {
+      if (smokeRunner.isStartupUrl(loadedUrl)) {
         return;
       }
       window.webContents.off("did-finish-load", runSmokeAfterRendererLoad);
-      void runElectronSmokeChecks(window)
+      console.log("[electron-smoke] renderer loaded");
+      void smokeRunner
+        .run()
         .then(() => {
           void exitElectronSmoke(0);
         })
@@ -197,10 +198,21 @@ function createMainWindow(): BrowserWindow {
         });
     };
     window.webContents.on("did-finish-load", runSmokeAfterRendererLoad);
-    window.webContents.once("did-fail-load", (_event, code, description) => {
-      console.error(`[electron-smoke] renderer failed: ${code} ${description}`);
-      void exitElectronSmoke(1);
-    });
+    window.webContents.on(
+      "did-fail-load",
+      (_event, code, description, _url, isMainFrame) => {
+        if (code === -3 || isMainFrame === false) {
+          return;
+        }
+        console.error(
+          `[electron-smoke] renderer failed: ${code} ${description}`,
+        );
+        void smokeRunner
+          .recordFailure("renderer-load")
+          .catch(() => undefined)
+          .finally(() => exitElectronSmoke(1));
+      },
+    );
   }
 
   window.on("closed", () => {
@@ -442,192 +454,6 @@ async function clearDevRendererCache(): Promise<void> {
       }`,
     );
   }
-}
-
-async function runElectronSmokeChecks(window: BrowserWindow): Promise<void> {
-  console.log("[electron-smoke] renderer loaded");
-  const client = new AppServerClient({ initialRequestId: 1 });
-  const request = client.initialize({
-    clientInfo: {
-      name: "electron_smoke",
-      title: "Electron smoke",
-      version: app.getVersion(),
-    },
-    capabilities: {
-      eventMethods: ["agentSession/event"],
-      experimental: true,
-    },
-  });
-  const response = await appServerHost.handleJsonLines({
-    lines: [encodeMessage(request)],
-  });
-  const message = decodeMessage(response.lines[0] ?? "");
-  if (!("result" in message)) {
-    throw new Error("app-server initialize did not return a result");
-  }
-
-  const result = message.result as InitializeResponse;
-  if (result.serverInfo.name !== SERVER_NAME) {
-    throw new Error(
-      `unexpected app-server name: ${String(result.serverInfo.name)}`,
-    );
-  }
-  if (result.serverInfo.protocolVersion !== PROTOCOL_VERSION) {
-    throw new Error(
-      `unexpected app-server protocol: ${String(
-        result.serverInfo.protocolVersion,
-      )}`,
-    );
-  }
-  console.log(
-    `[electron-smoke] app-server initialized protocol=${result.serverInfo.protocolVersion} version=${result.serverInfo.version}`,
-  );
-  await waitForElectronSmokeWorkbenchReady(window);
-  console.log("[electron-smoke] claw workbench shell ready");
-  await waitForElectronSmokeMemorySettingsReady(window);
-  console.log("[electron-smoke] memory settings ready");
-}
-
-async function waitForElectronSmokeWorkbenchReady(
-  window: BrowserWindow,
-): Promise<void> {
-  if (window.isDestroyed()) {
-    throw new Error("main window was destroyed before workbench smoke");
-  }
-
-  const result = (await window.webContents.executeJavaScript(
-    `new Promise((resolve) => {
-      const timeoutMs = 60000;
-      const intervalMs = 250;
-      const startedAt = Date.now();
-      const problemPatterns = [
-        /无法连接后端桥接/,
-        /Desktop Host 尚未支持命令/,
-        /Electron host command is not supported/,
-        /Electron host command is not implemented/,
-        /Unsupported command/,
-        /未知命令/,
-        /bridge cooldown active/,
-        /加载.*失败/,
-        /加载失败/,
-        /调用失败/,
-      ];
-      const sanitize = (value) => String(value || "").replace(/\\s+/g, " ").trim();
-      const readJsonArray = (key) => {
-        try {
-          const parsed = JSON.parse(localStorage.getItem(key) || "[]");
-          return Array.isArray(parsed) ? parsed : [];
-        } catch {
-          return [];
-        }
-      };
-      const isCurrentRunEntry = (entry) => {
-        const timestamp = Date.parse(entry?.timestamp || "");
-        return Number.isFinite(timestamp) && timestamp >= startedAt;
-      };
-      const visible = (element) => {
-        if (!element) {
-          return false;
-        }
-        const rect = element.getBoundingClientRect();
-        const style = window.getComputedStyle(element);
-        return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-      };
-      const collect = () => {
-        const text = document.body?.innerText || "";
-        const problemTexts = problemPatterns.flatMap((pattern) => {
-          const match = text.match(pattern);
-          return match ? [match[0]] : [];
-        });
-        const textareas = Array.from(document.querySelectorAll('textarea[name="agent-chat-message"]'));
-        const composer = textareas.find((item) => visible(item) && !item.disabled && item.getAttribute("aria-disabled") !== "true");
-        const shellReady = Boolean(document.querySelector('[data-testid="workspace-shell-scene"]'));
-        const inputbarReady = Boolean(document.querySelector('[data-testid="inputbar-core-container"]'));
-        const invokeErrors = readJsonArray("lime_invoke_error_buffer_v1").filter(isCurrentRunEntry);
-        const traceErrors = readJsonArray("lime_invoke_trace_buffer_v1").filter((entry) => entry && entry.status === "error" && isCurrentRunEntry(entry));
-        return {
-          ok: shellReady && inputbarReady && Boolean(composer) && problemTexts.length === 0 && invokeErrors.length === 0 && traceErrors.length === 0,
-          shellReady,
-          inputbarReady,
-          composerReady: Boolean(composer),
-          problemTexts,
-          invokeErrors: invokeErrors.slice(-5).map((entry) => ({
-            command: entry?.command || null,
-            transport: entry?.transport || null,
-            error: sanitize(entry?.error),
-          })),
-          traceErrors: traceErrors.slice(-5).map((entry) => ({
-            command: entry?.command || null,
-            transport: entry?.transport || null,
-            status: entry?.status || null,
-            error: sanitize(entry?.error),
-          })),
-          visibleButtons: Array.from(document.querySelectorAll("button"))
-            .map((button, index) => {
-              const rect = button.getBoundingClientRect();
-              return {
-                index,
-                visible: rect.width > 0 && rect.height > 0,
-                text: sanitize(button.textContent),
-                aria: button.getAttribute("aria-label") || "",
-                testId: button.getAttribute("data-testid") || "",
-                disabled: button.disabled || button.getAttribute("aria-disabled") === "true",
-              };
-            })
-            .filter((button) => button.visible && !button.disabled)
-            .slice(0, 24),
-          url: window.location.href,
-          title: document.title,
-          bodyStart: sanitize(text).slice(0, 500),
-        };
-      };
-      const tick = () => {
-        const snapshot = collect();
-        if (snapshot.ok) {
-          resolve(snapshot);
-          return;
-        }
-        if (Date.now() - startedAt >= timeoutMs) {
-          resolve(snapshot);
-          return;
-        }
-        setTimeout(tick, intervalMs);
-      };
-      tick();
-    })`,
-    true,
-  )) as {
-    ok?: boolean;
-    shellReady?: boolean;
-    inputbarReady?: boolean;
-    composerReady?: boolean;
-    problemTexts?: unknown[];
-    invokeErrors?: unknown[];
-    traceErrors?: unknown[];
-    visibleButtons?: unknown[];
-    url?: string;
-    title?: string;
-    bodyStart?: string;
-  };
-
-  if (result?.ok) {
-    return;
-  }
-
-  throw new Error(
-    `claw workbench shell not ready: ${JSON.stringify({
-      shellReady: result?.shellReady ?? false,
-      inputbarReady: result?.inputbarReady ?? false,
-      composerReady: result?.composerReady ?? false,
-      problemTexts: result?.problemTexts ?? [],
-      invokeErrors: result?.invokeErrors ?? [],
-      traceErrors: result?.traceErrors ?? [],
-      visibleButtons: result?.visibleButtons ?? [],
-      url: result?.url ?? "",
-      title: result?.title ?? "",
-      bodyStart: result?.bodyStart ?? "",
-    })}`,
-  );
 }
 
 async function exitElectronSmoke(exitCode: number): Promise<void> {

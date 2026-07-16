@@ -18,7 +18,7 @@ import {
 } from "./agentChatWorkspaceHelpers";
 import { useWorkspaceContextHarnessRuntime } from "./useWorkspaceContextHarnessRuntime";
 import { useWorkspaceRightSurfaceLocalStateRuntime } from "./useWorkspaceRightSurfaceLocalStateRuntime";
-import { hasRunningThreadReadActivity } from "./workspaceSceneSessionProjection";
+import { hasActiveThreadReadActivity } from "../projection/threadReadActivity";
 
 interface UseWorkspaceContextSurfaceRuntimeParams {
   activeTheme: string;
@@ -113,7 +113,8 @@ export function useWorkspaceContextSurfaceRuntime({
     todoItems,
   });
   const inputbarIsSending =
-    isSending || hasRunningThreadReadActivity(threadRead);
+    isSending ||
+    hasActiveThreadReadActivity(threadRead);
 
   useEffect(() => {
     onAgentStreamingChange?.(inputbarIsSending);

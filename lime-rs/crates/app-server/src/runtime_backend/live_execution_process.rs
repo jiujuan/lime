@@ -1,8 +1,9 @@
 use crate::execution_process::ExecutionProcessServer;
 use app_server_protocol::{
     ExecutionProcessDrainOutputParams, ExecutionProcessDrainOutputResponse,
-    ExecutionProcessIdParams, ExecutionProcessStartParams, ExecutionProcessStartResponse,
-    ExecutionProcessStatusResponse,
+    ExecutionProcessEmptyResponse, ExecutionProcessIdParams, ExecutionProcessStartParams,
+    ExecutionProcessStartResponse, ExecutionProcessStatusResponse,
+    ExecutionProcessWriteStdinParams,
 };
 use async_trait::async_trait;
 use tool_runtime::execution_process::live::RuntimeLiveExecutionGateway;
@@ -16,6 +17,13 @@ impl RuntimeLiveExecutionGateway for ExecutionProcessServer {
         self.start_process(params)
             .await
             .map_err(|error| error.to_string())
+    }
+
+    fn write_stdin(
+        &self,
+        params: ExecutionProcessWriteStdinParams,
+    ) -> Result<ExecutionProcessEmptyResponse, String> {
+        self.write_stdin(params).map_err(|error| error.to_string())
     }
 
     fn terminate(

@@ -250,7 +250,6 @@ struct TeamFactsSummary {
     work_item_ids: Vec<String>,
     team_phases: Vec<String>,
     source_event_ids: Vec<String>,
-    team_event_count: usize,
     task_event_count: usize,
     agent_event_count: usize,
     handoff_count: usize,
@@ -278,7 +277,6 @@ fn team_facts_summary(events: &[AgentEvent]) -> Value {
         }
 
         match event.event_type.as_str() {
-            "team.changed" => summary.team_event_count += 1,
             "task.changed" => summary.task_event_count += 1,
             "agent.changed" | "agent.spawned" | "agent.completed" => {
                 summary.agent_event_count += 1;
@@ -348,7 +346,6 @@ fn team_facts_summary(events: &[AgentEvent]) -> Value {
         "status": if event_count == 0 { "missing" } else { "exported" },
         "eventCount": event_count,
         "eventTypeBreakdown": summary.event_type_breakdown,
-        "teamEventCount": summary.team_event_count,
         "taskEventCount": summary.task_event_count,
         "agentEventCount": summary.agent_event_count,
         "handoffCount": summary.handoff_count,
@@ -370,8 +367,7 @@ fn team_facts_summary(events: &[AgentEvent]) -> Value {
 fn is_team_fact_event(event: &AgentEvent) -> bool {
     matches!(
         event.event_type.as_str(),
-        "team.changed"
-            | "task.changed"
+        "task.changed"
             | "agent.changed"
             | "agent.spawned"
             | "agent.completed"

@@ -143,9 +143,6 @@ pub(super) fn item_family(event_type: &str, payload: &Value) -> Option<ItemFamil
     if normalized.starts_with("mcp.") {
         return Some(ItemFamily::McpToolCall);
     }
-    if normalized.starts_with("collab.") {
-        return Some(ItemFamily::CollabAgentToolCall);
-    }
     if normalized == "approval.session_cache.hit" {
         return None;
     }
@@ -179,29 +176,7 @@ fn tool_family(payload: &Map<String, Value>) -> ItemFamily {
     {
         return ItemFamily::McpToolCall;
     }
-    let operation = map_string(
-        payload,
-        &["operation", "collabOperation", "collab_operation"],
-    );
-    let name = map_string(payload, &["toolName", "tool_name", "name"])
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if operation.is_some()
-        || matches!(
-            name.as_str(),
-            "spawn_agent"
-                | "send_message"
-                | "followup_task"
-                | "wait_agent"
-                | "interrupt_agent"
-                | "resume_agent"
-                | "close_agent"
-        )
-    {
-        ItemFamily::CollabAgentToolCall
-    } else {
-        ItemFamily::Tool
-    }
+    ItemFamily::Tool
 }
 
 pub(super) fn typed_payload(
@@ -256,7 +231,7 @@ pub(super) fn typed_payload(
         },
         ItemFamily::CollabAgentToolCall => ThreadItemPayload::CollabAgentToolCall {
             call_id: call_id(payload, fallback_call_id),
-            operation: collab_operation(payload),
+            operation: collab_operation(payload)?,
             target_thread_id: map_string(
                 payload,
                 &[
@@ -305,11 +280,28 @@ pub(super) fn typed_payload(
             command: map_string(payload, &["command", "cmd"])
                 .unwrap_or_else(|| "command".to_string()),
             cwd: map_string(payload, &["cwd", "workingDirectory", "working_dir"]),
-            output: map_string(payload, &["output", "stdout", "stderr", "result"]),
+            output: map_string(
+                payload,
+                &[
+                    "output",
+                    "stdout",
+                    "stderr",
+                    "result",
+                    "outputPreview",
+                    "output_preview",
+                    "preview",
+                    "summary",
+                ],
+            ),
             exit_code: map_i64(payload, &["exitCode", "exit_code"]).map(|value| value as i32),
         },
         ItemFamily::File => ThreadItemPayload::File {
             path: map_string(payload, &["path", "filePath", "file_path"])
+                .or_else(|| {
+                    string_list(payload, &["paths", "changedFiles", "changed_files"])
+                        .into_iter()
+                        .next()
+                })
                 .unwrap_or_else(|| "unknown".to_string()),
             diff: map_string(payload, &["diff", "patch", "content"]),
             status: file_change_status(event_type, payload),
@@ -331,7 +323,16 @@ pub(super) fn typed_payload(
             child_thread_id: ThreadId::new(
                 map_string(
                     payload,
-                    &["childThreadId", "child_thread_id", "threadId", "thread_id"],
+                    &[
+                        "childThreadId",
+                        "child_thread_id",
+                        "agentThreadId",
+                        "agent_thread_id",
+                        "sessionId",
+                        "session_id",
+                        "threadId",
+                        "thread_id",
+                    ],
                 )
                 .unwrap_or_else(|| "unknown".to_string()),
             ),
@@ -476,7 +477,7 @@ fn tool_output(payload: &Map<String, Value>) -> Option<ToolOutput> {
     (output != ToolOutput::default()).then_some(output)
 }
 
-fn collab_operation(payload: &Map<String, Value>) -> CollabAgentOperation {
+fn collab_operation(payload: &Map<String, Value>) -> Option<CollabAgentOperation> {
     let value = map_string(
         payload,
         &[
@@ -491,13 +492,8 @@ fn collab_operation(payload: &Map<String, Value>) -> CollabAgentOperation {
     .unwrap_or_default()
     .to_ascii_lowercase();
     match value.as_str() {
-        "send_message" | "sendmessage" => CollabAgentOperation::SendMessage,
-        "follow_up" | "followup" | "followup_task" => CollabAgentOperation::FollowUp,
-        "wait" | "wait_agent" => CollabAgentOperation::Wait,
-        "interrupt" | "interrupt_agent" => CollabAgentOperation::Interrupt,
-        "resume" | "resume_agent" => CollabAgentOperation::Resume,
-        "close" | "close_agent" => CollabAgentOperation::Close,
-        _ => CollabAgentOperation::Spawn,
+        "wait" | "wait_agent" => Some(CollabAgentOperation::Wait),
+        _ => None,
     }
 }
 

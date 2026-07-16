@@ -10,7 +10,6 @@ import {
   waitForGuiSessionVisible,
 } from "./claw-chat-current-fixture-session.mjs";
 import {
-  clearInvokeBuffers,
   evaluatePageSnapshot,
   invokeAppServerFromPage,
   reloadRendererDocument,
@@ -35,7 +34,6 @@ export async function verifyPlanHistoryHydrate({
     page,
     options,
   );
-  await clearInvokeBuffers(page);
 
   const guiPlanHistoryHydrateSessionVisible = await waitForGuiSessionVisible(
     page,

@@ -1,272 +1,76 @@
-# Lime Agent 评估指南
+# Lime Agent 与 Coding Evaluation
 
-> 基于 Anthropic AI Agent 评估指南的实践
+> status: current / Refactor v2
 
-## 概述
+## 1. 与确定性测试分开
 
-Lime 集成了 Agent Agent，需要专门的评估体系来确保 Agent 行为的正确性和稳定性。本指南基于 Anthropic 官方评估指南和 Orchids Bridge 项目的实践经验。
+Agent evaluation 回答“指定模型和配置完成任务的质量与稳定性如何”，不回答协议、状态机或 Electron 链是否正确。L0-L6 deterministic gate 失败时不运行 eval；eval 失败中可确定复现的 runtime/tool 缺陷必须下沉为内部回归测试。
 
-## 核心概念
+## 2. Evaluation 单元
 
-### 评估术语
+| 术语 | 含义 |
+| --- | --- |
+| Task | 版本化任务、环境、预算和 grader |
+| Trial | 指定 model/provider/config 下的一次独立执行 |
+| Trajectory | Thread/Turn/Item、工具、审批、请求和结果的脱敏记录 |
+| Outcome | verifier/grader 观察到的最终结果 |
+| Failure class | agent/model/runtime/tool/environment/verifier/budget |
 
-| 术语 | 定义 | Lime 示例 |
-|------|------|----------------|
-| **Task** | 单个测试任务 | "使用 Agent 读取文件并总结" |
-| **Trial** | 对任务的一次尝试 | 同一任务运行 5 次 |
-| **Grader** | 评分器 | 代码检查、LLM 判断 |
-| **Transcript** | 完整记录 | Agent 的所有消息和工具调用 |
-| **Outcome** | 最终结果 | 任务是否完成 |
+Task 不能把参考解、隐藏测试或 task-specific prompt patch 暴露给 Agent。
 
-### 评分器类型
+## 3. Grader
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        评分器类型                                │
-├─────────────────┬─────────────────┬─────────────────────────────┤
-│   代码评分器     │   模型评分器     │       人工评分器            │
-├─────────────────┼─────────────────┼─────────────────────────────┤
-│ • 工具调用验证   │ • 回答质量评估   │ • 复杂任务评审              │
-│ • 输出格式检查   │ • 语义相似度     │ • 边界情况判断              │
-│ • 状态断言       │ • 多轮对话评估   │ • 用户体验评估              │
-└─────────────────┴─────────────────┴─────────────────────────────┘
-```
+优先级：
 
-## 评估场景
+1. 程序化 verifier：测试、schema、文件、数据库或可观察状态。
+2. 结构化规则 grader：输出合同、工具权限、状态和 evidence 完整性。
+3. 模型 grader：语义/质量判断；必须版本化 rubric，并用人工样本校准。
+4. 人工评审：处理高价值、无法稳定自动判定的边界。
 
-### 1. 工具调用评估
+不要用 LLM grader 判定本可由代码精确验证的行为。
 
-验证 Agent 正确调用工具：
+## 4. 指标
 
-```rust
-#[cfg(test)]
-mod agent_tool_tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_file_read_tool_call() {
-        let agent = create_test_agent().await;
-        
-        let response = agent.chat("请读取 /test/file.txt 的内容").await;
-        
-        // 验证工具调用
-        assert!(response.tool_calls.iter().any(|tc| {
-            tc.name == "read_file" && 
-            tc.args.get("path") == Some(&"/test/file.txt".into())
-        }));
-    }
-
-    #[tokio::test]
-    async fn test_no_unnecessary_tool_calls() {
-        let agent = create_test_agent().await;
-        
-        // 简单问题不应该调用工具
-        let response = agent.chat("1 + 1 等于多少？").await;
-        
-        assert!(response.tool_calls.is_empty());
-    }
-}
+```text
+pass@k = P(k 次尝试至少一次成功)
+pass^k = P(k 次尝试全部成功)
 ```
 
-### 2. 流式响应评估
+同时记录：pass@1、成本、wall time、token、tool failures、approval/sandbox failures、no-op、timeout、patch size 和 failure class。所有比较必须固定 task slice、source commit、model/provider、tool policy、预算和 adapter version。
 
-验证流式输出的正确性：
+## 5. DeepSWE Coding
 
-```rust
-#[tokio::test]
-async fn test_streaming_response_format() {
-    let agent = create_test_agent().await;
-    let mut stream = agent.chat_stream("你好").await;
-    
-    let mut events = Vec::new();
-    while let Some(event) = stream.next().await {
-        events.push(event);
-    }
-    
-    // 验证事件序列
-    assert!(events.iter().any(|e| matches!(e, StreamEvent::Start)));
-    assert!(events.iter().any(|e| matches!(e, StreamEvent::Delta(_))));
-    assert!(events.iter().any(|e| matches!(e, StreamEvent::Stop)));
-}
+[DeepSWE v2 Coding 切片](../roadmap/benchmark/deepswe-coding-slice.md) 固定：
 
-#[tokio::test]
-async fn test_streaming_content_accumulation() {
-    let agent = create_test_agent().await;
-    let mut stream = agent.chat_stream("写一首短诗").await;
-    
-    let mut content = String::new();
-    while let Some(event) = stream.next().await {
-        if let StreamEvent::Delta(delta) = event {
-            content.push_str(&delta);
-        }
-    }
-    
-    // 验证内容非空且有意义
-    assert!(!content.is_empty());
-    assert!(content.len() > 20);
-}
-```
+- Smoke 10：5 种语言各两题，用于 adapter/model/runtime 候选快速比较。
+- Release 20：覆盖 streaming、cancellation、cache/persistence、multi-agent、parser/API 和 deterministic rewrite。
+- Adapter 必须通过 Lime App Server JSON-RPC current 链执行，DeepSWE separate verifier 独立判分。
 
-### 3. 错误处理评估
+DeepSWE source、任务 ID 和执行合同见 `deepswe-coding-slice-v2.json`。旧 fixed-ten dry-run 结果不继承。
 
-验证 Agent 正确处理错误：
+## 6. 产品任务 Eval
 
-```rust
-#[tokio::test]
-async fn test_invalid_tool_graceful_handling() {
-    let agent = create_test_agent().await;
-    
-    // 请求不存在的文件
-    let response = agent.chat("读取 /nonexistent/file.txt").await;
-    
-    // Agent 应该优雅处理错误
-    assert!(response.content.contains("文件不存在") || 
-            response.content.contains("无法找到"));
-}
+产品 eval 应来自真实高价值 workflow，例如 coding、工具审批、MCP/Skills、multi-agent、history recovery 和 multimodal。Replay 提升为 current task 前必须：
 
-#[tokio::test]
-async fn test_timeout_handling() {
-    let agent = create_test_agent_with_timeout(Duration::from_secs(1)).await;
-    
-    // 长时间任务应该超时
-    let result = agent.chat("执行一个需要很长时间的任务").await;
-    
-    assert!(result.is_err() || result.unwrap().content.contains("超时"));
-}
-```
+- 脱敏并最小化；
+- 固定输入、环境和 expected outcome；
+- 指定 grader 与失败分类；
+- 映射 [../roadmap/benchmark/scenario-matrix.md](../roadmap/benchmark/scenario-matrix.md)；
+- 证明不是某次实现轨迹的过拟合快照。
 
-## 评估指标
+## 7. 运行 Lane
 
-### pass@k 与 pass^k
+| Lane | Trials | 用途 |
+| --- | --- | --- |
+| bring-up | 1 | adapter/verifier/evidence 完整性，不评模型质量 |
+| smoke | 1/task | runtime/model 候选快速信号 |
+| bake-off | 3/task 或预算批准值 | pass@k/pass^k、成本和稳定性比较 |
+| release | 冻结策略 | 对稳定 baseline 做 non-inferiority 判断 |
 
-```
-pass@k = P(至少 1 次成功 | k 次尝试)
-pass^k = P(全部成功 | k 次尝试)
-```
+Live/eval 必须显式授权并隔离凭证。默认 PR 不调用真实 provider。
 
-**应用场景**：
-- **pass@k**：代码生成、创意任务（找到一个解决方案即可）
-- **pass^k**：关键操作、用户交互（每次都必须成功）
+## 8. Evidence 与安全
 
-### 评估脚本
+每次 trial 记录 task/source、candidate、model/provider/config、tool catalog、budget、trajectory、outcome、grader、cost 和 failure class。不得保存 API key、Authorization、真实用户数据、reference solution、隐藏 verifier 内容或敏感本地路径。
 
-```rust
-async fn evaluate_task(task: &Task, trials: usize) -> EvalResult {
-    let mut successes = 0;
-    let mut transcripts = Vec::new();
-    
-    for _ in 0..trials {
-        let agent = create_fresh_agent().await;
-        let transcript = agent.run_task(task).await;
-        
-        let passed = task.grader.evaluate(&transcript);
-        if passed {
-            successes += 1;
-        }
-        
-        transcripts.push(transcript);
-    }
-    
-    EvalResult {
-        task_id: task.id.clone(),
-        trials,
-        successes,
-        pass_at_k: 1.0 - (1.0 - successes as f64 / trials as f64).powi(trials as i32),
-        pass_pow_k: (successes as f64 / trials as f64).powi(trials as i32),
-        transcripts,
-    }
-}
-```
-
-## 测试套件组织
-
-### 能力评估 vs 回归评估
-
-| 类型 | 目标 | 初始通过率 | 用途 |
-|------|------|-----------|------|
-| **能力评估** | Agent 能做什么？ | 低 | 推动改进 |
-| **回归评估** | Agent 还能做以前能做的吗？ | ~100% | 防止退化 |
-
-### 测试套件结构
-
-```
-tests/agent/
-├── capability/              # 能力评估
-│   ├── file_operations.rs   # 文件操作能力
-│   ├── code_generation.rs   # 代码生成能力
-│   └── reasoning.rs         # 推理能力
-├── regression/              # 回归评估
-│   ├── basic_chat.rs        # 基础对话
-│   ├── tool_calls.rs        # 工具调用
-│   └── streaming.rs         # 流式响应
-└── edge_cases/              # 边界情况
-    ├── error_handling.rs
-    └── timeout.rs
-```
-
-## 评估原则
-
-### 1. 评估结果，而非路径
-
-```rust
-// ❌ 错误：检查具体的工具调用顺序
-fn test_bad() {
-    assert_eq!(transcript[0].tool, "list_files");
-    assert_eq!(transcript[1].tool, "read_file");
-}
-
-// ✅ 正确：检查最终结果
-fn test_good() {
-    assert!(outcome.file_content.contains("expected content"));
-}
-```
-
-### 2. 平衡问题集
-
-```rust
-// 测试"应该做"
-#[test]
-fn test_should_read_file_when_asked() { ... }
-
-// 测试"不应该做"
-#[test]
-fn test_should_not_read_file_without_permission() { ... }
-```
-
-### 3. 从 Bug 到测试
-
-每个修复的 Bug 都应该有对应的测试用例：
-
-```rust
-// Bug: Agent 在文件不存在时无限重试
-// 修复后添加测试
-#[test]
-fn test_no_infinite_retry_on_missing_file() {
-    let agent = create_test_agent();
-    let response = agent.chat("读取 /nonexistent.txt").await;
-    
-    // 验证重试次数有限
-    assert!(response.tool_calls.len() <= 3);
-}
-```
-
-## 运行评估
-
-```bash
-# 运行所有 Agent 评估
-cd lime-rs && cargo test agent::
-
-# 运行能力评估
-cargo test agent::capability::
-
-# 运行回归评估
-cargo test agent::regression::
-
-# 运行多次试验
-cargo test agent:: -- --test-threads=1 --nocapture
-```
-
-## 下一步
-
-- [测试用例：Agent](test-cases/agent-tests.md)
-- [单元测试指南](unit-tests.md)
+公开 benchmark prompt 不进入 system prompt、skill 或 task router；发现 task-specific 特判时结果作废并按数据污染处理。

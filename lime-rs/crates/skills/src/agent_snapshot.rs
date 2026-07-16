@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 use crate::skill_summary::{load_skill_summaries_from_directory, LoadedSkillSummary};
 use lime_core::app_paths;
 
-const PROJECT_SKILLS_RELATIVE_DIR: &str = ".agents/skills";
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSkillMetadata {
     pub skill_id: String,
@@ -288,21 +286,22 @@ pub fn agent_skill_roots_for_workspace(
     let mut roots = Vec::new();
 
     if let Some(project_root) = project_root {
-        push_unique_root(
-            &mut roots,
-            project_root.join(PROJECT_SKILLS_RELATIVE_DIR),
-            AgentSkillScope::Project,
-        );
+        for path in app_paths::resolve_project_skill_roots(project_root) {
+            push_unique_root(&mut roots, path, AgentSkillScope::Project);
+        }
     }
     if let Some(working_dir) = working_dir {
-        push_unique_root(
-            &mut roots,
-            working_dir.join(PROJECT_SKILLS_RELATIVE_DIR),
-            AgentSkillScope::Project,
-        );
+        for path in app_paths::resolve_project_skill_roots(working_dir) {
+            push_unique_root(&mut roots, path, AgentSkillScope::Project);
+        }
     }
 
     for root in default_agent_skill_roots() {
+        if root.scope == AgentSkillScope::Project
+            && (working_dir.is_some() || project_root.is_some())
+        {
+            continue;
+        }
         push_unique_root(&mut roots, root.path, root.scope);
     }
 
@@ -556,6 +555,13 @@ mod tests {
         assert!(roots
             .iter()
             .any(|root| root.path == working.join(".agents/skills")));
+        assert!(roots
+            .iter()
+            .any(|root| root.path == workspace.path().join(".codex/skills")));
+        assert!(roots
+            .iter()
+            .filter(|root| root.scope == AgentSkillScope::Project)
+            .all(|root| root.path.starts_with(workspace.path())));
     }
 
     #[test]

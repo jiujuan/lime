@@ -182,9 +182,6 @@ fn update_session_business_object_metadata(
     if let Some(value) = params.recent_preferences.as_ref() {
         updates.insert("recentPreferences".to_string(), value.clone());
     }
-    if let Some(value) = params.recent_team_selection.as_ref() {
-        updates.insert("recentTeamSelection".to_string(), value.clone());
-    }
     if let Some(value) = params.article_workspace_selected_object_ref.as_ref() {
         updates.insert(
             "articleWorkspaceSelectedObjectRef".to_string(),
@@ -266,19 +263,34 @@ impl RuntimeCore {
     fn list_runtime_core_session_overviews(
         &self,
         params: &AgentSessionListParams,
-    ) -> Vec<AgentSessionOverview> {
+    ) -> Result<Vec<AgentSessionOverview>, RuntimeCoreError> {
         if params.archived_only.unwrap_or(false) {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let scope = SessionListScope::from_params(params);
+        let pending_thread_ids = self
+            .projection_store
+            .as_ref()
+            .map(|store| {
+                store
+                    .list_pending_thread_spawn_ids_sync()
+                    .map(|thread_ids| thread_ids.into_iter().collect::<HashSet<_>>())
+                    .map_err(|error| RuntimeCoreError::Backend(error.to_string()))
+            })
+            .transpose()?
+            .unwrap_or_default();
         let state = self
             .state
             .lock()
             .expect("runtime core state mutex poisoned");
-        state
+        Ok(state
             .sessions
             .values()
+            .filter(|stored| {
+                !pending_thread_ids
+                    .contains(&agent_protocol::ThreadId::new(stored.session.thread_id.clone()))
+            })
             .filter(|stored| !stored_session_hidden_from_user_recents(stored))
             .map(stored_session_to_overview)
             .filter(|overview| {
@@ -287,7 +299,7 @@ impl RuntimeCore {
                     overview.working_dir.as_deref(),
                 )
             })
-            .collect()
+            .collect())
     }
 
     pub async fn list_agent_sessions(
@@ -308,7 +320,7 @@ impl RuntimeCore {
             }
         }
         sessions.extend(
-            self.list_runtime_core_session_overviews(&params)
+            self.list_runtime_core_session_overviews(&params)?
                 .into_iter()
                 .filter(|session| persisted_session_ids.insert(session.session_id.clone())),
         );
@@ -409,6 +421,9 @@ impl RuntimeCore {
                 .cloned()
                 .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?
         };
+        if self.is_pending_agent_control_thread(&stored.session.thread_id)? {
+            return Err(RuntimeCoreError::SessionNotFound(params.session_id));
+        }
         let workflow_audit_events =
             self.read_workflow_audit_events_for_session(&params.session_id)?;
         let detail = read_model::runtime_session_read_detail_with_options(
@@ -445,6 +460,9 @@ impl RuntimeCore {
             .get(session_id)
             .map(|stored| stored.session.thread_id.clone())
         {
+            if self.is_pending_agent_control_thread(&thread_id)? {
+                return Err(RuntimeCoreError::SessionNotFound(session_id.to_string()));
+            }
             return Ok(thread_id);
         }
         if let Some(projection_store) = self.projection_store.as_ref() {
@@ -486,7 +504,6 @@ impl RuntimeCore {
                         execution_strategy: params.execution_strategy.clone(),
                         recent_access_mode: params.recent_access_mode.clone(),
                         recent_preferences: params.recent_preferences.clone(),
-                        recent_team_selection: params.recent_team_selection.clone(),
                         article_workspace_selected_object_ref: params
                             .article_workspace_selected_object_ref
                             .clone(),
@@ -682,7 +699,14 @@ impl RuntimeCore {
             .state
             .lock()
             .expect("runtime core state mutex poisoned");
-        state.sessions.contains_key(session_id)
+        state
+            .sessions
+            .get(session_id)
+            .is_some_and(|stored| {
+                !self
+                    .is_pending_agent_control_thread(&stored.session.thread_id)
+                    .unwrap_or(true)
+            })
     }
 
     fn insert_hydrated_session(&self, stored: StoredSession) {

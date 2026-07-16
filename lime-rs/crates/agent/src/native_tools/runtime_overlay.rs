@@ -28,9 +28,11 @@ impl NativeRegistration {
 }
 
 pub(crate) fn current_native_tool_definitions() -> Vec<RuntimeToolDefinition> {
-    runtime_native_tool_install_plan()
+    let mut definitions = runtime_native_tool_install_plan()
         .iter()
         .map(|step| runtime_native_tool_definition(step.tool()))
         .filter(|definition| runtime_native_tool_registration_is_allowed(&definition.name))
-        .collect()
+        .collect::<Vec<_>>();
+    definitions.extend(tool_runtime::unified_exec::unified_exec_tool_definitions());
+    definitions
 }

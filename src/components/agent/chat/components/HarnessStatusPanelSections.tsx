@@ -10,7 +10,6 @@ import {
   HarnessAgentUiProjectionSection,
   HarnessRuntimeFactsSection,
   HarnessRuntimeTaskSection,
-  HarnessTeamConfigSection,
 } from "./HarnessRuntimeOverviewSections";
 import { HarnessToolInventorySection } from "./HarnessToolInventorySection";
 import {
@@ -53,8 +52,6 @@ export interface HarnessStatusPanelSectionsProps {
     key: HarnessSectionKey,
     node: HTMLElement | null,
   ) => void;
-  hasSelectedTeamConfig: boolean;
-  teamConfigSectionProps: ComponentProps<typeof HarnessTeamConfigSection>;
   runtimeTaskSectionProps:
     | ComponentProps<typeof HarnessRuntimeTaskSection>
     | null;
@@ -76,8 +73,6 @@ export interface HarnessStatusPanelSectionsProps {
 
 export function HarnessStatusPanelSections({
   registerSectionRef,
-  hasSelectedTeamConfig,
-  teamConfigSectionProps,
   runtimeTaskSectionProps,
   handoffSectionProps,
   objectiveSection,
@@ -92,10 +87,6 @@ export function HarnessStatusPanelSections({
 }: HarnessStatusPanelSectionsProps) {
   return (
     <>
-      {hasSelectedTeamConfig ? (
-        <HarnessTeamConfigSection {...teamConfigSectionProps} />
-      ) : null}
-
       {runtimeTaskSectionProps ? (
         <HarnessRuntimeTaskSection {...runtimeTaskSectionProps} />
       ) : null}

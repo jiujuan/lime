@@ -13,7 +13,6 @@ import {
   normalizeToolResultMetadata,
   resolveCommandOutputStreams,
   resolveCommandToolSummary,
-  resolveImportedSourceToolPresentation,
   resolveSkillInvocationContentInfo,
   resolveToolResultPath,
   resolveUserFacingPathName,
@@ -145,9 +144,9 @@ describe("ToolCallDisplayViewModel", () => {
     ]);
   });
 
-  it("导入命令记录应保留事实源但隐藏原始命令和输出展示", () => {
+  it("导入 provenance 不应改变普通命令摘要、输出和分组语义", () => {
     const toolCall = baseToolCall({
-      name: "command_execution",
+      name: "exec_command",
       arguments: JSON.stringify({ command: "npm test" }),
       result: {
         success: true,
@@ -161,79 +160,31 @@ describe("ToolCallDisplayViewModel", () => {
       },
     });
 
-    expect(resolveImportedSourceToolPresentation(toolCall)).toEqual({
-      kind: "command_record",
-    });
     expect(
       resolveCommandToolSummary({
         toolName: toolCall.name,
         args: { command: "npm test" },
         metadata: normalizeToolResultMetadata(toolCall.result?.metadata),
       }),
-    ).toBeNull();
+    ).toEqual(
+      expect.objectContaining({
+        command: "npm test",
+        exitCode: 0,
+      }),
+    );
     expect(
       resolveCommandOutputStreams({
         output: toolCall.result?.output,
         metadata: normalizeToolResultMetadata(toolCall.result?.metadata),
       }),
-    ).toEqual([]);
-    expect(
-      buildToolGroupPreview([toolCall], () => "+1", () => "导入的命令记录"),
-    ).toBe("导入的命令记录");
-  });
-
-  it("导入命令记录即使只有顶层 metadata 也应按只读历史记录展示", () => {
-    const toolCall = baseToolCall({
-      name: "exec_command",
-      arguments: JSON.stringify({ command: "npm test" }),
-      metadata: {
-        imported: true,
-        imported_synthetic: true,
-        source_client: "codex",
-        exit_code: 0,
+    ).toEqual([
+      {
+        key: "stdout",
+        content: "ok",
+        tone: "neutral",
       },
-      result: undefined,
-    });
-
-    expect(resolveImportedSourceToolPresentation(toolCall)).toEqual({
-      kind: "command_record",
-    });
-  });
-
-  it("导入命令记录不应把来源判断写死到单一客户端", () => {
-    const toolCall = baseToolCall({
-      name: "exec_command",
-      arguments: JSON.stringify({ command: "npm test" }),
-      result: {
-        success: true,
-        output: "ok",
-        metadata: {
-          source_client: "claude_code",
-          exit_code: 0,
-          stdout_text: "ok",
-        },
-      },
-    });
-
-    expect(resolveImportedSourceToolPresentation(toolCall)).toEqual({
-      kind: "command_record",
-    });
-    expect(
-      resolveCommandToolSummary({
-        toolName: toolCall.name,
-        args: { command: "npm test" },
-        metadata: normalizeToolResultMetadata(toolCall.result?.metadata),
-      }),
-    ).toBeNull();
-    expect(
-      resolveCommandOutputStreams({
-        output: toolCall.result?.output,
-        metadata: normalizeToolResultMetadata(toolCall.result?.metadata),
-      }),
-    ).toEqual([]);
-    expect(
-      buildToolGroupPreview([toolCall], () => "+1", () => "导入的命令记录"),
-    ).toBe("导入的命令记录");
+    ]);
+    expect(buildToolGroupPreview([toolCall], () => "+1")).toContain("npm test");
   });
 
   it("应识别 Skill 调用并隐藏原始 metadata 细节", () => {

@@ -27,6 +27,9 @@
 - 路线图主线：`internal/roadmap/`
 - 参考运行时主链总计划：`internal/exec-plans/upstream-runtime-alignment-plan.md`
 - 参考运行时主链进度日志：`internal/exec-plans/upstream-runtime-alignment-progress.md`
+- Refactor v2 全项目 Gate A/B 验收计划：`internal/exec-plans/project-gate-a-b-acceptance-plan.md`
+- Codex 对话兼容重构：`internal/exec-plans/codex-conversation-compat-refactor-plan.md`
+- Refactor v2 测试体系第二期计划：`internal/exec-plans/refactor-v2-test-phase-2-plan.md`
 - Agent Runtime 单一投影入口收口计划：`internal/exec-plans/agent-runtime-single-projection-entry-plan.md`
 - Claw Streaming Rendering Codex 对齐重构计划：`internal/exec-plans/claw-streaming-rendering-codex-refactor-plan.md`
 - Claw Trace 系统实施全过程计划：`internal/exec-plans/claw-trace-system-implementation-plan.md`

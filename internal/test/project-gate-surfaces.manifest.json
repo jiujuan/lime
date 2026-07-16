@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "surfaces": [
+    {
+      "id": "SHELL-01",
+      "priority": "P0",
+      "owners": ["desktop-host", "quality-workflow"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "SHELL-02",
+      "priority": "P0",
+      "owners": ["app-paths", "desktop-host"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "AGENT-01",
+      "priority": "P0",
+      "owners": ["agent-runtime", "app-server"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "AGENT-02",
+      "priority": "P0",
+      "owners": ["agent-runtime", "app-server"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "AGENT-03",
+      "priority": "P0",
+      "owners": ["app-server", "thread-store"],
+      "requiredProofs": ["gate-a", "gate-b-f", "gate-b-r"]
+    },
+    {
+      "id": "AGENT-04",
+      "priority": "P0",
+      "owners": ["agent-runtime", "tool-runtime"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "AGENT-05",
+      "priority": "P0",
+      "owners": ["tool-runtime", "app-server"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "AGENT-06",
+      "priority": "P0",
+      "owners": ["agent-runtime", "app-server", "thread-store"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "AGENT-07",
+      "priority": "P0",
+      "owners": ["mcp", "tool-runtime", "app-server"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "AGENT-08",
+      "priority": "P1",
+      "owners": ["skills", "agent-gui"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "PROVIDER-01",
+      "priority": "P0",
+      "owners": ["model-provider", "settings"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "HOME-01",
+      "priority": "P0",
+      "owners": ["agent-gui"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "WORK-01",
+      "priority": "P0",
+      "owners": ["agent-gui", "workspace"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "WORK-02",
+      "priority": "P1",
+      "owners": ["workspace", "app-server"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "WORK-03",
+      "priority": "P1",
+      "owners": ["content-factory", "workspace"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "WORK-04",
+      "priority": "P1",
+      "owners": ["media-runtime", "model-provider"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "WORK-05",
+      "priority": "P1",
+      "owners": ["browser-runtime"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "PAGE-01",
+      "priority": "P1",
+      "owners": ["skills", "agent-gui"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "PAGE-02",
+      "priority": "P1",
+      "owners": ["skills", "agent-gui"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "PAGE-03",
+      "priority": "P1",
+      "owners": ["plugin-runtime"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "PAGE-04",
+      "priority": "P1",
+      "owners": ["knowledge", "agent-runtime"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "PAGE-05",
+      "priority": "P1",
+      "owners": ["automation", "agent-runtime"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    },
+    {
+      "id": "PAGE-06",
+      "priority": "P1",
+      "owners": ["channels"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "PAGE-07",
+      "priority": "P1",
+      "owners": ["resources"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "PAGE-08",
+      "priority": "P1",
+      "owners": ["browser-runtime"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "SETTINGS-01",
+      "priority": "P0",
+      "owners": ["settings", "desktop-host", "app-server"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "HOST-01",
+      "priority": "P0",
+      "owners": ["desktop-host"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "HOST-02",
+      "priority": "P1",
+      "owners": ["desktop-host"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "RELEASE-01",
+      "priority": "P0",
+      "owners": ["release-workflow"],
+      "requiredProofs": ["gate-a", "gate-b-p"]
+    },
+    {
+      "id": "RELEASE-02",
+      "priority": "P1",
+      "owners": ["release-workflow"],
+      "requiredProofs": ["gate-a", "gate-b-p"]
+    },
+    {
+      "id": "CROSS-01",
+      "priority": "P0",
+      "owners": ["i18n", "quality-workflow"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "CROSS-02",
+      "priority": "P1",
+      "owners": ["accessibility", "quality-workflow"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "CROSS-03",
+      "priority": "P0",
+      "owners": ["security", "quality-workflow"],
+      "requiredProofs": ["gate-a", "gate-b-f"]
+    },
+    {
+      "id": "CROSS-04",
+      "priority": "P1",
+      "owners": ["performance", "quality-workflow"],
+      "requiredProofs": ["gate-a", "gate-b-r"]
+    }
+  ]
+}

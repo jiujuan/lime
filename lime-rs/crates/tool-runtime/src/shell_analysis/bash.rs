@@ -248,14 +248,25 @@ fn extract_read_targets(raw_words: &[String], command_name: &str) -> Vec<String>
 
     let mut positional_targets = Vec::new();
     let mut after_double_dash = false;
+    let mut skip_write_redirection_target = false;
 
     for word in raw_words.iter().skip(start_index + 1) {
+        if skip_write_redirection_target {
+            skip_write_redirection_target = false;
+            continue;
+        }
         if !after_double_dash && word == "--" {
             after_double_dash = true;
             continue;
         }
 
         let normalized = normalize_shell_word(word);
+        if !after_double_dash {
+            if let Some(has_inline_target) = bash_write_redirection_word(&normalized) {
+                skip_write_redirection_target = !has_inline_target;
+                continue;
+            }
+        }
         if !after_double_dash && normalized.starts_with('-') {
             continue;
         }
@@ -399,6 +410,23 @@ fn has_bash_write_redirection(command: &str) -> bool {
         .captures_iter(command)
         .filter_map(|captures| captures.name("target"))
         .any(|target| !is_safe_shell_sink(target.as_str()))
+}
+
+fn bash_write_redirection_word(word: &str) -> Option<bool> {
+    let captures = bash_write_redirection_word_re().captures(word)?;
+    Some(
+        captures
+            .name("target")
+            .is_some_and(|target| !target.as_str().is_empty()),
+    )
+}
+
+fn bash_write_redirection_word_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"^(?:\d+|&)?(?:>\||>>?)(?P<target>.*)$")
+            .expect("valid bash write redirection word regex")
+    })
 }
 
 fn shell_env_assign_re() -> &'static Regex {

@@ -11,7 +11,6 @@ import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import type { MarkdownRenderMode } from "./MarkdownRenderer";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
 import {
-  isImportedProcessMetadata,
   shouldSplitProcessBeforeEntry,
   type StreamingProcessEntry,
 } from "./StreamingProcessGroupModel";
@@ -600,8 +599,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             kind: "thinking",
             id: `thinking-${index}`,
             text: part.text,
-            defaultExpanded:
-              isStreaming || isImportedProcessMetadata(part.metadata),
+            defaultExpanded: isStreaming,
             isActive: isStreaming,
             autoCollapseEligible: hasDownstreamContent,
             metadata: part.metadata,
@@ -628,7 +626,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             nextEntry,
           );
           const shouldKeepCompletedProcessIntroWithTool =
-            !isStreaming && processBufferOnlyThinking() && shouldSplitBeforeTool;
+            !isStreaming &&
+            processBufferOnlyThinking() &&
+            shouldSplitBeforeTool;
           if (
             isStreaming &&
             processBufferOnlyThinking() &&
@@ -802,13 +802,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         return (
           <>
             {processSegments.map((segment, segmentIndex) =>
-              renderProcessRun(
-                segment,
-                `fallback-process-${segmentIndex}`,
-                {
-                  forceGroup: true,
-                },
-              ),
+              renderProcessRun(segment, `fallback-process-${segmentIndex}`, {
+                forceGroup: true,
+              }),
             )}
           </>
         );

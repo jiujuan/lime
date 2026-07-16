@@ -63,7 +63,7 @@ test("subagents model carries collaboration facts for runtime and workbench surf
   const model = buildAgentUiSubagentsModel([
     event({
       id: "evt-subagent-running",
-      eventClass: "subagent.status",
+      eventClass: "agent.changed",
       status: "running",
       sequence: 1,
       payload: {
@@ -73,7 +73,7 @@ test("subagents model carries collaboration facts for runtime and workbench surf
           surface: "collaboration",
           collaborationSurface: "team_roster",
           collaborationPhase: "acting",
-          collaborationKind: "subagent_status",
+          collaborationKind: "subagent_activity",
           profileId: "cool_confident_operator",
           packId: "stylepack.cool_confident_operator.v1",
           toneVariant: "cool_confident",
@@ -95,28 +95,25 @@ test("subagents model carries collaboration facts for runtime and workbench surf
   assert.equal(model.threads[0].collaboration?.riskLevel, "normal");
   assert.equal(
     model.threads[0].collaboration?.collaborationFacts?.collaborationKind,
-    "subagent_status",
+    "subagent_activity",
   );
   assert.equal(
     model.activities[0].collaboration?.profileId,
     "cool_confident_operator",
   );
-  assert.equal(
-    model.delegationCalls[0].collaboration?.packId,
-    "stylepack.cool_confident_operator.v1",
-  );
+  assert.equal(model.delegationCalls.length, 0);
 
   const snapshot = buildAgentUiSubagentsModel([
     event({
       id: "evt-subagent-running-copy",
-      eventClass: "subagent.status",
+      eventClass: "agent.changed",
       status: "running",
       sequence: 1,
       payload: {
         collaborationFacts: {
           collaborationSurface: "team_roster",
           collaborationPhase: "acting",
-          collaborationKind: "subagent_status",
+          collaborationKind: "subagent_activity",
         },
       },
     }),
@@ -171,7 +168,7 @@ test("App Server facts normalize cancelled and closed event statuses as terminal
       sequence: 1,
       sessionId: "session-1",
       threadId: "thread-parent",
-      type: "subagent.status",
+      type: "agent.changed",
       timestamp: "2026-06-12T00:00:00.000Z",
       payload: {
         subagentId: "subagent-closed",
@@ -210,7 +207,7 @@ test("App Server facts normalize cancelled and closed event statuses as terminal
   assert.deepEqual(
     executionEvents.map((item) => [item.eventClass, item.status]),
     [
-      ["subagent.status", "failed"],
+      ["agent.changed", "failed"],
       ["task.updated", "failed"],
       ["action.expired", "failed"],
     ],

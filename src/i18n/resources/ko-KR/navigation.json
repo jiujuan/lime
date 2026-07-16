@@ -189,7 +189,6 @@
   "navigation.sidebar.importDialog.empty.noThreads": "가져올 수 있는 로컬 기록을 찾지 못했습니다",
   "navigation.sidebar.importDialog.meta.source": "소스",
   "navigation.sidebar.importDialog.source.localHistory": "로컬 기록",
-  "navigation.sidebar.importDialog.source.claudeCode": "Claude Code",
   "navigation.sidebar.importDialog.target.standalone": "독립 대화",
   "navigation.sidebar.importDialog.preview.loading": "미리보기 생성 중",
   "navigation.sidebar.importDialog.preview.empty": "미리 볼 로컬 기록 대화를 선택하세요",

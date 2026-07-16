@@ -63,6 +63,9 @@ impl RuntimeCore {
         let Some(stored) = stored else {
             return Ok(None);
         };
+        if self.is_pending_agent_control_thread(&stored.session.thread_id)? {
+            return Ok(None);
+        }
         let workflow_audit_events =
             self.read_workflow_audit_events_for_session(&params.session_id)?;
         let detail = match self.projection_store.as_deref() {
@@ -477,7 +480,7 @@ fn active_turn_id_from_stored_turns(stored: &StoredSession) -> Option<Value> {
         .turns
         .iter()
         .rev()
-        .find(|turn| super::status::agent_turn_is_active(turn.status))
+        .find(|turn| super::status::agent_turn_blocks_queue_resume(turn.status))
         .map(|turn| json!(turn.turn_id))
 }
 
@@ -517,8 +520,8 @@ mod tests {
     use app_server_protocol::AgentTurnStatus;
 
     #[test]
-    fn active_turn_id_from_stored_turns_uses_latest_active_turn() {
-        let stored = StoredSession {
+    fn active_turn_id_from_stored_turns_uses_latest_executing_turn() {
+        let mut stored = StoredSession {
             session: AgentSession {
                 session_id: "sess-active-turn".to_string(),
                 thread_id: "thread-active-turn".to_string(),
@@ -557,5 +560,8 @@ mod tests {
             active_turn_id_from_stored_turns(&stored),
             Some(json!("turn-running"))
         );
+
+        stored.turns[1].status = AgentTurnStatus::Queued;
+        assert_eq!(active_turn_id_from_stored_turns(&stored), None);
     }
 }

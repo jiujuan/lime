@@ -93,7 +93,6 @@ export const AGENT_UI_TASK_EVENT_TYPES = new Set<AgentUiEventClass>([
   "agent.spawned",
   "agent.completed",
   "agent.handoff",
-  "team.changed",
   "worker.notification",
 ]);
 
@@ -229,7 +228,6 @@ export const AGENT_UI_SUBAGENTS_EVENT_TYPES = new Set<AgentUiEventClass>([
   "agent.spawned",
   "agent.completed",
   "agent.handoff",
-  "team.changed",
   "worker.notification",
   "review.requested",
   "review.completed",

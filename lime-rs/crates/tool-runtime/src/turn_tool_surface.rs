@@ -7,7 +7,14 @@ pub const TURN_TOOL_SURFACE_DIRECT_ANSWER: &str = "direct_answer";
 pub const TURN_TOOL_SURFACE_LOCAL_WORKSPACE: &str = "local_workspace";
 pub const TURN_TOOL_SURFACE_COMPACT_TOOLS: &str = "compact_tools";
 
-pub const LOCAL_WORKSPACE_TOOL_NAMES: &[&str] = &["Bash", "Read", "view_image", "Glob", "Grep"];
+pub const LOCAL_WORKSPACE_TOOL_NAMES: &[&str] = &[
+    "exec_command",
+    "write_stdin",
+    "Read",
+    "view_image",
+    "Glob",
+    "Grep",
+];
 pub const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
     "ToolSearch",
     "list_mcp_resources",
@@ -18,8 +25,8 @@ pub const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
     "view_image",
     "Glob",
     "Grep",
-    "Bash",
-    "PowerShell",
+    "exec_command",
+    "write_stdin",
     "apply_patch",
     "request_user_input",
     "WebSearch",
@@ -27,17 +34,6 @@ pub const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
     "StructuredOutput",
 ];
 pub const RESOURCE_GATED_TOOL_NAMES: &[&str] = &["list_mcp_resources", "read_mcp_resource"];
-pub const SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES: &[&str] = &[
-    "Bash",
-    "PowerShell",
-    "Read",
-    "Glob",
-    "Grep",
-    "WebFetch",
-    "WebSearch",
-];
-pub const SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES: &[&str] = &["Skill", "ToolSearch"];
-pub const RUNTIME_TOOL_SURFACE_POWERSHELL_ENV: &str = "AGENT_USE_POWERSHELL_TOOL";
 
 pub const DIRECT_ANSWER_TURN_GUIDANCE: &str = "【当前回合执行约束】本回合应优先直接回答。除非信息明显不足或用户明确要求，否则不要调用工具，也不要把简单回复扩展成多阶段流程。";
 pub const LOCAL_WORKSPACE_TURN_GUIDANCE: &str = "【当前回合执行约束】本回合只允许使用本地工作区工具。先用最少的侦查动作定位关键文件，优先小范围目录/文件列表与精确搜索；通常先控制在 3 到 6 次工具调用内拿到关键证据，只有前一步明确暴露新线索时再继续深入。若需要连续侦查，请把相互独立的读取/搜索收敛成一批，并在同一条回复里一起发起 2 到 4 个彼此独立的只读工具调用，让运行时并行执行；先完成这一批，再直接输出 1 到 2 句用户可见的结论正文，说明已经确认了什么、还缺什么、为什么还要继续，不要额外输出“阶段结论”标题，再决定是否继续下一批。如果用户消息里已经点名绝对路径、仓库根或具体文件，就把这些显式路径当作本回合唯一优先入口；第一批只围绕这些路径展开，不要先扫描当前默认工作区或无关目录。读取文件时聚焦与问题直接相关的入口、注册表、配置和代码片段，避免重复枚举大目录、避免一次性展开超长目录或整文件全文，也不要把大段原文直接抄回最终回答，改用结论加文件路径。";
@@ -54,11 +50,6 @@ pub enum RuntimeTurnToolSurfaceMode {
 pub struct RuntimeTurnToolScope {
     pub allowed_tools: Vec<String>,
     pub disallowed_tools: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RuntimeToolSurfaceGates {
-    pub powershell: bool,
 }
 
 impl RuntimeTurnToolSurfaceMode {
@@ -97,68 +88,6 @@ impl RuntimeTurnToolScope {
             disallowed_tools,
         }
     }
-}
-
-pub fn runtime_tool_surface_gates() -> RuntimeToolSurfaceGates {
-    let env = std::env::vars().collect::<HashMap<_, _>>();
-    runtime_tool_surface_gates_from_env_map(&env, cfg!(target_os = "windows"))
-}
-
-pub fn runtime_tool_surface_gates_from_env_map(
-    env: &HashMap<String, String>,
-    is_windows: bool,
-) -> RuntimeToolSurfaceGates {
-    let powershell_env = env.get(RUNTIME_TOOL_SURFACE_POWERSHELL_ENV);
-
-    RuntimeToolSurfaceGates {
-        powershell: is_windows && !env_defined_falsy(powershell_env),
-    }
-}
-
-pub fn runtime_tool_surface_should_register_name(
-    name: &str,
-    gates: RuntimeToolSurfaceGates,
-) -> bool {
-    match name {
-        "PowerShell" => gates.powershell,
-        _ => true,
-    }
-}
-
-pub fn runtime_registered_tool_exposure_allows_tool_name(
-    name: &str,
-    resources_supported: bool,
-    gates: RuntimeToolSurfaceGates,
-) -> bool {
-    if RESOURCE_GATED_TOOL_NAMES.contains(&name) {
-        return resources_supported;
-    }
-
-    runtime_tool_surface_should_register_name(name, gates)
-}
-
-pub fn runtime_turn_tool_exposure_allows_tool_name(
-    name: &str,
-    session_is_subagent: bool,
-    resources_supported: bool,
-    gates: RuntimeToolSurfaceGates,
-    final_output_tool_name: &str,
-) -> bool {
-    if !runtime_registered_tool_exposure_allows_tool_name(name, resources_supported, gates) {
-        return false;
-    }
-
-    if !session_is_subagent {
-        return true;
-    }
-
-    if is_extension_prefixed_tool_name(name) {
-        return true;
-    }
-
-    SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES.contains(&name)
-        || SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES.contains(&name)
-        || name == final_output_tool_name
 }
 
 pub fn runtime_turn_tool_surface_mode_from_metadata(
@@ -298,19 +227,6 @@ fn normalize_turn_metadata_tool_list(value: Option<&Value>) -> Vec<String> {
         normalized.push(name.to_string());
     }
     normalized
-}
-
-fn env_defined_falsy(value: Option<&String>) -> bool {
-    value.is_some_and(|raw| {
-        matches!(
-            raw.trim().to_ascii_lowercase().as_str(),
-            "0" | "false" | "no" | "off"
-        )
-    })
-}
-
-fn is_extension_prefixed_tool_name(name: &str) -> bool {
-    name.contains("__")
 }
 
 fn matches_runtime_turn_tool_scope(
@@ -461,91 +377,10 @@ mod tests {
     }
 
     #[test]
-    fn tool_surface_gates_power_shell_by_platform_and_env() {
-        let env = HashMap::new();
-        assert_eq!(
-            runtime_tool_surface_gates_from_env_map(&env, true),
-            RuntimeToolSurfaceGates { powershell: true }
-        );
-        assert_eq!(
-            runtime_tool_surface_gates_from_env_map(&env, false),
-            RuntimeToolSurfaceGates { powershell: false }
-        );
-
-        let disabled = HashMap::from([(
-            RUNTIME_TOOL_SURFACE_POWERSHELL_ENV.to_string(),
-            " false ".to_string(),
-        )]);
-        assert_eq!(
-            runtime_tool_surface_gates_from_env_map(&disabled, true),
-            RuntimeToolSurfaceGates { powershell: false }
-        );
-    }
-
-    #[test]
-    fn registered_tool_exposure_requires_resources_and_registration_gate() {
-        let gates = RuntimeToolSurfaceGates { powershell: false };
-
-        assert!(!runtime_registered_tool_exposure_allows_tool_name(
-            "PowerShell",
-            true,
-            gates
-        ));
-        assert!(!runtime_registered_tool_exposure_allows_tool_name(
-            "read_mcp_resource",
-            false,
-            gates
-        ));
-        assert!(runtime_registered_tool_exposure_allows_tool_name(
-            "Read", false, gates
-        ));
-    }
-
-    #[test]
-    fn subagent_tool_exposure_keeps_only_registered_current_tools() {
-        let gates = RuntimeToolSurfaceGates { powershell: true };
-
-        assert!(runtime_turn_tool_exposure_allows_tool_name(
-            "Read",
-            true,
-            true,
-            gates,
-            "StructuredOutput",
-        ));
-        assert!(runtime_turn_tool_exposure_allows_tool_name(
-            "vendor__tool",
-            true,
-            true,
-            gates,
-            "StructuredOutput",
-        ));
-        assert!(runtime_turn_tool_exposure_allows_tool_name(
-            "StructuredOutput",
-            true,
-            true,
-            gates,
-            "StructuredOutput",
-        ));
-        assert!(!runtime_turn_tool_exposure_allows_tool_name(
-            "spawn_agent",
-            true,
-            true,
-            gates,
-            "StructuredOutput",
-        ));
-        assert!(!runtime_turn_tool_exposure_allows_tool_name(
-            "send_message",
-            true,
-            true,
-            gates,
-            "StructuredOutput",
-        ));
-        assert!(!runtime_turn_tool_exposure_allows_tool_name(
-            "read_mcp_resource",
-            true,
-            false,
-            gates,
-            "StructuredOutput",
-        ));
+    fn compact_surface_exposes_codex_unified_exec_pair() {
+        assert!(runtime_turn_tool_surface_is_compact_tool("exec_command"));
+        assert!(runtime_turn_tool_surface_is_compact_tool("write_stdin"));
+        assert!(!runtime_turn_tool_surface_is_compact_tool("Bash"));
+        assert!(!runtime_turn_tool_surface_is_compact_tool("PowerShell"));
     }
 }

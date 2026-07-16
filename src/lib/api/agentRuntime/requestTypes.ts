@@ -2,7 +2,6 @@ import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntimeAccessMode,
   AgentSessionExecutionRuntimePreferences,
-  AgentSessionExecutionRuntimeRecentTeamSelection,
 } from "../agentExecutionRuntime";
 import type { AgentRuntimeResumeActionDecision } from "@limecloud/agent-ui-contracts";
 
@@ -140,7 +139,6 @@ export interface AgentRuntimeUpdateSessionRequest {
   archived?: boolean;
   recent_access_mode?: AgentSessionExecutionRuntimeAccessMode;
   recent_preferences?: AgentSessionExecutionRuntimePreferences;
-  recent_team_selection?: AgentSessionExecutionRuntimeRecentTeamSelection;
   article_workspace_selected_object_ref?: Record<string, unknown> | null;
   article_workspace_edited_draft?: Record<string, unknown> | null;
 }

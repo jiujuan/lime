@@ -121,10 +121,6 @@ export type AppServerAgentSessionMediaReadParams =
   protocol.AgentSessionMediaReadParams;
 export type AppServerAgentSessionMediaReadResponse =
   protocol.AgentSessionMediaReadResponse;
-export type AppServerConversationImportThreadRuntimeEventsReadParams =
-  protocol.ConversationImportThreadRuntimeEventsReadParams;
-export type AppServerConversationImportThreadRuntimeEventsReadResponse =
-  protocol.ConversationImportThreadRuntimeEventsReadResponse;
 export type AppServerAgentSessionToolInventoryReadParams =
   protocol.AgentSessionToolInventoryReadParams;
 export type AppServerAgentInput = protocol.AgentInput;

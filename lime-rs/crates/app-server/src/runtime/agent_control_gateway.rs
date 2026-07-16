@@ -95,12 +95,17 @@ impl RuntimeCore {
     ) -> Result<AgentControlGatewayResult, RuntimeCoreError> {
         let caller = self.resolve_agent_control_caller(&request.caller).await?;
         let (output, projection_facts) = match request.command {
-            tool_runtime::agent_control::AgentControlCommand::SpawnAgent { task_name, message } => {
+            tool_runtime::agent_control::AgentControlCommand::SpawnAgent {
+                task_name,
+                message,
+                fork_mode,
+            } => {
                 let (output, target_thread_id, agent_path) = self
                     .execute_agent_control_spawn(
                         &caller,
                         task_name,
                         message,
+                        fork_mode,
                         host,
                         child_runtime_options.clone(),
                     )
@@ -250,6 +255,7 @@ impl RuntimeCore {
         caller: &ResolvedAgentControlCaller,
         task_name: String,
         message: String,
+        fork_mode: tool_runtime::agent_control::SpawnAgentForkMode,
         host: &RuntimeHostContext,
         child_runtime_options: Option<RuntimeOptions>,
     ) -> Result<(serde_json::Value, ThreadId, String), RuntimeCoreError> {
@@ -277,10 +283,11 @@ impl RuntimeCore {
             ]),
         );
         let response = self
-            .spawn_agent_controlled(AgentControlSpawnRequest {
+            .stage_agent_control_spawn(AgentControlSpawnRequest {
                 parent_session_id: caller.session.session_id.clone(),
                 child_session_id: Some(child_session_id),
                 child_thread_id: Some(child_thread_id),
+                fork_mode,
             })
             .await?;
         let store = self.agent_control_store()?;
@@ -293,7 +300,11 @@ impl RuntimeCore {
             last_task_message: Some(message.clone()),
         };
         if let Err(error) = store.upsert_agent_identity(identity.clone()).await {
-            self.cleanup_unusable_agent_control_child(caller, &response.session)
+            self.cleanup_unusable_agent_control_child(
+                &caller.identity.root_thread_id,
+                Some(&response.session.session_id),
+                ThreadId::new(response.session.thread_id.clone()),
+            )
                 .await
                 .map_err(|cleanup_error| {
                     RuntimeCoreError::Backend(format!(
@@ -316,7 +327,11 @@ impl RuntimeCore {
         {
             Ok(message_id) => message_id,
             Err(error) => {
-                self.cleanup_unusable_agent_control_child(caller, &response.session)
+                self.cleanup_unusable_agent_control_child(
+                    &caller.identity.root_thread_id,
+                    Some(&response.session.session_id),
+                    ThreadId::new(response.session.thread_id.clone()),
+                )
                     .await
                     .map_err(|cleanup_error| {
                         RuntimeCoreError::Backend(format!(
@@ -326,19 +341,30 @@ impl RuntimeCore {
                 return Err(error);
             }
         };
+        if let Err(error) = self.commit_agent_control_spawn(&response.session).await {
+            self.cleanup_unusable_agent_control_child(
+                &caller.identity.root_thread_id,
+                Some(&response.session.session_id),
+                ThreadId::new(response.session.thread_id.clone()),
+            )
+            .await
+            .map_err(|cleanup_error| {
+                RuntimeCoreError::Backend(format!(
+                    "failed to commit child spawn: {error}; failed to remove pending child: {cleanup_error}"
+                ))
+            })?;
+            return Err(error);
+        }
         self.schedule_pending_agent_mailbox_triggers(
             response.session.session_id.clone(),
             host.clone(),
             child_runtime_options,
         )
         .await;
-        let task_name = identity
-            .task_name()
-            .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
+        let task_name = identity.agent_path.clone();
         Ok((
             json!({
                 "task_name": task_name,
-                "nickname": identity.nickname,
                 "message_id": message_id,
             }),
             identity.thread_id,
@@ -532,28 +558,141 @@ impl RuntimeCore {
 
     async fn cleanup_unusable_agent_control_child(
         &self,
-        caller: &ResolvedAgentControlCaller,
-        child: &AgentSession,
+        root_thread_id: &ThreadId,
+        child_session_id: Option<&str>,
+        child_thread_id: ThreadId,
     ) -> Result<(), RuntimeCoreError> {
         let store = self.agent_control_store()?;
-        let child_thread_id = ThreadId::new(child.thread_id.clone());
-        store
-            .delete_agent_mailbox_messages(
-                caller.identity.root_thread_id.clone(),
-                child_thread_id.clone(),
+        let mut cleanup_errors = Vec::new();
+        if let Err(error) = store
+            .delete_agent_mailbox_messages(root_thread_id.clone(), child_thread_id.clone())
+            .await
+        {
+            cleanup_errors.push(format!("mailbox: {error}"));
+        }
+        if let Err(error) = store.delete_agent_identity(child_thread_id.clone()).await {
+            cleanup_errors.push(format!("identity: {error}"));
+        }
+        if let Some(child_session_id) = child_session_id {
+            if let Err(error) = self.delete_agent_control_child_data(child_session_id) {
+                cleanup_errors.push(error);
+            }
+        }
+        if cleanup_errors.is_empty() {
+            if let Err(error) = store.delete_thread_spawn_edge(child_thread_id).await {
+                cleanup_errors.push(format!("graph edge: {error}"));
+            }
+        }
+        if cleanup_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(RuntimeCoreError::Backend(cleanup_errors.join("; ")))
+        }
+    }
+
+    pub async fn recover_agent_control_spawns(
+        &self,
+        host: RuntimeHostContext,
+        runtime_options: Option<RuntimeOptions>,
+    ) -> Result<(), RuntimeCoreError> {
+        let Some(store) = self.projection_store.clone() else {
+            return Ok(());
+        };
+        let pending_spawns = store
+            .list_pending_thread_spawn_intents_sync()
+            .map_err(agent_control_store_error)?;
+        for (parent_thread_id, child_thread_id, child_session_id) in pending_spawns {
+            let root_thread_id = match store
+                .read_agent_identity(child_thread_id.clone())
+                .await
+                .map_err(agent_control_store_error)?
+            {
+                Some(identity) => identity.root_thread_id,
+                None => store
+                    .read_agent_identity(parent_thread_id.clone())
+                    .await
+                    .map_err(agent_control_store_error)?
+                    .map(|identity| identity.root_thread_id)
+                    .unwrap_or(parent_thread_id),
+            };
+            self.cleanup_unusable_agent_control_child(
+                &root_thread_id,
+                Some(&child_session_id),
+                child_thread_id,
             )
+            .await?;
+        }
+
+        let recipients = store
+            .list_pending_agent_mailbox_trigger_recipients()
             .await
             .map_err(agent_control_store_error)?;
-        store
-            .delete_agent_identity(child_thread_id.clone())
-            .await
-            .map_err(agent_control_store_error)?;
-        store
-            .delete_thread_spawn_edge(child_thread_id)
-            .await
-            .map_err(agent_control_store_error)?;
-        self.delete_agent_control_child_after_edge_failure(&child.session_id)
-            .map_err(RuntimeCoreError::Backend)
+        for recipient in recipients {
+            let Some(parent) = store
+                .read_thread_spawn_parent(recipient.recipient_thread_id.clone())
+                .await
+                .map_err(agent_control_store_error)?
+            else {
+                continue;
+            };
+            if parent.status != ThreadSpawnEdgeStatus::Open {
+                continue;
+            }
+            let identity = store
+                .read_agent_identity(recipient.recipient_thread_id.clone())
+                .await
+                .map_err(agent_control_store_error)?;
+            let thread = store
+                .read_thread(thread_store::ReadThreadParams {
+                    thread_id: recipient.recipient_thread_id.clone(),
+                    include_archived: true,
+                    turns_view: agent_protocol::ThreadTurnsView::NotLoaded,
+                })
+                .await
+                .map_err(agent_control_store_error)?;
+            let (identity, thread) = match (identity, thread) {
+                (Some(identity), Some(thread)) => (identity, thread),
+                (_, thread) => {
+                    let child_session_id = thread
+                        .as_ref()
+                        .map(|thread| thread.session_id.as_str().to_string());
+                    self.cleanup_unusable_agent_control_child(
+                        &recipient.root_thread_id,
+                        child_session_id.as_deref(),
+                        recipient.recipient_thread_id,
+                    )
+                    .await?;
+                    continue;
+                }
+            };
+            if identity.root_thread_id != recipient.root_thread_id {
+                return Err(RuntimeCoreError::Backend(format!(
+                    "pending mailbox recipient {} changed root identity",
+                    identity.thread_id
+                )));
+            }
+            let recovery = self
+                .process_pending_agent_mailbox_triggers_with_options(
+                    thread.session_id.as_str(),
+                    host.clone(),
+                    runtime_options.clone(),
+                    None,
+                )
+                .await;
+            match recovery {
+                Ok(_) => {}
+                Err(RuntimeCoreError::SessionNotFound(_)) => {
+                    self.cleanup_unusable_agent_control_child(
+                        &recipient.root_thread_id,
+                        Some(thread.session_id.as_str()),
+                        recipient.recipient_thread_id,
+                    )
+                    .await?;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
     }
 
     async fn agent_control_identity_or_root(

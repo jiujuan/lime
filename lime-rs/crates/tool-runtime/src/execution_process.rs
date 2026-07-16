@@ -11,6 +11,7 @@ use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::task::JoinHandle;
 
 pub mod live;
+mod pty;
 
 const DEFAULT_OUTPUT_RETAIN_BYTES: usize = 128 * 1024;
 const PROCESS_OUTPUT_CHUNK_BYTES: usize = 8 * 1024;
@@ -364,6 +365,7 @@ pub struct LocalExecutionRequest {
     pub command: Vec<String>,
     pub cwd: Option<PathBuf>,
     pub env: HashMap<String, String>,
+    pub tty: bool,
 }
 
 impl LocalExecutionRequest {
@@ -380,6 +382,7 @@ impl LocalExecutionRequest {
             command,
             cwd: None,
             env: HashMap::new(),
+            tty: false,
         }
     }
 }
@@ -399,7 +402,7 @@ pub trait LiveExecutionProcessRegistry: Send + Sync {
 #[derive(Debug)]
 pub struct LocalExecutionProcessHandle {
     process_id: String,
-    control_tx: mpsc::UnboundedSender<LocalExecutionControl>,
+    control_tx: LocalExecutionControlSender,
     output_rx: mpsc::UnboundedReceiver<ExecutionOutputDelta>,
     state_rx: watch::Receiver<ExecutionProcessSnapshot>,
     final_rx: Option<oneshot::Receiver<ExecutionProcessSnapshot>>,
@@ -409,7 +412,7 @@ pub struct LocalExecutionProcessHandle {
 #[derive(Debug, Clone)]
 pub struct LocalExecutionProcessControlHandle {
     process_id: String,
-    control_tx: mpsc::UnboundedSender<LocalExecutionControl>,
+    control_tx: LocalExecutionControlSender,
     state_rx: watch::Receiver<ExecutionProcessSnapshot>,
 }
 
@@ -437,19 +440,14 @@ impl LocalExecutionProcessHandle {
     pub fn write_stdin(&self, bytes: impl Into<Vec<u8>>) -> Result<(), LocalExecutionError> {
         self.control_tx
             .send(LocalExecutionControl::WriteStdin(bytes.into()))
-            .map_err(|_| LocalExecutionError::ControlClosed)
     }
 
     pub fn interrupt(&self) -> Result<(), LocalExecutionError> {
-        self.control_tx
-            .send(LocalExecutionControl::Interrupt)
-            .map_err(|_| LocalExecutionError::ControlClosed)
+        self.control_tx.send(LocalExecutionControl::Interrupt)
     }
 
     pub fn terminate(&self) -> Result<(), LocalExecutionError> {
-        self.control_tx
-            .send(LocalExecutionControl::Terminate)
-            .map_err(|_| LocalExecutionError::ControlClosed)
+        self.control_tx.send(LocalExecutionControl::Terminate)
     }
 
     pub async fn wait(&mut self) -> Result<ExecutionProcessSnapshot, LocalExecutionError> {
@@ -480,19 +478,14 @@ impl LocalExecutionProcessControlHandle {
     pub fn write_stdin(&self, bytes: impl Into<Vec<u8>>) -> Result<(), LocalExecutionError> {
         self.control_tx
             .send(LocalExecutionControl::WriteStdin(bytes.into()))
-            .map_err(|_| LocalExecutionError::ControlClosed)
     }
 
     pub fn interrupt(&self) -> Result<(), LocalExecutionError> {
-        self.control_tx
-            .send(LocalExecutionControl::Interrupt)
-            .map_err(|_| LocalExecutionError::ControlClosed)
+        self.control_tx.send(LocalExecutionControl::Interrupt)
     }
 
     pub fn terminate(&self) -> Result<(), LocalExecutionError> {
-        self.control_tx
-            .send(LocalExecutionControl::Terminate)
-            .map_err(|_| LocalExecutionError::ControlClosed)
+        self.control_tx.send(LocalExecutionControl::Terminate)
     }
 }
 
@@ -508,9 +501,31 @@ enum LocalExecutionControl {
     Terminate,
 }
 
+#[derive(Debug, Clone)]
+enum LocalExecutionControlSender {
+    Async(mpsc::UnboundedSender<LocalExecutionControl>),
+    Blocking(std::sync::mpsc::Sender<LocalExecutionControl>),
+}
+
+impl LocalExecutionControlSender {
+    fn send(&self, control: LocalExecutionControl) -> Result<(), LocalExecutionError> {
+        match self {
+            Self::Async(sender) => sender
+                .send(control)
+                .map_err(|_| LocalExecutionError::ControlClosed),
+            Self::Blocking(sender) => sender
+                .send(control)
+                .map_err(|_| LocalExecutionError::ControlClosed),
+        }
+    }
+}
+
 pub fn start_local_execution_process(
     request: LocalExecutionRequest,
 ) -> io::Result<LocalExecutionProcessHandle> {
+    if request.tty {
+        return pty::start_local_pty_execution_process(request);
+    }
     let Some(program) = request.command.first() else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -560,7 +575,7 @@ pub fn start_local_execution_process(
 
     Ok(LocalExecutionProcessHandle {
         process_id: request.process_id,
-        control_tx,
+        control_tx: LocalExecutionControlSender::Async(control_tx),
         output_rx,
         state_rx,
         final_rx: Some(final_rx),
@@ -777,148 +792,4 @@ fn duration_millis(duration: Duration) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn start_process() -> ExecutionProcess {
-        ExecutionProcess::start(ExecutionProcessStart {
-            process_id: "process-1".to_string(),
-            tool_id: "tool-1".to_string(),
-            tool_name: "Bash".to_string(),
-            command: Some("npm test".to_string()),
-            cwd: Some("/tmp/project".to_string()),
-        })
-    }
-
-    #[test]
-    fn process_tracks_output_delta_metadata() {
-        let mut process = start_process();
-        let delta = process.append_output(ExecutionOutputKind::Stdout, b"hello");
-
-        assert_eq!(delta.sequence, 1);
-        assert_eq!(delta.delta, "hello");
-        assert_eq!(delta.bytes, 5);
-        assert_eq!(delta.omitted_bytes, 0);
-        assert!(!delta.truncated);
-
-        let metadata = delta.metadata();
-        assert_eq!(metadata.get("processId"), Some(&json!("process-1")));
-        assert_eq!(metadata.get("outputBytes"), Some(&json!(5)));
-        assert_eq!(metadata.get("outputTruncated"), Some(&json!(false)));
-        assert_eq!(metadata.get("stdinWritable"), Some(&json!(true)));
-        assert_eq!(metadata.get("stdin_writable"), Some(&json!(true)));
-    }
-
-    #[test]
-    fn process_bounds_retained_output() {
-        let mut output = BoundedProcessOutput::new(8);
-        output.push(b"12345");
-        output.push(b"67890");
-
-        let snapshot = output.snapshot();
-        assert_eq!(snapshot.bytes, 10);
-        assert_eq!(snapshot.omitted_bytes, 2);
-        assert!(snapshot.truncated);
-        assert_eq!(snapshot.text, "34567890");
-    }
-
-    #[test]
-    fn process_status_terminal_transitions_do_not_regress() {
-        let mut process = start_process();
-        process.interrupt();
-        process.exit(0);
-
-        let snapshot = process.snapshot();
-        assert_eq!(snapshot.status, ExecutionProcessStatus::Interrupted);
-        assert_eq!(snapshot.exit_code, None);
-        let metadata = snapshot.metadata();
-        assert_eq!(metadata.get("stdinWritable"), Some(&json!(false)));
-        assert_eq!(metadata.get("stdin_writable"), Some(&json!(false)));
-    }
-
-    #[test]
-    fn manager_controls_process_lifecycle() {
-        let mut manager = ExecutionProcessManager::default();
-        let snapshot = manager.start(ExecutionProcessStart {
-            process_id: "process-1".to_string(),
-            tool_id: "tool-1".to_string(),
-            tool_name: "Bash".to_string(),
-            command: Some("cargo test".to_string()),
-            cwd: None,
-        });
-        assert_eq!(snapshot.status, ExecutionProcessStatus::Running);
-
-        let delta = manager
-            .append_output("process-1", ExecutionOutputKind::Combined, b"running")
-            .expect("process should exist");
-        assert_eq!(delta.sequence, 1);
-
-        let snapshot = manager
-            .terminate("process-1")
-            .expect("process should terminate");
-        assert_eq!(snapshot.status, ExecutionProcessStatus::Terminated);
-        assert_eq!(snapshot.retained_output, "running");
-    }
-
-    #[tokio::test]
-    async fn local_process_emits_stdout_stderr_and_exit_snapshot() {
-        let mut handle = start_local_execution_process(LocalExecutionRequest::new(
-            "process-local-1",
-            "tool-local-1",
-            "Bash",
-            shell_command("printf stdout; printf stderr 1>&2"),
-        ))
-        .expect("local process should start");
-
-        let mut observed = Vec::new();
-        while let Ok(Some(delta)) =
-            tokio::time::timeout(Duration::from_secs(2), handle.recv_output()).await
-        {
-            observed.push(delta);
-        }
-
-        let final_snapshot = handle.wait().await.expect("process should finish");
-        assert_eq!(final_snapshot.status, ExecutionProcessStatus::Exited);
-        assert_eq!(final_snapshot.exit_code, Some(0));
-        assert!(final_snapshot.retained_output.contains("stdout"));
-        assert!(final_snapshot.retained_output.contains("stderr"));
-        assert!(observed
-            .iter()
-            .any(|delta| delta.kind == ExecutionOutputKind::Stdout && delta.delta == "stdout"));
-        assert!(observed
-            .iter()
-            .any(|delta| delta.kind == ExecutionOutputKind::Stderr && delta.delta == "stderr"));
-    }
-
-    #[tokio::test]
-    async fn local_process_terminate_sets_terminal_status() {
-        let mut handle = start_local_execution_process(LocalExecutionRequest::new(
-            "process-local-terminate",
-            "tool-local-terminate",
-            "Bash",
-            shell_command("sleep 5"),
-        ))
-        .expect("local process should start");
-
-        handle.terminate().expect("terminate signal should send");
-        let final_snapshot = handle.wait().await.expect("process should finish");
-
-        assert_eq!(final_snapshot.status, ExecutionProcessStatus::Terminated);
-    }
-
-    fn shell_command(script: &str) -> Vec<String> {
-        if cfg!(windows) {
-            vec![
-                "cmd".to_string(),
-                "/C".to_string(),
-                script
-                    .replace("printf stdout", "echo|set /p=stdout")
-                    .replace("printf stderr 1>&2", "echo|set /p=stderr 1>&2")
-                    .replace("sleep 5", "timeout /T 5 /NOBREAK >NUL")
-                    .to_string(),
-            ]
-        } else {
-            vec!["sh".to_string(), "-c".to_string(), script.to_string()]
-        }
-    }
-}
+mod tests;

@@ -3,6 +3,10 @@ use serde::Serialize;
 use serde_json::Map as JsonMap;
 use serde_json::Value as JsonValue;
 
+mod command;
+
+pub use command::{prepare_sandbox_command, SandboxCommandError, SandboxCommandRequest};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RequestedSandboxPolicy {
     ReadOnly,
@@ -279,19 +283,12 @@ pub fn plan_sandbox_backend(input: SandboxBackendPlanInput<'_>) -> SandboxBacken
             "sandbox_backend_unavailable",
             "Linux bubblewrap backend 不可用",
         ),
-        SandboxBackendPlatform::Windows if windows_restricted_token_available() => (
-            SandboxBackend::RestrictedToken,
-            SandboxBackendStatus::Ready,
-            true,
-            "sandbox_backend_ready",
-            "Windows restricted token backend 可用于当前 shell 工具执行",
-        ),
         SandboxBackendPlatform::Windows => (
             SandboxBackend::RestrictedToken,
-            SandboxBackendStatus::Unavailable,
+            SandboxBackendStatus::Planned,
             false,
-            "sandbox_backend_windows_runner_unavailable_on_host",
-            "当前宿主构建不可执行 Windows restricted token runner",
+            "sandbox_backend_windows_runner_not_implemented",
+            "Windows restricted token runner 尚未接入 current execution process owner",
         ),
         SandboxBackendPlatform::Unsupported => (
             SandboxBackend::None,
@@ -337,18 +334,6 @@ fn linux_bubblewrap_available() -> bool {
     }
 
     #[cfg(not(target_os = "linux"))]
-    {
-        false
-    }
-}
-
-fn windows_restricted_token_available() -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        true
-    }
-
-    #[cfg(not(target_os = "windows"))]
     {
         false
     }

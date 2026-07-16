@@ -1,31 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { loadNamespaceResource } from "@/i18n/loadNamespace";
-import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import type { AgentThreadItem } from "../types";
 import { buildAgentThreadDisplayModel } from "./agentThreadGrouping";
-
-function importedProcessResourceKeys(
-  resource: Record<string, string>,
-): string[] {
-  return Object.keys(resource)
-    .filter((key) =>
-      key.startsWith("generalWorkbench.taskRail.importedProcess."),
-    )
-    .sort();
-}
-
-const zhAgentResource = loadNamespaceResource("zh-CN", "agent");
-
-function tFromZhAgentResource(
-  key: string,
-  options?: Record<string, unknown>,
-): string {
-  const template = zhAgentResource[key] ?? String(options?.defaultValue ?? key);
-  return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, name: string) =>
-    String(options?.[name.trim()] ?? ""),
-  );
-}
 
 function at(second: number): string {
   return `2026-03-15T09:00:${String(second).padStart(2, "0")}Z`;
@@ -59,27 +35,6 @@ function createBaseItem(
 }
 
 describe("agentThreadGrouping", () => {
-  it("导入过程摘要文案覆盖五语言资源", () => {
-    const requiredKeys = importedProcessResourceKeys(
-      loadNamespaceResource("zh-CN", "agent"),
-    );
-
-    expect(requiredKeys).toContain(
-      "generalWorkbench.taskRail.importedProcess.title",
-    );
-    expect(requiredKeys).toContain(
-      "generalWorkbench.taskRail.importedProcess.empty",
-    );
-
-    for (const locale of SUPPORTED_LOCALES) {
-      const resource = loadNamespaceResource(locale, "agent");
-      for (const key of requiredKeys) {
-        expect(resource[key], `${locale}:${key}`).toEqual(expect.any(String));
-        expect(String(resource[key]).trim()).not.toBe("");
-      }
-    }
-  });
-
   it("应按真实时序把连续执行项收成一个过程块", () => {
     const items: AgentThreadItem[] = [
       {
@@ -546,7 +501,7 @@ describe("agentThreadGrouping", () => {
     );
   });
 
-  it("本地历史导入过程摘要应保留命令记录入口而不泄漏原始命令", () => {
+  it("本地历史 provenance 不应改变普通过程分组", () => {
     const importedMetadata = {
       imported: true,
       imported_synthetic: true,
@@ -570,24 +525,15 @@ describe("agentThreadGrouping", () => {
       },
     ];
 
-    const model = buildAgentThreadDisplayModel(items, {
-      t: tFromZhAgentResource,
-    });
+    const model = buildAgentThreadDisplayModel(items);
 
     expect(model.orderedBlocks).toHaveLength(1);
-    expect(model.orderedBlocks[0]?.title).toBe("导入的命令记录");
-    expect(model.orderedBlocks[0]?.previewLines).toEqual([
-      "命令记录 1 条",
-      "搜索记录 1 条",
-    ]);
+    expect(model.orderedBlocks[0]?.title).toBe("执行过程");
     expect(model.orderedBlocks[0]?.countLabel).toBe("2 步");
-    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("展开查看导入过程");
-    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(true);
-    expect(model.orderedBlocks[0]?.forceExpanded).toBe(true);
-    expect(model.orderedBlocks[0]?.title).not.toContain("npm test");
-    expect(model.orderedBlocks[0]?.previewLines.join("\n")).not.toContain(
-      "npm test",
-    );
+    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("查看执行过程");
+    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(false);
+    expect(model.orderedBlocks[0]?.forceExpanded).toBeUndefined();
+    expect(JSON.stringify(model.orderedBlocks[0])).toContain("npm test");
   });
 
   it("workspace patch 宿主工具 WebSearch 也应按调用边界拆分", () => {
@@ -627,7 +573,7 @@ describe("agentThreadGrouping", () => {
     expect(model.orderedBlocks[1]?.title).toBe("已搜索网页：golang 并发实践");
   });
 
-  it("本地历史导入混合推理过程仍应保留命令记录入口", () => {
+  it("本地历史混合推理过程应复用普通过程分组", () => {
     const importedMetadata = {
       imported: true,
       imported_synthetic: true,
@@ -670,26 +616,19 @@ describe("agentThreadGrouping", () => {
       },
     ];
 
-    const model = buildAgentThreadDisplayModel(items, {
-      t: tFromZhAgentResource,
-    });
+    const model = buildAgentThreadDisplayModel(items);
 
     expect(model.orderedBlocks).toHaveLength(1);
-    expect(model.orderedBlocks[0]?.title).toBe("导入的命令记录");
-    expect(model.orderedBlocks[0]?.previewLines).toEqual([
-      "已完成思考 1 条",
-      "命令记录 1 条",
-      "搜索记录 1 条",
-      "文件变更 1 条",
-    ]);
-    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(true);
-    expect(model.orderedBlocks[0]?.forceExpanded).toBe(true);
-    expect(model.orderedBlocks[0]?.previewLines.join("\n")).not.toContain(
-      "npm test",
+    expect(model.orderedBlocks[0]?.title).toBe("执行过程");
+    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(false);
+    expect(model.orderedBlocks[0]?.forceExpanded).toBeUndefined();
+    expect(JSON.stringify(model.orderedBlocks[0])).toContain("npm test");
+    expect(JSON.stringify(model.orderedBlocks[0])).toContain(
+      "需要先确认测试失败点",
     );
   });
 
-  it("本地历史导入过程摘要应支持调用方传入本地化文案", () => {
+  it("本地历史 provenance 不应触发 imported-only 本地化分支", () => {
     const importedMetadata = {
       imported: true,
       imported_synthetic: true,
@@ -712,39 +651,14 @@ describe("agentThreadGrouping", () => {
       },
     ];
 
-    const model = buildAgentThreadDisplayModel(items, {
-      t: (key, options) => {
-        const defaults: Record<string, string> = {
-          "generalWorkbench.taskRail.importedProcess.title":
-            "Imported command record",
-          "generalWorkbench.taskRail.importedProcess.reasoning":
-            "{{count}} reasoning records completed",
-          "generalWorkbench.taskRail.importedProcess.commands":
-            "{{count}} command records",
-          "generalWorkbench.taskRail.importedProcess.count": "{{count}} steps",
-          "generalWorkbench.taskRail.importedProcess.open":
-            "Expand imported process",
-        };
-        const template = defaults[key] ?? String(options?.defaultValue ?? key);
-        return template.replace(
-          /\{\{\s*count\s*\}\}/g,
-          String(options?.count ?? ""),
-        );
-      },
-    });
+    const model = buildAgentThreadDisplayModel(items);
 
-    expect(model.orderedBlocks[0]?.title).toBe("Imported command record");
-    expect(model.orderedBlocks[0]?.previewLines).toEqual([
-      "1 reasoning records completed",
-      "1 command records",
-    ]);
-    expect(model.orderedBlocks[0]?.countLabel).toBe("2 steps");
-    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe(
-      "Expand imported process",
-    );
+    expect(model.orderedBlocks[0]?.title).toBe("执行过程");
+    expect(model.orderedBlocks[0]?.countLabel).toBe("2 步");
+    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("查看执行过程");
   });
 
-  it("本地历史导入过程摘要无资源兜底时不应回退成中文", () => {
+  it("无翻译回调时本地历史也应使用普通过程语义", () => {
     const importedMetadata = {
       imported: true,
       imported_synthetic: true,
@@ -776,19 +690,10 @@ describe("agentThreadGrouping", () => {
 
     const model = buildAgentThreadDisplayModel(items);
 
-    expect(model.orderedBlocks[0]?.title).toBe("Imported command record");
-    expect(model.orderedBlocks[0]?.previewLines).toEqual([
-      "1 reasoning records completed",
-      "1 command records",
-      "1 file changes",
-    ]);
-    expect(model.orderedBlocks[0]?.countLabel).toBe("3 steps");
-    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe(
-      "Expand imported process",
-    );
-    expect(JSON.stringify(model.orderedBlocks[0])).not.toMatch(
-      /[\u4e00-\u9fff]/,
-    );
+    expect(model.orderedBlocks[0]?.title).toBe("执行过程");
+    expect(model.orderedBlocks[0]?.countLabel).toBe("3 步");
+    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("查看执行过程");
+    expect(JSON.stringify(model.orderedBlocks[0])).toContain("npm test");
   });
 
   it("交互与任务结果预览应使用更直白的用户文案", () => {

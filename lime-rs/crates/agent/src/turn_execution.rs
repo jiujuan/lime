@@ -59,6 +59,11 @@ where
         None
     };
     let cancel_token = agent_state.create_cancel_token(request.session_id).await;
+    let working_directory = request
+        .session_config
+        .turn_context
+        .as_ref()
+        .and_then(|context| context.cwd.clone());
     let session_config = request.session_config;
     let provider = match configured_provider.as_ref() {
         Some(configured_provider) => configured_provider.provider(),
@@ -75,7 +80,7 @@ where
         provider,
         request.input,
         request.initial_messages,
-        None,
+        working_directory.as_deref(),
         session_config,
         Some(cancel_token),
         request.request_tool_policy,

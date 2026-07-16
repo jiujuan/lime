@@ -1,0 +1,735 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+
+import {
+  capturePatch,
+  classifyFailure,
+  collectPierEvidence,
+  createTaskWorkspaceLocation,
+  currentChainFromError,
+  loadTaskDefinition,
+  preflightSelectedTasks,
+  preparePierReplayTask,
+  prepareTaskWorkspace,
+  providerStepsFromEvidence,
+  readJson,
+  runCurrentChainTask,
+  runtimePrerequisites,
+  terminalMessageFromEvidence,
+} from "./deepswe-adapter-core.mjs";
+
+const repoRoot = process.cwd();
+const sourceRoot = path.join(repoRoot, ".lime/benchmark/sources/deep-swe");
+const temporaryRoots = [];
+
+function temporaryRoot() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "deepswe-adapter-test-"));
+  temporaryRoots.push(root);
+  return root;
+}
+
+function git(cwd, args) {
+  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+}
+
+function createLocalRepository(root) {
+  const repository = path.join(root, "origin");
+  fs.mkdirSync(repository, { recursive: true });
+  git(repository, ["init"]);
+  git(repository, ["config", "user.name", "DeepSWE Test"]);
+  git(repository, ["config", "user.email", "deepswe-test@localhost"]);
+  fs.writeFileSync(path.join(repository, "README.md"), "baseline\n", "utf8");
+  git(repository, ["add", "README.md"]);
+  git(repository, ["commit", "-m", "baseline"]);
+  return { repository, baseCommit: git(repository, ["rev-parse", "HEAD"]) };
+}
+
+afterEach(() => {
+  for (const root of temporaryRoots.splice(0)) {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+describe("DeepSWE current-chain adapter", () => {
+  it("validates all selected Release 20 tasks against the pinned source", () => {
+    const result = preflightSelectedTasks({
+      repoRoot,
+      sourceRoot,
+      sliceName: "release-20",
+    });
+
+    expect(result.status).toBe("pass");
+    expect(result.taskCount).toBe(20);
+    expect(result.checks).toHaveLength(61);
+    expect(result.checks.every((check) => check.passed)).toBe(true);
+  }, 20_000);
+
+  it("loads task metadata with TOML semantics instead of ad hoc line parsing", () => {
+    const task = loadTaskDefinition({
+      repoRoot,
+      sourceRoot,
+      taskId: "happy-dom-abort-pending-body-reads",
+    });
+
+    expect(task).toMatchObject({
+      id: "happy-dom-abort-pending-body-reads",
+      schemaVersion: "1.1",
+      repository: "capricorn86/happy-dom",
+      baseCommit: "82a0888cb2c87a6123e05424b528f8e8c9b3e426",
+      verifier: { environmentMode: "separate" },
+      environment: { allowInternet: false },
+    });
+    expect(task.instruction).toContain("AbortError");
+  });
+
+  it("prepares an isolated branch and captures committed plus uncommitted changes", () => {
+    const root = temporaryRoot();
+    const { repository, baseCommit } = createLocalRepository(root);
+    const workspaceDir = path.join(root, "workspace");
+    const workspace = prepareTaskWorkspace({
+      task: { repositoryUrl: repository, baseCommit },
+      workspaceDir,
+      runId: "test-run",
+    });
+    fs.writeFileSync(path.join(workspaceDir, "README.md"), "changed\n", "utf8");
+    fs.writeFileSync(path.join(workspaceDir, "new.txt"), "new\n", "utf8");
+    const patchPath = path.join(root, "patch.diff");
+    const patch = capturePatch({
+      workspaceDir,
+      baseCommit,
+      outputPath: patchPath,
+    });
+
+    expect(workspace.branch).toBe("deepswe-test-run");
+    expect(workspace.head).toBe(baseCommit);
+    expect(git(workspaceDir, ["remote"])).toBe("");
+    expect(git(workspaceDir, ["branch", "--format=%(refname:short)"])).toBe(
+      "deepswe-test-run\nmain",
+    );
+    expect(patch.bytes).toBeGreaterThan(0);
+    expect(fs.readFileSync(patchPath, "utf8")).toContain("new.txt");
+  }, 20_000);
+
+  it("places task workspaces outside the Lime repository and its node_modules lookup chain", () => {
+    const root = temporaryRoot();
+    const fakeRepoRoot = path.join(root, "lime");
+    const hostOnlyModule = path.join(
+      fakeRepoRoot,
+      "node_modules",
+      "host-only-module",
+    );
+    fs.mkdirSync(hostOnlyModule, { recursive: true });
+    fs.writeFileSync(
+      path.join(hostOnlyModule, "package.json"),
+      JSON.stringify({ name: "host-only-module", main: "index.js" }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(hostOnlyModule, "index.js"),
+      "module.exports = 1;\n",
+    );
+
+    const location = createTaskWorkspaceLocation({
+      repoRoot: fakeRepoRoot,
+      tempRoot: root,
+    });
+    fs.mkdirSync(location.workspaceDir);
+    const relative = path.relative(fakeRepoRoot, location.workspaceDir);
+    const workspaceRequire = createRequire(
+      path.join(location.workspaceDir, "resolution-probe.cjs"),
+    );
+
+    expect(relative === ".." || relative.startsWith(`..${path.sep}`)).toBe(
+      true,
+    );
+    expect(() => workspaceRequire.resolve("host-only-module")).toThrow();
+  });
+
+  it("captures candidate patches larger than the child-process default buffer", () => {
+    const root = temporaryRoot();
+    const { repository } = createLocalRepository(root);
+    const largePath = path.join(repository, "large.txt");
+    fs.writeFileSync(largePath, `${"a".repeat(700_000)}\n`, "utf8");
+    git(repository, ["add", "large.txt"]);
+    git(repository, ["commit", "-m", "large baseline"]);
+    const baseCommit = git(repository, ["rev-parse", "HEAD"]);
+    fs.writeFileSync(largePath, `${"b".repeat(700_000)}\n`, "utf8");
+
+    const patch = capturePatch({
+      workspaceDir: repository,
+      baseCommit,
+      outputPath: path.join(root, "large.patch"),
+    });
+
+    expect(patch.bytes).toBeGreaterThan(1_000_000);
+  }, 20_000);
+
+  it("rejects upstream commits that moved HEAD beyond the task base", () => {
+    const root = temporaryRoot();
+    const { repository, baseCommit } = createLocalRepository(root);
+    fs.writeFileSync(path.join(repository, "upstream.txt"), "future\n", "utf8");
+    git(repository, ["add", "upstream.txt"]);
+    git(repository, ["commit", "-m", "future upstream"]);
+    const workspaceDir = path.join(root, "drifted-workspace");
+    execFileSync("git", ["clone", repository, workspaceDir]);
+    git(workspaceDir, ["config", "user.name", "Lime DeepSWE Adapter"]);
+    git(workspaceDir, ["config", "user.email", "deepswe@localhost"]);
+
+    expect(() =>
+      capturePatch({
+        workspaceDir,
+        baseCommit,
+        outputPath: path.join(root, "invalid.patch"),
+      }),
+    ).toThrow("workspace HEAD contains non-candidate commits");
+  }, 20_000);
+
+  it("runs the public current-chain contract and writes structured evidence", async () => {
+    const root = temporaryRoot();
+    const workspaceDir = path.join(root, "workspace");
+    fs.mkdirSync(workspaceDir);
+    const calls = [];
+    const sessionRead = {
+      detail: {
+        turns: [{ id: "deepswe-turn-run-1", status: "completed" }],
+        items: [
+          {
+            kind: "tool",
+            payload: { type: "tool", name: "Read" },
+            status: "completed",
+          },
+          { type: "command_execution", status: "completed" },
+          { type: "file_artifact", status: "completed" },
+        ],
+      },
+    };
+    const rpc = {
+      waitForHealth: async () => ({ status: "ok" }),
+      invoke: async (_options, method, params) => {
+        calls.push({ method, params });
+        if (method === "workspace/ensure") {
+          return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
+        }
+        if (method === "agentSession/start") {
+          return { session: { sessionId: "deepswe-run-1" } };
+        }
+        if (method === "agentSession/read") {
+          return sessionRead;
+        }
+        if (method === "evidence/export") {
+          return { events: [{ type: "tool.completed", callId: "call-1" }] };
+        }
+        throw new Error(`unexpected method ${method}`);
+      },
+      resolveProvider: async () => ({
+        providerPreference: "provider-1",
+        providerName: "openai",
+        modelPreference: "model-1",
+        source: "test",
+      }),
+      updateSession: async () => {},
+      startTurn: async () => {},
+      readThread: async () => ({
+        status: "completed",
+        active_turn_id: null,
+        turns: [{ id: "deepswe-turn-run-1", status: "completed" }],
+      }),
+      sleep: async () => {},
+    };
+    const result = await runCurrentChainTask({
+      options: {
+        healthUrl: "http://unused",
+        invokeUrl: "http://unused",
+        intervalMs: 1,
+        timeoutMs: 30_000,
+      },
+      task: { id: "task-1", instruction: "Fix the task" },
+      workspaceDir,
+      runDir: root,
+      runId: "run-1",
+      rpc,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(calls.map((call) => call.method)).toEqual([
+      "workspace/ensure",
+      "agentSession/start",
+      "agentSession/read",
+      "evidence/export",
+    ]);
+    expect(
+      calls.find((call) => call.method === "agentSession/start")?.params,
+    ).toMatchObject({ workingDir: workspaceDir, workspaceId: "workspace-1" });
+    expect(fs.existsSync(path.join(root, "thread-turn-item.json"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "trajectory.json"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "provider-steps.json"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "tool-lifecycle.json"))).toBe(true);
+    expect(readJson(path.join(root, "tool-lifecycle.json")).itemCount).toBe(3);
+  });
+
+  it("summarizes provider step output and enforces comparable token accounting", () => {
+    const summary = providerStepsFromEvidence(
+      {
+        events: [
+          {
+            type: "provider.step",
+            sequence: 10,
+            timestamp: "2026-07-16T00:00:00Z",
+            payload: {
+              attempt: 1,
+              completed: true,
+              finish_reason: "tool_call",
+              text_output_chars: 7,
+              reasoning_output_chars: 40,
+              tool_call_count: 1,
+              usage: {
+                input_tokens: 100,
+                output_tokens: 20,
+                cached_input_tokens: 40,
+              },
+            },
+          },
+          {
+            type: "provider.step",
+            sequence: 20,
+            payload: {
+              runtimeEvent: {
+                type: "provider_step",
+                attempt: 2,
+                completed: true,
+                finish_reason: "stop",
+                text_output_chars: 12,
+                reasoning_output_chars: 60,
+                tool_call_count: 0,
+                usage: {
+                  input_tokens: 200,
+                  output_tokens: 30,
+                  cached_input_tokens: 50,
+                },
+              },
+            },
+          },
+        ],
+      },
+      { maxProviderSteps: 2, tokenBudget: 250 },
+    );
+
+    expect(summary).toMatchObject({
+      stepCount: 2,
+      usageStatus: "complete",
+      usage: {
+        inputTokens: 300,
+        outputTokens: 50,
+        cachedInputTokens: 90,
+        budgetTokens: 260,
+      },
+      budgets: {
+        exhausted: true,
+        reasons: ["provider_steps", "token_budget"],
+        remainingProviderSteps: 0,
+        remainingTokens: 0,
+      },
+    });
+    expect(summary.steps[0].output).toEqual({
+      textChars: 7,
+      reasoningChars: 40,
+      toolCalls: 1,
+    });
+  });
+
+  it("keeps the App Server terminal failure message for owner classification", () => {
+    expect(
+      terminalMessageFromEvidence(
+        {
+          events: [
+            {
+              type: "turn.failed",
+              turnId: "turn-1",
+              payload: {
+                message:
+                  "execution backend error: 读取 provider SSE 失败: error decoding response body",
+              },
+            },
+          ],
+        },
+        "turn-1",
+      ),
+    ).toBe(
+      "execution backend error: 读取 provider SSE 失败: error decoding response body",
+    );
+  });
+
+  it("keeps partial current-chain evidence when turn start fails", async () => {
+    const root = temporaryRoot();
+    const workspaceDir = path.join(root, "workspace");
+    fs.mkdirSync(workspaceDir);
+    let readCount = 0;
+    const rpc = {
+      waitForHealth: async () => ({ status: "ok" }),
+      invoke: async (_options, method) => {
+        if (method === "workspace/ensure") {
+          return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
+        }
+        if (method === "agentSession/start") {
+          return { session: { sessionId: "deepswe-run-failed" } };
+        }
+        if (method === "agentSession/read") {
+          readCount += 1;
+          return { detail: { turns: [], items: [] } };
+        }
+        if (method === "evidence/export") {
+          return { events: [{ type: "provider.failed" }] };
+        }
+        throw new Error(`unexpected method ${method}`);
+      },
+      resolveProvider: async () => ({
+        providerPreference: "provider-1",
+        providerName: "openai",
+        modelPreference: "model-1",
+        source: "test",
+      }),
+      updateSession: async () => {},
+      startTurn: async () => {
+        throw new Error("Provider tool call omitted tool name");
+      },
+      readThread: async () => ({ status: "in_progress", turns: [] }),
+      sleep: async () => {},
+    };
+
+    const error = await runCurrentChainTask({
+      options: { intervalMs: 1, timeoutMs: 30_000 },
+      task: { id: "task-1", instruction: "Fix the task" },
+      workspaceDir,
+      runDir: root,
+      runId: "run-failed",
+      rpc,
+    }).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("Provider tool call omitted tool name");
+    expect(currentChainFromError(error)).toMatchObject({
+      status: "failed",
+      sessionId: "deepswe-run-failed",
+      turnId: "deepswe-turn-run-failed",
+      provider: {
+        providerPreference: "provider-1",
+        modelPreference: "model-1",
+      },
+      terminalMessage: "Provider tool call omitted tool name",
+      evidenceCapture: "partial",
+    });
+
+    expect(readCount).toBeGreaterThan(0);
+    expect(readJson(path.join(root, "thread-turn-item.json"))).toMatchObject({
+      capture: {
+        status: "partial",
+        startTurnError: "Provider tool call omitted tool name",
+      },
+    });
+    expect(readJson(path.join(root, "trajectory.json")).events).toEqual([
+      { type: "provider.failed" },
+    ]);
+    expect(fs.existsSync(path.join(root, "tool-lifecycle.json"))).toBe(true);
+  });
+
+  it("cancels the current turn when provider token evidence reaches the budget", async () => {
+    const root = temporaryRoot();
+    const workspaceDir = path.join(root, "workspace");
+    fs.mkdirSync(workspaceDir);
+    let canceled = false;
+    const providerEvents = {
+      events: [
+        {
+          type: "provider.step",
+          sequence: 5,
+          payload: {
+            attempt: 1,
+            completed: true,
+            finish_reason: "tool_call",
+            text_output_chars: 0,
+            reasoning_output_chars: 10,
+            tool_call_count: 1,
+            usage: { input_tokens: 100, output_tokens: 10 },
+          },
+        },
+      ],
+    };
+    const rpc = {
+      waitForHealth: async () => ({ status: "ok" }),
+      invoke: async (_options, method) => {
+        if (method === "workspace/ensure") {
+          return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
+        }
+        if (method === "agentSession/start") {
+          return { session: { sessionId: "deepswe-run-budget" } };
+        }
+        if (method === "agentSession/read") {
+          return {
+            detail: {
+              turns: [
+                {
+                  turnId: "deepswe-turn-run-budget",
+                  status: canceled ? "interrupted" : "accepted",
+                },
+              ],
+              items: [],
+            },
+          };
+        }
+        if (method === "evidence/export") {
+          return providerEvents;
+        }
+        throw new Error(`unexpected method ${method}`);
+      },
+      resolveProvider: async () => ({
+        providerPreference: "provider-1",
+        providerName: "openai",
+        modelPreference: "model-1",
+        source: "test",
+      }),
+      updateSession: async () => {},
+      startTurn: async () => {},
+      cancelTurn: async () => {
+        canceled = true;
+      },
+      readThread: async () => ({
+        status: canceled ? "interrupted" : "running",
+        turns: [],
+      }),
+      sleep: async () => {},
+    };
+
+    const result = await runCurrentChainTask({
+      options: {
+        intervalMs: 1,
+        evidenceIntervalMs: 1,
+        timeoutMs: 30_000,
+        maxProviderSteps: 5,
+        tokenBudget: 100,
+      },
+      task: { id: "task-1", instruction: "Fix the task" },
+      workspaceDir,
+      runDir: root,
+      runId: "run-budget",
+      rpc,
+    });
+
+    expect(canceled).toBe(true);
+    expect(result).toMatchObject({
+      status: "interrupted",
+      terminalMessage: expect.stringContaining("provider budget exhausted"),
+      budgetCancellation: {
+        reasons: ["token_budget"],
+        stepCount: 1,
+        usage: { budgetTokens: 110 },
+      },
+      providerSteps: {
+        stepCount: 1,
+        usageStatus: "complete",
+      },
+    });
+  });
+
+  it("builds a Pier replay task without copying the reference solution", () => {
+    const root = temporaryRoot();
+    const taskDir = path.join(root, "task");
+    fs.mkdirSync(path.join(taskDir, "solution"), { recursive: true });
+    fs.mkdirSync(path.join(taskDir, "tests"), { recursive: true });
+    fs.writeFileSync(
+      path.join(taskDir, "task.toml"),
+      "schema_version = '1.1'\n",
+    );
+    fs.writeFileSync(
+      path.join(taskDir, "solution", "reference.patch"),
+      "secret\n",
+    );
+    fs.writeFileSync(path.join(taskDir, "tests", "test.sh"), "#!/bin/bash\n");
+    const patchPath = path.join(root, "patch.diff");
+    fs.writeFileSync(patchPath, "diff --git a/a b/a\n", "utf8");
+
+    const replay = preparePierReplayTask({
+      task: { taskDir },
+      runDir: root,
+      patchPath,
+    });
+
+    expect(
+      fs.existsSync(
+        path.join(replay.replayTaskDir, "solution", "reference.patch"),
+      ),
+    ).toBe(false);
+    expect(
+      fs.readFileSync(
+        path.join(replay.replayTaskDir, "solution", "model.patch"),
+        "utf8",
+      ),
+    ).toContain("diff --git");
+    expect(fs.readFileSync(replay.solvePath, "utf8")).toContain(
+      "git apply --binary --index /solution/model.patch",
+    );
+  });
+
+  it("collects the three verifier outputs required by the v2 contract", () => {
+    const root = temporaryRoot();
+    const jobDir = path.join(root, "jobs", "trial", "verifier");
+    const runDir = path.join(root, "run");
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.mkdirSync(runDir, { recursive: true });
+    for (const name of ["reward.json", "ctrf.json", "test-stdout.txt"]) {
+      fs.writeFileSync(path.join(jobDir, name), `${name}\n`, "utf8");
+    }
+
+    const evidence = collectPierEvidence({
+      jobDir: path.join(root, "jobs"),
+      runDir,
+    });
+
+    expect(Object.keys(evidence).sort()).toEqual([
+      "ctrf.json",
+      "reward.json",
+      "test-stdout.txt",
+    ]);
+    expect(fs.existsSync(path.join(runDir, "reward.json"))).toBe(true);
+  });
+
+  it("reports missing Pier and container prerequisites without pretending to run", () => {
+    const result = runtimePrerequisites({
+      pierBin: "/path/that/does/not/exist/pier",
+      containerBin: "/path/that/does/not/exist/docker",
+    });
+    expect(result.status).toBe("blocked");
+    expect(result.checks.every((check) => check.passed === false)).toBe(true);
+  });
+
+  it("classifies current-chain and verifier failures by owner", () => {
+    expect(
+      classifyFailure("agent", new Error("agentSession/read failed")).owner,
+    ).toBe("app-server");
+    expect(
+      classifyFailure("verifier", new Error("Pier reward.json missing")).owner,
+    ).toBe("verifier");
+    expect(
+      classifyFailure(
+        "agent-terminal",
+        new Error("读取 provider SSE 失败: error decoding response body"),
+      ).owner,
+    ).toBe("model");
+    expect(
+      classifyFailure("patch", new Error("spawnSync git ENOBUFS")).owner,
+    ).toBe("harness");
+    expect(
+      classifyFailure(
+        "patch",
+        new Error(
+          "DeepSWE workspace HEAD contains non-candidate commits after base",
+        ),
+      ).owner,
+    ).toBe("harness");
+    expect(
+      classifyFailure(
+        "agent",
+        new Error("DeepSWE turn timeout: session=s turn=t status=in_progress"),
+      ).owner,
+    ).toBe("budget");
+    expect(
+      classifyFailure(
+        "agent",
+        new Error("timed out waiting for app-server message after 37ms"),
+      ).owner,
+    ).toBe("budget");
+  });
+
+  it("keeps retired Benchmark runners and npm entries physically absent", () => {
+    const retiredPaths = [
+      "internal/test/benchmark-release.manifest.json",
+      "internal/test/agent-qc-benchmark.manifest.json",
+      "internal/roadmap/benchmark/dataset-selection.md",
+      "internal/roadmap/benchmark/progress.md",
+      "internal/roadmap/benchmark/version-test-plan.md",
+    ];
+    expect(
+      retiredPaths.every((entry) => !fs.existsSync(path.join(repoRoot, entry))),
+    ).toBe(true);
+    const benchmarkScripts = fs
+      .readdirSync(path.join(repoRoot, "scripts/agent-qc"))
+      .filter(
+        (entry) => entry.startsWith("benchmark") && entry.endsWith(".mjs"),
+      );
+    expect(benchmarkScripts).toEqual([]);
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    );
+    expect(
+      Object.keys(packageJson.scripts).filter((name) =>
+        name.startsWith("agent-qc:benchmark"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("fails closed before live execution without explicit authorization", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/harness/deepswe-adapter.mjs",
+        "--task",
+        "happy-dom-abort-pending-body-reads",
+      ],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}${result.stderr}`).toContain(
+      "--allow-live-provider",
+    );
+  });
+
+  it("records verifier prerequisite blockers without overwriting product failure evidence", () => {
+    const root = temporaryRoot();
+    const runDir = path.join(root, "existing-run");
+    fs.mkdirSync(runDir);
+    fs.writeFileSync(
+      path.join(runDir, "patch.diff"),
+      "candidate patch\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(runDir, "adapter-result.json"),
+      JSON.stringify({
+        schemaVersion: "deepswe-adapter-result-v1",
+        status: "product_failed",
+        failure: { owner: "model", message: "provider stream failed" },
+      }),
+      "utf8",
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/harness/deepswe-adapter.mjs",
+        "--verifier-only",
+        "--run-dir",
+        runDir,
+        "--pier-bin",
+        path.join(root, "missing-pier"),
+        "--container-bin",
+        path.join(root, "missing-container"),
+      ],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    const adapterResult = readJson(path.join(runDir, "adapter-result.json"));
+    expect(adapterResult).toMatchObject({
+      status: "product_failed",
+      failure: { owner: "model" },
+      verification: { status: "blocked", failure: { owner: "verifier" } },
+    });
+    expect(
+      readJson(path.join(runDir, "verifier-prerequisites.json")).status,
+    ).toBe("blocked");
+  });
+});

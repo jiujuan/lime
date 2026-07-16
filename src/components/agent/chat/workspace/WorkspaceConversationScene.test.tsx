@@ -394,7 +394,6 @@ function renderScene(props?: RenderSceneProps) {
         subagent: false,
       },
       onToolPreferenceChange: vi.fn(),
-      selectedTeam: null,
       creationMode: "guided",
       onCreationModeChange: vi.fn(),
       activeTheme: "general",

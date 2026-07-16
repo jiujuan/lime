@@ -1,10 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  buildCodexMultiAgentVisualSnapshotProjectionEvent,
-  extractCodexMultiAgentVisualSnapshot,
-} from "../dist/index.js";
+import { extractCodexMultiAgentVisualSnapshot } from "../dist/index.js";
 
 function spawnItem(overrides = {}) {
   return {
@@ -110,62 +107,17 @@ function baseInput(overrides = {}) {
 }
 
 test("multi-agent visual snapshot is derived from Codex collabToolCall items", () => {
-  const event = buildCodexMultiAgentVisualSnapshotProjectionEvent(
-    baseInput(),
-    {
-      sequence: 251,
-      sessionId: "session-root",
-      turnId: "turn-root",
-      timestamp: "2026-07-09T00:00:00.000Z",
-    },
-  );
+  const snapshot = extractCodexMultiAgentVisualSnapshot(baseInput());
 
-  assert.deepEqual(
-    {
-      type: event.type,
-      sourceType: event.sourceType,
-      sequence: event.sequence,
-      sessionId: event.sessionId,
-      threadId: event.threadId,
-      turnId: event.turnId,
-      owner: event.owner,
-      scope: event.scope,
-      phase: event.phase,
-      surface: event.surface,
-      persistence: event.persistence,
-      control: event.control,
-      topology: event.topology,
-      runtimeEntity: event.runtimeEntity,
-      runtimeStatus: event.runtimeStatus,
-    },
-    {
-      type: "team.changed",
-      sourceType: "multi_agent_visual_snapshot_projection",
-      sequence: 251,
-      sessionId: "session-root",
-      threadId: "thread-root",
-      turnId: "turn-root",
-      owner: "team",
-      scope: "team",
-      phase: "completed",
-      surface: "delegation_graph",
-      persistence: "snapshot",
-      control: "open_detail",
-      topology: "coordinator_team",
-      runtimeEntity: "work_item",
-      runtimeStatus: "completed",
-    },
-  );
-
-  assert.deepEqual(event.payload.validationIssues, []);
-  assert.equal(event.payload.collabItemCount, 2);
-  assert.deepEqual(event.payload.visualSurfaces, {
+  assert.deepEqual(snapshot.validationIssues, []);
+  assert.equal(snapshot.collabItemCount, 2);
+  assert.deepEqual(snapshot.visualSurfaces, {
     teamTranscript: true,
     teamRoster: true,
     delegationGraph: true,
     workerNotifications: true,
   });
-  assert.deepEqual(event.payload.teamTranscriptRows[0], {
+  assert.deepEqual(snapshot.teamTranscriptRows[0], {
     itemId: "spawn-1",
     tool: "spawn_agent",
     status: "completed",
@@ -175,7 +127,7 @@ test("multi-agent visual snapshot is derived from Codex collabToolCall items", (
     requestedModel: "gpt-5",
     reasoningEffort: "high",
   });
-  assert.deepEqual(event.payload.teamRosterCards[0], {
+  assert.deepEqual(snapshot.teamRosterCards[0], {
     threadId: "thread-research",
     status: "completed",
     sourceStatus: "completed",
@@ -184,7 +136,7 @@ test("multi-agent visual snapshot is derived from Codex collabToolCall items", (
     role: "explorer",
     messagePreview: "Done with source links.",
   });
-  assert.deepEqual(event.payload.workerNotifications, [
+  assert.deepEqual(snapshot.workerNotifications, [
     {
       notificationId: "thread-research:completed",
       itemId: "wait-1",

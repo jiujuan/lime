@@ -34,39 +34,6 @@ export interface WorkspaceMediaGenerationSettings {
   allowFallback?: boolean;
 }
 
-export type WorkspaceTeamSelectionSource = "builtin" | "custom";
-
-export interface WorkspaceTeamSelectionReference {
-  id: string;
-  source: WorkspaceTeamSelectionSource;
-}
-
-export interface WorkspaceAgentTeamRoleSettings {
-  id: string;
-  label: string;
-  summary: string;
-  profileId?: string;
-  roleKey?: string;
-  skillIds?: string[];
-}
-
-export interface WorkspaceAgentCustomTeamSettings {
-  id: string;
-  label: string;
-  description: string;
-  theme?: string;
-  presetId?: string;
-  roles: WorkspaceAgentTeamRoleSettings[];
-  createdAt?: number;
-  updatedAt?: number;
-}
-
-export interface WorkspaceAgentTeamSettings {
-  selectedTeam?: WorkspaceTeamSelectionReference;
-  disabled?: boolean;
-  customTeams?: WorkspaceAgentCustomTeamSettings[];
-}
-
 /** Workspace 设置 */
 export interface WorkspaceSettings {
   mcpConfig?: Record<string, unknown>;
@@ -75,5 +42,4 @@ export interface WorkspaceSettings {
   imageGeneration?: WorkspaceMediaGenerationSettings;
   videoGeneration?: WorkspaceMediaGenerationSettings;
   voiceGeneration?: WorkspaceMediaGenerationSettings;
-  agentTeam?: WorkspaceAgentTeamSettings;
 }

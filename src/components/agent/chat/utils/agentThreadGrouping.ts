@@ -15,10 +15,6 @@ import type {
   AgentThreadSummaryChip,
 } from "./agentThreadGroupingTypes";
 import {
-  hasImportedSourceProcessItem,
-  isImportedSourceMetadata,
-} from "./importedSourceProcess";
-import {
   isUnifiedWebFetchToolName,
   isUnifiedWebSearchToolName,
 } from "./toolNameFamily";
@@ -173,112 +169,12 @@ function resolveCountLabel(kind: AgentThreadGroupKind, count: number): string {
   }
 }
 
-function summarizeImportedSourceProcessBatch(
-  items: AgentThreadItem[],
-  t?: AgentThreadGroupingTranslate,
-): {
-  title: string;
-  supportingLines: string[];
-  countLabel: string;
-  rawDetailLabel: string;
-} | null {
-  if (!hasImportedSourceProcessItem(items)) {
-    return null;
-  }
-
-  const commandCount = items.filter(
-    (item) =>
-      (item.type === "command_execution" || item.type === "tool_call") &&
-      isImportedSourceMetadata(item.metadata),
-  ).length;
-  const reasoningCount = items.filter(
-    (item) =>
-      item.type === "reasoning" &&
-      item.text.trim().length > 0 &&
-      isImportedSourceMetadata(item.metadata),
-  ).length;
-  const searchCount = items.filter(
-    (item) =>
-      item.type === "web_search" && isImportedSourceMetadata(item.metadata),
-  ).length;
-  const patchCount = items.filter(
-    (item) => item.type === "patch" && isImportedSourceMetadata(item.metadata),
-  ).length;
-
-  const supportingLines = [
-    reasoningCount > 0
-      ? translateGroupingText(
-          t,
-          "generalWorkbench.taskRail.importedProcess.reasoning",
-          "{{count}} reasoning records completed",
-          { count: reasoningCount },
-        )
-      : null,
-    commandCount > 0
-      ? translateGroupingText(
-          t,
-          "generalWorkbench.taskRail.importedProcess.commands",
-          "{{count}} command records",
-          { count: commandCount },
-        )
-      : null,
-    searchCount > 0
-      ? translateGroupingText(
-          t,
-          "generalWorkbench.taskRail.importedProcess.searches",
-          "{{count}} search records",
-          { count: searchCount },
-        )
-      : null,
-    patchCount > 0
-      ? translateGroupingText(
-          t,
-          "generalWorkbench.taskRail.importedProcess.patches",
-          "{{count}} file changes",
-          { count: patchCount },
-        )
-      : null,
-  ].filter((line): line is string => Boolean(line));
-
-  return {
-    title: translateGroupingText(
-      t,
-      "generalWorkbench.taskRail.importedProcess.title",
-      "Imported command record",
-    ),
-    supportingLines:
-      supportingLines.length > 0
-        ? supportingLines
-        : [
-            translateGroupingText(
-              t,
-              "generalWorkbench.taskRail.importedProcess.empty",
-              "Execution records imported from local history",
-            ),
-          ],
-    countLabel: translateGroupingText(
-      t,
-      "generalWorkbench.taskRail.importedProcess.count",
-      "{{count}} steps",
-      { count: items.length },
-    ),
-    rawDetailLabel: translateGroupingText(
-      t,
-      "generalWorkbench.taskRail.importedProcess.open",
-      "Expand imported process",
-    ),
-  };
-}
-
 function shouldDefaultExpand(
   kind: AgentThreadGroupKind,
   status: AgentThreadItemStatus,
   items: AgentThreadItem[] = [],
 ): boolean {
   if (kind === "approval" || kind === "alert") {
-    return true;
-  }
-  if (kind === "process" && hasImportedSourceProcessItem(items)) {
     return true;
   }
   return status !== "completed";
@@ -337,40 +233,26 @@ export function buildAgentThreadDisplayModel(
         entry.type === "turn_summary" ||
         entry.type === "context_compaction",
     );
-    const importedProcessSummary =
-      current.kind === "process"
-        ? summarizeImportedSourceProcessBatch(current.items, options.t)
-        : null;
     const processBatchSummary =
-      current.kind === "process" &&
-      !hasReasoningProcessItem &&
-      !importedProcessSummary
+      current.kind === "process" && !hasReasoningProcessItem
         ? summarizeThreadProcessBatch(current.items)
         : null;
     const startedAt =
       current.items[0]?.started_at || current.items[0]?.updated_at || "";
     const completedAt = current.items[current.items.length - 1]?.completed_at;
-    const forceExpanded =
-      current.kind === "process" && hasImportedSourceProcessItem(current.items);
     const block: AgentThreadOrderedBlock = {
       id: current.items.map((entry) => entry.id).join(":"),
       kind: current.kind,
-      title:
-        importedProcessSummary?.title ||
-        processBatchSummary?.title ||
-        resolveBlockTitle(current.kind),
+      title: processBatchSummary?.title || resolveBlockTitle(current.kind),
       status,
       items: current.items,
       previewLines:
-        importedProcessSummary?.supportingLines ||
         processBatchSummary?.supportingLines ||
         buildPreviewLines(current.kind, current.items),
       countLabel:
-        importedProcessSummary?.countLabel ||
         processBatchSummary?.countLabel ||
         resolveCountLabel(current.kind, current.items.length),
       rawDetailLabel:
-        importedProcessSummary?.rawDetailLabel ||
         processBatchSummary?.rawDetailLabel ||
         (current.kind === "approval"
           ? "查看待处理项"
@@ -380,7 +262,6 @@ export function buildAgentThreadDisplayModel(
               ? "查看子任务详情"
               : "查看执行过程"),
       defaultExpanded: shouldDefaultExpand(current.kind, status, current.items),
-      ...(forceExpanded ? { forceExpanded: true } : {}),
       startedAt,
       completedAt,
     };

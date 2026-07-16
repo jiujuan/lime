@@ -243,6 +243,22 @@ pub enum TextDeltaBatchBoundary {
 pub type AgentProviderTraceStage = ProviderTraceStage;
 pub type AgentProviderTraceEvent = ProviderTraceEvent;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentMessagePhase {
+    Commentary,
+    FinalAnswer,
+}
+
+impl AgentMessagePhase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Commentary => "commentary",
+            Self::FinalAnswer => "final_answer",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentEvent {
@@ -284,6 +300,7 @@ pub enum AgentEvent {
     TextEnd {
         #[serde(rename = "itemId")]
         item_id: String,
+        phase: AgentMessagePhase,
     },
 
     #[serde(rename = "text_delta_batch")]
@@ -504,6 +521,19 @@ pub enum AgentEvent {
         queued_turn_ids: Vec<String>,
     },
 
+    #[serde(rename = "provider_step")]
+    ProviderStep {
+        attempt: u32,
+        completed: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        finish_reason: Option<String>,
+        text_output_chars: u64,
+        reasoning_output_chars: u64,
+        tool_call_count: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        usage: Option<AgentTokenUsage>,
+    },
+
     #[serde(rename = "done")]
     Done {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -550,7 +580,13 @@ pub(crate) fn canonical_tool_item_event(
     if matches!(phase, ToolLifecyclePhase::Completed) && output.is_none() {
         return None;
     }
+    if tool_name == tool_runtime::unified_exec::WRITE_STDIN_TOOL_NAME
+        && matches!(phase, ToolLifecyclePhase::Started)
+    {
+        return None;
+    }
 
+    let raw_arguments = arguments.clone();
     let arguments = canonical_tool_arguments(arguments);
     let mut metadata = serde_json::Map::new();
     metadata.insert(
@@ -568,7 +604,7 @@ pub(crate) fn canonical_tool_item_event(
         ),
     );
 
-    let (status, output) = match output {
+    let (mut status, output) = match output {
         Some(output) => {
             let NormalizedToolOutput {
                 success,
@@ -614,7 +650,55 @@ pub(crate) fn canonical_tool_item_event(
         }
         None => (ItemStatus::InProgress, None),
     };
-    let payload = if tool_name == tool_runtime::agent_control::WAIT_AGENT_TOOL_NAME {
+    let command_call_id = metadata
+        .get("exec_command_call_id")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let command_running = metadata.get("session_id").is_some_and(Value::is_number)
+        && metadata.get("exit_code").is_none_or(Value::is_null);
+    let command_exit_code = metadata
+        .get("exit_code")
+        .and_then(Value::as_i64)
+        .and_then(|value| i32::try_from(value).ok());
+    let command_tool = tool_name == tool_runtime::unified_exec::EXEC_COMMAND_TOOL_NAME
+        || tool_name == tool_runtime::unified_exec::WRITE_STDIN_TOOL_NAME;
+    if command_running {
+        status = ItemStatus::InProgress;
+    }
+    let payload = if command_tool {
+        let command = metadata
+            .get("command")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                raw_arguments
+                    .get("cmd")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned)
+            })
+            .unwrap_or_else(|| "command".to_string());
+        let cwd = metadata
+            .get("cwd")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                raw_arguments
+                    .get("workdir")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned)
+            });
+        let command_output = metadata
+            .get("command_output")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .filter(|value| !value.is_empty());
+        ThreadItemPayload::Command {
+            command,
+            cwd,
+            output: command_output,
+            exit_code: command_exit_code,
+        }
+    } else if tool_name == tool_runtime::agent_control::WAIT_AGENT_TOOL_NAME {
         ThreadItemPayload::CollabAgentToolCall {
             call_id: call_id.clone(),
             operation: CollabAgentOperation::Wait,
@@ -630,11 +714,12 @@ pub(crate) fn canonical_tool_item_event(
             output,
         }
     };
+    let item_id = command_call_id.unwrap_or(call_id);
     let item = ThreadItem {
         session_id: context.session_id,
         thread_id: context.thread_id,
         turn_id: TurnId::new(turn_id),
-        item_id: ItemId::new(call_id),
+        item_id: ItemId::new(item_id),
         sequence: context.sequence,
         ordinal: context.ordinal,
         created_at_ms: context.created_at_ms,
@@ -645,9 +730,10 @@ pub(crate) fn canonical_tool_item_event(
         payload,
         metadata: Value::Object(metadata),
     };
-    Some(match phase {
-        ToolLifecyclePhase::Started => AgentEvent::ItemStarted { item },
-        ToolLifecyclePhase::Completed => AgentEvent::ItemCompleted { item },
+    Some(match (phase, command_running) {
+        (ToolLifecyclePhase::Started, _) => AgentEvent::ItemStarted { item },
+        (ToolLifecyclePhase::Completed, true) => AgentEvent::ItemUpdated { item },
+        (ToolLifecyclePhase::Completed, false) => AgentEvent::ItemCompleted { item },
     })
 }
 
@@ -711,8 +797,6 @@ pub struct AgentUserPreferences {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selected_team_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_continue: Option<Value>,
 }
 
@@ -769,6 +853,140 @@ mod agent_control_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use tool_runtime::tool_lifecycle::{ToolLifecycleEvent, ToolLifecyclePhase};
+    use tool_runtime::tool_result_projection::NormalizedToolOutput;
+
+    fn tool_item_context() -> ToolItemLifecycleContext {
+        ToolItemLifecycleContext {
+            session_id: SessionId::new("session-1"),
+            thread_id: ThreadId::new("thread-1"),
+            sequence: 1,
+            ordinal: 1,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+        }
+    }
+
+    fn unified_exec_output(running: bool) -> NormalizedToolOutput {
+        let mut metadata = HashMap::from([
+            (
+                "exec_command_call_id".to_string(),
+                serde_json::json!("exec-call"),
+            ),
+            ("command".to_string(), serde_json::json!("printf done")),
+            ("cwd".to_string(), serde_json::json!("/tmp/project")),
+            (
+                "command_output".to_string(),
+                serde_json::json!(if running { "" } else { "done" }),
+            ),
+            (
+                "exit_code".to_string(),
+                if running {
+                    Value::Null
+                } else {
+                    serde_json::json!(0)
+                },
+            ),
+        ]);
+        if running {
+            metadata.insert("session_id".to_string(), serde_json::json!(1001));
+        }
+        NormalizedToolOutput {
+            success: true,
+            text: "{}".to_string(),
+            structured_content: None,
+            error: None,
+            duration_ms: 10,
+            truncation: None,
+            sidecar_reference: None,
+            metadata,
+            agent_control_projection_facts: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn exec_command_projects_canonical_command_lifecycle() {
+        let started = canonical_tool_item_event(
+            ToolLifecycleEvent {
+                turn_id: "turn-1".to_string(),
+                call_id: "exec-call".to_string(),
+                tool_name: "exec_command".to_string(),
+                arguments: serde_json::json!({ "cmd": "printf done" }),
+                environments: Vec::new(),
+                phase: ToolLifecyclePhase::Started,
+                output: None,
+            },
+            tool_item_context(),
+        )
+        .expect("command started event");
+        let AgentEvent::ItemStarted { item } = started else {
+            panic!("expected item started");
+        };
+        assert!(matches!(item.payload, ThreadItemPayload::Command { .. }));
+
+        let updated = canonical_tool_item_event(
+            ToolLifecycleEvent {
+                turn_id: "turn-1".to_string(),
+                call_id: "exec-call".to_string(),
+                tool_name: "exec_command".to_string(),
+                arguments: serde_json::json!({ "cmd": "printf done" }),
+                environments: Vec::new(),
+                phase: ToolLifecyclePhase::Completed,
+                output: Some(unified_exec_output(true)),
+            },
+            tool_item_context(),
+        )
+        .expect("running command update");
+        let AgentEvent::ItemUpdated { item } = updated else {
+            panic!("expected item updated");
+        };
+        assert_eq!(item.item_id.as_str(), "item_exec-call");
+        assert_eq!(item.status, ItemStatus::InProgress);
+    }
+
+    #[test]
+    fn write_stdin_completes_original_command_item_without_second_started_item() {
+        let started = canonical_tool_item_event(
+            ToolLifecycleEvent {
+                turn_id: "turn-1".to_string(),
+                call_id: "write-call".to_string(),
+                tool_name: "write_stdin".to_string(),
+                arguments: serde_json::json!({ "session_id": 1001, "chars": "" }),
+                environments: Vec::new(),
+                phase: ToolLifecyclePhase::Started,
+                output: None,
+            },
+            tool_item_context(),
+        );
+        assert!(started.is_none());
+
+        let completed = canonical_tool_item_event(
+            ToolLifecycleEvent {
+                turn_id: "turn-1".to_string(),
+                call_id: "write-call".to_string(),
+                tool_name: "write_stdin".to_string(),
+                arguments: serde_json::json!({ "session_id": 1001, "chars": "" }),
+                environments: Vec::new(),
+                phase: ToolLifecyclePhase::Completed,
+                output: Some(unified_exec_output(false)),
+            },
+            tool_item_context(),
+        )
+        .expect("original command completion");
+        let AgentEvent::ItemCompleted { item } = completed else {
+            panic!("expected item completed");
+        };
+        assert_eq!(item.item_id.as_str(), "item_exec-call");
+        assert!(matches!(
+            item.payload,
+            ThreadItemPayload::Command {
+                output: Some(ref output),
+                exit_code: Some(0),
+                ..
+            } if output == "done"
+        ));
+    }
 
     #[test]
     fn agent_op_user_input_serializes_with_protocol_tag() {
@@ -788,7 +1006,6 @@ mod tests {
                 task: Some(false),
                 subagent: Some(false),
                 theme: Some("general".to_string()),
-                selected_team_id: None,
                 auto_continue: Some(serde_json::json!({
                     "enabled": true,
                     "continuation_length": 3
@@ -941,6 +1158,7 @@ mod tests {
             },
             AgentEvent::TextEnd {
                 item_id: "message-1".to_string(),
+                phase: AgentMessagePhase::FinalAnswer,
             },
             AgentEvent::ThinkingDelta {
                 item_id: "reasoning-1".to_string(),
@@ -956,6 +1174,7 @@ mod tests {
         assert_eq!(values[0]["itemId"], "message-1");
         assert_eq!(values[1]["type"], "text_delta");
         assert_eq!(values[1]["itemId"], "message-1");
+        assert_eq!(values[2]["phase"], "final_answer");
         assert_eq!(values[2]["type"], "text_end");
         assert_eq!(values[2]["itemId"], "message-1");
         assert_eq!(values[3]["type"], "thinking_delta");

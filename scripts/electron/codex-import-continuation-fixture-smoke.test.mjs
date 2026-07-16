@@ -1,22 +1,24 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
-function readSmokeScript() {
-  return fs.readFileSync(
+function readSmokeSources() {
+  return [
     "scripts/electron/codex-import-continuation-fixture-smoke.mjs",
-    "utf8",
-  );
+    "scripts/electron/lib/codex-import-continuation-fixture.mjs",
+  ]
+    .map((filePath) => fs.readFileSync(filePath, "utf8"))
+    .join("\n");
 }
 
 describe("codex import continuation Electron fixture smoke guard", () => {
   it("keeps the smoke on real Electron Desktop Host IPC and App Server JSON-RPC", () => {
-    const content = readSmokeScript();
+    const content = readSmokeSources();
 
     expect(content).toContain("import { _electron as electron }");
     expect(content).toContain("resolveDevAppServerBinary");
     expect(content).toContain("APP_SERVER_BIN: appServerBinary");
     expect(content).toContain("electron.launch({");
-    expect(content).toContain('"--use-mock-keychain"');
+    expect(content).toContain('args: ["--use-mock-keychain", "."]');
     expect(content).toContain("ELECTRON_E2E_USER_DATA_DIR");
     expect(content).toContain('LIME_ELECTRON_E2E: "1"');
     expect(content).toContain('LIME_ELECTRON_DEV_HTTP_BRIDGE: "0"');
@@ -26,13 +28,35 @@ describe("codex import continuation Electron fixture smoke guard", () => {
     );
     expect(content).toContain("window.electronAPI.supportsCommand");
     expect(content).toContain("app_server_handle_json_lines");
+    expect(content).toContain("window.__LIME_ELECTRON__ === true");
+    expect(content).toContain("client.bridgeFacts.every");
+    expect(content).toContain("turnStartCount === 2");
   });
 
-  it("imports source rollout details then continues the same current session", () => {
-    const content = readSmokeScript();
+  it("uses the runtime provider loop for imported and normal unified exec turns", () => {
+    const content = readSmokeSources();
+
+    expect(content).toContain("startOpenAiCompatibleFixtureServer");
+    expect(content).toContain('APP_SERVER_BACKEND_MODE: "runtime"');
+    expect(content).toContain('name: "exec_command"');
+    expect(content).toContain('request.toolNames.includes("exec_command")');
+    expect(content).toContain('request.toolNames.includes("write_stdin")');
+    expect(content).toContain("providerRequestsAfterCommit === 0");
+    expect(content).toContain("findCompletedCommand");
+    expect(content).toContain("commandShapesIsomorphic");
+    expect(content).toContain("importedCommandShape");
+    expect(content).toContain("normalCommandShape");
+    expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "external"');
+    expect(content).not.toContain("APP_SERVER_BACKEND_COMMAND");
+  });
+
+  it("imports canonical history details without replaying historical tools", () => {
+    const content = readSmokeSources();
 
     expect(content).toContain('"conversationImport/thread/commit"');
     expect(content).toContain('"agentSession/read"');
+    expect(content).toContain('"agentSession/start"');
+    expect(content).toContain('"agentSession/update"');
     expect(content).toContain('"agentSession/turn/start"');
     expect(content).toContain("writeCodexRolloutFixture");
     expect(content).toContain('type: "reasoning"');
@@ -40,28 +64,20 @@ describe("codex import continuation Electron fixture smoke guard", () => {
     expect(content).toContain('type: "web_search_call"');
     expect(content).toContain('type: "patch_apply_end"');
     expect(content).toContain('type: "exec_approval_request"');
-    expect(content).toContain("hasReasoningItem");
-    expect(content).toContain("hasCommandItem");
-    expect(content).toContain("hasPatchItem");
-    expect(content).toContain("hasWebSearchItem");
-    expect(content).toContain("hasApprovalItem");
-    expect(content).toContain("continuedReadSessionId === summary.sessionId");
-    expect(content).toContain("backendMetadataImported");
-    expect(content).toContain('summary.backendCwd === "/workspace/imported-codex"');
+    expect(content).toContain("historical.hasReasoningItem");
+    expect(content).toContain("historical.hasCommandItem");
+    expect(content).toContain("historical.hasPatchItem");
+    expect(content).toContain("historical.hasWebSearchItem");
+    expect(content).toContain("historical.hasApprovalItem");
   });
 
-  it("uses external fixture backend only, not legacy runtime or mock fallback", () => {
-    const content = readSmokeScript();
+  it("keeps retired shell names negative-only and excludes production mock fallback", () => {
+    const content = readSmokeSources();
 
-    expect(content).toContain('APP_SERVER_BACKEND_MODE: "external"');
-    expect(content).toContain("APP_SERVER_BACKEND_COMMAND: process.execPath");
-    expect(content).toContain("writeFixtureBackend");
-    expect(content).toContain('input.kind === "turnStart"');
-    expect(content).toContain('type: "message.delta"');
-    expect(content).toContain('type: "turn.completed"');
+    expect(content).toContain(
+      'const retiredTools = ["Bash", "PowerShell", "BashTool", "PowerShellTool"]',
+    );
     expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "mock"');
-    expect(content).not.toContain('backendMode: "mock"');
-    expect(content).not.toContain("--allow-live-provider");
     expect(content).not.toContain("agent_runtime_");
     expect(content).not.toContain("mockPriorityCommands");
     expect(content).not.toContain("defaultMocks");

@@ -11,6 +11,7 @@ use app_server::FilesystemFileCheckpointSnapshotStore;
 use app_server::FilesystemOutputSnapshotStore;
 use app_server::LocalAppDataSource;
 use app_server::ProjectionStore;
+use app_server::RuntimeHostContext;
 use app_server::SidecarStore;
 use app_server::StorageRoots;
 use app_server::TraceEventWriter;
@@ -176,6 +177,11 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
             .with_projection_store(Arc::new(projection_store))
             .with_telemetry_store(Arc::new(telemetry_store));
     }
+
+    runtime
+        .recover_agent_control_spawns(RuntimeHostContext::default(), None)
+        .await
+        .map_err(|error| anyhow::anyhow!("failed to recover agent control spawns: {error}"))?;
 
     AppServer::with_runtime(runtime)
         .with_mcp_elicitation_router(mcp_elicitation_router)

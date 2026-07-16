@@ -67,7 +67,6 @@ describe("agentStreamRuntimeContextController", () => {
       output_schema_runtime: null,
       recent_access_mode: null,
       recent_preferences: null,
-      recent_team_selection: null,
       recent_theme: null,
       recent_session_mode: null,
       recent_gate_key: null,

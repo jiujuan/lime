@@ -107,34 +107,6 @@ describe("workspace harness request metadata runtime", () => {
       },
       isThemeWorkbench: true,
       mappedTheme: "general",
-      preferredTeamPresetId: "builtin-research",
-      resolvedTeamMemoryShadowSnapshot: {
-        repoScope: "/tmp/project",
-        entries: {
-          "team.selection": {
-            key: "team.selection",
-            content: "Team：前端联调团队",
-            updatedAt: 1,
-          },
-        },
-      },
-      selectedTeam: {
-        id: "team-1",
-        source: "builtin",
-        description: "负责跨文件定位与修复",
-        roles: [
-          {
-            id: "researcher",
-            label: "研究员",
-            summary: "负责收集资料",
-            profileId: "code-explorer",
-            roleKey: "explorer",
-            skillIds: ["repo-exploration"],
-          },
-        ],
-      },
-      selectedTeamLabel: "前端联调团队",
-      selectedTeamSummary: "按定位、修复、验证三段推进",
       themeWorkbenchActiveQueueTitle: "  修复导入渲染  ",
       workspaceSkillBindings: [workspaceSkillBinding],
       workspaceSkillRuntimeEnable: {
@@ -153,12 +125,6 @@ describe("workspace harness request metadata runtime", () => {
       gate_key: "write_mode",
       run_title: "修复导入渲染",
       content_id: "content-1",
-      preferred_team_preset_id: "builtin-research",
-      selected_team_id: "team-1",
-      selected_team_source: "builtin",
-      selected_team_label: "前端联调团队",
-      selected_team_description: "负责跨文件定位与修复",
-      selected_team_summary: "按定位、修复、验证三段推进",
       agent_response_language: "en-US",
       browser_assist: {
         enabled: true,
@@ -166,16 +132,6 @@ describe("workspace harness request metadata runtime", () => {
         preferred_backend: "lime_extension_bridge",
         auto_launch: false,
         stream_mode: "both",
-      },
-      team_memory_shadow: {
-        repo_scope: "/tmp/project",
-        entries: [
-          {
-            key: "team.selection",
-            content: "Team：前端联调团队",
-            updated_at: 1,
-          },
-        ],
       },
       workspace_skill_bindings: {
         source: "p3c_runtime_binding",
@@ -198,16 +154,6 @@ describe("workspace harness request metadata runtime", () => {
         ],
       },
     });
-    expect(metadata.selected_team_roles).toEqual([
-      {
-        id: "researcher",
-        label: "研究员",
-        summary: "负责收集资料",
-        profile_id: "code-explorer",
-        role_key: "explorer",
-        skill_ids: ["repo-exploration"],
-      },
-    ]);
   });
 
   it("非主题工作台时不应写入 gate key", () => {
@@ -271,7 +217,7 @@ describe("workspace harness request metadata runtime", () => {
     const firstDisabled = harness.getValue();
 
     harness.rerender({
-      selectedTeamLabel: "前端联调团队",
+      contentId: "ignored-while-disabled",
     });
     expect(harness.getValue()).toBe(firstDisabled);
     expect(harness.getValue()).toEqual({});

@@ -1,5 +1,4 @@
 import type { AgentThreadItem, Message } from "../types";
-import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
 import { isUpdatePlanToolName } from "../utils/toolNameFamily";
 import {
   buildTimelineActionContentPart,
@@ -133,8 +132,6 @@ export function buildTimelineInlineContentParts(params: {
       item.text.trim().length > 0
     );
   });
-  const hasImportedProcess = hasImportedSourceProcessItem(items);
-
   const reasoningCount = items.filter(
     (item) => item.type === "reasoning" && item.text.trim().length > 0,
   ).length;
@@ -164,7 +161,6 @@ export function buildTimelineInlineContentParts(params: {
   }
   if (
     !hasAgentMessage &&
-    !hasImportedProcess &&
     reasoningCount === 0 &&
     planCount === 0 &&
     toolLikeCount === 0 &&

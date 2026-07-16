@@ -42,6 +42,22 @@ export function readContentPartSequence(part: ContentPart): number | null {
     : null;
 }
 
+export function canonicalAgentMessageItemId(
+  parts: readonly ContentPart[] | null | undefined,
+): string | null {
+  for (const part of [...(parts ?? [])].reverse()) {
+    if (part.type !== "text" || part.metadata?.source !== "agent_text_delta") {
+      continue;
+    }
+    for (const value of [part.metadata.threadItemId, part.metadata.itemId]) {
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+  }
+  return null;
+}
+
 export function isProcessBoundaryContentPart(part: ContentPart): boolean {
   if (part.type !== "text") {
     return true;

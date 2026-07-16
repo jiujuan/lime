@@ -131,7 +131,6 @@ const {
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
   METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
   METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
-  METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
   METHOD_EVIDENCE_EXPORT,
   METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
   METHOD_EXECUTION_PROCESS_INTERRUPT,
@@ -505,7 +504,6 @@ test("builds workspace and skill read requests with current methods", () => {
     executionStrategy: "react",
     recentAccessMode: "full-access",
     recentPreferences: { task: true, subagent: false },
-    recentTeamSelection: { disabled: true },
   });
   const archiveManySessions = client.archiveManySessions({
     sessionIds: ["session-main", "session-second"],
@@ -629,7 +627,6 @@ test("builds workspace and skill read requests with current methods", () => {
     executionStrategy: "react",
     recentAccessMode: "full-access",
     recentPreferences: { task: true, subagent: false },
-    recentTeamSelection: { disabled: true },
   });
   assert.equal(archiveManySessions.method, METHOD_AGENT_SESSION_ARCHIVE_MANY);
   assert.deepEqual(archiveManySessions.params, {
@@ -2399,25 +2396,6 @@ test("builds connect deep link requests with current methods", () => {
     workspaceId: "workspace-1",
     confirmed: true,
   });
-  const importRuntimeEvents = client.readConversationImportRuntimeEvents({
-    sessionId: "sess-imported",
-    offset: 80,
-    limit: 20,
-    turnIndex: 0,
-    eventType: "command.started",
-  });
-  assert.equal(importRuntimeEvents.id, 9);
-  assert.equal(
-    importRuntimeEvents.method,
-    METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
-  );
-  assert.deepEqual(importRuntimeEvents.params, {
-    sessionId: "sess-imported",
-    offset: 80,
-    limit: 20,
-    turnIndex: 0,
-    eventType: "command.started",
-  });
 });
 
 test("builds evidence export requests with optional scope flags and runtime export requests", () => {
@@ -3087,6 +3065,27 @@ test("ordinary request timeout is not extended forever by streaming notification
 
   assert.equal(sent[0].method, METHOD_AGENT_SESSION_LIST);
   assert.ok(sequence > 0);
+});
+
+test("request timeout reports the original budget instead of the final read slice", async () => {
+  const observedTimeouts = [];
+  const connection = new AppServerConnection({
+    send() {},
+    async nextMessage(timeoutMs) {
+      observedTimeouts.push(timeoutMs);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      throw new Error(
+        `timed out waiting for app-server message after ${timeoutMs}ms`,
+      );
+    },
+  });
+
+  await assert.rejects(
+    () => connection.listSessions({}, { timeoutMs: 30 }),
+    /timed out waiting for app-server message after 30ms/,
+  );
+
+  assert.ok(observedTimeouts.some((timeoutMs) => timeoutMs < 30));
 });
 
 test("connection rejects already aborted requests before transport send", async () => {

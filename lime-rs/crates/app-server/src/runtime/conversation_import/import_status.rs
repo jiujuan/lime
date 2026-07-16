@@ -108,6 +108,5 @@ fn reference_source_client_matches(
 pub(super) fn source_client_value(source_client: ConversationImportSourceClient) -> &'static str {
     match source_client {
         ConversationImportSourceClient::Codex => "codex",
-        ConversationImportSourceClient::ClaudeCode => "claude_code",
     }
 }

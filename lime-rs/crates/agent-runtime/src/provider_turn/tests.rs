@@ -235,6 +235,67 @@ fn provider_output_item_id_is_turn_and_attempt_scoped() {
 }
 
 #[tokio::test]
+async fn provider_request_includes_model_visible_working_directory_before_user_input() {
+    let provider = Arc::new(ScriptedProvider::new(vec![vec![
+        Ok(CanonicalLlmEvent::TextDelta {
+            id: "text-0".to_string(),
+            text: "done".to_string(),
+        }),
+        Ok(CanonicalLlmEvent::Finish {
+            reason: FinishReason::Stop,
+            usage: None,
+            response_id: Some("response-1".to_string()),
+        }),
+    ]]));
+    let requests = Arc::clone(&provider.requests);
+
+    run_current_provider_turn(
+        CurrentProviderTurnInput {
+            provider,
+            provider_trace_metadata: None,
+            session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                .turn_id("turn-1")
+                .build(),
+            initial_messages: vec![CurrentProviderMessage::user(vec![
+                CurrentProviderContent::Text("inspect the workspace".to_string()),
+            ])],
+            tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                RuntimeToolStepSnapshot::new(
+                    Vec::new(),
+                    RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                ),
+            ),
+            model_request_policy: None,
+            tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+            working_directory: PathBuf::from("/tmp/task<&>"),
+            cancel_token: None,
+        },
+        |_| {},
+    )
+    .await
+    .expect("provider turn");
+
+    let requests = requests.lock().expect("recorded requests");
+    assert_eq!(requests.len(), 1);
+    assert!(matches!(
+        requests[0].messages.as_slice(),
+        [
+            CurrentProviderMessage {
+                role: CurrentProviderRole::User,
+                content: environment_content,
+            },
+            CurrentProviderMessage {
+                role: CurrentProviderRole::User,
+                content: user_content,
+            }
+        ] if matches!(environment_content.as_slice(), [CurrentProviderContent::Text(text)]
+            if text == "<environment_context>\n<cwd>/tmp/task&lt;&amp;&gt;</cwd>\n</environment_context>")
+            && matches!(user_content.as_slice(), [CurrentProviderContent::Text(text)]
+                if text == "inspect the workspace")
+    ));
+}
+
+#[tokio::test]
 async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
     let provider = Arc::new(ScriptedProvider::new(vec![
         vec![
@@ -250,7 +311,12 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
             }),
             Ok(CanonicalLlmEvent::Finish {
                 reason: FinishReason::ToolCall,
-                usage: None,
+                usage: Some(Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(4),
+                    cache_read_input_tokens: Some(2),
+                    ..Usage::default()
+                }),
                 response_id: Some("response-1".to_string()),
             }),
         ],
@@ -261,7 +327,12 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
             }),
             Ok(CanonicalLlmEvent::Finish {
                 reason: FinishReason::Stop,
-                usage: None,
+                usage: Some(Usage {
+                    input_tokens: Some(20),
+                    output_tokens: Some(6),
+                    cache_read_input_tokens: Some(5),
+                    ..Usage::default()
+                }),
                 response_id: Some("response-2".to_string()),
             }),
         ],
@@ -313,7 +384,7 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
             CurrentProviderTurnEvent::TextDelta { item_id, .. } => {
                 Some(("delta", item_id.as_str()))
             }
-            CurrentProviderTurnEvent::TextEnd { item_id } => Some(("end", item_id.as_str())),
+            CurrentProviderTurnEvent::TextEnd { item_id, .. } => Some(("end", item_id.as_str())),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -326,6 +397,20 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
             ("start", "provider:turn-1:2:text:text-0"),
             ("delta", "provider:turn-1:2:text:text-0"),
             ("end", "provider:turn-1:2:text:text-0"),
+        ]
+    );
+    let text_phases = events
+        .iter()
+        .filter_map(|event| match event {
+            CurrentProviderTurnEvent::TextEnd { phase, .. } => Some(*phase),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        text_phases,
+        vec![
+            CurrentProviderTextPhase::Commentary,
+            CurrentProviderTextPhase::FinalAnswer,
         ]
     );
 
@@ -358,6 +443,62 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
             && event.runtime_provider_protocol.as_deref() == Some("responses")
             && event.runtime_provider_active_model.as_deref() == Some("gpt-5")
     }));
+    let steps = events
+        .iter()
+        .filter_map(|event| match event {
+            CurrentProviderTurnEvent::ProviderStep {
+                attempt,
+                completed,
+                finish_reason,
+                text_output_chars,
+                reasoning_output_chars,
+                tool_call_count,
+                usage,
+            } => Some((
+                *attempt,
+                *completed,
+                finish_reason.as_deref(),
+                *text_output_chars,
+                *reasoning_output_chars,
+                *tool_call_count,
+                usage.clone(),
+            )),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        steps,
+        vec![
+            (
+                1,
+                true,
+                Some("tool_call"),
+                7,
+                0,
+                1,
+                Some(CurrentProviderUsage {
+                    input_tokens: 10,
+                    output_tokens: 4,
+                    cached_input_tokens: Some(2),
+                    cache_creation_input_tokens: None,
+                }),
+            ),
+            (
+                2,
+                true,
+                Some("stop"),
+                4,
+                0,
+                0,
+                Some(CurrentProviderUsage {
+                    input_tokens: 20,
+                    output_tokens: 6,
+                    cached_input_tokens: Some(5),
+                    cache_creation_input_tokens: None,
+                }),
+            ),
+        ]
+    );
 }
 
 #[tokio::test]

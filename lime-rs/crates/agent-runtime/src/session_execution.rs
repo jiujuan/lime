@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use crate::session_recent::{
     extract_recent_access_mode_from_metadata, extract_recent_harness_context_from_metadata,
     RecentHarnessContext, SessionExecutionRuntimeAccessMode, SessionExecutionRuntimePreferences,
-    SessionExecutionRuntimeRecentTeamSelection,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,12 +15,10 @@ pub struct SessionExecutionRuntimeSessionProjection<Usage> {
     pub usage: Option<Usage>,
     pub recent_access_mode: Option<SessionExecutionRuntimeAccessMode>,
     pub recent_preferences: Option<SessionExecutionRuntimePreferences>,
-    pub recent_team_selection: Option<SessionExecutionRuntimeRecentTeamSelection>,
 }
 
 pub const SESSION_RECENT_ACCESS_MODE_EXTENSION_NAME: &str = "lime_recent_access_mode";
 pub const SESSION_RECENT_PREFERENCES_EXTENSION_NAME: &str = "lime_recent_preferences";
-pub const SESSION_RECENT_TEAM_SELECTION_EXTENSION_NAME: &str = "lime_recent_team_selection";
 pub const SESSION_RECENT_EXTENSION_VERSION: &str = "v0";
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,7 +28,6 @@ pub struct SessionExecutionRuntimeSessionSource<UsageSource> {
     pub usage: Option<UsageSource>,
     pub recent_access_mode_state: Option<Value>,
     pub recent_preferences_state: Option<Value>,
-    pub recent_team_selection_state: Option<Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,10 +82,6 @@ pub fn project_session_execution_runtime_session<Usage>(
         recent_preferences: deserialize_session_runtime_state(
             source.recent_preferences_state.as_ref(),
         ),
-        recent_team_selection: deserialize_session_runtime_state::<
-            SessionExecutionRuntimeRecentTeamSelection,
-        >(source.recent_team_selection_state.as_ref())
-        .and_then(SessionExecutionRuntimeRecentTeamSelection::normalize),
     }
 }
 
@@ -546,10 +538,6 @@ mod tests {
                     "task": true,
                     "subagent": false
                 })),
-                recent_team_selection_state: Some(serde_json::json!({
-                    "selectedTeamId": " team-a ",
-                    "selectedTeamLabel": " Core "
-                })),
             },
             |usage| Some((usage.input_tokens?, usage.output_tokens?)),
         );
@@ -569,12 +557,6 @@ mod tests {
                 task: true,
                 subagent: false,
             })
-        );
-        assert_eq!(
-            projection
-                .recent_team_selection
-                .and_then(|team| team.selected_team_id),
-            Some("team-a".to_string())
         );
     }
 

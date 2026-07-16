@@ -1,15 +1,10 @@
 import { useMemo } from "react";
-import {
-  buildTeamMemoryShadowRequestMetadata,
-  type TeamMemorySnapshot,
-} from "@/lib/teamMemorySync";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import {
   buildHarnessRequestMetadata,
   type BuildHarnessRequestMetadataOptions,
 } from "../utils/harnessRequestMetadata";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
-import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { WorkspaceSkillRuntimeEnableInput } from "../utils/workspaceSkillBindingsMetadata";
 
 interface WorkspaceHarnessRequestMetadataParams {
@@ -23,14 +18,6 @@ interface WorkspaceHarnessRequestMetadataParams {
   effectiveChatToolPreferences: Pick<ChatToolPreferences, "task" | "subagent">;
   isThemeWorkbench: boolean;
   mappedTheme: string;
-  preferredTeamPresetId?: string | null;
-  resolvedTeamMemoryShadowSnapshot?: TeamMemorySnapshot | null;
-  selectedTeam?: Pick<
-    TeamDefinition,
-    "description" | "id" | "roles" | "source"
-  > | null;
-  selectedTeamLabel?: string | null;
-  selectedTeamSummary?: string | null;
   themeWorkbenchActiveQueueTitle?: string | null;
   workspaceSkillBindings?: AgentRuntimeWorkspaceSkillBinding[];
   workspaceSkillRuntimeEnable?: WorkspaceSkillRuntimeEnableInput | null;
@@ -50,11 +37,6 @@ export function resolveWorkspaceHarnessRequestMetadata({
   effectiveChatToolPreferences,
   isThemeWorkbench,
   mappedTheme,
-  preferredTeamPresetId,
-  resolvedTeamMemoryShadowSnapshot,
-  selectedTeam,
-  selectedTeamLabel,
-  selectedTeamSummary,
   themeWorkbenchActiveQueueTitle,
   workspaceSkillBindings,
   workspaceSkillRuntimeEnable,
@@ -76,16 +58,6 @@ export function resolveWorkspaceHarnessRequestMetadata({
     browserAssistProfileKey,
     browserAssistPreferredBackend,
     browserAssistAutoLaunch,
-    preferredTeamPresetId,
-    selectedTeamId: selectedTeam?.id,
-    selectedTeamSource: selectedTeam?.source,
-    selectedTeamLabel,
-    selectedTeamDescription: selectedTeam?.description,
-    selectedTeamSummary,
-    selectedTeamRoles: selectedTeam?.roles,
-    teamMemoryShadow: buildTeamMemoryShadowRequestMetadata(
-      resolvedTeamMemoryShadowSnapshot,
-    ),
     workspaceSkillBindings:
       workspaceSkillBindings && workspaceSkillBindings.length > 0
         ? workspaceSkillBindings
@@ -109,11 +81,6 @@ export function useWorkspaceHarnessRequestMetadataRuntime(
     effectiveChatToolPreferences,
     isThemeWorkbench,
     mappedTheme,
-    preferredTeamPresetId,
-    resolvedTeamMemoryShadowSnapshot,
-    selectedTeam,
-    selectedTeamLabel,
-    selectedTeamSummary,
     themeWorkbenchActiveQueueTitle,
     workspaceSkillBindings,
     workspaceSkillRuntimeEnable,
@@ -137,11 +104,6 @@ export function useWorkspaceHarnessRequestMetadataRuntime(
         },
         isThemeWorkbench,
         mappedTheme,
-        preferredTeamPresetId,
-        resolvedTeamMemoryShadowSnapshot,
-        selectedTeam,
-        selectedTeamLabel,
-        selectedTeamSummary,
         themeWorkbenchActiveQueueTitle,
         workspaceSkillBindings,
         workspaceSkillRuntimeEnable,
@@ -156,11 +118,6 @@ export function useWorkspaceHarnessRequestMetadataRuntime(
       enabled,
       isThemeWorkbench,
       mappedTheme,
-      preferredTeamPresetId,
-      resolvedTeamMemoryShadowSnapshot,
-      selectedTeam,
-      selectedTeamLabel,
-      selectedTeamSummary,
       subagentPreferenceEnabled,
       taskPreferenceEnabled,
       themeWorkbenchActiveQueueTitle,

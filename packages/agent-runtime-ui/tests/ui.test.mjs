@@ -216,7 +216,7 @@ test("AgentWorkbenchSurface exposes Subagents collaboration facts for non-timeli
         id: "evt-subagent-running",
         kind: "handoff",
         status: "running",
-        eventClass: "subagent.status",
+        eventClass: "agent.changed",
         title: "Research subtask running",
         threadId: "thread-parent",
         subagentId: "subagent-research",
@@ -228,7 +228,7 @@ test("AgentWorkbenchSurface exposes Subagents collaboration facts for non-timeli
             surface: "collaboration",
             collaborationSurface: "team_roster",
             collaborationPhase: "acting",
-            collaborationKind: "subagent_status",
+            collaborationKind: "subagent_activity",
             profileId: "cheeky_sassy_executor",
             packId: "stylepack.cheeky_sassy_executor.v1",
             toneVariant: "cheeky_sassy",
@@ -274,7 +274,7 @@ test("AgentWorkbenchSurface exposes Subagents collaboration facts for non-timeli
   assert.match(markup, /data-collaboration-facts="yes"/);
   assert.match(markup, /data-collaboration-surface="team_roster"/);
   assert.match(markup, /data-collaboration-phase="acting"/);
-  assert.match(markup, /data-collaboration-kind="subagent_status"/);
+  assert.match(markup, /data-collaboration-kind="subagent_activity"/);
   assert.match(markup, /data-collaboration-source="app_server_replay"/);
   assert.match(markup, /data-soul-style-level="L1"/);
   assert.match(markup, /data-soul-risk-level="normal"/);

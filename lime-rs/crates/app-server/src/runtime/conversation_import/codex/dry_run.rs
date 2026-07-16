@@ -2,17 +2,17 @@ use app_server_protocol::{
     AgentAttachment, ConversationImportPreviewDryRun, ConversationImportPreviewSummary,
 };
 
-use super::ImportedTimelineItem;
+use super::CodexTimelineItem;
 
 pub(super) fn apply_summary(
     summary: &mut ConversationImportPreviewSummary,
-    timeline: &[ImportedTimelineItem],
+    timeline: &[CodexTimelineItem],
 ) {
     let mut message_count = 0;
     let impact = import_impact(timeline);
 
     for item in timeline {
-        if matches!(item, ImportedTimelineItem::Message(_)) {
+        if matches!(item, CodexTimelineItem::Message(_)) {
             message_count += 1;
         }
     }
@@ -39,7 +39,7 @@ struct ImportImpact {
     attachments: usize,
 }
 
-fn import_impact(timeline: &[ImportedTimelineItem]) -> ImportImpact {
+fn import_impact(timeline: &[CodexTimelineItem]) -> ImportImpact {
     let mut impact = ImportImpact {
         messages: 0,
         turns: 0,
@@ -51,7 +51,7 @@ fn import_impact(timeline: &[ImportedTimelineItem]) -> ImportImpact {
 
     for item in timeline {
         impact.timeline_items += 1;
-        let ImportedTimelineItem::Message(message) = item else {
+        let CodexTimelineItem::Message(message) = item else {
             continue;
         };
 

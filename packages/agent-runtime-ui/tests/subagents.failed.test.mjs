@@ -63,7 +63,7 @@ test("SubagentsView exposes collaboration facts on threads, delegations, and act
         id: "evt-subagent-running",
         kind: "handoff",
         status: "running",
-        eventClass: "subagent.status",
+        eventClass: "agent.changed",
         title: "Research subagent running",
         threadId: "thread-parent",
         subagentId: "subagent-facts",
@@ -75,7 +75,7 @@ test("SubagentsView exposes collaboration facts on threads, delegations, and act
             surface: "collaboration",
             collaborationSurface: "team_roster",
             collaborationPhase: "acting",
-            collaborationKind: "subagent_status",
+            collaborationKind: "subagent_activity",
             profileId: "cool_confident_operator",
             packId: "stylepack.cool_confident_operator.v1",
             toneVariant: "cool_confident",
@@ -101,12 +101,12 @@ test("SubagentsView exposes collaboration facts on threads, delegations, and act
   assert.match(markup, /data-collaboration-facts="yes"/);
   assert.match(markup, /data-collaboration-surface="team_roster"/);
   assert.match(markup, /data-collaboration-phase="acting"/);
-  assert.match(markup, /data-collaboration-kind="subagent_status"/);
+  assert.match(markup, /data-collaboration-kind="subagent_activity"/);
   assert.match(markup, /data-soul-profile-id="cool_confident_operator"/);
   assert.match(markup, /data-soul-pack-id="stylepack.cool_confident_operator.v1"/);
   assert.match(markup, /data-soul-tone-variant="cool_confident"/);
   assert.equal(
     (markup.match(/data-collaboration-facts="yes"/g) ?? []).length,
-    3,
+    2,
   );
 });

@@ -2,17 +2,14 @@
   "$defs": {
     "ConversationImportSourceClient": {
       "enum": [
-        "claude_code",
         "codex"
       ],
       "type": "string"
     },
     "ConversationImportSourceStatus": {
       "enum": [
-        "error",
         "missing",
-        "ready",
-        "unsupported"
+        "ready"
       ],
       "type": "string"
     },

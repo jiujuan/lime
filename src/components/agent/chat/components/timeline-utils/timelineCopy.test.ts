@@ -56,7 +56,6 @@ const THREAD_TIMELINE_COPY_KEYS = [
   "agentChat.threadTimeline.approval.record.status.declined",
   "agentChat.threadTimeline.approval.record.status.expired",
   "agentChat.threadTimeline.approval.record.status.failed",
-  "agentChat.threadTimeline.approval.record.status.imported_read_only",
   "agentChat.threadTimeline.approval.record.status.unknown",
   "agentChat.threadTimeline.approval.record.title",
   "agentChat.threadTimeline.approval.record.toolTitle",

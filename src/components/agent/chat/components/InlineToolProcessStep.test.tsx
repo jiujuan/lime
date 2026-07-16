@@ -488,6 +488,42 @@ describe("InlineToolProcessStep", () => {
     );
   });
 
+  it("canonical named argument 数组也应暴露文件打开入口", () => {
+    const onFileClick = vi.fn();
+    const filePath = "/tmp/imported-local-history/docs/imported-preview.md";
+    const { container } = renderTool(
+      {
+        id: "tool-read-file-open-named-array-1",
+        name: "read_file",
+        arguments: JSON.stringify([
+          { name: "path", value: filePath },
+        ]),
+        status: "completed",
+        result: {
+          success: true,
+          output: "导入会话 Markdown 预览内容",
+        },
+        startTime: new Date("2026-06-17T10:08:00.000Z"),
+        endTime: new Date("2026-06-17T10:08:01.000Z"),
+      } as ToolCallState,
+      { onFileClick },
+    );
+
+    const button = container.querySelector(
+      '[data-testid="inline-tool-open-file"]',
+    ) as HTMLButtonElement | null;
+    expect(button?.getAttribute("data-file-path")).toBe(filePath);
+
+    act(() => {
+      button?.click();
+    });
+
+    expect(onFileClick).toHaveBeenCalledWith(
+      filePath,
+      "导入会话 Markdown 预览内容",
+    );
+  });
+
   it("工具详情遇到 TypeScript 尖括号语法时也应转义再渲染", () => {
     const { container } = renderTool({
       id: "tool-read-typescript-tags-1",

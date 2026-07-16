@@ -23,6 +23,7 @@ glob.workspace = true
 lime-core.workspace = true
 lime-skills.workspace = true
 patch-apply.workspace = true
+portable-pty.workspace = true
 rmcp.workspace = true
 regex.workspace = true
 reqwest.workspace = true

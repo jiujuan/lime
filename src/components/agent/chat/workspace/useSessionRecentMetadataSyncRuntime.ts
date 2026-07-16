@@ -4,7 +4,6 @@ import { logAgentDebug } from "@/lib/agentDebug";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import {
   createSessionRecentPreferencesFromChatToolPreferences,
-  createSessionRecentTeamSelectionFromTeamDefinition,
 } from "../utils/sessionExecutionRuntime";
 import {
   SESSION_RECENT_METADATA_BACKGROUND_SYNC_DELAY_MS,
@@ -222,27 +221,6 @@ export function useSessionRecentMetadataSyncRuntime() {
     [enqueueSessionRecentMetadataSync],
   );
 
-  const syncSessionRecentTeamSelection = useCallback(
-    async (
-      sessionId: string,
-      team: Parameters<
-        typeof createSessionRecentTeamSelectionFromTeamDefinition
-      >[0],
-      theme?: string | null,
-      options?: SessionRecentMetadataSyncOptions,
-    ) => {
-      await enqueueSessionRecentMetadataSync(
-        sessionId,
-        {
-          recent_team_selection:
-            createSessionRecentTeamSelectionFromTeamDefinition(team, theme),
-        },
-        options,
-      );
-    },
-    [enqueueSessionRecentMetadataSync],
-  );
-
   const chatToolPreferenceSessionSync = useMemo(
     () => ({
       getSessionId: () => activeSessionIdRef.current,
@@ -251,19 +229,10 @@ export function useSessionRecentMetadataSyncRuntime() {
     [syncSessionRecentPreferences],
   );
 
-  const selectedTeamSessionSync = useMemo(
-    () => ({
-      getSessionId: () => activeSessionIdRef.current,
-      setSessionRecentTeamSelection: syncSessionRecentTeamSelection,
-    }),
-    [syncSessionRecentTeamSelection],
-  );
-
   return {
     activeSessionIdRef,
     chatToolPreferenceSessionSync,
     deferSessionRecentMetadataSyncForNavigation,
-    selectedTeamSessionSync,
     syncSessionRecentPreferences,
   };
 }

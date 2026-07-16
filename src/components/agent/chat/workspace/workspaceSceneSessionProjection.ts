@@ -1,6 +1,6 @@
-import { hasRunningThreadReadActivity } from "../projection/threadReadActivity";
+import { hasActiveThreadReadActivity } from "../projection/threadReadActivity";
 
-export { hasRunningThreadReadActivity } from "../projection/threadReadActivity";
+export { hasActiveThreadReadActivity } from "../projection/threadReadActivity";
 
 export interface ResolveWorkspaceSceneSessionProjectionParams<
   TMessage,
@@ -138,6 +138,6 @@ export function resolveWorkspaceSceneSessionProjection<
     sceneSubmittedActionsInFlight: submittedActionsInFlight,
     sceneQueuedTurns: queuedTurns,
     sceneIsPreparingSend: isPreparingSend || isTaskCenterDraftSendPending,
-    sceneIsSending: isSending || hasRunningThreadReadActivity(threadRead),
+    sceneIsSending: isSending || hasActiveThreadReadActivity(threadRead),
   };
 }

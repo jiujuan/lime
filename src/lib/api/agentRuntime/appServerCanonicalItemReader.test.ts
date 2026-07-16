@@ -191,6 +191,53 @@ describe("readCanonicalThreadItem", () => {
     },
   );
 
+  it("projects canonical wait_agent lifecycle as a Tool item", () => {
+    expect(
+      readCanonicalThreadItem(
+        item(
+          {
+            type: "collabAgentToolCall",
+            call_id: "call-wait",
+            operation: "wait",
+            output: { text: "completed", durationMs: 18 },
+          },
+          { status: "completed" },
+        ),
+        event,
+      ),
+    ).toMatchObject({
+      id: "item-1",
+      type: "tool_call",
+      tool_name: "wait_agent",
+      arguments: [],
+      output: "completed",
+      duration_ms: 18,
+      success: true,
+      metadata: {
+        callId: "call-wait",
+        toolFamily: "agent_control",
+      },
+    });
+  });
+
+  it.each(["spawn", "sendMessage", "followUp", "interrupt", "resume", "close"])(
+    "rejects dead CollabAgent operation %s",
+    (operation) => {
+      expect(
+        readCanonicalThreadItem(
+          item({
+            type: "collabAgentToolCall",
+            call_id: `call-${operation}`,
+            operation,
+            target_thread_id: "thread-child",
+            message: "legacy activity",
+          }),
+          event,
+        ),
+      ).toBeNull();
+    },
+  );
+
   it("keeps Tool item identity separate from call identity", () => {
     expect(
       readCanonicalThreadItem(

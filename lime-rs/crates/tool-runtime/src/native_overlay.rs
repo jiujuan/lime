@@ -553,8 +553,8 @@ fn turn_context_allows_web_tools_without_confirmation(
 /// The list is owned here so App Server / GUI inventory and the migration guard have
 /// one current policy source while registry-backed tools are migrated to their domain owners.
 const RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST: &[&str] = &[
-    "Bash",
-    "PowerShell",
+    "exec_command",
+    "write_stdin",
     "Read",
     "view_image",
     "Glob",
@@ -779,7 +779,10 @@ mod tests {
         let names = runtime_native_tool_registration_allowlist();
         let unique = names.iter().copied().collect::<HashSet<_>>();
         assert_eq!(unique.len(), names.len());
-        assert!(names.contains(&"Bash"));
+        assert!(names.contains(&"exec_command"));
+        assert!(names.contains(&"write_stdin"));
+        assert!(!names.contains(&"Bash"));
+        assert!(!names.contains(&"PowerShell"));
         assert!(names.contains(&"Read"));
         assert!(names.contains(&"view_image"));
         assert!(names.contains(&REQUEST_USER_INPUT_TOOL_NAME));

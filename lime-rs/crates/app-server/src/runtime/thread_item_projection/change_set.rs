@@ -399,6 +399,25 @@ fn merge_payload(
             reason_code: reason_code.or(previous_reason_code),
             expires_at_ms: expires_at_ms.or(previous_expires_at_ms),
         },
+        (
+            ThreadItemPayload::Command {
+                command: previous_command,
+                cwd: previous_cwd,
+                output: previous_output,
+                exit_code: previous_exit_code,
+            },
+            ThreadItemPayload::Command {
+                command,
+                cwd,
+                output,
+                exit_code,
+            },
+        ) => ThreadItemPayload::Command {
+            command: prefer_string(previous_command, command, "command"),
+            cwd: cwd.or(previous_cwd),
+            output: output.or(previous_output),
+            exit_code: exit_code.or(previous_exit_code),
+        },
         (_, next) => next,
     }
 }

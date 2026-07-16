@@ -177,6 +177,7 @@ pub struct ThreadMetadataPatch {
     pub name: ClearableField<String>,
     pub preview: Option<String>,
     pub model_provider: Option<String>,
+    pub forked_from_id: Option<ThreadId>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -205,6 +206,9 @@ impl ThreadMetadataPatch {
         if next.model_provider.is_some() {
             self.model_provider = next.model_provider;
         }
+        if next.forked_from_id.is_some() {
+            self.forked_from_id = next.forked_from_id;
+        }
         if next.product.is_some() {
             self.product = next.product;
         }
@@ -223,6 +227,7 @@ impl ThreadMetadataPatch {
         self.name.is_none()
             && self.preview.is_none()
             && self.model_provider.is_none()
+            && self.forked_from_id.is_none()
             && self.product.is_none()
             && self.updated_at_ms.is_none()
             && self.advance_recency_at_ms.is_none()
@@ -269,9 +274,11 @@ mod tests {
 
     #[test]
     fn metadata_patch_round_trips_clear_operations() {
+        let forked_from_id = ThreadId::new("thread-parent");
         let patch = ThreadMetadataPatch {
             name: Some(None),
             product: Some(Some("chat".to_string())),
+            forked_from_id: Some(forked_from_id.clone()),
             metadata: Some(None),
             ..Default::default()
         };
@@ -279,20 +286,25 @@ mod tests {
         let value = serde_json::to_value(&patch).expect("serialize patch");
         assert_eq!(value["name"], Value::Null);
         assert_eq!(value["product"], "chat");
+        assert_eq!(value["forked_from_id"], forked_from_id.as_str());
         assert_eq!(value["metadata"], Value::Null);
 
         let decoded: ThreadMetadataPatch =
             serde_json::from_value(value).expect("deserialize patch");
         assert_eq!(decoded.name, Some(None));
         assert_eq!(decoded.product, Some(Some("chat".to_string())));
+        assert_eq!(decoded.forked_from_id, Some(forked_from_id));
         assert_eq!(decoded.metadata, Some(None));
     }
 
     #[test]
     fn metadata_patch_merge_uses_presence_semantics() {
+        let original_fork = ThreadId::new("thread-original-parent");
+        let next_fork = ThreadId::new("thread-next-parent");
         let mut current = ThreadMetadataPatch {
             name: Some(Some("old".to_string())),
             preview: Some("keep".to_string()),
+            forked_from_id: Some(original_fork),
             metadata: Some(Some(json!({"old": true}))),
             ..Default::default()
         };
@@ -300,6 +312,7 @@ mod tests {
         current.merge(ThreadMetadataPatch {
             name: Some(None),
             product: Some(Some("agent".to_string())),
+            forked_from_id: Some(next_fork.clone()),
             metadata: Some(Some(json!({"new": true}))),
             ..Default::default()
         });
@@ -307,6 +320,10 @@ mod tests {
         assert_eq!(current.name, Some(None));
         assert_eq!(current.preview.as_deref(), Some("keep"));
         assert_eq!(current.product, Some(Some("agent".to_string())));
+        assert_eq!(current.forked_from_id, Some(next_fork.clone()));
         assert_eq!(current.metadata, Some(Some(json!({"new": true}))));
+
+        current.merge(ThreadMetadataPatch::default());
+        assert_eq!(current.forked_from_id, Some(next_fork));
     }
 }

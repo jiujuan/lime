@@ -61,6 +61,13 @@ pub struct AppendAgentMailboxMessageParams {
     pub message: AgentMailboxMessage,
 }
 
+/// Root/recipient pair with at least one durable TriggerTurn awaiting delivery.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingAgentMailboxTriggerRecipient {
+    pub root_thread_id: ThreadId,
+    pub recipient_thread_id: ThreadId,
+}
+
 /// Future returned by [`AgentMailboxStore`] operations.
 pub type AgentMailboxStoreFuture<'a, T> =
     Pin<Box<dyn Future<Output = ThreadStoreResult<T>> + Send + 'a>>;
@@ -81,6 +88,11 @@ pub trait AgentMailboxStore: Send + Sync {
         root_thread_id: ThreadId,
         recipient_thread_id: ThreadId,
     ) -> AgentMailboxStoreFuture<'_, Vec<AgentMailboxMessage>>;
+
+    /// Lists distinct recipients whose durable TriggerTurn work must resume after restart.
+    fn list_pending_agent_mailbox_trigger_recipients(
+        &self,
+    ) -> AgentMailboxStoreFuture<'_, Vec<PendingAgentMailboxTriggerRecipient>>;
 
     /// Atomically transitions a pending message to delivered. Returns the transitioned record;
     /// missing or already-delivered messages return `None` so concurrent consumers cannot both

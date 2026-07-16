@@ -1,7 +1,11 @@
 use super::*;
 use crate::runtime::agent_control::AgentControlSpawnRequest;
 use crate::runtime::agent_mailbox_delivery::{canonical_mailbox_item_exists, mailbox_item_id};
-use agent_protocol::{ItemKind, ThreadId, ThreadItemPayload, ThreadTurnsView, TurnId};
+use crate::runtime::agent_terminal_activity::terminal_result_payload;
+use agent_protocol::{
+    ItemId, ItemKind, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload,
+    ThreadTurnsView, Turn, TurnId, TurnStatus,
+};
 use async_trait::async_trait;
 use std::sync::Arc;
 use thread_store::{
@@ -48,6 +52,7 @@ impl ExecutionBackend for TerminalBackend {
                     json!({
                         "itemId": "child-final-answer",
                         "role": "assistant",
+                        "phase": "final_answer",
                         "text": text,
                     }),
                 ))?;
@@ -112,10 +117,11 @@ async fn setup(
         .start_session(start_params("root-session", "root-thread"))
         .expect("root session")
         .session;
-    core.spawn_agent_controlled(AgentControlSpawnRequest {
+    core.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
         parent_session_id: root.session_id.clone(),
         child_session_id: Some("child-session".to_string()),
         child_thread_id: Some("child-thread".to_string()),
+        fork_mode: tool_runtime::agent_control::SpawnAgentForkMode::None,
     })
     .await
     .expect("child session");
@@ -175,6 +181,79 @@ fn child_turn_params() -> AgentSessionTurnStartParams {
         queue_if_busy: false,
         skip_pre_submit_resume: false,
     }
+}
+
+fn completed_turn_with_messages(messages: &[(&str, Option<&str>)]) -> Turn {
+    Turn {
+        session_id: SessionId::new("child-session"),
+        thread_id: ThreadId::new("child-thread"),
+        turn_id: TurnId::new("child-turn"),
+        status: TurnStatus::Completed,
+        admission: Default::default(),
+        queue: Default::default(),
+        approval: Default::default(),
+        items: messages
+            .iter()
+            .enumerate()
+            .map(|(index, (text, phase))| ThreadItem {
+                session_id: SessionId::new("child-session"),
+                thread_id: ThreadId::new("child-thread"),
+                turn_id: TurnId::new("child-turn"),
+                item_id: ItemId::new(format!("message-{index}")),
+                sequence: index as u64 + 1,
+                ordinal: index as u64,
+                created_at_ms: index as i64,
+                updated_at_ms: index as i64,
+                completed_at_ms: Some(index as i64),
+                kind: ItemKind::AgentMessage,
+                status: ItemStatus::Completed,
+                payload: ThreadItemPayload::AgentMessage {
+                    text: (*text).to_string(),
+                    phase: phase.map(str::to_string),
+                    content_parts: Vec::new(),
+                },
+                metadata: json!({}),
+            })
+            .collect(),
+        items_view: Default::default(),
+        error: None,
+        created_at_ms: 0,
+        updated_at_ms: 3,
+        started_at_ms: Some(0),
+        completed_at_ms: Some(3),
+        duration_ms: Some(3),
+    }
+}
+
+#[test]
+fn completed_child_result_selects_only_the_last_final_answer() {
+    let turn = completed_turn_with_messages(&[
+        ("commentary", Some("commentary")),
+        ("first final", Some("final_answer")),
+        ("last final", Some("final_answer")),
+        ("legacy trailing message", None),
+    ]);
+
+    assert_eq!(
+        terminal_result_payload(&turn),
+        Some((
+            AgentMailboxResultStatus::Completed,
+            "last final".to_string(),
+        ))
+    );
+}
+
+#[test]
+fn completed_child_result_never_promotes_commentary_or_unphased_messages() {
+    let turn = completed_turn_with_messages(&[
+        ("commentary", Some("commentary")),
+        ("legacy trailing message", None),
+    ]);
+
+    assert_eq!(
+        terminal_result_payload(&turn),
+        Some((AgentMailboxResultStatus::Completed, String::new()))
+    );
 }
 
 async fn complete_child(core: &RuntimeCore) -> AgentTurn {
@@ -644,28 +723,15 @@ async fn active_wait_recovers_terminal_result_written_after_initial_repair() {
 }
 
 #[tokio::test]
-async fn wait_performs_final_recovery_for_terminal_activity_before_deadline() {
+async fn expired_wait_recovers_terminal_activity_before_timing_out() {
     let (_temp, core, store, root, root_turn) = setup(ChildOutcome::Completed).await;
-    let gateway =
-        core.agent_control_gateway_for_turn(&root, &root_turn, RuntimeHostContext::default());
-    let wait = tokio::spawn(async move {
-        gateway
-            .gateway()
-            .execute(AgentControlGatewayRequest {
-                caller: caller(&root, &root_turn, "wait-final-recovery"),
-                command: AgentControlCommand::WaitAgent { timeout_ms: 300 },
-                cancel_token: None,
-            })
-            .await
-    });
-    tokio::time::sleep(std::time::Duration::from_millis(220)).await;
     store
         .delete_agent_identity(ThreadId::new("child-thread"))
         .await
         .expect("remove child identity");
     core.start_turn(child_turn_params(), RuntimeHostContext::default())
         .await
-        .expect_err("terminal mailbox effect must fail near deadline");
+        .expect_err("terminal mailbox effect must fail");
     store
         .upsert_agent_identity(AgentIdentity {
             root_thread_id: ThreadId::new("root-thread"),
@@ -678,10 +744,16 @@ async fn wait_performs_final_recovery_for_terminal_activity_before_deadline() {
         .await
         .expect("restore child identity");
 
-    let waited = tokio::time::timeout(std::time::Duration::from_secs(1), wait)
+    let gateway =
+        core.agent_control_gateway_for_turn(&root, &root_turn, RuntimeHostContext::default());
+    let waited = gateway
+        .gateway()
+        .execute(AgentControlGatewayRequest {
+            caller: caller(&root, &root_turn, "wait-expired-recovery"),
+            command: AgentControlCommand::WaitAgent { timeout_ms: 0 },
+            cancel_token: None,
+        })
         .await
-        .expect("wait final recovery")
-        .expect("wait task")
         .expect("wait result");
     assert_eq!(waited.output["message"], "Wait completed.");
     assert_eq!(waited.output["activity"][0]["kind"], "result");

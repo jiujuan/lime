@@ -53,7 +53,7 @@ describe("agentStreamResumeBinding", () => {
     });
   });
 
-  it("running read model 使用 current turnId 字段时也应解析恢复目标", () => {
+  it("缺少 active_turn_id 时不应从兼容 running turn 猜恢复目标", () => {
     expect(
       resolveAgentStreamResumeBindingTarget({
         sessionId: "session-1",
@@ -63,6 +63,13 @@ describe("agentStreamResumeBinding", () => {
         threadRead: {
           thread_id: "thread-1",
           status: "running",
+          active_turn_id: null,
+          queued_turns: [
+            {
+              queued_turn_id: "queued-1",
+              message_preview: "排队中",
+            },
+          ],
           turns: [
             {
               turnId: "turn-current-1",
@@ -73,13 +80,7 @@ describe("agentStreamResumeBinding", () => {
         } as AgentRuntimeThreadReadModel,
         threadTurns: [],
       }),
-    ).toEqual({
-      eventName: "agentSession/event/session-1",
-      sessionId: "session-1",
-      threadId: "thread-1",
-      turnId: "turn-current-1",
-      startedAt: null,
-    });
+    ).toBeNull();
   });
 
   it("只有 thread 级 running 或孤立 active_turn_id 时不恢复 active stream", () => {

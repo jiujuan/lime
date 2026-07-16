@@ -1582,12 +1582,12 @@ describe("buildGeneralWorkbenchTaskRailProjection", () => {
     expect(projection.approvalItems).toEqual([
       expect.objectContaining({
         id: "approval-resolved:approval-shell",
-        title: "导入的权限记录",
+        title: "Allow npm test?",
         status: "resolved",
         canRespond: false,
       }),
     ]);
-    expect(projection.approvalItems[0]?.title).not.toContain("Allow npm test");
+    expect(projection.approvalItems[0]?.title).not.toContain("导入");
   });
 
   it("缺少上下文来源时应展示待补来源状态", () => {

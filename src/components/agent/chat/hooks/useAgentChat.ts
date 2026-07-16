@@ -30,7 +30,7 @@ import {
   type UseAgentChatOptions,
 } from "./agentChatShared";
 import { useAgentTopicSnapshot } from "./useAgentTopicSnapshot";
-import { hasRunningThreadReadActivity } from "../projection/threadReadActivity";
+import { hasActiveThreadReadActivity } from "../projection/threadReadActivity";
 import { resolveClawWorkspaceProviderSelection } from "../utils/clawWorkspaceProviderSelection";
 import {
   applyGeneratedAutoTitleToTopics,
@@ -398,7 +398,7 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     threadReadStatus: session.threadRead?.status,
     turns: session.threadTurns,
   });
-  const hasRecoverableRunningActivity = hasRunningThreadReadActivity(
+  const hasRecoverableRunningActivity = hasActiveThreadReadActivity(
     session.threadRead,
   );
 

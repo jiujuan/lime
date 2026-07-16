@@ -203,16 +203,45 @@ export const parseToolCallArguments = (
   if (typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, ToolCallArgumentValue>;
   }
+  const parseNamedArguments = (
+    parsed: unknown,
+  ): Record<string, ToolCallArgumentValue> | null => {
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return null;
+    }
+    const entries = parsed
+      .filter(
+        (item): item is { name: string; value: ToolCallArgumentValue } =>
+          Boolean(item) &&
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          typeof (item as { name?: unknown }).name === "string" &&
+          (item as { name: string }).name.trim().length > 0 &&
+          "value" in item,
+      )
+      .map((item) => [item.name, item.value] as const);
+    return entries.length === parsed.length
+      ? Object.fromEntries(entries)
+      : null;
+  };
   if (typeof value !== "string" || !value.trim()) return {};
   try {
     const parsed = JSON.parse(value);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, ToolCallArgumentValue>;
     }
+    const namedArguments = parseNamedArguments(parsed);
+    if (namedArguments) {
+      return namedArguments;
+    }
     if (typeof parsed === "string" && parsed.trim()) {
       const nested = JSON.parse(parsed);
       if (nested && typeof nested === "object" && !Array.isArray(nested)) {
         return nested as Record<string, ToolCallArgumentValue>;
+      }
+      const nestedNamedArguments = parseNamedArguments(nested);
+      if (nestedNamedArguments) {
+        return nestedNamedArguments;
       }
     }
   } catch {

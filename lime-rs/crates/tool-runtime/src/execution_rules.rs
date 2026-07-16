@@ -553,7 +553,7 @@ mod tests {
         }];
 
         let rule_match = classify_network_access(
-            "Bash",
+            "exec_command",
             &json!({ "command": "curl -L https://downloads.example.test/archive.zip" }),
             Some("curl -L https://downloads.example.test/archive.zip"),
             &configured_rules,

@@ -39,13 +39,11 @@ describe("appServerReadModelClient", () => {
     const appServerClient = appServerClientMock();
     const client = createAppServerReadModelClient({ appServerClient });
 
-    await expect(
-      client.getAgentRuntimeThreadRead(" session-1 "),
-    ).resolves.toMatchObject({
+    const readModel = await client.getAgentRuntimeThreadRead(" session-1 ");
+    expect(readModel).toMatchObject({
       thread_id: "thread-1",
       status: "running",
       profile_status: "running",
-      active_turn_id: "turn-1",
       turns: [
         {
           turn_id: "turn-1",
@@ -54,8 +52,9 @@ describe("appServerReadModelClient", () => {
         },
       ],
     });
+    expect(readModel.active_turn_id).toBeUndefined();
 
-    expect(appServerClient.readSession).toHaveBeenCalledWith({
+    expect(appServerClient.readSession).toHaveBeenLastCalledWith({
       sessionId: "session-1",
     });
   });

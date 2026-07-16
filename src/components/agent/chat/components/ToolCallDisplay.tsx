@@ -67,7 +67,6 @@ import {
   readRecordString,
   resolveCommandOutputStreams,
   resolveCommandToolSummary,
-  resolveImportedSourceToolPresentation,
   resolveSkillInvocationContentInfo,
   resolveToolResultPath,
   type ToolResultNotice,
@@ -174,16 +173,13 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       toolCall.result?.output,
     ],
   );
-  const resultMetadata = useMemo(
-    () => {
-      const metadata = {
-        ...(normalizeToolResultMetadata(toolCall.metadata) || {}),
-        ...(normalizeToolResultMetadata(toolCall.result?.metadata) || {}),
-      };
-      return Object.keys(metadata).length > 0 ? metadata : undefined;
-    },
-    [toolCall.metadata, toolCall.result?.metadata],
-  );
+  const resultMetadata = useMemo(() => {
+    const metadata = {
+      ...(normalizeToolResultMetadata(toolCall.metadata) || {}),
+      ...(normalizeToolResultMetadata(toolCall.result?.metadata) || {}),
+    };
+    return Object.keys(metadata).length > 0 ? metadata : undefined;
+  }, [toolCall.metadata, toolCall.result?.metadata]);
   const skillInvocationContentInfo = useMemo(
     () =>
       resolveSkillInvocationContentInfo({
@@ -305,10 +301,6 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       isResultFailure,
     }).map((key) => t(`agentChat.toolCall.resultNotice.${key}`));
   }, [isResultFailure, resultMetadata, t]);
-  const importedSourcePresentation = useMemo(
-    () => resolveImportedSourceToolPresentation(toolCall),
-    [toolCall],
-  );
   const commandSummary = useMemo(
     () =>
       resolveCommandToolSummary({
@@ -901,7 +893,6 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       {shouldRenderResultPanel && (
         <ToolCallDisplayResultPanel
           toolCallId={toolCall.id}
-          importedSourcePresentation={importedSourcePresentation}
           commandSummary={commandSummary}
           commandOutputStreams={commandOutputStreams}
           commandSurfaceLabel={commandSurfaceLabel}
@@ -942,7 +933,6 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     </div>
   );
 };
-
 
 // 导出别名，用于交错显示模式
 export const ToolCallItem = ToolCallDisplay;

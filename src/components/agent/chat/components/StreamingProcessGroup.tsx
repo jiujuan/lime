@@ -16,17 +16,11 @@ import {
   getToolDisplayInfo,
 } from "../utils/toolDisplayInfo";
 import { resolveToolProcessNarrative } from "../utils/toolProcessSummary";
-import {
-  isImportedProcessMetadata,
-  isImportedToolCall,
-  type StreamingProcessEntry,
-} from "./StreamingProcessGroupModel";
+import type { StreamingProcessEntry } from "./StreamingProcessGroupModel";
 import { resolveWorkspaceSkillRuntimeEnableResultDisplay } from "../utils/toolResultEnvelopeDisplay";
 
 interface StreamingProcessSummaryCopy {
   completedThinking: () => string;
-  formatImportedSourceCommandRecord: (count?: number) => string;
-  importedSteps: (count: number) => string;
   failedSteps: (count: number) => string;
   runningSteps: (count: number) => string;
   completedSteps: (count: number) => string;
@@ -94,24 +88,11 @@ function buildStreamingProcessSummary(
   const thinkingCount = entries.filter(
     (entry) => entry.kind === "thinking",
   ).length;
-  const importedToolCount = toolEntries.filter((entry) =>
-    isImportedToolCall(entry.toolCall),
-  ).length;
-  const hasImportedThinking =
-    entries.some(
-      (entry) =>
-        entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
-    ) ||
-    (importedToolCount > 0 && thinkingCount > 0);
   const summarizedBatchDescriptor =
     toolEntries.length > 0
       ? summarizeStreamingToolBatch(toolEntries.map((entry) => entry.toolCall))
       : null;
-  const batchDescriptor =
-    summarizedBatchDescriptor &&
-    (importedToolCount === 0 || summarizedBatchDescriptor.kind === "web_search")
-      ? summarizedBatchDescriptor
-      : null;
+  const batchDescriptor = summarizedBatchDescriptor;
   if (batchDescriptor) {
     return {
       summaryText: batchDescriptor.title,
@@ -122,21 +103,6 @@ function buildStreamingProcessSummary(
 
   const toolCount = toolEntries.length;
   if (toolCount > 0) {
-    if (importedToolCount > 0) {
-      return {
-        summaryText: copy.formatImportedSourceCommandRecord(importedToolCount),
-        descriptor: null,
-        metaText:
-          joinSummaryParts(
-            [
-              hasImportedThinking ? copy.completedThinking() : null,
-              toolCount > 1 ? copy.importedSteps(toolCount) : null,
-            ],
-            copy.separator(),
-          ) || null,
-      };
-    }
-
     const toolCalls = toolEntries.map((entry) => entry.toolCall);
     const families = new Set(
       toolCalls.map(
@@ -145,10 +111,7 @@ function buildStreamingProcessSummary(
     );
     if (families.size === 1) {
       return {
-        summaryText: buildToolGroupHeadline(
-          toolCalls,
-          copy.formatImportedSourceCommandRecord,
-        ),
+        summaryText: buildToolGroupHeadline(toolCalls),
         descriptor: null,
         metaText: null,
       };
@@ -235,12 +198,8 @@ function buildStreamingProcessSummary(
         firstThinking?.kind === "thinking"
           ? resolveProcessThinkingDisplay(firstThinking, copy)
           : null;
-      const summaryText =
-        hasImportedThinking && thinkingDisplay?.preview
-          ? thinkingDisplay.preview
-          : thinkingDisplay?.statusLabel || copy.completedThinking();
       return {
-        summaryText,
+        summaryText: thinkingDisplay?.statusLabel || copy.completedThinking(),
         descriptor: null,
         metaText: thinkingCount > 1 ? copy.thinkingNotes(thinkingCount) : null,
       };
@@ -305,10 +264,6 @@ export const StreamingProcessGroup: React.FC<{
   const { summaryText, descriptor, metaText } = useMemo(
     () =>
       buildStreamingProcessSummary(entries, {
-        formatImportedSourceCommandRecord: (count?: number) =>
-          t("agentChat.toolCall.importedCommandRecord.groupTitle", {
-            count,
-          }),
         completedThinking: () =>
           t("agentChat.thinkingBlock.status.completed", {
             defaultValue: "已完成思考",
@@ -320,11 +275,6 @@ export const StreamingProcessGroup: React.FC<{
         structuredThinking: () =>
           t("agentChat.thinkingBlock.preview.structured", {
             defaultValue: "在整理结构化内容",
-          }),
-        importedSteps: (count: number) =>
-          t("agentChat.processGroup.importedSteps", {
-            count,
-            defaultValue: "Imported process, {{count}} steps",
           }),
         failedSteps: (count: number) =>
           t("agentChat.processGroup.failedSteps", {

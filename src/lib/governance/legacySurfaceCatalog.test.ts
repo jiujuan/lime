@@ -3497,6 +3497,9 @@ describe("legacySurfaceCatalog", () => {
         'name: "TeamCreate",',
         'canonical_name: "ListPeers",',
         "SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES",
+        "SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES",
+        "SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES",
+        "runtime_turn_tool_exposure_allows_tool_name(",
       ]),
     );
   });

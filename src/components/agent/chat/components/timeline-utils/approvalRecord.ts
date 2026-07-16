@@ -20,7 +20,6 @@ export type ApprovalRecordStatus =
   | "cancelled"
   | "expired"
   | "failed"
-  | "imported_read_only"
   | "unknown";
 
 export interface ApprovalRecordViewModel {
@@ -34,7 +33,6 @@ export interface ApprovalRecordViewModel {
   source?: string;
   sourceEventType?: string;
   autoResolved: boolean;
-  importedReadOnly: boolean;
 }
 
 type ApprovalThreadItem = Extract<
@@ -163,11 +161,7 @@ function statusFromDecision(params: {
   decision: ApprovalRecordDecision;
   sourceEventType?: string;
   itemStatus?: string;
-  importedReadOnly?: boolean;
 }): ApprovalRecordStatus {
-  if (params.importedReadOnly && params.decision === "unknown") {
-    return "imported_read_only";
-  }
   if (params.sourceEventType === "action.expired") {
     return "expired";
   }
@@ -279,10 +273,6 @@ export function toApprovalRecordFromThreadItem(
   ]);
   const autoResolved =
     booleanValue(response, ["auto_resolved", "autoResolved"]) ?? false;
-  const importedReadOnly =
-    booleanValue(response, ["imported_read_only", "importedReadOnly"]) ??
-    booleanValue(metadata, ["imported_read_only", "importedReadOnly"]) ??
-    false;
   const decision =
     decisionFromEventType(sourceEventType) ??
     canonicalDecisionFromResponse(response) ??
@@ -297,7 +287,6 @@ export function toApprovalRecordFromThreadItem(
       decision,
       sourceEventType,
       itemStatus: item.status,
-      importedReadOnly,
     }),
     decisionScope: stringValue(response, [
       "decision_scope",
@@ -308,7 +297,6 @@ export function toApprovalRecordFromThreadItem(
     source: sourceFromResponse(response, autoResolved),
     sourceEventType,
     autoResolved,
-    importedReadOnly,
   };
 }
 
@@ -330,8 +318,6 @@ export function toApprovalRecordFromActionRequired(
 
   const autoResolved =
     booleanValue(response, ["auto_resolved", "autoResolved"]) ?? false;
-  const importedReadOnly =
-    booleanValue(response, ["imported_read_only", "importedReadOnly"]) ?? false;
   const sourceEventType = stringValue(response, [
     "source_event_type",
     "sourceEventType",
@@ -349,7 +335,6 @@ export function toApprovalRecordFromActionRequired(
       decision,
       sourceEventType,
       itemStatus: request.status,
-      importedReadOnly,
     }),
     decisionScope: stringValue(response, [
       "decision_scope",
@@ -360,6 +345,5 @@ export function toApprovalRecordFromActionRequired(
     source: sourceFromResponse(response, autoResolved),
     sourceEventType,
     autoResolved,
-    importedReadOnly,
   };
 }

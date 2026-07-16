@@ -321,7 +321,7 @@ export function useWorkspaceInputbarSceneRuntime({
         workflowRunState,
         onSend: handleInputbarSend,
         onStop: handleStopSending,
-        isLoading: isSending || resolvedQueuedTurns.length > 0,
+        isLoading: isSending,
         knowledgePackSelection: knowledgeRuntime.knowledgePackSelection,
         knowledgePackOptions: knowledgeRuntime.knowledgePackOptions,
         onKnowledgePacksNeeded: knowledgeRuntime.onKnowledgePacksNeeded,
@@ -435,8 +435,6 @@ export function useWorkspaceInputbarSceneRuntime({
         isSending,
         executionRuntime: sessionExecutionRuntime,
         runtimeStatusTitle: activeRuntimeStatusTitle,
-        selectedTeamRoleCount:
-          generalWorkbenchHarnessPanelBaseProps.selectedTeamRoles?.length || 0,
       },
     },
   });

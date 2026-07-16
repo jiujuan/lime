@@ -101,12 +101,8 @@ describe("conversationImportDialogViewModel", () => {
     expect(meta).not.toContain("thread-1");
   });
 
-  it("source client label 只在第二来源导入场景显示来源名，默认来源展示为本地历史", () => {
-    expect(resolveImportSourceClientLabel("codex", t)).toBe("本地历史");
-    expect(resolveImportSourceClientLabel(undefined, t)).toBe("本地历史");
-    expect(resolveImportSourceClientLabel("claude_code", t)).toBe(
-      "Claude Code",
-    );
+  it("Codex 导入入口统一展示为本地历史", () => {
+    expect(resolveImportSourceClientLabel(t)).toBe("本地历史");
   });
 
   it("默认选择第一条未导入对话，全部已导入时回退第一条", () => {

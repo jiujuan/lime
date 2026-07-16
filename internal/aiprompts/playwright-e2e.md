@@ -603,14 +603,14 @@ Runtime prompt 层的禁止证据：
 4. 验证工具开关恢复的是该话题最近一次 session runtime，而不是主题级 localStorage 默认值
 5. 如首次切回旧话题时只能命中 fallback，再继续切换一次，确认第二次开始已优先走 runtime 恢复
 
-### 话题 Subagents 恢复验证
+### 话题 Subagents current 验证
 
-1. 进入同一工作区中的两个话题
-2. 在话题 A 里选择一个 builtin Subagents profile，在话题 B 里选择另一个 builtin 或 custom profile
-3. 在两个话题之间来回切换，必要时新建一个空白话题再切回
-4. 验证 Subagents profile 选择器、摘要区和子代理展示恢复的是该话题最近一次 `recent_team_selection`，而不是主题级 localStorage 的旧值
-5. 对 custom profile 额外确认：切回后 label / description / roles 没丢；如果本轮是从 fallback 回填，继续切换一次确认第二次开始已优先走 runtime 恢复
-6. 如果当前项目已有子代理或父会话上下文，再发送一条新消息，确认子代理影子卡片与当前 profile 恢复一致，不会退回到全局 theme fallback；本轮如涉及 `harness.team_memory_shadow`，这里就是最小 GUI 续测锚点
+1. 在真实 Electron 会话里启用 Subagent 工具并触发一次 `spawn_agent`
+2. 验证六个 AgentControl 工具只在 current gateway 可用时出现，不读取 Team profile 或 Renderer shadow
+3. 验证 parent timeline 只从 canonical SubAgent Item 展示 Started / Interacted / Interrupted
+4. 通过 `thread/list` 检查 child 的 `parentThreadId`、`agentPath`、`agentState` 与 GUI roster 一致
+5. 冷重启 Electron/App Server 后重新打开 parent Thread，确认 child identity、状态和导航保持稳定
+6. 证据中不得出现 `recent_team_selection`、`team_memory_shadow`、synthetic Team member 或 raw status channel
 
 ### 子代理 current 字段验证
 

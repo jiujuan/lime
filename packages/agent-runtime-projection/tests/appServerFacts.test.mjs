@@ -329,7 +329,7 @@ test("App Server tool process facts drive shared tool surface classification", (
   assert.equal(result.state.toolCalls.calls[0].operationKind, "web_search");
 });
 
-test("App Server collaboration events preserve Soul collaboration facts", () => {
+test("App Server replay rejects retired raw subagent status events", () => {
   const events = projectAppServerEventsToExecutionEvents([
     appServerEvent("evt-subagent", 1, "subagent.status_changed", {
       status: "running",
@@ -347,33 +347,7 @@ test("App Server collaboration events preserve Soul collaboration facts", () => 
     }),
   ]);
 
-  assert.equal(events[0].eventClass, "subagent.status_changed");
-  assert.equal(events[0].kind, "handoff");
-  assert.equal(events[0].taskId, "child-1");
-  assert.equal(events[0].subagentId, "child-1");
-  assert.deepEqual(events[0].payload?.collaborationFacts, {
-    source: "projection_facts",
-    surface: "collaboration",
-    collaborationSurface: "team_roster",
-    collaborationPhase: "acting",
-    collaborationKind: "subagent_status",
-    sourceType: "subagent.status_changed",
-    status: "running",
-    runtimeEntity: "subagent_turn",
-    runtimeStatus: "running",
-    taskId: "child-1",
-    agentId: "child-1",
-    parentThreadId: "thread-1",
-    transcriptRef: "child-1:turn-1",
-    styleLevel: "L1",
-    riskLevel: "normal",
-    toneVariant: "cheeky_sassy",
-    profileId: "cheeky_sassy_executor",
-    packId: "com.lime.soul.cheeky-sassy-executor",
-  });
-  assert.equal(events[0].payload?.collaborationSurface, "team_roster");
-  assert.equal(events[0].payload?.styleLevel, "L1");
-  assert.equal(events[0].payload?.riskLevel, "normal");
+  assert.deepEqual(events, []);
 });
 
 function appServerEvent(eventId, sequence, type, payload = {}) {

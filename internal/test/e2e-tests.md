@@ -1,140 +1,87 @@
-# Lime 浏览器续测与 E2E 指南
+# Lime E2E、Gate A 与 Gate B
 
-> 本文只保留 Lime 当前仍有效的浏览器端 E2E 入口；详细操作与续测步骤以 `internal/aiprompts/playwright-e2e.md` 为准。
+> status: current / Refactor v2
+> detailed_playbook: `internal/aiprompts/playwright-e2e.md`
 
 ## 1. 当前事实源
 
 ### current
 
-- `internal/aiprompts/playwright-e2e.md`：浏览器续测、Playwright MCP 交互、DevBridge 排障的唯一详细事实源
-- `npm run electron:dev`：当前 Electron GUI 开发启动入口
-- `npm run bridge:health -- --timeout-ms 120000`：当前 DevBridge 就绪检查入口
-- `npm run test:bridge`：当前浏览器桥接最小自动校验入口
-- `npm run smoke:electron`：当前 Electron GUI 最小 smoke 入口
-- `npm run smoke:workspace-ready`：当前自包含 smoke，覆盖 DevBridge 就绪与默认 workspace 基础链路
-- `npm run smoke:browser-runtime`：当前自包含 smoke，覆盖 browser runtime 的启动、状态读取、最小动作与审计关联键
-- `npm run smoke:site-adapters`：当前自包含 smoke，覆盖站点适配器目录状态、列表、推荐与检索主链
-- `npm run smoke:agent-runtime-tool-surface`：当前自包含 smoke，覆盖 runtime inventory 到应用层透传、Runtime strip 与 HarnessStatusPanel 的 team/task current surface 派生
-- `npm run smoke:agent-runtime-tool-surface-page`：当前真实页面 smoke，覆盖 onboarding 跳过、最小发送、工作台 `Runtime 能力摘要`，并确认旧页级黄提示不再回到主路径
+- `npm run electron:dev`：启动当前 Electron GUI 开发链。
+- `npm run smoke:electron`：Electron GUI 最小 smoke。
+- `npm run verify:gui-smoke`：GUI 主路径最低聚合门禁。
+- `npm run test:contracts`：Electron/App Server/typed client 边界校验。
+- `npm run smoke:agent-runtime-current-fixture`：Agent runtime current fixture。
+- `npm run smoke:agent-session-history-electron-fixture`、`npm run smoke:code-artifact-workbench-electron-fixture` 等真实 Electron 专项 Gate B。
+- `internal/aiprompts/playwright-e2e.md`：真实点击、截图、控制台和续测细则。
 
 ### supplement
 
-- `npm run bridge:e2e`：偏排障性质的脚本，不是仓库统一 E2E 标准
-- `npm run smoke:social-workbench`：现有专项 smoke，但仍依赖人工前置状态，暂不等于“自包含主链路冒烟”
+- `npm run test:e2e`：Vitest e2e layer，可能覆盖多模块流程，但不自动证明 Electron/preload/IPC。
+- 普通 Chrome/browser mirror：只作为 Gate A。
+- CDP attach：观察通道；只有接入真实 Electron 且满足 Gate B 断言时才算 Gate B。
+- live provider smoke：只证明声明的 provider/model/config，不替代 deterministic fixture。
 
-### deprecated
+## 2. Gate A
 
-- 旧桌面宿主 headless 启动口径：不再作为 current GUI 验证入口
-- 旧桌面 WebDriver 方案：不再是当前仓库推荐的 E2E 方案
-- `npm run test:e2e`：当前仓库已不存在，不应继续作为执行入口
+Gate A 验证 Renderer projection、DOM、交互、文案、错误状态和五语言。可以使用显式 fixture/event replay，但必须标记 `test-only`。
 
-## 2. 何时使用 E2E / 续测
+Gate A 至少记录：
 
-以下场景优先走当前浏览器续测流程：
+- route/page 与 candidate；
+- fixture/backend mode；
+- 用户动作与稳定 DOM 断言；
+- console/page error；
+- screenshot 或结构化 snapshot；
+- 对应场景 ID。
 
-- 用户明确要求“继续测试”“继续复现”“继续用 Playwright MCP 验证”
-- 需要复用已有页面状态或浏览器标签页
-- 需要确认页面真实交互、控制台报错、DevBridge / mock fallback 行为
-- 修改涉及前端页面主路径，而不是单一工具函数或纯后端逻辑
+Gate A 不能证明 Electron main、preload、IPC、sidecar 或 packaged app。
 
-以下场景不要强行拉起整条 E2E：
+## 3. Gate B
 
-- 只是模块级逻辑修改，可用单测或定向集成测试覆盖
-- 只是 `safeInvoke`、mock、bridge 边界修改，且 `npm run test:bridge` 足以验证
-- 只是命令注册 / 命令漂移问题，优先跑 `npm run test:contracts`
+Gate B 必须真实经过：
 
-## 3. 当前标准流程
-
-### 第 1 步：启动浏览器模式
-
-```bash
-npm run electron:dev
+```text
+Electron Desktop Host
+  -> preload/contextBridge
+  -> Electron IPC
+  -> app_server_handle_json_lines
+  -> App Server JSON-RPC
+  -> RuntimeCore/read model
+  -> visible GUI
 ```
 
-用途：
+硬断言：
 
-- 启动前端 dev server
-- 启动 Electron Desktop Host
-- 启动 DevBridge
-- 让 Playwright MCP 可访问 `http://127.0.0.1:1420/`
+1. 页面运行在真实 Electron，不是 browser mirror。
+2. IPC trace 命中 `app_server_handle_json_lines` 和场景声明的 current method。
+3. GUI 与 read model 的 thread/turn/item identity 一致。
+4. console/page/invoke error 为零，或有精确 owner/退出条件。
+5. legacy command 和 production mock fallback 命中为零。
+6. 场景以真实 terminal 或明确 pending 状态结束。
 
-### 第 2 步：等待桥接就绪
+External/unavailable fixture 可以证明桌面/current bridge，但不证明 live provider。报告必须写明 backend mode。
 
-```bash
-npm run bridge:health -- --timeout-ms 120000
-```
+## 4. 选择入口
 
-用途：
+| 风险 | 最低入口 |
+| --- | --- |
+| 纯 Renderer projection | related component/unit + Gate A |
+| Workspace/GUI 主路径 | `verify:gui-smoke` + Gate A |
+| App Server/bridge | contracts + current fixture；有可见状态时加 Gate B |
+| history/recovery | `smoke:agent-session-history-electron-fixture` 或对应 Gate B |
+| artifact/workbench | `smoke:code-artifact-workbench-electron-fixture` 或对应 Gate B |
+| Claw chat/stream | current runtime fixture + `smoke:claw-chat-current-fixture` |
+| packaged/platform | 实际 packaged app + macOS/Windows evidence |
 
-- 等待 `http://127.0.0.1:3030/health` 可用
-- 降低页面早于 DevBridge 就绪时的 `Failed to fetch` 噪音
+## 5. Fixture 规则
 
-### 第 3 步：使用 Playwright MCP 进入页面
+- 使用临时 userData/appData/workspace，不读取真实用户目录。
+- fixture backend 必须显式传入，生产路径不存在自动 mock fallback。
+- 不用固定 sleep 判断 stream/turn 完成；等待 terminal event 与 DOM 状态。
+- screenshot、trace、read model 和 run context 属于同一 candidate/run ID。
+- 不保存 secret、完整 system prompt、真实用户正文或敏感本地路径。
 
-标准入口：
+## 6. 完成结论
 
-- 打开 `http://127.0.0.1:1420/`
-- 等待“正在加载...”消失
-- 确认默认首页已出现
-- 检查一次 `browser_console_messages(level=error)`
-
-### 第 4 步：沿主路径做最小验证
-
-当前优先验证以下路径：
-
-1. 首页可加载，主导航可见
-2. 社媒内容工作流可进入
-3. 页面交互后控制台不新增关键 error
-4. runtime inventory、Runtime strip、工作台 `Runtime 能力摘要` 与应用层透传对 team/task current tools 的展示保持一致，且旧页级黄提示不回流
-
-详细点击路径、控制台检查要求、交接格式，以 `internal/aiprompts/playwright-e2e.md` 为准。
-
-## 4. 当前命令矩阵
-
-| 目标                            | 命令 / 入口                                     | 角色       | 说明                                                                                             |
-| ------------------------------- | ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| 启动 Electron GUI               | `npm run electron:dev`                          | current    | 当前标准启动命令                                                                                 |
-| 等待 Bridge 就绪                | `npm run bridge:health -- --timeout-ms 120000`  | current    | 当前标准健康检查                                                                                 |
-| 校验桥接基础能力                | `npm run test:bridge`                           | compat     | `safeInvoke` / DevBridge fallback 最小自动校验，不能单独证明 GUI current 可交付                  |
-| Electron GUI smoke              | `npm run smoke:electron`                        | current    | Electron Desktop Host 最小可用性验证                                                             |
-| Workspace 自包含 smoke          | `npm run smoke:workspace-ready`                 | current    | 验证 DevBridge、默认 workspace、路径回查链路                                                     |
-| Browser Runtime smoke           | `npm run smoke:browser-runtime`                 | current    | 验证 browser runtime 最短主链与审计关联键                                                        |
-| Site Adapter smoke              | `npm run smoke:site-adapters`                   | current    | 验证站点适配器目录、推荐与检索最短主链                                                           |
-| Runtime Tool Surface smoke      | `npm run smoke:agent-runtime-tool-surface`      | current    | 验证 runtime inventory 到应用层透传 / Runtime strip / HarnessStatusPanel 的 current surface 派生 |
-| Runtime Tool Surface page smoke | `npm run smoke:agent-runtime-tool-surface-page` | current    | 验证真实页面最小发送后工作台 `Runtime 能力摘要` 的缺口诊断，并确认旧页级黄提示已删除             |
-| 校验跨层命令契约                | `npm run test:contracts`                        | current    | 检查前端命令、Rust 注册、catalog、mock 集合漂移                                                  |
-| 浏览器续测细则                  | `internal/aiprompts/playwright-e2e.md`          | current    | Playwright MCP 唯一详细事实源                                                                    |
-| 专项 bridge 排障                | `npm run bridge:e2e`                            | supplement | 适合排障，不是统一门禁                                                                           |
-| 社媒内容专项 smoke              | `npm run smoke:social-workbench`                | supplement | 仍非自包含，不应冒充标准 E2E                                                                     |
-| 旧桌面宿主 headless             | 已下线                                          | deprecated | 只用于 legacy adapter 排障，不作为 current 证据                                                  |
-| 旧 E2E 命令                     | `npm run test:e2e`                              | deprecated | 当前仓库不存在                                                                                   |
-
-## 5. 当前验证标准
-
-一次有效的浏览器续测 / E2E 至少满足以下之一：
-
-1. 主路径走通且控制台 error 归零
-2. 主路径走通，且剩余错误已明确归类为非阻塞项
-3. 已定位新的 bridge / mock / 命令注册缺口，并给出下一步最小修复点
-
-## 6. 当前不做的假设
-
-本文不再把以下内容当成当前标准：
-
-- 假设仓库已接入本地 Playwright 测试目录与统一 `test:e2e` 命令
-- 假设旧桌面 WebDriver 方案仍是推荐路径
-- 假设旧桌面宿主 headless smoke 仍能证明 Electron GUI current 可交付
-- 假设浏览器 E2E 已进入 CI 标准门禁
-
-当前浏览器最小 smoke 基线已经具备；后续是否继续补 terminal / server / 专项 smoke，以 `internal/test/testing-strategy-2026.md` 的剩余优先级为准。
-
-## 7. 给后续 Agent 的交接要求
-
-如果本轮没有完全收口，请至少留下：
-
-- 当前页面 URL
-- 已完成的业务步骤
-- 控制台 error 数量
-- 是否走到了真实 bridge 或 mock fallback
-- 最新暴露的命令缺口
-- 下一轮应先补 mock、bridge，还是命令注册
+有效 E2E 报告必须写清 proof level：`vitest-e2e`、`gate-a`、`gate-b-fixture`、`gate-b-runtime`、`gate-b-live` 或 `packaged-platform`。只写“页面能打开”“smoke 通过”不足以判定产品可交付。

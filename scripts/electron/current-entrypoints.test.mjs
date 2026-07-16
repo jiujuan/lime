@@ -321,19 +321,34 @@ describe("Electron current package entrypoints", () => {
   it("Electron smoke gates Claw workbench shell and composer readiness", () => {
     const mainContent = readFile("electron/main.ts");
     const memorySmokeContent = readFile("electron/smokeMemorySettings.ts");
+    const smokeChecksContent = readFile("electron/smokeChecks.ts");
+    const smokeEvidenceContent = readFile("electron/smokeEvidence.ts");
     const smokeScript = readFile("scripts/electron/smoke.mjs");
 
-    expect(mainContent).toContain("waitForElectronSmokeWorkbenchReady");
-    expect(mainContent).toContain("waitForElectronSmokeMemorySettingsReady");
+    expect(mainContent).toContain("createElectronSmokeRunner");
+    expect(mainContent).not.toContain("function runElectronSmokeChecks");
+    expect(smokeChecksContent).toContain("waitForElectronSmokeWorkbenchReady");
+    expect(smokeChecksContent).toContain(
+      "waitForElectronSmokeMemorySettingsReady",
+    );
     expect(mainContent).toContain("showMainWindowDuringStartup");
     expect(mainContent).toContain("shouldShowMainWindowDuringStartup");
     expect(mainContent).toContain("LIME_ELECTRON_SMOKE_VISIBLE");
     expect(mainContent).toContain("window.showInactive()");
-    expect(mainContent).toContain('[data-testid="workspace-shell-scene"]');
-    expect(mainContent).toContain('[data-testid="inputbar-core-container"]');
-    expect(mainContent).toContain('textarea[name="agent-chat-message"]');
-    expect(mainContent).toContain("claw workbench shell ready");
-    expect(mainContent).toContain("memory settings ready");
+    expect(smokeChecksContent).toContain(
+      '[data-testid="workspace-shell-scene"]',
+    );
+    expect(smokeChecksContent).toContain(
+      '[data-testid="inputbar-core-container"]',
+    );
+    expect(smokeChecksContent).toContain('textarea[name="agent-chat-message"]');
+    expect(smokeChecksContent).toContain("claw workbench shell ready");
+    expect(smokeChecksContent).toContain("memory settings ready");
+    expect(smokeChecksContent).toContain("reloadElectronSmokeRenderer");
+    expect(smokeChecksContent).toContain(
+      "claw workbench shell ready after reload",
+    );
+    expect(smokeChecksContent).toContain("collectRendererPageErrorCount");
     expect(memorySmokeContent).toContain(
       '[data-testid="app-sidebar-account-model-settings"]',
     );
@@ -374,10 +389,32 @@ describe("Electron current package entrypoints", () => {
     expect(memorySmokeContent).toContain("/MemoryPage/");
     expect(mainContent).not.toContain('"agentSession/turn/start"');
     expect(mainContent).not.toContain('"test_api_key_provider_chat"');
+    expect(smokeChecksContent).toContain("LIME_GATE_RUN_ID");
+    expect(smokeChecksContent).toContain("LIME_ELECTRON_SMOKE_EVIDENCE_DIR");
+    expect(smokeChecksContent).toContain("app_server_handle_json_lines");
+    expect(smokeChecksContent).toContain("electron-ipc");
+    expect(smokeChecksContent).toContain("capturePage");
+    expect(smokeChecksContent).toContain("legacyCommandHitCount");
+    expect(smokeChecksContent).toContain("mockFallbackHitCount");
+    expect(smokeChecksContent).toContain("pageErrorCount");
+    expect(smokeChecksContent).toContain("rendererCrashCount");
+    expect(smokeEvidenceContent).toContain(
+      'ELECTRON_SMOKE_PROOF_LEVEL = "Gate B-F"',
+    );
+    expect(smokeEvidenceContent).toContain("currentAppServerMethodObserved");
+    expect(smokeEvidenceContent).toContain("noMockFallbackHits");
+    expect(smokeEvidenceContent).toContain("screenshotCaptured");
+    expect(smokeEvidenceContent).toContain('surfaceId: "SHELL-01"');
+    expect(smokeEvidenceContent).toContain('proof: "gate-b-f"');
+    expect(smokeEvidenceContent).toContain('complete: result === "pass"');
+    expect(smokeEvidenceContent).toContain("workbenchReloadReady");
     expect(smokeScript).toContain("mkdtempSync");
     expect(smokeScript).toContain("ELECTRON_E2E_USER_DATA_DIR");
     expect(smokeScript).toContain('LIME_ELECTRON_E2E: "1"');
     expect(smokeScript).toContain("LIME_ELECTRON_SMOKE_VISIBLE");
+    expect(smokeScript).toContain("LIME_GATE_RUN_ID");
+    expect(smokeScript).toContain("LIME_ELECTRON_SMOKE_EVIDENCE_DIR");
+    expect(smokeScript).toContain('path.join(evidenceDir, "summary.json")');
     expect(smokeScript).toContain("timed out waiting for renderer/workbench");
   });
 

@@ -8,18 +8,9 @@ import { formatDate } from "@/i18n/format";
 export const DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT: ConversationImportSourceClient =
   "codex";
 
-const IMPORT_SOURCE_CLIENT_LABELS: Record<
-  ConversationImportSourceClient,
-  { key: string; defaultValue: string }
-> = {
-  codex: {
-    key: "navigation.sidebar.importDialog.source.localHistory",
-    defaultValue: "Local history",
-  },
-  claude_code: {
-    key: "navigation.sidebar.importDialog.source.claudeCode",
-    defaultValue: "Claude Code",
-  },
+const IMPORT_SOURCE_CLIENT_LABEL = {
+  key: "navigation.sidebar.importDialog.source.localHistory",
+  defaultValue: "Local history",
 };
 
 export interface ConversationImportDialogTranslate {
@@ -217,14 +208,9 @@ export function formatImportOptionalDate(
 }
 
 export function resolveImportSourceClientLabel(
-  sourceClient: string | undefined,
   t: ConversationImportDialogTranslate,
 ): string {
-  const sourceLabel =
-    IMPORT_SOURCE_CLIENT_LABELS[
-      sourceClient as ConversationImportSourceClient
-    ] ?? IMPORT_SOURCE_CLIENT_LABELS.codex;
-  return t(sourceLabel.key, sourceLabel.defaultValue);
+  return t(IMPORT_SOURCE_CLIENT_LABEL.key, IMPORT_SOURCE_CLIENT_LABEL.defaultValue);
 }
 
 export function buildImportPreviewMetaText(

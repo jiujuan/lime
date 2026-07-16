@@ -48,7 +48,6 @@ import {
   type McpToolOperationKind,
   type ParsedMcpToolName,
 } from "./toolNameFamily";
-import { isImportedSourceMetadata } from "./importedSourceMetadata";
 import { resolveRequiredAgentChatCopy } from "./agentChatCopy";
 import type {
   ToolCallStatus,
@@ -334,29 +333,13 @@ const buildContentWorkbenchGroupHeadline = (
   );
 };
 
-function isImportedSourceToolCall(toolCall: ToolCallState): boolean {
-  return (
-    isImportedSourceMetadata(toolCall.metadata) ||
-    isImportedSourceMetadata(toolCall.result?.metadata)
-  );
-}
-
-export const buildToolGroupHeadline = (
-  toolCalls: ToolCallState[],
-  formatImportedSourceCommandRecord: (count?: number) => string = () =>
-    resolveRequiredAgentChatCopy("toolCall.importedCommandRecord.groupTitle"),
-): string => {
+export const buildToolGroupHeadline = (toolCalls: ToolCallState[]): string => {
   const first = toolCalls[0]!;
   const info = getToolDisplayInfo(first.name, first.status);
   const failed = toolCalls.some((item) => item.status === "failed");
   const running = toolCalls.some((item) => item.status === "running");
   const statusKey = failed ? "failed" : running ? "running" : "completed";
   const countValues = { count: toolCalls.length };
-  const importedToolCount = toolCalls.filter(isImportedSourceToolCall).length;
-  if (importedToolCount > 0) {
-    return formatImportedSourceCommandRecord(importedToolCount);
-  }
-
   const contentWorkbenchHeadline =
     buildContentWorkbenchGroupHeadline(toolCalls);
   if (contentWorkbenchHeadline) {

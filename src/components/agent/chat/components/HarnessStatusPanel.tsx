@@ -65,9 +65,6 @@ export function HarnessStatusPanel({
   description = "集中查看最新进展、文件变更、处理结果和待确认事项。",
   toggleLabel = "详情",
   leadContent,
-  selectedTeamLabel = null,
-  selectedTeamSummary = null,
-  selectedTeamRoles = [],
   threadRead = null,
   turns = [],
   threadItems = [],
@@ -186,10 +183,6 @@ export function HarnessStatusPanel({
     () => summarizeCanonicalChildThreads(canonicalChildren),
     [canonicalChildren],
   );
-  const hasSelectedTeamConfig =
-    Boolean(selectedTeamLabel?.trim()) ||
-    Boolean(selectedTeamSummary?.trim()) ||
-    (selectedTeamRoles?.length ?? 0) > 0;
   const threadReliabilitySummary = useMemo(
     () =>
       buildThreadReliabilitySummary({
@@ -265,7 +258,6 @@ export function HarnessStatusPanel({
   const fileReviewEmptyHint = String(
     t("agentChat.harness.fileReview.emptyHint" as never),
   );
-  const selectedTeamRolesCount = selectedTeamRoles?.length || 0;
 
   const availableSections = useMemo(
     () =>
@@ -274,7 +266,6 @@ export function HarnessStatusPanel({
         fileChangeReviewEntriesLength: fileChangeReviewEntries.length,
         hasAgentUiProjectionSection,
         hasHandoffSection,
-        hasSelectedTeamConfig,
         hasToolInventorySection,
         harnessState,
         realTeamSummary,
@@ -292,7 +283,6 @@ export function HarnessStatusPanel({
       fileReviewTitle,
       hasAgentUiProjectionSection,
       hasHandoffSection,
-      hasSelectedTeamConfig,
       hasToolInventorySection,
       harnessState,
       realTeamSummary,
@@ -317,16 +307,12 @@ export function HarnessStatusPanel({
         evidencePack,
         hasAgentUiProjectionSection,
         hasHandoffSection,
-        hasSelectedTeamConfig,
         hasToolInventorySection,
         harnessState,
         realTeamSummary,
         runtimeTaskPresentation,
         runtimeToolTotal,
         runtimeToolVisibleTotal,
-        selectedTeamLabel,
-        selectedTeamRolesCount,
-        selectedTeamSummary,
         threadReliability: {
           shouldRender: threadReliabilitySummary.shouldRender,
           statusLabel: threadReliabilitySummary.statusLabel,
@@ -347,16 +333,12 @@ export function HarnessStatusPanel({
       evidencePack,
       hasAgentUiProjectionSection,
       hasHandoffSection,
-      hasSelectedTeamConfig,
       hasToolInventorySection,
       harnessState,
       realTeamSummary,
       runtimeTaskPresentation,
       runtimeToolTotal,
       runtimeToolVisibleTotal,
-      selectedTeamLabel,
-      selectedTeamRolesCount,
-      selectedTeamSummary,
       threadReliabilitySummary.shouldRender,
       threadReliabilitySummary.statusLabel,
       threadReliabilitySummary.summary,
@@ -397,7 +379,6 @@ export function HarnessStatusPanel({
             evidencePackExport,
             hasAgentUiProjectionSection,
             hasHandoffSection,
-            hasSelectedTeamConfig,
             harnessState,
             messages,
             onInterruptCurrentTurn,
@@ -422,9 +403,6 @@ export function HarnessStatusPanel({
             registerSectionRef,
             runtimeFactSummary,
             runtimeTaskPresentation,
-            selectedTeamLabel,
-            selectedTeamRoles,
-            selectedTeamSummary,
             submittedActionsInFlight,
             t,
             threadItems,
@@ -453,7 +431,6 @@ export function HarnessStatusPanel({
       evidencePackExport,
       hasAgentUiProjectionSection,
       hasHandoffSection,
-      hasSelectedTeamConfig,
       harnessState,
       isDetailsExpanded,
       messages,
@@ -479,9 +456,6 @@ export function HarnessStatusPanel({
       registerSectionRef,
       runtimeFactSummary,
       runtimeTaskPresentation,
-      selectedTeamLabel,
-      selectedTeamRoles,
-      selectedTeamSummary,
       submittedActionsInFlight,
       t,
       threadItems,

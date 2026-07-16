@@ -11,15 +11,16 @@ describe("agentUiProjectionSummary", () => {
   it("应按 Agent UI v0.6 Subagents surface 聚合专用 lane", () => {
     const events: AgentUiProjectionEvent[] = [
       {
-        type: "team.changed",
-        sourceType: "runtime_status",
+        type: "agent.changed",
+        sourceType: "item_completed",
         sequence: 1,
         sessionId: "session-team-1",
-        owner: "team",
-        scope: "team",
+        owner: "agent",
+        scope: "agent",
         phase: "acting",
         surface: "team_roster",
         persistence: "snapshot",
+        runtimeEntity: "subagent_turn",
       },
       {
         type: "agent.spawned",
@@ -132,12 +133,12 @@ describe("agentUiProjectionSummary", () => {
         runtimeEntity: "work_item",
       },
       {
-        type: "team.changed",
-        sourceType: "runtime_status",
+        type: "task.changed",
+        sourceType: "team_control_projection",
         sequence: 3,
         sessionId: "session-team-1",
-        owner: "team",
-        scope: "team",
+        owner: "task",
+        scope: "task",
         phase: "acting",
         surface: "team_policy",
         persistence: "snapshot",

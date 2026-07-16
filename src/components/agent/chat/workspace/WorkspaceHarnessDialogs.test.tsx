@@ -76,7 +76,6 @@ function renderDialog(
           execution_strategy: "react",
         }}
         runtimeStatusTitle={null}
-        selectedTeamRoleCount={0}
         harnessState={createHarnessState()}
         environment={{
           skillsCount: 0,
@@ -95,7 +94,6 @@ function renderDialog(
           model: "gpt-5.4",
           executionStrategy: "react",
           activeTheme: "default",
-          selectedTeamLabel: null,
         }}
         threadRead={{
           thread_id: "session-code",
@@ -152,7 +150,6 @@ function renderSurface(
           model: "gpt-5.4",
           executionStrategy: "react",
           activeTheme: "default",
-          selectedTeamLabel: null,
         }}
         threadRead={{
           thread_id: "session-surface",
@@ -350,7 +347,6 @@ describe("WorkspaceHarnessDialogs", () => {
         model: "gpt-5.4",
         executionStrategy: "react",
         activeTheme: "default",
-        selectedTeamLabel: null,
       },
       threadRead: {
         thread_id: "session-react",

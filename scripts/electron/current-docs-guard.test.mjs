@@ -215,8 +215,10 @@ describe("Electron current testing docs guard", () => {
     expect(testingIndex).toContain("src/lib/desktop-host/");
     expect(testingIndex).toContain("smoke:electron");
     expect(testingIndex).toContain("verify:gui-smoke");
-    expect(testingIndex).toContain("测试用例需要全面更新事实源");
-    expect(testingIndex).toContain("不得作为新功能可交付证据");
+    expect(testingIndex).toContain(
+      "Gate A Renderer 证据与真实 Electron Gate B fixture",
+    );
+    expect(testingIndex).toContain("生产路径不得使用其 mock 作为 fallback");
 
     const p0Scenarios = readFile("internal/tests/agent-qc-p0-scenarios.md");
     expect(p0Scenarios).toContain("npm run test:contracts");

@@ -118,6 +118,97 @@ fn canonical_agent_state_uses_edge_thread_and_latest_turn_facts() {
         derive_agent_state(&thread, ThreadSpawnEdgeStatus::Closed).status,
         CollabAgentStatus::Shutdown
     );
+    assert_eq!(
+        derive_agent_state(&thread, ThreadSpawnEdgeStatus::Pending).status,
+        CollabAgentStatus::NotFound
+    );
+}
+
+#[test]
+fn pending_spawn_is_hidden_until_atomic_commit() {
+    let (_temp, store) = store();
+    let parent = canonical_thread("pending-parent");
+    let child = canonical_thread("pending-child");
+    store
+        .create_thread_sync(CreateThreadParams {
+            thread: parent.clone(),
+        })
+        .expect("create parent");
+    block_on(store.create_pending_thread_spawn_edge(
+        parent.thread_id.clone(),
+        child.thread_id.clone(),
+        child.session_id.to_string(),
+    ))
+    .expect("reserve pending child");
+    store
+        .create_thread_sync(CreateThreadParams {
+            thread: child.clone(),
+        })
+        .expect("create hidden child");
+
+    assert!(store
+        .read_thread_sync(ReadThreadParams {
+            thread_id: child.thread_id.clone(),
+            include_archived: true,
+            turns_view: ThreadTurnsView::NotLoaded,
+        })
+        .expect("read pending child")
+        .is_none());
+    assert_eq!(
+        store
+            .list_threads_sync(ListThreadsParams {
+                include_archived: true,
+                page: PageRequest {
+                    cursor: None,
+                    limit: 10,
+                    sort_direction: SortDirection::Asc,
+                },
+            })
+            .expect("list visible threads")
+            .data
+            .into_iter()
+            .map(|thread| thread.thread_id)
+            .collect::<Vec<_>>(),
+        vec![parent.thread_id.clone()]
+    );
+    assert_eq!(
+        block_on(store.read_thread_spawn_parent(child.thread_id.clone()))
+            .expect("read pending parent")
+            .expect("pending parent")
+            .status,
+        ThreadSpawnEdgeStatus::Pending
+    );
+    assert_eq!(
+        store
+            .list_pending_thread_spawn_intents_sync()
+            .expect("list pending intents"),
+        vec![(
+            parent.thread_id.clone(),
+            child.thread_id.clone(),
+            child.session_id.to_string(),
+        )]
+    );
+
+    assert!(block_on(
+        store.commit_pending_thread_spawn_edge(
+            child.thread_id.clone(),
+            child.session_id.to_string(),
+        )
+    )
+    .expect("commit pending child"));
+    let visible = store
+        .read_thread_sync(ReadThreadParams {
+            thread_id: child.thread_id,
+            include_archived: true,
+            turns_view: ThreadTurnsView::NotLoaded,
+        })
+        .expect("read committed child")
+        .expect("committed child");
+    assert_eq!(visible.parent_thread_id, Some(parent.thread_id));
+    assert!(store
+        .list_pending_thread_spawn_intents_sync()
+        .expect("pending intents after commit")
+        .is_empty());
 }
 
 #[test]

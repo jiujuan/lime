@@ -28,32 +28,6 @@ export interface AgentSessionExecutionRuntimePreferences {
   subagent: boolean;
 }
 
-export type AgentSessionExecutionRuntimeRecentTeamSource =
-  | "builtin"
-  | "custom"
-  | "ephemeral";
-
-export interface AgentSessionExecutionRuntimeRecentTeamRole {
-  id?: string | null;
-  label?: string | null;
-  summary?: string | null;
-  profileId?: string | null;
-  roleKey?: string | null;
-  skillIds?: string[] | null;
-}
-
-export interface AgentSessionExecutionRuntimeRecentTeamSelection {
-  disabled: boolean;
-  theme?: string | null;
-  preferredTeamPresetId?: string | null;
-  selectedTeamId?: string | null;
-  selectedTeamSource?: AgentSessionExecutionRuntimeRecentTeamSource | null;
-  selectedTeamLabel?: string | null;
-  selectedTeamDescription?: string | null;
-  selectedTeamSummary?: string | null;
-  selectedTeamRoles?: AgentSessionExecutionRuntimeRecentTeamRole[] | null;
-}
-
 export interface AgentSessionExecutionRuntimeTaskProfile {
   kind: string;
   source: string;
@@ -180,7 +154,6 @@ export interface AgentSessionExecutionRuntime {
   context_summary?: AgentTurnContextSummary | null;
   recent_access_mode?: AgentSessionExecutionRuntimeAccessMode | null;
   recent_preferences?: AgentSessionExecutionRuntimePreferences | null;
-  recent_team_selection?: AgentSessionExecutionRuntimeRecentTeamSelection | null;
   recent_theme?: string | null;
   recent_session_mode?: "default" | "general_workbench" | string | null;
   recent_gate_key?: string | null;

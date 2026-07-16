@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 
 import {
   buildAgentUiModelChangeEvent,
-  buildAgentUiRuntimeTeamChangedEvent,
   buildAgentUiTaskProfileResolvedEvent,
   buildAgentUiThreadStartedEvent,
 } from "../dist/index.js";
@@ -56,73 +55,6 @@ test("model change helper builds standard routing status events", () => {
     model: "gpt-5.4",
     mode: "responsive",
   });
-});
-
-test("runtime team helper builds standard team changed events", () => {
-  const event = buildAgentUiRuntimeTeamChangedEvent(
-    {
-      sourceType: "runtime_status",
-      phase: "routing",
-      title: "并行执行",
-      detail: "正在协调多个 Worker",
-      metadata: {
-        team_phase: "running",
-        team_parallel_budget: 3,
-        team_active_count: 2,
-        team_queued_count: 1,
-        concurrency_phase: "active",
-        concurrency_scope: "provider",
-        provider_concurrency_group: "openai:gpt-5.4",
-        provider_parallel_budget: 4,
-        queue_reason: "provider_busy",
-        retryable_overload: true,
-      },
-    },
-    {
-      sessionId: "session-team-1",
-      threadId: "thread-team-1",
-    },
-  );
-
-  assert.ok(event);
-  assert.equal(event.type, "team.changed");
-  assert.equal(event.sourceType, "runtime_status");
-  assert.equal(event.owner, "team");
-  assert.equal(event.scope, "team");
-  assert.equal(event.phase, "acting");
-  assert.equal(event.surface, "team_roster");
-  assert.equal(event.persistence, "snapshot");
-  assert.equal(event.runtimeStatus, "preparing");
-  assert.equal(event.latestTurnStatus, "preparing");
-  assert.equal(event.topology, "parallel_workers");
-  assert.equal(event.teamPhase, "running");
-  assert.equal(event.teamParallelBudget, 3);
-  assert.equal(event.teamActiveCount, 2);
-  assert.equal(event.teamQueuedCount, 1);
-  assert.equal(event.queuedTurnCount, 1);
-  assert.equal(event.providerConcurrencyGroup, "openai:gpt-5.4");
-  assert.equal(event.providerParallelBudget, 4);
-  assert.equal(event.queueReason, "provider_busy");
-  assert.equal(event.retryableOverload, true);
-  assert.deepEqual(event.payload, {
-    teamEvent: "runtime_status_changed",
-    sourcePhase: "routing",
-    title: "并行执行",
-    detailPreview: "正在协调多个 Worker",
-    concurrencyPhase: "active",
-    concurrencyScope: "provider",
-  });
-});
-
-test("runtime team helper skips runtime status without team metadata", () => {
-  const event = buildAgentUiRuntimeTeamChangedEvent({
-    sourceType: "runtime_status",
-    phase: "routing",
-    title: "路由中",
-    detail: "没有 Team metadata",
-  });
-
-  assert.equal(event, null);
 });
 
 test("task profile helper builds standard task changed events", () => {

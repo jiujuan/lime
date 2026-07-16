@@ -4,6 +4,7 @@ import { buildCommonAssertions } from "./claw-chat-current-fixture-common-assert
 import { buildNotApplicableAssertions } from "./claw-chat-current-fixture-not-applicable-assertions.mjs";
 import { buildScenarioAssertions } from "./claw-chat-current-fixture-scenario-assertions.mjs";
 import { assert } from "./claw-chat-current-fixture-utils.mjs";
+import { buildGateBContractAssertions } from "./claw-chat-current-fixture-gate-b-contract.mjs";
 
 export function buildFixtureAssertionReport(input) {
   const backendSummary = summarizeBackendLedger(input.backendLedger);
@@ -11,18 +12,33 @@ export function buildFixtureAssertionReport(input) {
   const commonAssertions = buildCommonAssertions(context);
   const scenarioAssertions = buildScenarioAssertions(context);
   const notApplicableAssertions = buildNotApplicableAssertions(context);
+  const gateBContractAssertions = buildGateBContractAssertions(
+    context.gateBContract,
+  );
   const assertions = {
+    ...gateBContractAssertions,
     ...commonAssertions,
     ...scenarioAssertions,
   };
 
   for (const [key, passed] of Object.entries(assertions)) {
-    assert(passed, `断言失败: ${key}`);
+    const evidence =
+      key === "identityConsistent"
+        ? context.gateBContract.identity
+        : key === "explicitTerminalOrPending"
+          ? context.gateBContract.outcome
+          : null;
+    assert(
+      passed,
+      `断言失败: ${key}${evidence ? `; evidence=${JSON.stringify(evidence)}` : ""}`,
+    );
   }
 
   return {
     appServerRequestMethods: context.appServerRequestMethods,
     backendSummary,
+    gateBContract: context.gateBContract,
+    gateBContractAssertions,
     assertions,
     commonAssertions,
     scenarioAssertions,

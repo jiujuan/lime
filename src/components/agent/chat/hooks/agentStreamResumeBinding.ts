@@ -20,7 +20,7 @@ import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import { handleTurnStreamEvent } from "./agentStreamRuntimeHandler";
 import type { StreamRequestState } from "./agentStreamRuntimeHandlerTypes";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
-import { hasRunningThreadReadActivity } from "../projection/threadReadActivity";
+import { hasActiveThreadReadActivity } from "../projection/threadReadActivity";
 import {
   upsertThreadItemState,
   upsertThreadTurnState,
@@ -92,10 +92,6 @@ interface BindRecoveredAgentStreamThreadOptions {
 function normalizeNonEmpty(value?: string | null): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
-}
-
-function isRunningStatus(value?: string | null): boolean {
-  return normalizeNonEmpty(value)?.toLowerCase() === "running";
 }
 
 function isExplicitTerminalStatus(value?: string | null): boolean {
@@ -301,35 +297,6 @@ export function consumeLocallyInterruptedAgentStreamBinding(
   return true;
 }
 
-function findRunningThreadTurn(
-  threadTurns: readonly AgentThreadTurn[],
-): AgentThreadTurn | null {
-  for (let index = threadTurns.length - 1; index >= 0; index -= 1) {
-    const turn = threadTurns[index];
-    if (turn?.status === "running" && normalizeRealTurnId(turn.id)) {
-      return turn;
-    }
-  }
-  return null;
-}
-
-function findRunningThreadReadTurnId(
-  threadRead?: AgentRuntimeThreadReadModel | null,
-): string | null {
-  const turns = threadRead?.turns ?? [];
-  for (let index = turns.length - 1; index >= 0; index -= 1) {
-    const turn = turns[index];
-    if (isRunningStatus(turn?.status)) {
-      return (
-        normalizeRealTurnId(turn.turn_id) ??
-        normalizeRealTurnId((turn as { turnId?: string | null }).turnId) ??
-        normalizeRealTurnId((turn as { id?: string | null }).id)
-      );
-    }
-  }
-  return null;
-}
-
 function findExistingAssistantMessageId(
   messages: readonly Message[],
   turnId: string,
@@ -385,9 +352,7 @@ export function resolveAgentStreamResumeBindingTarget(
     return null;
   }
 
-  const runningThreadTurn = findRunningThreadTurn(options.threadTurns);
-  const hasRunningReadModel = hasRunningThreadReadActivity(options.threadRead);
-  if (!hasRunningReadModel) {
+  if (!hasActiveThreadReadActivity(options.threadRead)) {
     return null;
   }
 
@@ -400,11 +365,13 @@ export function resolveAgentStreamResumeBindingTarget(
           | null
           | undefined
       )?.activeTurnId,
-    ) ??
-    findRunningThreadReadTurnId(options.threadRead);
+    );
   if (!turnId) {
     return null;
   }
+  const runningThreadTurn = options.threadTurns.find(
+    (turn) => normalizeRealTurnId(turn.id) === turnId,
+  );
 
   return {
     eventName: `agentSession/event/${sessionId}`,

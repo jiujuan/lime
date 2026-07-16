@@ -37,13 +37,10 @@ export const METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT =
 
 export const CONVERSATION_IMPORT_SOURCE_CLIENTS = [
   "codex",
-  "claude_code",
 ] as const satisfies readonly GeneratedConversationImportSourceClient[];
 export const CONVERSATION_IMPORT_SOURCE_STATUSES = [
   "ready",
   "missing",
-  "unsupported",
-  "error",
 ] as const satisfies readonly GeneratedConversationImportSourceStatus[];
 export const CONVERSATION_IMPORT_THREAD_STATUSES = [
   "not_imported",
@@ -896,7 +893,6 @@ export type AgentSessionUpdateParams = {
   executionStrategy?: string;
   recentAccessMode?: string;
   recentPreferences?: unknown;
-  recentTeamSelection?: unknown;
   articleWorkspaceSelectedObjectRef?: unknown;
   articleWorkspaceEditedDraft?: unknown;
 };
@@ -3084,13 +3080,9 @@ export type ConnectCallbackSendResponse = {
   delivered: boolean;
 };
 
-export type ConversationImportSourceClient = "codex" | "claude_code";
+export type ConversationImportSourceClient = "codex";
 
-export type ConversationImportSourceStatus =
-  | "ready"
-  | "missing"
-  | "unsupported"
-  | "error";
+export type ConversationImportSourceStatus = "ready" | "missing";
 
 export type ConversationImportThreadStatus =
   | "not_imported"
@@ -3243,35 +3235,6 @@ export type ConversationImportThreadCommitResponse = {
   importedTurns: number;
   canContinue: boolean;
   warnings: string[];
-};
-
-export type ConversationImportThreadRuntimeEventsReadParams = {
-  sessionId: string;
-  offset?: number;
-  limit?: number;
-  turnIndex?: number;
-  eventType?: string;
-};
-
-export type ConversationImportRuntimeEventDetail = {
-  sourceEventIndex: number;
-  turnIndex: number;
-  eventIndex: number;
-  eventType: string;
-  payload: unknown;
-};
-
-export type ConversationImportThreadRuntimeEventsReadResponse = {
-  sessionId: string;
-  offset: number;
-  limit: number;
-  totalEvents: number;
-  nextOffset?: number;
-  sourceRuntimeEvents: number;
-  materializedRuntimeEvents: number;
-  sidecarRuntimeEvents: number;
-  projection?: unknown;
-  events: ConversationImportRuntimeEventDetail[];
 };
 
 export type ProtocolSchemaGroup = "jsonrpc" | "v0";

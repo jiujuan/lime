@@ -18,6 +18,7 @@ use self::lifecycle::{
 };
 use self::lowering::{item_family, typed_payload, ItemFamily};
 use super::change_set::{ChangeSetAccumulator, MaterializationError};
+use super::helpers::event_metadata;
 use agent_protocol::{
     ItemId, ItemStatus, SessionId, ThreadHistoryChangeSet, ThreadId, ThreadItem, ThreadItemPayload,
     Turn, TurnError, TurnId, TurnItemsView, TurnStatus,
@@ -221,8 +222,28 @@ fn item_from_event(
         kind: payload.kind(),
         status,
         payload,
-        metadata: source.get("metadata").cloned().unwrap_or(Value::Null),
+        metadata: materialized_item_metadata(event, source, family),
     })
+}
+
+fn materialized_item_metadata(
+    event: &AgentEvent,
+    source: &serde_json::Map<String, Value>,
+    family: ItemFamily,
+) -> Value {
+    let mut metadata = event_metadata(event)
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    if let Some(source_metadata) = source.get("metadata").and_then(Value::as_object) {
+        metadata.extend(source_metadata.clone());
+    }
+    if matches!(family, ItemFamily::Command) {
+        if let Some(command_id) = map_string(source, &["commandId", "command_id"]) {
+            metadata.insert("source_call_id".to_string(), Value::String(command_id));
+        }
+    }
+    Value::Object(metadata)
 }
 
 fn canonical_item_from_event(

@@ -1,4 +1,6 @@
-use super::{event_msg_runtime_events, response_item_runtime_events, ImportedRuntimeEvent};
+use super::{
+    approval_prompt, event_msg_rollout_events, response_item_rollout_events, CodexRolloutEvent,
+};
 use serde_json::json;
 
 #[test]
@@ -15,9 +17,9 @@ fn codex_completed_plan_preserves_authoritative_item_identity() {
         }
     });
 
-    let events = event_msg_runtime_events(Some(&payload), None);
+    let events = event_msg_rollout_events(Some(&payload), None);
     assert_eq!(events.len(), 1);
-    let ImportedRuntimeEvent::Runtime {
+    let CodexRolloutEvent::Runtime {
         event_type,
         payload,
     } = &events[0]
@@ -41,9 +43,9 @@ fn codex_subagent_activity_preserves_current_kind() {
             "agent_thread_id": "thread-child",
         });
 
-        let events = event_msg_runtime_events(Some(&payload), None);
+        let events = event_msg_rollout_events(Some(&payload), None);
         assert_eq!(events.len(), 1);
-        let ImportedRuntimeEvent::Runtime {
+        let CodexRolloutEvent::Runtime {
             event_type,
             payload,
         } = &events[0]
@@ -69,6 +71,18 @@ fn codex_tool_search_stays_in_provider_history() {
             "output": "selected tools"
         }),
     ] {
-        assert!(response_item_runtime_events(Some(&payload), None).is_empty());
+        assert!(response_item_rollout_events(Some(&payload), None).is_empty());
     }
+}
+
+#[test]
+fn approval_prompt_uses_the_canonical_command_fallback() {
+    let payload = json!({
+        "type": "exec_approval_request",
+        "command": ["npm", "test"]
+    });
+
+    let prompt = approval_prompt(&payload).expect("command fallback");
+    assert_eq!(prompt, "Approve command: npm test");
+    assert!(!prompt.contains("imported"));
 }

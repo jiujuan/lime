@@ -5,6 +5,7 @@ use super::tests_support::*;
 use app_server_protocol::{
     JsonRpcMessage, RequestId, METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
     METHOD_EXECUTION_PROCESS_START, METHOD_EXECUTION_PROCESS_STATUS,
+    METHOD_EXECUTION_PROCESS_WRITE_STDIN,
 };
 use serde_json::json;
 use tokio::time::Duration;
@@ -21,7 +22,7 @@ async fn execution_process_methods_start_drain_and_report_status() {
             Some(json!({
                 "processId": "jsonrpc-process-test",
                 "toolId": "tool-jsonrpc",
-                "toolName": "Bash",
+                "toolName": "exec_command",
                 "command": ["sh", "-c", "printf jsonrpc-process"],
                 "workingDirectory": std::env::current_dir()
                     .unwrap_or_default()
@@ -85,26 +86,37 @@ async fn execution_process_methods_start_drain_and_report_status() {
             .is_some_and(|value| value.contains("jsonrpc-process"))
     }));
 
-    let status = processor
-        .handle_request(JsonRpcRequest::new(
-            RequestId::Integer(12),
-            METHOD_EXECUTION_PROCESS_STATUS,
-            Some(json!({
-                "processId": "jsonrpc-process-test",
-            })),
-        ))
-        .await
-        .expect("execution process status response");
-    match &status[0] {
-        JsonRpcMessage::Response(response) => {
-            assert_eq!(response.result["snapshot"]["status"], "exited");
+    let mut observed_status = None;
+    for attempt in 0..20 {
+        let status = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(100 + attempt),
+                METHOD_EXECUTION_PROCESS_STATUS,
+                Some(json!({
+                    "processId": "jsonrpc-process-test",
+                })),
+            ))
+            .await
+            .expect("execution process status response");
+        match &status[0] {
+            JsonRpcMessage::Response(response) => {
+                let current_status = response.result["snapshot"]["status"]
+                    .as_str()
+                    .expect("execution process status should be a string");
+                observed_status = Some(current_status.to_string());
+                if current_status == "exited" {
+                    break;
+                }
+            }
+            other => panic!("expected response, got {other:?}"),
         }
-        other => panic!("expected response, got {other:?}"),
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
+    assert_eq!(observed_status.as_deref(), Some("exited"));
 }
 
 #[tokio::test]
-async fn execution_process_start_rejects_workspace_sandbox_without_process_owner() {
+async fn execution_process_start_uses_fallback_when_workspace_sandbox_backend_is_disabled() {
     let processor = RequestProcessor::new(RuntimeCore::default());
     initialize_processor(&processor).await;
 
@@ -115,7 +127,7 @@ async fn execution_process_start_rejects_workspace_sandbox_without_process_owner
             Some(json!({
                 "processId": "jsonrpc-process-sandbox",
                 "toolId": "tool-jsonrpc-sandbox",
-                "toolName": "Bash",
+                "toolName": "exec_command",
                 "command": ["sh", "-c", "printf blocked"],
                 "workingDirectory": std::env::current_dir()
                     .unwrap_or_default()
@@ -128,10 +140,94 @@ async fn execution_process_start_rejects_workspace_sandbox_without_process_owner
         .await
         .expect("execution process sandbox rejection response");
 
-    match &response[0] {
-        JsonRpcMessage::Error(response) => {
-            assert!(response.error.message.contains("requires sandbox backend"));
+    let JsonRpcMessage::Response(response) = &response[0] else {
+        panic!("expected response, got {:?}", response[0]);
+    };
+    assert_eq!(
+        response.result["snapshot"]["processId"],
+        "jsonrpc-process-sandbox"
+    );
+    assert_eq!(response.result["snapshot"]["toolName"], "exec_command");
+}
+
+#[tokio::test]
+async fn execution_process_jsonrpc_supports_pty_stdin_and_combined_output() {
+    let processor = RequestProcessor::new(RuntimeCore::default());
+    initialize_processor(&processor).await;
+    let working_directory = std::env::current_dir()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
+    processor
+        .handle_request(JsonRpcRequest::new(
+            RequestId::Integer(20),
+            METHOD_EXECUTION_PROCESS_START,
+            Some(json!({
+                "processId": "jsonrpc-process-pty",
+                "toolId": "tool-jsonrpc-pty",
+                "toolName": "exec_command",
+                "command": [
+                    "sh",
+                    "-c",
+                    "printf PTY_JSONRPC_READY; IFS= read -r value; printf 'PTY_JSONRPC:%s' \"$value\""
+                ],
+                "workingDirectory": working_directory,
+                "tty": true,
+                "approvalPolicy": "never",
+                "sandboxPolicy": "danger-full-access",
+            })),
+        ))
+        .await
+        .expect("PTY process start response");
+
+    processor
+        .handle_request(JsonRpcRequest::new(
+            RequestId::Integer(21),
+            METHOD_EXECUTION_PROCESS_WRITE_STDIN,
+            Some(json!({
+                "processId": "jsonrpc-process-pty",
+                "data": "hello-jsonrpc\n",
+            })),
+        ))
+        .await
+        .expect("PTY stdin response");
+
+    let mut deltas = Vec::new();
+    for attempt in 0..40 {
+        let drained = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(30 + attempt),
+                METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
+                Some(json!({
+                    "processId": "jsonrpc-process-pty",
+                    "afterSequence": 0,
+                    "maxBytes": 65536,
+                })),
+            ))
+            .await
+            .expect("PTY output response");
+        let JsonRpcMessage::Response(response) = &drained[0] else {
+            panic!("expected response, got {:?}", drained[0]);
+        };
+        deltas = response.result["deltas"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        if deltas.iter().any(|delta| {
+            delta["delta"]
+                .as_str()
+                .is_some_and(|value| value.contains("PTY_JSONRPC:hello-jsonrpc"))
+        }) {
+            break;
         }
-        other => panic!("expected response, got {other:?}"),
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
+
+    assert!(deltas.iter().any(|delta| delta["kind"] == "combined"));
+    assert!(deltas.iter().any(|delta| {
+        delta["delta"]
+            .as_str()
+            .is_some_and(|value| value.contains("PTY_JSONRPC:hello-jsonrpc"))
+    }));
 }

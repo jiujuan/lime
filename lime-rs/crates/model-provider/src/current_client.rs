@@ -335,7 +335,6 @@ impl CurrentProviderClient {
     pub fn new(config: RuntimeProviderConfig) -> Result<Self, CurrentProviderError> {
         let mut client_builder = Client::builder()
             .connect_timeout(Duration::from_secs(30))
-            .timeout(Duration::from_secs(600))
             .tcp_keepalive(Duration::from_secs(60))
             .gzip(true)
             .brotli(true)
@@ -577,6 +576,7 @@ mod tests {
     use super::lowering::chat_completions_request;
     use super::stream::{
         drain_sse_frames, openai_chat_sse, parse_sse_frame, response_item_tool_call, responses_sse,
+        sse_frames_with_idle_timeout,
     };
     use super::*;
     use crate::runtime_provider::RuntimeProviderConfig;
@@ -820,6 +820,125 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(lifecycle, ["start", "delta", "delta", "end", "call"]);
+    }
+
+    #[tokio::test]
+    async fn openai_text_stream_ignores_empty_tool_call_placeholder() {
+        let body = concat!(
+            "data: {\"id\":\"chatcmpl-empty-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl-empty-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":\"\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl-empty-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let (base_url, _requests, server) = spawn_http_fixture(vec![fixture_response(
+            "200 OK",
+            "Content-Type: text/event-stream\r\n",
+            body,
+        )])
+        .await;
+        let response = Client::builder()
+            .no_proxy()
+            .build()
+            .expect("HTTP client")
+            .get(base_url)
+            .send()
+            .await
+            .expect("SSE response");
+
+        let events = openai_chat_sse(response)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("empty tool placeholder must not fail a text response");
+
+        server.await.expect("fixture server");
+        assert!(events.iter().any(|event| matches!(
+            event,
+            CanonicalLlmEvent::TextDelta { text, .. } if text == "done"
+        )));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, CanonicalLlmEvent::ToolCall { .. })));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            CanonicalLlmEvent::Finish {
+                reason: FinishReason::Stop,
+                ..
+            }
+        )));
+    }
+
+    #[tokio::test]
+    async fn openai_tool_stream_rejects_arguments_without_name() {
+        let body = concat!(
+            "data: {\"id\":\"chatcmpl-missing-name\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\"}}]},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl-missing-name\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n"
+        );
+        let (base_url, _requests, server) = spawn_http_fixture(vec![fixture_response(
+            "200 OK",
+            "Content-Type: text/event-stream\r\n",
+            body,
+        )])
+        .await;
+        let response = Client::builder()
+            .no_proxy()
+            .build()
+            .expect("HTTP client")
+            .get(base_url)
+            .send()
+            .await
+            .expect("SSE response");
+
+        let error = openai_chat_sse(response)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect_err("non-empty incomplete tool call must fail closed");
+
+        server.await.expect("fixture server");
+        assert_eq!(error.message, "Provider tool call omitted tool name");
+    }
+
+    #[tokio::test]
+    async fn provider_stream_timeout_is_idle_based() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind idle fixture");
+        let address = listener.local_addr().expect("idle fixture address");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept idle request");
+            read_http_headers(&mut stream).await;
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: 10\r\n\r\n",
+                )
+                .await
+                .expect("write idle response headers");
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        });
+        let response = Client::builder()
+            .no_proxy()
+            .build()
+            .expect("HTTP client")
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .expect("idle SSE response");
+
+        let mut frames = Box::pin(sse_frames_with_idle_timeout(
+            response,
+            Duration::from_millis(10),
+        ));
+        let error = frames
+            .next()
+            .await
+            .expect("idle stream result")
+            .expect_err("idle stream must time out");
+
+        assert_eq!(error.message, "读取 provider SSE 超时: 10 ms 内未收到数据");
+        server.await.expect("idle fixture server");
     }
 
     #[tokio::test]

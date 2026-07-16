@@ -4,9 +4,7 @@ import { CONVERSATION_IMPORT_SOURCE_CLIENTS } from "../../../packages/app-server
 import {
   commitConversationImportThread,
   previewConversationImportThread,
-  readConversationImportRuntimeEvents,
   scanConversationImportSource,
-  type ConversationImportThreadRuntimeEventsReadResponse,
   type ConversationImportSourceScanResponse,
   type ConversationImportThreadCommitResponse,
   type ConversationImportThreadPreviewResponse,
@@ -197,30 +195,6 @@ function appServerCommitResponse(): ConversationImportThreadCommitResponse {
   };
 }
 
-function appServerRuntimeEventsResponse(): ConversationImportThreadRuntimeEventsReadResponse {
-  return {
-    sessionId: "sess-imported",
-    offset: 80,
-    limit: 20,
-    totalEvents: 90,
-    sourceRuntimeEvents: 454,
-    materializedRuntimeEvents: 404,
-    sidecarRuntimeEvents: 50,
-    events: [
-      {
-        sourceEventIndex: 401,
-        turnIndex: 0,
-        eventIndex: 401,
-        eventType: "command.started",
-        payload: {
-          commandId: "call_exec_80",
-          command: "echo 80",
-        },
-      },
-    ],
-  };
-}
-
 describe("conversationImport API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -228,10 +202,7 @@ describe("conversationImport API", () => {
   });
 
   it("导入来源协议枚举由 app-server-client 统一导出", () => {
-    expect([...CONVERSATION_IMPORT_SOURCE_CLIENTS].sort()).toEqual([
-      "claude_code",
-      "codex",
-    ]);
+    expect([...CONVERSATION_IMPORT_SOURCE_CLIENTS]).toEqual(["codex"]);
   });
 
   it("应通过 App Server current 主链扫描 Codex 对话来源", async () => {
@@ -258,42 +229,6 @@ describe("conversationImport API", () => {
         query: "runtime",
         includeArchived: true,
         limit: 20,
-      },
-    );
-    expect(safeInvoke).not.toHaveBeenCalled();
-  });
-
-  it("扫描响应应接受 app-server protocol 声明的第二来源枚举", async () => {
-    const result = {
-      ...appServerScanResponse(),
-      source: {
-        ...appServerScanResponse().source,
-        sourceClient: "claude_code",
-        status: "unsupported",
-        readable: false,
-        threadCount: 0,
-        sourceHomeExists: false,
-        stateDbReadable: false,
-        rolloutFileCount: 0,
-        sourceRoot: undefined,
-        statePath: undefined,
-        message: "Importer is not available yet.",
-      },
-      threads: [],
-      nextCursor: undefined,
-    } satisfies ConversationImportSourceScanResponse;
-    appServerRequestMock.mockResolvedValueOnce({ result });
-
-    await expect(
-      scanConversationImportSource({
-        sourceClient: "claude_code",
-      }),
-    ).resolves.toEqual(result);
-
-    expect(appServerRequestMock).toHaveBeenCalledWith(
-      "conversationImport/source/scan",
-      {
-        sourceClient: "claude_code",
       },
     );
     expect(safeInvoke).not.toHaveBeenCalled();
@@ -457,46 +392,4 @@ describe("conversationImport API", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("应通过 App Server current 主链分页读取导入运行时完整事件", async () => {
-    const result = appServerRuntimeEventsResponse();
-    appServerRequestMock.mockResolvedValueOnce({ result });
-
-    await expect(
-      readConversationImportRuntimeEvents({
-        sessionId: "sess-imported",
-        offset: 80,
-        limit: 20,
-        turnIndex: 0,
-        eventType: "command.started",
-      }),
-    ).resolves.toEqual(result);
-
-    expect(appServerRequestMock).toHaveBeenCalledWith(
-      "conversationImport/thread/runtimeEvents/read",
-      {
-        sessionId: "sess-imported",
-        offset: 80,
-        limit: 20,
-        turnIndex: 0,
-        eventType: "command.started",
-      },
-    );
-    expect(safeInvoke).not.toHaveBeenCalled();
-  });
-
-  it("导入运行时完整事件响应形状异常时应 fail closed", async () => {
-    appServerRequestMock.mockResolvedValueOnce({
-      result: {
-        sessionId: "sess-imported",
-        events: [{ eventType: "command.started" }],
-      },
-    });
-
-    await expect(
-      readConversationImportRuntimeEvents({ sessionId: "sess-imported" }),
-    ).rejects.toThrow(
-      "conversationImport/thread/runtimeEvents/read returned an invalid runtime event detail shape",
-    );
-    expect(safeInvoke).not.toHaveBeenCalled();
-  });
 });

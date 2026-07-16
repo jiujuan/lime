@@ -683,10 +683,6 @@ impl RequestProcessor {
                 self.handle_conversation_import_thread_commit_impl(params)
                     .await
             }
-            METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ => {
-                self.handle_conversation_import_thread_runtime_events_read_impl(params)
-                    .await
-            }
             METHOD_AGENT_SESSION_TURN_START => self.handle_turn_start(params, event_callback).await,
             METHOD_AGENT_SESSION_TURN_CANCEL => self.handle_turn_cancel(params).await,
             METHOD_AGENT_SESSION_ACTION_REPLAY => self.handle_action_replay(params).await,

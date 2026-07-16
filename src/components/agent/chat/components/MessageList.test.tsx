@@ -178,9 +178,39 @@ describe("MessageList layout and scrolling", () => {
           content: "第一轮回答",
           timestamp: new Date("2026-06-01T02:57:01.000Z"),
           runtimeTurnId: "turn-scope-1",
+          contentParts: [
+            {
+              type: "text",
+              text: "第一轮回答",
+              metadata: {
+                source: "agent_text_delta",
+                itemId: "item-agent-message-turn-scope",
+                threadItemId: "item-agent-message-turn-scope",
+                phase: "final_answer",
+              },
+            },
+          ],
         } as Message,
       ],
       {
+        threadRead: {
+          thread_id: "thread-scope",
+          status: "completed",
+          thread_items: [
+            {
+              id: "item-user-message-turn-scope",
+              type: "user_message",
+              status: "completed",
+              turn_id: "turn-scope-1",
+            },
+            {
+              id: "item-agent-message-turn-scope",
+              type: "agent_message",
+              status: "completed",
+              turn_id: "turn-scope-1",
+            },
+          ],
+        },
         turns: [
           {
             id: "turn-scope-1",
@@ -202,13 +232,23 @@ describe("MessageList layout and scrolling", () => {
     const assistantBubble = container.querySelector<HTMLElement>(
       '[data-message-id="assistant-turn-scope"]',
     );
+    const userBubble = container.querySelector<HTMLElement>(
+      '[data-message-id="user-turn-scope"]',
+    );
 
     expect(group?.getAttribute("data-runtime-turn-id")).toBe("turn-scope-1");
+    expect(group?.getAttribute("data-runtime-turn-status")).toBe("completed");
     expect(group?.getAttribute("data-last-assistant-message-id")).toBe(
       "assistant-turn-scope",
     );
     expect(assistantBubble?.getAttribute("data-runtime-turn-id")).toBe(
       "turn-scope-1",
+    );
+    expect(assistantBubble?.getAttribute("data-thread-item-id")).toBe(
+      "item-agent-message-turn-scope",
+    );
+    expect(userBubble?.getAttribute("data-thread-item-id")).toBe(
+      "item-user-message-turn-scope",
     );
   });
 

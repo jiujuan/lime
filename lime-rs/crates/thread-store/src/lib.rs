@@ -20,7 +20,7 @@ pub use agent_identity::{
 pub use agent_mailbox::{
     AgentMailboxDeliveryMode, AgentMailboxDeliveryStatus, AgentMailboxMessage,
     AgentMailboxMessageKind, AgentMailboxResultStatus, AgentMailboxStore, AgentMailboxStoreFuture,
-    AppendAgentMailboxMessageParams,
+    AppendAgentMailboxMessageParams, PendingAgentMailboxTriggerRecipient,
 };
 pub use store::{ThreadStore, ThreadStoreFuture};
 pub use types::{

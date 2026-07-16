@@ -8,7 +8,7 @@ import {
 installStreamingRendererTestHarness();
 
 describe("StreamingRenderer WebSearch imported rendering", () => {
-  it("本地历史导入工具流应把网页检索从命令记录中分组展示", () => {
+  it("本地历史工具流应复用普通命令与网页检索展示", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -73,12 +73,11 @@ describe("StreamingRenderer WebSearch imported rendering", () => {
 
     expect(processGroupButtons).toHaveLength(1);
     expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).toContain("导入的命令记录");
+    expect(container.textContent).toContain("已运行 npm test");
     expect(searchGroupButton?.textContent).toContain(
       "已搜索网页：Lime history import",
     );
-    expect(container.textContent).not.toContain("npm test");
-    expect(container.textContent).not.toContain("Output:");
+    expect(container.textContent).not.toContain("导入的命令记录");
     expect(searchGroupButton?.textContent).toContain("Lime history import");
 
     act(() => {

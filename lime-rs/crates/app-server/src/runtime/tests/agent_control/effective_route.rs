@@ -103,6 +103,7 @@ async fn gateway_reads_preflight_route_from_canonical_turn_options() {
             command: AgentControlCommand::SpawnAgent {
                 task_name: "route_check".to_string(),
                 message: "inspect the effective route".to_string(),
+                fork_mode: SpawnAgentForkMode::None,
             },
             cancel_token: None,
         })
@@ -201,6 +202,7 @@ async fn warm_followup_keeps_the_target_effective_route() {
             command: AgentControlCommand::SpawnAgent {
                 task_name: "route_target".to_string(),
                 message: "start with the parent route".to_string(),
+                fork_mode: SpawnAgentForkMode::None,
             },
             cancel_token: None,
         })

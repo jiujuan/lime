@@ -30,8 +30,6 @@ function mergeExecutionRuntime(
     updates.recent_access_mode ?? current?.recent_access_mode ?? null;
   const recentPreferences =
     updates.recent_preferences ?? current?.recent_preferences ?? null;
-  const recentTeamSelection =
-    updates.recent_team_selection ?? current?.recent_team_selection ?? null;
   const recentTheme = updates.recent_theme ?? current?.recent_theme ?? null;
   const recentSessionMode = normalizeHarnessSessionMode(
     updates.recent_session_mode ?? current?.recent_session_mode ?? null,
@@ -59,7 +57,6 @@ function mergeExecutionRuntime(
     !outputSchemaRuntime &&
     !executionStrategy &&
     !recentPreferences &&
-    !recentTeamSelection &&
     !recentTheme &&
     !recentSessionMode &&
     !recentGateKey &&
@@ -78,7 +75,6 @@ function mergeExecutionRuntime(
     output_schema_runtime: outputSchemaRuntime,
     recent_access_mode: recentAccessMode,
     recent_preferences: recentPreferences,
-    recent_team_selection: recentTeamSelection,
     recent_theme: recentTheme,
     recent_session_mode: recentSessionMode,
     recent_gate_key: recentGateKey,

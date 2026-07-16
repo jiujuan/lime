@@ -39,15 +39,16 @@ test("Codex v2 multi-agent schema contracts expose current tool names only", () 
   }
 });
 
-test("spawn_agent requires task_name and message and rejects v1 item fields", () => {
+test("spawn_agent exposes the implemented task/message/fork_turns contract", () => {
   const contract = getCodexMultiAgentToolSchemaContract("spawn_agent");
   assert.deepEqual(contract?.requiredInputFields, ["task_name", "message"]);
+  assert.deepEqual(contract?.optionalInputFields, ["fork_turns"]);
   assert.deepEqual(contract?.forbiddenInputFields, [
     "items",
     "fork_context",
     "target",
   ]);
-  assert.deepEqual(contract?.outputRequiredFields, ["task_name", "nickname"]);
+  assert.deepEqual(contract?.outputRequiredFields, ["task_name", "message_id"]);
 
   assert.deepEqual(
     validateCodexMultiAgentToolSchema({
@@ -60,6 +61,60 @@ test("spawn_agent requires task_name and message and rejects v1 item fields", ()
     }),
     [],
   );
+
+  const validForkTurns = [
+    undefined,
+    null,
+    "",
+    "   ",
+    "none",
+    " NoNe ",
+    "all",
+    " ALL ",
+    "1",
+    "01",
+    "+1",
+    " 3 ",
+    "18446744073709551615",
+  ];
+  for (const fork_turns of validForkTurns) {
+    assert.deepEqual(
+      validateCodexMultiAgentToolSchema({
+        toolName: "spawn_agent",
+        input: {
+          task_name: "researcher",
+          message: "Find the relevant files",
+          fork_turns,
+        },
+      }),
+      [],
+    );
+  }
+  const invalidForkTurns = [
+    1,
+    -1,
+    "0",
+    "00",
+    "+0",
+    "-1",
+    "banana",
+    "1_000",
+    "18446744073709551616",
+    "99999999999999999999999999999999999999999999999999",
+  ];
+  for (const fork_turns of invalidForkTurns) {
+    assert.deepEqual(
+      validateCodexMultiAgentToolSchema({
+        toolName: "spawn_agent",
+        input: {
+          task_name: "researcher",
+          message: "Find the relevant files",
+          fork_turns,
+        },
+      }).map((item) => [item.code, item.path]),
+      [["invalid_fork_turns", "$.input.fork_turns"]],
+    );
+  }
 
   assert.deepEqual(
     validateCodexMultiAgentToolSchema({
@@ -74,6 +129,28 @@ test("spawn_agent requires task_name and message and rejects v1 item fields", ()
       ["missing_required_field", "$.input.task_name"],
       ["forbidden_field", "$.input.items"],
       ["forbidden_field", "$.input.fork_context"],
+    ],
+  );
+});
+
+test("spawn_agent rejects Codex options until the current runtime owner exists", () => {
+  assert.deepEqual(
+    validateCodexMultiAgentToolSchema({
+      toolName: "spawn_agent",
+      input: {
+        task_name: "researcher",
+        message: "Find the relevant files",
+        agent_type: "reviewer",
+        model: "gpt-5",
+        reasoning_effort: "high",
+        service_tier: "flex",
+      },
+    }).map((item) => [item.code, item.path]),
+    [
+      ["unsupported_field", "$.input.agent_type"],
+      ["unsupported_field", "$.input.model"],
+      ["unsupported_field", "$.input.reasoning_effort"],
+      ["unsupported_field", "$.input.service_tier"],
     ],
   );
 });
@@ -149,8 +226,8 @@ test("projection event binds Codex v2 tool schema to Team UI policy surface", ()
         message: "Collect source links",
       },
       result: {
-        task_name: "researcher",
-        nickname: "Researcher",
+        task_name: "/root/researcher",
+        message_id: "mailbox-spawn-1",
       },
     },
     {

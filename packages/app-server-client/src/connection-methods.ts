@@ -1166,12 +1166,6 @@ declare module "./connection.js" {
     ): Promise<
       AppServerRequestResult<protocol.ConversationImportThreadCommitResponse>
     >;
-    readConversationImportRuntimeEvents(
-      params: protocol.ConversationImportThreadRuntimeEventsReadParams,
-      options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.ConversationImportThreadRuntimeEventsReadResponse>
-    >;
     startTurn(
       params: protocol.AgentSessionTurnStartParams,
       options?: AppServerRequestOptions,

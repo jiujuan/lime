@@ -518,9 +518,7 @@ fn canonical_display_payloads_merge_create_update_and_terminal_fields() {
                     "id": "collab-1",
                     "type": "collab_agent_tool_call",
                     "callId": "call-collab",
-                    "operation": "send_message",
-                    "targetThreadId": "thread-child",
-                    "message": "continue"
+                    "operation": "wait"
                 }}),
             ),
             event(
@@ -532,9 +530,8 @@ fn canonical_display_payloads_merge_create_update_and_terminal_fields() {
                     "id": "collab-1",
                     "type": "collab_agent_tool_call",
                     "callId": "call-collab",
-                    "operation": "send_message",
-                    "targetThreadId": "thread-child",
-                    "output": "delivered"
+                    "operation": "wait",
+                    "output": "ready"
                 }}),
             ),
             event(
@@ -610,10 +607,9 @@ fn canonical_display_payloads_merge_create_update_and_terminal_fields() {
     assert!(changes.changed_items.iter().any(|item| matches!(
         &item.payload,
         ThreadItemPayload::CollabAgentToolCall {
-            operation: CollabAgentOperation::SendMessage,
-            target_thread_id: Some(target),
+            operation: CollabAgentOperation::Wait,
             ..
-        } if target.as_str() == "thread-child"
+        }
     )));
 
     let approval = changes
@@ -642,6 +638,79 @@ fn canonical_display_payloads_merge_create_update_and_terminal_fields() {
             ]
             && reason == "user_approved"
     ));
+}
+
+#[test]
+fn only_explicit_wait_materializes_as_collab_agent_tool_call() {
+    let changes = materialize_events(
+        &[
+            event(
+                "send-start",
+                1,
+                "item.started",
+                "turn-1",
+                json!({"item": {
+                    "id": "send-1",
+                    "type": "tool_call",
+                    "callId": "call-send",
+                    "toolName": "send_message",
+                    "operation": "send_message",
+                    "targetThreadId": "thread-child",
+                    "message": "continue"
+                }}),
+            ),
+            event(
+                "send-end",
+                2,
+                "item.completed",
+                "turn-1",
+                json!({"item": {
+                    "id": "send-1",
+                    "type": "tool_call",
+                    "callId": "call-send",
+                    "toolName": "send_message",
+                    "operation": "send_message",
+                    "output": "delivered"
+                }}),
+            ),
+            event(
+                "legacy-collab-start",
+                3,
+                "item.started",
+                "turn-1",
+                json!({"item": {
+                    "id": "legacy-collab-1",
+                    "type": "collab_agent_tool_call",
+                    "callId": "call-legacy-collab",
+                    "operation": "send_message"
+                }}),
+            ),
+            event(
+                "raw-collab",
+                4,
+                "collab.completed",
+                "turn-1",
+                json!({
+                    "callId": "call-raw-collab",
+                    "operation": "wait"
+                }),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize collab producer boundary");
+
+    assert_eq!(changes.changed_items.len(), 1);
+    assert!(matches!(
+        &changes.changed_items[0].payload,
+        ThreadItemPayload::Tool { call_id, name, .. }
+            if call_id == "call-send" && name == "send_message"
+    ));
+    assert!(!changes
+        .changed_items
+        .iter()
+        .any(|item| matches!(item.payload, ThreadItemPayload::CollabAgentToolCall { .. })));
 }
 
 #[test]

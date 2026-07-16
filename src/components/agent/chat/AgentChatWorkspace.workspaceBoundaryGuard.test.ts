@@ -129,6 +129,13 @@ describe("AgentChatWorkspace task center draft state boundary", () => {
       join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
       "utf8",
     );
+    const commandWiringSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
+      ),
+      "utf8",
+    );
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -137,8 +144,12 @@ describe("AgentChatWorkspace task center draft state boundary", () => {
       "utf8",
     );
 
-    expect(workspaceSource).toContain(
+    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
+    expect(workspaceSource).not.toContain(
       "useWorkspaceTaskCenterDraftStateRuntime({",
+    );
+    expect(commandWiringSource).toContain(
+      "useWorkspaceTaskCenterDraftStateRuntime(",
     );
     expect(workspaceSource).not.toContain("const [taskCenterDraftSendRequest");
     expect(workspaceSource).not.toContain("const [homePendingPreviewRequest");
@@ -444,8 +455,19 @@ describe("AgentChatWorkspace general workbench entry prompt actions boundary", (
       ),
       "utf8",
     );
+    const commandWiringSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
+      ),
+      "utf8",
+    );
 
-    expect(workspaceSource).toContain(
+    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceWorkbenchActionSurfaceRuntime({",
+    );
+    expect(commandWiringSource).toContain(
       "useWorkspaceWorkbenchActionSurfaceRuntime({",
     );
     expect(compositionSource).toContain(
@@ -938,8 +960,17 @@ describe("AgentChatWorkspace image workbench send command boundary", () => {
       ),
       "utf8",
     );
+    const commandWiringSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
+      ),
+      "utf8",
+    );
 
-    expect(workspaceSource).toContain("useWorkspaceSendSurfaceRuntime({");
+    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
+    expect(workspaceSource).not.toContain("useWorkspaceSendSurfaceRuntime({");
+    expect(commandWiringSource).toContain("useWorkspaceSendSurfaceRuntime({");
     expect(sendSurfaceSource).toContain("useWorkspaceImageWorkbenchRuntime(");
     expect(ownerSource.split("\n").length).toBeLessThan(160);
     for (const retiredWorkspaceImageSendOwner of [
@@ -1027,8 +1058,17 @@ describe("AgentChatWorkspace image workbench command action boundary", () => {
       ),
       "utf8",
     );
+    const commandWiringSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
+      ),
+      "utf8",
+    );
 
-    expect(workspaceSource).toContain("useWorkspaceSendSurfaceRuntime({");
+    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
+    expect(workspaceSource).not.toContain("useWorkspaceSendSurfaceRuntime({");
+    expect(commandWiringSource).toContain("useWorkspaceSendSurfaceRuntime({");
     expect(sendSurfaceSource).toContain("useWorkspaceImageWorkbenchRuntime(");
     expect(commandOwnerSource.split("\n").length).toBeLessThan(400);
     expect(actionOwnerSource.split("\n").length).toBeLessThan(800);

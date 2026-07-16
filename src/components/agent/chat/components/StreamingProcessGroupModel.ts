@@ -2,7 +2,6 @@ import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtoco
 import type { ActionRequired } from "../types";
 import { isUnifiedWebSearchToolName } from "../utils/searchResultPreview";
 import { isUnifiedWebFetchToolName } from "../utils/toolNameFamily";
-import { isImportedSourceMetadata } from "../utils/importedSourceMetadata";
 import { mergeIncrementalText } from "./streamingContentPartSegments";
 
 export type StreamingProcessEntry =
@@ -84,18 +83,6 @@ export function coalesceAdjacentThinkingProcessEntries(
 
   flushPendingThinking();
   return didCoalesce ? coalescedEntries : entries;
-}
-
-export function isImportedProcessMetadata(metadata: unknown): boolean {
-  return isImportedSourceMetadata(metadata);
-}
-
-export function isImportedToolCall(toolCall: ToolCallState): boolean {
-  const possibleToolMetadata = (toolCall as { metadata?: unknown }).metadata;
-  return (
-    isImportedProcessMetadata(toolCall.result?.metadata) ||
-    isImportedProcessMetadata(possibleToolMetadata)
-  );
 }
 
 export function isWebRetrievalToolCall(toolCall: ToolCallState): boolean {
@@ -255,55 +242,31 @@ export function shouldAutoExpandProcessEntries(
   entries: StreamingProcessEntry[],
   isMessageStreaming: boolean,
 ): boolean {
-  const hasImportedThinking = entries.some(
-    (entry) =>
-      entry.kind === "thinking" && isImportedProcessMetadata(entry.metadata),
-  );
-  const hasImportedTool = entries.some(
-    (entry) => entry.kind === "tool" && isImportedToolCall(entry.toolCall),
-  );
-  const hasImportedProcess = hasImportedThinking || hasImportedTool;
   const hasRunningWebRetrieval = hasRunningWebRetrievalProcess(entries);
-  const isImportedWebRetrievalOnly =
-    hasImportedTool &&
-    entries.every(
-      (entry) =>
-        entry.kind === "tool" &&
-        isImportedToolCall(entry.toolCall) &&
-        isWebRetrievalToolCall(entry.toolCall),
-    );
 
   if (!isMessageStreaming) {
-    if (isImportedWebRetrievalOnly) {
-      return hasRunningWebRetrieval;
-    }
-    return hasImportedThinking || hasImportedTool;
-  }
-
-  if (isImportedWebRetrievalOnly && hasRunningWebRetrieval) {
-    return true;
+    return false;
   }
 
   const hasActiveThinking = entries.some(
     (entry) => entry.kind === "thinking" && entry.isActive,
   );
-  if (!hasImportedProcess && hasActiveThinking) {
+  if (hasActiveThinking) {
     return true;
   }
 
-  if (!hasImportedProcess && hasRunningWebRetrieval) {
+  if (hasRunningWebRetrieval) {
     return true;
   }
 
   if (
-    !hasImportedProcess &&
     hasOnlyWebRetrievalTools(entries) &&
     hasSuccessfulOrRunningWebRetrievalProcess(entries)
   ) {
     return true;
   }
 
-  if (!hasImportedProcess && hasSuccessfulOrRunningSkillProcess(entries)) {
+  if (hasSuccessfulOrRunningSkillProcess(entries)) {
     return true;
   }
 

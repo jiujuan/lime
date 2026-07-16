@@ -1,116 +1,252 @@
-# Lime 测试体系待办（2026）
+# Lime 测试策略（Refactor v2）
 
-> 本文件只保留当前仍未解决的测试问题；已落地能力已从优先级清单移除。
+> status: current
+> owner: quality-workflow
+> last_verified: 2026-07-15
+> source: `internal/research/refactor/v2/**`
 
 ## 1. 事实源与分类
 
 ### current
 
-以下路径已经是当前测试体系的事实源，不再作为“待建设能力”重复列入：
-
-- `internal/test/README.md`：当前测试入口与命令索引
-- `internal/test/e2e-tests.md`：当前浏览器续测与 E2E 总览入口
-- Electron Desktop Host / preload / IPC：当前桌面壳与 GUI smoke 的事实源
-- App Server JSON-RPC：当前 Agent runtime、跨 App 复用和服务化能力的事实源
-- `packages/app-server-client`：当前前端 / 外部 App 复用 App Server 的 TypeScript client 事实源
-- `src/lib/desktop-host/`：当前前端桌面 host mock 与 bridge fallback 事实源
-- `internal/tests/agent-ops-qc.md`：当前 Agent 运营级测试体系、qcloop 场景与 Evidence Pack 门禁
-- `internal/tests/agent-qc-p0-scenarios.md`：当前 Agent QC P0 场景执行、GUI/runtime 证据与失败沉淀手册
-- `internal/tests/lime-agent-qc-rollout-plan.md`：当前 Lime 样本产品的 Agent 运营级测试分阶段落地计划
-- `internal/test/agent-qc-scenarios.manifest.json`：当前 Agent QC 机器可读场景清单
-- `internal/test/agent-qc-evidence.schema.json`：当前 Agent QC Evidence Pack schema
-- `internal/test/agent-qc-gui-flows.manifest.json`：当前 Agent QC GUI / Playwright MCP flow 清单
-- `internal/aiprompts/playwright-e2e.md`：当前浏览器续测 / Playwright MCP 事实源
-- `package.json`：当前统一测试命令入口
-- `npm run smoke:electron`：当前 Electron GUI 最小 smoke 入口
-- `npm run verify:gui-smoke`：当前 GUI smoke 聚合入口，默认应串联 Electron current smoke
-- `scripts/local-ci.mjs`：当前本地智能校验入口
-- `scripts/agent-qc/report.mjs`：当前 Agent QC 场景报告与合同检查入口
-- `scripts/agent-qc/gui-flow-report.mjs`：当前 Agent QC GUI flow 报告与合同检查入口
-- `scripts/agent-qc/qcloop-job.mjs`：当前 Agent QC manifest 到 qcloop job payload 的生成入口
-- `scripts/agent-qc/export-evidence.mjs`：当前 qcloop job 到 Evidence Pack 的导出入口
-- `scripts/agent-qc/release-summary.mjs`：当前 Agent QC Evidence Pack 到 release note 质量证据的汇总入口
-- `scripts/agent-qc/completion-audit.mjs`：当前 Agent QC 整体目标完成度审计入口
-- `.github/workflows/harness-nightly.yml`：当前只上传 harness eval / cleanup / dashboard 资产，不进入 Agent QC / qcloop 验证
-- `.github/workflows/release.yml`：当前只创建或刷新 GitHub Release，不读取 Agent QC Evidence Pack
-- `scripts/report-legacy-surfaces.mjs`：当前 legacy / compat 回流护栏
+- 产品链：`Electron Desktop Host -> App Server JSON-RPC -> RuntimeCore -> Thread/Turn/Item projection -> GUI`。
+- Electron Desktop Host、preload/IPC、`app_server_handle_json_lines`：桌面进程边界。
+- `packages/app-server-client`：TypeScript 公共 App Server client 与 generated protocol types。
+- `src/lib/desktop-host/`：显式测试 fixture 与 host 边界；不得成为生产 fallback。
+- `lime-rs/crates/app-server-protocol`、`app-server`、`agent-runtime`、`tool-runtime`、`model-provider`、`thread-store`：对应领域 owner。
+- `npm run smoke:electron`、`npm run verify:gui-smoke`：Electron GUI 最小 current smoke。
+- `npm run smoke:agent-runtime-current-fixture`：Agent runtime current fixture 门槛。
+- related-first 的 TS/Rust test layer、`npm run test:contracts` 和 governance guards。
+- Gate A Renderer 证据、真实 Electron Gate B fixture、显式授权 live provider lane。
 
 ### compat
 
-- `safeInvoke`、DevBridge fallback、旧 `agent_runtime_*` facade：迁移期兼容入口，只能证明调用能委托到 current 路径
-- `npm run test:bridge`：桥接兼容最小守卫；不得单独作为 Electron GUI current 可交付证据
+- 测试 fixture 可以显式模拟 unavailable/external backend，但只能证明声明的边界。
+- 未完成第二期场景映射的 Agent QC/Harness manifest 只作为迁移输入，不是 release required。
+- 历史计划和 evidence 可以保留记录，但不得重新导航为 current 命令或 owner。
 
 ### deprecated
 
-- legacy desktop adapter、legacy desktop mock、旧宿主命令注册表相关测试口径
-- 旧桌面 WebDriver 方案作为仓库推荐 E2E 方案的说法
-- `npm run test:e2e` 作为现行测试入口的说法
+- 基于旧 owner、旧 command/type、旧 Team/roster/raw subagent 或大组件 mock 的测试。
+- 重复的 source-string boundary guard；迁入治理扫描或 owner contract test 后删除。
+- 依赖固定 sleep、共享用户目录、共享端口或前序测试状态的 smoke。
 
 ### dead
 
-- 旧桌面宿主源码路径、旧宿主 GUI smoke、旧宿主专用 E2E 口径
-- `npm run test:e2e` 作为现行仓库命令已不存在，不应继续作为测试标准引用
+- 旧 `benchmark-release-v1`、外部数据集 release runner、旧 Managed Objective differential。
+- 测试静态值、已删除实现正向行为、生产 mock fallback 和脱离构建图的 fixture。
+- 用脚本报告生成成功冒充 runtime/product 正确性的测试。
 
-## 2. 已从待办移除的事项
+## 2. 目标
 
-以下能力已具备基础，不再保留在优先级清单中：
+测试体系需要回答四个不同问题：
 
-- 前端 `Vitest` 覆盖已经足够广，`src/components`、`src/hooks`、`src/lib/api`、`src/features/browser-runtime` 等已有大量测试
-- Rust 单测 / 集成测试基础已经存在，`lime-rs/src` 与多个 workspace crate 都有可运行测试
-- 本地统一校验入口已经存在：`test:frontend`、`test:bridge`、`test:rust`、`verify:local`、`verify:local:full`
-- 桥接基础测试已经存在：`src/lib/dev-bridge/safeInvoke.test.ts`、`src/lib/desktop-host/core.test.ts`；legacy desktop mock 测试如保留，只能作为退役守卫
-- legacy 治理护栏已经存在：`npm run governance:legacy-report`
-- 旧权限表面治理护栏已经补齐：`src/lib/governance/legacyToolPermissionGuard.test.ts` + `npm run governance:legacy-report`
-- 跨层命令契约检查基础版已经落地：`npm run test:contracts` 已进入 `scripts/local-ci.mjs`
-- 命令契约延期例外已经收口：`agent_terminal_command_response`、`agent_term_scrollback_response` 已退出 `runtimeGatewayCommands`，改为 `dead-candidate` 治理监控
-- 自包含 smoke 最小基线已落地：`npm run smoke:electron`、`npm run smoke:workspace-ready`、`npm run smoke:browser-runtime`、`npm run smoke:site-adapters` 都无需人工准备；另外，`npm run smoke:agent-runtime-tool-surface` 与 `npm run smoke:agent-runtime-tool-surface-page` 已补齐“runtime inventory -> 应用层透传 / Runtime strip / 工作台 Runtime 能力摘要”这条应用层主线 smoke，`npm run verify:gui-smoke` 现已默认串联 Electron/App Server current smoke
-- 测试文档事实源已经收口：`internal/test/README.md`、`internal/test/e2e-tests.md`、`internal/aiprompts/playwright-e2e.md` 已按“索引 / 总览 / 详细事实源”分层
+1. current owner 的确定性逻辑是否正确？
+2. 公共协议、运行时、存储与投影是否形成一致状态？
+3. 用户是否能在真实 Electron 产品链看到并操作该状态？
+4. 指定 provider/model/platform 下的能力、稳定性和性能是否达到发布要求？
 
-## 3. 当前仍未解决的问题优先级
+每条证据只回答自己覆盖的问题。静态检查、全量单测、Gate A、Gate B、live eval 和平台测试不能互相代替。
 
-| 优先级 | 事项                                                    | 为什么重要                                          | 当前证据                                                                                                                                                                                                      | 完成定义                                                                                                      |
-| ------ | ------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| P1     | Agent eval 仍未完全工程化                               | 价值高，且当前最缺的是把证据沉淀成长期回归资产      | 已补 `internal/test/harness-evals.md`、`harness-evals.manifest.json`、`scripts/harness/eval-runner.mjs`、`scripts/harness/eval-trend-report.mjs` 与 nightly 摘要 / trend 骨架，但真实执行与更多高价值样本仍缺 | 形成稳定任务集、可增长 replay 样本、grader、nightly 输出与趋势指标                                            |
-| P1     | qcloop 真实运行结果尚未导出为 Evidence Pack             | 运营级测试需要从“场景清单”进入“每次运行可审计证据”  | 已补 Agent QC manifest、evidence schema 与本地报告脚本；Agent QC 已从 GitHub Actions / `test:contracts` 验证链路移出                                                                                          | qcloop 批次可导出 `agent-qc-evidence.schema.json` 形状，并可被本地 / 人工发布证据流程消费                     |
-| P2     | terminal / App Server sidecar 自包含 smoke 仍可继续扩面 | 最小 GUI smoke 基线已具备，但更细分主链仍缺专项守卫 | 当前 `smoke:electron / workspace-ready / browser-runtime / site-adapters` 已覆盖 GUI 最小主链；`smoke:social-workbench` 仍依赖已有 session，terminal / App Server sidecar 还没有各自独立的自包含 smoke 入口   | 如后续需要继续扩面，应补 terminal 或 App Server sidecar 的独立 smoke，而不是继续把现有 current smoke 算成缺口 |
+## 3. 测试金字塔
 
-## 4. 建议执行顺序
+```text
+                  live eval / platform / soak
+                 real Electron Gate B
+                Renderer Gate A
+             current runtime fixture
+          App Server public integration
+       domain integration / contracts
+            pure unit/component
+         static/governance preflight
+```
 
-### 第 1 步：把 Agent eval 工程化
+目标不是让底层用例数量最大，而是让大多数业务分支在最便宜且真实的 owner 层可定位；每条关键用户链再补少量跨层证据。
 
-现在可以把它提到第一优先级，因为前面的最小 GUI smoke 基线已经具备：
+## 4. 层级合同
 
-- 有稳定门禁
-- 有稳定契约检查
-- 有可重复 smoke
+### L0 静态与治理
 
-当前已先补：
+验证 generated types、schema、catalog、依赖方向、i18n 和旧路回流。L0 不证明 runtime 行为。
 
-- 固定 manifest 与 replay fixture
-- runner 摘要出口
-- nightly artifact 与 trend 骨架
+主要入口：
 
-后续再继续补：
+```bash
+npm run test:contracts
+npm run governance:legacy-report
+npm run governance:scripts
+npm run verify:app-version
+```
 
-- transcript 存档
-- 更多真实高价值 replay 样本
-- 更长窗口的趋势报表
+### L1 纯单元与组件
 
-### 第 2 步：按需继续扩自包含 smoke 覆盖面
+纯逻辑使用整对象、表驱动或 snapshot 断言。组件测试只验证 DOM、事件、hook 生命周期和关键接线；业务状态机下沉到 selector/projection/state machine。
 
-如果后续还要补 smoke，不要重复把 `workspace-ready / browser-runtime / site-adapters` 记成“未完成”。
+不允许：真实网络、用户目录、共享数据库、Electron、App Server、固定等待。
 
-下一轮更合理的扩面方向是：
+### L2 领域集成
 
-1. terminal 基础链路
-2. App Server sidecar 基础链路
-3. 仍依赖人工前置状态的专项 smoke 去人工化
+测试 current owner 和真实协作者：runtime queue、provider lowering、tool policy、store/materialization、MCP connection。只替换不可控外部边界，例如 provider HTTP server、时钟、权限响应。
 
-## 5. 当前建议
+Agent 逻辑变更默认必须有 L2 或更高集成测试。
 
-如果只看投入产出比，当前最值得先做的两刀是：
+### L3 App Server 集成
 
-1. 把 Agent eval 工程化
-2. 如需继续补 smoke，优先做 terminal / App Server sidecar 专项自包含场景
+从 public JSON-RPC client 进入，断言 response、notification、captured provider request 和 read model。禁止直接调私有 handler 代替公共协议闭环。
 
-这两步做完之后，再继续往 nightly、趋势报表与 replay promotion 收口，收益会更高。
+必须覆盖：成功、结构化失败、取消/恢复、未知/非法输入、持久化后读取。
+
+### L4 Current fixture
+
+通过 RuntimeCore/App Server current 链运行可控 provider/tool/MCP fixture，观察真实事件和 terminal state。fixture backend 必须显式配置，不能成为生产 fallback。
+
+### L5 Gate A
+
+验证 Renderer projection、DOM、交互、文案、五语言和错误状态。普通 Chrome/browser mirror 只能算 Gate A。
+
+### L6 Gate B
+
+真实启动 Electron，经过 preload/IPC、`app_server_handle_json_lines`、App Server、runtime/read model，并在 GUI 观察同一 identity。Gate B 必须记录 backend mode；external/unavailable fixture 不等于 live provider。
+
+### L7 Live/Eval
+
+显式调用真实 provider，使用版本化 task、grader、模型和配置，记录 pass@k/pass^k、成本、延迟和失败类别。它不进入默认 PR。
+
+### L8 Platform/Packaged/Soak
+
+在 macOS/Windows 实际运行 installer/package/update/current chain，并覆盖长线程、并发 turn、重启和资源回收。
+
+## 5. Codex 测试标准在 Lime 的落地
+
+### 5.1 Agent 逻辑优先集成测试
+
+Codex 把 Agent 核心行为放在 integration suite，通过可控 responses server 和 test builder 运行真实 agent loop。Lime 采用同一原则，但入口改成自己的 RuntimeCore/App Server owner；不复制 Codex TUI 或 crate 名。
+
+### 5.2 捕获结构化请求
+
+Provider fixture 返回可控 stream，同时保存 outbound request。测试优先比较完整 request、input、tool output、usage、event 和 read model，不手工在 JSON 字符串上做脆弱搜索。
+
+### 5.3 等待业务事件
+
+helper 提供 `wait_for_event(predicate)` 或等价能力。固定 sleep 只允许作为进程启动轮询的退避，不允许决定 turn 是否完成；超时必须打印最后事件、pending request 和当前 read model。
+
+### 5.4 隔离环境
+
+每个测试创建自己的 app data、workspace、数据库、端口和 provider server。不要在测试中修改全局 process env；由 builder 显式注入环境派生值。
+
+### 5.5 测试有价值的行为
+
+- 不测试静态常量、generated enum 的字面值或已删除逻辑的正向行为。
+- negative test 验证 current boundary 拒绝非法输入，不为 dead API 维持可调用性。
+- 修复 bug 后在根因 owner 层补回归；若 bug 穿越进程边界，再补一条产品级 vertical slice。
+
+## 6. 测试数据与 Fixture
+
+Fixture 必须：
+
+- 最小、可读、版本化；
+- 使用稳定 identity，避免随机值污染 snapshot；
+- 明确所属 scenario ID、owner、backend mode 和 allowed mocks；
+- 不含 secret、真实用户对话、真实 app data 路径或未脱敏 provider payload；
+- 与 production schema 一起演进，解析失败必须 fail closed。
+
+Replay 只有在能证明来源、schema、预期结果和 grader 时才提升为仓库 fixture。历史 replay 不自动进入 current 测试集。
+
+## 7. 断言策略
+
+优先级从高到低：
+
+1. 完整 typed object/read model equality。
+2. 结构化 request/event sequence snapshot。
+3. stable DOM/state snapshot 与用户动作结果。
+4. 少量关键字段断言，用于突出 failure owner。
+5. source-string guard，仅用于无法通过 AST/schema/catalog 表达的回流规则。
+
+不要只断言“函数被调用”“数组非空”“文案包含某词”就宣称业务场景通过。
+
+## 8. 场景设计
+
+稳定场景定义见 [../roadmap/benchmark/scenario-matrix.md](../roadmap/benchmark/scenario-matrix.md)。每个高风险能力至少覆盖：
+
+- happy path；
+- provider/tool/bridge 失败；
+- cancel/interrupt；
+- queue/concurrency；
+- restart/resume；
+- stale/out-of-order/duplicate；
+- pagination/large output；
+- visible error/recovery state。
+
+是否覆盖每一类取决于风险，不机械复制。协议常量不需要并发 case，Agent loop 不能只有 happy path。
+
+## 9. CI 与运行策略
+
+### PR related
+
+使用 diff selector 运行 L0 和受影响 L1-L3。GUI/bridge/runtime 主路径按风险追加 current fixture、Gate A 或 Gate B。
+
+### Nightly
+
+运行更广的 deterministic 场景、故障注入、restart/soak 和 flaky 审计。Nightly 失败不能通过无限 retry 变绿；重试只用于诊断并单独计数。
+
+### Release candidate
+
+冻结候选 digest，运行 P0 场景、真实 Electron 主链和 macOS/Windows packaged matrix。任何产品源码变化使候选证据失效。
+
+### Live quality
+
+独立授权和预算。固定 task/model/config/grader 版本，输出质量、成本和延迟；不得把 live 波动阻塞确定性 PR，也不得用 deterministic fixture 冒充 live 质量。
+
+## 10. Flaky 与超时
+
+- 测试默认 retry=0；失败先归因，不自动掩盖。
+- 超时分为 process startup、event wait、scenario deadline；分别记录。
+- 长 timeout 不是稳定性修复。冷编译/冷 transform 预算与业务等待分开。
+- 连续 flaky 测试必须修复或从 required lane 移出并登记 owner/退出条件；不能保留“偶尔过”的 release gate。
+
+## 11. 覆盖与质量指标
+
+不以行覆盖率作为单一目标。第二期主要指标：
+
+- P0 scenario automation coverage；
+- public boundary integration coverage；
+- Gate A/B coverage；
+- failure mode coverage；
+- flaky rate 与 retry count；
+- median/p95 duration；
+- orphan/dead/duplicate test count；
+- live pass@k/pass^k、成本和延迟；
+- macOS/Windows RC parity。
+
+代码覆盖率用于发现空白，不驱动静态值测试或重复分支。
+
+## 12. 旧测试迁移
+
+T0 inventory 按以下规则分类：
+
+| 分类 | 条件 | 动作 |
+| --- | --- | --- |
+| current | owner、入口、fixture、断言都对齐 v2 | 保留并映射稳定场景 ID |
+| rewrite | 风险有效但测试基础过时 | 先写新测试，再删除旧测试 |
+| merge | 多个测试重复证明一个边界事实 | 合并到 owner 测试/治理 guard |
+| dead | 静态值、旧实现、旧命令正向行为、无构建入口 | 直接删除 |
+| live-only | 真实网络/provider/账号 | 移出默认 lane，显式授权 |
+
+不新增 compat wrapper 来维持旧测试。历史路径只留在 Git history、不可变 evidence 或负向回流守卫。
+
+## 13. Evidence
+
+每次关键运行至少记录：scenario ID、candidate digest、proof level、command、status、duration、artifacts、failure owner、backend/mock mode。失败记录不可覆盖；修复后新增记录。
+
+测试报告必须写清：
+
+- 实际证明了什么；
+- 没有证明什么；
+- 是否真实 Electron；
+- 是否 live provider；
+- 是否使用显式 fixture；
+- 下一阻塞 owner。
+
+## 14. 当前实施入口
+
+第二期执行顺序与退出条件见 [../roadmap/benchmark/phase-2-test-plan.md](../roadmap/benchmark/phase-2-test-plan.md)。当前先完成 T0 inventory 和 T1 public integration harness，不恢复旧 Benchmark 总 runner。

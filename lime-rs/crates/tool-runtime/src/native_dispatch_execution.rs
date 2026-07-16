@@ -116,10 +116,13 @@ mod tests {
 
     #[tokio::test]
     async fn workspace_tool_executes_through_current_dispatch() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        std::fs::write(directory.path().join("current.txt"), "current-dispatch")
+            .expect("write fixture");
         let result = execute_runtime_native_dispatch_tool(RuntimeNativeDispatchToolRequest {
-            tool_name: "Bash",
-            params: &json!({ "command": "printf current-dispatch" }),
-            working_directory: std::env::current_dir().expect("current directory"),
+            tool_name: "Read",
+            params: &json!({ "path": "current.txt" }),
+            working_directory: directory.path().to_path_buf(),
             session_id: "session-native-dispatch-workspace".to_string(),
             cancel_token: None,
             turn_context: None,

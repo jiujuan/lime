@@ -59,8 +59,8 @@
 | review verdict 无 evidence | 审查不可复核 |
 | synthetic Team events 被计为 current Electron pass | 绕开 AgentControl、AgentGraph、mailbox 与 canonical GUI，形成第二套事实源 |
 
-## 6. 下一刀
+## 6. 当前收口
 
-六工具 current runtime Gate B 已闭环，且 `s4al` 已证明真实 Electron/App Server 重启后 roster、activity、interrupt、wait terminal Result 与 child Thread identity 从 canonical Thread/Turn/Item/SubAgent projection 恢复。下一刀是按窄写集删除 `team_memory_shadow` 本地 shadow 链和无执行消费者的 `TeamDefinition/recent_team_selection` compat 岛；不恢复旧 `multi-agent-team` external scenario，也不扩独立 Team board。
+六工具 current runtime Gate B 已闭环，且 `s4al` 已证明真实 Electron/App Server 重启后 roster、activity、interrupt、wait terminal Result 与 child Thread identity 从 canonical Thread/Turn/Item/SubAgent projection 恢复。`team_memory_shadow` 本地 shadow 链和无执行消费者的 `TeamDefinition/recent_team_selection` 已在 S6u 删除；后续只允许继续验证 canonical 主链，不恢复旧 `multi-agent-team` external scenario，也不扩独立 Team board。
 
 跨域要求：`run-observability.md` 的 run rail 必须显示 canonical child roster 与 activity；仅有后端 AgentGraph 或消息内 summary 不等于 Codex 式 GUI 协作可观察。

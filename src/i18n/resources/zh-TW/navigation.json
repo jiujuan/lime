@@ -189,7 +189,6 @@
   "navigation.sidebar.importDialog.empty.noThreads": "沒有找到可匯入的本機歷史對話",
   "navigation.sidebar.importDialog.meta.source": "來源",
   "navigation.sidebar.importDialog.source.localHistory": "本機歷史",
-  "navigation.sidebar.importDialog.source.claudeCode": "Claude Code",
   "navigation.sidebar.importDialog.target.standalone": "獨立對話",
   "navigation.sidebar.importDialog.preview.loading": "正在產生預覽",
   "navigation.sidebar.importDialog.preview.empty": "請選擇一條本機歷史對話查看預覽",

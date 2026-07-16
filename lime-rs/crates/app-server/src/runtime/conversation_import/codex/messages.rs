@@ -252,20 +252,20 @@ pub(super) fn truncate_preview_text(text: &str, max_bytes: usize) -> TruncatedTe
 }
 
 pub(super) fn push_timeline_message(
-    timeline: &mut Vec<super::ImportedTimelineItem>,
+    timeline: &mut Vec<super::CodexTimelineItem>,
     candidate: ConversationImportPreviewMessage,
 ) {
-    if let Some(super::ImportedTimelineItem::Message(existing)) = timeline
+    if let Some(super::CodexTimelineItem::Message(existing)) = timeline
         .iter_mut()
         .rev()
-        .find(|item| matches!(item, super::ImportedTimelineItem::Message(_)))
+        .find(|item| matches!(item, super::CodexTimelineItem::Message(_)))
     {
         if same_preview_message(existing, &candidate) {
             merge_preview_message(existing, candidate);
             return;
         }
     }
-    timeline.push(super::ImportedTimelineItem::Message(candidate));
+    timeline.push(super::CodexTimelineItem::Message(candidate));
 }
 
 pub(super) fn push_preview_message(

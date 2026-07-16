@@ -462,7 +462,7 @@ export function buildRuntimeProjectionDispatcher(
             key: "team.selection",
             repo_scope: "/repo/lime",
             updated_at: 1710000000,
-            source: "team_memory_shadow",
+            source: "context",
           },
         ],
       },

@@ -48,6 +48,8 @@ import {
   THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildFixtureAssertionReport } from "./claw-chat-current-fixture-assertions.mjs";
+import { resolveGateBExpectedIdentity } from "./claw-chat-current-fixture-assertion-context.mjs";
+import { collectGateBGuiEvidence } from "./claw-chat-current-fixture-gate-b-execution-evidence.mjs";
 import {
   collectAppServerTraceEvidence,
   collectAgentUiPerformanceTraceEvidence,
@@ -125,6 +127,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
+  --run-id <id>          Gate 项目 run-id；也可通过 LIME_GATE_RUN_ID 注入
   --scenario <name>      complete | home-hotpath | home-hotpath-greeting | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | inputbar-pending-steer-multi-queue | inputbar-pending-steer-pop-front-resume | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | live-tail-commit | electron-resize-reflow | approval-request-resume | approval-request-decline | approval-request-cancel | approval-request-full-access | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
   --prompt <text>        仅 home-hotpath 场景可用，覆盖默认新闻输入
   --soul-style-profile <id>   soul-style 场景使用的 profile，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID}
@@ -142,6 +145,7 @@ function parseArgs(argv) {
     cdpPort: null,
     cdpUrl: null,
     promptOverride: null,
+    runId: process.env.LIME_GATE_RUN_ID?.trim() || null,
     soulStyleProfileId: DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -163,6 +167,11 @@ function parseArgs(argv) {
     }
     if (arg === "--prefix" && next) {
       options.prefix = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--run-id" && next) {
+      options.runId = next.trim();
       index += 1;
       continue;
     }
@@ -222,6 +231,12 @@ function parseArgs(argv) {
   }
   if (!options.evidenceDir || !options.prefix) {
     throw new Error("--evidence-dir / --prefix 均不能为空");
+  }
+  options.runId ||= `standalone-${options.prefix}`;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(options.runId)) {
+    throw new Error(
+      "--run-id / LIME_GATE_RUN_ID 只能包含字母、数字、点、下划线和连字符，且长度不超过 128",
+    );
   }
   const allowedScenarios = [
     "complete",
@@ -504,6 +519,7 @@ async function run() {
   const appServerRequests = [];
   const summary = {
     ok: false,
+    runId: options.runId,
     scenarioId: "claw-chat-current-fixture",
     scenario: options.scenario,
     prompt:
@@ -552,6 +568,7 @@ async function run() {
     backendLedger: backendLedgerEvidencePath,
     screenshot: null,
     consoleErrors: [],
+    pageErrors: [],
     rendererSnapshot: null,
     initialize: null,
     imageFixtureProvider: null,
@@ -708,6 +725,7 @@ async function run() {
     agentUiPerformanceTrace: null,
     agentUiPerformanceTraceLatest: null,
     appServerTraceEvidence: null,
+    gateBGuiEvidence: null,
     assertions: {},
     summary: summaryPath,
   };
@@ -723,6 +741,7 @@ async function run() {
   };
   const consoleErrors = [];
   const actionableConsoleErrors = [];
+  const pageErrors = [];
   const agentDebugLogs = [];
   const pageLifecycleEvents = [];
   const fixtureConfigSoulOverrides =
@@ -738,6 +757,9 @@ async function run() {
         actionableConsoleErrors.push(text);
       }
     }
+  };
+  const collectPageError = (error) => {
+    pageErrors.push(sanitizeText(error));
   };
 
   try {
@@ -820,6 +842,7 @@ async function run() {
 
     page = await app.firstWindow({ timeout: options.timeoutMs });
     page.on("console", collectConsoleMessage);
+    page.on("pageerror", collectPageError);
     page.on("close", () => {
       pageLifecycleEvents.push({
         type: "page-close",
@@ -843,6 +866,7 @@ async function run() {
       cdpBrowser = await chromium.connectOverCDP(options.cdpUrl);
       page = await findElectronCdpPage(cdpBrowser, options);
       page.on("console", collectConsoleMessage);
+      page.on("pageerror", collectPageError);
       page.on("close", () => {
         pageLifecycleEvents.push({
           type: "cdp-page-close",
@@ -1088,6 +1112,34 @@ async function run() {
         applySoulStyleProviderMarkerSummary(summary, textProviderRequests);
       }
     }
+    summary.pageErrors = pageErrors;
+    summary.pageLifecycleEvents = pageLifecycleEvents;
+    const gateBExpectedIdentity = resolveGateBExpectedIdentity({
+      summary,
+      options,
+      backendLedger,
+      appServerRequests,
+    });
+    summary.gateBGuiEvidence = sanitizeJson(
+      await collectGateBGuiEvidence(page, gateBExpectedIdentity),
+    );
+    summary.gateBAppServerRequests = sanitizeJson(
+      appServerRequests.map(({ method, response, error }) => ({
+        method,
+        response,
+        error,
+      })),
+    );
+    try {
+      await page.screenshot({
+        path: screenshotPath,
+        fullPage: true,
+        timeout: 15_000,
+      });
+      summary.screenshot = screenshotPath;
+    } catch (screenshotError) {
+      summary.screenshotError = sanitizeText(screenshotError);
+    }
     const assertionReport = buildFixtureAssertionReport({
       backendLedger,
       traceMessages,
@@ -1101,16 +1153,6 @@ async function run() {
       options,
     });
 
-    try {
-      await page.screenshot({
-        path: screenshotPath,
-        fullPage: true,
-        timeout: 15_000,
-      });
-      summary.screenshot = screenshotPath;
-    } catch (screenshotError) {
-      summary.screenshotError = sanitizeText(screenshotError);
-    }
     summary.consoleErrors = consoleErrors;
     summary.actionableConsoleErrors = actionableConsoleErrors;
     summary.agentDebugLogs = agentDebugLogs.slice(-200);
@@ -1120,6 +1162,7 @@ async function run() {
     summary.pageLifecycleEvents = pageLifecycleEvents;
     summary.appServerRequestMethods = assertionReport.appServerRequestMethods;
     summary.backend = sanitizeJson(assertionReport.backendSummary);
+    summary.gateBContract = sanitizeJson(assertionReport.gateBContract);
     summary.assertions = assertionReport.assertions;
     summary.commonAssertions = assertionReport.commonAssertions;
     summary.scenarioAssertions = assertionReport.scenarioAssertions;
@@ -1170,6 +1213,7 @@ async function run() {
       error instanceof Error ? error.stack || error.message : String(error),
     );
     summary.consoleErrors = consoleErrors;
+    summary.pageErrors = pageErrors;
     summary.actionableConsoleErrors = actionableConsoleErrors;
     if (imageProviderFixtureServer) {
       summary.imageProviderFixtureServer = sanitizeJson({

@@ -1,8 +1,4 @@
-import type {
-  AgentUiProjectionContext,
-  AgentUiProjectionEvent,
-  AgentUiRuntimeStatus,
-} from "@limecloud/agent-ui-contracts";
+import type { AgentUiRuntimeStatus } from "@limecloud/agent-ui-contracts";
 
 import {
   getCodexMultiAgentToolSchemaContract,
@@ -506,53 +502,4 @@ export function extractCodexMultiAgentItemTaxonomySnapshot(
     ...base,
     validationIssues: validateSnapshot(input, base),
   };
-}
-
-function eventStatus(
-  issues: readonly AgentUiMultiAgentItemTaxonomyIssue[],
-): AgentUiRuntimeStatus {
-  return issues.length > 0 ? "failed" : "completed";
-}
-
-export function buildCodexMultiAgentItemTaxonomyProjectionEvent(
-  input: AgentUiMultiAgentItemTaxonomyInput,
-  context: AgentUiProjectionContext = {},
-): AgentUiProjectionEvent {
-  const snapshot = extractCodexMultiAgentItemTaxonomySnapshot(input);
-  const runtimeStatus = eventStatus(snapshot.validationIssues);
-  return compactProjectionFields({
-    type: "team.changed",
-    sourceType: "multi_agent_item_taxonomy_projection",
-    sequence: context.sequence,
-    timestamp: definedString(input.timestamp ?? undefined) ?? context.timestamp,
-    sessionId: definedString(context.sessionId ?? undefined),
-    threadId: snapshot.threadId ?? definedString(context.threadId ?? undefined),
-    runId: definedString(context.runId ?? undefined),
-    turnId: definedString(context.turnId ?? undefined),
-    owner: "team",
-    scope: "team",
-    phase: runtimeStatus === "failed" ? "failed" : "completed",
-    surface: "delegation_graph",
-    persistence: "snapshot",
-    control: "open_detail",
-    topology: "coordinator_team",
-    runtimeEntity: "work_item",
-    runtimeStatus,
-    latestTurnStatus: runtimeStatus,
-    payload: {
-      teamEvent: "multi_agent_item_taxonomy",
-      itemTaxonomySeen: snapshot.itemTaxonomySeen,
-      toolsCovered: snapshot.toolsCovered,
-      statusesCovered: snapshot.statusesCovered,
-      itemIdsStable: snapshot.itemIdsStable,
-      turnIdsStable: snapshot.turnIdsStable,
-      parentThreadBound: snapshot.parentThreadBound,
-      childLineageStable: snapshot.childLineageStable,
-      surfacesBoundToItems: snapshot.surfacesBoundToItems,
-      legacyTextSummaryClean: snapshot.legacyTextSummaryClean,
-      orphanAgentHistoryClean: snapshot.orphanAgentHistoryClean,
-      multiAgentItemTaxonomy: snapshot,
-      validationIssues: snapshot.validationIssues,
-    },
-  } satisfies AgentUiProjectionEvent);
 }

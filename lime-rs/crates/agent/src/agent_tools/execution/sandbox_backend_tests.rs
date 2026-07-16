@@ -75,7 +75,7 @@ fn test_sandbox_backend_plan_maps_supported_platforms() {
 }
 
 #[test]
-fn test_windows_restricted_token_backend_is_ready_on_windows() {
+fn test_windows_restricted_token_backend_is_planned_until_runner_is_current() {
     let metadata = json!({ "workspaceSandbox": { "enabled": true } });
     let plan = plan_sandbox_backend(SandboxBackendPlanInput {
         sandbox_profile: ToolExecutionSandboxProfile::WorkspaceCommand,
@@ -86,22 +86,16 @@ fn test_windows_restricted_token_backend_is_ready_on_windows() {
     });
 
     assert_eq!(plan.backend, SandboxBackend::RestrictedToken);
-    if cfg!(target_os = "windows") {
-        assert_eq!(plan.status, SandboxBackendStatus::Ready);
-        assert!(plan.enforced);
-        assert_eq!(plan.reason_code, "sandbox_backend_ready");
-    } else {
-        assert_eq!(plan.status, SandboxBackendStatus::Unavailable);
-        assert!(!plan.enforced);
-        assert_eq!(
-            plan.reason_code,
-            "sandbox_backend_windows_runner_unavailable_on_host"
-        );
-        assert_eq!(
-            plan.reason,
-            "当前宿主构建不可执行 Windows restricted token runner"
-        );
-    }
+    assert_eq!(plan.status, SandboxBackendStatus::Planned);
+    assert!(!plan.enforced);
+    assert_eq!(
+        plan.reason_code,
+        "sandbox_backend_windows_runner_not_implemented"
+    );
+    assert_eq!(
+        plan.reason,
+        "Windows restricted token runner 尚未接入 current execution process owner"
+    );
 }
 
 #[test]
@@ -139,7 +133,7 @@ fn test_decide_tool_execution_adds_strict_workspace_sandbox_metadata() {
     let params = json!({ "command": "pwd" });
 
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",
@@ -218,7 +212,7 @@ fn test_request_workspace_sandbox_can_disable_persisted_strict_fallback() {
     let params = json!({ "command": "pwd" });
 
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",
@@ -262,7 +256,7 @@ fn test_danger_full_access_does_not_require_workspace_sandbox_backend() {
     let params = json!({ "command": "cargo test" });
 
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",

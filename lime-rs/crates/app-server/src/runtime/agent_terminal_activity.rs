@@ -125,7 +125,9 @@ fn terminal_result_turn_ids(events: &[app_server_protocol::AgentEvent]) -> BTree
         .collect()
 }
 
-fn terminal_result_payload(turn: &Turn) -> Option<(AgentMailboxResultStatus, String)> {
+pub(in crate::runtime) fn terminal_result_payload(
+    turn: &Turn,
+) -> Option<(AgentMailboxResultStatus, String)> {
     match turn.status {
         TurnStatus::Completed => Some((
             AgentMailboxResultStatus::Completed,
@@ -133,7 +135,11 @@ fn terminal_result_payload(turn: &Turn) -> Option<(AgentMailboxResultStatus, Str
                 .iter()
                 .rev()
                 .find_map(|item| match &item.payload {
-                    ThreadItemPayload::AgentMessage { text, .. } => Some(text.clone()),
+                    ThreadItemPayload::AgentMessage { text, phase, .. }
+                        if phase.as_deref() == Some("final_answer") =>
+                    {
+                        Some(text.clone())
+                    }
                     _ => None,
                 })
                 .unwrap_or_default(),

@@ -64,7 +64,6 @@ import {
   resolveAgentUiThreadItemPhase,
   resolveAgentUiThreadItemSubagentRuntimeStatus,
   resolveAgentUiThreadItemToolResultType,
-  resolveTeamTopology,
   buildTeamRuntimeFacts,
   buildRoutingDecisionPayload,
   extractArtifactRefs,
@@ -1508,12 +1507,13 @@ test("Agent UI projection summaries classify host-neutral event groups", () => {
 test("Agent UI subagents summaries group surfaces and lanes", () => {
   const events = [
     {
-      type: "team.changed",
-      sourceType: "runtime_status",
+      type: "agent.changed",
+      sourceType: "item_completed",
       sequence: 1,
       sessionId: "session-team",
-      owner: "team",
-      scope: "team",
+      agentId: "agent-roster",
+      owner: "agent",
+      scope: "agent",
       phase: "acting",
       surface: "team_roster",
     },
@@ -3089,5 +3089,4 @@ test("runtime fact helpers normalize shared Agent UI status semantics", () => {
   assert.equal(teamFacts.teamQueuedCount, 1);
   assert.equal(teamFacts.queuedTurnCount, 1);
   assert.equal(teamFacts.providerConcurrencyGroup, "provider-a");
-  assert.equal(resolveTeamTopology(teamFacts), "parallel_workers");
 });

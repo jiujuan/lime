@@ -45,7 +45,8 @@ describe("local history import visual audit smoke guard", () => {
     expect(content).toContain("视觉审计缺少 desktop / compact / narrow");
     expect(content).toContain("inputbarVisible");
     expect(content).toContain("messageListVisible");
-    expect(content).toContain("hasCommandRecordVisible");
+    expect(content).toContain("hasCommandExecutionVisible");
+    expect(content).toContain("hasCommandOutput");
     expect(content).toContain("hasPatchText");
     expect(content).toContain("hasSearchEvidence");
     expect(content).toContain("hasApprovalText");

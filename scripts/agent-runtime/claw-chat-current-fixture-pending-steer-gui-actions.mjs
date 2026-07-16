@@ -204,6 +204,14 @@ async function evaluateInputbarQueuedTurnsPanel(page) {
         };
       });
       const bodyText = document.body?.innerText || "";
+      const turnGroups = Array.from(
+        document.querySelectorAll('[data-testid="message-turn-group"]'),
+      );
+      const richTurnGroup = [...turnGroups]
+        .reverse()
+        .find((group) => (group.textContent || "").includes(richPrompt));
+      const richTurnStatus =
+        richTurnGroup?.getAttribute("data-runtime-turn-status") || null;
       const stopButtonVisible = Array.from(
         document.querySelectorAll("button"),
       ).some((button) => {
@@ -239,6 +247,17 @@ async function evaluateInputbarQueuedTurnsPanel(page) {
           textarea instanceof HTMLTextAreaElement
             ? textarea.dataset.sessionId || null
             : null,
+        richTurnId:
+          richTurnGroup?.getAttribute("data-runtime-turn-id") || null,
+        richTurnStatus,
+        richTurnTerminal: [
+          "aborted",
+          "canceled",
+          "cancelled",
+          "completed",
+          "failed",
+          "interrupted",
+        ].includes(String(richTurnStatus || "").toLowerCase()),
         stopButtonVisible,
       };
     },
@@ -366,6 +385,7 @@ export async function clickQueuedTurnPromoteButtonForPrompt(
 export async function reloadAndWaitForPendingSteerQueuedHydrate(
   page,
   options,
+  expectedRichTurnId,
 ) {
   const reload = await reloadRendererDocument(page, options);
   await waitForRendererReady(page, options);
@@ -382,7 +402,10 @@ export async function reloadAndWaitForPendingSteerQueuedHydrate(
       snapshot.richQueued === false &&
       snapshot.secondPosition === "0" &&
       snapshot.textareaVisible === true &&
-      snapshot.textareaDisabled === false,
+      snapshot.textareaDisabled === false &&
+      snapshot.richTurnId === expectedRichTurnId &&
+      snapshot.richTurnTerminal === true &&
+      snapshot.stopButtonVisible === false,
     "Inputbar pending steer reload 后未 hydrate 剩余第二条 queue",
   );
   return sanitizeJson({

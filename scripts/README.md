@@ -171,21 +171,68 @@ npm run smoke:mcp-elicitation-gate-b
 
 新增 MCP control-plane 脚本继续进入 `scripts/mcp/` 或复用现有 `smoke:mcp-current` npm script；涉及真实 Electron Desktop Host GUI 的 MCP fixture 进入 `scripts/electron/`。共享实现仍放在领域子目录或 `scripts/lib/`。
 
+### Automation 脚本
+
+自动化 current 页面 smoke 统一通过稳定入口执行：
+
+```bash
+npm run smoke:automation-current
+```
+
+该入口使用 Chrome + DevBridge `/invoke` 验证持续流程页面读取走
+`app_server_handle_json_lines -> automationJob/list`，只归类为 Gate A / browser mirror；
+它不能替代真实 Electron preload/IPC 和自动化任务执行的 Gate B。
+
 ### Electron 脚本
 
 Electron release / updater 领域新增脚本进入 `scripts/electron/`。当前 `scripts/electron/update-feed-r2-upload-plan.mjs` 负责 R2 updater 上传计划，`scripts/electron/make-zip-local-feed.mjs` 负责用本地临时 feed 验证 Forge macOS ZIP / `RELEASES.json` 生成链路，`scripts/electron/release-workflow-guard.mjs` 负责结构化校验 GitHub Actions release workflow 的 Forge maker、签名、公证、Windows Squirrel 与旧链路拒绝规则。
 
 对外优先使用 `package.json` 里的 `electron:*` npm scripts。`npm run electron:make:zip-local-feed -- --arch arm64` 只写 `.tmp/electron-forge-local-feed`，不能替代 `electron:dist`、release workflow、DMG、签名、公证或 Windows Squirrel 实机证据。
 
+会话文件和 Deep Link 的真实 Electron fixture 使用稳定入口：
+
+```bash
+npm run smoke:session-files-electron-fixture
+npm run smoke:connect-deep-link-current
+npm run smoke:connect-open-deep-link-current
+npm run smoke:connect-deep-link-save-current
+```
+
+这些入口都启动隔离的真实 Electron Desktop Host，验证 preload、
+`app_server_handle_json_lines` 和对应 App Server current method；临时 userData/appData
+不得替代真实用户目录。Connect save fixture 使用脚本内测试 key 和 fixture relay，证据不得保存
+完整 key。
+
 ### Harness 脚本
 
 Harness eval、history、trend、analysis brief 与 replay promote 入口已迁到 `scripts/harness/`。对外继续使用 `package.json` 里的 `harness:*` npm scripts，不直接依赖根目录脚本路径。
+
+DeepSWE Coding 使用以下 current 入口：
+
+```bash
+npm run harness:deepswe:preflight
+npm run harness:deepswe:run -- --task happy-dom-abort-pending-body-reads --allow-live-provider
+```
+
+`harness:deepswe:run` 在隔离 git workspace 中通过 `workspace/ensure -> agentSession/start -> agentSession/turn/start -> agentSession/read/evidence/export -> agentSession/turn/cancel` 执行 Lime current Agent。adapter v3 持续导出 `provider.step`，以 provider step、token 和 wall time 三类预算约束 live run，并在 terminal 或预算取消后先固化 partial evidence 与 `patch.diff`。只有存在 candidate patch 时才进入 Pier separate verifier preflight；缺少容器运行时会保留 agent evidence 并记录独立 verifier blocker，不得生成伪造的 `reward.json`。真实执行默认 fail closed，必须显式允许 live Provider；已有 patch 可用 `--verifier-only --run-dir <path>` 续跑判分。
 
 新增 Harness 脚本继续进入 `scripts/harness/` 或复用现有 Harness npm scripts；共享实现仍放在 `scripts/lib/`。
 
 ### Agent QC 脚本
 
 Agent QC report、GUI flow、qcloop、evidence、release summary 与 owner/checklist 入口已迁到 `scripts/agent-qc/`。对外继续使用 `package.json` 里的 `agent-qc:*` npm scripts，不直接依赖根目录脚本路径。
+
+`npm run agent-qc:project-gate-candidate -- --codex-reference-repo <path>` 连续两次计算 tracked、untracked 与删除项的完整产品快照，默认间隔 5 秒；只有 product digest、tracked diff digest、Git HEAD、changed paths、exclusion、干净 Codex reference HEAD、owner tracker 状态和 34-surface contract 全部一致，才会在 `.lime/qc/project-gates/<run-id>/candidate.json` 生成候选摘要。Codex import tracker 只接受 `ready`、`ready-for-gate`、`completed` 或 `closed`；`active`、缺失或未知状态全部 fail closed。`internal/test/project-gate-surfaces.manifest.json` 固定 `17` 个 P0、`17` 个 P1 及每个 surface 所需 proof level，并进入 product snapshot；摘要另外保存其 digest。摘要只保存 Codex commit hash、tracker 相对路径/状态和仓库内 contract 路径，不保存外部仓库路径。Gate 日志、可变执行计划和 `internal/research/refactor/v2/13-evidence/project-gates/` 下的 Gate 汇总被显式排除，其他未跟踪产品文件必须进入 digest；`--snapshot-only` 只用于冻结前诊断，不生成候选。也可用 `LIME_CODEX_REFERENCE_REPO` 提供 reference 路径。
+
+每个 Wave 结束后使用 `npm run agent-qc:project-gate-candidate -- --verify-candidate .lime/qc/project-gates/<run-id>/candidate.json` 重算当前 snapshot；Git HEAD、product digest、tracked diff digest、changed paths 或 exclusion 任一漂移都会非零退出，并只输出 digest、计数和最多 50 个路径差异，不输出文件正文。
+
+候选冻结后使用 `npm run agent-qc:project-gate-coverage -- --candidate <candidate.json>` 聚合 34 个
+surface 的证据。聚合器只读取 evidence JSON 中显式声明的 `surfaceProof.surfaceId`、
+`surfaceProof.proof` 和 `surfaceProof.complete=true`，同时要求 candidate run-id 一致、场景 `result=pass`
+且 assertions 全部通过；不从文件名、场景名或 `proofLevel` 文案猜测覆盖关系。默认未达到 `34/34`
+就非零退出；Wave 过程报表显式使用 `--progress-only`。失败或 blocked 证据必须包含
+`failureClass` 与 `nextAction`，coverage summary 只保存 proof、计数和相对 evidence 路径，不复制请求、
+对话正文或凭证。
 
 新增 Agent QC 脚本继续进入 `scripts/agent-qc/` 或复用现有 Agent QC npm scripts；共享实现仍放在 `scripts/lib/`。
 
@@ -222,6 +269,18 @@ Agent Runtime smoke 与 Service Skill 入口 smoke 已迁到 `scripts/agent-runt
 ### Plugin 脚本
 
 Plugin smoke、runtime fixture、connector production gate、standalone release helper 与配套测试统一放在 `scripts/plugin/`。对外继续使用 `package.json`、GitHub Actions 或路线图文档里的稳定入口，不直接依赖根目录脚本路径。
+
+Plugin UI/runtime 的真实 Electron fixture 使用：
+
+```bash
+npm run smoke:plugin-ui-runtime-electron-fixture
+npm run smoke:plugin-runtime-electron-fixture
+npm run smoke:plugin-runtime-task-electron-fixture
+```
+
+UI runtime fixture 从正式侧栏进入 Plugin iframe surface；runtime fixture 验证 task facade
+保持 typed RuntimeOptions；task fixture覆盖任务、host action 和 current read model。三者都只使用
+临时 app data 和显式 external fixture，不调用 live Provider，也不是生产 fallback。
 
 新增 Plugin 脚本继续进入 `scripts/plugin/` 或复用现有 `plugin:*` / `smoke:content-factory-*` npm scripts；共享实现仍放在 `scripts/lib/`。旧 Plugin 页面和 Lab smoke 已归类为 `dead`，不得作为 Plugin smoke 恢复。
 

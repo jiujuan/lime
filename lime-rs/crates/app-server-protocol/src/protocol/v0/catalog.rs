@@ -620,8 +620,6 @@ pub enum AppServerRequestMethod {
     ConversationImportThreadPreview,
     #[serde(rename = "conversationImport/thread/commit")]
     ConversationImportThreadCommit,
-    #[serde(rename = "conversationImport/thread/runtimeEvents/read")]
-    ConversationImportThreadRuntimeEventsRead,
     #[serde(rename = "agentSession/start")]
     AgentSessionStart,
     #[serde(rename = "agentSession/read")]
@@ -943,9 +941,6 @@ impl AppServerRequestMethod {
             Self::ConversationImportSourceScan => METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
             Self::ConversationImportThreadPreview => METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
             Self::ConversationImportThreadCommit => METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
-            Self::ConversationImportThreadRuntimeEventsRead => {
-                METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ
-            }
             Self::AgentSessionStart => METHOD_AGENT_SESSION_START,
             Self::AgentSessionRead => METHOD_AGENT_SESSION_READ,
             Self::AgentSessionMediaRead => METHOD_AGENT_SESSION_MEDIA_READ,
@@ -1275,9 +1270,6 @@ impl AppServerRequestMethod {
                 Some(Self::ConversationImportThreadPreview)
             }
             METHOD_CONVERSATION_IMPORT_THREAD_COMMIT => Some(Self::ConversationImportThreadCommit),
-            METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ => {
-                Some(Self::ConversationImportThreadRuntimeEventsRead)
-            }
             METHOD_AGENT_SESSION_START => Some(Self::AgentSessionStart),
             METHOD_AGENT_SESSION_READ => Some(Self::AgentSessionRead),
             METHOD_AGENT_SESSION_MEDIA_READ => Some(Self::AgentSessionMediaRead),
@@ -2485,10 +2477,6 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {

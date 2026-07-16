@@ -58,6 +58,7 @@ export async function waitForGuiChatCompleted(
     requiredVisibleTexts,
     dedupeGuardTexts = [],
     disallowedVisibleTexts = ["legacy_tool_event"],
+    requireApprovalRecord = false,
   } = {},
 ) {
   const startedAt = Date.now();
@@ -383,6 +384,8 @@ export async function waitForGuiChatCompleted(
       snapshot.textareaVisible &&
       snapshot.textareaDisabled === false &&
       snapshot.stopButtonVisible === false &&
+      (!requireApprovalRecord ||
+        Number(snapshot.approvalRecordShape?.recordCount || 0) > 0) &&
       scopedDedupeGuardHits.every((hit) => hit.occurrences <= 1) &&
       scopedDisallowedVisibleTextHits.every((hit) => hit.occurrences === 0)
     ) {

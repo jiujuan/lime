@@ -4,8 +4,8 @@ use crate::execution_policy::{
 use crate::execution_policy_service::{ToolExecutionPolicyService, ToolExecutionResolverInput};
 use crate::sandbox::{
     command_text, evaluate_sandbox, plan_sandbox_backend, requested_sandbox_policy_label,
-    SandboxBackendPlan, SandboxBackendPlanInput, SandboxBackendPlatform, SandboxEvaluation,
-    SandboxEvaluationInput,
+    SandboxBackend, SandboxBackendPlan, SandboxBackendPlanInput, SandboxBackendPlatform,
+    SandboxEvaluation, SandboxEvaluationInput,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
@@ -65,6 +65,20 @@ impl ToolExecutionDecision {
     pub fn requires_sandboxed_execution(&self) -> bool {
         metadata_bool(&self.metadata, "sandboxBackendRequired")
             || self.workspace_sandbox_backend_enforced()
+    }
+
+    pub fn sandbox_backend(&self) -> Option<SandboxBackend> {
+        match self
+            .metadata
+            .get("sandboxBackend")
+            .and_then(JsonValue::as_str)
+        {
+            Some("seatbelt") => Some(SandboxBackend::Seatbelt),
+            Some("linux_sandbox") => Some(SandboxBackend::LinuxSandbox),
+            Some("restricted_token") => Some(SandboxBackend::RestrictedToken),
+            Some("none") => Some(SandboxBackend::None),
+            _ => None,
+        }
     }
 }
 

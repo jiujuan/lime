@@ -36,7 +36,6 @@ import {
   shouldRenderConversationTimelineItem,
   shouldSuppressPreAnswerThinkingTimeline,
 } from "./messageListInlineProcess";
-import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
 import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
@@ -300,16 +299,12 @@ export function resolveMessageListItemProjection({
     timelineItemsForDisplay?.some((item) => item.type === "plan"),
   );
   const primaryTimelineKey = timeline ? `leading:${timeline.turn.id}` : null;
-  const hasImportedSourcePrimaryTimeline = hasImportedSourceProcessItem(
-    timelineItemsForDisplay,
-  );
   const shouldPreferCompactHistoricalTimeline =
     Boolean(primaryTimelineKey) &&
     isRestoredHistoryWindow &&
     !focusedTimelineItemId &&
     timeline?.turn.status === "completed" &&
     timeline.turn.id !== activeCurrentTurnId &&
-    !hasImportedSourcePrimaryTimeline &&
     !expandedHistoricalTimelineKeys.has(primaryTimelineKey!) &&
     (shouldDeferThreadItemsScan ||
       (timelineItemsForDisplay?.length || 0) >=
@@ -320,7 +315,6 @@ export function resolveMessageListItemProjection({
     !focusedTimelineItemId &&
     timeline?.turn.status === "completed" &&
     timeline.turn.id !== activeCurrentTurnId &&
-    !hasImportedSourcePrimaryTimeline &&
     expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
   const hasStreamingOverlayText = Boolean(
     streamingFinalTextOverlayContent?.trim(),
@@ -857,7 +851,6 @@ export function resolveMessageListItemProjection({
     primaryTimeline?.turn.status === "completed" &&
     primaryTimeline.turn.id !== activeCurrentTurnId &&
     shouldPreferCompactHistoricalTimeline &&
-    !hasImportedSourcePrimaryTimeline &&
     !expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
   const shouldRenderPrimaryTimelineOutsideBubble =
     message.role === "assistant" &&

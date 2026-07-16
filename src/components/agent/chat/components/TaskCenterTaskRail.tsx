@@ -20,10 +20,6 @@ interface TaskCenterTaskRailProps {
   runControlSurfaceProjection?: GeneralWorkbenchRunControlSurfaceProjection | null;
   onOpenOutput?: (path: string) => void | Promise<void>;
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
-  importedRuntimeDetail?: {
-    enabled: boolean;
-    sessionId?: string | null;
-  };
   t?: (key: string, options?: Record<string, unknown>) => unknown;
 }
 
@@ -480,7 +476,6 @@ export function TaskCenterTaskRail({
   runControlSurfaceProjection,
   onOpenOutput,
   onRespondToAction,
-  importedRuntimeDetail,
   t,
 }: TaskCenterTaskRailProps) {
   const hasRunControlSurface = Boolean(runControlSurfaceProjection?.hasContent);
@@ -557,7 +552,6 @@ export function TaskCenterTaskRail({
           activityItems={projection.activityItems}
           outputItems={outputItems}
           onOpenOutput={onOpenOutput}
-          importedRuntimeDetail={importedRuntimeDetail}
           t={t}
         />
       ) : null}

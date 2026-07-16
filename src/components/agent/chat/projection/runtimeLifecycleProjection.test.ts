@@ -163,7 +163,7 @@ describe("runtimeLifecycleProjection", () => {
       baseContext,
     );
 
-    expect(events).toHaveLength(3);
+    expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({
       type: "run.status",
       sourceType: "runtime_status",
@@ -191,21 +191,6 @@ describe("runtimeLifecycleProjection", () => {
       payload: {
         permissionStatus: "requires_confirmation",
         confirmationRequestId: "approval-1",
-      },
-    });
-    expect(events[2]).toMatchObject({
-      type: "team.changed",
-      sourceType: "runtime_status",
-      owner: "team",
-      scope: "team",
-      phase: "waiting",
-      surface: "team_roster",
-      topology: "parallel_workers",
-      teamQueuedCount: 2,
-      providerParallelBudget: 4,
-      payload: {
-        teamEvent: "runtime_status_changed",
-        sourcePhase: "permission_review",
       },
     });
   });

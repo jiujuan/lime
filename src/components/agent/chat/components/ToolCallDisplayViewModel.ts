@@ -13,7 +13,6 @@ import {
   resolveToolFilePath as resolveToolFilePathFromInfo,
   resolveToolPrimarySubject as resolveToolPrimarySubjectFromInfo,
 } from "../utils/toolDisplayInfo";
-import { isImportedSourceMetadata } from "../utils/importedSourceMetadata";
 
 export interface ToolResultNotice {
   key: string;
@@ -50,10 +49,6 @@ export interface CommandOutputStream {
   key: "stdout" | "stderr";
   content: string;
   tone: "neutral" | "error";
-}
-
-export interface ImportedSourceToolPresentation {
-  kind: "command_record";
 }
 
 export type ToolResultMetaNoticeKey = "truncatedPreview" | "commandFailed";
@@ -257,10 +252,6 @@ export function resolveToolGroupKey(toolCall: ToolCallState): string {
     return "search";
   }
 
-  if (resolveImportedSourceToolPresentation(toolCall)) {
-    return "imported-source";
-  }
-
   const info = getToolDisplayInfoFromInfo(toolCall.name, toolCall.status);
   return `${info.groupTitle}:${toolCall.status}`;
 }
@@ -268,18 +259,10 @@ export function resolveToolGroupKey(toolCall: ToolCallState): string {
 export function buildToolGroupPreview(
   toolCalls: ToolCallState[],
   formatHiddenCount: (count: number) => string,
-  formatImportedSourceCommandRecord: (count?: number) => string = () =>
-    "imported command record",
 ): string {
   const previews = toolCalls
     .slice(0, 2)
     .map((toolCall) => {
-      const importedPresentation =
-        resolveImportedSourceToolPresentation(toolCall);
-      if (importedPresentation) {
-        return formatImportedSourceCommandRecord();
-      }
-
       const args = parseToolCallArgumentsFromInfo(toolCall.arguments);
       const filePath = resolveToolFilePathFromInfo(args);
       return (
@@ -361,20 +344,7 @@ export function buildToolSearchGroupQueryPreview(params: {
     : queryPreview;
 }
 
-export function buildToolGroupHeadline(
-  toolCalls: ToolCallState[],
-  formatImportedSourceCommandRecord: (count?: number) => string = (count) =>
-    count && count > 1
-      ? `imported ${count} command records`
-      : "imported command record",
-): string {
-  const importedSourceCount = toolCalls.filter((toolCall) =>
-    resolveImportedSourceToolPresentation(toolCall),
-  ).length;
-  if (importedSourceCount > 0 && importedSourceCount === toolCalls.length) {
-    return formatImportedSourceCommandRecord(importedSourceCount);
-  }
-
+export function buildToolGroupHeadline(toolCalls: ToolCallState[]): string {
   return buildToolGroupHeadlineFromInfo(toolCalls);
 }
 
@@ -520,47 +490,12 @@ export function readRecordBoolean(
   return null;
 }
 
-export function resolveImportedSourceToolPresentation(
-  toolCall: ToolCallState,
-): ImportedSourceToolPresentation | null {
-  const metadata = {
-    ...(normalizeToolResultMetadata(toolCall.metadata) || {}),
-    ...(normalizeToolResultMetadata(toolCall.result?.metadata) || {}),
-  };
-  const normalizedMetadata =
-    Object.keys(metadata).length > 0 ? metadata : undefined;
-  if (!isImportedSourceMetadata(normalizedMetadata)) {
-    return null;
-  }
-
-  const normalizedName = normalizeToolNameKeyFromInfo(toolCall.name);
-  const isCommandLike =
-    normalizedName.includes("bash") ||
-    normalizedName.includes("shell") ||
-    normalizedName.includes("exec") ||
-    normalizedName.includes("powershell") ||
-    normalizedName.includes("terminal") ||
-    normalizedName.includes("command") ||
-    readRecordNumber(normalizedMetadata, ["exit_code", "exitCode"]) !== null;
-  if (!isCommandLike) {
-    return null;
-  }
-
-  return {
-    kind: "command_record",
-  };
-}
-
 export function resolveCommandToolSummary(params: {
   toolName: string;
   args: Record<string, ToolCallArgumentValue>;
   metadata?: Record<string, unknown>;
 }): CommandToolSummary | null {
   const { toolName, args, metadata } = params;
-  if (isImportedSourceMetadata(metadata)) {
-    return null;
-  }
-
   const normalizedName = normalizeToolNameKeyFromInfo(toolName);
   const command = readRecordString(args, [
     "command",
@@ -702,10 +637,6 @@ export function resolveCommandOutputStreams(params: {
   error?: string;
   metadata?: Record<string, unknown>;
 }): CommandOutputStream[] {
-  if (isImportedSourceMetadata(params.metadata)) {
-    return [];
-  }
-
   const outputRecord = parseJsonRecord(params.output);
   const errorRecord = parseJsonRecord(params.error);
   const stdoutKeys = [

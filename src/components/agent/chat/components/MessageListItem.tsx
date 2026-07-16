@@ -30,6 +30,7 @@ import { MessageUserBody } from "./MessageUserBody";
 import type { MessageListRenderGroup } from "./MessageList.types";
 import { resolveMessageListItemProjection } from "./messageListItemProjection";
 import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
+import { canonicalAgentMessageItemId } from "../utils/contentPartTimeline";
 
 function contentPartDebugSignature(parts: Message["contentParts"]): string {
   return (parts || [])
@@ -59,6 +60,41 @@ function timelineDebugSignature(
   return (timeline?.items || [])
     .map((item) => `${item.type}:${item.id}`)
     .join("|");
+}
+
+function resolveCanonicalMessageItemId(
+  message: Message,
+  group: MessageListRenderGroup,
+  threadRead: AgentRuntimeThreadReadModel | null,
+): string | null {
+  if (message.role === "assistant") {
+    const fromContentParts = canonicalAgentMessageItemId(message.contentParts);
+    if (fromContentParts) {
+      return fromContentParts;
+    }
+  }
+
+  const turnId =
+    message.runtimeTurnId?.trim() || group.timeline?.turn?.id?.trim() || null;
+  const itemType =
+    message.role === "assistant"
+      ? "agent_message"
+      : message.role === "user"
+        ? "user_message"
+        : null;
+  if (!itemType) {
+    return null;
+  }
+  const candidates = [
+    ...(group.timeline?.items ?? []),
+    ...(threadRead?.thread_items ?? []),
+  ];
+  return (
+    candidates.find(
+      (item) =>
+        item.type === itemType && (!turnId || item.turn_id === turnId),
+    )?.id ?? null
+  );
 }
 
 export interface MessageListItemProps {
@@ -419,6 +455,10 @@ export function MessageListItem({
             data-message-id={msg.id}
             data-message-role={msg.role}
             data-runtime-turn-id={msg.runtimeTurnId || ""}
+            data-thread-item-id={
+              resolveCanonicalMessageItemId(msg, group, threadRead) ||
+              undefined
+            }
             data-message-content-part-types={contentPartDebugSignature(
               msg.contentParts,
             )}

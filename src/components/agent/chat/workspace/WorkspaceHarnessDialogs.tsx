@@ -13,16 +13,12 @@ import {
   type HarnessFileChangeReviewSummary,
 } from "../components/HarnessStatusPanel";
 import { countFailedHarnessOutputSignals } from "../utils/harnessOutputSignals";
-import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 
 type HarnessPanelBaseProps = Pick<
   ComponentProps<typeof HarnessStatusPanel>,
   | "harnessState"
   | "environment"
   | "canonicalChildren"
-  | "selectedTeamLabel"
-  | "selectedTeamSummary"
-  | "selectedTeamRoles"
   | "threadRead"
   | "turns"
   | "threadItems"
@@ -41,7 +37,6 @@ type HarnessPanelBaseProps = Pick<
   | "onManageProviders"
   | "onOpenExecutionPolicySettings"
   | "messages"
-  | "teamMemorySnapshot"
   | "diagnosticRuntimeContext"
   | "toolInventory"
   | "toolInventoryLoading"
@@ -254,13 +249,11 @@ function useGeneralWorkbenchHarnessSurface({
 
 interface GeneralWorkbenchHarnessSurfaceSectionProps extends HarnessPanelBaseProps {
   enabled: boolean;
-  teamMemorySnapshot?: TeamMemorySnapshot | null;
   onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
 }
 
 export function GeneralWorkbenchHarnessSurfaceSection({
   enabled,
-  teamMemorySnapshot = null,
   onSubmitCodeFixPrompt,
   ...panelBaseProps
 }: GeneralWorkbenchHarnessSurfaceSectionProps) {
@@ -291,7 +284,6 @@ export function GeneralWorkbenchHarnessSurfaceSection({
         <HarnessStatusPanel
           {...panelBaseProps}
           layout="dialog"
-          teamMemorySnapshot={teamMemorySnapshot}
           onOpenFileCheckpoints={openFileCheckpoints}
           leadContent={leadContent}
           title={t("agentChat.workspaceHarnessDialog.title")}
@@ -329,10 +321,6 @@ interface GeneralWorkbenchDialogSectionProps extends HarnessPanelBaseProps {
   runtimeStatusTitle: ComponentProps<
     typeof AgentRuntimeStrip
   >["runtimeStatusTitle"];
-  selectedTeamRoleCount: ComponentProps<
-    typeof AgentRuntimeStrip
-  >["selectedTeamRoleCount"];
-  teamMemorySnapshot?: TeamMemorySnapshot | null;
   onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
 }
 
@@ -346,8 +334,6 @@ export function GeneralWorkbenchDialogSection({
   isSending,
   executionRuntime,
   runtimeStatusTitle,
-  selectedTeamRoleCount,
-  teamMemorySnapshot = null,
   onSubmitCodeFixPrompt,
   ...panelBaseProps
 }: GeneralWorkbenchDialogSectionProps) {
@@ -390,7 +376,6 @@ export function GeneralWorkbenchDialogSection({
           <HarnessStatusPanel
             {...panelBaseProps}
             layout="dialog"
-            teamMemorySnapshot={teamMemorySnapshot}
             onOpenFileCheckpoints={openFileCheckpoints}
             title={t("agentChat.workspaceHarnessDialog.title")}
             description={t("agentChat.workspaceHarnessDialog.description")}
@@ -416,9 +401,6 @@ export function GeneralWorkbenchDialogSection({
                   isSending={isSending}
                   executionRuntime={executionRuntime}
                   runtimeStatusTitle={runtimeStatusTitle}
-                  selectedTeamLabel={panelBaseProps.selectedTeamLabel}
-                  selectedTeamSummary={panelBaseProps.selectedTeamSummary}
-                  selectedTeamRoleCount={selectedTeamRoleCount}
                   fileCheckpointSummary={fileCheckpointSummary}
                   onOpenFileCheckpoints={openFileCheckpoints}
                 />

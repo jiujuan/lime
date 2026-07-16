@@ -457,10 +457,7 @@ fn native_tool_policy_disallowed_tools_follow_codex_model_gates() {
 
     assert_eq!(
         native_tool_policy_disallowed_tool_names(Some(&unified_exec_policy)),
-        vec![
-            MODEL_NATIVE_SHELL_TOOL_NAME,
-            MODEL_NATIVE_POWERSHELL_TOOL_NAME
-        ]
+        Vec::<&'static str>::new()
     );
 
     let disabled_patch_metadata = json!({

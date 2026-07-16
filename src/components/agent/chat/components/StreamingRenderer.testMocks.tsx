@@ -131,15 +131,6 @@ vi.mock("react-i18next", () => ({
       if (key === "agentChat.fileChangesSummary.reviewHunks") {
         return `${values?.count ?? 0} 处变更`;
       }
-      if (key === "agentChat.toolCall.importedCommandRecord.title") {
-        return "导入的命令记录";
-      }
-      if (key === "agentChat.toolCall.importedCommandRecord.groupTitle") {
-        return "导入的命令记录";
-      }
-      if (key === "agentChat.toolCall.importedCommandRecord.description") {
-        return "从本地历史导入的执行记录，仅用于还原当时的过程；不会重新执行，也不需要再次授权。";
-      }
       if (key === "agentChat.thinkingBlock.status.completed") {
         return "已完成思考";
       }
@@ -151,9 +142,6 @@ vi.mock("react-i18next", () => ({
       }
       if (key === "agentChat.processGroup.completedThinking") {
         return "已完成思考";
-      }
-      if (key === "agentChat.processGroup.importedSteps") {
-        return `导入过程 ${values?.count ?? 0} 个步骤`;
       }
       if (key === "agentChat.processGroup.failedSteps") {
         return `失败 ${values?.count ?? 0} 个步骤`;

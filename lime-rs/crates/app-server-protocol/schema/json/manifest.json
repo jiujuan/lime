@@ -260,10 +260,6 @@
     },
     {
       "kind": "request",
-      "method": "conversationImport/thread/runtimeEvents/read"
-    },
-    {
-      "kind": "request",
       "method": "diagnostics/logStorage/read"
     },
     {
@@ -1501,7 +1497,6 @@
       "ConversationImportPreviewEvent",
       "ConversationImportPreviewMessage",
       "ConversationImportPreviewSummary",
-      "ConversationImportRuntimeEventDetail",
       "ConversationImportSourceClient",
       "ConversationImportSourceProvenance",
       "ConversationImportSourceScanParams",
@@ -1512,8 +1507,6 @@
       "ConversationImportThreadCommitResponse",
       "ConversationImportThreadPreviewParams",
       "ConversationImportThreadPreviewResponse",
-      "ConversationImportThreadRuntimeEventsReadParams",
-      "ConversationImportThreadRuntimeEventsReadResponse",
       "ConversationImportThreadStatus",
       "DiagnosticsCapabilityRoutingMetricsSnapshot",
       "DiagnosticsIdempotencyDiagnostics",

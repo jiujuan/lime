@@ -67,7 +67,6 @@ import {
   type GeneralWorkbenchCreationTaskEvent,
 } from "./generalWorkbenchWorkflowData";
 import { TaskCenterTaskRail } from "./TaskCenterTaskRail";
-import { hasImportedRuntimeDetailSignal } from "../utils/importedSourceProcess";
 import { hydrateAgentPlanState } from "../utils/planState";
 import type { WorkspaceRightSurfaceLauncherProjection } from "../workspace/right-surface";
 import { buildWorkspaceTaskRailRuntimeContext } from "../workspace/useWorkspaceTaskRailRuntime";
@@ -436,31 +435,6 @@ export function TaskCenterUtilityToolbar({
     setEnvironmentOpen(true);
     setEnvironmentVisited(true);
   }, [environmentOpen, taskRail?.threadItems]);
-  const importedRuntimeDetail = React.useMemo(() => {
-    if (!environmentOpen) {
-      return {
-        enabled: false,
-        sessionId: null,
-      };
-    }
-    const sessionId = taskRail?.sessionId?.trim() || null;
-    return {
-      enabled:
-        Boolean(sessionId) &&
-        hasImportedRuntimeDetailSignal({
-          threadItems: taskRail?.threadItems,
-          executionRuntime: taskRail?.executionRuntime,
-          threadRead: taskRail?.threadRead,
-        }),
-      sessionId,
-    };
-  }, [
-    environmentOpen,
-    taskRail?.executionRuntime,
-    taskRail?.sessionId,
-    taskRail?.threadItems,
-    taskRail?.threadRead,
-  ]);
   const runControlSurfaceProjection = React.useMemo(() => {
     if (!taskRailProjection) {
       return null;
@@ -685,7 +659,6 @@ export function TaskCenterUtilityToolbar({
                 runControlSurfaceProjection={runControlSurfaceProjection}
                 onOpenOutput={taskRail?.onOpenOutput}
                 onRespondToAction={taskRail?.onRespondToAction}
-                importedRuntimeDetail={importedRuntimeDetail}
                 t={taskRailTranslate}
               />
             ) : null}

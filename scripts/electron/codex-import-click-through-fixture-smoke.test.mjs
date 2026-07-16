@@ -74,7 +74,9 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("bodyText.includes(importedReasoningText)");
     expect(content).toContain("hasReasoningItem");
     expect(content).toContain("hasReasoningVisible");
-    expect(content).toContain("hasCommandRecordVisible");
+    expect(content).toContain("hasCommandExecutionVisible");
+    expect(content).toContain("hasCommandOutput");
+    expect(content).toContain('bodyText.includes("npm test")');
     expect(content).toContain("hasCommandText");
     expect(content).toContain("hasPatchText");
     expect(content).toContain("hasSearchEvidence");
@@ -85,6 +87,7 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("https://example.com/lime-codex-import-rendering");
     expect(content).toContain("Yahoo Scout");
     expect(content).toContain("hasApprovalText");
+    expect(content).toContain('bodyText.includes("权限记录")');
     expect(content).toContain("IMPORTED_ATTACHMENT_DATA_URL");
     expect(content).toContain("inspectImportedAttachmentPreview");
     expect(content).toContain("IMPORTED_PREVIEW_MARKDOWN_FILE");
@@ -108,6 +111,8 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("call_read_xlsx");
     expect(content).toContain("call_read_pptx");
     expect(content).toContain("inline-tool-open-file");
+    expect(content).toContain('button[title="展开过程详情"]');
+    expect(content).toContain("timeline-file-artifact-card");
     expect(content).toContain("inspectImportedFilePreviewArtifacts");
     expect(content).toContain("canvas-workbench-html-preview");
     expect(content).toContain("IMPORTED_PREVIEW_PDF_TEXT");

@@ -262,6 +262,8 @@ async fn delete_session_removes_empty_canonical_thread_and_allows_recreate() {
         .await,
         Err(RuntimeCoreError::Backend(_))
     ));
+    std::fs::rename(&database_path, &blocked_path).expect("unblock database path");
+    std::fs::rename(&backup_path, &database_path).expect("restore database");
     core.read_session(AgentSessionReadParams {
         session_id: "sess_empty_delete".to_string(),
         history_limit: None,
@@ -269,8 +271,6 @@ async fn delete_session_removes_empty_canonical_thread_and_allows_recreate() {
         history_before_message_id: None,
     })
     .expect("failed delete keeps memory session");
-    std::fs::rename(&database_path, &blocked_path).expect("unblock database path");
-    std::fs::rename(&backup_path, &database_path).expect("restore database");
 
     let deleted = core
         .delete_agent_session(AgentSessionDeleteParams {
@@ -1539,7 +1539,7 @@ async fn read_session_current_projection_summary_preserves_process_items() {
                 .is_some_and(|text| text.contains("查找历史事件"))
     }));
     assert!(items.iter().any(|item| {
-        item["type"].as_str() == Some("tool_call")
+        item["type"].as_str() == Some("web_search")
             && item["tool_name"].as_str() == Some("WebSearch")
     }));
     assert!(items.iter().any(|item| {

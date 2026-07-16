@@ -19,8 +19,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 #[test]
-fn test_tool_execution_policy_marks_bash_as_sandboxed_shell_risk() {
-    let policy = tool_execution_policy("Bash");
+fn test_tool_execution_policy_marks_exec_command_as_sandboxed_shell_risk() {
+    let policy = tool_execution_policy("exec_command");
     assert_eq!(
         policy.warning_policy,
         ToolExecutionWarningPolicy::ShellCommandRisk
@@ -97,7 +97,7 @@ fn test_tool_execution_policy_marks_view_image_as_workspace_path_tool() {
 fn test_decide_tool_execution_requires_approval_for_shell_on_request_policy() {
     let params = json!({ "command": "cargo test" });
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",
@@ -128,7 +128,7 @@ fn test_decide_tool_execution_requires_approval_for_shell_on_request_policy() {
 fn test_decide_tool_execution_adds_shell_command_rule_metadata() {
     let params = json!({ "command": "git push origin main" });
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",
@@ -177,7 +177,7 @@ fn test_decide_tool_execution_uses_runtime_shell_command_rule_metadata() {
     });
     let params = json!({ "command": "git push origin main" });
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",
@@ -214,7 +214,7 @@ fn test_decide_tool_execution_uses_runtime_shell_command_rule_metadata() {
 fn test_decide_tool_execution_allows_shell_when_approval_policy_never() {
     let params = json!({ "command": "cargo test" });
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",
@@ -242,7 +242,7 @@ fn test_decide_tool_execution_allows_shell_when_approval_policy_never() {
 fn test_decide_tool_execution_blocks_write_shell_in_read_only_sandbox() {
     let params = json!({ "command": "cargo test" });
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",
@@ -269,7 +269,7 @@ fn test_decide_tool_execution_blocks_write_shell_in_read_only_sandbox() {
 fn test_decide_tool_execution_allows_read_only_shell_in_read_only_sandbox() {
     let params = json!({ "command": "pwd && rg coding internal/roadmap/coding" });
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &params,
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",
@@ -289,7 +289,7 @@ fn test_decide_tool_execution_blocks_ambiguous_shell_in_read_only_sandbox() {
     for command in ["git branch new-branch", "find . -name '*.tmp' -delete"] {
         let params = json!({ "command": command });
         let decision = decide_tool_execution(ToolExecutionDecisionInput {
-            tool_name: "Bash",
+            tool_name: "exec_command",
             params: &params,
             working_directory: Path::new("/tmp/workspace"),
             surface: "runtime_tool",
@@ -312,7 +312,7 @@ fn test_decide_tool_execution_blocks_ambiguous_shell_in_read_only_sandbox() {
 fn test_resolve_tool_execution_policy_allows_persisted_override_to_replace_default() {
     let persisted_policy = ConfigToolExecutionPolicyConfig {
         tool_overrides: HashMap::from([(
-            "bash".to_string(),
+            "exec_command".to_string(),
             ConfigToolExecutionOverrideConfig {
                 warning_policy: Some(ConfigToolExecutionWarningPolicyConfig::None),
                 restriction_profile: Some(
@@ -325,7 +325,7 @@ fn test_resolve_tool_execution_policy_allows_persisted_override_to_replace_defau
     };
 
     let policy = resolve_tool_execution_policy(
-        "Bash",
+        "exec_command",
         ToolExecutionResolverInput {
             persisted_policy: Some(&persisted_policy),
             request_metadata: None,
@@ -344,7 +344,7 @@ fn test_resolve_tool_execution_policy_allows_persisted_override_to_replace_defau
 fn test_resolve_tool_execution_policy_runtime_override_beats_persisted_policy() {
     let persisted_policy = ConfigToolExecutionPolicyConfig {
         tool_overrides: HashMap::from([(
-            "bash".to_string(),
+            "exec_command".to_string(),
             ConfigToolExecutionOverrideConfig {
                 warning_policy: Some(ConfigToolExecutionWarningPolicyConfig::None),
                 restriction_profile: Some(
@@ -359,7 +359,7 @@ fn test_resolve_tool_execution_policy_runtime_override_beats_persisted_policy() 
         "harness": {
             "executionPolicy": {
                 "toolOverrides": {
-                    "BASH": {
+                    "EXEC_COMMAND": {
                         "warningPolicy": "shell_command_risk",
                         "restrictionProfile": "workspace_shell_command",
                         "sandboxProfile": "workspace_command"
@@ -370,7 +370,7 @@ fn test_resolve_tool_execution_policy_runtime_override_beats_persisted_policy() 
     });
 
     let policy = resolve_tool_execution_policy(
-        "Bash",
+        "exec_command",
         ToolExecutionResolverInput {
             persisted_policy: Some(&persisted_policy),
             request_metadata: Some(&request_metadata),
@@ -395,7 +395,7 @@ fn test_resolve_tool_execution_policy_runtime_override_beats_persisted_policy() 
 fn test_tool_execution_policy_service_resolves_metadata_sources() {
     let persisted_policy = ConfigToolExecutionPolicyConfig {
         tool_overrides: HashMap::from([(
-            "bash".to_string(),
+            "exec_command".to_string(),
             ConfigToolExecutionOverrideConfig {
                 warning_policy: Some(ConfigToolExecutionWarningPolicyConfig::None),
                 restriction_profile: None,
@@ -408,7 +408,7 @@ fn test_tool_execution_policy_service_resolves_metadata_sources() {
         "harness": {
             "executionPolicy": {
                 "toolOverrides": {
-                    "Bash": {
+                    "exec_command": {
                         "sandboxProfile": "none"
                     }
                 }
@@ -420,7 +420,7 @@ fn test_tool_execution_policy_service_resolves_metadata_sources() {
         request_metadata: Some(&request_metadata),
     });
 
-    let metadata = service.metadata("Bash", "core");
+    let metadata = service.metadata("exec_command", "core");
 
     assert_eq!(
         metadata.get("policyName"),
@@ -486,7 +486,7 @@ fn test_tool_execution_policy_service_applies_organization_user_request_layers()
         "harness": {
             "organizationExecutionPolicy": {
                 "toolOverrides": {
-                    "bash": {
+                    "exec_command": {
                         "warningPolicy": "none",
                         "sandboxProfile": "none"
                     }
@@ -494,21 +494,21 @@ fn test_tool_execution_policy_service_applies_organization_user_request_layers()
             },
             "userExecutionPolicy": {
                 "toolOverrides": {
-                    "bash": {
+                    "exec_command": {
                         "warningPolicy": "shell_command_risk"
                     }
                 }
             },
             "executionPolicy": {
                 "toolOverrides": {
-                    "bash": {
+                    "exec_command": {
                         "restrictionProfile": "workspace_path_required"
                     }
                 }
             },
             "requestExecutionPolicy": {
                 "toolOverrides": {
-                    "bash": {
+                    "exec_command": {
                         "sandboxProfile": "workspace_command"
                     }
                 }
@@ -516,7 +516,7 @@ fn test_tool_execution_policy_service_applies_organization_user_request_layers()
         }
     });
     let resolution = resolve_tool_execution_policy_resolution(
-        "Bash",
+        "exec_command",
         ToolExecutionResolverInput {
             persisted_policy: None,
             request_metadata: Some(&request_metadata),
@@ -641,7 +641,7 @@ fn test_resolve_tool_execution_policy_reads_runtime_override_from_nested_runtime
             "harness": {
                 "executionPolicy": {
                     "toolOverrides": {
-                        "bash": {
+                        "exec_command": {
                             "warningPolicy": "none",
                             "sandboxProfile": "none"
                         }
@@ -652,7 +652,7 @@ fn test_resolve_tool_execution_policy_reads_runtime_override_from_nested_runtime
     });
 
     let resolution = resolve_tool_execution_policy_resolution(
-        "Bash",
+        "exec_command",
         ToolExecutionResolverInput {
             persisted_policy: None,
             request_metadata: Some(&request_metadata),
@@ -684,7 +684,7 @@ fn test_persisted_tool_execution_policy_from_metadata_reads_agent_config_shape()
             "agent": {
                 "toolExecution": {
                     "toolOverrides": {
-                        "bash": {
+                        "exec_command": {
                             "warningPolicy": "none",
                             "sandboxProfile": "none"
                         }
@@ -697,7 +697,7 @@ fn test_persisted_tool_execution_policy_from_metadata_reads_agent_config_shape()
     let persisted_policy = persisted_tool_execution_policy_from_metadata(Some(&request_metadata))
         .expect("persisted tool execution policy");
     let resolution = resolve_tool_execution_policy_resolution(
-        "Bash",
+        "exec_command",
         ToolExecutionResolverInput {
             persisted_policy: Some(&persisted_policy),
             request_metadata: None,
@@ -726,7 +726,7 @@ fn test_persisted_tool_execution_policy_from_metadata_reads_agent_config_shape()
 fn test_resolve_tool_execution_policy_resolution_tracks_mixed_sources_per_field() {
     let persisted_policy = ConfigToolExecutionPolicyConfig {
         tool_overrides: HashMap::from([(
-            "bash".to_string(),
+            "exec_command".to_string(),
             ConfigToolExecutionOverrideConfig {
                 warning_policy: Some(ConfigToolExecutionWarningPolicyConfig::None),
                 restriction_profile: None,
@@ -739,7 +739,7 @@ fn test_resolve_tool_execution_policy_resolution_tracks_mixed_sources_per_field(
         "harness": {
             "executionPolicy": {
                 "toolOverrides": {
-                    "bash": {
+                    "exec_command": {
                         "sandboxProfile": "none"
                     }
                 }
@@ -748,7 +748,7 @@ fn test_resolve_tool_execution_policy_resolution_tracks_mixed_sources_per_field(
     });
 
     let resolution = resolve_tool_execution_policy_resolution(
-        "Bash",
+        "exec_command",
         ToolExecutionResolverInput {
             persisted_policy: Some(&persisted_policy),
             request_metadata: Some(&request_metadata),

@@ -137,7 +137,7 @@ pub(super) fn current_tool_item_from_event(event: &AgentEvent) -> Option<Current
 pub(super) fn is_command_tool_name(value: &str) -> bool {
     matches!(
         value.trim(),
-        "exec_command" | "command_execution" | "Bash" | "bash"
+        "exec_command" | "write_stdin" | "command_execution"
     )
 }
 

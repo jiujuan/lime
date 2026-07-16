@@ -1,8 +1,7 @@
 //! 工作区工具的 current dispatch。
 //!
-//! `Read`、`Glob`、`Grep`、`Bash` 与 `PowerShell` 已经是 tool-runtime 的 current
-//! 实现；本模块只把它们统一到 `RuntimeToolExecutor`，让 provider turn loop 不需要
-//! 经过 Agent tool registry。
+//! `Read`、`Glob` 与 `Grep` 已经是 tool-runtime 的 current 实现；本模块只把它们
+//! 统一到 `RuntimeToolExecutor`，让 provider turn loop 不需要经过 Agent tool registry。
 
 use crate::file_read_execution::{
     execute_runtime_file_read_tool, file_read_canonical_tool_name, file_read_tool_definition,
@@ -11,10 +10,6 @@ use crate::file_read_execution::{
 use crate::file_search_execution::{
     execute_runtime_file_search_tool, file_search_canonical_tool_name,
     file_search_tool_definitions, RuntimeFileSearchRequest,
-};
-use crate::shell_execution::{
-    execute_runtime_shell_tool, shell_canonical_tool_name, shell_tool_definitions,
-    RuntimeShellToolRequest,
 };
 use crate::tool_definition::RuntimeToolDefinition;
 use crate::tool_executor::{
@@ -51,18 +46,6 @@ impl RuntimeWorkspaceDispatch {
                 cancel_token: context.cancel_token().cloned(),
             })
             .await
-        } else if shell_canonical_tool_name(request.tool_name).is_some() {
-            execute_runtime_shell_tool(RuntimeShellToolRequest {
-                tool_name: request.tool_name,
-                params: request.params,
-                working_directory: context.working_directory().clone(),
-                session_id: context.session_id().to_string(),
-                environment: context.environment().clone(),
-                has_workspace_sandbox: context.has_workspace_sandbox(),
-                cancel_token: context.cancel_token().cloned(),
-                turn_context: request.turn_context,
-            })
-            .await
         } else {
             None
         };
@@ -93,7 +76,6 @@ pub fn runtime_workspace_dispatch_handle() -> RuntimeToolExecutorHandle {
 pub fn runtime_workspace_dispatch_definitions() -> Vec<RuntimeToolDefinition> {
     let mut definitions = vec![file_read_tool_definition()];
     definitions.extend(file_search_tool_definitions());
-    definitions.extend(shell_tool_definitions());
     definitions
 }
 
@@ -152,7 +134,7 @@ mod tests {
             .into_iter()
             .map(|definition| definition.name)
             .collect::<Vec<_>>();
-        assert_eq!(names, vec!["Read", "Glob", "Grep", "Bash", "PowerShell"]);
+        assert_eq!(names, vec!["Read", "Glob", "Grep"]);
     }
 
     #[tokio::test]

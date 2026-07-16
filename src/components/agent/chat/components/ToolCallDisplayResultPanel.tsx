@@ -12,13 +12,11 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 import type {
   CommandOutputStream,
   CommandToolSummary,
-  ImportedSourceToolPresentation,
   ToolResultNotice,
 } from "./ToolCallDisplayViewModel";
 
 interface ToolCallDisplayResultPanelProps {
   toolCallId: string;
-  importedSourcePresentation: ImportedSourceToolPresentation | null;
   commandSummary: CommandToolSummary | null;
   commandOutputStreams: CommandOutputStream[];
   commandSurfaceLabel: string | null;
@@ -46,7 +44,6 @@ interface ToolCallDisplayResultPanelProps {
 
 export function ToolCallDisplayResultPanel({
   toolCallId,
-  importedSourcePresentation,
   commandSummary,
   commandOutputStreams,
   commandSurfaceLabel,
@@ -74,19 +71,6 @@ export function ToolCallDisplayResultPanel({
       className="mb-2 ml-6 mt-1.5 space-y-2"
       data-testid="tool-call-result-panel"
     >
-      {importedSourcePresentation ? (
-        <div
-          className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2"
-          data-testid="tool-call-imported-source-command-record"
-        >
-          <div className="text-[11px] font-semibold text-slate-700">
-            {t("agentChat.toolCall.importedCommandRecord.title")}
-          </div>
-          <p className="mt-1 text-[11px] leading-5 text-slate-600">
-            {t("agentChat.toolCall.importedCommandRecord.description")}
-          </p>
-        </div>
-      ) : null}
       {commandSummary ? (
         <div
           className="rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2"
@@ -159,7 +143,9 @@ export function ToolCallDisplayResultPanel({
                 </span>
               ) : null}
               {commandSummary.sandboxed === false ? (
-                <span>{t("agentChat.toolCall.commandSummary.sandboxDisabled")}</span>
+                <span>
+                  {t("agentChat.toolCall.commandSummary.sandboxDisabled")}
+                </span>
               ) : null}
               {commandSummary.outputTruncated === true ? (
                 <span>{t("agentChat.toolCall.commandSummary.truncated")}</span>
@@ -207,7 +193,9 @@ export function ToolCallDisplayResultPanel({
                 <pre
                   className={cn(
                     "max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed",
-                    stream.tone === "error" ? "text-rose-800" : "text-slate-800",
+                    stream.tone === "error"
+                      ? "text-rose-800"
+                      : "text-slate-800",
                   )}
                 >
                   {stream.content}
@@ -266,7 +254,8 @@ export function ToolCallDisplayResultPanel({
                     data-testid="tool-call-diff-review-scope-item"
                   >
                     <code className="max-w-56 truncate font-mono text-slate-800">
-                      {scope.label || t("agentChat.toolCall.diffReview.scopeRoot")}
+                      {scope.label ||
+                        t("agentChat.toolCall.diffReview.scopeRoot")}
                     </code>
                     <span className="text-slate-500">
                       {t("agentChat.toolCall.diffReview.files", {
@@ -444,7 +433,10 @@ export function ToolCallDisplayResultPanel({
         </div>
       ) : null}
       {resultPath ? (
-        <div className="break-all text-[11px] text-slate-500" title={resultPath.value}>
+        <div
+          className="break-all text-[11px] text-slate-500"
+          title={resultPath.value}
+        >
           {resultPath.label}: {resultPath.displayValue}
         </div>
       ) : null}

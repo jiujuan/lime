@@ -91,8 +91,6 @@ export const METHOD_CONVERSATION_IMPORT_THREAD_COMMIT =
   "conversationImport/thread/commit";
 export const METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW =
   "conversationImport/thread/preview";
-export const METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ =
-  "conversationImport/thread/runtimeEvents/read";
 export const METHOD_DIAGNOSTICS_LOG_STORAGE_READ =
   "diagnostics/logStorage/read";
 export const METHOD_DIAGNOSTICS_SERVER_READ = "diagnostics/server/read";
@@ -634,10 +632,6 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "conversationImport/thread/preview",
-  },
-  {
-    kind: "request",
-    method: "conversationImport/thread/runtimeEvents/read",
   },
   {
     kind: "request",
@@ -2383,7 +2377,6 @@ export interface AgentSessionUpdateParams {
   providerSelector?: null | string;
   recentAccessMode?: null | string;
   recentPreferences?: unknown;
-  recentTeamSelection?: unknown;
   sessionId: string;
   title?: null | string;
 }
@@ -3847,11 +3840,6 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
-      method: "conversationImport/thread/runtimeEvents/read";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
       method: "agentSession/start";
       params?: unknown;
     }
@@ -3993,7 +3981,6 @@ export type AppServerRequestMethod =
   | "conversationImport/source/scan"
   | "conversationImport/thread/commit"
   | "conversationImport/thread/preview"
-  | "conversationImport/thread/runtimeEvents/read"
   | "diagnostics/logStorage/read"
   | "diagnostics/server/read"
   | "diagnostics/supportBundle/export"
@@ -4673,15 +4660,7 @@ export interface ConversationImportPreviewSummary {
   warnings?: string[];
 }
 
-export interface ConversationImportRuntimeEventDetail {
-  eventIndex: number;
-  eventType: string;
-  payload: unknown;
-  sourceEventIndex: number;
-  turnIndex: number;
-}
-
-export type ConversationImportSourceClient = "claude_code" | "codex";
+export type ConversationImportSourceClient = "codex";
 
 export interface ConversationImportSourceProvenance {
   sourceCallId?: null | string;
@@ -4711,11 +4690,7 @@ export interface ConversationImportSourceScanResponse {
   threads?: ImportedThreadSummary[];
 }
 
-export type ConversationImportSourceStatus =
-  | "error"
-  | "missing"
-  | "ready"
-  | "unsupported";
+export type ConversationImportSourceStatus = "missing" | "ready";
 
 export interface ConversationImportSourceSummary {
   indexedAt?: null | string;
@@ -4766,27 +4741,6 @@ export interface ConversationImportThreadPreviewResponse {
   source: ConversationImportSourceSummary;
   summary: ConversationImportPreviewSummary;
   thread: ImportedThreadSummary;
-}
-
-export interface ConversationImportThreadRuntimeEventsReadParams {
-  eventType?: null | string;
-  limit?: number | null;
-  offset?: number | null;
-  sessionId: string;
-  turnIndex?: number | null;
-}
-
-export interface ConversationImportThreadRuntimeEventsReadResponse {
-  events?: ConversationImportRuntimeEventDetail[];
-  limit: number;
-  materializedRuntimeEvents: number;
-  nextOffset?: number | null;
-  offset: number;
-  projection?: unknown;
-  sessionId: string;
-  sidecarRuntimeEvents: number;
-  sourceRuntimeEvents: number;
-  totalEvents: number;
 }
 
 export type ConversationImportThreadStatus =
@@ -5038,6 +4992,7 @@ export interface ExecutionProcessStartParams {
   sandboxPolicy?: null | string;
   toolId: string;
   toolName: string;
+  tty?: boolean;
   workingDirectory: string;
 }
 

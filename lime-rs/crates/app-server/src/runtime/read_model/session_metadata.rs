@@ -51,7 +51,6 @@ pub(super) fn session_execution_runtime(session: &AgentSession) -> serde_json::V
         "execution_strategy": session_execution_strategy(session),
         "recent_access_mode": metadata_string_alias(metadata, &["recentAccessMode", "recent_access_mode"]),
         "recent_preferences": metadata_value_alias(metadata, &["recentPreferences", "recent_preferences"]),
-        "recent_team_selection": metadata_value_alias(metadata, &["recentTeamSelection", "recent_team_selection"]),
         "source": "session_metadata",
         "mode": "current",
     });

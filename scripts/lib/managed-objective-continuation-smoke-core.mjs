@@ -262,8 +262,9 @@ export async function createAgentSessionCurrent(
 export async function updateAgentSessionRuntimeCurrent(
   options,
   { sessionId, provider, executionStrategy = "react" },
+  invoke = invokeAppServerMethod,
 ) {
-  await invokeAppServerMethod(
+  await invoke(
     options,
     APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
     {
@@ -409,6 +410,7 @@ export async function startAgentSessionTurnCurrent(
     queuedTurnId,
     skipPreSubmitResume = true,
   },
+  invoke = invokeAppServerMethod,
 ) {
   const runtimeOptions = compactRecord({
     stream: true,
@@ -419,7 +421,7 @@ export async function startAgentSessionTurnCurrent(
       ...runtimeRequest,
     }),
   });
-  return invokeAppServerMethod(
+  return invoke(
     options,
     APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
     compactRecord({
@@ -492,8 +494,9 @@ export async function readAgentRuntimeThreadCurrent(
   options,
   sessionId,
   { historyLimit } = {},
+  invoke = invokeAppServerMethod,
 ) {
-  const response = await invokeAppServerMethod(
+  const response = await invoke(
     options,
     APP_SERVER_METHOD_AGENT_SESSION_READ,
     compactRecord({
@@ -522,7 +525,7 @@ export async function readAgentRuntimeThreadCurrent(
   };
 }
 
-export async function resolveProviderPreference(options) {
+export async function resolveProviderPreference(options, invoke = invokeAppServerMethod) {
   const explicitProvider = String(options.providerPreference || "").trim();
   const explicitModel = String(options.modelPreference || "").trim();
   if (explicitProvider && explicitModel) {
@@ -534,7 +537,7 @@ export async function resolveProviderPreference(options) {
     };
   }
 
-  const providerList = await invokeAppServerMethod(
+  const providerList = await invoke(
     options,
     APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
     {},
@@ -552,7 +555,7 @@ export async function resolveProviderPreference(options) {
   let providerDetail = selected;
   try {
     providerDetail =
-      (await invokeAppServerMethod(
+      (await invoke(
         options,
         APP_SERVER_METHOD_MODEL_PROVIDER_READ,
         { providerId },

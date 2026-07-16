@@ -295,8 +295,6 @@ pub const METHOD_CONNECT_CALLBACK_SEND: &str = "connectCallback/send";
 pub const METHOD_CONVERSATION_IMPORT_SOURCE_SCAN: &str = "conversationImport/source/scan";
 pub const METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW: &str = "conversationImport/thread/preview";
 pub const METHOD_CONVERSATION_IMPORT_THREAD_COMMIT: &str = "conversationImport/thread/commit";
-pub const METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ: &str =
-    "conversationImport/thread/runtimeEvents/read";
 pub const METHOD_AGENT_SESSION_START: &str = "agentSession/start";
 pub const METHOD_AGENT_SESSION_READ: &str = "agentSession/read";
 pub const METHOD_AGENT_SESSION_MEDIA_READ: &str = "agentSession/media/read";

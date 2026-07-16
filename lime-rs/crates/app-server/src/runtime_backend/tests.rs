@@ -7,27 +7,8 @@ use super::request_context::{
 };
 use super::*;
 use crate::runtime::ToolInventoryReadRequest;
-use crate::AppDataSource;
-use crate::AutomationManagementAppDataSource;
-use crate::AutomationOverviewAppDataSource;
-use crate::ConnectAppDataSource;
-use crate::DiagnosticsAppDataSource;
-use crate::GatewayAppDataSource;
-use crate::KnowledgeAppDataSource;
-use crate::McpAppDataSource;
-use crate::MediaAppDataSource;
-use crate::MemoryAppDataSource;
-use crate::ModelProviderAppDataSource;
 use crate::NoopAppDataSource;
-use crate::PluginDataSource;
-use crate::RightSurfaceAppDataSource;
 use crate::RuntimeHostContext;
-use crate::SessionAppDataSource;
-use crate::SkillAppDataSource;
-use crate::UsageStatsAppDataSource;
-use crate::VoiceAppDataSource;
-use crate::WorkspaceAppDataSource;
-use crate::WorkspaceSkillBindingAppDataSource;
 use crate::{ActionRespondRequest, CancelExecutionRequest, ExecutionBackend};
 use agent_protocol::turn_context::TurnOutputSchemaSource;
 use app_server_protocol::AgentInput;
@@ -37,11 +18,7 @@ use app_server_protocol::AgentSessionStatus;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::BusinessObjectRef;
-use app_server_protocol::McpServerLifecycleResponse;
-use app_server_protocol::McpServerStartParams;
-use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::RuntimeOptions;
-use async_trait::async_trait;
 use lime_agent::agent_tools::catalog::{
     MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
     MEMORY_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_NAME,
@@ -51,8 +28,6 @@ use lime_agent::{
 };
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::Mutex;
 use tempfile::TempDir;
 
 mod coding_event_projection;
@@ -76,88 +51,6 @@ impl RuntimeEventSink for TestRuntimeEventSink {
     fn emit(&mut self, event: RuntimeEvent) -> Result<(), RuntimeCoreError> {
         self.events.push(event);
         Ok(())
-    }
-}
-
-#[derive(Default)]
-struct TestMcpAutostartDataSource {
-    servers: Vec<Value>,
-    started_servers: Mutex<Vec<String>>,
-    fail_start: bool,
-    hang_start: bool,
-}
-
-impl TestMcpAutostartDataSource {
-    fn new(servers: Vec<Value>) -> Self {
-        Self {
-            servers,
-            started_servers: Mutex::new(Vec::new()),
-            fail_start: false,
-            hang_start: false,
-        }
-    }
-
-    fn with_fail_start(mut self) -> Self {
-        self.fail_start = true;
-        self
-    }
-
-    fn with_hanging_start(mut self) -> Self {
-        self.hang_start = true;
-        self
-    }
-
-    fn started_servers(&self) -> Vec<String> {
-        self.started_servers
-            .lock()
-            .expect("started servers lock")
-            .clone()
-    }
-}
-
-impl SessionAppDataSource for TestMcpAutostartDataSource {}
-impl WorkspaceAppDataSource for TestMcpAutostartDataSource {}
-impl SkillAppDataSource for TestMcpAutostartDataSource {}
-impl WorkspaceSkillBindingAppDataSource for TestMcpAutostartDataSource {}
-impl GatewayAppDataSource for TestMcpAutostartDataSource {}
-impl MediaAppDataSource for TestMcpAutostartDataSource {}
-impl VoiceAppDataSource for TestMcpAutostartDataSource {}
-impl PluginDataSource for TestMcpAutostartDataSource {}
-impl KnowledgeAppDataSource for TestMcpAutostartDataSource {}
-impl AutomationOverviewAppDataSource for TestMcpAutostartDataSource {}
-impl AutomationManagementAppDataSource for TestMcpAutostartDataSource {}
-impl MemoryAppDataSource for TestMcpAutostartDataSource {}
-impl DiagnosticsAppDataSource for TestMcpAutostartDataSource {}
-impl UsageStatsAppDataSource for TestMcpAutostartDataSource {}
-impl ModelProviderAppDataSource for TestMcpAutostartDataSource {}
-impl ConnectAppDataSource for TestMcpAutostartDataSource {}
-impl RightSurfaceAppDataSource for TestMcpAutostartDataSource {}
-
-#[async_trait]
-impl McpAppDataSource for TestMcpAutostartDataSource {
-    async fn list_mcp_servers_with_status(
-        &self,
-    ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
-        Ok(McpServerStatusListResponse {
-            servers: self.servers.clone(),
-        })
-    }
-
-    async fn start_mcp_server(
-        &self,
-        params: McpServerStartParams,
-    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
-        self.started_servers
-            .lock()
-            .expect("started servers lock")
-            .push(params.name);
-        if self.hang_start {
-            std::future::pending().await
-        }
-        if self.fail_start {
-            return Err(RuntimeCoreError::Backend("start failed".to_string()));
-        }
-        Ok(McpServerLifecycleResponse::default())
     }
 }
 

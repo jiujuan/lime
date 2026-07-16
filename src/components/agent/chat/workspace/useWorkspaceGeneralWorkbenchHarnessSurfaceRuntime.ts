@@ -61,12 +61,8 @@ interface UseWorkspaceGeneralWorkbenchHarnessSurfaceRuntimeParams {
     requestId: string,
     latestAssistantMessageId: string,
   ) => ReturnType<ReplayPendingRequestHandler>;
-  selectedTeamLabel: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["selectedTeamLabel"];
-  selectedTeamRoles: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["selectedTeamRoles"];
-  selectedTeamSummary: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["selectedTeamSummary"];
   sessionId?: string | null;
   submittedActionsInFlight: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["submittedActionsInFlight"];
-  teamMemorySnapshot: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["teamMemorySnapshot"];
   threadItems: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["threadItems"];
   threadRead: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["threadRead"];
   turns: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["turns"];
@@ -101,12 +97,8 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
   queuedTurns,
   refreshSessionReadModel,
   replayPendingAction,
-  selectedTeamLabel,
-  selectedTeamRoles,
-  selectedTeamSummary,
   sessionId,
   submittedActionsInFlight,
-  teamMemorySnapshot,
   threadItems,
   threadRead,
   turns,
@@ -116,10 +108,6 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
     () => ({
       environment: contextHarnessRuntime.harnessEnvironment,
       canonicalChildren,
-      selectedTeamLabel,
-      selectedTeamSummary,
-      selectedTeamRoles,
-      teamMemorySnapshot,
       threadRead,
       turns,
       threadItems,
@@ -152,7 +140,6 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
         model: activeExecutionRuntime?.model_name || model || null,
         executionStrategy: executionStrategy || null,
         activeTheme: activeTheme || null,
-        selectedTeamLabel,
       },
       toolInventory: harnessInventoryRuntime.toolInventory,
       toolInventoryLoading: harnessInventoryRuntime.toolInventoryLoading,
@@ -204,12 +191,8 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
       queuedTurns,
       refreshSessionReadModel,
       replayPendingAction,
-      selectedTeamLabel,
-      selectedTeamRoles,
-      selectedTeamSummary,
       sessionId,
       submittedActionsInFlight,
-      teamMemorySnapshot,
       threadItems,
       threadRead,
       turns,

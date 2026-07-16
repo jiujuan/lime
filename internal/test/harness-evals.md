@@ -283,7 +283,7 @@ Trend 报告至少还要回答：
 | 文档 / 文件                                                                                      | 角色                                                   |
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
 | [agent-evaluation.md](agent-evaluation.md)                                                       | 解释评估原则、pass@k / pass^k、grader 类型             |
-| [testing-strategy-2026.md](testing-strategy-2026.md)                                             | 解释为什么 eval 工程化排在 smoke 之后                  |
+| [testing-strategy-2026.md](testing-strategy-2026.md)                                             | 解释 deterministic gate、replay eval、live/coding eval 的分层关系 |
 | [../tech/harness/README.md](../tech/harness/README.md)                                            | 固定 Harness Engine 的导出链与 current runtime owner   |
 | [../aiprompts/harness-engine-governance.md](../aiprompts/harness-engine-governance.md)            | 固定 evidence/replay/analysis/review 的唯一事实源      |
 | [../aiprompts/quality-workflow.md](../aiprompts/quality-workflow.md)                              | 固定 runner、nightly、trend 与 Gate B 的验证层级        |

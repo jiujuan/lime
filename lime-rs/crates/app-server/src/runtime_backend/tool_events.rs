@@ -93,6 +93,7 @@ pub(super) fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "turn_context" => "turn.context",
         "model_change" => "model.changed",
         "provider_trace" => "provider.trace",
+        "provider_step" => "provider.step",
         "provider_stream_event" => "runtime.event",
         "context_trace" => "context.trace",
         "context_compaction_started" => "context.compaction.started",
@@ -220,6 +221,32 @@ mod tests {
             runtime_event_type_from_raw("runtime_status"),
             "runtime.status"
         );
+    }
+
+    #[test]
+    fn provider_step_maps_usage_and_output_summary_to_current_event() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ProviderStep {
+            attempt: 2,
+            completed: true,
+            finish_reason: Some("tool_call".to_string()),
+            text_output_chars: 7,
+            reasoning_output_chars: 42,
+            tool_call_count: 1,
+            usage: Some(lime_agent::AgentTokenUsage {
+                input_tokens: 120,
+                output_tokens: 30,
+                cached_input_tokens: Some(20),
+                cache_creation_input_tokens: None,
+            }),
+        })
+        .expect("provider step should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "provider.step");
+        assert_eq!(events[0].payload["attempt"], 2);
+        assert_eq!(events[0].payload["tool_call_count"], 1);
+        assert_eq!(events[0].payload["usage"]["input_tokens"], 120);
+        assert_eq!(events[0].payload["runtimeEvent"]["type"], "provider_step");
     }
 
     #[test]

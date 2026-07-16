@@ -3,7 +3,6 @@ import type { LucideIcon } from "lucide-react";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
-import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type {
   ActionRequired,
@@ -12,7 +11,6 @@ import type {
   ConfirmResponse,
   Message,
 } from "../types";
-import type { TeamRoleDefinition } from "../utils/teamDefinitions";
 import type { HarnessSessionState } from "../utils/harnessState";
 import type { HarnessEnvironmentSummary } from "./HarnessActivityTypes";
 import type { HarnessFilePreviewResult } from "./useHarnessPreviewDialog";
@@ -64,9 +62,6 @@ export interface HarnessStatusPanelProps {
   description?: string;
   toggleLabel?: string;
   leadContent?: HarnessLeadContent;
-  selectedTeamLabel?: string | null;
-  selectedTeamSummary?: string | null;
-  selectedTeamRoles?: TeamRoleDefinition[] | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
   turns?: AgentThreadTurn[];
   threadItems?: AgentThreadItem[];
@@ -87,7 +82,6 @@ export interface HarnessStatusPanelProps {
     context?: ExecutionPolicyFocusContext,
   ) => void;
   messages?: Message[];
-  teamMemorySnapshot?: TeamMemorySnapshot | null;
   diagnosticRuntimeContext?: {
     sessionId?: string | null;
     workspaceId?: string | null;
@@ -96,6 +90,5 @@ export interface HarnessStatusPanelProps {
     model?: string | null;
     executionStrategy?: string | null;
     activeTheme?: string | null;
-    selectedTeamLabel?: string | null;
   } | null;
 }

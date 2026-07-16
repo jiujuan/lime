@@ -1,7 +1,11 @@
 import { act } from "react";
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem } from "../types";
-import { at, createBaseItem, renderTimeline } from "./AgentThreadTimeline.testFixtures";
+import {
+  at,
+  createBaseItem,
+  renderTimeline,
+} from "./AgentThreadTimeline.testFixtures";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
 describe("AgentThreadTimeline", () => {
@@ -126,7 +130,7 @@ describe("AgentThreadTimeline", () => {
     ).toHaveLength(0);
   });
 
-  it("本地历史导入过程应在完成态历史中默认展开工具细节", () => {
+  it("本地历史完成态应与普通历史一样默认折叠并可展开", () => {
     const container = renderTimeline(
       [
         {
@@ -165,6 +169,12 @@ describe("AgentThreadTimeline", () => {
       '[data-testid="agent-thread-block:1:process"]',
     );
 
+    expect(block?.open).toBe(false);
+    act(() => {
+      block
+        ?.querySelector("summary")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
     expect(block?.open).toBe(true);
     expect(container.textContent).toContain("npm test");
     expect(container.textContent).toContain("Lime history import");
@@ -173,7 +183,7 @@ describe("AgentThreadTimeline", () => {
     ).toHaveLength(2);
   });
 
-  it("本地历史导入过程摘要应跟随当前语言资源", async () => {
+  it("本地历史过程摘要不应使用 imported-only 文案", async () => {
     await changeLimeLocale("en-US");
     const container = renderTimeline(
       [
@@ -216,11 +226,8 @@ describe("AgentThreadTimeline", () => {
         )
         ?.querySelector("summary")?.textContent ?? "";
 
-    expect(summaryText).toContain("Imported command record");
-    expect(summaryText).toContain("1 command records");
-    expect(summaryText).toContain("1 search records");
     expect(summaryText).not.toContain("导入的命令记录");
-    expect(summaryText).not.toContain("搜索记录");
+    expect(summaryText).not.toContain("Imported command record");
   });
 
   it("子任务协作卡片应跟随 collaboration copy 资源", async () => {

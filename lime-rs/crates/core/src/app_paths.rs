@@ -138,8 +138,12 @@ pub fn resolve_project_skills_dir() -> Option<PathBuf> {
 pub fn resolve_lime_project_skill_roots() -> Vec<PathBuf> {
     std::env::current_dir()
         .ok()
-        .map(|cwd| resolve_project_skill_roots_from_cwd(&cwd))
+        .map(|cwd| resolve_project_skill_roots(&cwd))
         .unwrap_or_default()
+}
+
+pub fn resolve_project_skill_roots(base: &Path) -> Vec<PathBuf> {
+    resolve_provider_skill_roots_from_base(base)
 }
 
 pub fn resolve_user_agents_skills_dir() -> Option<PathBuf> {
@@ -340,10 +344,6 @@ fn fallback_user_memory_path() -> PathBuf {
 
 fn resolve_project_skills_dir_from_cwd(cwd: &Path) -> PathBuf {
     cwd.join(".agents").join("skills")
-}
-
-fn resolve_project_skill_roots_from_cwd(cwd: &Path) -> Vec<PathBuf> {
-    resolve_provider_skill_roots_from_base(cwd)
 }
 
 fn resolve_user_agents_skills_dir_from_home(home: &Path) -> PathBuf {
@@ -1108,9 +1108,9 @@ mod tests {
     }
 
     #[test]
-    fn resolve_project_skill_roots_from_cwd_builds_cross_provider_roots_in_precedence_order() {
+    fn resolve_project_skill_roots_builds_cross_provider_roots_in_precedence_order() {
         let cwd = Path::new("/tmp/workspace");
-        let resolved = resolve_project_skill_roots_from_cwd(cwd);
+        let resolved = resolve_project_skill_roots(cwd);
 
         assert_eq!(resolved.first(), Some(&cwd.join(".agents").join("skills")));
         assert!(resolved.contains(&cwd.join(".claude").join("skills")));

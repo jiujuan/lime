@@ -100,16 +100,9 @@ function WorkToolCallGroup({
   const hasRunning = toolCalls.some((item) => item.status === "running");
   const hasFailed = toolCalls.some((item) => item.status === "failed");
   const [expanded, setExpanded] = useState(hasRunning || hasFailed);
-  const formatImportedSourceCommandRecord = (count?: number) =>
-    t("agentChat.toolCall.importedCommandRecord.groupTitle", { count });
-  const headline = buildToolGroupHeadline(
-    toolCalls,
-    formatImportedSourceCommandRecord,
-  );
-  const preview = buildToolGroupPreview(
-    toolCalls,
-    (count) => t("agentChat.toolCall.group.hiddenItems", { count }),
-    formatImportedSourceCommandRecord,
+  const headline = buildToolGroupHeadline(toolCalls);
+  const preview = buildToolGroupPreview(toolCalls, (count) =>
+    t("agentChat.toolCall.group.hiddenItems", { count }),
   );
 
   useEffect(() => {

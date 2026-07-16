@@ -25,9 +25,6 @@ interface AgentRuntimeStripProps {
   isSending?: boolean;
   executionRuntime?: AgentSessionExecutionRuntime | null;
   runtimeStatusTitle?: string | null;
-  selectedTeamLabel?: string | null;
-  selectedTeamSummary?: string | null;
-  selectedTeamRoleCount?: number;
   fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
   onOpenFileCheckpoints?: () => void;
 }
@@ -122,9 +119,6 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
   isSending = false,
   executionRuntime = null,
   runtimeStatusTitle = null,
-  selectedTeamLabel = null,
-  selectedTeamSummary = null,
-  selectedTeamRoleCount = 0,
   fileCheckpointSummary = null,
   onOpenFileCheckpoints,
 }) => {
@@ -144,20 +138,6 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     hasRuntimeFileSignals || hasRuntimeOutputSignals;
   const themeLabel = translate("agentChat.runtimeStrip.theme.general");
   const stripTitle = translate("agentChat.runtimeStrip.title.general");
-  const hasSelectedTeam =
-    Boolean(selectedTeamLabel?.trim()) || selectedTeamRoleCount > 0;
-  const selectedTeamBadgeLabel =
-    selectedTeamLabel?.trim() ||
-    translate("agentChat.runtimeStrip.team.badgeRoleCount", {
-      count: selectedTeamRoleCount,
-    });
-  const selectedTeamSummaryText =
-    selectedTeamSummary?.trim() ||
-    (hasSelectedTeam
-      ? translate("agentChat.runtimeStrip.team.configuredSummary", {
-          count: selectedTeamRoleCount,
-        })
-      : translate("agentChat.runtimeStrip.team.defaultSummary"));
   const canReviewFileCheckpoints =
     fileCheckpointCount > 0 && Boolean(onOpenFileCheckpoints);
   const reasoningStatus = harnessState.reasoning?.reasoning;
@@ -171,6 +151,16 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     () => summarizeRuntimeTeamStatus(canonicalChildren),
     [canonicalChildren],
   );
+  const hasCanonicalSubagents = runtimeTeamCounts.total > 0;
+  const canonicalSubagentsLabel = translate(
+    "agentChat.runtimeStrip.team.badgeRoleCount",
+    { count: runtimeTeamCounts.total },
+  );
+  const canonicalSubagentsSummary = hasCanonicalSubagents
+    ? translate("agentChat.runtimeStrip.team.configuredSummary", {
+        count: runtimeTeamCounts.total,
+      })
+    : translate("agentChat.runtimeStrip.team.defaultSummary");
   const runtimeStripCollaboration = useMemo(() => {
     const totalTeamSessions = runtimeTeamCounts.total;
     const delegatedTaskCount = harnessState.delegatedTasks.length;
@@ -516,10 +506,10 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         </div>
         <Badge variant="outline">{themeLabel}</Badge>
         {toolPreferences.subagent ? (
-          <Badge variant={hasSelectedTeam ? "secondary" : "outline"}>
-            {hasSelectedTeam
+          <Badge variant={hasCanonicalSubagents ? "secondary" : "outline"}>
+            {hasCanonicalSubagents
               ? translate("agentChat.runtimeStrip.team.badgeConfigured", {
-                  label: selectedTeamBadgeLabel,
+                  label: canonicalSubagentsLabel,
                 })
               : translate("agentChat.runtimeStrip.team.badgeEnabled")}
           </Badge>
@@ -566,7 +556,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
           <span className="font-medium text-foreground">
             {translate("agentChat.runtimeStrip.team.title")}
           </span>
-          <span> · {selectedTeamSummaryText}</span>
+          <span> · {canonicalSubagentsSummary}</span>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">

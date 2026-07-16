@@ -702,24 +702,12 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(sendCall.modelOverride).toBeUndefined();
     expect(sendCall.autoContinue).toBeUndefined();
     const sendOptions = sendCall.options;
-    expect(sendOptions?.requestMetadata?.harness).toMatchObject({
-      preferred_team_preset_id: "code-triage-team",
-      selected_team_id: "code-triage-team",
-      selected_team_source: "builtin",
-      selected_team_label: "代码排障 profile",
-      selected_team_roles: expect.arrayContaining([
-        expect.objectContaining({
-          id: "explorer",
-          label: "分析",
-          profile_id: "code-explorer",
-        }),
-        expect.objectContaining({
-          id: "executor",
-          label: "执行",
-          profile_id: "code-executor",
-        }),
-      ]),
-    });
+    expect(sendOptions?.requestMetadata?.harness).not.toHaveProperty(
+      "selected_team_id",
+    );
+    expect(sendOptions?.requestMetadata?.harness).not.toHaveProperty(
+      "selected_team_roles",
+    );
     expect(
       sendOptions?.requestMetadata?.harness?.turn_team_decision,
     ).toBeUndefined();

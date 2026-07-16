@@ -131,7 +131,6 @@ describe("HarnessStatusPanel reviewGuard", () => {
         model: "gpt-5.4",
         executionStrategy: "react",
         activeTheme: "default",
-        selectedTeamLabel: null,
       },
     });
 

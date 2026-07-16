@@ -6,7 +6,6 @@ import {
   resolveRuntimeDecisionReason,
   resolveRuntimeFallbackChain,
   resolveStatShellClassName,
-  resolveTeamMemoryShadowKey,
   resolveToneClassName,
   serializeReliabilityClipboardPayload,
 } from "./AgentThreadReliabilityPanelViewModel";
@@ -98,26 +97,5 @@ describe("AgentThreadReliabilityPanelViewModel", () => {
     expect(resolveLatestTurnPrompt(turns, "turn-1")).toBe("第一条");
     expect(resolveLatestTurnPrompt(turns, "missing")).toBe("第二条");
     expect(resolveLatestTurnPrompt([], "missing")).toBe("");
-  });
-
-  it("应构造 team memory shadow 稳定 key", () => {
-    expect(resolveTeamMemoryShadowKey(null)).toBe("");
-    expect(
-      resolveTeamMemoryShadowKey({
-        repo_scope: "/workspace",
-        entries: [
-          {
-            key: "team.selection",
-            content: "A",
-            updated_at: 10,
-          },
-          {
-            key: "team.parent_context",
-            content: "B",
-            updated_at: 20,
-          },
-        ],
-      }),
-    ).toBe("/workspace|team.selection:10|team.parent_context:20");
   });
 });

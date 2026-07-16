@@ -1566,10 +1566,6 @@ beforeEach(async () => {
       setSessionRecentPreferences: vi.fn(async () => undefined),
     },
     deferSessionRecentMetadataSyncForNavigation: vi.fn(),
-    selectedTeamSessionSync: {
-      getSessionId: () => sessionRecentMetadataActiveSessionRef.current,
-      setSessionRecentTeamSelection: vi.fn(async () => undefined),
-    },
     syncSessionRecentPreferences: vi.fn(async () => undefined),
   });
   mockUseWorkspaceKnowledgeRuntime.mockReturnValue({

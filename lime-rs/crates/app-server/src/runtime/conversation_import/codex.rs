@@ -17,14 +17,18 @@ use std::path::{Path, PathBuf};
 
 use crate::RuntimeCoreError;
 
+mod canonical_items;
 mod dry_run;
 pub(super) mod events;
+mod history_builder;
 mod media;
 mod messages;
 mod paths;
 mod project_filter;
 mod session_index;
 mod state;
+
+pub(super) use history_builder::build_canonical_history_events;
 
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 200;
@@ -437,7 +441,7 @@ pub(super) struct CodexRolloutPreview {
     pub(super) summary: ConversationImportPreviewSummary,
     pub(super) messages: Vec<ConversationImportPreviewMessage>,
     pub(super) events: Vec<ConversationImportPreviewEvent>,
-    pub(super) timeline: Vec<ImportedTimelineItem>,
+    pub(super) timeline: Vec<CodexTimelineItem>,
 }
 
 pub(super) fn parse_rollout_for_import(
@@ -525,24 +529,24 @@ fn parse_rollout(
                     }
                     messages::push_timeline_message(&mut timeline, timeline_message);
                 } else {
-                    let runtime_events = events::response_item_runtime_events(
+                    let rollout_events = events::response_item_rollout_events(
                         value.get("payload"),
                         Some(&provenance),
                     );
                     record_response_item_fidelity(
                         &mut summary.fidelity,
                         value.get("payload"),
-                        runtime_events.len(),
+                        rollout_events.len(),
                     );
-                    if runtime_events.is_empty() {
+                    if rollout_events.is_empty() {
                         summary.unsupported_count += 1;
                         summary.fidelity.unsupported += 1;
                         summary.fidelity.provenance_only += 1;
                     } else {
                         timeline.extend(
-                            runtime_events
+                            rollout_events
                                 .into_iter()
-                                .map(ImportedTimelineItem::RuntimeEvent),
+                                .map(CodexTimelineItem::RolloutEvent),
                         );
                     }
                 }
@@ -565,14 +569,14 @@ fn parse_rollout(
                     }
                     messages::push_timeline_message(&mut timeline, timeline_message);
                 } else {
-                    let runtime_events =
-                        events::event_msg_runtime_events(value.get("payload"), Some(&provenance));
+                    let rollout_events =
+                        events::event_msg_rollout_events(value.get("payload"), Some(&provenance));
                     record_event_msg_fidelity(
                         &mut summary.fidelity,
                         value.get("payload"),
-                        runtime_events.len(),
+                        rollout_events.len(),
                     );
-                    if runtime_events.is_empty()
+                    if rollout_events.is_empty()
                         && value
                             .get("payload")
                             .and_then(|payload| payload.get("type"))
@@ -584,9 +588,9 @@ fn parse_rollout(
                         summary.fidelity.provenance_only += 1;
                     }
                     timeline.extend(
-                        runtime_events
+                        rollout_events
                             .into_iter()
-                            .map(ImportedTimelineItem::RuntimeEvent),
+                            .map(CodexTimelineItem::RolloutEvent),
                     );
                 }
                 if events.len() >= limit {
@@ -633,9 +637,9 @@ fn parse_rollout(
 }
 
 #[derive(Debug, Clone)]
-pub(super) enum ImportedTimelineItem {
+pub(super) enum CodexTimelineItem {
     Message(ConversationImportPreviewMessage),
-    RuntimeEvent(events::ImportedRuntimeEvent),
+    RolloutEvent(events::CodexRolloutEvent),
 }
 
 pub(super) fn find_thread(source_root: &Path, thread_id: &str) -> Option<ImportedThreadSummary> {
@@ -782,7 +786,7 @@ fn apply_session_meta_to_thread(thread: &mut ImportedThreadSummary, payload: Opt
 fn enrich_preview_provenance(
     messages: &mut [ConversationImportPreviewMessage],
     events: &mut [ConversationImportPreviewEvent],
-    timeline: &mut [ImportedTimelineItem],
+    timeline: &mut [CodexTimelineItem],
     source_thread_id: &str,
     source_path: Option<String>,
 ) {
@@ -806,7 +810,7 @@ fn enrich_preview_provenance(
     }
     for item in timeline {
         match item {
-            ImportedTimelineItem::Message(message) => {
+            CodexTimelineItem::Message(message) => {
                 if let Some(provenance) = message.provenance.take() {
                     message.provenance = Some(events::enrich_source_provenance(
                         provenance,
@@ -815,7 +819,7 @@ fn enrich_preview_provenance(
                     ));
                 }
             }
-            ImportedTimelineItem::RuntimeEvent(event) => {
+            CodexTimelineItem::RolloutEvent(event) => {
                 enrich_runtime_event_provenance(event, source_thread_id, source_path.as_deref());
             }
         }
@@ -823,7 +827,7 @@ fn enrich_preview_provenance(
 }
 
 fn enrich_runtime_event_provenance(
-    event: &mut events::ImportedRuntimeEvent,
+    event: &mut events::CodexRolloutEvent,
     source_thread_id: &str,
     source_path: Option<&str>,
 ) {
@@ -845,7 +849,7 @@ fn enrich_runtime_event_provenance(
 fn record_response_item_fidelity(
     fidelity: &mut ConversationImportFidelitySummary,
     payload: Option<&Value>,
-    mapped_runtime_events: usize,
+    mapped_rollout_events: usize,
 ) {
     let Some(payload) = payload else {
         return;
@@ -856,7 +860,7 @@ fn record_response_item_fidelity(
         | Some("function_call_output")
         | Some("custom_tool_call")
         | Some("custom_tool_call_output") => {
-            if mapped_runtime_events > 0 {
+            if mapped_rollout_events > 0 {
                 fidelity.tools += 1;
             }
             if tool_name_from_payload(payload).as_deref() == Some("exec_command") {
@@ -864,7 +868,7 @@ fn record_response_item_fidelity(
             }
         }
         Some("web_search_call") => {
-            if mapped_runtime_events > 0 {
+            if mapped_rollout_events > 0 {
                 fidelity.web_search += 1;
                 fidelity.tools += 1;
             }
@@ -876,7 +880,7 @@ fn record_response_item_fidelity(
 fn record_event_msg_fidelity(
     fidelity: &mut ConversationImportFidelitySummary,
     payload: Option<&Value>,
-    mapped_runtime_events: usize,
+    mapped_rollout_events: usize,
 ) {
     let Some(payload) = payload else {
         return;
@@ -885,7 +889,7 @@ fn record_event_msg_fidelity(
         Some("patch_apply_end") => fidelity.patches += 1,
         Some("mcp_tool_call_begin" | "mcp_tool_call_end") => {
             fidelity.mcp += 1;
-            if mapped_runtime_events > 0 {
+            if mapped_rollout_events > 0 {
                 fidelity.tools += 1;
             }
         }
@@ -903,12 +907,12 @@ fn record_event_msg_fidelity(
             | "collab_resume_begin"
             | "collab_resume_end",
         ) => {
-            if mapped_runtime_events > 0 {
+            if mapped_rollout_events > 0 {
                 fidelity.tools += 1;
             }
         }
         Some("hook_prompt" | "entered_review_mode") => {
-            if mapped_runtime_events > 0 {
+            if mapped_rollout_events > 0 {
                 fidelity.reasoning += 1;
             }
         }
@@ -916,7 +920,7 @@ fn record_event_msg_fidelity(
         | Some("exited_review_mode") => {}
         Some("web_search_end") => {
             fidelity.web_search += 1;
-            if mapped_runtime_events > 0 {
+            if mapped_rollout_events > 0 {
                 fidelity.tools += 1;
             }
         }
@@ -928,7 +932,7 @@ fn record_event_msg_fidelity(
                 .get("item")
                 .and_then(|item| item.get("type"))
                 .and_then(Value::as_str);
-            if mapped_runtime_events > 0 {
+            if mapped_rollout_events > 0 {
                 match item_type {
                     Some("CommandExecution") => {
                         fidelity.commands += 1;

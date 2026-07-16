@@ -3,6 +3,7 @@ use app_server_protocol::AgentTurnStatus;
 
 pub(super) fn session_status_from_event(event_type: &str) -> &'static str {
     match event_type {
+        "session.created" => "idle",
         "turn.completed" => "completed",
         "turn.failed" => "failed",
         "turn.canceled" => "canceled",

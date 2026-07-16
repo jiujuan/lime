@@ -28,31 +28,6 @@ describe("HarnessStatusPanel runtime", () => {
     expect(document.body.textContent).toContain("429 rate limit");
   });
 
-  it("存在 selectedTeam 时应在工作台展示当前 Subagents", () => {
-    renderPanel({
-      selectedTeamLabel: "前端联调团队",
-      selectedTeamSummary: "分析、实现、验证三段式推进。",
-      selectedTeamRoles: [
-        {
-          id: "explorer",
-          label: "分析",
-          summary: "负责定位问题、澄清范围。",
-          profileId: "code-explorer",
-          roleKey: "explorer",
-          skillIds: ["repo-exploration", "source-grounding"],
-        },
-      ],
-    });
-
-    expect(document.body.textContent).toContain("Subagents");
-    expect(document.body.textContent).toContain("当前 Subagents");
-    expect(document.body.textContent).toContain("前端联调团队");
-    expect(document.body.textContent).toContain("分析、实现、验证三段式推进。");
-    expect(document.body.textContent).toContain("模板 code-explorer");
-    expect(document.body.textContent).toContain("职责 explorer");
-    expect(document.body.textContent).toContain("repo-exploration");
-  });
-
   it("存在 canonical child roster 时应展示子任务摘要", () => {
     renderPanel({
       canonicalChildren: [
@@ -176,7 +151,6 @@ describe("HarnessStatusPanel runtime", () => {
         model: "gpt-5.4",
         executionStrategy: "react",
         activeTheme: "default",
-        selectedTeamLabel: "代码团队",
       },
       harnessState: createHarnessState({
         activeFileWrites: [
@@ -328,7 +302,6 @@ describe("HarnessStatusPanel runtime", () => {
         model: "gpt-5.4",
         executionStrategy: "react",
         activeTheme: "default",
-        selectedTeamLabel: "代码团队",
       },
       harnessState: createHarnessState({
         outputSignals: [

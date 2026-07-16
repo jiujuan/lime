@@ -532,7 +532,7 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
     );
   });
 
-  it("首页首发真实 session 已创建但消息未投影时应接管会话并保留 pending preview", async () => {
+  it("direct-dispatch 首发应由发起者完成 session 交接", async () => {
     const onNonMaterializedSessionReady = vi.fn();
     const snapshots: Array<{
       taskCenterDraftSendRequest: TaskCenterDraftSendRequest | null;
@@ -561,18 +561,45 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
       const latest = snapshots.at(-1);
       expect(latest?.taskCenterDraftSendRequest).toMatchObject({
         id: request.id,
-        draftTabId: "sess_live_ready",
-        sessionReady: true,
+        draftTabId: "draft-send-live",
+        dispatchState: "dispatched",
       });
       expect(latest?.homePendingPreviewRequest).toMatchObject({
         id: request.id,
-        draftTabId: "sess_live_ready",
-        sessionReady: true,
+        draftTabId: "draft-send-live",
+        dispatchState: "dispatched",
       });
     });
-    expect(onNonMaterializedSessionReady).toHaveBeenCalledWith(
-      "sess_live_ready",
-    );
+    expect(onNonMaterializedSessionReady).not.toHaveBeenCalled();
+  });
+
+  it("direct-dispatch 首条消息出现时也不得提前清理 pending owner", async () => {
+    const onNonMaterializedSessionReady = vi.fn();
+    const request = createDraftSendRequest({
+      draftTabId: "draft-send-live-message",
+      dispatchState: "dispatched",
+      materializeDraft: false,
+      source: "task-center-empty-state",
+    });
+    const snapshots: Array<{
+      taskCenterDraftSendRequest: TaskCenterDraftSendRequest | null;
+      homePendingPreviewRequest: TaskCenterDraftSendRequest | null;
+    }> = [];
+
+    mountDraftSendRuntime({
+      currentSessionId: "sess_live_message",
+      displayMessagesLength: 2,
+      messagesLength: 2,
+      request,
+      onNonMaterializedSessionReady,
+      onSnapshot: (snapshot) => snapshots.push(snapshot),
+    });
+
+    await vi.waitFor(() => {
+      expect(snapshots.at(-1)?.taskCenterDraftSendRequest).toEqual(request);
+      expect(snapshots.at(-1)?.homePendingPreviewRequest).toEqual(request);
+    });
+    expect(onNonMaterializedSessionReady).not.toHaveBeenCalled();
   });
 
   it("首页首发发送返回 false 时应清理 pending preview", async () => {
@@ -830,7 +857,9 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
     expect(commitOptions).toEqual(
       expect.objectContaining({ hydrateSession: false }),
     );
-    expect(commitOptions).toEqual(expect.objectContaining({ syncRoute: false }));
+    expect(commitOptions).toEqual(
+      expect.objectContaining({ syncRoute: false }),
+    );
   });
 
   it("materialized 草稿发送复用输入预热 session 时不应同步路由", async () => {
@@ -1013,9 +1042,7 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
     });
 
     expect(runtime.setInput).toHaveBeenCalledWith("");
-    expect(
-      runtime.setInput.mock.invocationCallOrder[0],
-    ).toBeLessThan(
+    expect(runtime.setInput.mock.invocationCallOrder[0]).toBeLessThan(
       runtime.setTaskCenterDraftSendRequest.mock.invocationCallOrder[0],
     );
     expect(runtime.clearMessages).toHaveBeenCalledWith({ showToast: false });
@@ -1198,9 +1225,7 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
       }),
     );
     expect(runtime.setInput).toHaveBeenCalledWith("");
-    expect(
-      runtime.setInput.mock.invocationCallOrder[0],
-    ).toBeLessThan(
+    expect(runtime.setInput.mock.invocationCallOrder[0]).toBeLessThan(
       runtime.setTaskCenterDraftSendRequest.mock.invocationCallOrder[0],
     );
     expect(runtime.setTaskCenterDraftTabs).not.toHaveBeenCalled();
@@ -1316,9 +1341,7 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
       }),
     );
     expect(runtime.setInput).toHaveBeenCalledWith("");
-    expect(
-      runtime.setInput.mock.invocationCallOrder[0],
-    ).toBeLessThan(
+    expect(runtime.setInput.mock.invocationCallOrder[0]).toBeLessThan(
       runtime.setTaskCenterDraftSendRequest.mock.invocationCallOrder[0],
     );
     expect(runtime.handleSend).not.toHaveBeenCalled();

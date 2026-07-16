@@ -1,9 +1,5 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it,
-} from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   flushEffects,
   mockGetAgentRuntimeSession,
@@ -12,7 +8,8 @@ import {
 } from "../useAgentChat.testUtils";
 
 const getSubmittedTurnMetadata = () =>
-  mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest?.metadata as
+  mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
+    ?.metadata as
     | {
         agentUiPerformanceTrace?: unknown;
         harness?: Record<string, unknown>;
@@ -210,8 +207,8 @@ describe("useAgentChat 兼容接口 - runtime metadata", () => {
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
         (
-          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-            ?.metadata as {
+          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+            ?.runtimeRequest?.metadata as {
             harness?: { content_id?: string };
           } | null
         )?.harness?.content_id,
@@ -335,8 +332,8 @@ describe("useAgentChat 兼容接口 - runtime metadata", () => {
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
         (
-          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-            ?.metadata as {
+          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+            ?.runtimeRequest?.metadata as {
             harness?: { theme?: string; session_mode?: string };
           } | null
         )?.harness,
@@ -462,8 +459,8 @@ describe("useAgentChat 兼容接口 - runtime metadata", () => {
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
         (
-          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-            ?.metadata as {
+          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+            ?.runtimeRequest?.metadata as {
             harness?: { gate_key?: string; run_title?: string };
           } | null
         )?.harness,
@@ -471,208 +468,6 @@ describe("useAgentChat 兼容接口 - runtime metadata", () => {
         gate_key: "publish_confirm",
         run_title: "发布确认",
       });
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  it("已有 recent_team_selection 且 metadata 显式携带时，不应重复保留 Team 选择 metadata", async () => {
-    const workspaceId = "ws-runtime-team-selection-reuse";
-    const topicId = "topic-runtime-team-selection-reuse";
-    mockGetAgentRuntimeSession.mockResolvedValue({
-      id: topicId,
-      created_at: Date.now(),
-      updated_at: Date.now(),
-      execution_strategy: "react",
-      execution_runtime: {
-        session_id: topicId,
-        execution_strategy: "react",
-        recent_team_selection: {
-          disabled: false,
-          theme: "general",
-          preferredTeamPresetId: "code-triage-team",
-          selectedTeamId: "custom-team-1",
-          selectedTeamSource: "custom",
-          selectedTeamLabel: "前端联调团队",
-          selectedTeamDescription: "分析、实现、验证三段式推进。",
-          selectedTeamSummary: "分析、实现、验证三段式推进。",
-          selectedTeamRoles: [
-            {
-              id: "explorer",
-              label: "分析",
-              summary: "负责定位问题与影响范围。",
-              profileId: "code-explorer",
-              roleKey: "explorer",
-              skillIds: ["repo-exploration"],
-            },
-          ],
-        },
-        source: "session",
-      },
-      messages: [],
-      turns: [],
-      items: [],
-    });
-
-    const harness = mountHook(workspaceId);
-
-    try {
-      await flushEffects();
-      await act(async () => {
-        await harness.getValue().switchTopic(topicId);
-      });
-      mockSubmitAgentRuntimeTurn.mockClear();
-
-      await act(async () => {
-        await harness
-          .getValue()
-          .sendMessage(
-            "继续沿用当前 Team 选择",
-            [],
-            false,
-            false,
-            false,
-            "react",
-            undefined,
-            undefined,
-            {
-              requestMetadata: {
-                harness: {
-                  preferred_team_preset_id: "code-triage-team",
-                  selected_team_id: "custom-team-1",
-                  selected_team_source: "custom",
-                  selected_team_label: "前端联调团队",
-                  selected_team_description: "分析、实现、验证三段式推进。",
-                  selected_team_summary: "分析、实现、验证三段式推进。",
-                  selected_team_roles: [
-                    {
-                      id: "explorer",
-                      label: "分析",
-                      summary: "负责定位问题与影响范围。",
-                      profile_id: "code-explorer",
-                      role_key: "explorer",
-                      skill_ids: ["repo-exploration"],
-                    },
-                  ],
-                },
-              },
-            },
-          );
-      });
-
-      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
-      expectHarnessMetadataRemoved();
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  it("Team 选择已变更但 session 仍是旧值时，应保留 Team 选择 metadata", async () => {
-    const workspaceId = "ws-runtime-team-selection-pending-sync";
-    const topicId = "topic-runtime-team-selection-pending-sync";
-    mockGetAgentRuntimeSession.mockResolvedValue({
-      id: topicId,
-      created_at: Date.now(),
-      updated_at: Date.now(),
-      execution_strategy: "react",
-      execution_runtime: {
-        session_id: topicId,
-        execution_strategy: "react",
-        recent_team_selection: {
-          disabled: false,
-          theme: "general",
-          preferredTeamPresetId: "research-team",
-          selectedTeamId: "runtime-team",
-          selectedTeamSource: "builtin",
-          selectedTeamLabel: "旧 Team",
-          selectedTeamDescription: "旧 Team 描述。",
-          selectedTeamSummary: "旧 Team 摘要。",
-          selectedTeamRoles: [
-            {
-              id: "writer",
-              label: "写作",
-              summary: "负责整理文稿。",
-              profileId: "writing-agent",
-              roleKey: "writer",
-              skillIds: ["drafting"],
-            },
-          ],
-        },
-        source: "session",
-      },
-      messages: [],
-      turns: [],
-      items: [],
-    });
-
-    const harness = mountHook(workspaceId);
-
-    try {
-      await flushEffects();
-      await act(async () => {
-        await harness.getValue().switchTopic(topicId);
-      });
-      mockSubmitAgentRuntimeTurn.mockClear();
-
-      await act(async () => {
-        await harness
-          .getValue()
-          .sendMessage(
-            "切换 Team 后立即发送",
-            [],
-            false,
-            false,
-            false,
-            "react",
-            undefined,
-            undefined,
-            {
-              requestMetadata: {
-                harness: {
-                  preferred_team_preset_id: "code-triage-team",
-                  selected_team_id: "custom-team-1",
-                  selected_team_source: "custom",
-                  selected_team_label: "前端联调团队",
-                  selected_team_description: "分析、实现、验证三段式推进。",
-                  selected_team_summary: "分析、实现、验证三段式推进。",
-                  selected_team_roles: [
-                    {
-                      id: "explorer",
-                      label: "分析",
-                      summary: "负责定位问题与影响范围。",
-                      profile_id: "code-explorer",
-                      role_key: "explorer",
-                      skill_ids: ["repo-exploration"],
-                    },
-                  ],
-                },
-              },
-            },
-          );
-      });
-
-      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
-      expect(
-        (
-          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-            ?.metadata as {
-            harness?: {
-              selected_team_label?: string;
-              selected_team_roles?: Array<{ profile_id?: string }>;
-            };
-          } | null
-        )?.harness?.selected_team_label,
-      ).toBe("前端联调团队");
-      expect(
-        (
-          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-            ?.metadata as {
-            harness?: {
-              selected_team_roles?: Array<{ profile_id?: string }>;
-            };
-          } | null
-        )?.harness?.selected_team_roles?.[0]?.profile_id,
-      ).toBe("code-explorer");
     } finally {
       harness.unmount();
     }

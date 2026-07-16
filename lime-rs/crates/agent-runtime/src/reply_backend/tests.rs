@@ -286,7 +286,11 @@ fn backend_start_prepares_session_metadata() {
     let session_config = SessionConfigBuilder::new("session-backend").build();
     let start_request = RuntimeReplyStartRequest::new(request, session_config, None, true);
     let mut backend_start = RuntimeReplyBackendStart::from_start_request(start_request);
-    let preparation = backend_start.prepare_session_metadata(["Bash", "PowerShell", "bash"]);
+    let preparation = backend_start.prepare_session_metadata([
+        "exec_command",
+        "write_stdin",
+        "EXEC_COMMAND",
+    ]);
 
     assert!(preparation.provider_wire_shape_requested);
     assert!(preparation.provider_wire_shape_attached);
@@ -303,7 +307,7 @@ fn backend_start_prepares_session_metadata() {
         metadata
             .get(crate::reply_session::DISALLOWED_TOOLS_METADATA_KEY)
             .expect("disallowed tools"),
-        &serde_json::json!(["Bash", "PowerShell"])
+        &serde_json::json!(["exec_command", "write_stdin"])
     );
     assert!(
         session_config
@@ -332,7 +336,7 @@ fn backend_start_prepare_run_selects_default_path() {
     let session_config = SessionConfigBuilder::new("session-backend").build();
     let start_request = RuntimeReplyStartRequest::new(request, session_config, None, false);
     let backend_run = RuntimeReplyBackendStart::from_start_request(start_request)
-        .prepare_run(None, ["Bash"])
+        .prepare_run(None, ["exec_command"])
         .expect("default run");
 
     assert_eq!(backend_run.message_chars(), 5);

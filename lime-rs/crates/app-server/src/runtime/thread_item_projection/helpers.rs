@@ -261,5 +261,8 @@ pub(super) fn event_metadata(event: &AgentEvent) -> Value {
     if let Some(value) = event.payload.get("importedIncomplete").cloned() {
         metadata.insert("imported_incomplete".to_string(), value);
     }
+    if let Some(value) = event.payload.get("importedReadOnly").cloned() {
+        metadata.insert("imported_read_only".to_string(), value);
+    }
     Value::Object(metadata)
 }

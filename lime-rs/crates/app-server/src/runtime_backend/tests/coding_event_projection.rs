@@ -468,6 +468,7 @@ fn runtime_agent_message_emits_its_own_terminal_before_turn_terminal() {
     emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
         &RuntimeAgentEvent::TextEnd {
             item_id: "message-1".to_string(),
+            phase: lime_agent::protocol::AgentMessagePhase::FinalAnswer,
         },
         &mut sink,
         &mut mirror,
@@ -516,6 +517,7 @@ fn runtime_output_items_keep_distinct_provider_identities() {
         },
         RuntimeAgentEvent::TextEnd {
             item_id: "message-1".to_string(),
+            phase: lime_agent::protocol::AgentMessagePhase::Commentary,
         },
         RuntimeAgentEvent::ThinkingStart {
             item_id: "reasoning-2".to_string(),
@@ -536,6 +538,7 @@ fn runtime_output_items_keep_distinct_provider_identities() {
         },
         RuntimeAgentEvent::TextEnd {
             item_id: "message-2".to_string(),
+            phase: lime_agent::protocol::AgentMessagePhase::FinalAnswer,
         },
     ];
 
@@ -589,6 +592,13 @@ fn runtime_output_items_keep_distinct_provider_identities() {
             ("message.completed", "message-2"),
         ]
     );
+    let message_phases = sink
+        .events
+        .iter()
+        .filter(|event| event.event_type == "message.completed")
+        .map(|event| event.payload["phase"].as_str().expect("message phase"))
+        .collect::<Vec<_>>();
+    assert_eq!(message_phases, vec!["commentary", "final_answer"]);
 }
 
 #[test]
@@ -607,6 +617,59 @@ fn canceled_runtime_agent_message_uses_interrupted_item_status() {
 
     assert_eq!(sink.events[1].event_type, "message.completed");
     assert_eq!(sink.events[1].payload["status"], "interrupted");
+    assert_eq!(sink.events[1].payload["phase"], "commentary");
+}
+
+#[test]
+fn failed_runtime_output_items_finish_before_turn_failure() {
+    let mut sink = TestRuntimeEventSink::default();
+    let mut mirror = coding_events::CodingEventMirror::default();
+    let mut parser = proposed_plan_parser::ProposedPlanParser::default();
+    let mut reasoning_state = reasoning_events::ReasoningEventState::default();
+    for event in [
+        RuntimeAgentEvent::ThinkingStart {
+            item_id: "reasoning-1".to_string(),
+        },
+        RuntimeAgentEvent::ThinkingDelta {
+            item_id: "reasoning-1".to_string(),
+            text: "partial reasoning".to_string(),
+        },
+        RuntimeAgentEvent::TextStart {
+            item_id: "message-1".to_string(),
+        },
+        RuntimeAgentEvent::TextDelta {
+            item_id: "message-1".to_string(),
+            text: "partial answer".to_string(),
+        },
+    ] {
+        emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+            &event,
+            &mut sink,
+            &mut mirror,
+            &mut parser,
+            &mut reasoning_state,
+        )
+        .expect("partial provider output should map");
+    }
+
+    emit_reasoning_finish(&mut reasoning_state, "failed", &mut sink)
+        .expect("reasoning failure should emit");
+    emit_agent_message_finish(&mut parser, "failed", &mut sink)
+        .expect("message failure should emit");
+
+    let reasoning_terminal = sink
+        .events
+        .iter()
+        .find(|event| event.event_type == "reasoning.ended")
+        .expect("reasoning terminal");
+    let message_terminal = sink
+        .events
+        .iter()
+        .find(|event| event.event_type == "message.completed")
+        .expect("message terminal");
+    assert_eq!(reasoning_terminal.payload["status"], "failed");
+    assert_eq!(message_terminal.payload["status"], "failed");
+    assert_eq!(message_terminal.payload["phase"], "commentary");
 }
 
 #[test]

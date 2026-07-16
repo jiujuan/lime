@@ -151,7 +151,6 @@ describe("HarnessStatusPanel", () => {
         model: "gpt-5.4",
         executionStrategy: "react",
         activeTheme: "default",
-        selectedTeamLabel: null,
       },
     });
 
@@ -204,7 +203,6 @@ describe("HarnessStatusPanel", () => {
         model: "gpt-5.4",
         executionStrategy: "react",
         activeTheme: "default",
-        selectedTeamLabel: null,
       },
     });
 

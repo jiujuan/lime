@@ -2,6 +2,7 @@ export const STALE_RUNNING_THREAD_READ_MS = 30 * 60 * 1000;
 
 export interface ThreadReadActivityOptions {
   allowThreadStatusWithoutTurn?: boolean;
+  includeQueuedActivity?: boolean;
   nowMs?: number;
   staleRunningMs?: number;
 }
@@ -146,6 +147,33 @@ export function hasRunningTurnRecordActivity(
   return isRunningTurnStatus(status) && isFreshRunningRecord(record, options);
 }
 
+export function hasActiveThreadReadActivity(
+  threadRead: unknown,
+  options: ThreadReadActivityOptions = {},
+): boolean {
+  const record = readRecord(threadRead);
+  if (!record) {
+    return false;
+  }
+  const threadStatus = normalizeStatus(record.status);
+  const profileStatus = normalizeStatus(record.profile_status);
+  if (
+    isExplicitTerminalThreadStatus(threadStatus) ||
+    isExplicitTerminalThreadStatus(profileStatus)
+  ) {
+    return false;
+  }
+
+  const activeTurnId = readString(record, ["active_turn_id", "activeTurnId"]);
+  if (!activeTurnId) {
+    return false;
+  }
+  const activeTurn = readArray(record, ["turns"])
+    .map(readRecord)
+    .find((turn) => turn && readTurnId(turn) === activeTurnId);
+  return activeTurn ? hasRunningTurnRecordActivity(activeTurn, options) : false;
+}
+
 export function hasRunningThreadReadActivity(
   threadRead: unknown,
   options: ThreadReadActivityOptions = {},
@@ -171,11 +199,12 @@ export function hasRunningThreadReadActivity(
   const hasQueuedTurns =
     readArray(record, ["queued_turns", "queuedTurns"]).length > 0;
   if (
-    hasQueuedTurns ||
-    (isQueuedThreadStatus(threadStatus) &&
-      isFreshRunningRecord(record, options)) ||
-    (isQueuedThreadStatus(profileStatus) &&
-      isFreshRunningRecord(record, options))
+    options.includeQueuedActivity !== false &&
+    (hasQueuedTurns ||
+      (isQueuedThreadStatus(threadStatus) &&
+        isFreshRunningRecord(record, options)) ||
+      (isQueuedThreadStatus(profileStatus) &&
+        isFreshRunningRecord(record, options)))
   ) {
     return true;
   }

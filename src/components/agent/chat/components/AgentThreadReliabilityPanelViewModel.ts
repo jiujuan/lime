@@ -2,7 +2,6 @@ import type {
   AgentRuntimeThreadReadModel,
   AgentRuntimeSummary,
 } from "@/lib/api/agentRuntime/sessionTypes";
-import type { TeamMemoryShadowRequestMetadata } from "@/lib/teamMemorySync";
 import type { AgentThreadTurn } from "../types";
 import type { RuntimeRoutingEvidence } from "../utils/runtimeRoutingEvidence";
 import type { ThreadReliabilityTone } from "../utils/threadReliabilityView";
@@ -97,16 +96,4 @@ export function resolveLatestTurnPrompt(
   const activeTurn =
     turns.find((turn) => turn.id === currentTurnId) || turns[turns.length - 1];
   return activeTurn?.prompt_text?.trim() || "";
-}
-
-export function resolveTeamMemoryShadowKey(
-  metadata?: TeamMemoryShadowRequestMetadata | null,
-): string {
-  if (!metadata) {
-    return "";
-  }
-  return [
-    metadata.repo_scope,
-    ...metadata.entries.map((entry) => `${entry.key}:${entry.updated_at}`),
-  ].join("|");
 }

@@ -97,21 +97,6 @@ function readBooleanDecision(value: unknown): boolean | null {
   );
 }
 
-function isImportedReadOnlyResponse(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-  const decision =
-    typeof record.decision === "string" ? record.decision.trim() : "";
-  return (
-    record.imported_read_only === true ||
-    record.importedReadOnly === true ||
-    decision === "imported_read_only"
-  );
-}
-
 function resolveStatus(
   item: Extract<AgentThreadItem, { type: "approval_request" | "request_user_input" }>,
   actionType: ActionRequired["actionType"],
@@ -135,14 +120,6 @@ function buildTitle(
   actionType: ActionRequired["actionType"],
   t: MinimalTranslate,
 ): string {
-  if (isImportedReadOnlyResponse(item.response)) {
-    return translateTaskRailText(
-      t,
-      "generalWorkbench.taskRail.approval.importedReadOnlyTitle",
-      "导入的权限记录",
-    );
-  }
-
   const prompt = item.prompt?.trim();
   if (prompt) {
     return truncateText(prompt);

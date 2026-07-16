@@ -693,7 +693,7 @@ mod tests {
     use serde_json::json;
 
     fn default_policy_for_tool(tool_name: &str) -> ToolExecutionPolicy {
-        if tool_name.eq_ignore_ascii_case("bash") {
+        if tool_name.eq_ignore_ascii_case("exec_command") {
             ToolExecutionPolicy {
                 warning_policy: ToolExecutionWarningPolicy::ShellCommandRisk,
                 restriction_profile: ToolExecutionRestrictionProfile::WorkspaceShellCommand,
@@ -722,7 +722,7 @@ mod tests {
     fn runtime_override_beats_persisted_policy() {
         let persisted_policy = ConfigToolExecutionPolicyConfig {
             tool_overrides: HashMap::from([(
-                "bash".to_string(),
+                "exec_command".to_string(),
                 ConfigToolExecutionOverrideConfig {
                     warning_policy: Some(ConfigToolExecutionWarningPolicyConfig::None),
                     restriction_profile: Some(
@@ -737,7 +737,7 @@ mod tests {
             "harness": {
                 "executionPolicy": {
                     "toolOverrides": {
-                        "BASH": {
+                        "EXEC_COMMAND": {
                             "warningPolicy": "shell_command_risk",
                             "restrictionProfile": "workspace_shell_command",
                             "sandboxProfile": "workspace_command"
@@ -751,7 +751,7 @@ mod tests {
             persisted_policy: Some(&persisted_policy),
             request_metadata: Some(&request_metadata),
         })
-        .resolve("Bash");
+        .resolve("exec_command");
 
         assert_eq!(
             resolution.policy.warning_policy,
@@ -826,7 +826,7 @@ mod tests {
                 "nativeAgent": {
                     "toolExecution": {
                         "toolOverrides": {
-                            "Bash": {
+                            "exec_command": {
                                 "warningPolicy": "none"
                             }
                         }
@@ -838,6 +838,6 @@ mod tests {
         let policy = ToolExecutionPolicyService::persisted_policy_from_metadata(Some(&metadata))
             .expect("persisted policy should be decoded");
 
-        assert!(policy.tool_overrides.contains_key("Bash"));
+        assert!(policy.tool_overrides.contains_key("exec_command"));
     }
 }

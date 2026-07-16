@@ -92,8 +92,8 @@ mod tests {
     fn reply_disallowed_tools_merges_without_case_duplicates() {
         let mut session_config = SessionConfigBuilder::new("session-1").build();
 
-        attach_reply_disallowed_tools(&mut session_config, ["Bash", "PowerShell"]);
-        attach_reply_disallowed_tools(&mut session_config, ["bash", "apply_patch"]);
+        attach_reply_disallowed_tools(&mut session_config, ["exec_command", "write_stdin"]);
+        attach_reply_disallowed_tools(&mut session_config, ["EXEC_COMMAND", "apply_patch"]);
 
         let metadata = session_config
             .turn_context
@@ -107,7 +107,7 @@ mod tests {
             metadata
                 .get(DISALLOWED_TOOLS_METADATA_KEY)
                 .expect("disallowed tools"),
-            &serde_json::json!(["Bash", "PowerShell", "apply_patch"])
+            &serde_json::json!(["exec_command", "write_stdin", "apply_patch"])
         );
     }
 

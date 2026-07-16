@@ -45,7 +45,8 @@ pub(super) fn create_thread_store_schema(conn: &Connection) -> ThreadStoreResult
         CREATE TABLE IF NOT EXISTS canonical_thread_spawn_edges (
             parent_thread_id TEXT NOT NULL,
             child_thread_id TEXT NOT NULL PRIMARY KEY,
-            status TEXT NOT NULL
+            status TEXT NOT NULL,
+            pending_session_id TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_canonical_threads_archive_recency
             ON canonical_threads(archived, recency_at_ms DESC, updated_at_ms DESC, thread_id DESC);
@@ -61,7 +62,32 @@ pub(super) fn create_thread_store_schema(conn: &Connection) -> ThreadStoreResult
             ON canonical_thread_spawn_edges(parent_thread_id, status);
         "#,
     )
-    .map_err(store_error)
+    .map_err(store_error)?;
+    ensure_spawn_edge_column(conn, "pending_session_id", "TEXT")
+}
+
+fn ensure_spawn_edge_column(
+    conn: &Connection,
+    column: &str,
+    definition: &str,
+) -> ThreadStoreResult<()> {
+    let mut statement = conn
+        .prepare("PRAGMA table_info(canonical_thread_spawn_edges)")
+        .map_err(store_error)?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(store_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(store_error)?;
+    if columns.iter().any(|existing| existing == column) {
+        return Ok(());
+    }
+    conn.execute(
+        &format!("ALTER TABLE canonical_thread_spawn_edges ADD COLUMN {column} {definition}"),
+        [],
+    )
+    .map_err(store_error)?;
+    Ok(())
 }
 
 pub(super) fn apply_change_set(

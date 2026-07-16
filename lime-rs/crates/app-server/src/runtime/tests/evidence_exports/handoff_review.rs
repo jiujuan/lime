@@ -40,10 +40,11 @@ async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
         ("sess_handoff_active_child", "thread_handoff_active_child"),
         ("sess_handoff_closed_child", "thread_handoff_closed_child"),
     ] {
-        core.spawn_agent_controlled(AgentControlSpawnRequest {
+        core.create_open_agent_control_child_for_test(AgentControlSpawnRequest {
             parent_session_id: "sess_handoff".to_string(),
             child_session_id: Some(session_id.to_string()),
             child_thread_id: Some(thread_id.to_string()),
+            fork_mode: tool_runtime::agent_control::SpawnAgentForkMode::None,
         })
         .await
         .expect("spawn canonical child");

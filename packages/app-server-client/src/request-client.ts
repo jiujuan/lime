@@ -769,9 +769,6 @@ export interface AppServerClient {
   commitConversationImportThread(
     params: protocol.ConversationImportThreadCommitParams,
   ): protocol.JsonRpcRequest;
-  readConversationImportRuntimeEvents(
-    params: protocol.ConversationImportThreadRuntimeEventsReadParams,
-  ): protocol.JsonRpcRequest;
   startTurn(
     params: protocol.AgentSessionTurnStartParams,
   ): protocol.JsonRpcRequest;

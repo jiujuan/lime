@@ -1,14 +1,14 @@
-use super::{call_id, compact_json, parsed_arguments, string_field, ImportedRuntimeEvent};
+use super::{call_id, compact_json, parsed_arguments, string_field, CodexRolloutEvent};
 use serde_json::{json, Value};
 
-pub(super) fn plan_final_from_response_item(payload: &Value) -> Option<ImportedRuntimeEvent> {
+pub(super) fn plan_final_from_response_item(payload: &Value) -> Option<CodexRolloutEvent> {
     let arguments = parsed_arguments(payload)?;
     let plan = plan_steps(&arguments);
     if plan.is_empty() {
         return None;
     }
     let text = plan_markdown(&plan);
-    Some(ImportedRuntimeEvent::new(
+    Some(CodexRolloutEvent::new(
         "plan.final",
         compact_json(json!({
             "planId": call_id(payload),
@@ -26,10 +26,10 @@ pub(super) fn plan_final_from_response_item(payload: &Value) -> Option<ImportedR
     ))
 }
 
-pub(super) fn completed_plan_event(item: &Value) -> Option<ImportedRuntimeEvent> {
+pub(super) fn completed_plan_event(item: &Value) -> Option<CodexRolloutEvent> {
     let item_id = string_field(item, &["id"])?;
     let text = string_field(item, &["text"])?;
-    Some(ImportedRuntimeEvent::new(
+    Some(CodexRolloutEvent::new(
         "plan.final",
         compact_json(json!({
             "itemId": item_id,

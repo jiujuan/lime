@@ -4,7 +4,6 @@ import {
   summarizeCanonicalChildThreads,
   type CanonicalChildThreadSummary,
 } from "../projection/canonicalChildThreadSummary";
-import { isImportedSourceProcessItem } from "../utils/importedSourceProcess";
 import {
   type MinimalTranslate,
   translateTaskRailText,
@@ -107,37 +106,6 @@ function recordString(
   return null;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function readThreadItemMetadata(
-  item: AgentThreadItem,
-): Record<string, unknown> | null {
-  return asRecord((item as unknown as { metadata?: unknown }).metadata);
-}
-
-function readSourceProvenanceRecord(
-  item: AgentThreadItem,
-): Record<string, unknown> | null {
-  const metadata = readThreadItemMetadata(item);
-  const candidates = [
-    metadata?.source_provenance,
-    metadata?.sourceProvenance,
-    (item as unknown as { sourceProvenance?: unknown }).sourceProvenance,
-    (item as unknown as { source_provenance?: unknown }).source_provenance,
-  ];
-  for (const candidate of candidates) {
-    const record = asRecord(candidate);
-    if (record) {
-      return record;
-    }
-  }
-  return null;
-}
-
 function compactSourceLabel(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -230,19 +198,6 @@ function collectThreadItemSourceLabels(
   const labels: string[] = [];
 
   for (const item of threadItems ?? []) {
-    if (!isImportedSourceProcessItem(item)) {
-      const provenance = readSourceProvenanceRecord(item);
-      appendSourceLabel(
-        labels,
-        recordString(provenance ?? {}, [
-          "sourcePath",
-          "source_path",
-          "sourceThreadId",
-          "source_thread_id",
-        ]),
-      );
-    }
-
     if (item.type === "web_search") {
       appendSourceLabel(labels, item.query || item.action);
       continue;

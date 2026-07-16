@@ -732,15 +732,6 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ConversationImportThreadCommitResponse>(
             "ConversationImportThreadCommitResponse",
         ),
-        typed_schema::<ConversationImportThreadRuntimeEventsReadParams>(
-            "ConversationImportThreadRuntimeEventsReadParams",
-        ),
-        typed_schema::<ConversationImportRuntimeEventDetail>(
-            "ConversationImportRuntimeEventDetail",
-        ),
-        typed_schema::<ConversationImportThreadRuntimeEventsReadResponse>(
-            "ConversationImportThreadRuntimeEventsReadResponse",
-        ),
         typed_schema::<AgentSessionStartParams>("AgentSessionStartParams"),
         typed_schema::<AgentSessionStartResponse>("AgentSessionStartResponse"),
         typed_schema::<AgentSessionReadParams>("AgentSessionReadParams"),

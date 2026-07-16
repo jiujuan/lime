@@ -402,7 +402,6 @@ async fn update_agent_session_writes_projection_overview() {
             execution_strategy: Some("updated-strategy".to_string()),
             recent_access_mode: Some("full-access".to_string()),
             recent_preferences: Some(json!({ "task": true, "webSearch": false })),
-            recent_team_selection: Some(json!({ "disabled": true })),
             ..AgentSessionUpdateParams::default()
         })
         .await
@@ -436,7 +435,6 @@ async fn update_agent_session_writes_projection_overview() {
     assert_eq!(metadata["providerSelector"], "updated-provider");
     assert_eq!(metadata["recentAccessMode"], "full-access");
     assert_eq!(metadata["recentPreferences"]["task"], true);
-    assert_eq!(metadata["recentTeamSelection"]["disabled"], true);
 }
 
 #[tokio::test]

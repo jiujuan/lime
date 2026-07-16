@@ -3,8 +3,6 @@ import { isLikelyImageGenerationSearchText } from "@/lib/imageGen/providerMatche
 import type {
   AgentSessionExecutionRuntime,
   AgentSessionExecutionRuntimePreferences,
-  AgentSessionExecutionRuntimeRecentTeamRole,
-  AgentSessionExecutionRuntimeRecentTeamSelection,
   AgentTurnOutputSchemaRuntime,
 } from "@/lib/api/agentExecutionRuntime";
 import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
@@ -15,12 +13,6 @@ import {
   type ChatToolPreferences,
 } from "./chatToolPreferences";
 import { createAccessModeFromExecutionRuntime } from "./accessModeRuntime";
-import {
-  buildTeamDefinitionSummary,
-  createTeamDefinitionFromPreset,
-  normalizeTeamDefinition,
-  type TeamDefinition,
-} from "./teamDefinitions";
 
 export {
   applyModelChangeExecutionRuntime,
@@ -198,119 +190,6 @@ export function createSessionRecentPreferencesFromChatToolPreferences(
   return {
     task: preferences.task,
     subagent: preferences.subagent,
-  };
-}
-
-function normalizeRuntimeText(value?: string | null): string | null {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
-function normalizeRuntimeSkillIds(
-  value?: string[] | null,
-): string[] | undefined {
-  const skillIds =
-    value
-      ?.map((skillId) => normalizeRuntimeText(skillId))
-      .filter((skillId): skillId is string => Boolean(skillId)) || [];
-  return skillIds.length > 0 ? skillIds : undefined;
-}
-
-function createTeamRoleDefinitionsFromRuntimeSelection(
-  roles?: AgentSessionExecutionRuntimeRecentTeamRole[] | null,
-) {
-  return (roles || [])
-    .map((role, index) => {
-      const label = normalizeRuntimeText(role.label) || `角色 ${index + 1}`;
-      const summary =
-        normalizeRuntimeText(role.summary) || `${label}负责当前子任务。`;
-      return {
-        id: normalizeRuntimeText(role.id) || `runtime-role-${index + 1}`,
-        label,
-        summary,
-        profileId: normalizeRuntimeText(role.profileId) || undefined,
-        roleKey: normalizeRuntimeText(role.roleKey) || undefined,
-        skillIds: normalizeRuntimeSkillIds(role.skillIds),
-      };
-    })
-    .filter((role) => role.label.trim().length > 0);
-}
-
-export function createTeamDefinitionFromExecutionRuntimeRecentTeamSelection(
-  selection?: AgentSessionExecutionRuntimeRecentTeamSelection | null,
-): TeamDefinition | null {
-  if (!selection || selection.disabled) {
-    return null;
-  }
-
-  const selectedTeamSource = normalizeRuntimeText(selection.selectedTeamSource);
-  const selectedTeamId = normalizeRuntimeText(selection.selectedTeamId);
-  const preferredTeamPresetId = normalizeRuntimeText(
-    selection.preferredTeamPresetId,
-  );
-
-  if (
-    selectedTeamSource === "builtin" ||
-    (!selectedTeamSource && preferredTeamPresetId)
-  ) {
-    return createTeamDefinitionFromPreset(
-      selectedTeamId || preferredTeamPresetId || "",
-    );
-  }
-
-  const normalizedTeam = normalizeTeamDefinition({
-    id: selectedTeamId || undefined,
-    source:
-      selectedTeamSource === "ephemeral"
-        ? "ephemeral"
-        : selectedTeamSource === "custom"
-          ? "custom"
-          : "custom",
-    label: normalizeRuntimeText(selection.selectedTeamLabel) || "",
-    description:
-      normalizeRuntimeText(selection.selectedTeamDescription) || undefined,
-    theme: normalizeRuntimeText(selection.theme) || undefined,
-    presetId: preferredTeamPresetId || undefined,
-    roles: createTeamRoleDefinitionsFromRuntimeSelection(
-      selection.selectedTeamRoles,
-    ),
-  });
-
-  return normalizedTeam;
-}
-
-export function createSessionRecentTeamSelectionFromTeamDefinition(
-  team: TeamDefinition | null,
-  theme?: string | null,
-): AgentSessionExecutionRuntimeRecentTeamSelection {
-  if (!team) {
-    return {
-      disabled: true,
-      theme: normalizeRuntimeText(theme) || undefined,
-    };
-  }
-
-  return {
-    disabled: false,
-    theme: normalizeRuntimeText(theme) || normalizeRuntimeText(team.theme),
-    preferredTeamPresetId:
-      normalizeRuntimeText(team.presetId) ||
-      (team.source === "builtin" ? normalizeRuntimeText(team.id) : null) ||
-      undefined,
-    selectedTeamId: normalizeRuntimeText(team.id) || undefined,
-    selectedTeamSource: team.source,
-    selectedTeamLabel: normalizeRuntimeText(team.label) || undefined,
-    selectedTeamDescription:
-      normalizeRuntimeText(team.description) || undefined,
-    selectedTeamSummary: buildTeamDefinitionSummary(team) || undefined,
-    selectedTeamRoles: team.roles.map((role) => ({
-      id: normalizeRuntimeText(role.id) || undefined,
-      label: normalizeRuntimeText(role.label) || undefined,
-      summary: normalizeRuntimeText(role.summary) || undefined,
-      profileId: normalizeRuntimeText(role.profileId) || undefined,
-      roleKey: normalizeRuntimeText(role.roleKey) || undefined,
-      skillIds: normalizeRuntimeSkillIds(role.skillIds) || undefined,
-    })),
   };
 }
 

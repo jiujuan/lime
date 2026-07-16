@@ -331,6 +331,44 @@ describe("useAgentRuntimeSyncEffects terminal read model", () => {
     }
   });
 
+  it("当前 turn 已终态且后续 turn 仍排队时应只收起当前 stream", async () => {
+    const settleActiveRuntimeStream = vi.fn();
+    const harness = await mountHook({
+      isSending: true,
+      currentStreamTurnId: "turn-current",
+      threadReadStatus: "completed",
+      threadRead: {
+        thread_id: "thread-1",
+        status: "completed",
+        active_turn_id: null,
+        turns: [],
+      },
+      queuedTurnCount: 1,
+      threadTurns: [
+        createThreadTurn({
+          id: "turn-current",
+          status: "completed",
+        }),
+        createThreadTurn({
+          id: "turn-queued",
+          status: "running",
+        }),
+      ],
+      settleActiveRuntimeStream,
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(settleActiveRuntimeStream).toHaveBeenCalledTimes(1);
+      expect(settleActiveRuntimeStream).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("diagnostics 最新 turn 已终态时不应继续 recovered poll", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
     const harness = await mountHook({

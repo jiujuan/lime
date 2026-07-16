@@ -189,7 +189,6 @@
   "navigation.sidebar.importDialog.empty.noThreads": "インポート可能なローカル履歴が見つかりません",
   "navigation.sidebar.importDialog.meta.source": "ソース",
   "navigation.sidebar.importDialog.source.localHistory": "ローカル履歴",
-  "navigation.sidebar.importDialog.source.claudeCode": "Claude Code",
   "navigation.sidebar.importDialog.target.standalone": "単独会話",
   "navigation.sidebar.importDialog.preview.loading": "プレビューを生成中",
   "navigation.sidebar.importDialog.preview.empty": "プレビューするローカル履歴の会話を選択してください",

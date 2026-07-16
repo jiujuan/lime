@@ -6,6 +6,9 @@ use reqwest::Response;
 use runtime_core::{CanonicalLlmEvent as LlmEvent, FailureClassification, FinishReason, Usage};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::Duration;
+
+const DEFAULT_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Default)]
 struct ToolCallAccumulator {
@@ -126,10 +129,21 @@ pub(super) fn openai_chat_sse(
                 }
                 for delta in choice.delta.tool_calls.unwrap_or_default() {
                     let index = delta.index;
+                    let id = delta.id.filter(|value| !value.trim().is_empty());
+                    let name = delta
+                        .function
+                        .name
+                        .filter(|value| !value.trim().is_empty());
+                    let arguments = delta
+                        .function
+                        .arguments
+                        .filter(|value| !value.is_empty());
+                    if id.is_none() && name.is_none() && arguments.is_none() {
+                        continue;
+                    }
                     let call = state.calls.entry(index).or_default();
-                    if delta.id.is_some() { call.id = delta.id; }
-                    if delta.function.name.is_some() { call.name = delta.function.name; }
-                    let arguments = delta.function.arguments;
+                    if id.is_some() { call.id = id; }
+                    if name.is_some() { call.name = name; }
                     if let Some(arguments) = arguments.as_ref() {
                         call.arguments.push_str(&arguments);
                     }
@@ -629,11 +643,28 @@ pub(super) struct SseFrame {
 fn sse_frames(
     response: Response,
 ) -> impl Stream<Item = Result<SseFrame, CurrentProviderError>> + Send {
+    sse_frames_with_idle_timeout(response, DEFAULT_STREAM_IDLE_TIMEOUT)
+}
+
+pub(super) fn sse_frames_with_idle_timeout(
+    response: Response,
+    idle_timeout: Duration,
+) -> impl Stream<Item = Result<SseFrame, CurrentProviderError>> + Send {
     try_stream! {
         let mut pending = Vec::new();
         let mut bytes = response.bytes_stream();
-        while let Some(next) = bytes.next().await {
-            let next = next.map_err(|error| CurrentProviderError::new(format!("读取 provider SSE 失败: {error}")))?;
+        loop {
+            let next = tokio::time::timeout(idle_timeout, bytes.next())
+                .await
+                .map_err(|_| CurrentProviderError::new(format!(
+                    "读取 provider SSE 超时: {} ms 内未收到数据",
+                    idle_timeout.as_millis()
+                )))?;
+            let Some(next) = next else { break; };
+            let next = next.map_err(|error| CurrentProviderError::new(format!(
+                "读取 provider SSE 失败: {}",
+                super::transport::error_chain(&error)
+            )))?;
             pending.extend_from_slice(&next);
             for frame in drain_sse_frames(&mut pending)? { yield frame; }
         }

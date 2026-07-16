@@ -598,7 +598,6 @@ function appServerSessionUpdateParamsFromRequest(
     executionStrategy: request.execution_strategy,
     recentAccessMode: request.recent_access_mode,
     recentPreferences: request.recent_preferences,
-    recentTeamSelection: request.recent_team_selection,
     articleWorkspaceSelectedObjectRef:
       request.article_workspace_selected_object_ref ?? undefined,
     articleWorkspaceEditedDraft:
@@ -667,9 +666,13 @@ function appServerSessionReadToRuntimeDetail(
     updated_at: timestampMillis(response.session.updatedAt),
     workspace_id: response.session.workspaceId,
     messages: [],
-    turns: response.turns.map((turn) =>
-      appServerTurnToRuntimeTurn(turn, fallbackTimestamp),
-    ),
+    turns: response.turns.flatMap((turn) => {
+      const projectedTurn = appServerTurnToRuntimeTurn(
+        turn,
+        fallbackTimestamp,
+      );
+      return projectedTurn ? [projectedTurn] : [];
+    }),
     items: [],
     queued_turns: [],
     thread_read: projectAppServerSessionReadToThreadReadModel(response),
@@ -699,14 +702,18 @@ function sessionTitleFromBusinessObjectRef(
 function appServerTurnToRuntimeTurn(
   turn: AppServerAgentTurn,
   fallbackTimestamp: string,
-): AgentThreadTurn {
+): AgentThreadTurn | null {
+  const status = agentThreadTurnStatusFromAppServer(turn.status);
+  if (!status) {
+    return null;
+  }
   const startedAt = turn.startedAt ?? fallbackTimestamp;
   const updatedAt = turn.completedAt ?? startedAt;
   return {
     id: turn.turnId,
     thread_id: turn.threadId,
     prompt_text: "",
-    status: agentThreadTurnStatusFromAppServer(turn.status),
+    status,
     started_at: startedAt,
     completed_at: turn.completedAt,
     created_at: startedAt,
@@ -716,7 +723,7 @@ function appServerTurnToRuntimeTurn(
 
 function agentThreadTurnStatusFromAppServer(
   status: AppServerAgentTurn["status"],
-): AgentThreadTurnStatus {
+): AgentThreadTurnStatus | null {
   switch (status) {
     case "completed":
       return "completed";
@@ -725,10 +732,11 @@ function agentThreadTurnStatusFromAppServer(
     case "canceled":
       return "canceled";
     case "accepted":
-    case "queued":
     case "running":
     case "waitingAction":
       return "running";
+    case "queued":
+      return null;
   }
 }
 

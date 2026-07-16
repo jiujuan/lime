@@ -1,264 +1,148 @@
 # Lime 测试体系
 
-> 面向 Lime 当前桌面端产品形态的测试入口与索引
+> status: current / Refactor v2
+> owner: quality-workflow
+> last_verified: 2026-07-15
 
-## 概述
+## 1. 事实源
 
-Lime 当前是一个本地优先的 Electron Desktop Host + App Server JSON-RPC 桌面应用，而不是单一前端项目或单一 API 服务。legacy desktop adapter 只用于兼容和退役守卫，不再作为 current 交付事实源。
+Lime 当前是 `Electron Desktop Host + App Server JSON-RPC` 桌面产品；RuntimeCore、Thread/Turn/Item projection 和 GUI 继续沿这条链收敛。
 
-测试体系需要同时覆盖：
+Lime 的唯一产品链是：
 
-- 前端界面与工作台交互
-- Electron Desktop Host / App Server JSON-RPC 命令边界
-- legacy desktop adapter 守卫
-- Rust 服务层与业务逻辑
-- 数据库、文件系统与工作区状态
-- Provider、协议转换与本地 HTTP Server
-- 浏览器运行时等桌面能力
-- Agent Runtime 与真实模型行为
-- macOS / Windows 平台差异
-
-## 测试分层
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Lime 测试金字塔                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│                        ┌─────────┐                              │
-│                        │  E2E    │  端到端测试                   │
-│                        │  测试   │  (Electron + App Server + 前端)│
-│                       ─┴─────────┴─                             │
-│                      ┌─────────────┐                            │
-│                      │   集成测试   │  API 服务器、Provider runtime│
-│                     ─┴─────────────┴─                           │
-│                    ┌─────────────────┐                          │
-│                    │     单元测试     │  转换器、Provider、工具   │
-│                   ─┴─────────────────┴─                         │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```text
+Electron Desktop Host
+  -> App Server JSON-RPC
+  -> RuntimeCore
+  -> Thread / Turn / Item projection
+  -> GUI
 ```
 
-## Current / Legacy 测试口径
+仓库级最低门禁以 [../aiprompts/quality-workflow.md](../aiprompts/quality-workflow.md) 为准；完整策略以 [testing-strategy-2026.md](testing-strategy-2026.md) 为准；第二期覆盖建设以 [../roadmap/benchmark/README.md](../roadmap/benchmark/README.md) 为准。
 
-- `current`：Electron Desktop Host、Electron preload / IPC、App Server JSON-RPC、`packages/app-server-client`、`src/lib/desktop-host/` mock、`smoke:electron` / `verify:gui-smoke`
-- `compat`：`safeInvoke`、DevBridge fallback、旧 `agent_runtime_*` facade；只能证明迁移期适配没有漂移
-- `deprecated`：legacy desktop adapter、legacy desktop mock、旧宿主命令注册表；只能作为旧入口不回流的守卫
-- `dead`：旧桌面宿主源码路径、旧宿主 GUI smoke、旧宿主专用 E2E；不得作为新功能可交付证据
+## 2. 文档导航
 
-测试用例需要全面更新事实源：新增和重写测试默认覆盖 current 路径；已有 legacy desktop adapter / mock 测试若仍保留，必须改名或注释为 legacy guard，不能继续冒充主路径回归。
+| 文档 | 作用 |
+| --- | --- |
+| [testing-strategy-2026.md](testing-strategy-2026.md) | 分层、测试作者合同、CI/release lane、旧测试迁移规则 |
+| [unit-tests.md](unit-tests.md) | 纯单元和组件测试边界 |
+| [integration-tests.md](integration-tests.md) | Rust domain 与 App Server public JSON-RPC 集成测试 |
+| [e2e-tests.md](e2e-tests.md) | Gate A、Gate B、Vitest e2e 和 Electron smoke 的关系 |
+| [agent-evaluation.md](agent-evaluation.md) | live provider、grader、pass@k/pass^k 和非确定性评估 |
+| [harness-evals.md](harness-evals.md) | 现有 replay/harness 资产；第二期迁移输入，不是默认 release gate |
+| [../aiprompts/playwright-e2e.md](../aiprompts/playwright-e2e.md) | 真实 GUI 续测与 Playwright 操作细则 |
+| [../roadmap/benchmark/scenario-matrix.md](../roadmap/benchmark/scenario-matrix.md) | 第二期稳定场景 ID 与证据等级 |
 
-## 目录结构
+机器可读资产：
 
-```
-internal/test/
-├── README.md                    # 本文件 - 测试体系概览
-├── testing-strategy-2026.md     # 当前 Lime 主测试策略
-├── unit-tests.md               # 单元测试指南
-├── integration-tests.md        # 集成测试指南
-├── e2e-tests.md               # 浏览器续测与 E2E 总览
-├── agent-evaluation.md        # Agent 评估指南（核心文档）
-├── agent-qc-evidence.schema.json        # Agent QC Evidence Pack schema
-├── agent-qc-benchmark.manifest.json     # Agent QC baseline / candidate 差异验证计划
-├── agent-qc-gui-flows.manifest.json     # Agent QC GUI / Playwright MCP flow 清单
-├── agent-qc-scenarios.manifest.json     # Agent QC 核心场景清单
-├── harness-evals.md           # Harness eval 任务集与 runner 入口
-└── test-cases/                # 测试用例模板
-    ├── converter-tests.md     # 协议转换器测试用例
-    ├── provider-tests.md      # Provider 测试用例
-    └── agent-tests.md         # Agent 测试用例
+- `agent-qc-scenarios.manifest.json`、`agent-qc-gui-flows.manifest.json`、`agent-qc-evidence.schema.json`：现有 Agent QC 输入，第二期 T0 逐项审计前不自动算新门禁。
+- `harness-evals.manifest.json`、`harness-fixtures/**`：replay/eval 输入，只能证明 manifest 声明的场景。
+- `deepswe-coding-slice-v2.json`：DeepSWE Smoke 10 / Release 20 的版本化选题与 adapter v2 执行合同；当前已有诊断 true run，Agnes 预算内无 patch，Verifier 因本机缺容器运行时阻塞。
 
-internal/tests/
-├── agent-ops-qc.md            # Agent 运营级测试体系与证据门禁
-├── agent-qc-p0-scenarios.md   # Agent QC P0 场景执行手册
-├── lime-agent-qc-rollout-plan.md # Lime 样本产品落地计划
-└── lime-agent-qc-current-blockers.md # 当前 P0 qcloop 阻断记录
-```
+旧 `benchmark-release` 和 `agent-qc-benchmark` manifest 已删除，禁止恢复同名入口。
 
-## 文档索引
+## 3. 常用命令
 
-| 文档                                                                                     | 说明                         | 适用场景                                                 |
-| ---------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------- |
-| [testing-strategy-2026.md](testing-strategy-2026.md)                                     | 当前 Lime 测试体系建设建议   | 建立分层门禁、规划演进                                   |
-| [unit-tests.md](unit-tests.md)                                                           | 单元测试指南                 | 独立模块测试                                             |
-| [integration-tests.md](integration-tests.md)                                             | 集成测试指南                 | 模块间协作测试                                           |
-| [e2e-tests.md](e2e-tests.md)                                                             | 当前浏览器续测与 E2E 入口    | Playwright MCP / DevBridge 主路径验证                    |
-| [../aiprompts/playwright-e2e.md](../aiprompts/playwright-e2e.md)                         | 浏览器续测详细事实源         | 继续测试、复现、控制台与 Bridge 排障                     |
-| [agent-evaluation.md](agent-evaluation.md)                                               | Agent 评估指南               | AI Agent 行为评估                                        |
-| [../tests/agent-ops-qc.md](../tests/agent-ops-qc.md)                                     | Agent 运营级测试体系         | qcloop、证据包、发布门禁、运营回归                       |
-| [../tests/agent-qc-p0-scenarios.md](../tests/agent-qc-p0-scenarios.md)                   | Agent QC P0 场景执行手册     | 核心场景执行、证据要求、失败沉淀                         |
-| [../tests/lime-agent-qc-rollout-plan.md](../tests/lime-agent-qc-rollout-plan.md)         | Lime 落地计划                | 分阶段构建 qcloop 证据链、GUI/Runtime 深测、release gate |
-| [../tests/lime-agent-qc-current-blockers.md](../tests/lime-agent-qc-current-blockers.md) | 当前 P0 阻断记录             | 真实 qcloop fail evidence、root cause、关闭条件          |
-| [agent-qc-scenarios.manifest.json](agent-qc-scenarios.manifest.json)                     | Agent QC 场景清单            | 机器可读场景、lane、命令、证据要求                       |
-| [agent-qc-benchmark.manifest.json](agent-qc-benchmark.manifest.json)                     | Agent QC 差异验证计划        | baseline / candidate 场景、确定性 diff、Supervisor 输入  |
-| [agent-qc-evidence.schema.json](agent-qc-evidence.schema.json)                           | Evidence Pack schema         | 测试证据、场景结果、verdict 合同                         |
-| [agent-qc-gui-flows.manifest.json](agent-qc-gui-flows.manifest.json)                     | GUI flow 清单                | Playwright MCP 步骤、断言、证据要求                      |
-| [harness-evals.md](harness-evals.md)                                                     | Harness eval 任务集与 runner | Replay 样本、grader、nightly 摘要                        |
-| [test-cases/converter-tests.md](test-cases/converter-tests.md)                           | 转换器测试用例               | OpenAI ↔ Claude 转换                                     |
-| [test-cases/provider-tests.md](test-cases/provider-tests.md)                             | Provider 测试用例            | API Key Provider、协议转换和 API 调用                    |
-| [test-cases/agent-tests.md](test-cases/agent-tests.md)                                   | Agent 测试用例               | Agent Agent 集成                                         |
-
-## 快速开始
-
-### 运行 Rust 测试
+### 快速反馈
 
 ```bash
-cd lime-rs && cargo test
+npm run test:related -- <paths...>
+npm run test:changed -- <ref>
+npm run test:unit -- <paths...>
+npm run test:component -- <paths...>
+npm run test:contract -- <paths...>
+npm run test:integration -- <paths...>
+npm run test:resume
 ```
 
-### 运行前端测试
+`npm run test:e2e` 只运行 Vitest e2e layer，不等于真实 Electron Gate B。
+
+### Rust
 
 ```bash
-npm test
+npm run test:rust:related -- <paths...>
+npm run test:rust:integration:related -- <paths...>
+npm run test:rust:unit -- -p <crate> <filter>
+npm run test:rust:integration -- -p <crate> --test <target>
 ```
 
-### 运行本地智能校验
+### Contracts 与主路径
+
+```bash
+npm run test:contracts
+npm run smoke:electron
+npm run smoke:agent-runtime-current-fixture
+npm run smoke:mcp-current
+npm run verify:gui-smoke
+npm run governance:legacy-report
+```
+
+### 聚合门禁
 
 ```bash
 npm run verify:local
-```
-
-### 运行本地全量校验
-
-```bash
 npm run verify:local:full
 ```
 
-### 运行 Electron GUI smoke
+聚合命令不能替代受影响场景的公共边界集成测试或 Gate B。
 
-```bash
-npm run verify:gui-smoke
-npm run smoke:electron
+## 4. 分层
+
+| 层 | 适合验证 | 不适合验证 |
+| --- | --- | --- |
+| unit | parser、selector、projection、lowering、state transition | React/进程/网络/文件系统 |
+| component | DOM 渲染、事件、hook 生命周期、关键接线 | Agent 状态机和跨进程主链 |
+| contract | schema、typed client、command/catalog/preload 边界 | runtime 行为正确性 |
+| integration | domain owner、App Server public API、store、provider fixture | Electron 可见状态 |
+| current fixture | RuntimeCore/tool/provider/event/read model | live provider，除非显式使用 |
+| Gate A | Renderer projection 与交互 | Electron/preload/IPC |
+| Gate B | 真实 Electron 产品链 | 未运行的 provider/平台 |
+| live/eval | 模型能力和非确定性稳定性 | 确定性协议正确性 |
+
+## 5. Current / Deprecated / Dead
+
+### current
+
+- related-first 的 TS/Rust layer runners。
+- `packages/app-server-client` 的 protocol/client contract 和 public JSON-RPC integration。
+- `src/lib/desktop-host/` 的显式 host fixture；生产路径不得使用其 mock 作为 fallback。
+- `smoke:agent-runtime-current-fixture`、`smoke:mcp-current` 等 current fixture。
+- Gate A Renderer 证据与真实 Electron Gate B fixture。
+- `verify:local`、`test:contracts`、`verify:gui-smoke`、governance guards。
+
+### deprecated
+
+- 未映射到第二期稳定场景 ID 的旧 Agent QC/Harness manifest。
+- 仍基于旧 owner、旧命名或过大 React mount 的测试；只能迁移或合并。
+- 只靠 source-string 搜索证明行为的 boundary tests；优先收进治理扫描或 owner contract test。
+
+### dead
+
+- 旧 Benchmark runner、release manifest 和旧 Terminal-Bench/DeepSWE wrapper；DeepSWE v2 选题仍是 current evaluation 输入。
+- 测试静态定义、已删除 runtime/command 正向行为和脱离构建图的 fixture。
+- 生产 mock fallback、renderer fallback 或旧 wrapper 通过的“主路径”测试。
+
+## 6. 新增测试前
+
+1. 在 [../roadmap/benchmark/scenario-matrix.md](../roadmap/benchmark/scenario-matrix.md) 找到或新增场景 ID。
+2. 确定唯一 owner 和最低证据层，不从 UI 层重复测试后端所有分支。
+3. 优先复用已有 builder、fixture、临时目录和事件等待 helper。
+4. 正常与失败路径使用同一 public boundary。
+5. 断言完整 request/event/read model；避免只验证 mock 被调用。
+6. 写明定向命令、运行时间、live/secret/platform 约束。
+
+## 7. Evidence 最小字段
+
+```yaml
+scenario: TRN-01
+candidate: <commit-or-working-tree-digest>
+proof_level: integration|fixture|gate-a|gate-b|live|platform
+command: <stable repository command>
+status: pass|fail|blocked
+duration_ms: <number>
+artifacts: <paths>
+failure_owner: <domain-or-none>
+mock_mode: none|explicit-test-fixture
 ```
 
-### 浏览器模式桥接检查
-
-```bash
-npm run bridge:health -- --timeout-ms 120000
-```
-
-### 运行自包含 smoke
-
-```bash
-npm run smoke:workspace-ready
-npm run smoke:browser-runtime
-npm run smoke:site-adapters
-npm run smoke:agent-runtime-tool-surface
-npm run smoke:agent-runtime-tool-surface-page
-```
-
-### 运行 Harness eval 摘要
-
-```bash
-npm run harness:eval
-```
-
-### 提升工作区 Replay 为仓库样本
-
-```bash
-npm run harness:eval:promote -- --session-id "session-123" --slug "pending-request-runtime"
-```
-
-### 运行 Harness eval 趋势报告
-
-```bash
-npm run harness:eval:trend
-```
-
-### 运行 Agent QC 场景报告 / 合同检查
-
-```bash
-npm run agent-qc:report
-npm run agent-qc:report:json
-npm run agent-qc:gui-flow:report
-npm run agent-qc:gui-flow:check
-npm run agent-qc:check
-npm run agent-qc:benchmark:check
-npm run agent-qc:benchmark:compare -- --baseline "<baseline-job-dir>" --candidate "<candidate-job-dir>"
-npm run agent-qc:qcloop-job -- --risk P0 --output "./.lime/qc/qcloop-p0-job.json" --check
-npm run agent-qc:payload-coverage -- --payload "./.lime/qc/qcloop-p0-job.json" --format json --output "./.lime/qc/qcloop-p0-single-owner-ready-coverage-current.json" --check
-npm run agent-qc:verify-local-gate -- --check
-npm run agent-qc:export-evidence -- --job-id "<qcloop-job-id>" --output "./.lime/qc/agent-qc-evidence.json" --check
-npm run agent-qc:release-summary -- --evidence "./.lime/qc/agent-qc-evidence.json" --require-scenario-manifest "internal/test/agent-qc-scenarios.manifest.json" --require-risk P0 --tag "<release-tag>" --output "./.lime/qc/release-agent-qc.md" --check
-npm run agent-qc:audit
-npm run agent-qc:objective-checklist -- --check
-```
-
-`agent-qc:check` 是本地显式 Agent QC 场景 / GUI flow 合同检查；GitHub Actions 与 `test:contracts` 不自动执行 qcloop 或 Agent QC 批量验证。`agent-qc:verify-local-gate` 只包装真实 `npm run verify:local` 并写入 `.lime/qc/verify-local-current.json`，不会覆盖 official Evidence Pack。
-
-### 记录 Harness eval 历史窗口
-
-```bash
-npm run harness:eval:history:record
-```
-
-默认会把完整 artifact 套件写到 `./.lime/harness/reports/`：
-
-- `harness-eval-summary.json`
-- `harness-eval-summary.md`
-- `harness-eval-trend.json`
-- `harness-eval-trend.md`
-- `harness-cleanup-report.json`
-- `harness-cleanup-report.md`
-- `harness-dashboard.html`
-
-### 运行 Harness cleanup / slop 报告
-
-```bash
-npm run harness:cleanup-report
-```
-
-### 当前浏览器续测入口
-
-当前仓库的浏览器模式 E2E / 续测文档分两层：
-
-- `internal/test/e2e-tests.md`：总览、命令矩阵、适用边界
-- `internal/aiprompts/playwright-e2e.md`：详细操作流程与 Playwright MCP 续测事实源
-
-### 运行代码检查
-
-```bash
-# Rust
-cargo clippy --manifest-path "lime-rs/Cargo.toml"
-
-# 前端
-npm run lint
-```
-
-## 核心测试模块
-
-| 模块          | 测试重点                             | 文档                                                |
-| ------------- | ------------------------------------ | --------------------------------------------------- |
-| 协议转换      | OpenAI ↔ Claude 转换正确性           | [converter-tests.md](test-cases/converter-tests.md) |
-| Provider 系统 | API Key Provider、协议转换、API 调用 | [provider-tests.md](test-cases/provider-tests.md)   |
-| 退役凭证入口  | 旧凭证 HTTP API 保持下线             | [integration-tests.md](integration-tests.md)        |
-| Agent Agent   | 流式响应、工具调用                   | [agent-tests.md](test-cases/agent-tests.md)         |
-
-## 测试原则
-
-基于 [Anthropic AI Agent 评估指南](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) 和 Orchids Bridge 项目实践：
-
-1. **评估结果，而非路径** - Agent 可能找到更好的方法，不要过度约束执行路径
-2. **平衡问题集** - 测试"应该做"和"不应该做"两种情况
-3. **隔离测试环境** - 每个测试独立状态，避免测试间污染
-4. **从 Bug 到测试** - 每个修复的 Bug 都应该有对应测试用例
-5. **处理非确定性** - 使用 pass@k 和 pass^k 指标评估 Agent 行为
-6. **多层防护** - 结合自动评估、监控、人工审查
-
-## 评分器类型
-
-| 类型           | 适用场景   | 优点         | 缺点             |
-| -------------- | ---------- | ------------ | ---------------- |
-| **代码评分器** | 确定性验证 | 快速、可复现 | 对有效变体脆弱   |
-| **模型评分器** | 语义评估   | 灵活、可扩展 | 非确定性、需校准 |
-| **人工评分器** | 复杂判断   | 金标准质量   | 昂贵、慢         |
-
-## 评估指标
-
-```
-pass@k = P(至少 1 次成功 | k 次尝试) = 1 - (1 - p)^k
-pass^k = P(全部成功 | k 次尝试) = p^k
-```
-
-- **pass@k**：适用于"找到一个解决方案就行"的场景
-- **pass^k**：适用于"每次都必须成功"的场景
+失败 evidence 不覆盖；修复后新增记录。live evidence 不保存 secret、完整用户正文或敏感本地路径。

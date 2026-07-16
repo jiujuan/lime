@@ -9,7 +9,7 @@ import {
 installStreamingRendererTestHarness();
 
 describe("StreamingRenderer imported history", () => {
-  it("本地历史导入命令记录应展示友好只读摘要而不是原始命令", () => {
+  it("本地历史命令应复用普通命令名称、参数和输出展示", () => {
     const { container } = renderHarness({
       content: "导入完成",
       toolCalls: [
@@ -34,19 +34,11 @@ describe("StreamingRenderer imported history", () => {
       ],
     });
 
-    expect(container.textContent).toContain("导入的命令记录");
-    expect(container.textContent).toContain("不会重新执行");
-    expect(container.textContent).not.toContain("npm test");
+    expect(container.textContent).toContain("已运行 npm test");
+    expect(container.textContent).toContain("ok");
+    expect(container.textContent).not.toContain("导入的命令记录");
     expect(container.textContent).not.toContain("stdout");
-    expect(container.textContent).not.toContain("ok");
-    expect(
-      container.querySelector('[data-testid="tool-call-command-summary"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector(
-        '[data-testid="tool-call-command-output-streams"]',
-      ),
-    ).toBeNull();
+    expect(container.textContent).not.toContain("source_client");
   });
 
   it("续聊后的本地历史导入过程应保留命令记录并单独展示搜索摘要", () => {
@@ -123,17 +115,17 @@ describe("StreamingRenderer imported history", () => {
       '[data-testid="streaming-process-group"] > button',
     );
     expect(processGroupButtons).toHaveLength(1);
-    expect(container.textContent).toContain("导入的命令记录");
+    expect(container.textContent).toContain("已运行 npm test");
     expect(processGroupButtons[0]?.textContent).toContain(
       "已搜索网页：Lime history import",
     );
     expect(processGroupButtons[0]?.textContent).not.toContain("导入的命令记录");
     expect(container.textContent).toContain("已完成修复。");
     expect(container.textContent).not.toContain("imported_read_only");
-    expect(container.textContent).not.toContain("npm test");
+    expect(container.textContent).not.toContain("导入的命令记录");
   });
 
-  it("其他本地历史来源的导入过程也应复用只读命令记录展示", () => {
+  it("来源 provenance 不应改变普通命令展示", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -151,7 +143,7 @@ describe("StreamingRenderer imported history", () => {
               success: true,
               output: "ok",
               metadata: {
-                source_client: "claude_code",
+                source_client: "codex",
               },
             },
             startTime: new Date("2026-06-17T10:00:00.000Z"),
@@ -173,13 +165,12 @@ describe("StreamingRenderer imported history", () => {
       '[data-testid="inline-tool-process-step"]',
     );
     expect(commandRecord).not.toBeNull();
-    expect(commandRecord?.textContent).toContain("导入的命令记录");
-    expect(container.textContent).toContain("不会重新执行");
-    expect(container.textContent).not.toContain("npm test");
-    expect(container.textContent).not.toContain("claude_code");
+    expect(commandRecord?.textContent).toContain("已运行 npm test");
+    expect(container.textContent).not.toContain("导入的命令记录");
+    expect(container.textContent).not.toContain("source_client");
   });
 
-  it("本地历史导入思考应默认展开并排在命令记录之前", () => {
+  it("本地历史思考与命令应按普通历史顺序展示", () => {
     const importedMetadata = {
       imported: true,
       imported_synthetic: true,
@@ -239,7 +230,7 @@ describe("StreamingRenderer imported history", () => {
       "I need to inspect the test failure first.",
     );
     expect(container.textContent).toContain("已完成修复。");
-    expect(container.textContent).not.toContain("npm test");
+    expect(container.textContent).toContain("npm test");
   });
 
   it("导入工具轨同组的思考即使缺少来源 metadata 也应还原原文", () => {

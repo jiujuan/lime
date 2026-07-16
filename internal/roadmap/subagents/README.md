@@ -22,9 +22,7 @@
 
 ### compat
 
-- `TeamDefinition`、`selectedTeam`、`recent_team_selection`、`lime.chat.team_selection.v1.general` 仍是历史兼容命名，只能承载现有 runtime metadata / selection projection。
-- 兼容字段可以继续被发送边界读取，但不允许重新变成用户可见 Team 概念、profile 编辑器、任务分工模板或自定义 Team 存储入口。
-- 退出条件：App Server / RuntimeCore 提供 current `SubagentThread` / `SubagentProfile` 事实源后，将上述 compat 命名迁成 subagent/thread 语义，并删除不再被 current projection 使用的存储 key。
+- 无。Subagents current 链不保留 Team selection 或 Renderer memory shadow 包装。
 
 ### dead
 
@@ -38,6 +36,7 @@
 - `agentChat.inputbar.teamSelector.*` 与 Team canvas / board / dock / formation / selectedSession / activityPreview / operations / canvasLane / teamPreset i18n key。
 - `agentChat.inputbar.teamSuggestion.*` i18n key 与 `team-suggestion-bar` DOM surface。
 - `team-workspace-runtime/**`、`useTeamWorkspaceRuntime`、`teamWorkspaceRuntime`、session/control wrappers、restored synthetic facts、本地 live/draft/tool/queue map 与 unavailable controls。
+- `TeamDefinition`、`selectedTeam`、`recent_team_selection`、`lime.chat.team_selection.v1.general` 及其 metadata / localStorage owner。
 - `agentChat.teamWorkspace.liveRuntime.*`、`runtimeStatus.*`、`control.*` 五语言 dead key。
 
 ## 实施约束
@@ -46,7 +45,7 @@
 2. UI 只展示 Subagents/thread/runtime 状态；不得弹 TeamSelector Popover，不得打开 TeamSelectorPanel，不得出现 Team 画布或旧协作工作台。
 3. 新增用户可见文案必须使用 Subagents / 子代理语义，并覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
 4. 治理守卫必须阻止旧 Team UI 文件、路径、props、test id 和 i18n key 回流。
-5. 保留的 `team*` compat 命名必须标明用途和退出条件，不能继续承接新功能。
+5. `team*` 只允许出现在 typed `team_memory_refs` 等 current memory 领域语义或负向回流守卫中。
 
 ## 本轮实施切口
 
@@ -62,7 +61,7 @@
 - 已删除 Team 画布、Team workspace board、dock、summary panel、memory shadow card 和 `team-workspace-board/` 目录；Subagents 展示回到 runtime projection / thread 状态主链。
 - 已删除 `TeamSuggestionBar` 与 `teamSuggestion` 主动推荐链；复杂输入不再弹出或插入推荐条，Subagents 只通过显式 `/subagents`、工具状态和线程展示进入。
 - 已删除未使用的自定义 Team 克隆与本地 `custom_teams` 写入入口；workspace settings 中的历史 `customTeams` 只保留只读 compat 解析。
-- 已把用户可见文案从 `Team current tools`、`Team Memory`、`Team member`、`teammate` 等改为 Subagents / 子代理语义；兼容 key 仅保留在协议、storage 和 runtime metadata 边界。
+- 已把用户可见文案从 `Team current tools`、`Team Memory`、`Team member`、`teammate` 等改为 Subagents / 子代理语义。
 - 已补 `legacySurfaceCatalog` dead surface 守卫，覆盖旧文件、路径、props、test id、Team 画布术语和旧展示文案，防止后续恢复。
 
 ## 2026-07-14 current supersession
@@ -73,6 +72,5 @@
 
 ## 后续退出条件
 
-- Runtime 提供 first-class Subagents thread/profile schema 后，迁掉 `TeamDefinition` / `selectedTeam` / `recent_team_selection` 等 compat 命名。
 - `agentTeamWorkspace` namespace 只承载仍在使用的 AgentUI projection copy；是否改名为 Subagents namespace另开窄切片，不恢复已删 runtime/control key。
 - 若 `teamMemorySnapshot` 仍只作为历史 metadata 展示，保持只读 compat；若无 current 消费，按 `dead` 删除并补守卫。

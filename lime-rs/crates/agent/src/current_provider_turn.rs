@@ -291,9 +291,21 @@ fn handle_provider_event<F>(
             AgentEvent::TextDelta { item_id, text },
             on_event,
         ),
-        CurrentProviderTurnEvent::TextEnd { item_id } => {
-            emit_with_artifacts(artifact_events, AgentEvent::TextEnd { item_id }, on_event)
-        }
+        CurrentProviderTurnEvent::TextEnd { item_id, phase } => emit_with_artifacts(
+            artifact_events,
+            AgentEvent::TextEnd {
+                item_id,
+                phase: match phase {
+                    agent_runtime::provider_turn::CurrentProviderTextPhase::Commentary => {
+                        crate::protocol::AgentMessagePhase::Commentary
+                    }
+                    agent_runtime::provider_turn::CurrentProviderTextPhase::FinalAnswer => {
+                        crate::protocol::AgentMessagePhase::FinalAnswer
+                    }
+                },
+            },
+            on_event,
+        ),
         CurrentProviderTurnEvent::ReasoningStart { item_id } => emit_with_artifacts(
             artifact_events,
             AgentEvent::ThinkingStart { item_id },
@@ -315,7 +327,33 @@ fn handle_provider_event<F>(
             delta: _,
             accumulated_arguments: _,
         } => {}
-        CurrentProviderTurnEvent::Usage { usage: value } => *usage = Some(value),
+        CurrentProviderTurnEvent::Usage { .. } => {}
+        CurrentProviderTurnEvent::ProviderStep {
+            attempt,
+            completed,
+            finish_reason,
+            text_output_chars,
+            reasoning_output_chars,
+            tool_call_count,
+            usage: step_usage,
+        } => {
+            if let Some(step_usage) = step_usage.as_ref() {
+                accumulate_usage(usage, step_usage);
+            }
+            emit_with_artifacts(
+                artifact_events,
+                AgentEvent::ProviderStep {
+                    attempt,
+                    completed,
+                    finish_reason,
+                    text_output_chars,
+                    reasoning_output_chars,
+                    tool_call_count,
+                    usage: step_usage.map(project_usage),
+                },
+                on_event,
+            );
+        }
     }
 }
 
@@ -360,6 +398,31 @@ fn project_usage(usage: model_provider::current_client::CurrentProviderUsage) ->
         output_tokens: usage.output_tokens,
         cached_input_tokens: usage.cached_input_tokens,
         cache_creation_input_tokens: usage.cache_creation_input_tokens,
+    }
+}
+
+fn accumulate_usage(
+    total: &mut Option<model_provider::current_client::CurrentProviderUsage>,
+    step: &model_provider::current_client::CurrentProviderUsage,
+) {
+    let total = total.get_or_insert_default();
+    total.input_tokens = total.input_tokens.saturating_add(step.input_tokens);
+    total.output_tokens = total.output_tokens.saturating_add(step.output_tokens);
+    total.cached_input_tokens =
+        sum_optional_tokens(total.cached_input_tokens, step.cached_input_tokens);
+    total.cache_creation_input_tokens = sum_optional_tokens(
+        total.cache_creation_input_tokens,
+        step.cache_creation_input_tokens,
+    );
+}
+
+fn sum_optional_tokens(left: Option<u32>, right: Option<u32>) -> Option<u32> {
+    match (left, right) {
+        (None, None) => None,
+        (left, right) => Some(
+            left.unwrap_or_default()
+                .saturating_add(right.unwrap_or_default()),
+        ),
     }
 }
 
@@ -558,11 +621,16 @@ mod tests {
     fn lifecycle_projection_maps_failed_output_to_failed_item() {
         let (sender, _receiver) = mpsc::unbounded_channel();
         let emitter = CurrentTurnToolLifecycleEmitter::new(sender, "session-1", "thread-1");
+        let output_metadata = HashMap::from([
+            ("command".to_string(), serde_json::json!("false")),
+            ("command_output".to_string(), serde_json::json!("failed")),
+            ("exit_code".to_string(), serde_json::json!(1)),
+        ]);
         let projected = emitter
             .project(ToolLifecycleEvent {
                 turn_id: "turn-1".to_string(),
                 call_id: "call-failed".to_string(),
-                tool_name: "Bash".to_string(),
+                tool_name: "exec_command".to_string(),
                 arguments: serde_json::json!({ "command": "false" }),
                 environments: Vec::new(),
                 phase: ToolLifecyclePhase::Completed,
@@ -574,7 +642,7 @@ mod tests {
                     duration_ms: 3,
                     truncation: None,
                     sidecar_reference: None,
-                    metadata: HashMap::new(),
+                    metadata: output_metadata,
                     agent_control_projection_facts: Vec::new(),
                 }),
             })
@@ -584,13 +652,18 @@ mod tests {
             panic!("expected canonical item completed event");
         };
         assert_eq!(item.status, ItemStatus::Failed);
-        let ThreadItemPayload::Tool { output, .. } = item.payload else {
-            panic!("expected canonical tool payload");
+        let ThreadItemPayload::Command {
+            command,
+            output,
+            exit_code,
+            ..
+        } = item.payload
+        else {
+            panic!("expected canonical command payload");
         };
-        assert_eq!(
-            output.and_then(|output| output.error).as_deref(),
-            Some("exit code 1")
-        );
+        assert_eq!(command, "false");
+        assert_eq!(output.as_deref(), Some("failed"));
+        assert_eq!(exit_code, Some(1));
     }
 
     #[tokio::test]
@@ -718,7 +791,7 @@ mod tests {
 
         let (scope, call_id) = action_scope(
             RuntimeToolExecutionRequest {
-                tool_name: "Bash",
+                tool_name: "exec_command",
                 params: &params,
                 context: &context,
                 turn_context: Some(&turn_context),
@@ -763,7 +836,7 @@ mod tests {
 
         let error = action_scope(
             RuntimeToolExecutionRequest {
-                tool_name: "Bash",
+                tool_name: "exec_command",
                 params: &params,
                 context: &context,
                 turn_context: Some(&turn_context),

@@ -33,7 +33,7 @@ pub fn check_shell_command_permission(
     command: &str,
     working_directory: &Path,
 ) -> ShellPermissionDecision {
-    if normalized_tool_name(tool_name).contains("powershell") {
+    if cfg!(target_os = "windows") || normalized_tool_name(tool_name).contains("powershell") {
         return check_powershell_command_permission(command, working_directory);
     }
     check_bash_command_permission(command, working_directory)

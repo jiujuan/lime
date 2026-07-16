@@ -178,7 +178,6 @@ export function createBaseParams(overrides: Record<string, unknown> = {}) {
       subagent: false,
     },
     setChatToolPreferences: noop,
-    selectedTeam: null,
     creationMode: "guided",
     setCreationMode: noop,
     activeTheme: "general",

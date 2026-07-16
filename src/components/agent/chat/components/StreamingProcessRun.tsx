@@ -9,8 +9,6 @@ import {
 } from "./StreamingProcessGroup";
 import {
   coalesceAdjacentThinkingProcessEntries,
-  isImportedProcessMetadata,
-  isImportedToolCall,
   isWebRetrievalToolCall,
   shouldAutoExpandProcessEntries,
   type StreamingProcessEntry,
@@ -153,9 +151,7 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
         processEntries: StreamingProcessEntry[],
       ) => {
         if (entry.kind === "thinking") {
-          const preserveThinkingSourceText =
-            entry.preserveSourceText ||
-            isImportedProcessMetadata(entry.metadata);
+          const preserveThinkingSourceText = entry.preserveSourceText === true;
           const isThinkingStreaming =
             Boolean(entry.isActive ?? isStreaming) &&
             isStreaming &&
@@ -234,23 +230,7 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
     const toolCount = coalescedEntries.filter(
       (entry) => entry.kind === "tool",
     ).length;
-    const hasImportedProcess = coalescedEntries.some(
-      (entry) =>
-        (entry.kind === "thinking" &&
-          isImportedProcessMetadata(entry.metadata)) ||
-        (entry.kind === "tool" && isImportedToolCall(entry.toolCall)),
-    );
-    const processEntries = hasImportedProcess
-      ? coalescedEntries.map((entry) =>
-          entry.kind === "thinking"
-            ? {
-                ...entry,
-                defaultExpanded: entry.defaultExpanded ?? true,
-                preserveSourceText: true,
-              }
-            : entry,
-        )
-      : coalescedEntries;
+    const processEntries = coalescedEntries;
     const toolEntries = processEntries.filter(
       (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
         entry.kind === "tool",

@@ -22,7 +22,6 @@ import {
   createFallbackWorkflowTranslate,
   translateTaskRailText,
 } from "./generalWorkbenchTaskRailText";
-import { ImportedRuntimeEventDetailPanel } from "./ImportedRuntimeEventDetailPanel";
 
 type TaskRailTranslate = (
   key: string,
@@ -34,10 +33,6 @@ interface TaskCenterRunControlSurfaceProps {
   activityItems?: readonly GeneralWorkbenchTaskRailActivityItem[];
   outputItems?: readonly GeneralWorkbenchTaskRailItem[];
   onOpenOutput?: (path: string) => void | Promise<void>;
-  importedRuntimeDetail?: {
-    enabled: boolean;
-    sessionId?: string | null;
-  };
   t?: TaskRailTranslate;
 }
 
@@ -465,7 +460,6 @@ export function TaskCenterRunControlSurface({
   activityItems = [],
   outputItems = [],
   onOpenOutput,
-  importedRuntimeDetail,
   t,
 }: TaskCenterRunControlSurfaceProps) {
   if (!projection.hasContent) {
@@ -481,8 +475,7 @@ export function TaskCenterRunControlSurface({
   ].filter((item): item is GeneralWorkbenchTaskRailContextItem =>
     Boolean(item),
   );
-  const shouldShowSourceSection =
-    Boolean(projection.sourceItem) || Boolean(importedRuntimeDetail?.enabled);
+  const shouldShowSourceSection = Boolean(projection.sourceItem);
 
   return (
     <div
@@ -572,11 +565,6 @@ export function TaskCenterRunControlSurface({
           <SurfaceContextRow
             item={projection.sourceItem}
             testId="task-center-run-control-source-row"
-          />
-          <ImportedRuntimeEventDetailPanel
-            enabled={Boolean(importedRuntimeDetail?.enabled)}
-            sessionId={importedRuntimeDetail?.sessionId}
-            t={t}
           />
         </SurfaceSection>
 

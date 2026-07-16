@@ -80,6 +80,22 @@ mod tests {
     }
 
     #[test]
+    fn bash_read_target_ignores_file_descriptor_redirection() {
+        let cwd = std::env::temp_dir().join(format!(
+            "tool-runtime-shell-analysis-redirection-{}",
+            std::process::id()
+        ));
+        let packages = cwd.join("packages");
+        fs::create_dir_all(&packages).unwrap();
+
+        let missing =
+            missing_bash_read_targets("ls packages/ 2>/dev/null || echo \"no packages dir\"", &cwd);
+
+        assert!(missing.is_empty());
+        let _ = fs::remove_dir_all(&cwd);
+    }
+
+    #[test]
     fn powershell_read_target_reports_missing_file() {
         let cwd = std::env::temp_dir().join(format!(
             "tool-runtime-shell-analysis-pwsh-{}",

@@ -34,7 +34,6 @@ const CONSUMER_PATHS = [
   "src/components/agent/chat/hooks/agentStreamReadModelParsing.ts",
   "src/components/agent/chat/hooks/agentStreamRequestStartController.ts",
   "src/components/agent/chat/hooks/agentStreamSend.ts",
-  "src/components/agent/chat/utils/importedSourceProcess.ts",
   "src/components/agent/chat/utils/agentTaskRuntime.ts",
   "src/components/agent/chat/utils/inputbarRuntimeStatusLine.ts",
   "src/components/agent/chat/hooks/agentSessionTopicViewModel.ts",

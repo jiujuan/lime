@@ -2,7 +2,9 @@
 
 > status: current verification contract
 > owner: quality-workflow
-> last_verified: 2026-07-12
+> last_verified: 2026-07-15
+>
+> 当前 v2 代码切片以 `internal/exec-plans/refactor-v2-implementation.md` 为执行事实源；本矩阵只约束验证等级，不再把已完成切片描述为“仅文档”。
 
 ## 风险到门禁
 
@@ -49,6 +51,17 @@ remaining_blocker: <none or exact reason>
 - Gate B 必须真实经过 Electron、preload/IPC、`app_server_handle_json_lines`、App Server JSON-RPC、runtime/read model 和可见 UI。
 - 生产路径不允许 mock fallback；测试 fixture 的 mock 必须显式标注且仍经过 current bridge。
 
+## 2026-07-15 已验证切片
+
+- [S6u Team memory / selection retirement](./2026-07-15-s6u-team-memory-selection-retirement.md)：Renderer/Rust/App Server 旧 Team memory shadow、selected-team metadata 和 recent selection 已删除。
+- [S6v Workspace agentTeam settings retirement](./2026-07-15-s6v-workspace-agent-team-settings-retirement.md)：Workspace `agentTeam` DTO、serde 正向测试和 GUI fixture 已删除。
+- [S6n2 Synthetic Team projection retirement](./2026-07-15-s6n2-synthetic-team-projection-retirement.md)：raw subagent replay、runtime Team snapshot、Team control synthetic event 已删除。
+- [S4am spawn_agent V2 contract gap](./2026-07-15-s4am-spawn-agent-v2-contract-gap.md)：`fork_turns` lifecycle/lineage/返回错误补偿已完成复核：Rust/Renderer 参数边界一致，child history 只重建 completed final-answer canonical Item，source mapping、EventLog/sidecar 清理、稳定重试与 cold restart 均有回归。hard-crash pending-spawn recovery 仍是明确 blocker；`agent_type/model/reasoning_effort/service_tier` 继续 fail closed，拆给各自 current owner。
+- [S4an dead subagent tool exposure](./2026-07-15-s4an-dead-subagent-tool-exposure.md)：零生产 caller 的旧 subagent fixed whitelist API、常量和正向测试已删除；current provider step snapshot 与 AgentControl gateway 不变。
+- [S4ao spawn canonical path output](./2026-07-15-s4ao-spawn-canonical-path-output.md)：spawn result 的 `task_name` 对齐 Codex canonical full path；恒空 `nickname` 删除，durable `message_id` 保留。
+
+本批次验证：`npm run typecheck`、`npm run test:contracts`、`npm run governance:legacy-report`、`npm run verify:gui-smoke`、projection/UI package tests、Rust workspace/evidence 定向测试均通过。
+
 ## 完成度口径
 
-本次仅生成 v2 研究/执行文档，不宣称任何代码切片已完成。初始实现完成度为 `0%`；文档基线完成度以目录 manifest 和链接扫描为准。后续每个 S 切片只能在退出条件全部满足后增加百分比。
+完成度以执行计划中的 slice 退出条件和证据记录为准；未满足退出条件的切片不得标记完成。当前批次已满足 S6u、S6v、S6n2 的最小验证门禁，后续切片继续沿用同一格式记录。

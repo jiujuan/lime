@@ -152,6 +152,60 @@ fn projection_store_is_the_canonical_thread_store_owner() {
 }
 
 #[test]
+fn projection_store_persists_explicit_fork_lineage_without_inventing_it() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let database_path = temp.path().join("projection.sqlite");
+    let store = ProjectionStore::initialize(database_path.clone()).expect("projection store");
+    let parent_thread_id = ThreadId::new("thread-parent");
+    let forked = thread("thread-forked", 1);
+    let plain = thread("thread-plain", 2);
+    create(&store, &forked);
+    create(&store, &plain);
+
+    let updated_fork = block_on(store.update_thread_metadata(UpdateThreadMetadataParams {
+        thread_id: forked.thread_id.clone(),
+        patch: ThreadMetadataPatch {
+            forked_from_id: Some(parent_thread_id.clone()),
+            ..Default::default()
+        },
+        include_archived: false,
+    }))
+    .expect("persist fork lineage");
+    assert_eq!(updated_fork.forked_from_id, Some(parent_thread_id.clone()));
+
+    let updated_plain = block_on(store.update_thread_metadata(UpdateThreadMetadataParams {
+        thread_id: plain.thread_id.clone(),
+        patch: ThreadMetadataPatch {
+            preview: Some("plain-updated".to_string()),
+            ..Default::default()
+        },
+        include_archived: false,
+    }))
+    .expect("update plain thread");
+    assert_eq!(updated_plain.forked_from_id, None);
+
+    drop(store);
+    let reopened = ProjectionStore::initialize(database_path).expect("reopen projection store");
+    let persisted_fork = block_on(reopened.read_thread(ReadThreadParams {
+        thread_id: forked.thread_id,
+        include_archived: false,
+        turns_view: ThreadTurnsView::NotLoaded,
+    }))
+    .expect("read persisted fork")
+    .expect("forked thread");
+    let persisted_plain = block_on(reopened.read_thread(ReadThreadParams {
+        thread_id: plain.thread_id,
+        include_archived: false,
+        turns_view: ThreadTurnsView::NotLoaded,
+    }))
+    .expect("read persisted plain thread")
+    .expect("plain thread");
+
+    assert_eq!(persisted_fork.forked_from_id, Some(parent_thread_id));
+    assert_eq!(persisted_plain.forked_from_id, None);
+}
+
+#[test]
 fn history_apply_is_typed_atomic_idempotent_and_rollback_capable() {
     let (_temp, store) = store();
     let source = thread("thread-1", 1);

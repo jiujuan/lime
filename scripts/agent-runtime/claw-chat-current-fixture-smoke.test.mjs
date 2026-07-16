@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { containsForbiddenTraceEvidenceFragment } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
-import { APPROVAL_REQUEST_RESUME_REQUEST_ID } from "./claw-chat-current-fixture-constants.mjs";
+import {
+  APPROVAL_REQUEST_RESUME_REQUEST_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+  HOME_HOTPATH_GREETING_SCENARIO,
+  HOME_HOTPATH_SCENARIO,
+} from "./claw-chat-current-fixture-constants.mjs";
+import { resolveGateBExpectedIdentity } from "./claw-chat-current-fixture-assertion-context.mjs";
 import {
   buildCanonicalToolItem,
   summarizeRequestInput,
@@ -85,6 +91,8 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-not-applicable-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-assertion-context.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-gate-b-contract.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-gate-b-execution-evidence.mjs",
 ];
 
 function readSmokeScript() {
@@ -129,6 +137,314 @@ function readFixtureUtilsScript() {
 }
 
 describe("claw chat current Electron fixture smoke guard", () => {
+  it.each([HOME_HOTPATH_SCENARIO, HOME_HOTPATH_GREETING_SCENARIO])(
+    "%s Gate B identity binds to the home submission turn",
+    (scenario) => {
+      const identity = resolveGateBExpectedIdentity({
+        summary: {
+          sessionId: "precreated-session",
+          threadId: "precreated-thread",
+          homeHotpath: {
+            backendTurnStart: {
+              sessionId: "home-session",
+              turnId: "home-turn",
+            },
+          },
+        },
+        options: { scenario },
+        backendLedger: [
+          {
+            kind: "turnStart",
+            sessionId: "precreated-session",
+            threadId: "precreated-thread",
+            turnId: "precreated-turn",
+          },
+          {
+            kind: "turnStart",
+            sessionId: "other-session",
+            threadId: "other-thread",
+            turnId: "other-turn",
+          },
+          {
+            kind: "turnStart",
+            sessionId: "home-session",
+            threadId: null,
+            turnId: "home-turn",
+          },
+          {
+            kind: "turnStart",
+            sessionId: "latest-session",
+            threadId: "latest-thread",
+            turnId: "latest-turn",
+          },
+        ],
+        appServerRequests: [
+          {
+            method: "agentSession/read",
+            params: { sessionId: "home-session" },
+            response: {
+              sessionId: "different-session",
+              threadId: "wrong-thread",
+              turns: [{ turnId: "home-turn" }],
+            },
+          },
+          {
+            method: "agentSession/read",
+            params: { sessionId: "home-session" },
+            response: {
+              sessionId: "home-session",
+              threadId: "other-turn-thread",
+              turns: [{ turnId: "other-turn" }],
+            },
+          },
+          {
+            method: "agentSession/read",
+            params: { sessionId: "home-session" },
+            response: {
+              sessionId: "home-session",
+              threadId: null,
+              turns: [{ turnId: "home-turn" }],
+            },
+          },
+          {
+            method: "agentSession/read",
+            params: { sessionId: "home-session" },
+            response: {
+              sessionId: "home-session",
+              threadId: "home-thread",
+              turns: [{ turnId: "home-turn" }],
+            },
+          },
+          {
+            method: "agentSession/read",
+            params: { sessionId: "latest-session" },
+            response: {
+              sessionId: "latest-session",
+              threadId: "latest-thread",
+              turns: [{ turnId: "latest-turn" }],
+            },
+          },
+        ],
+      });
+
+      expect(identity).toEqual({
+        sessionId: "home-session",
+        threadId: "home-thread",
+        turnId: "home-turn",
+      });
+    },
+  );
+
+  it("keeps the precreated Gate B identity for non-home scenarios", () => {
+    expect(
+      resolveGateBExpectedIdentity({
+        summary: {
+          sessionId: "precreated-session",
+          threadId: "precreated-thread",
+        },
+        options: { scenario: "complete" },
+        appServerRequests: [],
+        backendLedger: [
+          {
+            kind: "turnStart",
+            sessionId: "runtime-session",
+            threadId: "runtime-thread",
+            turnId: "runtime-turn",
+          },
+        ],
+      }),
+    ).toEqual({
+      sessionId: "precreated-session",
+      threadId: "precreated-thread",
+    });
+  });
+
+  it("binds skills runtime Gate B identity to the final manual-enable turn", () => {
+    expect(
+      resolveGateBExpectedIdentity({
+        summary: {
+          sessionId: "precreated-session",
+          threadId: "precreated-thread",
+          manualEnableSkillsRuntimeTurnStart: {
+            backend: {
+              sessionId: "skills-session",
+              turnId: "skills-turn",
+            },
+          },
+        },
+        options: { scenario: "skills-runtime" },
+        backendLedger: [
+          {
+            kind: "turnStart",
+            sessionId: "skills-session",
+            turnId: "skills-turn",
+          },
+        ],
+        appServerRequests: [
+          {
+            method: "agentSession/read",
+            params: { sessionId: "skills-session" },
+            response: {
+              sessionId: "skills-session",
+              threadId: "skills-thread",
+              turns: [{ turnId: "skills-turn" }],
+            },
+          },
+        ],
+      }),
+    ).toEqual({
+      sessionId: "skills-session",
+      threadId: "skills-thread",
+      turnId: "skills-turn",
+    });
+  });
+
+  it("binds content factory Gate B identity to the App Server worker turn", () => {
+    expect(
+      resolveGateBExpectedIdentity({
+        summary: {
+          contentFactoryArticleWorkspaceWorkerTurnStart: {
+            turnId: "worker-turn",
+          },
+        },
+        options: { scenario: "content-factory-article-workspace" },
+        backendLedger: [],
+        appServerRequests: [
+          {
+            method: "agentSession/turn/start",
+            params: {
+              sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+              turnId: "worker-turn",
+            },
+            response: {
+              sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+              threadId: "content-thread",
+              turnId: "worker-turn",
+            },
+          },
+          {
+            method: "agentSession/read",
+            params: { sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID },
+            response: {
+              sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+              threadId: "content-thread",
+              turns: [{ turnId: "worker-turn" }],
+            },
+          },
+        ],
+      }),
+    ).toEqual({
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      threadId: "content-thread",
+      turnId: "worker-turn",
+    });
+  });
+
+  it("fails closed when the home submission turn has no matching ledger identity", () => {
+    expect(() =>
+      resolveGateBExpectedIdentity({
+        summary: {
+          sessionId: "precreated-session",
+          threadId: "precreated-thread",
+          homeHotpath: {
+            backendTurnStart: {
+              sessionId: "home-session",
+              turnId: "home-turn",
+            },
+          },
+        },
+        options: { scenario: HOME_HOTPATH_SCENARIO },
+        appServerRequests: [
+          {
+            method: "agentSession/read",
+            params: { sessionId: "home-session" },
+            response: {
+              sessionId: "home-session",
+              threadId: "home-thread",
+              turns: [{ turnId: "home-turn" }],
+            },
+          },
+        ],
+        backendLedger: [
+          {
+            kind: "turnStart",
+            sessionId: "home-session",
+            threadId: "wrong-thread",
+            turnId: "different-turn",
+          },
+          {
+            kind: "turnStart",
+            sessionId: "different-session",
+            threadId: "wrong-thread",
+            turnId: "home-turn",
+          },
+        ],
+      }),
+    ).toThrow(/matching backend turnStart and agentSession\/read evidence/);
+  });
+
+  it("fails closed when no session read binds the home session and turn", () => {
+    expect(() =>
+      resolveGateBExpectedIdentity({
+        summary: {
+          homeHotpath: {
+            backendTurnStart: {
+              sessionId: "home-session",
+              turnId: "home-turn",
+            },
+          },
+        },
+        options: { scenario: HOME_HOTPATH_SCENARIO },
+        backendLedger: [
+          {
+            kind: "turnStart",
+            sessionId: "home-session",
+            threadId: null,
+            turnId: "home-turn",
+          },
+        ],
+        appServerRequests: [
+          {
+            method: "agentSession/read",
+            params: { sessionId: "home-session" },
+            response: {
+              sessionId: "home-session",
+              threadId: "wrong-thread",
+              turns: [{ turnId: "different-turn" }],
+            },
+          },
+          {
+            method: "agentSession/read",
+            params: { sessionId: "different-session" },
+            response: {
+              sessionId: "home-session",
+              threadId: "wrong-thread",
+              turns: [{ turnId: "home-turn" }],
+            },
+          },
+        ],
+      }),
+    ).toThrow(/matching backend turnStart and agentSession\/read evidence/);
+  });
+
+  it("binds Gate B artifacts to one run before assertions", () => {
+    const content = readSmokeScript();
+    const screenshotIndex = content.indexOf("path: screenshotPath");
+    const assertionIndex = content.indexOf(
+      "const assertionReport = buildFixtureAssertionReport({",
+    );
+
+    expect(content).toContain("LIME_GATE_RUN_ID");
+    expect(content).toContain('arg === "--run-id"');
+    expect(content).toContain("runId: options.runId");
+    expect(content).toContain("screenshotCaptured");
+    expect(content).toContain("collectGateBGuiEvidence");
+    expect(content).toContain("identityConsistent");
+    expect(content).toContain("explicitTerminalOrPending");
+    expect(screenshotIndex).toBeGreaterThan(-1);
+    expect(assertionIndex).toBeGreaterThan(screenshotIndex);
+  });
+
   it("首页首发采样只允许从完整首页单向切换到 conversation", () => {
     const mainAreaBounds = { left: 294, top: 8, width: 1134, height: 980 };
     const homeSample = (elapsedMs) => ({
@@ -1014,7 +1330,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "inputbarPendingSteerPopFrontHydratedResumeReady",
     );
     expect(content).toContain(
-      "inputbarPendingSteerPopFrontQueuedPanel.stopButtonVisible === true",
+      "inputbarPendingSteerPopFrontQueuedPanel.richTurnTerminal === true",
+    );
+    expect(content).toContain(
+      "inputbarPendingSteerPopFrontQueuedPanel.stopButtonVisible === false",
     );
     expect(content).toMatch(
       /isInputbarPendingSteerPopFrontResumeScenario\s*\?\s*inputbarPendingSteerPopFrontHydratedResumeReady/u,
@@ -1061,6 +1380,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
   it("covers Plan mode revisioned thread item and history hydrate in the real Electron fixture", () => {
     const content = readSmokeScript();
+    const planHistoryContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
+      "utf8",
+    );
 
     expect(content).toContain('options.scenario === "plan"');
     expect(content).toContain("enablePlanModeFromGui");
@@ -1095,6 +1418,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("UpdatePlanTool");
     expect(content).toContain("update_plan");
     expect(content).toContain("legacyUpdatePlanToolVisible");
+    expect(planHistoryContent).not.toContain("clearInvokeBuffers");
   });
 
   it("locks the news WebSearch policy to model-visible auto choice, not keyword required", () => {

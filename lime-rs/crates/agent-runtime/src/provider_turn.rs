@@ -14,14 +14,15 @@ use futures::future::join_all;
 use futures::StreamExt;
 use model_provider::current_client::{
     CanonicalLlmEvent, CurrentProvider, CurrentProviderContent, CurrentProviderError,
-    CurrentProviderMessage, CurrentProviderRequest, CurrentProviderStream, CurrentProviderTool,
-    CurrentProviderToolCall, CurrentProviderToolResult, CurrentProviderUsage, Usage,
+    CurrentProviderMessage, CurrentProviderRequest, CurrentProviderRole, CurrentProviderStream,
+    CurrentProviderTool, CurrentProviderToolCall, CurrentProviderToolResult, CurrentProviderUsage,
+    FinishReason, Usage,
 };
 use model_provider::provider_stream::RuntimeReplyModelRequestPolicy;
 use model_provider::provider_stream::RuntimeReplyProviderTraceMetadata;
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -36,8 +37,8 @@ use tool_runtime::tool_lifecycle::ToolLifecycleEmitter;
 
 mod output_lifecycle;
 use output_lifecycle::{
-    end_output_item, finish_active_output_items, provider_output_item_id, start_output_item,
-    ProviderOutputFamily,
+    defer_text_output_item_end, end_reasoning_output_item, finish_active_output_items,
+    provider_output_item_id, start_output_item, ProviderOutputFamily,
 };
 use tool_runtime::tool_result_projection::NormalizedToolOutput;
 
@@ -108,6 +109,12 @@ pub struct CurrentProviderTurnInput {
     pub cancel_token: Option<CancellationToken>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CurrentProviderTextPhase {
+    Commentary,
+    FinalAnswer,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum CurrentProviderTurnEvent {
     ProviderTrace {
@@ -122,6 +129,7 @@ pub enum CurrentProviderTurnEvent {
     },
     TextEnd {
         item_id: String,
+        phase: CurrentProviderTextPhase,
     },
     ReasoningStart {
         item_id: String,
@@ -141,6 +149,15 @@ pub enum CurrentProviderTurnEvent {
     },
     Usage {
         usage: CurrentProviderUsage,
+    },
+    ProviderStep {
+        attempt: u32,
+        completed: bool,
+        finish_reason: Option<String>,
+        text_output_chars: u64,
+        reasoning_output_chars: u64,
+        tool_call_count: u32,
+        usage: Option<CurrentProviderUsage>,
     },
 }
 
@@ -172,6 +189,7 @@ where
                 false,
             )
         })?;
+    insert_environment_context_before_current_user(&mut initial_messages, &working_directory);
     let mut loop_state = RuntimeReplyLoop::new(session_config.max_turns);
     let mut text_output = String::new();
     let mut errors = Vec::new();
@@ -203,7 +221,10 @@ where
                     item_id: item_id.clone(),
                     text: MAX_REPLY_TURNS_REACHED_MESSAGE.to_string(),
                 });
-                on_event(CurrentProviderTurnEvent::TextEnd { item_id });
+                on_event(CurrentProviderTurnEvent::TextEnd {
+                    item_id,
+                    phase: CurrentProviderTextPhase::FinalAnswer,
+                });
                 return Ok(RuntimeReplyExecution::new(
                     text_output,
                     errors,
@@ -286,6 +307,11 @@ where
         let mut tool_arguments = HashMap::<String, String>::new();
         let mut active_text_item_id = None;
         let mut active_reasoning_item_id = None;
+        let mut pending_text_item_ids = Vec::new();
+        let mut finish_reason = None;
+        let mut step_text_output_chars = 0_u64;
+        let mut step_reasoning_output_chars = 0_u64;
+        let mut step_usage = None;
 
         loop {
             let event = next_provider_event(&mut stream, cancel_token.as_ref()).await;
@@ -353,6 +379,8 @@ where
                         emit_provider_trace(&mut on_event, provider_trace_metadata.as_ref(), event);
                     }
                     emitted_any = true;
+                    step_text_output_chars =
+                        step_text_output_chars.saturating_add(text.chars().count() as u64);
                     text_output.push_str(&text);
                     assistant_content.push(CurrentProviderContent::Text(text.clone()));
                     start_output_item(
@@ -367,10 +395,10 @@ where
                 CanonicalLlmEvent::TextEnd { id } => {
                     let id =
                         provider_output_item_id(&turn_id, attempt, ProviderOutputFamily::Text, &id);
-                    end_output_item(
+                    defer_text_output_item_end(
                         &mut active_text_item_id,
+                        &mut pending_text_item_ids,
                         id,
-                        ProviderOutputFamily::Text,
                         &mut on_event,
                         emitted_any,
                     )?;
@@ -391,6 +419,8 @@ where
                     )?;
                 }
                 CanonicalLlmEvent::ReasoningDelta { id, text } => {
+                    step_reasoning_output_chars =
+                        step_reasoning_output_chars.saturating_add(text.chars().count() as u64);
                     let id = provider_output_item_id(
                         &turn_id,
                         attempt,
@@ -415,10 +445,9 @@ where
                         ProviderOutputFamily::Reasoning,
                         &id,
                     );
-                    end_output_item(
+                    end_reasoning_output_item(
                         &mut active_reasoning_item_id,
                         id,
-                        ProviderOutputFamily::Reasoning,
                         &mut on_event,
                         emitted_any,
                     )?;
@@ -444,14 +473,21 @@ where
                     calls.push(call);
                 }
                 CanonicalLlmEvent::Usage { usage } => {
-                    on_event(CurrentProviderTurnEvent::Usage {
-                        usage: current_provider_usage(usage),
-                    });
+                    let usage = current_provider_usage(usage);
+                    step_usage = Some(usage.clone());
+                    on_event(CurrentProviderTurnEvent::Usage { usage });
                 }
-                CanonicalLlmEvent::Finish { .. } => {
+                CanonicalLlmEvent::Finish { reason, usage, .. } => {
+                    if let Some(usage) = usage {
+                        let usage = current_provider_usage(usage);
+                        step_usage = Some(usage.clone());
+                        on_event(CurrentProviderTurnEvent::Usage { usage });
+                    }
+                    finish_reason = Some(finish_reason_name(reason).to_string());
                     finish_active_output_items(
                         &mut active_reasoning_item_id,
                         &mut active_text_item_id,
+                        &mut pending_text_item_ids,
                         &mut on_event,
                     );
                     completed = true;
@@ -474,15 +510,43 @@ where
                 | CanonicalLlmEvent::ToolInputStart { .. }
                 | CanonicalLlmEvent::ToolInputEnd { .. }
                 | CanonicalLlmEvent::ToolResult { .. }
-                | CanonicalLlmEvent::ToolError { .. }
-                | CanonicalLlmEvent::StepFinish { .. } => {}
+                | CanonicalLlmEvent::ToolError { .. } => {}
+                CanonicalLlmEvent::StepFinish { reason, usage, .. } => {
+                    if let Some(usage) = usage {
+                        let usage = current_provider_usage(usage);
+                        step_usage = Some(usage.clone());
+                        on_event(CurrentProviderTurnEvent::Usage { usage });
+                    }
+                    finish_reason = Some(finish_reason_name(reason).to_string());
+                }
             }
         }
         finish_active_output_items(
             &mut active_reasoning_item_id,
             &mut active_text_item_id,
+            &mut pending_text_item_ids,
             &mut on_event,
         );
+        let text_phase = if calls.is_empty() {
+            CurrentProviderTextPhase::FinalAnswer
+        } else {
+            CurrentProviderTextPhase::Commentary
+        };
+        for item_id in pending_text_item_ids {
+            on_event(CurrentProviderTurnEvent::TextEnd {
+                item_id,
+                phase: text_phase,
+            });
+        }
+        on_event(CurrentProviderTurnEvent::ProviderStep {
+            attempt,
+            completed,
+            finish_reason,
+            text_output_chars: step_text_output_chars,
+            reasoning_output_chars: step_reasoning_output_chars,
+            tool_call_count: calls.len().min(u32::MAX as usize) as u32,
+            usage: step_usage,
+        });
 
         if !assistant_content.is_empty() {
             initial_messages.push(CurrentProviderMessage::assistant(assistant_content));
@@ -529,6 +593,32 @@ where
                 .collect(),
         ));
     }
+}
+
+fn insert_environment_context_before_current_user(
+    messages: &mut Vec<CurrentProviderMessage>,
+    working_directory: &Path,
+) {
+    let context = CurrentProviderMessage::user(vec![CurrentProviderContent::Text(format!(
+        "<environment_context>\n<cwd>{}</cwd>\n</environment_context>",
+        escape_xml_text(&working_directory.to_string_lossy())
+    ))]);
+    let insertion_index = if matches!(
+        messages.last(),
+        Some(message) if message.role == CurrentProviderRole::User
+    ) {
+        messages.len() - 1
+    } else {
+        messages.len()
+    };
+    messages.insert(insertion_index, context);
+}
+
+fn escape_xml_text(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 async fn start_provider_stream(
@@ -585,6 +675,17 @@ fn current_provider_usage(usage: Usage) -> CurrentProviderUsage {
         cache_creation_input_tokens: usage
             .cache_write_input_tokens
             .map(|value| value.min(u32::MAX as u64) as u32),
+    }
+}
+
+fn finish_reason_name(reason: FinishReason) -> &'static str {
+    match reason {
+        FinishReason::Stop => "stop",
+        FinishReason::ToolCall => "tool_call",
+        FinishReason::Length => "length",
+        FinishReason::ContentFilter => "content_filter",
+        FinishReason::Error => "error",
+        FinishReason::Unknown => "unknown",
     }
 }
 

@@ -94,7 +94,6 @@ import { useWorkspaceSkillDirectoryRuntime } from "./workspace/useWorkspaceSkill
 import { useWorkspaceArtifactSurfaceRuntime } from "./workspace/useWorkspaceArtifactSurfaceRuntime";
 import { useWorkspaceArtifactCanvasRuntime } from "./workspace/useWorkspaceArtifactCanvasRuntime";
 import { useWorkspaceExpertSkillPanelRuntime } from "./workspace/useWorkspaceExpertSkillPanelRuntime";
-import { useWorkspaceTeamMemoryRuntime } from "./workspace/useWorkspaceTeamMemoryRuntime";
 import { useWorkspaceSubagentNavigationRuntime } from "./workspace/useWorkspaceSubagentNavigationRuntime";
 import { useWorkspaceContextDetailRuntime } from "./workspace/useWorkspaceContextDetailRuntime";
 import {
@@ -221,7 +220,6 @@ export function AgentChatWorkspace({
     setInputbarObjectiveModeEnabled,
     setLayoutMode,
     setRuntimeEntryBannerMessage,
-    setRuntimeInitialInputCapability,
     setSelectedText,
     setShowSidebar,
     showSidebar,
@@ -274,7 +272,6 @@ export function AgentChatWorkspace({
     activeSessionIdRef,
     chatToolPreferenceSessionSync,
     deferSessionRecentMetadataSyncForNavigation,
-    selectedTeamSessionSync,
     syncSessionRecentPreferences,
   } = useSessionRecentMetadataSyncRuntime();
   const {
@@ -300,17 +297,11 @@ export function AgentChatWorkspace({
   const {
     projectId,
     shouldDisableSessionRestore,
-    hasHandledNewChatRequest,
     markNewChatRequestHandled,
     rememberProjectId,
     getRememberedProjectId,
     applyProjectSelection,
     resetProjectSelection,
-    clearProjectSelectionRuntime,
-    startTopicProjectResolution,
-    finishTopicProjectResolution,
-    deferTopicSwitch,
-    consumePendingTopicSwitch,
   } = projectSelectionRuntime;
   const taskCenterWorkspaceId = normalizeProjectId(projectId);
   const normalizedInitialSessionId =
@@ -743,19 +734,6 @@ export function AgentChatWorkspace({
       shouldAutoCollapseClassicClawSidebar,
       setShowSidebar,
     });
-  const {
-    selectedTeam,
-    preferredTeamPresetId,
-    selectedTeamLabel,
-    selectedTeamSummary,
-    resolvedTeamMemoryShadowSnapshot,
-  } = useWorkspaceTeamMemoryRuntime({
-    activeTheme,
-    runtimeSelection: executionRuntime?.recent_team_selection ?? null,
-    sessionId,
-    selectedTeamSessionSync,
-    workspaceRoot: project?.rootPath,
-  });
   const effectiveChatToolPreferences = useWorkspaceChatToolPreferencesRuntime({
     activeTheme,
     chatToolPreferences,
@@ -993,10 +971,6 @@ export function AgentChatWorkspace({
       input,
       chatToolPreferences: effectiveChatToolPreferences,
       creationReplay: initialCreationReplay,
-      preferredTeamPresetId,
-      selectedTeam,
-      selectedTeamLabel,
-      selectedTeamSummary,
       onNavigate: _onNavigate,
       recordServiceSkillUsage,
     });
@@ -1072,11 +1046,6 @@ export function AgentChatWorkspace({
     effectiveChatToolPreferences,
     isThemeWorkbench,
     mappedTheme,
-    preferredTeamPresetId,
-    resolvedTeamMemoryShadowSnapshot,
-    selectedTeam,
-    selectedTeamLabel,
-    selectedTeamSummary,
     themeWorkbenchActiveQueueTitle: themeWorkbenchActiveQueueItem?.title,
     workspaceSkillBindings,
     workspaceSkillRuntimeEnable: expertWorkspaceSkillRuntimeEnableInput,
@@ -1183,7 +1152,6 @@ export function AgentChatWorkspace({
         shouldKeepNewTaskHomeSessionRestoreDisabled &&
         !shouldDisableSessionRestore,
       processedMessageIdsRef: processedMessageIds,
-      preferredTeamPresetId,
       projectImageGenerationPreference: project?.settings?.imageGeneration,
       projectName: project?.name,
       projectRootPath: project?.rootPath || null,
@@ -1194,9 +1162,6 @@ export function AgentChatWorkspace({
         : undefined,
       savedSoulArtifactVoiceGenerationBrief: soulArtifactVoiceGenerationBrief,
       saveImageWorkbenchImagesToResource,
-      selectedTeam,
-      selectedTeamLabel,
-      selectedTeamSummary,
       serviceModels,
       serviceSkills: activeTheme === "general" ? serviceSkills : [],
       setCanvasState,
@@ -1218,7 +1183,6 @@ export function AgentChatWorkspace({
         themeWorkbenchBackendRunState?.latest_terminal ?? null,
       themeWorkbenchRunState,
       themeWorkbenchActiveQueueTitle: themeWorkbenchActiveQueueItem?.title,
-      teamMemoryShadowSnapshot: resolvedTeamMemoryShadowSnapshot,
       threadItemsLength: threadItems.length,
       topicById,
       topics,
@@ -1839,12 +1803,8 @@ export function AgentChatWorkspace({
       queuedTurns,
       refreshSessionReadModel,
       replayPendingAction,
-      selectedTeamLabel,
-      selectedTeamRoles: selectedTeam?.roles,
-      selectedTeamSummary,
       sessionId,
       submittedActionsInFlight,
-      teamMemorySnapshot: resolvedTeamMemoryShadowSnapshot,
       threadItems: effectiveThreadItems,
       threadRead,
       turns,

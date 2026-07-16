@@ -122,20 +122,15 @@ export function readCanonicalThreadItem(
         },
       );
     case "collabAgentToolCall": {
-      const output = normalizeRecord(payload.output);
-      return {
-        ...base,
-        type: "subagent_activity",
-        status_label: readString(payload, "operation") ?? status,
-        session_id: readString(payload, "target_thread_id", "targetThreadId"),
-        summary:
-          readString(payload, "message") ?? readString(output ?? {}, "text"),
-        metadata: {
-          ...(normalizeRecord(base.metadata) ?? {}),
-          callId: readString(payload, "call_id", "callId"),
-          output,
-        },
-      };
+      if (readString(payload, "operation") !== "wait") {
+        return null;
+      }
+      return toolCallItem(
+        base,
+        { ...payload, arguments: [] },
+        "wait_agent",
+        { toolFamily: "agent_control" },
+      );
     }
     case "approval": {
       const approval = projectCanonicalApprovalItem(item);

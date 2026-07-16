@@ -68,7 +68,7 @@ impl RuntimeCore {
             .await
     }
 
-    async fn process_pending_agent_mailbox_triggers_with_options(
+    pub(in crate::runtime) async fn process_pending_agent_mailbox_triggers_with_options(
         &self,
         session_id: &str,
         host: RuntimeHostContext,
@@ -268,8 +268,20 @@ impl RuntimeCore {
                     "turn.completed" | "turn.failed"
                 )
             });
-            if !has_terminal_in_valid_prefix && durable_scan.issue.is_none() {
-                continue;
+            if !has_terminal_in_valid_prefix {
+                if durable_scan
+                    .issue
+                    .as_ref()
+                    .is_some_and(|issue| issue.is_repairable_tail())
+                {
+                    event_log_writer
+                        .repair_session_event_log(&child_session_id)
+                        .map_err(RuntimeCoreError::Backend)?;
+                    continue;
+                }
+                if durable_scan.issue.is_none() {
+                    continue;
+                }
             }
             let context = self
                 .load_projection_session(&app_server_protocol::AgentSessionReadParams {

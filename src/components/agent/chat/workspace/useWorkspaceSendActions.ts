@@ -78,7 +78,6 @@ import type {
   Message,
   MessageImage,
 } from "../types";
-import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import {
   buildSubmissionPreviewMessages,
@@ -96,7 +95,6 @@ import {
   type EnsureBrowserAssistCanvasOptions,
 } from "./workspaceSendHelpers";
 import type { Character } from "@/lib/api/projectMemory";
-import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
 import type {
   ServiceSkillHomeItem,
@@ -252,11 +250,6 @@ interface UseWorkspaceSendActionsParams {
   executionStrategy: CurrentExecutionStrategy;
   accessMode?: AgentAccessMode;
   providerType?: string | null;
-  preferredTeamPresetId?: string | null;
-  selectedTeam?: TeamDefinition | null;
-  selectedTeamLabel?: string;
-  selectedTeamSummary?: string;
-  teamMemoryShadowSnapshot?: TeamMemorySnapshot | null;
   workspaceSkillBindings?: AgentRuntimeWorkspaceSkillBinding[] | null;
   workspaceSkillRuntimeEnable?: WorkspaceSkillRuntimeEnableInput | null;
   currentGateKey: string;
@@ -411,11 +404,6 @@ export function useWorkspaceSendActions({
   executionStrategy,
   accessMode: _accessMode,
   providerType,
-  preferredTeamPresetId,
-  selectedTeam,
-  selectedTeamLabel,
-  selectedTeamSummary,
-  teamMemoryShadowSnapshot,
   workspaceSkillBindings,
   workspaceSkillRuntimeEnable,
   currentGateKey,
@@ -3000,7 +2988,6 @@ export function useWorkspaceSendActions({
         sourceTextLength: sourceText.trim().length,
       });
       const effectiveToolPreferences = plan.effectiveToolPreferences;
-      const effectivePreferredTeamPresetId = preferredTeamPresetId;
       setInput("");
       setMentionedCharacters([]);
 
@@ -3024,11 +3011,6 @@ export function useWorkspaceSendActions({
           browserAssistProfileKey,
           browserAssistPreferredBackend,
           browserAssistAutoLaunch,
-          preferredTeamPresetId: effectivePreferredTeamPresetId,
-          selectedTeam,
-          selectedTeamLabel,
-          selectedTeamSummary,
-          teamMemoryShadowSnapshot,
           workspaceSkillBindings,
           workspaceSkillRuntimeEnable,
           agentResponseLanguage,
@@ -3066,11 +3048,6 @@ export function useWorkspaceSendActions({
             browserAssistProfileKey,
             browserAssistPreferredBackend,
             browserAssistAutoLaunch,
-            preferredTeamPresetId: effectivePreferredTeamPresetId,
-            selectedTeam,
-            selectedTeamLabel,
-            selectedTeamSummary,
-            teamMemoryShadowSnapshot,
             workspaceSkillBindings,
             workspaceSkillRuntimeEnable,
             agentResponseLanguage: effectiveAgentResponseLanguage,
@@ -3175,15 +3152,10 @@ export function useWorkspaceSendActions({
       isThemeWorkbench,
       mappedTheme,
       messagesCount,
-      preferredTeamPresetId,
       providerType,
       rollbackAfterSendFailure,
-      selectedTeam,
-      selectedTeamLabel,
-      selectedTeamSummary,
       serviceModels,
       resolveServiceModelsBeforeSend,
-      teamMemoryShadowSnapshot,
       workspaceSkillBindings,
       workspaceSkillRuntimeEnable,
       sendMessage,

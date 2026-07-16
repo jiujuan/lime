@@ -75,7 +75,6 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
     let projection_store =
         Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
-    let sidecar_store = Arc::new(SidecarStore::new(&roots.sidecar_root).expect("sidecar"));
     let rollout_path = temp.path().join("rollout-thread-replace.jsonl");
     write_rollout_with_assistant_reply(
         &rollout_path,
@@ -86,8 +85,7 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
     );
     let core = RuntimeCore::default()
         .with_event_log_writer(event_log_writer.clone())
-        .with_projection_store(projection_store.clone())
-        .with_sidecar_store(sidecar_store.clone());
+        .with_projection_store(projection_store.clone());
 
     let first = commit::commit_conversation_import_thread(
         &core,
@@ -107,10 +105,6 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
         .read_session_events(&first.session.session_id)
         .expect("old events")
         .is_empty());
-    let first_sidecar_path =
-        imported_runtime_sidecar_path(&first).expect("old imported runtime sidecar path");
-    assert!(sidecar_store.read_text(&first_sidecar_path).is_some());
-
     write_rollout_with_assistant_reply(
         &rollout_path,
         "thread-replace",
@@ -147,14 +141,10 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
         .read_session_events(&first.session.session_id)
         .expect("old event log after replace")
         .is_empty());
-    assert!(sidecar_store.read_text(&first_sidecar_path).is_none());
     assert!(projection_store
         .read_session_projection(&second.session.session_id, ProjectionReadWindow::default())
         .expect("new projection after replace")
         .is_some());
-    let second_sidecar_path =
-        imported_runtime_sidecar_path(&second).expect("new imported runtime sidecar path");
-    assert!(sidecar_store.read_text(&second_sidecar_path).is_some());
 
     let missing_old = core
         .read_session_current(AgentSessionReadParams {
@@ -198,21 +188,6 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
         .collect::<Vec<_>>();
     assert!(assistant_texts.contains(&"new imported reply"));
     assert!(!assistant_texts.contains(&"old imported reply"));
-}
-
-fn imported_runtime_sidecar_path(
-    response: &ConversationImportThreadCommitResponse,
-) -> Option<String> {
-    response
-        .session
-        .business_object_ref
-        .as_ref()
-        .and_then(|reference| reference.metadata.as_ref())
-        .and_then(|metadata| metadata.get("importedRuntimeProjection"))
-        .and_then(|projection| projection.get("sidecar"))
-        .and_then(|sidecar| sidecar.get("relativePath"))
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string)
 }
 
 #[tokio::test]
@@ -463,6 +438,210 @@ async fn scan_and_preview_mark_previously_imported_codex_thread() {
     assert_eq!(
         preview.thread.import_status,
         ConversationImportThreadStatus::Imported
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn event_log_append_failure_rolls_back_all_import_state() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let sidecar_store = Arc::new(SidecarStore::new(&roots.sidecar_root).expect("sidecar"));
+    let event_sessions = roots.event_log_root.join("sessions");
+    fs::create_dir_all(&event_sessions).expect("event sessions directory");
+    fs::set_permissions(&event_sessions, fs::Permissions::from_mode(0o555))
+        .expect("make event sessions read only");
+
+    let rollout_path = temp.path().join("rollout-event-log-failure.jsonl");
+    write_rollout_with_assistant_reply(
+        &rollout_path,
+        "thread-event-log-failure",
+        "/workspace/event-log-failure",
+        "event log failure import",
+        "reply must roll back",
+    );
+    let core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store)
+        .with_sidecar_store(sidecar_store);
+
+    let result = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    );
+    fs::set_permissions(&event_sessions, fs::Permissions::from_mode(0o755))
+        .expect("restore event sessions permissions");
+
+    let error = result.expect_err("event log append failure must fail the import");
+    assert!(error.to_string().contains("event log"));
+    assert_import_storage_is_empty(&core, &roots);
+}
+
+#[test]
+fn canonical_projection_failure_after_event_log_append_rolls_back_all_import_state() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let sidecar_store = Arc::new(SidecarStore::new(&roots.sidecar_root).expect("sidecar"));
+    Connection::open(&roots.projection_db_path)
+        .expect("projection connection")
+        .execute_batch(
+            "CREATE TRIGGER fail_import_item_insert
+             BEFORE INSERT ON canonical_items
+             BEGIN
+               SELECT RAISE(ABORT, 'injected canonical item failure');
+             END;",
+        )
+        .expect("projection failure trigger");
+
+    let rollout_path = temp.path().join("rollout-projection-failure.jsonl");
+    write_rollout_with_assistant_reply(
+        &rollout_path,
+        "thread-projection-failure",
+        "/workspace/projection-failure",
+        "projection failure import",
+        "reply must roll back",
+    );
+    let core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store)
+        .with_sidecar_store(sidecar_store);
+
+    let error = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect_err("canonical projection failure must fail the import");
+
+    assert!(error
+        .to_string()
+        .contains("injected canonical item failure"));
+    assert_import_storage_is_empty(&core, &roots);
+}
+
+#[test]
+fn cleanup_failure_reports_both_import_and_compensation_errors() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let sidecar_store = Arc::new(SidecarStore::new(&roots.sidecar_root).expect("sidecar"));
+    Connection::open(&roots.projection_db_path)
+        .expect("projection connection")
+        .execute_batch(
+            "CREATE TRIGGER fail_import_item_insert
+             BEFORE INSERT ON canonical_items
+             BEGIN
+               SELECT RAISE(ABORT, 'injected import projection failure');
+             END;
+             CREATE TRIGGER fail_import_thread_cleanup
+             BEFORE DELETE ON canonical_threads
+             BEGIN
+               SELECT RAISE(ABORT, 'injected projection cleanup failure');
+             END;",
+        )
+        .expect("projection failure triggers");
+
+    let rollout_path = temp.path().join("rollout-cleanup-failure.jsonl");
+    write_rollout_with_assistant_reply(
+        &rollout_path,
+        "thread-cleanup-failure",
+        "/workspace/cleanup-failure",
+        "cleanup failure import",
+        "reply must fail closed",
+    );
+    let core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store)
+        .with_sidecar_store(sidecar_store);
+
+    let error = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect_err("cleanup failure must remain fail closed")
+    .to_string();
+
+    assert!(error.contains("injected import projection failure"));
+    assert!(error.contains("compensating cleanup also failed"));
+    assert!(error.contains("injected projection cleanup failure"));
+    assert!(
+        core.state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .sessions
+            .is_empty(),
+        "best-effort cleanup must still remove in-memory state"
+    );
+    assert_directory_is_empty(&roots.event_log_root.join("sessions"));
+    assert_directory_is_empty(&roots.sidecar_root.join("sessions"));
+}
+
+fn assert_import_storage_is_empty(core: &RuntimeCore, roots: &StorageRoots) {
+    assert!(
+        core.state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .sessions
+            .is_empty(),
+        "failed import must not leave an in-memory session"
+    );
+
+    let connection = Connection::open(&roots.projection_db_path).expect("projection connection");
+    for table in [
+        "canonical_threads",
+        "canonical_turns",
+        "canonical_items",
+        "projected_sessions",
+        "projected_turns",
+        "projected_items",
+        "projection_watermarks",
+    ] {
+        let count = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap_or_else(|error| panic!("read {table} count: {error}"));
+        assert_eq!(count, 0, "failed import left rows in {table}");
+    }
+    assert_directory_is_empty(&roots.event_log_root.join("sessions"));
+    assert_directory_is_empty(&roots.sidecar_root.join("sessions"));
+}
+
+fn assert_directory_is_empty(path: &std::path::Path) {
+    if !path.exists() {
+        return;
+    }
+    assert!(
+        fs::read_dir(path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+            .next()
+            .is_none(),
+        "{} must be empty",
+        path.display()
     );
 }
 

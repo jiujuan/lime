@@ -1,7 +1,6 @@
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-  AgentSessionExecutionRuntimeRecentTeamSelection,
 } from "@/lib/api/agentExecutionRuntime";
 import type { RuntimeProviderConfig } from "@/lib/api/agentRuntime/sessionTypes";
 import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
@@ -25,46 +24,26 @@ const RETIRED_HARNESS_IMAGE_SKILL_LAUNCH_KEYS = [
   "image_skill_launch",
   "imageSkillLaunch",
 ] as const;
-const IMAGE_GENERATION_CONTRACT_KEY = "image_generation";
-const IMAGE_GENERATION_ROUTING_SLOT = "image_generation_model";
-const HARNESS_TEAM_SELECTION_PRESET_KEYS = [
+const RETIRED_HARNESS_TEAM_SELECTION_KEYS = [
+  "selected_team_disabled",
+  "selectedTeamDisabled",
   "preferred_team_preset_id",
   "preferredTeamPresetId",
-] as const;
-const HARNESS_TEAM_SELECTION_ID_KEYS = [
   "selected_team_id",
   "selectedTeamId",
-] as const;
-const HARNESS_TEAM_SELECTION_SOURCE_KEYS = [
   "selected_team_source",
   "selectedTeamSource",
-] as const;
-const HARNESS_TEAM_SELECTION_LABEL_KEYS = [
   "selected_team_label",
   "selectedTeamLabel",
-] as const;
-const HARNESS_TEAM_SELECTION_DESCRIPTION_KEYS = [
   "selected_team_description",
   "selectedTeamDescription",
-] as const;
-const HARNESS_TEAM_SELECTION_SUMMARY_KEYS = [
   "selected_team_summary",
   "selectedTeamSummary",
-] as const;
-const HARNESS_TEAM_SELECTION_ROLE_KEYS = [
   "selected_team_roles",
   "selectedTeamRoles",
 ] as const;
-const HARNESS_TEAM_SELECTION_KEYS = [
-  ...HARNESS_TEAM_SELECTION_PRESET_KEYS,
-  ...HARNESS_TEAM_SELECTION_ID_KEYS,
-  ...HARNESS_TEAM_SELECTION_SOURCE_KEYS,
-  ...HARNESS_TEAM_SELECTION_LABEL_KEYS,
-  ...HARNESS_TEAM_SELECTION_DESCRIPTION_KEYS,
-  ...HARNESS_TEAM_SELECTION_SUMMARY_KEYS,
-  ...HARNESS_TEAM_SELECTION_ROLE_KEYS,
-] as const;
-
+const IMAGE_GENERATION_CONTRACT_KEY = "image_generation";
+const IMAGE_GENERATION_ROUTING_SLOT = "image_generation_model";
 function normalizeRuntimeIdentifier(value?: string | null): string {
   return value?.trim().toLowerCase() || "";
 }
@@ -102,28 +81,6 @@ function readHarnessStringFromRequestMetadata(
   for (const key of keys) {
     if (typeof harness[key] === "string" && harness[key].trim()) {
       return harness[key] as string;
-    }
-  }
-
-  return null;
-}
-
-function readHarnessArrayFromRequestMetadata(
-  requestMetadata: Record<string, unknown> | undefined,
-  keys: readonly string[],
-): unknown[] | null {
-  if (!requestMetadata) {
-    return null;
-  }
-
-  const nestedHarness = requestMetadata.harness;
-  const harness = isPlainRecord(nestedHarness)
-    ? (nestedHarness as Record<string, unknown>)
-    : requestMetadata;
-
-  for (const key of keys) {
-    if (Array.isArray(harness[key])) {
-      return harness[key] as unknown[];
     }
   }
 
@@ -275,13 +232,13 @@ function omitHarnessFieldsFromRequestMetadata(
   return Object.keys(harness).length > 0 ? harness : undefined;
 }
 
-function omitRetiredImageSkillLaunchMetadata(
+function omitRetiredHarnessMetadata(
   requestMetadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
-  return omitHarnessFieldsFromRequestMetadata(
-    requestMetadata,
-    RETIRED_HARNESS_IMAGE_SKILL_LAUNCH_KEYS,
-  );
+  return omitHarnessFieldsFromRequestMetadata(requestMetadata, [
+    ...RETIRED_HARNESS_IMAGE_SKILL_LAUNCH_KEYS,
+    ...RETIRED_HARNESS_TEAM_SELECTION_KEYS,
+  ]);
 }
 
 function normalizeComparableText(value: unknown): string | null {
@@ -291,124 +248,6 @@ function normalizeComparableText(value: unknown): string | null {
 
   const normalized = value.trim();
   return normalized ? normalized : null;
-}
-
-function normalizeComparableSkillIds(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizeComparableTeamRole(
-  role: unknown,
-): Record<string, unknown> | null {
-  if (!isPlainRecord(role)) {
-    return null;
-  }
-
-  return {
-    id: normalizeComparableText(role["id"]),
-    label: normalizeComparableText(role["label"]),
-    summary: normalizeComparableText(role["summary"]),
-    profileId: normalizeComparableText(role["profile_id"] ?? role["profileId"]),
-    roleKey: normalizeComparableText(role["role_key"] ?? role["roleKey"]),
-    skillIds: normalizeComparableSkillIds(
-      role["skill_ids"] ?? role["skillIds"],
-    ),
-  };
-}
-
-function createComparableRequestTeamSelection(
-  requestMetadata: Record<string, unknown> | undefined,
-): Record<string, unknown> | null {
-  const roles = readHarnessArrayFromRequestMetadata(
-    requestMetadata,
-    HARNESS_TEAM_SELECTION_ROLE_KEYS,
-  );
-  const normalizedRoles = roles
-    ?.map((role) => normalizeComparableTeamRole(role))
-    .filter((role): role is Record<string, unknown> => Boolean(role));
-  const comparableSelection = {
-    preferredTeamPresetId: normalizeComparableText(
-      readHarnessStringFromRequestMetadata(
-        requestMetadata,
-        HARNESS_TEAM_SELECTION_PRESET_KEYS,
-      ),
-    ),
-    selectedTeamId: normalizeComparableText(
-      readHarnessStringFromRequestMetadata(
-        requestMetadata,
-        HARNESS_TEAM_SELECTION_ID_KEYS,
-      ),
-    ),
-    selectedTeamSource: normalizeComparableText(
-      readHarnessStringFromRequestMetadata(
-        requestMetadata,
-        HARNESS_TEAM_SELECTION_SOURCE_KEYS,
-      ),
-    ),
-    selectedTeamLabel: normalizeComparableText(
-      readHarnessStringFromRequestMetadata(
-        requestMetadata,
-        HARNESS_TEAM_SELECTION_LABEL_KEYS,
-      ),
-    ),
-    selectedTeamDescription: normalizeComparableText(
-      readHarnessStringFromRequestMetadata(
-        requestMetadata,
-        HARNESS_TEAM_SELECTION_DESCRIPTION_KEYS,
-      ),
-    ),
-    selectedTeamSummary: normalizeComparableText(
-      readHarnessStringFromRequestMetadata(
-        requestMetadata,
-        HARNESS_TEAM_SELECTION_SUMMARY_KEYS,
-      ),
-    ),
-    selectedTeamRoles:
-      normalizedRoles && normalizedRoles.length > 0 ? normalizedRoles : null,
-  };
-
-  return Object.values(comparableSelection).some((value) => {
-    if (Array.isArray(value)) {
-      return value.length > 0;
-    }
-    return value !== null;
-  })
-    ? comparableSelection
-    : null;
-}
-
-function createComparableRuntimeTeamSelection(
-  selection?: AgentSessionExecutionRuntimeRecentTeamSelection | null,
-): Record<string, unknown> | null {
-  if (!selection || selection.disabled) {
-    return null;
-  }
-
-  const normalizedRoles = selection.selectedTeamRoles
-    ?.map((role) => normalizeComparableTeamRole(role))
-    .filter((role): role is Record<string, unknown> => Boolean(role));
-
-  return {
-    preferredTeamPresetId: normalizeComparableText(
-      selection.preferredTeamPresetId,
-    ),
-    selectedTeamId: normalizeComparableText(selection.selectedTeamId),
-    selectedTeamSource: normalizeComparableText(selection.selectedTeamSource),
-    selectedTeamLabel: normalizeComparableText(selection.selectedTeamLabel),
-    selectedTeamDescription: normalizeComparableText(
-      selection.selectedTeamDescription,
-    ),
-    selectedTeamSummary: normalizeComparableText(selection.selectedTeamSummary),
-    selectedTeamRoles:
-      normalizedRoles && normalizedRoles.length > 0 ? normalizedRoles : null,
-  };
 }
 
 export interface BuildSubmitOpRuntimeCompactionOptions {
@@ -490,9 +329,7 @@ export function buildSubmitOpRuntimeCompaction(
     requestedWebSearch,
     requestedThinking,
   } = options;
-  const requestMetadata = omitRetiredImageSkillLaunchMetadata(
-    options.requestMetadata,
-  );
+  const requestMetadata = omitRetiredHarnessMetadata(options.requestMetadata);
 
   const syncedProviderSelector =
     syncedSessionModelPreference?.providerType?.trim() || null;
@@ -562,20 +399,6 @@ export function buildSubmitOpRuntimeCompaction(
     requestedThinking,
   });
   let metadata = preferenceCompaction.metadata;
-
-  if (
-    JSON.stringify(createComparableRequestTeamSelection(metadata)) ===
-    JSON.stringify(
-      createComparableRuntimeTeamSelection(
-        executionRuntime?.recent_team_selection ?? null,
-      ),
-    )
-  ) {
-    metadata = omitHarnessFieldsFromRequestMetadata(
-      metadata,
-      HARNESS_TEAM_SELECTION_KEYS,
-    );
-  }
 
   const requestContentId = normalizeComparableText(
     readHarnessStringFromRequestMetadata(metadata, HARNESS_CONTENT_ID_KEYS),

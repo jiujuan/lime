@@ -1121,17 +1121,17 @@ mod tests {
             assert_eq!(memory_catalog.lifecycle, ToolLifecycle::Current);
             assert_eq!(memory_catalog.capabilities, vec![ToolCapability::Memory]);
         }
-        let bash_catalog = inventory
+        let exec_catalog = inventory
             .catalog_tools
             .iter()
-            .find(|entry| entry.name == "Bash")
-            .expect("Bash catalog entry should exist");
+            .find(|entry| entry.name == "exec_command")
+            .expect("exec_command catalog entry should exist");
         assert_eq!(
-            bash_catalog.execution_warning_policy,
+            exec_catalog.execution_warning_policy,
             ToolExecutionWarningPolicy::ShellCommandRisk
         );
         assert_eq!(
-            bash_catalog.execution_sandbox_profile,
+            exec_catalog.execution_sandbox_profile,
             ToolExecutionSandboxProfile::WorkspaceCommand
         );
 
@@ -1218,7 +1218,11 @@ mod tests {
             )],
             current_tool_definitions: vec![
                 definition("Agent", "delegate work", json!({ "type": "object" })),
-                definition("Bash", "workspace bash", json!({ "type": "object" })),
+                definition(
+                    "exec_command",
+                    "workspace command",
+                    json!({ "type": "object" }),
+                ),
             ],
             resource_helpers_supported: false,
             extension_configs: vec![builtin_extension(
@@ -1246,12 +1250,12 @@ mod tests {
         );
         assert!(agent_tool.visible_in_context);
 
-        let bash_tool = inventory
+        let exec_tool = inventory
             .runtime_tools
             .iter()
-            .find(|entry| entry.name == "Bash")
-            .expect("Bash runtime tool should exist");
-        assert_eq!(bash_tool.source_kind, RuntimeToolSourceKind::CurrentSurface);
+            .find(|entry| entry.name == "exec_command")
+            .expect("exec_command runtime tool should exist");
+        assert_eq!(exec_tool.source_kind, RuntimeToolSourceKind::CurrentSurface);
 
         let docs_tool = inventory
             .runtime_tools
@@ -1304,9 +1308,13 @@ mod tests {
             mcp_tools: Vec::new(),
             current_tool_definitions: vec![
                 definition("Read", "read file", json!({ "type": "object" })),
-                definition("Bash", "workspace bash", json!({ "type": "object" })),
                 definition(
-                    "PowerShell",
+                    "exec_command",
+                    "workspace command",
+                    json!({ "type": "object" }),
+                ),
+                definition(
+                    "write_stdin",
                     "workspace powershell",
                     json!({ "type": "object" }),
                 ),
@@ -1322,7 +1330,7 @@ mod tests {
             searchable_extension_tools: Vec::new(),
         });
 
-        for blocked_tool_name in ["Bash", "PowerShell", APPLY_PATCH_TOOL_NAME] {
+        for blocked_tool_name in ["exec_command", "write_stdin", APPLY_PATCH_TOOL_NAME] {
             assert!(
                 !inventory
                     .catalog_tools
@@ -1584,7 +1592,7 @@ mod tests {
             warnings: Vec::new(),
             persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
                 tool_overrides: std::collections::HashMap::from([(
-                    "bash".to_string(),
+                    "exec_command".to_string(),
                     ConfigToolExecutionOverrideConfig {
                         warning_policy: Some(ConfigToolExecutionWarningPolicyConfig::None),
                         restriction_profile: None,
@@ -1597,7 +1605,7 @@ mod tests {
                 "harness": {
                     "executionPolicy": {
                         "toolOverrides": {
-                            "bash": {
+                            "exec_command": {
                                 "sandboxProfile": "none"
                             }
                         }
@@ -1607,8 +1615,8 @@ mod tests {
             mcp_server_names: Vec::new(),
             mcp_tools: Vec::new(),
             current_tool_definitions: vec![definition(
-                "Bash",
-                "workspace bash",
+                "exec_command",
+                "workspace command",
                 json!({
                     "type": "object",
                     "x-lime": { "allowed_callers": ["assistant"] }
@@ -1620,63 +1628,63 @@ mod tests {
             searchable_extension_tools: Vec::new(),
         });
 
-        let bash_catalog = inventory
+        let exec_catalog = inventory
             .catalog_tools
             .iter()
-            .find(|entry| entry.name == "Bash")
-            .expect("Bash catalog entry should exist");
+            .find(|entry| entry.name == "exec_command")
+            .expect("exec_command catalog entry should exist");
         assert_eq!(
-            bash_catalog.execution_warning_policy,
+            exec_catalog.execution_warning_policy,
             ToolExecutionWarningPolicy::None
         );
         assert_eq!(
-            bash_catalog.execution_restriction_profile,
+            exec_catalog.execution_restriction_profile,
             ToolExecutionRestrictionProfile::WorkspaceShellCommand
         );
         assert_eq!(
-            bash_catalog.execution_warning_policy_source,
+            exec_catalog.execution_warning_policy_source,
             ToolExecutionPolicySource::Persisted
         );
         assert_eq!(
-            bash_catalog.execution_restriction_profile_source,
+            exec_catalog.execution_restriction_profile_source,
             ToolExecutionPolicySource::Default
         );
         assert_eq!(
-            bash_catalog.execution_sandbox_profile,
+            exec_catalog.execution_sandbox_profile,
             ToolExecutionSandboxProfile::None
         );
         assert_eq!(
-            bash_catalog.execution_sandbox_profile_source,
+            exec_catalog.execution_sandbox_profile_source,
             ToolExecutionPolicySource::Runtime
         );
 
-        let bash_native = inventory
+        let exec_native = inventory
             .native_tools
             .iter()
-            .find(|entry| entry.name == "Bash")
-            .expect("Bash native entry should exist");
+            .find(|entry| entry.name == "exec_command")
+            .expect("exec_command native entry should exist");
         assert_eq!(
-            bash_native.catalog_execution_warning_policy,
+            exec_native.catalog_execution_warning_policy,
             Some(ToolExecutionWarningPolicy::None)
         );
         assert_eq!(
-            bash_native.catalog_execution_restriction_profile,
+            exec_native.catalog_execution_restriction_profile,
             Some(ToolExecutionRestrictionProfile::WorkspaceShellCommand)
         );
         assert_eq!(
-            bash_native.catalog_execution_sandbox_profile,
+            exec_native.catalog_execution_sandbox_profile,
             Some(ToolExecutionSandboxProfile::None)
         );
         assert_eq!(
-            bash_native.catalog_execution_warning_policy_source,
+            exec_native.catalog_execution_warning_policy_source,
             Some(ToolExecutionPolicySource::Persisted)
         );
         assert_eq!(
-            bash_native.catalog_execution_restriction_profile_source,
+            exec_native.catalog_execution_restriction_profile_source,
             Some(ToolExecutionPolicySource::Default)
         );
         assert_eq!(
-            bash_native.catalog_execution_sandbox_profile_source,
+            exec_native.catalog_execution_sandbox_profile_source,
             Some(ToolExecutionPolicySource::Runtime)
         );
     }
@@ -1856,8 +1864,8 @@ mod tests {
             mcp_tools: Vec::new(),
             current_tool_definitions: vec![
                 definition(
-                    "Bash",
-                    "workspace bash",
+                    "exec_command",
+                    "workspace command",
                     json!({
                         "type": "object",
                         "x-lime": {
@@ -1921,7 +1929,7 @@ mod tests {
             inventory
                 .native_tools
                 .iter()
-                .find(|entry| entry.name == "Bash")
+                .find(|entry| entry.name == "exec_command")
                 .and_then(|entry| entry.catalog_execution_sandbox_profile),
             Some(ToolExecutionSandboxProfile::WorkspaceCommand)
         );

@@ -205,7 +205,7 @@ describe("agentUiEventProjection", () => {
       baseContext,
     );
 
-    expect(events).toHaveLength(2);
+    expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       type: "run.status",
       runtimeEntity: "agent_turn",
@@ -227,31 +227,6 @@ describe("agentUiEventProjection", () => {
         teamActiveCount: 1,
         teamQueuedCount: 1,
         providerConcurrencyGroup: "openai",
-      },
-    });
-    expect(events[1]).toMatchObject({
-      type: "team.changed",
-      sourceType: "runtime_status",
-      owner: "team",
-      scope: "team",
-      phase: "waiting",
-      surface: "team_roster",
-      runtimeEntity: "agent_turn",
-      runtimeStatus: "preparing",
-      latestTurnStatus: "preparing",
-      topology: "parallel_workers",
-      teamPhase: "queued",
-      teamParallelBudget: 2,
-      teamActiveCount: 1,
-      teamQueuedCount: 1,
-      providerConcurrencyGroup: "openai",
-      providerParallelBudget: 3,
-      queueReason: "provider_busy",
-      retryableOverload: true,
-      payload: {
-        teamEvent: "runtime_status_changed",
-        concurrencyPhase: undefined,
-        concurrencyScope: undefined,
       },
     });
   });
@@ -541,35 +516,14 @@ describe("agentUiEventProjection", () => {
       teamThreadContext,
     );
 
-    expect(events).toHaveLength(3);
+    expect(events).toHaveLength(2);
     expect(events.every((event) => event.threadId === "thread-team-1")).toBe(
       true,
     );
     expect(events[0]).toMatchObject({
-      type: "team.changed",
-      sourceType: "team_control_projection",
-      sequence: 10,
-      sessionId: "session-team-1",
-      threadId: "thread-team-1",
-      turnId: "turn-parent-1",
-      owner: "team",
-      scope: "team",
-      phase: "acting",
-      surface: "team_policy",
-      control: "continue_agent",
-      payload: {
-        teamEvent: "team_control",
-        action: "resume",
-        control: "continue_agent",
-        requestedSessionIds: ["child-1"],
-        affectedSessionIds: ["child-1"],
-        cascadeSessionIds: ["child-2"],
-      },
-    });
-    expect(events[1]).toMatchObject({
       type: "task.changed",
       sourceType: "team_control_projection",
-      sequence: 11,
+      sequence: 10,
       taskId: "child-1",
       agentId: "child-1",
       owner: "task",
@@ -587,10 +541,10 @@ describe("agentUiEventProjection", () => {
         runtimeEntity: "subagent_turn",
       },
     });
-    expect(events[2]).toMatchObject({
+    expect(events[1]).toMatchObject({
       type: "agent.handoff",
       sourceType: "team_control_projection",
-      sequence: 12,
+      sequence: 11,
       sessionId: "session-team-1",
       threadId: "thread-team-1",
       turnId: "turn-parent-1",
@@ -642,7 +596,7 @@ describe("agentUiEventProjection", () => {
           requestedSessionIds: ["child-delegated"],
         },
         baseContext,
-      )[1],
+      )[0],
     ).toMatchObject({
       type: "task.changed",
       control: "delegate",
@@ -660,7 +614,7 @@ describe("agentUiEventProjection", () => {
           workItemId: "work-item-1",
         },
         baseContext,
-      )[1],
+      )[0],
     ).toMatchObject({
       type: "task.changed",
       control: "assign",
@@ -686,7 +640,7 @@ describe("agentUiEventProjection", () => {
           resolvedStatus: "assigned",
         },
         baseContext,
-      )[1],
+      )[0],
     ).toMatchObject({
       type: "task.changed",
       taskId: "work-item-2",
@@ -716,7 +670,7 @@ describe("agentUiEventProjection", () => {
           runtimeEntity: "work_item",
         },
         baseContext,
-      )[1],
+      )[0],
     ).toMatchObject({
       type: "task.changed",
       taskId: "review-1",
@@ -1338,7 +1292,7 @@ describe("agentUiEventProjection", () => {
               key: "team.selection",
               repo_scope: "/repo/lime",
               updated_at: 1710000000,
-              source: "team_memory_shadow",
+              source: "context",
             },
           ],
         },
@@ -1753,8 +1707,8 @@ describe("agentUiEventProjection", () => {
       baseContext,
     );
 
-    expect(taskUpdateEvents).toHaveLength(3);
-    expect(taskUpdateEvents[2]).toMatchObject({
+    expect(taskUpdateEvents).toHaveLength(2);
+    expect(taskUpdateEvents[1]).toMatchObject({
       type: "task.changed",
       sourceType: "item_completed",
       taskId: "1",

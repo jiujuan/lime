@@ -147,8 +147,8 @@ describe("threadItemProjection", () => {
       baseContext,
     );
 
-    expect(events).toHaveLength(3);
-    expect(events[2]).toMatchObject({
+    expect(events).toHaveLength(2);
+    expect(events[1]).toMatchObject({
       type: "task.changed",
       sourceType: "item_completed",
       taskId: "task-1",

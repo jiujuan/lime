@@ -189,7 +189,6 @@
   "navigation.sidebar.importDialog.empty.noThreads": "没有找到可导入的本地历史对话",
   "navigation.sidebar.importDialog.meta.source": "来源",
   "navigation.sidebar.importDialog.source.localHistory": "本地历史",
-  "navigation.sidebar.importDialog.source.claudeCode": "Claude Code",
   "navigation.sidebar.importDialog.target.standalone": "独立对话",
   "navigation.sidebar.importDialog.preview.loading": "正在生成预览",
   "navigation.sidebar.importDialog.preview.empty": "请选择一条本地历史对话查看预览",

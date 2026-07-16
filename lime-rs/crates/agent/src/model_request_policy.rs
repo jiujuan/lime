@@ -9,8 +9,8 @@ const DEFAULT_TOOL_OUTPUT_TRUNCATION_BYTES: u64 = 10_000;
 const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT: i64 = 95;
 const AUTO_COMPACT_CONTEXT_WINDOW_RATIO_NUMERATOR: i64 = 9;
 const AUTO_COMPACT_CONTEXT_WINDOW_RATIO_DENOMINATOR: i64 = 10;
-pub const MODEL_NATIVE_SHELL_TOOL_NAME: &str = "Bash";
-pub const MODEL_NATIVE_POWERSHELL_TOOL_NAME: &str = "PowerShell";
+pub const MODEL_NATIVE_SHELL_TOOL_NAME: &str = "exec_command";
+pub const MODEL_NATIVE_STDIN_TOOL_NAME: &str = "write_stdin";
 pub const MODEL_NATIVE_APPLY_PATCH_TOOL_NAME: &str = "apply_patch";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -185,11 +185,9 @@ pub fn native_tool_policy_disallowed_tool_names(
     };
 
     let mut names = Vec::new();
-    let shell_command_available = policy.shell_tool_enabled
-        && policy.preferred_shell_surface.as_deref() == Some("shell_command");
-    if !shell_command_available {
+    if !policy.shell_tool_enabled {
         names.push(MODEL_NATIVE_SHELL_TOOL_NAME);
-        names.push(MODEL_NATIVE_POWERSHELL_TOOL_NAME);
+        names.push(MODEL_NATIVE_STDIN_TOOL_NAME);
     }
     let apply_patch_available = policy.apply_patch_tool_enabled
         && policy.apply_patch_tool_type.as_deref() == Some("freeform");

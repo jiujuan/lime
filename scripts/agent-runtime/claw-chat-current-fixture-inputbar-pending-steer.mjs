@@ -26,10 +26,7 @@ import {
   waitForInputbarPendingSteerPopFrontReadModel,
   waitForInputbarPendingSteerQueuedReadModel,
 } from "./claw-chat-current-fixture-pending-steer-read-model.mjs";
-import {
-  readJsonl,
-  sanitizeJson,
-} from "./claw-chat-current-fixture-utils.mjs";
+import { readJsonl, sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
 async function startActivePendingSteerTurn({
   page,
@@ -120,9 +117,10 @@ function summarizeRichRestoreResult(summary) {
       summary.inputbarPendingSteerQueuedReadModel,
     inputbarPendingSteerBackendBeforeCancel:
       summary.inputbarPendingSteerBackendBeforeCancel,
+    inputbarPendingSteerBackendCancel:
+      summary.inputbarPendingSteerBackendCancel,
     inputbarPendingSteerStopClick: summary.inputbarPendingSteerStopClick,
-    inputbarPendingSteerGuiCanceled:
-      summary.inputbarPendingSteerGuiCanceled,
+    inputbarPendingSteerGuiCanceled: summary.inputbarPendingSteerGuiCanceled,
   });
 }
 
@@ -181,14 +179,16 @@ export async function runInputbarPendingSteerRichRestoreScenario({
   appServerRequests,
   runtimeEnv,
 }) {
-  const { sessionId } = await startActivePendingSteerTurn({
-    page,
-    options,
-    summary,
-    runtimeEnv,
-    activeStreamingLabel:
-      "Inputbar pending steer active turn 未进入正在输出状态",
-  });
+  const { sessionId, turnId: activeTurnId } = await startActivePendingSteerTurn(
+    {
+      page,
+      options,
+      summary,
+      runtimeEnv,
+      activeStreamingLabel:
+        "Inputbar pending steer active turn 未进入正在输出状态",
+    },
+  );
 
   await queueRichPendingSteerDraft({
     page,
@@ -226,6 +226,19 @@ export async function runInputbarPendingSteerRichRestoreScenario({
       snapshot.bodyText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT),
     "Inputbar pending steer 取消 queued rich turn 后未恢复完整 rich 草稿",
   );
+
+  const activeCancel = await waitForBackendLedgerEntry(
+    runtimeEnv.backendLedgerPath,
+    (entry) =>
+      entry.kind === "turnCancel" &&
+      (!activeTurnId || entry.turnId === activeTurnId),
+    options,
+  );
+  summary.inputbarPendingSteerBackendCancel = sanitizeJson({
+    sessionId: activeCancel.entry.sessionId ?? null,
+    turnId: activeCancel.entry.turnId ?? null,
+    ledgerCount: activeCancel.ledger.length,
+  });
 
   return summarizeRichRestoreResult(summary);
 }
@@ -276,15 +289,16 @@ export async function runInputbarPendingSteerPopFrontResumeScenario({
   appServerRequests,
   runtimeEnv,
 }) {
-  const { sessionId, turnId: activeTurnId } =
-    await startActivePendingSteerTurn({
+  const { sessionId, turnId: activeTurnId } = await startActivePendingSteerTurn(
+    {
       page,
       options,
       summary,
       runtimeEnv,
       activeStreamingLabel:
         "Inputbar pending steer pop-front active turn 未进入正在输出状态",
-    });
+    },
+  );
 
   await queueRichPendingSteerDraft({
     page,
@@ -343,7 +357,11 @@ export async function runInputbarPendingSteerPopFrontResumeScenario({
     );
 
   summary.inputbarPendingSteerPopFrontGuiHydrated =
-    await reloadAndWaitForPendingSteerQueuedHydrate(page, options);
+    await reloadAndWaitForPendingSteerQueuedHydrate(
+      page,
+      options,
+      summary.inputbarPendingSteerPopFrontRichBackendTurnStart.turnId,
+    );
 
   return summarizePopFrontResumeResult(summary);
 }

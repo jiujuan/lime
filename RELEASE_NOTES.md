@@ -1,44 +1,36 @@
-## Lime v1.104.0
+## Lime v1.105.0
 
 ### 新功能
 
-- Message、Reasoning 与 Plan 全面进入 Codex 对齐的 canonical Item lifecycle：Start/Delta/End 共享稳定 identity，provider 输出按 canonical Turn 与 sampling attempt 隔离，Turn 终态不再旁路补造内容。
-- canonical AgentMessage 新增 typed `content_parts`，Text 与 reference-only Media 从 ThreadStore、`thread/read`、`agentSession/read` 到 live GUI 保持同一顺序与引用，拒绝 inline data URI 和 provider raw payload。
-- `agentSession/read` 明确为 ThreadStore-backed 的 current 产品展示端点；Approval cold/live read 统一输出 typed terminal response，GUI 决策别名只在 view-model 边界转换。
-- AgentControl child 从 parent Turn 继承已解析的 provider、model、reasoning、workspace 与 search policy；warm `followup_task` 保持目标 child 的有效 route，cold target 才使用 caller snapshot。
-- runtime-owned MCP client 使用 `2025-06-18` 并精确广告 form elicitation capability；没有可信 Thread owner 的 management connection 继续保持 capability absent。
-- Agent Chat 的任务索引、审核决策、工具过程与媒体工作台补齐 current owner、稳定 DOM identity 和五语言用户界面，空时间线会主动恢复 canonical history。
+- 新增 Codex 对齐的 `exec_command` / `write_stdin` current 工具面，支持 PTY、持续会话、增量输出、超时 yield、输出预算、stdin 写入和终态回收；命令执行统一进入 App Server execution process、审批、sandbox 与 canonical Tool/Command lifecycle。
+- `spawn_agent.fork_turns` 支持 `all`、`none` 与最近 N 个 canonical Turn，child 使用独立稳定 identity 重建可选历史和 provider transcript；Pending -> Open crash commit 在 child 完整持久化后才发布可见状态。
+- 新增 DeepSWE adapter、项目级 Gate candidate/coverage 入口和 Electron smoke evidence owner，为后续完整 Gate A/B 候选冻结提供可审计的 snapshot、surface contract 与证据分级。
 
 ### 修复
 
-- 修复同一 provider raw ID 在后续 sampling attempt 或 Turn 被复用的问题；Reasoning、Message、Plan 与 Tool 只按首次 canonical outer sequence 排序，terminal Item 拒绝 late delta。
-- 修复 producer ordinal 与 ThreadStore 唯一索引碰撞、imported Reasoning source ordinal 丢失，以及 canonical projection 失败仍继续通知 GUI/推进内存历史的问题。
-- 修复已有 Turn 元数据但 Message/Item 尚未加载时，同 session 导航错误跳过 history hydrate 而显示空对话的问题；缺失 canonical detail 现在显式失败。
-- 修复 Approval terminal wire 使用 GUI alias、Coding recovery 跨 Turn 复用执行 identity、Content Factory 合成 action/contract probe，以及 Project Shell 空白颜色环境变量不回落默认值的问题。
+- Provider SSE 改为 300 秒空闲超时而非请求总时长上限，保留底层 transport error chain；OpenAI chat 流会忽略全空 tool-call placeholder，并对携带参数但缺少工具名的调用 fail closed。
+- 修复 Agent final answer/commentary phase 在 TextEnd 映射时丢失、失败命令错误投影为 generic Tool，以及 streaming Turn DOM 缺少稳定终态的问题。
+- 修复 AgentControl spawn 在 history、lineage、graph、identity 或 mailbox 写入失败后残留半成品 child 的问题；启动恢复只暴露已完成 crash commit 的 Open child。
 
 ### 优化与重构
 
-- 删除 app-data session fallback、681 行 `session_hydration`、旧 Team runtime governor/SubAgent tree、Renderer Agent Runtime root barrel 与 stale 类型聚合；RuntimeCore、EventLog、ProjectionStore/ThreadStore 成为唯一 session 事实源。
-- 物理删除 RuntimeCore 第二套 provider-neutral request/event algebra 与 Model Provider generic chat/gemini/ollama lowering，共净删约 1,500 行；current 链只接受 canonical request/event 与 media body builder。
-- 拆分 provider output lifecycle、conversation import Plan、canonical message lifecycle、Approval/read-model workflow 等 owner 模块，保持主文件低于既有体量门槛，不新增 facade 或兼容双轨。
-- 媒体 DTO、Workspace request、Evidence/Inventory/Expert/Plugin 类型和 Agent client/session/thread 消费面迁到各自 current owner，并补 dead barrel 回流守卫。
+- Codex 本地历史导入开始直接重建 canonical Thread/Turn/Item，移除 imported runtime event sidecar、`conversationImport/thread/runtimeEvents/read`、专用详情面板和 imported-only 工具投影，导入记录不再形成第二套完整历史事实源。
+- 删除旧 `Bash`/PowerShell/shell alias 与独立 `shell_execution` owner，将 live process、PTY、输出 drain、interrupt/terminate 和 sandbox command preparation 收敛到 `tool-runtime` 与 App Server current owner。
+- 删除 Renderer synthetic Team projection、Team Memory shadow、selected-team/session metadata、Workspace Agent Team settings 和旧 SubAgent 工具 whitelist；GUI、read model 与 runtime 继续只消费 canonical child Thread/graph facts。
+- 拆分 Task Center draft-send dispatch、conversation import history builder、execution process、sandbox command 与 Electron smoke evidence 等高复杂度 owner，减少热文件体量和跨层隐式接线。
 
 ### 测试与质量
 
-- 扩展 Rust/TypeScript canonical lifecycle、typed media parts、Approval、session history、projection fail-closed、provider lowering 与 current owner 回归，并同步 App Server schema 和 generated client。
-- 补齐六个 AgentControl 工具、Reasoning 可见顺序、图片 media reference、Content Factory、Coding recovery 和 history replay 的真实 Electron / Gate B 证据。
-- AgentControl visible-DOM Gate B 验证六个 completed Tool row 与 Started/Interacted/Interrupted activity；MCP elicitation Gate B 同时验证 runtime capability 与 management absence。
-- history replay oracle 只在 Reasoning summary、图片附件与 MCP tool row 完整可见后断言；工具行新增稳定 name/status DOM 属性，减少瞬态竞态与脆弱文本定位。
-- 统一 Rust layer runner 在 macOS 测试进程中的最小栈默认值，同时保留显式调用者配置；smart frontend suite、changed Rust、legacy governance 与 GUI smoke 均有本轮候选证据。
-- 任务索引与 Runtime Review Decision 文案覆盖 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`ko-KR`，并补 locale 稳定回归。
+- 扩展 unified exec/PTY、execution process JSON-RPC、sandbox/policy、AgentControl fork/crash recovery、provider SSE、conversation import canonical mapping 与 GUI projection 的 Rust/TypeScript 回归。
+- 新增 DeepSWE coding slice、项目 Gate candidate digest、34-surface coverage contract、Gate B execution evidence 和 App Server stdio transport fixture；旧 benchmark release 双轨脚本及其过期 manifest 已删除。
+- 同步 App Server protocol schema、generated TypeScript client、command catalog、runtime fixture、Electron smoke 和 current docs guard。
 
 ### 文档
 
-- 更新全局架构、Refactor V2 中央计划、Agent Workspace、Project Thread 与逐切片 evidence，明确 canonical lifecycle、ThreadStore ordinal/projection、AgentSession presentation 和 provider algebra 的唯一 owner。
-- 记录 app-data fallback、旧 provider lowering、root barrel、Team/synthetic fixture 等 `dead / deleted / forbidden-to-restore` 分类及其验证、handoff 与退出条件。
+- 更新全局架构、Refactor V2 中央计划、Codex 导入路线图、Multi-Agent/Agent UI、测试策略和项目 Gate A/B 计划，记录 current owner、删除分类、候选冻结与后续验收条件。
 
 ### 其他
 
-- 版本事实源更新到 `1.104.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.105.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.103.0` -> `v1.104.0`
+**完整变更**: `v1.104.0` -> `v1.105.0`

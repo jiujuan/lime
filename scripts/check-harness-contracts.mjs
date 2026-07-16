@@ -169,14 +169,6 @@ function main() {
 
   const requiredMetadataKeys = [
     "preferences:",
-    "preferred_team_preset_id:",
-    "selected_team_id:",
-    "selected_team_source:",
-    "selected_team_label:",
-    "selected_team_description:",
-    "selected_team_summary:",
-    "selected_team_roles:",
-    "team_memory_shadow:",
     "browser_requirement:",
     "browser_requirement_reason:",
     "browser_launch_url:",
@@ -202,6 +194,24 @@ function main() {
     "turnTeamReason:",
     "turn_team_blueprint:",
     "turnTeamBlueprint:",
+    "selected_team_disabled:",
+    "selectedTeamDisabled:",
+    "preferred_team_preset_id:",
+    "preferredTeamPresetId:",
+    "selected_team_id:",
+    "selectedTeamId:",
+    "selected_team_source:",
+    "selectedTeamSource:",
+    "selected_team_label:",
+    "selectedTeamLabel:",
+    "selected_team_description:",
+    "selectedTeamDescription:",
+    "selected_team_summary:",
+    "selectedTeamSummary:",
+    "selected_team_roles:",
+    "selectedTeamRoles:",
+    "team_memory_shadow:",
+    "teamMemoryShadow:",
   ];
 
   const requiredLegacyCleanupKeys = [
@@ -214,13 +224,21 @@ function main() {
     "turn_team_decision",
     "turn_team_reason",
     "turn_team_blueprint",
+    "selected_team_disabled",
+    "preferred_team_preset_id",
+    "selected_team_id",
+    "selected_team_source",
+    "selected_team_label",
+    "selected_team_description",
+    "selected_team_summary",
+    "selected_team_roles",
+    "team_memory_shadow",
   ];
 
   const requiredRuntimeFields = [
     "session_id:",
     "execution_strategy:",
     "recent_preferences:",
-    "recent_team_selection:",
     "recent_content_id:",
   ];
 
@@ -279,16 +297,16 @@ function main() {
     "[harness-contracts] execution runtime 缺少 recent preferences 适配函数",
     failures,
   );
-  assertIncludes(
+  assertNotMatch(
     executionRuntimeSource,
-    "createTeamDefinitionFromExecutionRuntimeRecentTeamSelection",
-    "[harness-contracts] execution runtime 缺少 recent team 反序列化函数",
+    /RecentTeamSelection|createTeamDefinitionFromExecutionRuntime|createSessionRecentTeamSelection/u,
+    "[harness-contracts] execution runtime 仍保留 retired recent Team adapter",
     failures,
   );
-  assertIncludes(
-    executionRuntimeSource,
-    "createSessionRecentTeamSelectionFromTeamDefinition",
-    "[harness-contracts] execution runtime 缺少 recent team 序列化函数",
+  assertNotMatch(
+    executionRuntimeProjectionSource,
+    /recent_team_selection|recentTeamSelection/u,
+    "[harness-contracts] execution runtime projection 仍保留 retired recent Team 字段",
     failures,
   );
 

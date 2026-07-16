@@ -1,6 +1,7 @@
 use super::CurrentProviderError;
 use rand::Rng;
 use reqwest::{header::HeaderMap, StatusCode};
+use std::error::Error;
 use std::time::Duration;
 
 // Matches the Codex provider default: four retries after the initial request.
@@ -27,7 +28,23 @@ pub(super) fn retry_delay(headers: &HeaderMap, completed_attempts: u8) -> Durati
 }
 
 pub(super) fn request_failure(url: &str, error: reqwest::Error) -> CurrentProviderError {
-    CurrentProviderError::new(format!("Provider 请求失败 ({url}): {error}"))
+    CurrentProviderError::new(format!(
+        "Provider 请求失败 ({url}): {}",
+        error_chain(&error)
+    ))
+}
+
+pub(super) fn error_chain(error: &(dyn Error + 'static)) -> String {
+    let mut messages = vec![error.to_string()];
+    let mut source = error.source();
+    while let Some(error) = source {
+        let message = error.to_string();
+        if messages.last() != Some(&message) {
+            messages.push(message);
+        }
+        source = error.source();
+    }
+    messages.join(": ")
 }
 
 fn retry_after(headers: &HeaderMap) -> Option<Duration> {
@@ -51,6 +68,43 @@ fn exponential_backoff(completed_attempts: u8) -> Duration {
 mod tests {
     use super::*;
     use reqwest::header::{HeaderValue, RETRY_AFTER};
+    use std::fmt;
+
+    #[derive(Debug)]
+    struct OuterError {
+        source: InnerError,
+    }
+
+    impl fmt::Display for OuterError {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("outer")
+        }
+    }
+
+    impl Error for OuterError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            Some(&self.source)
+        }
+    }
+
+    #[derive(Debug)]
+    struct InnerError;
+
+    impl fmt::Display for InnerError {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("inner")
+        }
+    }
+
+    impl Error for InnerError {}
+
+    #[test]
+    fn error_chain_keeps_nested_transport_cause() {
+        assert_eq!(
+            error_chain(&OuterError { source: InnerError }),
+            "outer: inner"
+        );
+    }
 
     #[test]
     fn retries_only_transient_statuses() {

@@ -1,6 +1,6 @@
 import type { BrowserWindow } from "./electronRuntime";
 
-interface MemorySettingsSmokeSnapshot {
+export interface MemorySettingsSmokeSnapshot {
   ok?: boolean;
   stage?: string;
   problemTexts?: unknown[];
@@ -12,11 +12,12 @@ interface MemorySettingsSmokeSnapshot {
   visibleButtons?: unknown[];
   bodyStart?: string;
   url?: string;
+  title?: string;
 }
 
 export async function waitForElectronSmokeMemorySettingsReady(
   window: BrowserWindow,
-): Promise<void> {
+): Promise<MemorySettingsSmokeSnapshot> {
   if (window.isDestroyed()) {
     throw new Error("main window was destroyed before memory settings smoke");
   }
@@ -215,6 +216,7 @@ export async function waitForElectronSmokeMemorySettingsReady(
             .filter((button) => button.visible)
             .slice(0, 30),
           url: window.location.href,
+          title: document.title,
           bodyStart: sanitize(errors.text).slice(0, 700),
         };
       };
@@ -314,7 +316,7 @@ export async function waitForElectronSmokeMemorySettingsReady(
         );
         if (!result.ok) return result;
 
-        return { ok: true, stage: "done" };
+        return { ...summarize("done"), ok: true, stage: "done" };
       };
       run().then(resolve).catch((error) => resolve({
         ...summarize("exception"),
@@ -325,7 +327,7 @@ export async function waitForElectronSmokeMemorySettingsReady(
   )) as MemorySettingsSmokeSnapshot;
 
   if (result?.ok) {
-    return;
+    return result;
   }
 
   throw new Error(

@@ -1,10 +1,46 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalAgentMessageItemId,
   isProcessBoundaryContentPart,
   shouldAppendCompletionSuffixToTextPart,
 } from "./contentPartTimeline";
 
 describe("contentPartTimeline", () => {
+  it("应从最终 agent text part 读取 canonical Item identity", () => {
+    expect(
+      canonicalAgentMessageItemId([
+        {
+          type: "text",
+          text: "过程说明",
+          metadata: {
+            source: "agent_text_delta",
+            itemId: "item_agent-message-commentary",
+            phase: "commentary",
+          },
+        },
+        {
+          type: "text",
+          text: "最终答复",
+          metadata: {
+            source: "agent_text_delta",
+            itemId: "item_agent-message-final",
+            threadItemId: "item_agent-message-final",
+            phase: "final_answer",
+          },
+        },
+      ]),
+    ).toBe("item_agent-message-final");
+    expect(
+      canonicalAgentMessageItemId([
+        {
+          type: "text",
+          text: "本地草稿",
+          metadata: { itemId: "local-message" },
+        },
+      ]),
+    ).toBeNull();
+  });
+
   it("应把 commentary text 视为过程边界，但 final_answer text 仍是最终正文", () => {
     expect(
       isProcessBoundaryContentPart({

@@ -45,9 +45,7 @@ fn tool_family_for_approval(tool_name: &str, metadata: &HashMap<String, Value>) 
 
 fn infer_tool_family(tool_name: &str) -> String {
     match tool_name.trim().to_ascii_lowercase().as_str() {
-        "bash" | "powershell" | "shell" | "shell_command" | "exec_command" | "unified_exec" => {
-            SHELL_TOOL_FAMILY.to_string()
-        }
+        "exec_command" => SHELL_TOOL_FAMILY.to_string(),
         value if value.is_empty() => "unknown".to_string(),
         value => value.to_string(),
     }
@@ -232,7 +230,7 @@ mod tests {
             ),
         ]);
 
-        let projection = execution_approval_projection("Bash", &metadata);
+        let projection = execution_approval_projection("exec_command", &metadata);
 
         assert_eq!(projection.action_kind, TOOL_EXECUTION_ACTION_KIND);
         assert_eq!(projection.tool_family, SHELL_TOOL_FAMILY);

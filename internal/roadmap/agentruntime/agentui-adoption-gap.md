@@ -91,7 +91,7 @@ Plugin MVP 必须先满足：真实 runtime facts -> Host Run UI -> 业务 artif
 | AgentUI event schema 直接替代 AgentRuntime | 禁止 | AgentUI 是 projection schema，不拥有 execution、policy、artifact、evidence truth。 |
 | App 内实现完整 AgentUI runtime | 禁止 | 会让业务 App 变成第二套 Agent Runtime，回到“每个 App 自建 AI 同事”的问题。 |
 | 业务 App 直连模型 / provider API | 禁止 | 绕过 Lime model routing、Skills、ToolRuntime、usage、cost、policy、Evidence。 |
-| Subagents 全量表面一次性落地 | 暂缓 | 需要 runtime 先稳定暴露 `agent.spawned / worker.notification / team.changed / handoff / review` facts。 |
+| Subagents 全量表面一次性落地 | 暂缓 | 需要 runtime 先稳定暴露 canonical SubAgent Item / child Thread lifecycle，以及 `agent.spawned / worker.notification / agent.handoff / review` facts；synthetic `team.changed` 已删除，不是前置条件。 |
 | Remote teammate / background teammate UI | 暂缓 | 需要 remote task / background scheduler 的 durable facts；不能用普通 running 文案伪造。 |
 | Work Board 作为所有 Plugin 默认壳 | 暂缓 | 不是所有业务 App 都是看板心智；只能在 runtime 有 work item truth 时投影。 |
 

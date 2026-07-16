@@ -282,6 +282,7 @@ impl RuntimeBackend {
         let mut coding_event_mirror = coding_events::CodingEventMirror::default();
         let mut proposed_plan_parser = proposed_plan_parser::ProposedPlanParser::default();
         let mut reasoning_event_state = reasoning_events::ReasoningEventState::default();
+        let mut turn_usage = None;
         let execution_result = run_agent_turn_with_policy(
             &self.agent_state,
             AgentTurnExecutionRequest {
@@ -304,6 +305,9 @@ impl RuntimeBackend {
                 agent_control_gateway: request.agent_control_gateway.clone(),
             },
             |event| {
+                if let lime_agent::AgentEvent::Done { usage } = event {
+                    turn_usage = usage.clone();
+                }
                 if emit_error.is_some() {
                     return;
                 }
@@ -322,8 +326,17 @@ impl RuntimeBackend {
             },
         )
         .await;
-        let turn_execution =
-            execution_result.map_err(|error| RuntimeCoreError::Backend(error.message))?;
+        let turn_execution = match execution_result {
+            Ok(turn_execution) => turn_execution,
+            Err(error) => {
+                if let Some(error) = emit_error {
+                    return Err(error);
+                }
+                emit_reasoning_finish(&mut reasoning_event_state, "failed", sink)?;
+                emit_agent_message_finish(&mut proposed_plan_parser, "failed", sink)?;
+                return Err(RuntimeCoreError::Backend(error.message));
+            }
+        };
         let provider_config = turn_execution.provider_config.ok_or_else(|| {
             RuntimeCoreError::Backend(
                 "App Server runtime backend expected provider configuration for main turn"
@@ -373,6 +386,7 @@ impl RuntimeBackend {
                     .unwrap_or(&selection.provider),
                 "searchMode": request_tool_policy.search_mode.as_str(),
                 "attempts": execution.attempts_summary,
+                "usage": turn_usage,
             }),
         ))?;
 

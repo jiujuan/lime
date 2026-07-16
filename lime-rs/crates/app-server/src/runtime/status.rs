@@ -169,7 +169,7 @@ pub(super) fn runtime_turn_state_from_agent_turn<'a>(
 
 fn runtime_turn_has_active_activity(turn: &RuntimeTurnSnapshot<'_>, now: DateTime<Utc>) -> bool {
     match normalize_turn_runtime_status(turn.status).as_str() {
-        "queued" | "waitingAction" => true,
+        "waitingAction" => true,
         "accepted" | "running" => {
             running_turn_has_recent_activity([turn.started_at, turn.latest_activity_at], now)
         }
@@ -241,4 +241,39 @@ fn latest_event_timestamp_for_turn<'a>(events: &'a [AgentEvent], turn_id: &str) 
         .rev()
         .find(|event| event.turn_id.as_deref() == Some(turn_id))
         .map(|event| event.timestamp.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queued_turn_keeps_thread_running_without_becoming_active() {
+        let state = resolve_session_runtime_state(
+            "running",
+            0,
+            [
+                RuntimeTurnSnapshot {
+                    turn_id: "turn-completed",
+                    status: "completed",
+                    started_at: Some("2026-07-16T00:00:00Z"),
+                    latest_activity_at: Some("2026-07-16T00:00:01Z"),
+                },
+                RuntimeTurnSnapshot {
+                    turn_id: "turn-queued",
+                    status: "queued",
+                    started_at: Some("2026-07-16T00:00:02Z"),
+                    latest_activity_at: Some("2026-07-16T00:00:02Z"),
+                },
+            ],
+            DateTime::parse_from_rfc3339("2026-07-16T00:00:03Z")
+                .expect("valid test timestamp")
+                .with_timezone(&Utc),
+        );
+
+        assert_eq!(state.thread_status, "running");
+        assert_eq!(state.latest_turn_status.as_deref(), Some("queued"));
+        assert_eq!(state.active_turn_id, None);
+        assert_eq!(state.queued_turn_count, 1);
+    }
 }

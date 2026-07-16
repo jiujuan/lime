@@ -189,7 +189,7 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: false,
     },
     ToolCatalogEntry {
-        name: "Bash",
+        name: "exec_command",
         profiles: CORE_PROFILES,
         capabilities: EXECUTION_CAP,
         lifecycle: ToolLifecycle::Current,
@@ -270,7 +270,7 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: false,
     },
     ToolCatalogEntry {
-        name: "PowerShell",
+        name: "write_stdin",
         profiles: CORE_PROFILES,
         capabilities: EXECUTION_CAP,
         lifecycle: ToolLifecycle::Current,
@@ -522,8 +522,6 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
     match tool_catalog_reference_lookup_key(tool_name).as_str() {
         "requestuserinput" | "requestuserinputtool" => "request_user_input",
         "clocksleep" | "clock.sleep" | "sleep" => SLEEP_TOOL_NAME,
-        "bashtool" | "shell" | "developershell" | "mcpsystemshell" | "shellcommand"
-        | "localshellcall" => "Bash",
         "filereadtool" | "readfiletool" | "readfile" | "developerread" | "mcpsystemreadfile" => {
             "Read"
         }
@@ -536,7 +534,6 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "memoryread" | "memoryreadtool" => MEMORY_READ_TOOL_NAME,
         "memorysearch" | "memorysearchtool" => MEMORY_SEARCH_TOOL_NAME,
         "memoryaddnote" | "memoryaddnotetool" => MEMORY_ADD_NOTE_TOOL_NAME,
-        "powershelltool" => "PowerShell",
         "skilltool" => "Skill",
         "syntheticoutputtool" => "StructuredOutput",
         "toolsearchtool" | "toolsearch" | "mcpsystemtoolsearch" => TOOL_SEARCH_TOOL_NAME,
@@ -728,11 +725,6 @@ mod tests {
             ("RequestUserInputTool", "request_user_input"),
             ("clock.sleep", SLEEP_TOOL_NAME),
             ("sleep", SLEEP_TOOL_NAME),
-            ("BashTool", "Bash"),
-            ("developer__shell", "Bash"),
-            ("mcp__system__shell", "Bash"),
-            ("shell_command", "Bash"),
-            ("local_shell_call", "Bash"),
             ("ApplyPatchTool", APPLY_PATCH_TOOL_NAME),
             ("apply_patch", APPLY_PATCH_TOOL_NAME),
             ("FileReadTool", "Read"),
@@ -752,7 +744,6 @@ mod tests {
             ("memory_search", MEMORY_SEARCH_TOOL_NAME),
             ("MemoryAddNoteTool", MEMORY_ADD_NOTE_TOOL_NAME),
             ("memory_add_note", MEMORY_ADD_NOTE_TOOL_NAME),
-            ("PowerShellTool", "PowerShell"),
             ("ReadMcpResourceTool", READ_MCP_RESOURCE_TOOL_NAME),
             ("SkillTool", "Skill"),
             ("SyntheticOutputTool", "StructuredOutput"),
@@ -779,10 +770,29 @@ mod tests {
                 expected
             );
         }
-        assert!(
-            tool_catalog_entry("exec_command").is_none(),
-            "Codex unified_exec exec_command must not collapse into legacy Bash"
+        assert_eq!(
+            tool_catalog_entry("exec_command").map(|entry| entry.name),
+            Some("exec_command")
         );
+        assert_eq!(
+            tool_catalog_entry("write_stdin").map(|entry| entry.name),
+            Some("write_stdin")
+        );
+        for retired_shell_name in [
+            "Bash",
+            "BashTool",
+            "PowerShell",
+            "PowerShellTool",
+            "shell_command",
+            "developer__shell",
+            "mcp__system__shell",
+            "local_shell_call",
+        ] {
+            assert!(
+                tool_catalog_entry(retired_shell_name).is_none(),
+                "retired shell surface must not resolve: {retired_shell_name}"
+            );
+        }
         for deleted_tool_name in [
             "ConfigTool",
             "EnterWorktreeTool",

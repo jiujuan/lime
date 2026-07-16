@@ -240,8 +240,11 @@ function hasAnyText(snapshot, values) {
 }
 
 function hasPatchEvidenceText(bodyText) {
+  const currentFileArtifactVisible =
+    bodyText.includes("lib.rs") && bodyText.includes("打开文件");
   return (
-    hasAnyText({ bodyText }, ["补丁", "Patch", "patch", "已编辑"]) &&
+    (hasAnyText({ bodyText }, ["补丁", "Patch", "patch", "已编辑"]) ||
+      currentFileArtifactVisible) &&
     hasAnyText({ bodyText }, ["src/lib.rs", "lib.rs", "文件"])
   );
 }
@@ -263,13 +266,10 @@ export function summarizeImportedDetailsSnapshot(
     hasReasoningVisible: hasVisibleImportedReasoningText(bodyText),
     hasReasoningStatusVisible: bodyText.includes("已完成思考"),
     hasReasoningItem: readModelSummary?.hasReasoningItem === true,
-    hasCommandRecordVisible:
-      bodyText.includes("导入的命令记录") ||
-      bodyText.includes("Imported command record"),
+    hasCommandExecutionVisible: bodyText.includes("npm test"),
     hasCommandText:
-      bodyText.includes("导入的命令记录") ||
-      bodyText.includes("Imported command record") ||
-      readModelSummary?.hasCommandItem === true,
+      bodyText.includes("npm test") || readModelSummary?.hasCommandItem === true,
+    hasCommandOutput: bodyText.includes("ok"),
     hasCommandItem: readModelSummary?.hasCommandItem === true,
     hasPatchText: hasPatchEvidenceText(bodyText),
     hasSearchEvidence:
@@ -278,6 +278,7 @@ export function summarizeImportedDetailsSnapshot(
     hasApprovalText: hasAnyText({ bodyText }, [
       "导入的权限记录",
       "已导入，只读记录",
+      "权限记录",
       "审批",
       "确认",
       "权限请求",
@@ -571,12 +572,25 @@ export async function inspectImportedAttachmentPreview(page, options) {
 
 async function waitForInlineToolFileButton(page, options, fileName) {
   const selector = `[data-testid="inline-tool-open-file"][data-file-path$="${fileName}"]`;
+  const artifactCardSelector =
+    '[data-testid="timeline-file-attachment-card"], [data-testid="timeline-file-artifact-card"]';
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < Math.min(options.timeoutMs, 20_000)) {
     lastSnapshot = await page.evaluate(
-      ({ selector }) => {
+      ({ artifactCardSelector, fileName, selector }) => {
         const buttons = Array.from(document.querySelectorAll(selector));
+        const artifactCards = Array.from(
+          document.querySelectorAll(artifactCardSelector),
+        ).filter((card) => (card.textContent || "").includes(fileName));
+        const collapsedProcessButtons = Array.from(
+          document.querySelectorAll(
+            '[data-testid="inline-tool-process-step"] button[title="展开过程详情"]',
+          ),
+        );
+        for (const button of collapsedProcessButtons) {
+          button.click();
+        }
         const inlineSteps = Array.from(
           document.querySelectorAll('[data-testid="inline-tool-process-step"]'),
         ).map((step) => ({
@@ -593,6 +607,8 @@ async function waitForInlineToolFileButton(page, options, fileName) {
         }));
         return {
           count: buttons.length,
+          artifactCardCount: artifactCards.length,
+          expandedProcessCount: collapsedProcessButtons.length,
           paths: buttons
             .map((button) => button.getAttribute("data-file-path") || "")
             .filter(Boolean),
@@ -600,10 +616,13 @@ async function waitForInlineToolFileButton(page, options, fileName) {
           bodyText: document.body?.innerText || "",
         };
       },
-      { selector },
+      { artifactCardSelector, fileName, selector },
     );
     if (lastSnapshot.count > 0) {
-      return selector;
+      return { kind: "inline", selector };
+    }
+    if (lastSnapshot.artifactCardCount > 0) {
+      return { kind: "artifact-card", selector: artifactCardSelector };
     }
     await sleep(options.intervalMs);
   }
@@ -751,7 +770,17 @@ async function clickImportedToolFilePreview(page, options, expected) {
     options,
     expected.fileName,
   );
-  await page.locator(selector).first().click();
+  if (selector.kind === "inline") {
+    await page.locator(selector.selector).first().click();
+  } else {
+    await page
+      .locator(selector.selector)
+      .filter({ hasText: expected.fileName })
+      .first()
+      .locator("button")
+      .first()
+      .click();
+  }
   const result = await waitForWorkbenchFilePreview(page, options, expected);
   assert(
     result.workbenchVisible && result.previewPanelVisible,
@@ -889,14 +918,14 @@ async function inspectImportedSessionVisualViewport(
       bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT) &&
       bodyText.includes(CONTINUE_USER_TEXT) &&
       bodyText.includes(CONTINUE_ASSISTANT_TEXT) &&
-      (bodyText.includes("导入的命令记录") ||
-        bodyText.includes("Imported command record")) &&
+      bodyText.includes("npm test") &&
       hasPatchEvidenceText(bodyText) &&
       (bodyText.includes("搜索") ||
         bodyText.includes("Search") ||
         bodyText.includes("web search")) &&
       (bodyText.includes("导入的权限记录") ||
         bodyText.includes("已导入，只读记录") ||
+        bodyText.includes("权限记录") ||
         bodyText.includes("审批") ||
         bodyText.includes("Approval")) &&
       !bodyText.includes("imported_read_only") &&
@@ -1028,13 +1057,13 @@ async function inspectImportedSessionVisualViewport(
         hasContinueAssistantMessage: bodyText.includes(continueAssistantText),
         hasReasoningVisible: bodyText.includes(importedReasoningText),
         hasReasoningStatusVisible: bodyText.includes("已完成思考"),
-        hasCommandRecordVisible:
-          bodyText.includes("导入的命令记录") ||
-          bodyText.includes("Imported command record"),
+        hasCommandExecutionVisible: bodyText.includes("npm test"),
+        hasCommandOutput: bodyText.includes("ok"),
         hasPatchText:
           (bodyText.includes("补丁") ||
             bodyText.includes("Patch") ||
-            bodyText.includes("已编辑")) &&
+            bodyText.includes("已编辑") ||
+            (bodyText.includes("lib.rs") && bodyText.includes("打开文件"))) &&
           (bodyText.includes("src/lib.rs") ||
             bodyText.includes("lib.rs") ||
             bodyText.includes("文件")),
@@ -1045,6 +1074,7 @@ async function inspectImportedSessionVisualViewport(
         hasApprovalText:
           bodyText.includes("导入的权限记录") ||
           bodyText.includes("已导入，只读记录") ||
+          bodyText.includes("权限记录") ||
           bodyText.includes("审批") ||
           bodyText.includes("Approval"),
         importedBannerVisible: Boolean(importedBanner),
@@ -1162,9 +1192,10 @@ export async function collectImportedSessionVisualAudit(
     );
     assert(audit.hasReasoningVisible, `${viewport.label} 视口缺少导入思考记录`);
     assert(
-      audit.hasCommandRecordVisible,
-      `${viewport.label} 视口缺少导入命令友好记录`,
+      audit.hasCommandExecutionVisible,
+      `${viewport.label} 视口缺少 canonical npm test 命令卡`,
     );
+    assert(audit.hasCommandOutput, `${viewport.label} 视口缺少命令输出 ok`);
     assert(audit.hasPatchText, `${viewport.label} 视口缺少导入补丁记录`);
     assert(audit.hasSearchEvidence, `${viewport.label} 视口缺少导入搜索记录`);
     assert(audit.hasApprovalText, `${viewport.label} 视口缺少导入审批记录`);
@@ -1428,7 +1459,8 @@ export async function waitForImportedSessionDetails(page, options) {
         summary.hasImportedUserMessage &&
         summary.hasImportedAssistantMessage &&
         summary.hasReasoningVisible &&
-        summary.hasCommandRecordVisible &&
+        summary.hasCommandExecutionVisible &&
+        summary.hasCommandOutput &&
         summary.hasPatchText &&
         summary.hasApprovalText &&
         summary.hidesRawImportedCommand

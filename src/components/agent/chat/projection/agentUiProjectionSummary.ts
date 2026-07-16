@@ -67,7 +67,6 @@ export const AGENT_UI_EVENT_LABELS: Partial<Record<AgentUiEventClass, string>> =
     "run.started": "Run 开始",
     "run.status": "Run 状态",
     "task.changed": "Task",
-    "team.changed": "Subagents 状态",
     "tool.failed": "Tool 失败",
     "tool.output.delta": "Tool 输出",
     "tool.progress": "Tool 进度",

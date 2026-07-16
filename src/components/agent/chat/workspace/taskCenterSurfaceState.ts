@@ -14,6 +14,7 @@ interface ResolveTaskCenterDraftSurfaceStateParams {
   draftTabs: readonly TaskCenterDraftTab[];
   draftSurfaceActive: boolean;
   draftSendRequest: TaskCenterDraftSendRequest | null;
+  hasHomePendingPreview?: boolean;
   displayMessageCount: number;
   threadItemCount: number;
   hasLocalSessionOverride?: boolean;
@@ -30,6 +31,13 @@ export interface TaskCenterDraftSurfaceState {
   isTaskCenterDraftSendInFlight: boolean;
   hasVisibleSessionActivityForDraftSurface: boolean;
   shouldSuppressTaskCenterDraftContent: boolean;
+}
+
+export function hasTaskCenterPendingPreviewActivity(
+  isHomePendingPreviewActive: boolean,
+  bootstrapPendingPreviewMessageCount: number,
+): boolean {
+  return isHomePendingPreviewActive || bootstrapPendingPreviewMessageCount > 0;
 }
 
 interface ResolveTaskCenterHomeChromeStateParams {
@@ -73,6 +81,7 @@ export function resolveTaskCenterDraftSurfaceState({
   draftTabs,
   draftSurfaceActive,
   draftSendRequest,
+  hasHomePendingPreview = false,
   displayMessageCount,
   threadItemCount,
   hasLocalSessionOverride = false,
@@ -98,15 +107,16 @@ export function resolveTaskCenterDraftSurfaceState({
       : draftSurfaceActive),
   );
   const hasVisibleSessionActivityForDraftSurface =
-    !isTaskCenterDraftTabActive &&
-    (displayMessageCount > 0 ||
-      threadItemCount > 0 ||
-      Boolean(draftSendRequest) ||
-      hasLocalSessionOverride ||
-      hasPendingA2UIForm ||
-      isPreparingSend ||
-      isSending ||
-      queuedTurnCount > 0);
+    Boolean(draftSendRequest) ||
+    hasHomePendingPreview ||
+    isPreparingSend ||
+    isSending ||
+    (!isTaskCenterDraftTabActive &&
+      (displayMessageCount > 0 ||
+        threadItemCount > 0 ||
+        hasLocalSessionOverride ||
+        hasPendingA2UIForm ||
+        queuedTurnCount > 0));
   const shouldSuppressTaskCenterDraftContent =
     shouldSuppressTaskCenterDraftContentForLayout({
       draftSurfaceActive: isTaskCenterDraftSurfaceActive,

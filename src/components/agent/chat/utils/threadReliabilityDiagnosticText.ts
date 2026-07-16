@@ -35,7 +35,6 @@ export interface AgentThreadReliabilityDiagnosticContext {
   model?: string | null;
   executionStrategy?: string | null;
   activeTheme?: string | null;
-  selectedTeamLabel?: string | null;
 }
 
 const DIAGNOSTIC_I18N_PREFIX = "agentChat.threadReliability.diagnostic.";
@@ -333,7 +332,6 @@ export function buildReliabilityDiagnosticText(params: {
     fallbackChain: runtimeRoutingEvidence.fallbackChain,
   });
   const unknownLabel = tr(t, "value.unknown");
-  const unsetLabel = tr(t, "value.unset");
   const noneLabel = tr(t, "value.nonePlain");
   const noMessageLabel = tr(t, "value.noMessage");
   const noDetailLabel = tr(t, "value.noDetail");
@@ -385,9 +383,6 @@ export function buildReliabilityDiagnosticText(params: {
     }),
     bullet(t, "environment.theme", {
       value: diagnosticRuntimeContext?.activeTheme || unknownLabel,
-    }),
-    bullet(t, "environment.team", {
-      value: diagnosticRuntimeContext?.selectedTeamLabel || unsetLabel,
     }),
     bullet(t, "environment.workingDir", {
       value: diagnosticRuntimeContext?.workingDir || unknownLabel,

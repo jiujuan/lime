@@ -1,10 +1,5 @@
 import type { BrowserTaskRequirement, Message } from "../types";
-import type {
-  TeamRoleDefinition,
-  TeamDefinitionSource,
-} from "./teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
-import type { TeamMemoryShadowRequestMetadata } from "@/lib/teamMemorySync";
 import {
   isGeneralWorkbenchSessionMode,
   normalizeHarnessSessionMode,
@@ -58,14 +53,6 @@ export interface BuildHarnessRequestMetadataOptions {
     | "cdp_direct"
     | null;
   browserAssistAutoLaunch?: boolean | null;
-  preferredTeamPresetId?: string | null;
-  selectedTeamId?: string | null;
-  selectedTeamSource?: TeamDefinitionSource | null;
-  selectedTeamLabel?: string | null;
-  selectedTeamDescription?: string | null;
-  selectedTeamSummary?: string | null;
-  selectedTeamRoles?: TeamRoleDefinition[] | null;
-  teamMemoryShadow?: TeamMemoryShadowRequestMetadata | null;
   workspaceSkillBindings?: AgentRuntimeWorkspaceSkillBinding[] | null;
   workspaceSkillRuntimeEnable?: WorkspaceSkillRuntimeEnableInput | null;
   agentResponseLanguage?: string | null;
@@ -204,6 +191,24 @@ const LEGACY_HARNESS_STATE_KEYS = [
   "turnTeamReason",
   "turn_team_blueprint",
   "turnTeamBlueprint",
+  "selected_team_disabled",
+  "selectedTeamDisabled",
+  "preferred_team_preset_id",
+  "preferredTeamPresetId",
+  "selected_team_id",
+  "selectedTeamId",
+  "selected_team_source",
+  "selectedTeamSource",
+  "selected_team_label",
+  "selectedTeamLabel",
+  "selected_team_description",
+  "selectedTeamDescription",
+  "selected_team_summary",
+  "selectedTeamSummary",
+  "selected_team_roles",
+  "selectedTeamRoles",
+  "team_memory_shadow",
+  "teamMemoryShadow",
 ] as const;
 
 function clearLegacyHarnessStateFields(
@@ -233,14 +238,6 @@ export function buildHarnessRequestMetadata(
     browserAssistProfileKey,
     browserAssistPreferredBackend,
     browserAssistAutoLaunch,
-    preferredTeamPresetId,
-    selectedTeamId,
-    selectedTeamSource,
-    selectedTeamLabel,
-    selectedTeamDescription,
-    selectedTeamSummary,
-    selectedTeamRoles,
-    teamMemoryShadow,
     workspaceSkillBindings,
     workspaceSkillRuntimeEnable,
     agentResponseLanguage,
@@ -248,20 +245,6 @@ export function buildHarnessRequestMetadata(
     tenantFeatureFlags,
   } = options;
 
-  const serializeTeamRoles = (roles?: TeamRoleDefinition[] | null) =>
-    roles && roles.length > 0
-      ? roles.map((role) => ({
-          id: role.id,
-          label: role.label,
-          summary: role.summary,
-          profile_id: role.profileId || undefined,
-          role_key: role.roleKey || undefined,
-          skill_ids:
-            role.skillIds && role.skillIds.length > 0
-              ? [...role.skillIds]
-              : undefined,
-        }))
-      : undefined;
   const normalizedSessionMode =
     normalizeHarnessSessionMode(sessionMode) || "default";
   const existingBrowserAssist =
@@ -348,14 +331,6 @@ export function buildHarnessRequestMetadata(
       : undefined,
     run_title: runTitle || undefined,
     content_id: contentId || undefined,
-    preferred_team_preset_id: preferredTeamPresetId || undefined,
-    selected_team_id: selectedTeamId || undefined,
-    selected_team_source: selectedTeamSource || undefined,
-    selected_team_label: selectedTeamLabel || undefined,
-    selected_team_description: selectedTeamDescription || undefined,
-    selected_team_summary: selectedTeamSummary || undefined,
-    selected_team_roles: serializeTeamRoles(selectedTeamRoles),
-    team_memory_shadow: teamMemoryShadow || undefined,
     workspace_skill_bindings:
       workspaceSkillBindingsMetadata?.workspace_skill_bindings ??
       base?.workspace_skill_bindings ??

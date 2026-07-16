@@ -170,7 +170,7 @@ fn test_decide_tool_execution_adds_network_rule_metadata_for_curl_command() {
     });
 
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
-        tool_name: "Bash",
+        tool_name: "exec_command",
         params: &json!({ "command": "curl -L https://downloads.example.test/archive.zip" }),
         working_directory: Path::new("/tmp/workspace"),
         surface: "runtime_tool",

@@ -34,6 +34,8 @@ export type AgentUiMultiAgentToolSchemaIssueCode =
   | "legacy_tool_name"
   | "missing_required_field"
   | "forbidden_field"
+  | "unsupported_field"
+  | "invalid_fork_turns"
   | "invalid_timeout";
 
 export interface AgentUiMultiAgentToolSchemaIssue {
@@ -75,15 +77,9 @@ const CONTRACTS: readonly AgentUiMultiAgentToolSchemaContract[] = [
     action: "spawn",
     control: "delegate",
     requiredInputFields: ["task_name", "message"],
-    optionalInputFields: [
-      "agent_type",
-      "fork_turns",
-      "model",
-      "reasoning_effort",
-      "service_tier",
-    ],
+    optionalInputFields: ["fork_turns"],
     forbiddenInputFields: ["items", "fork_context", "target"],
-    outputRequiredFields: ["task_name", "nickname"],
+    outputRequiredFields: ["task_name", "message_id"],
     outputStatusField: "task_name",
   },
   {
@@ -163,8 +159,34 @@ const LEGACY_MULTI_AGENT_TOOL_NAMES = new Set([
   "multi_agent_v1.resume_agent",
 ]);
 
+const RUST_USIZE_MAX_DECIMAL = "18446744073709551615";
+
 function normalizedToolName(value: string | null | undefined): string | undefined {
   return definedString(value);
+}
+
+function isValidForkTurns(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value !== "string") return false;
+
+  const normalized = value.trim();
+  if (
+    normalized === "" ||
+    normalized.toLowerCase() === "none" ||
+    normalized.toLowerCase() === "all"
+  ) {
+    return true;
+  }
+
+  const match = /^\+?([0-9]+)$/.exec(normalized);
+  if (!match) return false;
+  const significantDigits = match[1].replace(/^0+/, "");
+  if (!significantDigits) return false;
+  return (
+    significantDigits.length < RUST_USIZE_MAX_DECIMAL.length ||
+    (significantDigits.length === RUST_USIZE_MAX_DECIMAL.length &&
+      significantDigits <= RUST_USIZE_MAX_DECIMAL)
+  );
 }
 
 function issue(
@@ -253,6 +275,30 @@ export function validateCodexMultiAgentToolSchema(
         ),
       );
     }
+  }
+  const allowedFields = new Set([
+    ...contract.requiredInputFields,
+    ...contract.optionalInputFields,
+    ...contract.forbiddenInputFields,
+  ]);
+  for (const field of Object.keys(args)) {
+    if (allowedFields.has(field)) continue;
+    issues.push(
+      issue(
+        "unsupported_field",
+        `${path}.input.${field}`,
+        `${toolName} does not accept unsupported field ${field}.`,
+      ),
+    );
+  }
+  if (toolName === "spawn_agent" && !isValidForkTurns(args.fork_turns)) {
+    issues.push(
+      issue(
+        "invalid_fork_turns",
+        `${path}.input.fork_turns`,
+        "spawn_agent fork_turns must be none, all, or a positive integer string.",
+      ),
+    );
   }
   const timeoutMs = readNumberField(args, ["timeout_ms"]);
   if (

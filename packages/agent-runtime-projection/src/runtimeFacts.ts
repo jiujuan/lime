@@ -3,7 +3,6 @@ import type {
   AgentUiProjectionEvent,
   AgentUiRuntimeEntity,
   AgentUiRuntimeStatus,
-  AgentUiTopology,
 } from "@limecloud/agent-ui-contracts";
 
 import { definedString } from "./normalization.js";
@@ -111,55 +110,6 @@ export function normalizeRuntimePhaseFromRuntimeStatusPhase(
   }
 }
 
-export function hasTeamRuntimeMetadata(
-  metadata: AgentUiTeamRuntimeMetadata | undefined,
-): boolean {
-  if (!metadata) {
-    return false;
-  }
-  return Boolean(
-    definedString(metadata.team_phase) ||
-    definedString(metadata.concurrency_phase) ||
-    definedString(metadata.concurrency_scope) ||
-    typeof metadata.team_parallel_budget === "number" ||
-    typeof metadata.team_active_count === "number" ||
-    typeof metadata.team_queued_count === "number" ||
-    typeof metadata.concurrency_active_count === "number" ||
-    typeof metadata.concurrency_queued_count === "number" ||
-    typeof metadata.concurrency_budget === "number" ||
-    definedString(metadata.provider_concurrency_group) ||
-    typeof metadata.provider_parallel_budget === "number" ||
-    definedString(metadata.queue_reason) ||
-    typeof metadata.retryable_overload === "boolean",
-  );
-}
-
-export function normalizeTeamRuntimePhase(input: {
-  phase: AgentRuntimeStatusPhase;
-  metadata?: AgentUiTeamRuntimeMetadata;
-}): AgentUiPhase {
-  const teamPhase = definedString(input.metadata?.team_phase);
-  const concurrencyPhase = definedString(input.metadata?.concurrency_phase);
-  const phase = teamPhase ?? concurrencyPhase;
-  switch (phase) {
-    case "completed":
-    case "done":
-    case "idle":
-      return "completed";
-    case "failed":
-    case "blocked":
-      return "failed";
-    case "queued":
-    case "waiting":
-      return "waiting";
-    case "running":
-    case "active":
-      return "acting";
-    default:
-      return normalizeRuntimePhaseFromRuntimeStatusPhase(input.phase);
-  }
-}
-
 export function buildTeamRuntimeFacts(
   metadata: AgentUiTeamRuntimeMetadata | undefined,
 ): Pick<
@@ -193,20 +143,4 @@ export function buildTeamRuntimeFacts(
     queueReason: definedString(metadata?.queue_reason),
     retryableOverload: metadata?.retryable_overload,
   };
-}
-
-export function resolveTeamTopology(
-  facts: Pick<
-    AgentUiProjectionEvent,
-    "teamParallelBudget" | "teamActiveCount" | "teamQueuedCount"
-  >,
-): AgentUiTopology {
-  if (
-    (facts.teamParallelBudget ?? 0) > 1 ||
-    (facts.teamActiveCount ?? 0) > 1 ||
-    (facts.teamQueuedCount ?? 0) > 0
-  ) {
-    return "parallel_workers";
-  }
-  return "coordinator_team";
 }

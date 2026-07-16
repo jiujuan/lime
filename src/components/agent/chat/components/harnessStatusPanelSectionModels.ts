@@ -40,7 +40,6 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   evidencePackExport: EvidencePackExport;
   hasAgentUiProjectionSection: boolean;
   hasHandoffSection: boolean;
-  hasSelectedTeamConfig: boolean;
   harnessState: HarnessStatusPanelProps["harnessState"];
   messages: NonNullable<HarnessStatusPanelProps["messages"]>;
   onInterruptCurrentTurn: HarnessStatusPanelProps["onInterruptCurrentTurn"];
@@ -65,9 +64,6 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   registerSectionRef: HarnessStatusPanelSectionsProps["registerSectionRef"];
   runtimeFactSummary: HarnessRuntimeFactSummary | null;
   runtimeTaskPresentation: RuntimeTaskPresentation | null;
-  selectedTeamLabel: HarnessStatusPanelProps["selectedTeamLabel"];
-  selectedTeamRoles: HarnessStatusPanelProps["selectedTeamRoles"];
-  selectedTeamSummary: HarnessStatusPanelProps["selectedTeamSummary"];
   submittedActionsInFlight: NonNullable<
     HarnessStatusPanelProps["submittedActionsInFlight"]
   >;
@@ -98,7 +94,6 @@ export function buildHarnessStatusPanelSectionModels({
   evidencePackExport,
   hasAgentUiProjectionSection,
   hasHandoffSection,
-  hasSelectedTeamConfig,
   harnessState,
   messages,
   onInterruptCurrentTurn,
@@ -123,9 +118,6 @@ export function buildHarnessStatusPanelSectionModels({
   registerSectionRef,
   runtimeFactSummary,
   runtimeTaskPresentation,
-  selectedTeamLabel,
-  selectedTeamRoles,
-  selectedTeamSummary,
   submittedActionsInFlight,
   t,
   threadItems,
@@ -194,13 +186,6 @@ export function buildHarnessStatusPanelSectionModels({
 
   return {
     registerSectionRef,
-    hasSelectedTeamConfig,
-    teamConfigSectionProps: {
-      selectedTeamLabel: selectedTeamLabel ?? null,
-      selectedTeamSummary: selectedTeamSummary ?? null,
-      selectedTeamRoles: selectedTeamRoles ?? null,
-      registerSectionRef,
-    },
     runtimeTaskSectionProps: runtimeTaskPresentation
       ? {
           runtimeTaskPresentation,

@@ -50,6 +50,13 @@
       "allowedPaths": []
     },
     {
+      "id": "rust-agent-duplicate-protocol-agent-control",
+      "classification": "dead",
+      "description": "已删除的 lime-agent 根层 AgentControl protocol 重复实现；唯一 current owner 是 src/protocol/protocol_agent_control.rs，不得恢复平级旧副本",
+      "targets": ["lime-rs/crates/agent/src/protocol_agent_control.rs"],
+      "allowedPaths": []
+    },
+    {
       "id": "root-task-center-patch-scripts",
       "classification": "dead-candidate",
       "description": "已删除的根目录一次性 Task Center 补丁脚本；任务中心 Chrome 样式当前收敛到 ChatNavbar/TaskCenter token 主链，不允许恢复脚本式字符串替换",
@@ -5607,7 +5614,10 @@
         "canonical_name: \"TeamCreate\",",
         "canonical_name: \"TeamDelete\",",
         "canonical_name: \"ListPeers\",",
-        "SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES"
+        "SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES",
+        "SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES",
+        "SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES",
+        "runtime_turn_tool_exposure_allows_tool_name("
       ],
       "includePathPrefixes": [
         "lime-rs/crates/tool-runtime/src",

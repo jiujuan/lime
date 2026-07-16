@@ -49,7 +49,7 @@ describe("appServerReadModelProjection", () => {
       thread_id: "thread-1",
       status: "running",
       profile_status: "running",
-      active_turn_id: "turn-2",
+      active_turn_id: undefined,
       updated_at: "2026-06-06T00:00:03.000Z",
       pending_requests: [],
       incidents: [],
@@ -69,7 +69,7 @@ describe("appServerReadModelProjection", () => {
     });
   });
 
-  it("active_turn_id 推断应跳过 queued turn", () => {
+  it("没有 canonical detail 时不应从 protocol turns 推断 active turn", () => {
     const result = projectAppServerSessionReadToThreadReadModel(
       sessionRead({
         turns: [
@@ -91,7 +91,47 @@ describe("appServerReadModelProjection", () => {
       }),
     );
 
-    expect(result.active_turn_id).toBe("turn-running");
+    expect(result.active_turn_id).toBeUndefined();
+  });
+
+  it("detail 明确没有 active turn 时不应从兼容 turns 反向推断", () => {
+    const result = projectAppServerSessionReadToThreadReadModel(
+      sessionRead({
+        detail: {
+          thread_read: {
+            thread_id: "thread-1",
+            status: "running",
+            active_turn_id: null,
+            queued_turns: [
+              {
+                queued_turn_id: "queued-1",
+                message_preview: "稍后处理",
+              },
+            ],
+          },
+        },
+        turns: [
+          {
+            turnId: "turn-completed",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "completed",
+            startedAt: "2026-06-06T00:00:01.000Z",
+            completedAt: "2026-06-06T00:00:02.000Z",
+          },
+          {
+            turnId: "turn-compat-running",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "running",
+            startedAt: "2026-06-06T00:00:03.000Z",
+          },
+        ],
+      }),
+    );
+
+    expect(result.active_turn_id).toBeUndefined();
+    expect(result.queued_turns).toHaveLength(1);
   });
 
   it("应保留 detail.thread_read 的富 read model 并归一 queued turns", () => {

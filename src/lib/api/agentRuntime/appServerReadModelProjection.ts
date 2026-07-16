@@ -37,8 +37,7 @@ export function projectAppServerSessionReadToThreadReadModel(
     thread_id: response.session.threadId,
     status: detailThreadRead?.status ?? sessionStatus,
     profile_status: detailThreadRead?.profile_status ?? sessionStatus,
-    active_turn_id:
-      detailThreadRead?.active_turn_id ?? inferActiveTurnId(response.turns),
+    active_turn_id: normalizeActiveTurnId(detailThreadRead?.active_turn_id),
     turns:
       detailThreadRead?.turns && detailThreadRead.turns.length > 0
         ? detailThreadRead.turns
@@ -62,6 +61,10 @@ export function projectAppServerSessionReadToThreadReadModel(
   return normalizeThreadReadModel(projected) as AgentRuntimeThreadReadModel;
 }
 
+function normalizeActiveTurnId(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function projectAppServerTurn(
   turn: AppServerAgentTurn,
 ): AgentRuntimeThreadTurnProfileView {
@@ -70,22 +73,6 @@ function projectAppServerTurn(
     status: profileStatusFromTurnStatus(turn.status),
     native_status: turn.status,
   };
-}
-
-function inferActiveTurnId(turns: AppServerAgentTurn[]): string | undefined {
-  for (let index = turns.length - 1; index >= 0; index -= 1) {
-    const turn = turns[index];
-    if (turn && isActiveTurnStatus(turn.status)) {
-      return turn.turnId;
-    }
-  }
-  return undefined;
-}
-
-function isActiveTurnStatus(status: AppServerAgentTurnStatus): boolean {
-  return (
-    status === "accepted" || status === "running" || status === "waitingAction"
-  );
 }
 
 function profileStatusFromSessionStatus(

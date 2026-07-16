@@ -168,9 +168,10 @@ export function buildCommonAssertions(context) {
     inputbarPendingSteerPopFrontQueuedPanel.secondPosition === "0" &&
     inputbarPendingSteerPopFrontQueuedPanel.activeOutputVisible === true &&
     inputbarPendingSteerPopFrontQueuedPanel.richPromptVisible === true &&
+    inputbarPendingSteerPopFrontQueuedPanel.richTurnTerminal === true &&
     inputbarPendingSteerPopFrontQueuedPanel.textareaVisible === true &&
     inputbarPendingSteerPopFrontQueuedPanel.textareaDisabled === false &&
-    inputbarPendingSteerPopFrontQueuedPanel.stopButtonVisible === true;
+    inputbarPendingSteerPopFrontQueuedPanel.stopButtonVisible === false;
   const homeHotpath = summary.homeHotpath ?? {};
   const homeHotpathGuiCompleted = homeHotpath.guiCompleted ?? {};
   const homeHotpathPostSubmitProjection =

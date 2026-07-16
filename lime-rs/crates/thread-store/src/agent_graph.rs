@@ -13,6 +13,8 @@ use crate::ThreadStoreResult;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThreadSpawnEdgeStatus {
+    /// The child spawn is durable but not yet usable or visible.
+    Pending,
     /// The child thread is still live or resumable as an open spawned agent.
     Open,
     /// The child thread has been closed from the parent/child graph's perspective.
@@ -35,6 +37,24 @@ pub type AgentGraphStoreFuture<'a, T> =
 /// Implementations return stable ordering for list methods so runtime callers can merge durable
 /// graph state with live state without introducing nondeterministic output.
 pub trait AgentGraphStore: Send + Sync {
+    /// Reserves a durable, hidden spawn intent before creating the child Thread.
+    ///
+    /// The child session id is retained only while the edge is pending so crash recovery can
+    /// remove every partial store even when the canonical Thread was never created.
+    fn create_pending_thread_spawn_edge(
+        &self,
+        parent_thread_id: ThreadId,
+        child_thread_id: ThreadId,
+        child_session_id: String,
+    ) -> AgentGraphStoreFuture<'_, ()>;
+
+    /// Atomically publishes a fully materialized pending child as Open.
+    fn commit_pending_thread_spawn_edge(
+        &self,
+        child_thread_id: ThreadId,
+        child_session_id: String,
+    ) -> AgentGraphStoreFuture<'_, bool>;
+
     /// Insert or replace the directional parent/child edge for a spawned thread.
     ///
     /// `child_thread_id` has at most one persisted parent. Re-inserting the same child updates both
@@ -90,12 +110,22 @@ mod tests {
     #[test]
     fn agent_graph_status_serializes_as_snake_case() {
         assert_eq!(
+            serde_json::to_string(&ThreadSpawnEdgeStatus::Pending)
+                .expect("serialize pending status"),
+            "\"pending\""
+        );
+        assert_eq!(
             serde_json::to_string(&ThreadSpawnEdgeStatus::Open).expect("serialize open status"),
             "\"open\""
         );
         assert_eq!(
             serde_json::to_string(&ThreadSpawnEdgeStatus::Closed).expect("serialize closed status"),
             "\"closed\""
+        );
+        assert_eq!(
+            serde_json::from_str::<ThreadSpawnEdgeStatus>("\"pending\"")
+                .expect("deserialize pending status"),
+            ThreadSpawnEdgeStatus::Pending
         );
         assert_eq!(
             serde_json::from_str::<ThreadSpawnEdgeStatus>("\"open\"")

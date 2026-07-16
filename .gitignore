@@ -86,6 +86,9 @@ internal/exec-plans/*
 !internal/exec-plans/current-runtime-convergence-progress.md
 !internal/exec-plans/refactor-v2-research.md
 !internal/exec-plans/refactor-v2-implementation.md
+!internal/exec-plans/project-gate-a-b-acceptance-plan.md
+!internal/exec-plans/refactor-v2-test-phase-2-plan.md
+!internal/exec-plans/codex-conversation-compat-refactor-plan.md
 internal/roadmap/**
 !internal/roadmap/
 !internal/roadmap/long-term/

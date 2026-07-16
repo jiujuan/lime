@@ -39,6 +39,8 @@ const SESSION_CLIENT_PATH = "src/lib/api/agentRuntime/sessionClient.ts";
 const SESSION_CLIENT_BOUNDARY_TEST_PATH =
   "src/lib/api/agentRuntime/sessionClient.current-boundary.test.ts";
 const CONVERSATION_IMPORT_API_TEST_PATH = "src/lib/api/conversationImport.test.ts";
+const CONVERSATION_IMPORT_PROTOCOL_PATH =
+  "lime-rs/crates/app-server-protocol/src/protocol/v0/conversation_import.rs";
 
 function readFile(filePath) {
   return fs.readFileSync(filePath, "utf8");
@@ -56,7 +58,7 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(matrix).toContain("conversationImport/thread/preview");
     expect(matrix).toContain("conversationImport/thread/commit");
     expect(matrix).toContain("RuntimeCore StoredSession + AgentEvent");
-    expect(matrix).toContain("agentSession/read + conversationImport/thread/runtimeEvents/read");
+    expect(matrix).toContain("agentSession/read + thread/items/list");
     expect(matrix).toContain("Preview Artifact Contract");
     expect(matrix).toContain("evidence/export / replay current 主链");
     expect(matrix).toContain("Renderer 不直接扫描 `.codex`");
@@ -99,12 +101,10 @@ describe("codex import fidelity acceptance matrix guard", () => {
       "context / review / subagent / collab",
       "incomplete lifecycle",
       "high-volume rollout",
-      "runtime detail drilldown",
       "continue same session",
       "evidence / replay",
       "session delete / retention boundary",
       "privacy / source leak boundary",
-      "non-Codex importer",
     ];
 
     for (const row of requiredRows) {
@@ -113,17 +113,17 @@ describe("codex import fidelity acceptance matrix guard", () => {
 
     const requiredRustEvidence = [
       "commit_preserves_codex_tool_command_and_patch_timeline",
-      "commit_preserves_high_volume_codex_tool_events_with_bounded_default_projection",
+      "commit_preserves_high_volume_codex_tool_events_in_canonical_projection",
       "scans_session_index_fallback_reports_read_only_health",
       "scans_missing_source_reports_read_only_health",
       "scans_codex_state_db_project_path_exact_prefix_and_contains",
-      "commit_applies_import_runtime_projection_budget_per_thread",
+      "commit_preserves_imported_commands_across_turns_without_projection_budget",
       "commit_preserves_imported_assistant_message_order_between_runtime_events",
       "commit_preserves_imported_update_plan_timeline_item",
       "commit_preserves_imported_completed_plan_item",
       "commit_projects_codex_runtime_specialized_items_into_existing_timeline_types",
       "commit_merges_duplicate_user_messages_when_response_item_precedes_event_msg",
-      "commit_closes_incomplete_imported_lifecycles_without_failed_timeline_items",
+      "commit_closes_incomplete_imported_lifecycles_as_failed_timeline_items",
       "mcp_tool_call_begin",
       "dynamic_tool_call_request",
       "view_image_tool_call",
@@ -146,7 +146,8 @@ describe("codex import fidelity acceptance matrix guard", () => {
 
     const requiredGuiEvidence = [
       "hasReasoningVisible",
-      "hasCommandRecordVisible",
+      "hasCommandExecutionVisible",
+      "hasCommandOutput",
       "hasPatchText",
       "hasSearchEvidence",
       "hasApprovalText",
@@ -154,8 +155,6 @@ describe("codex import fidelity acceptance matrix guard", () => {
       "Markdown",
       "HTML",
       "DOCX",
-      "runtimeDetailDrilldown",
-      "data-event-kind",
       "sourceThreadId",
       "sourcePath",
       "hidesRawSourceEventNames",
@@ -241,7 +240,6 @@ describe("codex import fidelity acceptance matrix guard", () => {
 
   it("keeps session delete separate from archive, reimport cleanup, and source retention", () => {
     const matrix = readFile(MATRIX_PATH);
-    const tracker = readFile(TRACKER_PATH);
     const sessionClient = readFile(SESSION_CLIENT_PATH);
     const sessionClientBoundary = readFile(SESSION_CLIENT_BOUNDARY_TEST_PATH);
 
@@ -249,12 +247,6 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(matrix).toContain("`agentSession/delete` 清理 Lime memory / projection / event log / session-scoped sidecar");
     expect(matrix).toContain("不删除外部来源目录");
     expect(matrix).toContain("导出后删除、删除前导出确认和保留期限策略还需要独立产品规则");
-    expect(tracker).toContain("CI-050");
-    expect(tracker).toContain("用户级删除 / 保留策略 current 收口");
-    expect(tracker).toContain("replaceExisting=true");
-    expect(tracker).toContain("session-scoped sidecar");
-    expect(tracker).toContain("App Server JSON-RPC `agentSession/delete` current 主链");
-    expect(tracker).toContain("不删除外部来源目录");
     expect(sessionClient).toContain("deleteAgentRuntimeSession");
     expect(sessionClient).toContain("appServerSessionClient.deleteAgentRuntimeSession(sessionId)");
     expect(sessionClientBoundary).toContain(
@@ -266,24 +258,25 @@ describe("codex import fidelity acceptance matrix guard", () => {
     );
   });
 
-  it("guards privacy and non-Codex compatibility as explicit boundaries", () => {
+  it("guards privacy and keeps the importer Codex-only", () => {
     const matrix = readFile(MATRIX_PATH);
+    const protocol = readFile(CONVERSATION_IMPORT_PROTOCOL_PATH);
     const securityTests = readFile(SECURITY_TEST_PATH);
-    const tracker = readFile(TRACKER_PATH);
     const smokeGuards = readFiles(
       REAL_SAMPLE_SMOKE_TEST_PATH,
       VISUAL_AUDIT_SMOKE_TEST_PATH,
     );
 
     expect(matrix).toContain("敏感文件路径");
-    expect(matrix).toContain("non-Codex importer");
-    expect(matrix).toContain("compat / deferred");
+    expect(matrix).not.toContain("non-Codex importer");
+    expect(matrix).not.toContain("compat / deferred");
+    expect(protocol).toContain("pub enum ConversationImportSourceClient");
+    expect(protocol).toContain("Codex,");
+    expect(protocol).not.toContain("ClaudeCode");
     expect(matrix).toContain("未来 Codex 新事件类型默认先进入 unsupported / provenance-only");
     expect(securityTests).toContain("scan_rejects_sensitive_rollout_path_from_state_db");
     expect(securityTests).toContain("preview_rejects_sensitive_source_path");
     expect(securityTests).toContain("commit_rejects_source_path_outside_source_root");
-    expect(tracker).toContain("Claude Code 需要后续导入，但不是当前架构主参考");
-    expect(tracker).toContain("当前返回 unsupported，不污染 Codex-first 主线");
     expect(smokeGuards).toContain("leakedTokens");
     expect(smokeGuards).toContain("SOURCE_BRAND_PATTERN");
     expect(smokeGuards).toContain("GUI 可见文本仍泄漏来源品牌");

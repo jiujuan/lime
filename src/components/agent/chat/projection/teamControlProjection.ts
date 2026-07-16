@@ -290,25 +290,7 @@ export function buildAgentUiTeamControlProjectionEvents(
     reassignmentReason,
   });
 
-  const events: AgentUiProjectionEvent[] = [
-    {
-      sourceType: "team_control_projection",
-      timestamp,
-      sessionId,
-      threadId: definedString(context.threadId),
-      runId: definedString(context.runId),
-      turnId: definedString(context.turnId),
-      type: "team.changed",
-      owner: "team",
-      scope: "team",
-      phase,
-      surface: "team_policy",
-      persistence: "snapshot",
-      control,
-      topology: "coordinator_team",
-      payload: sharedPayload,
-    },
-    ...taskSessionIds.map<AgentUiProjectionEvent>((taskId) => ({
+  const events: AgentUiProjectionEvent[] = taskSessionIds.map<AgentUiProjectionEvent>((taskId) => ({
       sourceType: "team_control_projection",
       timestamp,
       sessionId,
@@ -336,8 +318,7 @@ export function buildAgentUiTeamControlProjectionEvents(
         runtimeEntity,
         runtimeStatus,
       },
-    })),
-  ];
+    }));
 
   if (input.action === "resume" && runtimeEntity === "subagent_turn") {
     events.push(

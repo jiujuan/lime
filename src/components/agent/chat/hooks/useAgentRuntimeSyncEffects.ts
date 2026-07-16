@@ -645,7 +645,8 @@ export function useAgentRuntimeSyncEffects(
     ) {
       if (
         shouldForceSettleByThreadStatus ||
-        threadReadTerminalInfo.hasAuthoritativeTerminal
+        threadReadTerminalInfo.hasAuthoritativeTerminal ||
+        hasTerminalTurnInReadModel
       ) {
         observedActiveRuntimeWorkRef.current = false;
         settleActiveRuntimeStream(sessionId);

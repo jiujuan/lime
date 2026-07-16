@@ -3,7 +3,8 @@ use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use thread_store::{
     AgentMailboxDeliveryMode, AgentMailboxDeliveryStatus, AgentMailboxMessage,
     AgentMailboxMessageKind, AgentMailboxResultStatus, AgentMailboxStore, AgentMailboxStoreFuture,
-    AppendAgentMailboxMessageParams, ThreadStoreError, ThreadStoreResult,
+    AppendAgentMailboxMessageParams, PendingAgentMailboxTriggerRecipient, ThreadStoreError,
+    ThreadStoreResult,
 };
 
 use crate::ProjectionStore;
@@ -123,6 +124,35 @@ impl ProjectionStore {
         rows.map(|row| row.map_err(store_error)).collect()
     }
 
+    fn list_pending_agent_mailbox_trigger_recipients_sync(
+        &self,
+    ) -> ThreadStoreResult<Vec<PendingAgentMailboxTriggerRecipient>> {
+        let conn = self.open_agent_mailbox_store()?;
+        let mut statement = conn
+            .prepare(
+                "SELECT DISTINCT root_thread_id, recipient_thread_id
+                 FROM agent_mailbox_messages
+                 WHERE delivery_status = ?1 AND delivery_mode = ?2
+                 ORDER BY root_thread_id ASC, recipient_thread_id ASC",
+            )
+            .map_err(store_error)?;
+        let rows = statement
+            .query_map(
+                params![
+                    STATUS_PENDING,
+                    delivery_mode_str(AgentMailboxDeliveryMode::TriggerTurn)
+                ],
+                |row| {
+                    Ok(PendingAgentMailboxTriggerRecipient {
+                        root_thread_id: ThreadId::new(row.get::<_, String>(0)?),
+                        recipient_thread_id: ThreadId::new(row.get::<_, String>(1)?),
+                    })
+                },
+            )
+            .map_err(store_error)?;
+        rows.map(|row| row.map_err(store_error)).collect()
+    }
+
     fn mark_agent_mailbox_message_delivered_sync(
         &self,
         root_thread_id: ThreadId,
@@ -208,6 +238,13 @@ impl AgentMailboxStore for ProjectionStore {
         Box::pin(async move {
             store.list_pending_agent_mailbox_messages_sync(root_thread_id, recipient_thread_id)
         })
+    }
+
+    fn list_pending_agent_mailbox_trigger_recipients(
+        &self,
+    ) -> AgentMailboxStoreFuture<'_, Vec<PendingAgentMailboxTriggerRecipient>> {
+        let store = self.clone();
+        Box::pin(async move { store.list_pending_agent_mailbox_trigger_recipients_sync() })
     }
 
     fn mark_agent_mailbox_message_delivered(

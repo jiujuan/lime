@@ -262,7 +262,6 @@ describe("AgentThreadReliabilityPanel", () => {
         model: "gpt-5.4",
         executionStrategy: "react",
         activeTheme: "general",
-        selectedTeamLabel: "研究协作队",
       },
     });
 
@@ -447,7 +446,6 @@ describe("AgentThreadReliabilityPanel", () => {
         model: "gpt-5.4-mini",
         executionStrategy: "react",
         activeTheme: "general",
-        selectedTeamLabel: "默认协作",
       },
     });
 

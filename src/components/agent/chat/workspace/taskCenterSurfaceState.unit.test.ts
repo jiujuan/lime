@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
 import type { TaskCenterDraftTab } from "./agentChatWorkspaceHelpers";
 import {
+  hasTaskCenterPendingPreviewActivity,
   resolveTaskCenterDraftSurfaceState,
   resolveTaskCenterHomeChromeState,
 } from "./taskCenterSurfaceState";
@@ -30,11 +31,19 @@ function createDraftSendRequest(
     images: overrides.images ?? [],
     submittedAt: overrides.submittedAt ?? Date.parse("2026-06-22T00:00:00Z"),
     materializeDraft: overrides.materializeDraft ?? true,
+    dispatchState: overrides.dispatchState,
     source: overrides.source ?? "task-center-empty-state",
     sendExecutionStrategy: overrides.sendExecutionStrategy,
     sendOptions: overrides.sendOptions,
   };
 }
+
+describe("hasTaskCenterPendingPreviewActivity", () => {
+  it("home preview 已清但 bootstrap preview 仍有消息时应保持活跃", () => {
+    expect(hasTaskCenterPendingPreviewActivity(false, 1)).toBe(true);
+    expect(hasTaskCenterPendingPreviewActivity(false, 0)).toBe(false);
+  });
+});
 
 describe("resolveTaskCenterDraftSurfaceState", () => {
   it("激活草稿页且尚未发送时应压制旧会话内容", () => {
@@ -79,6 +88,79 @@ describe("resolveTaskCenterDraftSurfaceState", () => {
     });
 
     expect(state.isTaskCenterDraftSendInFlight).toBe(true);
+    expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
+  });
+
+  it("激活草稿的 direct-dispatch pending send 应立即解除首页压制", () => {
+    const draftTab = createDraftTab("draft-1");
+    const state = resolveTaskCenterDraftSurfaceState({
+      agentEntry: "claw",
+      isTaskCenterEntry: true,
+      activeDraftTabId: draftTab.id,
+      draftTabs: [draftTab],
+      draftSurfaceActive: false,
+      draftSendRequest: createDraftSendRequest({
+        draftTabId: "draft-send-request-1",
+        materializeDraft: false,
+        dispatchState: "dispatched",
+      }),
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      queuedTurnCount: 0,
+    });
+
+    expect(state.isTaskCenterDraftTabActive).toBe(true);
+    expect(state.isTaskCenterDraftSendInFlight).toBe(false);
+    expect(state.hasVisibleSessionActivityForDraftSurface).toBe(true);
+    expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
+  });
+
+  it("direct-dispatch tracking 清除后仍有 pending preview 时不应闪回首页", () => {
+    const draftTab = createDraftTab("draft-1");
+    const state = resolveTaskCenterDraftSurfaceState({
+      agentEntry: "claw",
+      isTaskCenterEntry: true,
+      activeDraftTabId: draftTab.id,
+      draftTabs: [draftTab],
+      draftSurfaceActive: false,
+      draftSendRequest: null,
+      hasHomePendingPreview: true,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      queuedTurnCount: 0,
+    });
+
+    expect(state.isTaskCenterDraftTabActive).toBe(true);
+    expect(state.hasVisibleSessionActivityForDraftSurface).toBe(true);
+    expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
+  });
+
+  it("新 session 接管时 request 和 preview 已清但仍在发送不应闪回首页", () => {
+    const draftTab = createDraftTab("draft-1");
+    const state = resolveTaskCenterDraftSurfaceState({
+      agentEntry: "claw",
+      isTaskCenterEntry: true,
+      activeDraftTabId: draftTab.id,
+      draftTabs: [draftTab],
+      draftSurfaceActive: false,
+      draftSendRequest: null,
+      hasHomePendingPreview: false,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: true,
+      queuedTurnCount: 0,
+    });
+
+    expect(state.isTaskCenterDraftTabActive).toBe(true);
+    expect(state.hasVisibleSessionActivityForDraftSurface).toBe(true);
     expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
   });
 
@@ -263,9 +345,7 @@ describe("resolveTaskCenterHomeChromeState", () => {
     expect(
       state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
     ).toBe(false);
-    expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBe(
-      "new-session",
-    );
+    expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBe("new-session");
   });
 
   it("首页发送刚触发但 preview 尚未派生时不应闪回 embedded home", () => {

@@ -7641,7 +7641,6 @@
           ]
         },
         "recentPreferences": true,
-        "recentTeamSelection": true,
         "sessionId": {
           "type": "string"
         },
@@ -13366,25 +13365,6 @@
               "$ref": "#/$defs/RequestId"
             },
             "method": {
-              "const": "conversationImport/thread/runtimeEvents/read",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
               "const": "agentSession/start",
               "type": "string"
             },
@@ -13757,7 +13737,6 @@
         "conversationImport/source/scan",
         "conversationImport/thread/commit",
         "conversationImport/thread/preview",
-        "conversationImport/thread/runtimeEvents/read",
         "diagnostics/logStorage/read",
         "diagnostics/server/read",
         "diagnostics/supportBundle/export",
@@ -17585,7 +17564,6 @@
       "$defs": {
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -17708,7 +17686,6 @@
         },
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -18021,43 +17998,9 @@
       "title": "ConversationImportPreviewSummary",
       "type": "object"
     },
-    "ConversationImportRuntimeEventDetail": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "eventIndex": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "eventType": {
-          "type": "string"
-        },
-        "payload": true,
-        "sourceEventIndex": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "turnIndex": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "eventIndex",
-        "eventType",
-        "payload",
-        "sourceEventIndex",
-        "turnIndex"
-      ],
-      "title": "ConversationImportRuntimeEventDetail",
-      "type": "object"
-    },
     "ConversationImportSourceClient": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "enum": [
-        "claude_code",
         "codex"
       ],
       "title": "ConversationImportSourceClient",
@@ -18067,7 +18010,6 @@
       "$defs": {
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -18139,7 +18081,6 @@
       "$defs": {
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -18203,17 +18144,14 @@
       "$defs": {
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
         },
         "ConversationImportSourceStatus": {
           "enum": [
-            "error",
             "missing",
-            "ready",
-            "unsupported"
+            "ready"
           ],
           "type": "string"
         },
@@ -18383,10 +18321,8 @@
     "ConversationImportSourceStatus": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "enum": [
-        "error",
         "missing",
-        "ready",
-        "unsupported"
+        "ready"
       ],
       "title": "ConversationImportSourceStatus",
       "type": "string"
@@ -18395,17 +18331,14 @@
       "$defs": {
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
         },
         "ConversationImportSourceStatus": {
           "enum": [
-            "error",
             "missing",
-            "ready",
-            "unsupported"
+            "ready"
           ],
           "type": "string"
         }
@@ -18478,7 +18411,6 @@
       "$defs": {
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -18817,7 +18749,6 @@
         },
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -18944,7 +18875,6 @@
       "$defs": {
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -19288,7 +19218,6 @@
         },
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -19356,10 +19285,8 @@
         },
         "ConversationImportSourceStatus": {
           "enum": [
-            "error",
             "missing",
-            "ready",
-            "unsupported"
+            "ready"
           ],
           "type": "string"
         },
@@ -19533,147 +19460,6 @@
         "thread"
       ],
       "title": "ConversationImportThreadPreviewResponse",
-      "type": "object"
-    },
-    "ConversationImportThreadRuntimeEventsReadParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "eventType": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "limit": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "offset": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "sessionId": {
-          "type": "string"
-        },
-        "turnIndex": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "sessionId"
-      ],
-      "title": "ConversationImportThreadRuntimeEventsReadParams",
-      "type": "object"
-    },
-    "ConversationImportThreadRuntimeEventsReadResponse": {
-      "$defs": {
-        "ConversationImportRuntimeEventDetail": {
-          "properties": {
-            "eventIndex": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "eventType": {
-              "type": "string"
-            },
-            "payload": true,
-            "sourceEventIndex": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "turnIndex": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          "required": [
-            "eventIndex",
-            "eventType",
-            "payload",
-            "sourceEventIndex",
-            "turnIndex"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "events": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/ConversationImportRuntimeEventDetail"
-          },
-          "type": "array"
-        },
-        "limit": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "materializedRuntimeEvents": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "nextOffset": {
-          "format": "uint",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "offset": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "projection": true,
-        "sessionId": {
-          "type": "string"
-        },
-        "sidecarRuntimeEvents": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "sourceRuntimeEvents": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "totalEvents": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "limit",
-        "materializedRuntimeEvents",
-        "offset",
-        "sessionId",
-        "sidecarRuntimeEvents",
-        "sourceRuntimeEvents",
-        "totalEvents"
-      ],
-      "title": "ConversationImportThreadRuntimeEventsReadResponse",
       "type": "object"
     },
     "ConversationImportThreadStatus": {
@@ -21781,6 +21567,10 @@
         },
         "toolName": {
           "type": "string"
+        },
+        "tty": {
+          "default": false,
+          "type": "boolean"
         },
         "workingDirectory": {
           "type": "string"
@@ -24011,7 +23801,6 @@
       "$defs": {
         "ConversationImportSourceClient": {
           "enum": [
-            "claude_code",
             "codex"
           ],
           "type": "string"
@@ -50502,7 +50291,6 @@
               "conversationImport/source/scan",
               "conversationImport/thread/commit",
               "conversationImport/thread/preview",
-              "conversationImport/thread/runtimeEvents/read",
               "diagnostics/logStorage/read",
               "diagnostics/server/read",
               "diagnostics/supportBundle/export",

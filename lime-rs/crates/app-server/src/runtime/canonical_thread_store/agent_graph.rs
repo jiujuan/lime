@@ -2,7 +2,7 @@
 // (5c19155cbd93bfa099016e7487259f61669823ff), Apache-2.0; see repository NOTICE.
 
 use agent_protocol::ThreadId;
-use rusqlite::{params, Connection, OptionalExtension, Params};
+use rusqlite::{params, Connection, OptionalExtension, Params, TransactionBehavior};
 use thread_store::{
     AgentGraphStore, AgentGraphStoreFuture, ThreadSpawnEdgeStatus, ThreadSpawnParent,
     ThreadStoreResult,
@@ -11,22 +11,79 @@ use thread_store::{
 use super::{error, store_error, ProjectionStore};
 
 impl ProjectionStore {
+    fn create_pending_thread_spawn_edge_sync(
+        &self,
+        parent_thread_id: ThreadId,
+        child_thread_id: ThreadId,
+        child_session_id: String,
+    ) -> ThreadStoreResult<()> {
+        let child_session_id = child_session_id.trim();
+        if child_session_id.is_empty() {
+            return Err(error("pending child session id is empty"));
+        }
+        let mut conn = self.open_thread_store()?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(store_error)?;
+        ensure_acyclic_spawn_edge(&tx, &parent_thread_id, &child_thread_id)?;
+        tx.execute(
+            "INSERT INTO canonical_thread_spawn_edges (
+                parent_thread_id, child_thread_id, status, pending_session_id
+             ) VALUES (?1, ?2, 'pending', ?3)",
+            params![
+                parent_thread_id.as_str(),
+                child_thread_id.as_str(),
+                child_session_id
+            ],
+        )
+        .map_err(store_error)?;
+        tx.commit().map_err(store_error)
+    }
+
+    fn commit_pending_thread_spawn_edge_sync(
+        &self,
+        child_thread_id: ThreadId,
+        child_session_id: String,
+    ) -> ThreadStoreResult<bool> {
+        let child_session_id = child_session_id.trim();
+        if child_session_id.is_empty() {
+            return Err(error("pending child session id is empty"));
+        }
+        let conn = self.open_thread_store()?;
+        conn.execute(
+            "UPDATE canonical_thread_spawn_edges
+             SET status = 'open', pending_session_id = NULL
+             WHERE child_thread_id = ?1
+               AND status = 'pending'
+               AND pending_session_id = ?2",
+            params![child_thread_id.as_str(), child_session_id],
+        )
+        .map(|changed| changed == 1)
+        .map_err(store_error)
+    }
+
     fn upsert_thread_spawn_edge_sync(
         &self,
         parent_thread_id: ThreadId,
         child_thread_id: ThreadId,
         status: ThreadSpawnEdgeStatus,
     ) -> ThreadStoreResult<()> {
+        if status == ThreadSpawnEdgeStatus::Pending {
+            return Err(error(
+                "pending thread spawn edges must use the durable reservation boundary",
+            ));
+        }
         let mut conn = self.open_thread_store()?;
         let tx = conn.transaction().map_err(store_error)?;
         ensure_acyclic_spawn_edge(&tx, &parent_thread_id, &child_thread_id)?;
         tx.execute(
             "INSERT INTO canonical_thread_spawn_edges (
-                parent_thread_id, child_thread_id, status
-             ) VALUES (?1, ?2, ?3)
+                parent_thread_id, child_thread_id, status, pending_session_id
+             ) VALUES (?1, ?2, ?3, NULL)
              ON CONFLICT(child_thread_id) DO UPDATE SET
                 parent_thread_id = excluded.parent_thread_id,
-                status = excluded.status",
+                status = excluded.status,
+                pending_session_id = NULL",
             params![
                 parent_thread_id.as_str(),
                 child_thread_id.as_str(),
@@ -43,9 +100,16 @@ impl ProjectionStore {
         child_thread_id: ThreadId,
         status: ThreadSpawnEdgeStatus,
     ) -> ThreadStoreResult<()> {
+        if status == ThreadSpawnEdgeStatus::Pending {
+            return Err(error(
+                "pending thread spawn edges must use the durable reservation boundary",
+            ));
+        }
         let conn = self.open_thread_store()?;
         conn.execute(
-            "UPDATE canonical_thread_spawn_edges SET status = ?2 WHERE child_thread_id = ?1",
+            "UPDATE canonical_thread_spawn_edges
+             SET status = ?2, pending_session_id = NULL
+             WHERE child_thread_id = ?1",
             params![child_thread_id.as_str(), status_str(status)],
         )
         .map_err(store_error)?;
@@ -153,9 +217,87 @@ impl ProjectionStore {
             ),
         }
     }
+
+    pub(crate) fn list_pending_thread_spawn_intents_sync(
+        &self,
+    ) -> ThreadStoreResult<Vec<(ThreadId, ThreadId, String)>> {
+        let conn = self.open_thread_store()?;
+        let mut statement = conn
+            .prepare(
+                "SELECT parent_thread_id, child_thread_id, pending_session_id
+                 FROM canonical_thread_spawn_edges
+                 WHERE status = 'pending'
+                 ORDER BY child_thread_id ASC",
+            )
+            .map_err(store_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })
+            .map_err(store_error)?;
+        rows.map(|row| {
+            let (parent_thread_id, child_thread_id, session_id) = row.map_err(store_error)?;
+            let session_id = session_id
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    error(format!(
+                        "pending thread spawn {child_thread_id} has no recovery session id"
+                    ))
+                })?;
+            Ok((
+                ThreadId::new(parent_thread_id),
+                ThreadId::new(child_thread_id),
+                session_id,
+            ))
+        })
+        .collect()
+    }
+
+    pub(crate) fn list_pending_thread_spawn_ids_sync(&self) -> ThreadStoreResult<Vec<ThreadId>> {
+        let conn = self.open_thread_store()?;
+        query_thread_ids(
+            &conn,
+            "SELECT child_thread_id
+             FROM canonical_thread_spawn_edges
+             WHERE status = 'pending'
+             ORDER BY child_thread_id ASC",
+            [],
+        )
+    }
 }
 
 impl AgentGraphStore for ProjectionStore {
+    fn create_pending_thread_spawn_edge(
+        &self,
+        parent_thread_id: ThreadId,
+        child_thread_id: ThreadId,
+        child_session_id: String,
+    ) -> AgentGraphStoreFuture<'_, ()> {
+        let store = self.clone();
+        Box::pin(async move {
+            store.create_pending_thread_spawn_edge_sync(
+                parent_thread_id,
+                child_thread_id,
+                child_session_id,
+            )
+        })
+    }
+
+    fn commit_pending_thread_spawn_edge(
+        &self,
+        child_thread_id: ThreadId,
+        child_session_id: String,
+    ) -> AgentGraphStoreFuture<'_, bool> {
+        let store = self.clone();
+        Box::pin(async move {
+            store.commit_pending_thread_spawn_edge_sync(child_thread_id, child_session_id)
+        })
+    }
+
     fn upsert_thread_spawn_edge(
         &self,
         parent_thread_id: ThreadId,
@@ -261,6 +403,7 @@ fn query_thread_ids<P: Params>(
 
 fn status_str(status: ThreadSpawnEdgeStatus) -> &'static str {
     match status {
+        ThreadSpawnEdgeStatus::Pending => "pending",
         ThreadSpawnEdgeStatus::Open => "open",
         ThreadSpawnEdgeStatus::Closed => "closed",
     }
@@ -268,6 +411,7 @@ fn status_str(status: ThreadSpawnEdgeStatus) -> &'static str {
 
 fn parse_status(status: &str) -> ThreadStoreResult<ThreadSpawnEdgeStatus> {
     match status {
+        "pending" => Ok(ThreadSpawnEdgeStatus::Pending),
         "open" => Ok(ThreadSpawnEdgeStatus::Open),
         "closed" => Ok(ThreadSpawnEdgeStatus::Closed),
         _ => Err(error(format!("unknown thread spawn edge status: {status}"))),

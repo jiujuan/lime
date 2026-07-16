@@ -137,18 +137,11 @@ impl ShellSecurityChecker {
 /// 为 bash 工具实现动态权限检查
 impl DynamicPermissionCheck for ShellSecurityChecker {
     fn check_permissions(&self, tool_name: &str, input: &serde_json::Value) -> PermissionBehavior {
-        // 只检查 bash/shell 类工具
-        if tool_name != "bash"
-            && tool_name != "Bash"
-            && tool_name != "PowerShell"
-            && tool_name != "powershell"
-            && tool_name != "shell"
-            && tool_name != "execute_command"
-        {
+        if tool_name != "exec_command" {
             return PermissionBehavior::Allow;
         }
 
-        let command = input.get("command").and_then(|v| v.as_str()).unwrap_or("");
+        let command = input.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
 
         if command.is_empty() {
             return PermissionBehavior::Allow;
@@ -220,9 +213,9 @@ mod tests {
     #[test]
     fn test_dynamic_permission_check_readonly() {
         let checker = ShellSecurityChecker;
-        let input = serde_json::json!({"command": "ls -la"});
+        let input = serde_json::json!({"cmd": "ls -la"});
         assert_eq!(
-            checker.check_permissions("Bash", &input),
+            checker.check_permissions("exec_command", &input),
             PermissionBehavior::Allow
         );
     }
@@ -230,15 +223,15 @@ mod tests {
     #[test]
     fn test_dynamic_permission_check_dangerous() {
         let checker = ShellSecurityChecker;
-        let input = serde_json::json!({"command": "rm -rf /"});
-        match checker.check_permissions("Bash", &input) {
+        let input = serde_json::json!({"cmd": "rm -rf /"});
+        match checker.check_permissions("exec_command", &input) {
             PermissionBehavior::Deny { .. } => {}
             other => panic!("Expected Deny, got {:?}", other),
         }
     }
 
     #[test]
-    fn test_dynamic_permission_check_non_bash() {
+    fn test_dynamic_permission_check_non_shell() {
         let checker = ShellSecurityChecker;
         let input = serde_json::json!({"command": "rm -rf /"});
         assert_eq!(

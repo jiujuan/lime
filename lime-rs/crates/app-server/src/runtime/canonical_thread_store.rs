@@ -28,8 +28,8 @@ mod queries;
 
 use persistence::{apply_change_set, create_thread_store_schema, refresh_thread_snapshot};
 use queries::{
-    ensure_thread_visible, hydrate_thread, hydrate_turn, persist_thread_snapshot, query_item_page,
-    query_thread_page, query_turn_page, read_thread_row,
+    ensure_thread_visible, hydrate_thread, hydrate_turn, is_pending_spawn_thread,
+    persist_thread_snapshot, query_item_page, query_thread_page, query_turn_page, read_thread_row,
 };
 
 const MAX_PAGE_SIZE: u32 = 500;
@@ -54,6 +54,14 @@ impl ProjectionStore {
         self.open_thread_store()
             .map(|_| ())
             .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn is_pending_thread_spawn_sync(
+        &self,
+        thread_id: &ThreadId,
+    ) -> ThreadStoreResult<bool> {
+        let conn = self.open_thread_store()?;
+        is_pending_spawn_thread(&conn, thread_id)
     }
 
     pub(super) fn create_empty_canonical_thread(
@@ -228,6 +236,9 @@ impl ProjectionStore {
         params: ReadThreadParams,
     ) -> ThreadStoreResult<Option<Thread>> {
         let conn = self.open_thread_store()?;
+        if is_pending_spawn_thread(&conn, &params.thread_id)? {
+            return Ok(None);
+        }
         let Some((mut thread, archived)) = read_thread_row(&conn, &params.thread_id)? else {
             return Ok(None);
         };
@@ -521,10 +532,10 @@ fn derive_agent_state(thread: &Thread, edge_status: ThreadSpawnEdgeStatus) -> Co
             .cmp(&right.updated_at_ms)
             .then_with(|| left.turn_id.as_str().cmp(right.turn_id.as_str()))
     });
-    let status = if edge_status == ThreadSpawnEdgeStatus::Closed {
-        CollabAgentStatus::Shutdown
-    } else {
-        match &thread.status {
+    let status = match edge_status {
+        ThreadSpawnEdgeStatus::Pending => CollabAgentStatus::NotFound,
+        ThreadSpawnEdgeStatus::Closed => CollabAgentStatus::Shutdown,
+        ThreadSpawnEdgeStatus::Open => match &thread.status {
             ThreadStatus::Active { .. } => CollabAgentStatus::Running,
             ThreadStatus::SystemError => CollabAgentStatus::Errored,
             ThreadStatus::NotLoaded | ThreadStatus::Idle => {
@@ -536,7 +547,7 @@ fn derive_agent_state(thread: &Thread, edge_status: ThreadSpawnEdgeStatus) -> Co
                     None => CollabAgentStatus::PendingInit,
                 }
             }
-        }
+        },
     };
     let message = (status == CollabAgentStatus::Errored)
         .then(|| latest_turn.and_then(|turn| turn.error.as_ref()))
@@ -685,6 +696,9 @@ fn apply_metadata_patch(thread: &mut Thread, patch: ThreadMetadataPatch) {
     }
     if let Some(model_provider) = patch.model_provider {
         thread.model_provider = model_provider;
+    }
+    if let Some(forked_from_id) = patch.forked_from_id {
+        thread.forked_from_id = Some(forked_from_id);
     }
     if let Some(product) = patch.product {
         thread.product = product;

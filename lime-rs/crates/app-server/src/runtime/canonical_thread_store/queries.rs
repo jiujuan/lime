@@ -115,7 +115,14 @@ pub(super) fn query_thread_page(
     });
     let sql = format!(
         "SELECT thread_json, COALESCE(recency_at_ms, updated_at_ms), thread_id
-         FROM canonical_threads WHERE (?1 = 1 OR archived = 0) {cursor_clause}
+         FROM canonical_threads
+         WHERE (?1 = 1 OR archived = 0)
+           AND NOT EXISTS (
+                SELECT 1 FROM canonical_thread_spawn_edges AS edge
+                WHERE edge.child_thread_id = canonical_threads.thread_id
+                  AND edge.status = 'pending'
+           )
+           {cursor_clause}
          ORDER BY COALESCE(recency_at_ms, updated_at_ms) {order}, thread_id {order} LIMIT ?4"
     );
     let mut stmt = conn.prepare(&sql).map_err(store_error)?;
@@ -279,11 +286,29 @@ pub(super) fn read_thread_row(
     .transpose()
 }
 
+pub(super) fn is_pending_spawn_thread(
+    conn: &Connection,
+    thread_id: &ThreadId,
+) -> ThreadStoreResult<bool> {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM canonical_thread_spawn_edges
+            WHERE child_thread_id = ?1 AND status = 'pending'
+         )",
+        params![thread_id.as_str()],
+        |row| row.get(0),
+    )
+    .map_err(store_error)
+}
+
 pub(super) fn ensure_thread_visible(
     conn: &Connection,
     thread_id: &ThreadId,
     include_archived: bool,
 ) -> ThreadStoreResult<()> {
+    if is_pending_spawn_thread(conn, thread_id)? {
+        return Err(error(format!("thread {thread_id} does not exist")));
+    }
     let Some((_, archived)) = read_thread_row(conn, thread_id)? else {
         return Err(error(format!("thread {thread_id} does not exist")));
     };

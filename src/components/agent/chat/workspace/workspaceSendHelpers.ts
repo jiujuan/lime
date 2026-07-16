@@ -27,17 +27,7 @@ import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilit
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { BrowserTaskRequirement, Message, MessageImage } from "../types";
 import type { Character } from "@/lib/api/projectMemory";
-import {
-  buildTeamMemoryShadowRequestMetadata,
-  type TeamMemoryShadowRequestMetadata,
-  type TeamMemorySnapshot,
-} from "@/lib/teamMemorySync";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
-import type {
-  TeamDefinition,
-  TeamDefinitionSource,
-  TeamRoleDefinition,
-} from "../utils/teamDefinitions";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import type {
   OemCloudBootstrapResponse,
@@ -244,104 +234,6 @@ function omitLegacyAccessModeFromHarnessMetadata(
   delete nextMetadata.access_mode;
   delete nextMetadata.accessMode;
   return nextMetadata;
-}
-
-function readExistingTeamSource(
-  metadata: Record<string, unknown> | undefined,
-): TeamDefinitionSource | undefined {
-  const source = readMetadataText(metadata, "selected_team_source");
-  if (source === "builtin" || source === "custom" || source === "ephemeral") {
-    return source;
-  }
-  return undefined;
-}
-
-function readExistingTeamRoles(
-  metadata: Record<string, unknown> | undefined,
-): TeamRoleDefinition[] | undefined {
-  const rawRoles = metadata?.selected_team_roles;
-  if (!Array.isArray(rawRoles) || rawRoles.length === 0) {
-    return undefined;
-  }
-
-  const roles = rawRoles
-    .map((item, index): TeamRoleDefinition | null => {
-      const record = asRecord(item);
-      if (!record) {
-        return null;
-      }
-
-      const label = readMetadataText(record, "label");
-      const summary = readMetadataText(record, "summary");
-      if (!label || !summary) {
-        return null;
-      }
-
-      const skillIds = Array.isArray(record.skill_ids)
-        ? record.skill_ids.filter(
-            (skillId): skillId is string =>
-              typeof skillId === "string" && skillId.trim().length > 0,
-          )
-        : [];
-
-      return {
-        id: readMetadataText(record, "id") || `base-role-${index + 1}`,
-        label,
-        summary,
-        profileId: readMetadataText(record, "profile_id"),
-        roleKey: readMetadataText(record, "role_key"),
-        skillIds,
-      };
-    })
-    .filter((role): role is TeamRoleDefinition => role !== null);
-
-  return roles.length > 0 ? roles : undefined;
-}
-
-function readExistingTeamMemoryShadow(
-  metadata: Record<string, unknown> | undefined,
-): TeamMemoryShadowRequestMetadata | undefined {
-  const rawShadow =
-    asRecord(metadata?.team_memory_shadow) ??
-    asRecord(metadata?.teamMemoryShadow);
-  const repoScope =
-    readMetadataText(rawShadow, "repo_scope") ||
-    readMetadataText(rawShadow, "repoScope");
-  const rawEntries = Array.isArray(rawShadow?.entries) ? rawShadow.entries : [];
-  const entries = rawEntries
-    .map((item) => {
-      const record = asRecord(item);
-      const key = readMetadataText(record, "key");
-      const content = readMetadataText(record, "content");
-      const updatedAt = record?.updated_at ?? record?.updatedAt;
-      if (
-        !key ||
-        !content ||
-        typeof updatedAt !== "number" ||
-        !Number.isFinite(updatedAt)
-      ) {
-        return null;
-      }
-
-      return {
-        key,
-        content,
-        updated_at: updatedAt,
-      };
-    })
-    .filter(
-      (entry): entry is TeamMemoryShadowRequestMetadata["entries"][number] =>
-        entry !== null,
-    );
-
-  if (!repoScope || entries.length === 0) {
-    return undefined;
-  }
-
-  return {
-    repo_scope: repoScope,
-    entries,
-  };
 }
 
 function readExistingOemRouting(
@@ -606,11 +498,6 @@ interface BuildWorkspaceRequestMetadataOptions {
     | "cdp_direct"
     | null;
   browserAssistAutoLaunch?: boolean | null;
-  preferredTeamPresetId?: string | null;
-  selectedTeam?: TeamDefinition | null;
-  selectedTeamLabel?: string;
-  selectedTeamSummary?: string;
-  teamMemoryShadowSnapshot?: TeamMemorySnapshot | null;
   workspaceSkillBindings?: AgentRuntimeWorkspaceSkillBinding[] | null;
   workspaceSkillRuntimeEnable?: WorkspaceSkillRuntimeEnableInput | null;
   agentResponseLanguage?: string | null;
@@ -898,11 +785,6 @@ export function buildWorkspaceRequestMetadata(
     browserAssistProfileKey,
     browserAssistPreferredBackend,
     browserAssistAutoLaunch,
-    preferredTeamPresetId,
-    selectedTeam,
-    selectedTeamLabel,
-    selectedTeamSummary,
-    teamMemoryShadowSnapshot,
     workspaceSkillBindings,
     workspaceSkillRuntimeEnable,
     agentResponseLanguage,
@@ -914,30 +796,6 @@ export function buildWorkspaceRequestMetadata(
       ...(sendOptions?.requestMetadata || {}),
     }),
   );
-  const resolvedPreferredTeamPresetId =
-    preferredTeamPresetId ||
-    readMetadataText(existingHarnessMetadata, "preferred_team_preset_id");
-  const resolvedSelectedTeamId =
-    selectedTeam?.id ||
-    readMetadataText(existingHarnessMetadata, "selected_team_id");
-  const resolvedSelectedTeamSource =
-    selectedTeam?.source || readExistingTeamSource(existingHarnessMetadata);
-  const resolvedSelectedTeamLabel =
-    selectedTeamLabel ||
-    readMetadataText(existingHarnessMetadata, "selected_team_label");
-  const resolvedSelectedTeamDescription =
-    selectedTeam?.description ||
-    readMetadataText(existingHarnessMetadata, "selected_team_description");
-  const resolvedSelectedTeamSummary =
-    selectedTeamSummary ||
-    readMetadataText(existingHarnessMetadata, "selected_team_summary");
-  const resolvedSelectedTeamRoles =
-    (selectedTeam?.roles && selectedTeam.roles.length > 0
-      ? selectedTeam.roles
-      : undefined) || readExistingTeamRoles(existingHarnessMetadata);
-  const resolvedTeamMemoryShadow =
-    buildTeamMemoryShadowRequestMetadata(teamMemoryShadowSnapshot) ||
-    readExistingTeamMemoryShadow(existingHarnessMetadata);
   const resolvedBrowserRequirement =
     browserRequirementMatch?.requirement ||
     readExistingBrowserRequirement(existingHarnessMetadata);
@@ -978,14 +836,6 @@ export function buildWorkspaceRequestMetadata(
         : undefined,
     browserAssistPreferredBackend,
     browserAssistAutoLaunch,
-    preferredTeamPresetId: resolvedPreferredTeamPresetId,
-    selectedTeamId: resolvedSelectedTeamId,
-    selectedTeamSource: resolvedSelectedTeamSource,
-    selectedTeamLabel: resolvedSelectedTeamLabel,
-    selectedTeamDescription: resolvedSelectedTeamDescription,
-    selectedTeamSummary: resolvedSelectedTeamSummary,
-    selectedTeamRoles: resolvedSelectedTeamRoles,
-    teamMemoryShadow: resolvedTeamMemoryShadow,
     workspaceSkillBindings,
     workspaceSkillRuntimeEnable,
     agentResponseLanguage,

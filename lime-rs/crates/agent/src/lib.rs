@@ -80,7 +80,7 @@ pub use model_request_policy::{
     runtime_reply_model_request_policy_from_turn_context, ModelNativeToolPolicySnapshot,
     ModelRequestPolicySnapshot, ModelResponsesPolicySnapshot, ModelToolCallPolicySnapshot,
     ModelTruncationPolicySnapshot, MODEL_NATIVE_APPLY_PATCH_TOOL_NAME,
-    MODEL_NATIVE_POWERSHELL_TOOL_NAME, MODEL_NATIVE_SHELL_TOOL_NAME,
+    MODEL_NATIVE_SHELL_TOOL_NAME, MODEL_NATIVE_STDIN_TOOL_NAME,
 };
 pub use prompt::SystemPromptBuilder;
 pub use prompt::{

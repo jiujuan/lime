@@ -93,6 +93,9 @@ export function summarizeReadModelQueueState(readModel) {
     readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
   return sanitizeJson({
     sessionId: readString(readModel?.session, "session_id", "sessionId"),
+    threadId:
+      readString(threadRead, "thread_id", "threadId") ??
+      readString(detail, "thread_id", "threadId"),
     detailStatus: readString(detail, "status"),
     threadStatus: readString(threadRead, "status"),
     activeTurnId: readString(threadRead, "active_turn_id", "activeTurnId"),
@@ -107,6 +110,11 @@ export function summarizeReadModelQueueState(readModel) {
     turns: collectReadModelTurns(readModel).map((turn) => ({
       turnId: readModelTurnId(turn),
       status: readModelTurnStatus(turn),
+    })),
+    items: collectReadModelItems(readModel).map((item) => ({
+      itemId: readString(item, "item_id", "itemId", "id"),
+      turnId: readModelScopedTurnId(item),
+      type: readString(item, "type", "item_type", "itemType"),
     })),
   });
 }

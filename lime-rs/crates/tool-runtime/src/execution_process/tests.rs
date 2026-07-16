@@ -1,0 +1,200 @@
+use super::*;
+
+fn start_process() -> ExecutionProcess {
+    ExecutionProcess::start(ExecutionProcessStart {
+        process_id: "process-1".to_string(),
+        tool_id: "tool-1".to_string(),
+        tool_name: "exec_command".to_string(),
+        command: Some("npm test".to_string()),
+        cwd: Some("/tmp/project".to_string()),
+    })
+}
+
+#[test]
+fn process_tracks_output_delta_metadata() {
+    let mut process = start_process();
+    let delta = process.append_output(ExecutionOutputKind::Stdout, b"hello");
+
+    assert_eq!(delta.sequence, 1);
+    assert_eq!(delta.delta, "hello");
+    assert_eq!(delta.bytes, 5);
+    assert_eq!(delta.omitted_bytes, 0);
+    assert!(!delta.truncated);
+
+    let metadata = delta.metadata();
+    assert_eq!(metadata.get("processId"), Some(&json!("process-1")));
+    assert_eq!(metadata.get("outputBytes"), Some(&json!(5)));
+    assert_eq!(metadata.get("outputTruncated"), Some(&json!(false)));
+    assert_eq!(metadata.get("stdinWritable"), Some(&json!(true)));
+    assert_eq!(metadata.get("stdin_writable"), Some(&json!(true)));
+}
+
+#[test]
+fn process_bounds_retained_output() {
+    let mut output = BoundedProcessOutput::new(8);
+    output.push(b"12345");
+    output.push(b"67890");
+
+    let snapshot = output.snapshot();
+    assert_eq!(snapshot.bytes, 10);
+    assert_eq!(snapshot.omitted_bytes, 2);
+    assert!(snapshot.truncated);
+    assert_eq!(snapshot.text, "34567890");
+}
+
+#[test]
+fn process_status_terminal_transitions_do_not_regress() {
+    let mut process = start_process();
+    process.interrupt();
+    process.exit(0);
+
+    let snapshot = process.snapshot();
+    assert_eq!(snapshot.status, ExecutionProcessStatus::Interrupted);
+    assert_eq!(snapshot.exit_code, None);
+    let metadata = snapshot.metadata();
+    assert_eq!(metadata.get("stdinWritable"), Some(&json!(false)));
+    assert_eq!(metadata.get("stdin_writable"), Some(&json!(false)));
+}
+
+#[test]
+fn manager_controls_process_lifecycle() {
+    let mut manager = ExecutionProcessManager::default();
+    let snapshot = manager.start(ExecutionProcessStart {
+        process_id: "process-1".to_string(),
+        tool_id: "tool-1".to_string(),
+        tool_name: "exec_command".to_string(),
+        command: Some("cargo test".to_string()),
+        cwd: None,
+    });
+    assert_eq!(snapshot.status, ExecutionProcessStatus::Running);
+
+    let delta = manager
+        .append_output("process-1", ExecutionOutputKind::Combined, b"running")
+        .expect("process should exist");
+    assert_eq!(delta.sequence, 1);
+
+    let snapshot = manager
+        .terminate("process-1")
+        .expect("process should terminate");
+    assert_eq!(snapshot.status, ExecutionProcessStatus::Terminated);
+    assert_eq!(snapshot.retained_output, "running");
+}
+
+#[tokio::test]
+async fn local_process_emits_stdout_stderr_and_exit_snapshot() {
+    let mut handle = start_local_execution_process(LocalExecutionRequest::new(
+        "process-local-1",
+        "tool-local-1",
+        "exec_command",
+        shell_command("printf stdout; printf stderr 1>&2"),
+    ))
+    .expect("local process should start");
+
+    let mut observed = Vec::new();
+    while let Ok(Some(delta)) =
+        tokio::time::timeout(Duration::from_secs(2), handle.recv_output()).await
+    {
+        observed.push(delta);
+    }
+
+    let final_snapshot = handle.wait().await.expect("process should finish");
+    assert_eq!(final_snapshot.status, ExecutionProcessStatus::Exited);
+    assert_eq!(final_snapshot.exit_code, Some(0));
+    assert!(final_snapshot.retained_output.contains("stdout"));
+    assert!(final_snapshot.retained_output.contains("stderr"));
+    assert!(observed
+        .iter()
+        .any(|delta| delta.kind == ExecutionOutputKind::Stdout && delta.delta == "stdout"));
+    assert!(observed
+        .iter()
+        .any(|delta| delta.kind == ExecutionOutputKind::Stderr && delta.delta == "stderr"));
+}
+
+#[tokio::test]
+async fn local_process_terminate_sets_terminal_status() {
+    let mut handle = start_local_execution_process(LocalExecutionRequest::new(
+        "process-local-terminate",
+        "tool-local-terminate",
+        "exec_command",
+        shell_command("sleep 5"),
+    ))
+    .expect("local process should start");
+
+    handle.terminate().expect("terminate signal should send");
+    let final_snapshot = handle.wait().await.expect("process should finish");
+
+    assert_eq!(final_snapshot.status, ExecutionProcessStatus::Terminated);
+}
+
+#[tokio::test]
+async fn local_pty_process_accepts_stdin_and_emits_combined_output() {
+    let mut request = LocalExecutionRequest::new(
+        "process-local-pty",
+        "tool-local-pty",
+        "exec_command",
+        interactive_shell_command(),
+    );
+    request.tty = true;
+    let mut handle = start_local_execution_process(request).expect("PTY process should start");
+
+    handle
+        .write_stdin("hello-from-pty\n")
+        .expect("PTY stdin should remain writable");
+    let mut observed = Vec::new();
+    loop {
+        match tokio::time::timeout(Duration::from_secs(5), handle.recv_output()).await {
+            Ok(Some(delta)) => observed.push(delta),
+            Ok(None) => break,
+            Err(_) => panic!("timed out waiting for PTY output"),
+        }
+    }
+
+    let final_snapshot = tokio::time::timeout(Duration::from_secs(5), handle.wait())
+        .await
+        .expect("PTY process should terminate")
+        .expect("PTY final snapshot should be available");
+    assert_eq!(final_snapshot.status, ExecutionProcessStatus::Exited);
+    assert_eq!(final_snapshot.exit_code, Some(0));
+    assert!(final_snapshot.retained_output.contains("PTY_READY"));
+    assert!(final_snapshot
+        .retained_output
+        .contains("PTY_ECHO:hello-from-pty"));
+    assert!(observed
+        .iter()
+        .all(|delta| delta.kind == ExecutionOutputKind::Combined));
+}
+
+fn shell_command(script: &str) -> Vec<String> {
+    if cfg!(windows) {
+        vec![
+            "cmd".to_string(),
+            "/C".to_string(),
+            script
+                .replace("printf stdout", "echo|set /p=stdout")
+                .replace("printf stderr 1>&2", "echo|set /p=stderr 1>&2")
+                .replace("sleep 5", "timeout /T 5 /NOBREAK >NUL")
+                .to_string(),
+        ]
+    } else {
+        vec!["sh".to_string(), "-c".to_string(), script.to_string()]
+    }
+}
+
+fn interactive_shell_command() -> Vec<String> {
+    if cfg!(windows) {
+        vec![
+            "cmd.exe".to_string(),
+            "/D".to_string(),
+            "/V:ON".to_string(),
+            "/S".to_string(),
+            "/C".to_string(),
+            "echo PTY_READY & set /p PTY_VALUE= & echo PTY_ECHO:!PTY_VALUE!".to_string(),
+        ]
+    } else {
+        vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            "printf PTY_READY; IFS= read -r value; printf 'PTY_ECHO:%s' \"$value\"".to_string(),
+        ]
+    }
+}

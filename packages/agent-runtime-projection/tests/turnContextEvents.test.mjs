@@ -41,7 +41,7 @@ test("turn context helper builds standard context changed events", () => {
         team_memory_refs: [
           {
             key: "team.selection",
-            source: "team_memory_shadow",
+            source: "context",
           },
         ],
       },
@@ -96,7 +96,7 @@ test("turn context helper builds standard context changed events", () => {
     teamMemoryRefs: [
       {
         key: "team.selection",
-        source: "team_memory_shadow",
+        source: "context",
       },
     ],
   });

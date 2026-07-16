@@ -390,6 +390,167 @@ fn read_detail_projects_thread_items_into_thread_read() {
 }
 
 #[test]
+fn canonical_overlay_preserves_richer_current_coding_projection() {
+    const FILE_PATH: &str =
+        ".lime/qc/code-artifact-workbench-electron-fixture/src/coding-target.ts";
+    const COMMAND_ID: &str = "code-artifact-workbench-electron:command:test";
+    const TEST_RUN_ID: &str = "code-artifact-workbench-electron:test:unit";
+    const FAILURE_PREVIEW: &str =
+        "FAIL coding-target.test.ts: expected codingWorkbenchSmoke to be true";
+
+    let mut stored = stored_running_session("2026-07-15T22:54:38.000Z", "2026-07-15T22:54:39.000Z");
+    let session_id = stored.session.session_id.clone();
+    let thread_id = stored.session.thread_id.clone();
+    let turn_id = stored.turns[0].turn_id.clone();
+    let event = |sequence: u64, event_type: &str, payload: serde_json::Value| AgentEvent {
+        event_id: format!("event-coding-{sequence}"),
+        sequence,
+        session_id: session_id.clone(),
+        thread_id: Some(thread_id.clone()),
+        turn_id: Some(turn_id.clone()),
+        event_type: event_type.to_string(),
+        timestamp: format!("2026-07-15T22:54:{sequence:02}.000Z"),
+        payload,
+    };
+    stored.events = vec![
+        event(1, "file.changed", json!({ "path": FILE_PATH })),
+        event(
+            2,
+            "command.started",
+            json!({ "commandId": COMMAND_ID, "command": "npm test -- coding-target", "cwd": "." }),
+        ),
+        event(
+            3,
+            "command.output",
+            json!({ "commandId": COMMAND_ID, "preview": FAILURE_PREVIEW }),
+        ),
+        event(
+            4,
+            "command.exited",
+            json!({
+                "commandId": COMMAND_ID,
+                "command": "npm test -- coding-target",
+                "exitCode": 1,
+                "preview": FAILURE_PREVIEW
+            }),
+        ),
+        event(
+            5,
+            "test.started",
+            json!({ "testRunId": TEST_RUN_ID, "commandId": COMMAND_ID, "suite": "coding-target" }),
+        ),
+        event(
+            6,
+            "test.completed",
+            json!({
+                "testRunId": TEST_RUN_ID,
+                "commandId": COMMAND_ID,
+                "suite": "coding-target",
+                "result": "failed",
+                "passed": 0,
+                "failed": 1
+            }),
+        ),
+    ];
+    let canonical_items = vec![
+        json!({
+            "id": format!("item_{COMMAND_ID}"),
+            "type": "command_execution",
+            "turn_id": turn_id,
+            "status": "completed",
+            "command": "npm test -- coding-target",
+            "cwd": ".",
+            "exit_code": 1,
+            "aggregated_output": null
+        }),
+        json!({
+            "id": "item_coding-target",
+            "type": "file_change",
+            "turn_id": stored.turns[0].turn_id,
+            "status": "completed",
+            "path": FILE_PATH
+        }),
+    ];
+
+    let detail = runtime_session_read_detail_with_item_source(
+        &stored,
+        ReadDetailOptions::default(),
+        &[],
+        Some(&canonical_items),
+    );
+    let serialized = serde_json::to_string(&detail).expect("serialize read detail");
+
+    assert!(serialized.contains(FILE_PATH));
+    assert!(serialized.contains(COMMAND_ID));
+    assert!(serialized.contains(TEST_RUN_ID));
+    assert!(serialized.contains(FAILURE_PREVIEW));
+    assert_eq!(
+        detail["thread_read"]["commands"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        detail["thread_read"]["commands"][0]["command_id"],
+        COMMAND_ID
+    );
+    assert_eq!(
+        detail["thread_read"]["commands"][0]["output_preview"],
+        FAILURE_PREVIEW
+    );
+}
+
+#[test]
+fn command_lifecycle_materializes_complete_canonical_snapshot() {
+    const COMMAND_ID: &str = "command-canonical-snapshot";
+    const OUTPUT: &str = "FAIL canonical command output";
+    let event = |sequence: u64, event_type: &str, payload: serde_json::Value| AgentEvent {
+        event_id: format!("event-command-{sequence}"),
+        sequence,
+        session_id: "session-command-snapshot".to_string(),
+        thread_id: Some("thread-command-snapshot".to_string()),
+        turn_id: Some("turn-command-snapshot".to_string()),
+        event_type: event_type.to_string(),
+        timestamp: format!("2026-07-15T23:00:{sequence:02}.000Z"),
+        payload,
+    };
+    let changes = super::super::thread_item_projection::materialize_events(
+        &[
+            event(
+                1,
+                "command.started",
+                json!({ "commandId": COMMAND_ID, "command": "npm test", "cwd": "." }),
+            ),
+            event(
+                2,
+                "command.output",
+                json!({ "commandId": COMMAND_ID, "preview": OUTPUT }),
+            ),
+            event(
+                3,
+                "command.exited",
+                json!({ "commandId": COMMAND_ID, "exitCode": 1 }),
+            ),
+        ],
+        "session-command-snapshot",
+        "thread-command-snapshot",
+    )
+    .expect("materialize command lifecycle");
+
+    assert_eq!(changes.changed_items.len(), 1);
+    let item = &changes.changed_items[0];
+    assert_eq!(item.metadata["source_call_id"], COMMAND_ID);
+    assert_eq!(item.status, ItemStatus::Completed);
+    assert_eq!(
+        item.payload,
+        ThreadItemPayload::Command {
+            command: "npm test".to_string(),
+            cwd: Some(".".to_string()),
+            output: Some(OUTPUT.to_string()),
+            exit_code: Some(1),
+        }
+    );
+}
+
+#[test]
 fn read_detail_prefers_canonical_thread_store_items_after_restart() {
     let temp = tempfile::tempdir().expect("tempdir");
     let database_path = temp.path().join("projection.sqlite");

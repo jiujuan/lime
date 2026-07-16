@@ -124,7 +124,13 @@ export function projectAppServerEventsToExecutionEvents(
   events: readonly AppServerAgentEventFact[] | undefined,
 ): AgentRuntimeExecutionEvent[] {
   return dedupeExecutionEvents(
-    (events ?? []).map(projectAppServerEventToExecutionEvent),
+    (events ?? [])
+      .filter(
+        (event) =>
+          event.type !== "subagent.status_changed" &&
+          event.type !== "subagent_status_changed",
+      )
+      .map(projectAppServerEventToExecutionEvent),
   );
 }
 
@@ -337,7 +343,6 @@ function projectAppServerEventToExecutionEvent(
 
 function isCollaborationEvent(eventClass: string): boolean {
   return (
-    eventClass.startsWith("subagent.") ||
     eventClass.startsWith("handoff.") ||
     eventClass.startsWith("review.") ||
     eventClass.startsWith("task.")
@@ -347,15 +352,13 @@ function isCollaborationEvent(eventClass: string): boolean {
 function collaborationKindForEventClass(eventClass: string): string {
   if (eventClass.startsWith("handoff.")) return "specialist_handoff";
   if (eventClass.startsWith("review.")) return "collaboration_review";
-  if (eventClass.startsWith("task.")) return "collaboration_task";
-  return "subagent_status";
+  return "collaboration_task";
 }
 
 function collaborationSurfaceForEventClass(eventClass: string): string {
   if (eventClass.startsWith("handoff.")) return "handoff_lane";
   if (eventClass.startsWith("review.")) return "review_lane";
-  if (eventClass.startsWith("task.")) return "task_capsule";
-  return "team_roster";
+  return "task_capsule";
 }
 
 function runtimeEntityForCollaborationEvent(eventClass: string): string {

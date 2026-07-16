@@ -3,7 +3,10 @@ import { buildClawAgentParams } from "@/lib/workspace/navigation";
 import type { AgentChatWorkspaceProps } from "../agentChatWorkspaceContract";
 import { buildInitialDispatchPreviewMessages } from "./workspaceSendHelpers";
 import { useTaskCenterHomePendingPreviewRuntime } from "./useTaskCenterDraftSendRuntime";
-import { resolveTaskCenterDraftSurfaceState } from "./taskCenterSurfaceState";
+import {
+  hasTaskCenterPendingPreviewActivity,
+  resolveTaskCenterDraftSurfaceState,
+} from "./taskCenterSurfaceState";
 
 type DraftSurfaceParams = Parameters<
   typeof resolveTaskCenterDraftSurfaceState
@@ -34,7 +37,6 @@ export function useWorkspaceTaskCenterSurfaceRuntime({
   onNavigate,
   taskCenterWorkspaceId,
 }: UseWorkspaceTaskCenterSurfaceRuntimeParams) {
-  const draftSurfaceState = resolveTaskCenterDraftSurfaceState(draftSurface);
   const { homePendingPreviewMessages, isHomePendingPreviewActive } =
     useTaskCenterHomePendingPreviewRuntime(homePendingPreview);
   const bootstrapPendingPreviewMessages = useMemo(
@@ -44,6 +46,14 @@ export function useWorkspaceTaskCenterSurfaceRuntime({
         : [],
     [bootstrapDispatchPreview, homePendingPreview.displayMessagesLength],
   );
+  const hasPendingPreviewActivity = hasTaskCenterPendingPreviewActivity(
+    isHomePendingPreviewActive,
+    bootstrapPendingPreviewMessages.length,
+  );
+  const draftSurfaceState = resolveTaskCenterDraftSurfaceState({
+    ...draftSurface,
+    hasHomePendingPreview: hasPendingPreviewActivity,
+  });
   const persistTaskCenterMaterializedSessionNavigation = useCallback(
     (sessionId: string) => {
       const normalizedSessionId = sessionId.trim();
@@ -68,6 +78,7 @@ export function useWorkspaceTaskCenterSurfaceRuntime({
   const isHomeSendStarting = Boolean(
     draftSurface.draftSendRequest ||
     homePendingPreview.homePendingPreviewRequest ||
+    hasPendingPreviewActivity ||
     draftSurface.isPreparingSend ||
     draftSurface.isSending ||
     draftSurface.queuedTurnCount > 0,

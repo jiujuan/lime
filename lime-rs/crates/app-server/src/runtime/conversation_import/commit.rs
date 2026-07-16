@@ -1,13 +1,8 @@
-use super::codex::{self, events::ImportedRuntimeEvent, ImportedTimelineItem};
-use super::commit_events::{
-    enrich_imported_runtime_event_payload, lower_imported_runtime_events_for_commit,
-    materialize_imported_runtime_events_for_default_projection, ImportedRuntimeEventNormalizer,
-    ImportedRuntimeEventProjectionSelector, ImportedRuntimeEventProjectionSummary,
-};
+use super::codex::{self, events::CodexRolloutEvent, CodexTimelineItem};
 use super::import_status;
 use super::provenance::{self, ImportProvenance};
 use crate::runtime::{new_id, timestamp};
-use crate::{RuntimeCore, RuntimeCoreError, RuntimeEvent, SidecarWriteRequest};
+use crate::{RuntimeCore, RuntimeCoreError};
 use app_server_protocol::{
     AgentAttachment, AgentInput, AgentSessionStartParams, AgentSessionStatus, AgentTurn,
     AgentTurnStatus, BusinessObjectRef, ConversationImportSourceClient,
@@ -28,16 +23,7 @@ pub(super) fn commit_conversation_import_thread(
         ));
     }
 
-    match params
-        .source_client
-        .unwrap_or(ConversationImportSourceClient::Codex)
-    {
-        ConversationImportSourceClient::Codex => commit_codex_thread(core, params),
-        ConversationImportSourceClient::ClaudeCode => Err(RuntimeCoreError::Backend(
-            "Claude Code conversation import commit is not implemented in this milestone."
-                .to_string(),
-        )),
-    }
+    commit_codex_thread(core, params)
 }
 
 fn commit_codex_thread(
@@ -61,7 +47,7 @@ fn commit_codex_thread(
     preview.thread.source_path = Some(codex::path_to_string(&source_path));
     preview.thread.import_status = ConversationImportThreadStatus::Imported;
 
-    let turns = imported_turns(&preview.timeline);
+    let turns = history_turns(&preview.timeline);
     if turns.is_empty() {
         return Err(RuntimeCoreError::Backend(
             "source rollout does not contain importable user messages".to_string(),
@@ -98,8 +84,9 @@ fn commit_codex_thread(
         &source_path,
         &preview.summary.fidelity,
     );
+    let prepared_turns = prepare_history_turns(turns)?;
 
-    let session = core
+    let created_session = core
         .start_session(AgentSessionStartParams {
             session_id: None,
             thread_id: None,
@@ -120,66 +107,81 @@ fn commit_codex_thread(
         })?
         .session;
 
-    let mut projection_selector = ImportedRuntimeEventProjectionSelector::default();
-    let prepared_turns = prepare_imported_turns(turns, &mut projection_selector)?;
-    let projection_summary = summarize_prepared_turns(&prepared_turns);
-    let sidecar_ref =
-        persist_imported_runtime_event_sidecar(core, &session.session_id, &prepared_turns)?;
-    attach_import_projection_metadata(
-        core,
-        &session.session_id,
-        &projection_summary,
-        sidecar_ref.as_ref(),
-    )?;
+    let commit_result = (|| {
+        let imported_turns = append_history_turns(
+            core,
+            &created_session.session_id,
+            prepared_turns,
+            &provenance,
+        )?;
+        let imported_messages = preview.summary.dry_run.will_import_messages;
+        let warnings = provenance::commit_warnings(
+            &preview.summary.warnings,
+            preview.summary.unsupported_count,
+            preview.summary.rollout_event_items,
+        );
 
-    let imported_turns =
-        append_imported_turns(core, &session.session_id, prepared_turns, &provenance)?;
-    let imported_messages = preview.summary.dry_run.will_import_messages;
-    let warnings = provenance::commit_warnings(
-        &preview.summary.warnings,
-        preview.summary.unsupported_count,
-        preview.summary.rollout_event_items,
-    );
+        let (mut session, _) = core.session_snapshot(&created_session.session_id)?;
+        session.status = AgentSessionStatus::Completed;
 
-    let (mut session, _) = core.session_snapshot(&session.session_id)?;
-    session.status = AgentSessionStatus::Completed;
+        Ok(ConversationImportThreadCommitResponse {
+            session,
+            thread: preview.thread,
+            summary: preview.summary,
+            imported_messages,
+            imported_turns,
+            can_continue: true,
+            warnings,
+        })
+    })();
 
-    Ok(ConversationImportThreadCommitResponse {
-        session,
-        thread: preview.thread,
-        summary: preview.summary,
-        imported_messages,
-        imported_turns,
-        can_continue: true,
-        warnings,
-    })
+    match commit_result {
+        Ok(response) => Ok(response),
+        Err(import_error) => {
+            match clear_existing_imported_session(core, &created_session.session_id) {
+                Ok(()) => Err(import_error),
+                Err(cleanup_error) => Err(RuntimeCoreError::Backend(format!(
+                    "Codex import failed after creating session {}: {import_error}; compensating cleanup also failed: {cleanup_error}",
+                    created_session.session_id
+                ))),
+            }
+        }
+    }
 }
 
 fn clear_existing_imported_session(
     core: &RuntimeCore,
     session_id: &str,
 ) -> Result<(), RuntimeCoreError> {
-    let mut state = core
-        .state
-        .lock()
-        .expect("runtime core state mutex poisoned");
+    let mut errors = Vec::new();
     if let Some(projection_store) = core.projection_store.as_ref() {
-        projection_store
-            .delete_session_data(session_id)
-            .map_err(RuntimeCoreError::Backend)?;
+        if let Err(error) = projection_store.delete_session_data(session_id) {
+            errors.push(format!("projection cleanup failed: {error}"));
+        }
     }
-    super::super::approval_cache::remove_session(&mut state.session_approval_cache, session_id);
-    state.sessions.remove(session_id);
-    drop(state);
+    {
+        let mut state = core
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        super::super::approval_cache::remove_session(&mut state.session_approval_cache, session_id);
+        state.sessions.remove(session_id);
+    }
     if let Some(event_log_writer) = core.event_log_writer.as_ref() {
-        event_log_writer
-            .clear_session(session_id)
-            .map_err(RuntimeCoreError::Backend)?;
+        if let Err(error) = event_log_writer.clear_session(session_id) {
+            errors.push(format!("event log cleanup failed: {error}"));
+        }
     }
     if let Some(sidecar_store) = core.sidecar_store.as_ref() {
-        sidecar_store
-            .clear_session(session_id)
-            .map_err(RuntimeCoreError::Backend)?;
+        if let Err(error) = sidecar_store.clear_session(session_id) {
+            errors.push(format!("sidecar cleanup failed: {error}"));
+        }
+    }
+    if !errors.is_empty() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "failed to clear imported session {session_id}: {}",
+            errors.join("; ")
+        )));
     }
     Ok(())
 }
@@ -232,36 +234,34 @@ fn resolve_source_path(
     Ok((source_path, indexed_thread))
 }
 
-struct ImportedTurn {
+struct HistoryTurn {
     user_text: String,
     user_attachments: Vec<AgentAttachment>,
     user_timestamp: Option<String>,
     user_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
-    events: Vec<ImportedTurnEvent>,
+    events: Vec<HistoryTurnEvent>,
 }
 
-struct PreparedImportedTurn {
+struct PreparedHistoryTurn {
     user_text: String,
     user_attachments: Vec<AgentAttachment>,
     user_timestamp: Option<String>,
     user_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
-    user_message: ImportedRuntimeEvent,
-    source_events: Vec<ImportedRuntimeEvent>,
-    materialized_events: Vec<ImportedRuntimeEvent>,
-    projection_summary: ImportedRuntimeEventProjectionSummary,
+    user_message: CodexRolloutEvent,
+    events: Vec<CodexRolloutEvent>,
 }
 
-enum ImportedTurnEvent {
-    AssistantMessage(ImportedAssistantMessage),
-    Runtime(ImportedRuntimeEvent),
+enum HistoryTurnEvent {
+    AssistantMessage(HistoricalAssistantMessage),
+    Runtime(CodexRolloutEvent),
 }
 
-struct ImportedAssistantMessage {
+struct HistoricalAssistantMessage {
     text: String,
     provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
 }
 
-fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
+fn history_turns(timeline: &[CodexTimelineItem]) -> Vec<HistoryTurn> {
     let mut turns = Vec::new();
     let mut pending_user: Option<(
         String,
@@ -275,7 +275,7 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
 
     for item in timeline {
         match item {
-            ImportedTimelineItem::Message(message) => match message.role.as_str() {
+            CodexTimelineItem::Message(message) => match message.role.as_str() {
                 "user" => {
                     if pending_user.as_mut().is_some_and(
                         |(text, attachments, source_type, timestamp, provenance)| {
@@ -307,7 +307,7 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
                     ) {
                         continue;
                     }
-                    flush_imported_turn(&mut turns, &mut pending_user, &mut pending_events);
+                    flush_history_turn(&mut turns, &mut pending_user, &mut pending_events);
                     pending_user = Some((
                         message.text.clone(),
                         message.attachments.clone(),
@@ -318,15 +318,15 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
                     pending_events.extend(
                         leading_runtime_events
                             .drain(..)
-                            .map(ImportedTurnEvent::Runtime),
+                            .map(HistoryTurnEvent::Runtime),
                     );
                 }
                 "assistant" => {
                     if pending_user.is_some() {
                         let text = message.text.trim();
                         if !text.is_empty() {
-                            pending_events.push(ImportedTurnEvent::AssistantMessage(
-                                ImportedAssistantMessage {
+                            pending_events.push(HistoryTurnEvent::AssistantMessage(
+                                HistoricalAssistantMessage {
                                     text: text.to_string(),
                                     provenance: message.provenance.clone(),
                                 },
@@ -336,21 +336,21 @@ fn imported_turns(timeline: &[ImportedTimelineItem]) -> Vec<ImportedTurn> {
                 }
                 _ => {}
             },
-            ImportedTimelineItem::RuntimeEvent(event) => {
+            CodexTimelineItem::RolloutEvent(event) => {
                 if pending_user.is_some() {
-                    pending_events.push(ImportedTurnEvent::Runtime(event.clone()));
+                    pending_events.push(HistoryTurnEvent::Runtime(event.clone()));
                 } else {
                     leading_runtime_events.push(event.clone());
                 }
             }
         }
     }
-    flush_imported_turn(&mut turns, &mut pending_user, &mut pending_events);
+    flush_history_turn(&mut turns, &mut pending_user, &mut pending_events);
     turns
 }
 
-fn flush_imported_turn(
-    turns: &mut Vec<ImportedTurn>,
+fn flush_history_turn(
+    turns: &mut Vec<HistoryTurn>,
     pending_user: &mut Option<(
         String,
         Vec<AgentAttachment>,
@@ -358,7 +358,7 @@ fn flush_imported_turn(
         Option<String>,
         Option<app_server_protocol::ConversationImportSourceProvenance>,
     )>,
-    pending_events: &mut Vec<ImportedTurnEvent>,
+    pending_events: &mut Vec<HistoryTurnEvent>,
 ) {
     let Some((user_text, user_attachments, _source_type, user_timestamp, user_provenance)) =
         pending_user.take()
@@ -366,7 +366,7 @@ fn flush_imported_turn(
         pending_events.clear();
         return;
     };
-    turns.push(ImportedTurn {
+    turns.push(HistoryTurn {
         user_text,
         user_attachments,
         user_timestamp,
@@ -382,19 +382,19 @@ fn is_duplicate_source_user_message(existing: Option<&str>, candidate: Option<&s
     )
 }
 
-fn append_imported_turns(
+fn append_history_turns(
     core: &RuntimeCore,
     session_id: &str,
-    turns: Vec<PreparedImportedTurn>,
+    turns: Vec<PreparedHistoryTurn>,
     provenance: &ImportProvenance,
 ) -> Result<usize, RuntimeCoreError> {
     let (session, _) = core.session_snapshot(session_id)?;
     let thread_id = session.thread_id.clone();
     let mut imported = 0;
 
-    for imported_turn in turns {
+    for history_turn in turns {
         let turn_id = new_id("turn");
-        let started_at = imported_turn
+        let started_at = history_turn
             .user_timestamp
             .clone()
             .unwrap_or_else(timestamp);
@@ -420,36 +420,22 @@ fn append_imported_turns(
             stored.turn_inputs.insert(
                 turn_id.clone(),
                 AgentInput {
-                    text: imported_turn.user_text,
-                    attachments: imported_turn.user_attachments,
+                    text: history_turn.user_text,
+                    attachments: history_turn.user_attachments,
                 },
             );
             stored.turn_runtime_options.insert(
                 turn_id.clone(),
-                provenance.turn_runtime_options(imported_turn.user_provenance.as_ref()),
+                provenance.turn_runtime_options(history_turn.user_provenance.as_ref()),
             );
             stored.turns.push(turn);
         }
 
-        let mut materialized_source_events =
-            Vec::with_capacity(imported_turn.materialized_events.len() + 1);
-        materialized_source_events.push(imported_turn.user_message);
-        materialized_source_events.extend(imported_turn.materialized_events);
-        let materialized_events = lower_imported_runtime_events_for_commit(
-            &materialized_source_events,
-            session_id,
-            &thread_id,
-            &turn_id,
-        );
-        let events: Vec<RuntimeEvent> = materialized_events
-            .into_iter()
-            .map(|event| {
-                let (event_type, payload) = event
-                    .into_runtime()
-                    .expect("commit lowering must remove source-local imported tool drafts");
-                RuntimeEvent::new(event_type, enrich_imported_runtime_event_payload(payload))
-            })
-            .collect();
+        let mut source_events = Vec::with_capacity(history_turn.events.len() + 1);
+        source_events.push(history_turn.user_message);
+        source_events.extend(history_turn.events);
+        let events =
+            codex::build_canonical_history_events(source_events, session_id, &thread_id, &turn_id);
         core.append_runtime_events(session_id, &thread_id, Some(&turn_id), events)?;
         imported += 1;
     }
@@ -457,185 +443,50 @@ fn append_imported_turns(
     Ok(imported)
 }
 
-fn prepare_imported_turns(
-    turns: Vec<ImportedTurn>,
-    projection_selector: &mut ImportedRuntimeEventProjectionSelector,
-) -> Result<Vec<PreparedImportedTurn>, RuntimeCoreError> {
+fn prepare_history_turns(
+    turns: Vec<HistoryTurn>,
+) -> Result<Vec<PreparedHistoryTurn>, RuntimeCoreError> {
     turns
         .into_iter()
         .map(|turn| {
-            let user_message = imported_message_draft(
+            let user_message = message_rollout_event(
                 "user",
                 &turn.user_text,
                 &turn.user_attachments,
                 turn.user_provenance.as_ref(),
             )?;
-            let (mut source_events, has_terminal_event) =
-                normalize_imported_turn_events(turn.events)?;
-            if !has_terminal_event {
-                source_events.push(ImportedRuntimeEvent::new(
-                    "turn.completed",
-                    json!({
-                        "imported": true,
-                        "sourceClient": "codex",
-                    }),
-                ));
+            let mut events = Vec::with_capacity(turn.events.len());
+            for event in turn.events {
+                match event {
+                    HistoryTurnEvent::AssistantMessage(message) => {
+                        events.push(message_rollout_event(
+                            "assistant",
+                            &message.text,
+                            &[],
+                            message.provenance.as_ref(),
+                        )?);
+                    }
+                    HistoryTurnEvent::Runtime(runtime_event) => events.push(runtime_event),
+                }
             }
-            let (materialized_events, projection_summary) =
-                materialize_imported_runtime_events_for_default_projection(
-                    &source_events,
-                    projection_selector,
-                );
-            Ok(PreparedImportedTurn {
+            Ok(PreparedHistoryTurn {
                 user_text: turn.user_text,
                 user_attachments: turn.user_attachments,
                 user_timestamp: turn.user_timestamp,
                 user_provenance: turn.user_provenance,
                 user_message,
-                source_events,
-                materialized_events,
-                projection_summary,
+                events,
             })
         })
         .collect()
 }
 
-fn summarize_prepared_turns(
-    turns: &[PreparedImportedTurn],
-) -> ImportedRuntimeEventProjectionSummary {
-    let mut summary = ImportedRuntimeEventProjectionSummary::default();
-    for turn in turns {
-        summary.merge(&turn.projection_summary);
-    }
-    summary
-}
-
-fn persist_imported_runtime_event_sidecar(
-    core: &RuntimeCore,
-    session_id: &str,
-    turns: &[PreparedImportedTurn],
-) -> Result<Option<crate::runtime::SidecarRef>, RuntimeCoreError> {
-    let Some(sidecar_store) = core.sidecar_store.as_ref() else {
-        return Ok(None);
-    };
-    let mut lines = Vec::new();
-    for (turn_index, turn) in turns.iter().enumerate() {
-        for (event_index, event) in turn.source_events.iter().enumerate() {
-            lines.push(
-                serde_json::to_string(&json!({
-                    "turnIndex": turn_index,
-                    "eventIndex": event_index,
-                    "eventType": event.event_type(),
-                    "payload": event.sidecar_payload(),
-                }))
-                .map_err(|error| {
-                    RuntimeCoreError::Backend(format!(
-                        "unable to serialize imported runtime event sidecar: {error}"
-                    ))
-                })?,
-            );
-        }
-    }
-    let reference = sidecar_store
-        .write_text(&SidecarWriteRequest {
-            session_id: session_id.to_string(),
-            kind: "conversation_import_runtime_events".to_string(),
-            logical_id: "normalized-runtime-events".to_string(),
-            relative_path: crate::runtime::sidecar_store::session_scoped_relative_path(
-                session_id,
-                "conversation-import/runtime-events.jsonl",
-            ),
-            content: lines.join("\n"),
-        })
-        .map_err(RuntimeCoreError::Backend)?;
-    Ok(Some(reference))
-}
-
-fn attach_import_projection_metadata(
-    core: &RuntimeCore,
-    session_id: &str,
-    projection_summary: &ImportedRuntimeEventProjectionSummary,
-    sidecar_ref: Option<&crate::runtime::SidecarRef>,
-) -> Result<(), RuntimeCoreError> {
-    let mut state = core
-        .state
-        .lock()
-        .expect("runtime core state mutex poisoned");
-    let stored = state
-        .sessions
-        .get_mut(session_id)
-        .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
-    let reference = stored
-        .session
-        .business_object_ref
-        .get_or_insert_with(|| BusinessObjectRef {
-            kind: import_status::IMPORTED_CONVERSATION_KIND.to_string(),
-            id: session_id.to_string(),
-            title: None,
-            uri: None,
-            metadata: None,
-        });
-    let metadata = reference.metadata.get_or_insert_with(|| json!({}));
-    if !metadata.is_object() {
-        *metadata = json!({});
-    }
-    let Some(object) = metadata.as_object_mut() else {
-        return Ok(());
-    };
-    object.insert(
-        "importedRuntimeProjection".to_string(),
-        provenance::compact_json(json!({
-            "mode": "default_window",
-            "sourceRuntimeEvents": projection_summary.source_runtime_events,
-            "materializedRuntimeEvents": projection_summary.materialized_runtime_events,
-            "sidecarRuntimeEvents": projection_summary.sidecar_runtime_events,
-            "materializedCommandToolCalls": projection_summary.materialized_command_tool_calls,
-            "materializedOtherToolCalls": projection_summary.materialized_other_tool_calls,
-            "skippedCommandToolCalls": projection_summary.skipped_command_tool_calls,
-            "skippedOtherToolCalls": projection_summary.skipped_other_tool_calls,
-            "commandToolCallLimit": projection_summary.command_tool_call_limit,
-            "otherToolCallLimit": projection_summary.other_tool_call_limit,
-            "defaultReadModel": "materialized_window",
-            "fullFidelity": "source_rollout_or_sidecar",
-            "sidecar": sidecar_ref,
-        })),
-    );
-    Ok(())
-}
-
-fn normalize_imported_turn_events(
-    events: Vec<ImportedTurnEvent>,
-) -> Result<(Vec<ImportedRuntimeEvent>, bool), RuntimeCoreError> {
-    let mut normalized = Vec::new();
-    let mut normalizer = ImportedRuntimeEventNormalizer::new();
-
-    for event in events {
-        match event {
-            ImportedTurnEvent::AssistantMessage(message) => {
-                normalized.push(imported_message_draft(
-                    "assistant",
-                    &message.text,
-                    &[],
-                    message.provenance.as_ref(),
-                )?);
-            }
-            ImportedTurnEvent::Runtime(runtime_event) => {
-                normalized.extend(normalizer.push(runtime_event));
-            }
-        }
-    }
-
-    normalized.extend(normalizer.finish());
-
-    Ok((normalized, normalizer.has_terminal_event()))
-}
-
-fn imported_message_draft(
+fn message_rollout_event(
     role: &'static str,
     text: &str,
     attachments: &[AgentAttachment],
     provenance: Option<&ConversationImportSourceProvenance>,
-) -> Result<ImportedRuntimeEvent, RuntimeCoreError> {
+) -> Result<CodexRolloutEvent, RuntimeCoreError> {
     let provenance = provenance.ok_or_else(|| {
         RuntimeCoreError::Backend(format!(
             "Codex import {role} message is missing source provenance"
@@ -669,7 +520,7 @@ fn imported_message_draft(
         ))
     })?;
 
-    Ok(ImportedRuntimeEvent::new(
+    Ok(CodexRolloutEvent::new(
         if role == "user" {
             "import.message"
         } else {

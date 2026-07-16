@@ -21,7 +21,6 @@ const {
   mockXtermTerminalOptions,
   mockXtermWrite,
   mockXtermWriteln,
-  mockReadConversationImportRuntimeEvents,
   mockBuildGeneralWorkbenchTaskRailProjection,
   mockBuildWorkspaceTaskRailRuntimeContext,
 } = vi.hoisted(() => ({
@@ -39,7 +38,6 @@ const {
   mockXtermTerminalOptions: [] as Array<Record<string, unknown>>,
   mockXtermWrite: vi.fn(),
   mockXtermWriteln: vi.fn(),
-  mockReadConversationImportRuntimeEvents: vi.fn(),
   mockBuildGeneralWorkbenchTaskRailProjection: vi.fn(),
   mockBuildWorkspaceTaskRailRuntimeContext: vi.fn(),
 }));
@@ -58,10 +56,6 @@ vi.mock("@/lib/api/projectShell", () => ({
   resizeProjectShellSession: mockResizeProjectShellSession,
   startProjectShellSession: mockStartProjectShellSession,
   writeProjectShellSession: mockWriteProjectShellSession,
-}));
-
-vi.mock("@/lib/api/conversationImport", () => ({
-  readConversationImportRuntimeEvents: mockReadConversationImportRuntimeEvents,
 }));
 
 vi.mock("./generalWorkbenchTaskRailViewModel", async (importOriginal) => {
@@ -265,38 +259,6 @@ beforeEach(() => {
     pid: 123,
   });
   mockWriteProjectShellSession.mockResolvedValue(undefined);
-  mockReadConversationImportRuntimeEvents.mockResolvedValue({
-    sessionId: "session-imported",
-    offset: 0,
-    limit: 10,
-    totalEvents: 2,
-    nextOffset: undefined,
-    sourceRuntimeEvents: 120,
-    materializedRuntimeEvents: 80,
-    sidecarRuntimeEvents: 40,
-    projection: {},
-    events: [
-      {
-        sourceEventIndex: 80,
-        turnIndex: 1,
-        eventIndex: 2,
-        eventType: "command_execution",
-        payload: {
-          command: "npm test",
-          status: "completed",
-        },
-      },
-      {
-        sourceEventIndex: 81,
-        turnIndex: 1,
-        eventIndex: 3,
-        eventType: "reasoning",
-        payload: {
-          summary: "checked previous output",
-        },
-      },
-    ],
-  });
   mockXtermOnDataHandlers.length = 0;
   mockXtermTerminalOptions.length = 0;
 });
@@ -1108,7 +1070,7 @@ describe("TaskCenterUtilityToolbar", () => {
     ).toBeNull();
   });
 
-  it("环境信息来源区应按需读取导入会话的完整运行记录", async () => {
+  it("导入 provenance 不应创建 imported-only 完整运行记录入口", async () => {
     const container = renderToolbar({
       taskRail: {
         sessionId: "session-imported",
@@ -1149,146 +1111,16 @@ describe("TaskCenterUtilityToolbar", () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
 
-    expect(mockReadConversationImportRuntimeEvents).not.toHaveBeenCalled();
-    const toggle = document.body.querySelector<HTMLButtonElement>(
-      '[data-testid="imported-runtime-detail-toggle"]',
-    );
-    expect(toggle?.textContent).toContain("查看完整记录");
-
-    await act(async () => {
-      toggle?.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-
-    expect(mockReadConversationImportRuntimeEvents).toHaveBeenCalledWith({
-      sessionId: "session-imported",
-      offset: 0,
-      limit: 10,
-    });
-    const panel = document.body.querySelector(
-      '[data-testid="imported-runtime-detail-panel"]',
-    );
-    expect(panel?.textContent).toContain("已默认展示 80 / 120 条");
-    expect(panel?.textContent).toContain("完整记录保留 40 条");
-    expect(panel?.textContent).toContain("command execution");
-    expect(panel?.textContent).toContain("轮次 2 · 事件 3");
-    expect(panel?.textContent).toContain("npm test");
-    expect(panel?.textContent).not.toContain(
+    expect(
+      document.body.querySelector('[data-testid="imported-runtime-detail-toggle"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="imported-runtime-detail-panel"]'),
+    ).toBeNull();
+    expect(document.body.textContent).not.toContain("查看完整记录");
+    expect(document.body.textContent).not.toContain(
       "/Users/example/.codex/sessions/thread.jsonl",
     );
-  });
-
-  it("导入会话即使当前时间线窗口没有导入标记也应显示完整运行记录入口", async () => {
-    const container = renderToolbar({
-      taskRail: {
-        sessionId: "session-imported",
-        workflowSteps: [],
-        messages: [],
-        context: {
-          sourceCount: 1,
-          sourceLabels: ["docs.example.com"],
-        },
-        executionRuntime: {
-          session_id: "session-imported",
-          source_client: "codex",
-          imported_thread_settings: {
-            cwd: "/tmp/project",
-          },
-          source: "session",
-        },
-        threadItems: [
-          {
-            id: "web-source",
-            type: "web_search",
-            thread_id: "thread-1",
-            turn_id: "turn-1",
-            sequence: 1,
-            status: "completed",
-            query: "workspace docs",
-            started_at: "2026-06-16T10:00:00.000Z",
-            completed_at: "2026-06-16T10:00:01.000Z",
-            updated_at: "2026-06-16T10:00:01.000Z",
-          },
-        ],
-      },
-    });
-    const trigger = container.querySelector(
-      '[data-testid="task-center-environment-trigger"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      trigger?.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-
-    const toggle = document.body.querySelector<HTMLButtonElement>(
-      '[data-testid="imported-runtime-detail-toggle"]',
-    );
-    expect(toggle?.textContent).toContain("查看完整记录");
-
-    await act(async () => {
-      toggle?.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-
-    expect(mockReadConversationImportRuntimeEvents).toHaveBeenCalledWith({
-      sessionId: "session-imported",
-      offset: 0,
-      limit: 10,
-    });
-  });
-
-  it("导入会话在当前窗口未物化条目且缺少运行时摘要时仍应从 threadRead 显示完整记录入口", async () => {
-    const container = renderToolbar({
-      taskRail: {
-        sessionId: "session-imported-thread-read",
-        workflowSteps: [],
-        messages: [],
-        threadItems: [],
-        threadRead: {
-          thread_id: "thread-imported",
-          status: "completed",
-          diagnostics: {
-            warning_count: 0,
-            context_compaction_count: 0,
-            failed_tool_call_count: 0,
-            failed_command_count: 0,
-            pending_request_count: 0,
-          },
-          runtime_summary: {
-            sourceClient: "codex",
-          } as unknown as AgentRuntimeThreadReadModel["runtime_summary"],
-        },
-      },
-    });
-    const trigger = container.querySelector(
-      '[data-testid="task-center-environment-trigger"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      trigger?.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-
-    const sourceSection = document.body.querySelector(
-      '[data-testid="task-center-run-control-sources"]',
-    );
-    const toggle = document.body.querySelector<HTMLButtonElement>(
-      '[data-testid="imported-runtime-detail-toggle"]',
-    );
-    expect(sourceSection).not.toBeNull();
-    expect(toggle?.textContent).toContain("查看完整记录");
-
-    await act(async () => {
-      toggle?.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-
-    expect(mockReadConversationImportRuntimeEvents).toHaveBeenCalledWith({
-      sessionId: "session-imported-thread-read",
-      offset: 0,
-      limit: 10,
-    });
   });
 
   it("普通来源会话不应显示完整运行记录入口", async () => {
@@ -1331,50 +1163,6 @@ describe("TaskCenterUtilityToolbar", () => {
         '[data-testid="imported-runtime-detail-panel"]',
       ),
     ).toBeNull();
-    expect(mockReadConversationImportRuntimeEvents).not.toHaveBeenCalled();
-  });
-
-  it("纯导入会话即使没有普通来源摘要也应显示完整运行记录入口", async () => {
-    const container = renderToolbar({
-      taskRail: {
-        sessionId: "session-imported-only",
-        workflowSteps: [],
-        messages: [],
-        threadItems: [
-          {
-            id: "imported-reasoning",
-            type: "reasoning",
-            thread_id: "thread-1",
-            turn_id: "turn-1",
-            sequence: 1,
-            status: "completed",
-            text: "keep going",
-            summary: ["keep going"],
-            started_at: "2026-06-16T10:00:00.000Z",
-            completed_at: "2026-06-16T10:00:01.000Z",
-            updated_at: "2026-06-16T10:00:01.000Z",
-            metadata: {
-              imported: true,
-              source_client: "claude_code",
-            },
-          },
-        ],
-      },
-    });
-    const trigger = container.querySelector(
-      '[data-testid="task-center-environment-trigger"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      trigger?.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-
-    const sourceSection = document.body.querySelector(
-      '[data-testid="task-center-run-control-sources"]',
-    );
-    expect(sourceSection).not.toBeNull();
-    expect(sourceSection?.textContent).toContain("查看完整记录");
   });
 
   it("环境信息区域应消费运行日志与任务文件输出，并隐藏超出项", async () => {

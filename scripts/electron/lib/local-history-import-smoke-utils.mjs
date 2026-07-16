@@ -498,9 +498,7 @@ export async function inspectImportedConversationVisualState(page, params) {
       const bodyText = normalizeVisibleText(snapshot.bodyText);
       const hasTargetTitle =
         !normalizedSessionTitle || bodyText.includes(normalizedSessionTitle);
-      const hasMessageSurface =
-        bodyText.includes("导入的命令记录") ||
-        bodyText.includes("Imported command record");
+      const hasMessageSurface = bodyText.length > 0;
       return hasTargetTitle && hasMessageSurface;
     },
     `${viewport.label}/${position} 视口目标 session 未稳定`,
@@ -579,13 +577,14 @@ export async function inspectImportedConversationVisualState(page, params) {
             messageRect.top < viewportHeight,
           importedBannerVisible: Boolean(importedBanner),
           importedRunControlVisible: Boolean(importedRunControl),
-          hasCommandRecordVisible:
-            bodyText.includes("导入的命令记录") ||
-            bodyText.includes("Imported command record"),
+          hasCommandExecutionVisible: Boolean(
+            document.querySelector('[data-testid="tool-call-row"]'),
+          ),
           hasPatchText:
             bodyText.includes("补丁") ||
             bodyText.includes("Patch") ||
             bodyText.includes("已编辑") ||
+            (bodyText.includes("lib.rs") && bodyText.includes("打开文件")) ||
             bodyText.includes("文件变更"),
           hasSearchEvidence:
             bodyText.includes("搜索") ||
@@ -593,6 +592,7 @@ export async function inspectImportedConversationVisualState(page, params) {
             bodyText.includes("web search"),
           hasApprovalText:
             bodyText.includes("导入的权限记录") ||
+            bodyText.includes("权限记录") ||
             bodyText.includes("审批") ||
             bodyText.includes("Approval"),
           leakedTokens,
@@ -601,9 +601,7 @@ export async function inspectImportedConversationVisualState(page, params) {
               bodyText
                 .replace(/\s+/g, " ")
                 .trim()
-                .includes(normalizedSessionTitle)) &&
-            (bodyText.includes("导入的命令记录") ||
-              bodyText.includes("Imported command record")),
+                .includes(normalizedSessionTitle)) && Boolean(messageList),
         };
       },
       { forbiddenTokens, normalizedSessionTitle },

@@ -342,7 +342,6 @@ export function renderPanel(props?: {
     model?: string | null;
     executionStrategy?: string | null;
     activeTheme?: string | null;
-    selectedTeamLabel?: string | null;
   } | null;
 }) {
   const container = document.createElement("div");

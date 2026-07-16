@@ -1,6 +1,7 @@
 use super::*;
 use app_server_protocol::{
     AgentInput, AgentSessionReadParams, AgentSessionTurnStartParams, AgentTurnStatus,
+    ConversationImportSourceStatus,
 };
 use rusqlite::{params, Connection};
 use std::fs;
@@ -266,6 +267,15 @@ INSERT INTO threads (
     )
     .expect("commit");
 
+    assert!(
+        backend
+            .requests
+            .lock()
+            .expect("requests mutex poisoned")
+            .is_empty(),
+        "importing persisted history must not replay provider or tool execution",
+    );
+
     let read = core
         .read_session(AgentSessionReadParams {
             session_id: response.session.session_id.clone(),
@@ -305,6 +315,7 @@ INSERT INTO threads (
     .expect("continue turn");
 
     let requests = backend.requests.lock().expect("requests mutex poisoned");
+    assert_eq!(requests.len(), 1, "only the live continuation may execute");
     let request = requests.last().expect("recorded request");
     assert_eq!(request.provider_preference(), None);
     assert_eq!(request.model_preference(), None);

@@ -45,7 +45,11 @@ pub fn agent_control_tool_definitions() -> Vec<RuntimeToolDefinition> {
                 "additionalProperties": false,
                 "properties": {
                     "task_name": { "type": "string" },
-                    "message": { "type": "string" }
+                    "message": { "type": "string" },
+                    "fork_turns": {
+                        "type": "string",
+                        "description": "Optional number of turns to fork. Defaults to `all`. Use `none`, `all`, or a positive integer string such as `3`."
+                    }
                 },
                 "required": ["task_name", "message"]
             }),
@@ -122,13 +126,36 @@ pub struct AgentControlCaller {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SpawnAgentForkMode {
+    None,
+    FullHistory,
+    LastNTurns(usize),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AgentControlCommand {
-    SpawnAgent { task_name: String, message: String },
-    SendMessage { target: String, message: String },
-    FollowupTask { target: String, message: String },
-    WaitAgent { timeout_ms: u64 },
-    InterruptAgent { target: String },
-    ListAgents { path_prefix: Option<String> },
+    SpawnAgent {
+        task_name: String,
+        message: String,
+        fork_mode: SpawnAgentForkMode,
+    },
+    SendMessage {
+        target: String,
+        message: String,
+    },
+    FollowupTask {
+        target: String,
+        message: String,
+    },
+    WaitAgent {
+        timeout_ms: u64,
+    },
+    InterruptAgent {
+        target: String,
+    },
+    ListAgents {
+        path_prefix: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -325,7 +352,38 @@ fn parse_spawn(params: &Value) -> Result<AgentControlCommand, RuntimeToolExecuti
     Ok(AgentControlCommand::SpawnAgent {
         task_name,
         message: required_nonempty(input.message, "message")?,
+        fork_mode: parse_spawn_fork_mode(input.fork_turns)?,
     })
+}
+
+fn parse_spawn_fork_mode(
+    fork_turns: Option<String>,
+) -> Result<SpawnAgentForkMode, RuntimeToolExecutionError> {
+    let fork_turns = fork_turns
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("all");
+    if fork_turns.eq_ignore_ascii_case("none") {
+        return Ok(SpawnAgentForkMode::None);
+    }
+    if fork_turns.eq_ignore_ascii_case("all") {
+        return Ok(SpawnAgentForkMode::FullHistory);
+    }
+    let last_n_turns = fork_turns
+        .parse::<usize>()
+        .map_err(|_| invalid_spawn_fork_turns())?;
+    if last_n_turns == 0 {
+        return Err(invalid_spawn_fork_turns());
+    }
+    Ok(SpawnAgentForkMode::LastNTurns(last_n_turns))
+}
+
+fn invalid_spawn_fork_turns() -> RuntimeToolExecutionError {
+    agent_control_execution_error(
+        "fork_turns must be `none`, `all`, or a positive integer string",
+        "agent_control_invalid_params",
+    )
 }
 
 fn parse_message(params: &Value) -> Result<MessageInput, RuntimeToolExecutionError> {
@@ -402,6 +460,7 @@ fn agent_control_execution_error(
 struct SpawnAgentInput {
     task_name: String,
     message: String,
+    fork_turns: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -535,6 +594,7 @@ mod tests {
             AgentControlCommand::SpawnAgent {
                 task_name: "research".to_string(),
                 message: "inspect the plan".to_string(),
+                fork_mode: SpawnAgentForkMode::FullHistory,
             }
         );
         assert!(requests[0].cancel_token.is_none());
@@ -545,6 +605,82 @@ mod tests {
         )
         .await
         .is_none());
+    }
+
+    #[tokio::test]
+    async fn validates_codex_v2_spawn_fork_turns() {
+        let gateway = RecordingGateway::default();
+        let context = context();
+        for (value, expected) in [
+            ("none", SpawnAgentForkMode::None),
+            ("all", SpawnAgentForkMode::FullHistory),
+            ("3", SpawnAgentForkMode::LastNTurns(3)),
+            (" 2 ", SpawnAgentForkMode::LastNTurns(2)),
+            ("", SpawnAgentForkMode::FullHistory),
+        ] {
+            let params = json!({
+                "task_name": "research",
+                "message": "inspect the plan",
+                "fork_turns": value,
+            });
+            execute_agent_control_tool(
+                &gateway,
+                "thread-root",
+                request(SPAWN_AGENT_TOOL_NAME, &params, &context),
+            )
+            .await
+            .expect("current tool")
+            .expect("valid fork_turns");
+            let actual = gateway
+                .requests
+                .lock()
+                .expect("requests mutex poisoned")
+                .last()
+                .expect("gateway request")
+                .command
+                .clone();
+            assert_eq!(
+                actual,
+                AgentControlCommand::SpawnAgent {
+                    task_name: "research".to_string(),
+                    message: "inspect the plan".to_string(),
+                    fork_mode: expected,
+                }
+            );
+        }
+
+        for value in ["0", "banana", "-1"] {
+            let params = json!({
+                "task_name": "research",
+                "message": "inspect the plan",
+                "fork_turns": value,
+            });
+            let error = execute_agent_control_tool(
+                &gateway,
+                "thread-root",
+                request(SPAWN_AGENT_TOOL_NAME, &params, &context),
+            )
+            .await
+            .expect("current tool")
+            .expect_err("invalid fork_turns");
+            assert!(error
+                .message()
+                .contains("fork_turns must be `none`, `all`, or a positive integer string"));
+        }
+
+        let legacy = json!({
+            "task_name": "research",
+            "message": "inspect the plan",
+            "fork_context": true,
+        });
+        assert!(execute_agent_control_tool(
+            &gateway,
+            "thread-root",
+            request(SPAWN_AGENT_TOOL_NAME, &legacy, &context),
+        )
+        .await
+        .expect("current tool")
+        .is_err());
     }
 
     #[tokio::test]

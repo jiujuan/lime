@@ -129,6 +129,37 @@ describe("resolveWorkspaceSceneSessionProjection", () => {
     expect(projection.sceneIsSending).toBe(true);
   });
 
+  it("只有后续 turn 排队时不应把已完成会话保持为发送态", () => {
+    const projection = resolveWorkspaceSceneSessionProjection(
+      baseInput({
+        isSending: false,
+        threadRead: {
+          status: "running",
+          active_turn_id: null,
+          pending_requests: [],
+          queued_turns: [
+            {
+              turn_id: "turn-queued",
+              status: "queued",
+            },
+          ],
+          turns: [
+            {
+              turn_id: "turn-completed",
+              status: "completed",
+            },
+            {
+              turn_id: "turn-queued",
+              status: "queued",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(projection.sceneIsSending).toBe(false);
+  });
+
   it("意外退出遗留的陈旧 running turn 不应永久锁住输入框", () => {
     const projection = resolveWorkspaceSceneSessionProjection(
       baseInput({
@@ -152,7 +183,7 @@ describe("resolveWorkspaceSceneSessionProjection", () => {
     expect(projection.sceneIsSending).toBe(false);
   });
 
-  it("当前 read model 的运行中 turn 也应保持场景发送态", () => {
+  it("缺少 active_turn_id 时不应从兼容 running turn 推断场景发送态", () => {
     const projection = resolveWorkspaceSceneSessionProjection(
       baseInput({
         isSending: false,
@@ -166,7 +197,7 @@ describe("resolveWorkspaceSceneSessionProjection", () => {
       }),
     );
 
-    expect(projection.sceneIsSending).toBe(true);
+    expect(projection.sceneIsSending).toBe(false);
   });
 
   it("陈旧 running 状态指向已完成 active turn 时不应永久锁住输入框", () => {

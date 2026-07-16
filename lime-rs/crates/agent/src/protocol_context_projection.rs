@@ -292,7 +292,7 @@ fn build_team_memory_ref_from_object(
         updated_at: read_object_i64(object, &["updated_at", "updatedAt"]),
         priority: read_object_u32(object, &["priority"]).or_else(|| u32::try_from(index).ok()),
         source: read_object_string(object, &["source"])
-            .or_else(|| Some("team_memory_shadow".to_string())),
+            .or_else(|| Some("context".to_string())),
     })
 }
 
@@ -302,15 +302,6 @@ fn extract_agentui_context_object(
     metadata_object(metadata, &["agentui_context", "agentUiContext"]).or_else(|| {
         metadata_object(metadata, &["harness"])
             .and_then(|harness| nested_object(harness, &["agentui_context", "agentUiContext"]))
-    })
-}
-
-fn extract_team_memory_shadow_object(
-    metadata: &HashMap<String, serde_json::Value>,
-) -> Option<&serde_json::Map<String, serde_json::Value>> {
-    metadata_object(metadata, &["team_memory_shadow", "teamMemoryShadow"]).or_else(|| {
-        metadata_object(metadata, &["harness"])
-            .and_then(|harness| nested_object(harness, &["team_memory_shadow", "teamMemoryShadow"]))
     })
 }
 
@@ -377,19 +368,6 @@ pub(crate) fn project_turn_context_summary_with_active_context_tokens(
                     value
                         .as_object()
                         .and_then(|object| build_team_memory_ref_from_object(object, None, index))
-                }));
-        }
-    }
-
-    if let Some(shadow) = extract_team_memory_shadow_object(metadata) {
-        let repo_scope = read_object_string(shadow, &["repo_scope", "repoScope"]);
-        if let Some(entries) = nested_array(shadow, &["entries"]) {
-            summary
-                .team_memory_refs
-                .extend(entries.iter().enumerate().filter_map(|(index, value)| {
-                    value.as_object().and_then(|object| {
-                        build_team_memory_ref_from_object(object, repo_scope.clone(), index)
-                    })
                 }));
         }
     }

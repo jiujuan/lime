@@ -25,8 +25,9 @@ use tool_runtime::execution_process::{
     ExecutionProcessStatus as RuntimeExecutionProcessStatus, LiveExecutionProcessRegistry,
     LocalExecutionProcessControlHandle, LocalExecutionRequest,
 };
+use tool_runtime::sandbox::{prepare_sandbox_command, SandboxCommandRequest};
 use tool_runtime::shell::{is_shell_tool_name, shell_command_text_from_argv};
-use tool_runtime::shell_permission::check_shell_command_permission;
+use tool_runtime::shell_permission::{check_shell_command_permission, ShellPermissionDecision};
 
 const DEFAULT_DRAIN_LIMIT: usize = 128;
 const MAX_DRAIN_LIMIT: usize = 1024;
@@ -59,14 +60,16 @@ pub enum ExecutionProcessError {
     ProcessExists(String),
     #[error("Execution process not found: {0}")]
     ProcessNotFound(String),
+    #[error("Execution process working directory is invalid: {0}")]
+    WorkingDirectory(String),
     #[error("Failed to start execution process: {0}")]
     Start(String),
     #[error("Execution process rejected by policy: {0}")]
     Policy(String),
     #[error("Execution process only supports shell tools")]
     UnsupportedTool,
-    #[error("Execution process requires sandbox backend and must use the sandbox executor")]
-    SandboxRequired,
+    #[error("Failed to prepare sandboxed execution process: {0}")]
+    Sandbox(String),
     #[error("Failed to control execution process: {0}")]
     Control(String),
     #[error("Execution process state is unavailable")]
@@ -144,7 +147,20 @@ impl ExecutionProcessServer {
         if params.command.is_empty() {
             return Err(ExecutionProcessError::EmptyCommand);
         }
-        let working_directory = PathBuf::from(params.working_directory.clone());
+        let requested_working_directory = PathBuf::from(&params.working_directory);
+        let working_directory =
+            std::fs::canonicalize(&requested_working_directory).map_err(|error| {
+                ExecutionProcessError::WorkingDirectory(format!(
+                    "{}: {error}",
+                    requested_working_directory.display()
+                ))
+            })?;
+        if !working_directory.is_dir() {
+            return Err(ExecutionProcessError::WorkingDirectory(format!(
+                "{} is not a directory",
+                working_directory.display()
+            )));
+        }
         let canonical_tool_name = canonical_shell_tool_name(&params.tool_name)
             .ok_or(ExecutionProcessError::UnsupportedTool)?;
         let command_text = shell_command_text_from_argv(&params.command);
@@ -176,13 +192,12 @@ impl ExecutionProcessServer {
                 )));
             }
         }
-        if decision.requires_sandboxed_execution() {
-            return Err(ExecutionProcessError::SandboxRequired);
-        }
         validate_shell_execution_process_command(
             canonical_tool_name,
             &command_text,
             &working_directory,
+            params.approval_policy.as_deref(),
+            params.sandbox_policy.as_deref(),
         )
         .map_err(ExecutionProcessError::Policy)?;
 
@@ -193,13 +208,29 @@ impl ExecutionProcessServer {
             }
         }
 
+        let command = if decision.workspace_sandbox_backend_enforced() {
+            prepare_sandbox_command(SandboxCommandRequest {
+                backend: decision.sandbox_backend().ok_or_else(|| {
+                    ExecutionProcessError::Sandbox(
+                        "execution decision did not identify a sandbox backend".to_string(),
+                    )
+                })?,
+                requested_policy: params.sandbox_policy.as_deref(),
+                command: params.command,
+                working_directory: &working_directory,
+            })
+            .map_err(|error| ExecutionProcessError::Sandbox(error.to_string()))?
+        } else {
+            params.command
+        };
         let request = LocalExecutionRequest {
             process_id: params.process_id.clone(),
             tool_id: params.tool_id,
             tool_name: canonical_tool_name.to_string(),
-            command: params.command,
+            command,
             cwd: Some(working_directory),
             env: params.env,
+            tty: params.tty,
         };
         let mut handle = start_local_execution_process(request)
             .map_err(|error| ExecutionProcessError::Start(error.to_string()))?;
@@ -396,13 +427,7 @@ impl LiveExecutionProcessRegistry for ExecutionProcessServer {
 }
 
 fn canonical_shell_tool_name(tool_name: &str) -> Option<&'static str> {
-    if !is_shell_tool_name(tool_name) {
-        return None;
-    }
-    if normalized_tool_name(tool_name).contains("powershell") {
-        return Some("PowerShell");
-    }
-    Some("Bash")
+    is_shell_tool_name(tool_name).then_some(tool_runtime::unified_exec::EXEC_COMMAND_TOOL_NAME)
 }
 
 fn app_server_tool_execution_policy_options() -> ToolExecutionPolicyDecisionOptions {
@@ -431,9 +456,21 @@ fn validate_shell_execution_process_command(
     tool_name: &str,
     command_text: &str,
     working_directory: &PathBuf,
+    approval_policy: Option<&str>,
+    sandbox_policy: Option<&str>,
 ) -> Result<(), String> {
-    check_shell_command_permission(tool_name, command_text, working_directory)
-        .into_result_without_confirmation()
+    match check_shell_command_permission(tool_name, command_text, working_directory) {
+        ShellPermissionDecision::Allow => Ok(()),
+        ShellPermissionDecision::Deny(reason) => Err(reason),
+        ShellPermissionDecision::RequiresConfirmation(message)
+            if approval_policy.is_some_and(|policy| policy.eq_ignore_ascii_case("never"))
+                || sandbox_policy
+                    .is_some_and(|policy| policy.eq_ignore_ascii_case("danger-full-access")) =>
+        {
+            Ok(())
+        }
+        ShellPermissionDecision::RequiresConfirmation(message) => Err(message),
+    }
 }
 
 fn normalized_tool_name(tool_name: &str) -> String {
@@ -505,275 +542,5 @@ fn map_output_kind(kind: RuntimeExecutionOutputKind) -> ExecutionProcessOutputKi
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn execution_process_server_streams_output_and_status() {
-        let server = ExecutionProcessServer::default();
-        let response = server
-            .start_process(ExecutionProcessStartParams {
-                process_id: "process-test".to_string(),
-                tool_id: "tool-test".to_string(),
-                tool_name: "Bash".to_string(),
-                command: vec![
-                    "sh".to_string(),
-                    "-c".to_string(),
-                    "printf hello".to_string(),
-                ],
-                working_directory: std::env::current_dir()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-                approval_policy: Some("never".to_string()),
-                sandbox_policy: Some("danger-full-access".to_string()),
-                runtime_metadata: None,
-                cwd: None,
-                env: HashMap::new(),
-            })
-            .await
-            .expect("process should start");
-        assert_eq!(response.snapshot.status, ExecutionProcessStatus::Running);
-
-        let mut output = ExecutionProcessDrainOutputResponse {
-            deltas: Vec::new(),
-            next_sequence: None,
-        };
-        for _ in 0..20 {
-            let next = server
-                .drain_output(ExecutionProcessDrainOutputParams {
-                    process_id: Some("process-test".to_string()),
-                    after_sequence: None,
-                    limit: None,
-                    max_bytes: None,
-                })
-                .expect("output should drain");
-            output.deltas.extend(next.deltas);
-            if output
-                .deltas
-                .iter()
-                .any(|delta| delta.delta.contains("hello"))
-            {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-        }
-        assert!(output
-            .deltas
-            .iter()
-            .any(|delta| delta.delta.contains("hello")));
-
-        let status = server
-            .status(ExecutionProcessIdParams {
-                process_id: "process-test".to_string(),
-            })
-            .expect("status should read");
-        assert_eq!(status.snapshot.status, ExecutionProcessStatus::Exited);
-    }
-
-    #[tokio::test]
-    async fn execution_process_output_replays_until_cursor_advances() {
-        let server = ExecutionProcessServer::default();
-        server
-            .start_process(ExecutionProcessStartParams {
-                process_id: "process-replay".to_string(),
-                tool_id: "tool-replay".to_string(),
-                tool_name: "Bash".to_string(),
-                command: vec![
-                    "sh".to_string(),
-                    "-c".to_string(),
-                    "printf replay".to_string(),
-                ],
-                working_directory: std::env::current_dir()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-                approval_policy: Some("never".to_string()),
-                sandbox_policy: Some("danger-full-access".to_string()),
-                runtime_metadata: None,
-                cwd: None,
-                env: HashMap::new(),
-            })
-            .await
-            .expect("process should start");
-
-        let mut first = ExecutionProcessDrainOutputResponse {
-            deltas: Vec::new(),
-            next_sequence: None,
-        };
-        for _ in 0..20 {
-            first = server
-                .drain_output(ExecutionProcessDrainOutputParams {
-                    process_id: Some("process-replay".to_string()),
-                    after_sequence: None,
-                    limit: None,
-                    max_bytes: None,
-                })
-                .expect("output should replay");
-            if first
-                .deltas
-                .iter()
-                .any(|delta| delta.delta.contains("replay"))
-            {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-        }
-        assert!(first
-            .deltas
-            .iter()
-            .any(|delta| delta.delta.contains("replay")));
-        let cursor = first.next_sequence.expect("cursor should advance");
-
-        let repeated = server
-            .drain_output(ExecutionProcessDrainOutputParams {
-                process_id: Some("process-replay".to_string()),
-                after_sequence: None,
-                limit: None,
-                max_bytes: None,
-            })
-            .expect("output should remain replayable");
-        assert_eq!(repeated.deltas, first.deltas);
-
-        let after_cursor = server
-            .drain_output(ExecutionProcessDrainOutputParams {
-                process_id: Some("process-replay".to_string()),
-                after_sequence: Some(cursor),
-                limit: None,
-                max_bytes: None,
-            })
-            .expect("cursor read should succeed");
-        assert!(after_cursor.deltas.is_empty());
-        assert_eq!(after_cursor.next_sequence, Some(cursor));
-    }
-
-    #[tokio::test]
-    async fn execution_process_server_tracks_registered_live_process() {
-        let server = ExecutionProcessServer::default();
-        let mut handle = start_local_execution_process(LocalExecutionRequest {
-            process_id: "process-registered".to_string(),
-            tool_id: "tool-registered".to_string(),
-            tool_name: "Bash".to_string(),
-            command: shell_output_command("registered-output"),
-            cwd: Some(std::env::current_dir().unwrap_or_default()),
-            env: HashMap::new(),
-        })
-        .expect("local process should start");
-
-        server
-            .register_live_process(handle.control_handle(), handle.status())
-            .expect("registered process should attach");
-        let running = server
-            .status(ExecutionProcessIdParams {
-                process_id: "process-registered".to_string(),
-            })
-            .expect("registered status should read");
-        assert_eq!(running.snapshot.status, ExecutionProcessStatus::Running);
-
-        let mut saw_output = false;
-        while let Some(delta) = handle.recv_output().await {
-            saw_output |= delta.delta.contains("registered-output");
-            server
-                .record_live_process_output(delta)
-                .expect("registered output should record");
-        }
-        assert!(saw_output);
-
-        let final_snapshot = handle.wait().await.expect("process should finish");
-        server
-            .finish_live_process(final_snapshot)
-            .expect("registered process should finish");
-        let output = server
-            .drain_output(ExecutionProcessDrainOutputParams {
-                process_id: Some("process-registered".to_string()),
-                after_sequence: None,
-                limit: None,
-                max_bytes: None,
-            })
-            .expect("registered output should drain");
-        assert!(output
-            .deltas
-            .iter()
-            .any(|delta| delta.delta.contains("registered-output")));
-
-        let status = server
-            .status(ExecutionProcessIdParams {
-                process_id: "process-registered".to_string(),
-            })
-            .expect("final registered status should read");
-        assert_eq!(status.snapshot.status, ExecutionProcessStatus::Exited);
-        assert_eq!(status.snapshot.exit_code, Some(0));
-    }
-
-    #[tokio::test]
-    async fn execution_process_server_rejects_dangerous_shell_command() {
-        let server = ExecutionProcessServer::default();
-        let error = server
-            .start_process(ExecutionProcessStartParams {
-                process_id: "process-danger".to_string(),
-                tool_id: "tool-danger".to_string(),
-                tool_name: "Bash".to_string(),
-                command: vec!["sh".to_string(), "-c".to_string(), "rm -rf /".to_string()],
-                working_directory: std::env::current_dir()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-                approval_policy: Some("never".to_string()),
-                sandbox_policy: Some("danger-full-access".to_string()),
-                runtime_metadata: None,
-                cwd: None,
-                env: HashMap::new(),
-            })
-            .await
-            .expect_err("dangerous command should be rejected");
-
-        assert!(matches!(error, ExecutionProcessError::Policy(_)));
-    }
-
-    #[tokio::test]
-    async fn execution_process_server_rejects_workspace_sandbox_process() {
-        let server = ExecutionProcessServer::default();
-        let error = server
-            .start_process(ExecutionProcessStartParams {
-                process_id: "process-sandbox".to_string(),
-                tool_id: "tool-sandbox".to_string(),
-                tool_name: "Bash".to_string(),
-                command: vec![
-                    "sh".to_string(),
-                    "-c".to_string(),
-                    "printf blocked".to_string(),
-                ],
-                working_directory: std::env::current_dir()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-                approval_policy: Some("never".to_string()),
-                sandbox_policy: Some("workspace-write".to_string()),
-                runtime_metadata: None,
-                cwd: None,
-                env: HashMap::new(),
-            })
-            .await
-            .expect_err("workspace sandbox command should not use bare process");
-
-        assert!(matches!(error, ExecutionProcessError::SandboxRequired));
-    }
-
-    fn shell_output_command(output: &str) -> Vec<String> {
-        if cfg!(windows) {
-            vec![
-                "cmd".to_string(),
-                "/D".to_string(),
-                "/S".to_string(),
-                "/C".to_string(),
-                format!("echo {output}"),
-            ]
-        } else {
-            vec![
-                "sh".to_string(),
-                "-c".to_string(),
-                format!("printf {output}"),
-            ]
-        }
-    }
-}
+#[path = "execution_process/tests.rs"]
+mod tests;

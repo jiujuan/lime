@@ -9,6 +9,13 @@ describe("AgentChatWorkspace persistence runtime boundary", () => {
       join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
       "utf8",
     );
+    const commandWiringSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
+      ),
+      "utf8",
+    );
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -17,7 +24,9 @@ describe("AgentChatWorkspace persistence runtime boundary", () => {
       "utf8",
     );
 
-    expect(workspaceSource).toContain("useWorkspacePersistenceRuntime({");
+    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
+    expect(workspaceSource).not.toContain("useWorkspacePersistenceRuntime({");
+    expect(commandWiringSource).toContain("useWorkspacePersistenceRuntime({");
     expect(ownerSource.split("\n").length).toBeLessThan(140);
     for (const retiredWorkspacePersistenceGlue of [
       "useSessionFiles(",

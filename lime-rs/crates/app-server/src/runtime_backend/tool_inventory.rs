@@ -452,7 +452,7 @@ mod tests {
                 "agent": {
                     "toolExecution": {
                         "toolOverrides": {
-                            "bash": {
+                            "exec_command": {
                                 "warningPolicy": "none",
                                 "sandboxProfile": "none"
                             }
@@ -464,25 +464,25 @@ mod tests {
         .await;
 
         assert_eq!(
-            catalog_tool(&inventory, "Bash")
+            catalog_tool(&inventory, "exec_command")
                 .get("execution_warning_policy")
                 .and_then(Value::as_str),
             Some("none")
         );
         assert_eq!(
-            catalog_tool(&inventory, "Bash")
+            catalog_tool(&inventory, "exec_command")
                 .get("execution_warning_policy_source")
                 .and_then(Value::as_str),
             Some("persisted")
         );
         assert_eq!(
-            catalog_tool(&inventory, "Bash")
+            catalog_tool(&inventory, "exec_command")
                 .get("execution_sandbox_profile")
                 .and_then(Value::as_str),
             Some("none")
         );
         assert_eq!(
-            catalog_tool(&inventory, "Bash")
+            catalog_tool(&inventory, "exec_command")
                 .get("execution_sandbox_profile_source")
                 .and_then(Value::as_str),
             Some("persisted")
@@ -496,7 +496,7 @@ mod tests {
                 "harness": {
                     "executionPolicy": {
                         "toolOverrides": {
-                            "bash": {
+                            "exec_command": {
                                 "warningPolicy": "shell_command_risk",
                                 "sandboxProfile": "workspace_command"
                             }
@@ -508,7 +508,7 @@ mod tests {
                 "agent": {
                     "toolExecution": {
                         "toolOverrides": {
-                            "bash": {
+                            "exec_command": {
                                 "warningPolicy": "none",
                                 "sandboxProfile": "none"
                             }
@@ -520,25 +520,25 @@ mod tests {
         .await;
 
         assert_eq!(
-            catalog_tool(&inventory, "Bash")
+            catalog_tool(&inventory, "exec_command")
                 .get("execution_warning_policy")
                 .and_then(Value::as_str),
             Some("shell_command_risk")
         );
         assert_eq!(
-            catalog_tool(&inventory, "Bash")
+            catalog_tool(&inventory, "exec_command")
                 .get("execution_warning_policy_source")
                 .and_then(Value::as_str),
             Some("runtime")
         );
         assert_eq!(
-            catalog_tool(&inventory, "Bash")
+            catalog_tool(&inventory, "exec_command")
                 .get("execution_sandbox_profile")
                 .and_then(Value::as_str),
             Some("workspace_command")
         );
         assert_eq!(
-            catalog_tool(&inventory, "Bash")
+            catalog_tool(&inventory, "exec_command")
                 .get("execution_sandbox_profile_source")
                 .and_then(Value::as_str),
             Some("runtime")

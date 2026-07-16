@@ -322,7 +322,7 @@ mod tests {
         let result = execute_runtime_gateway_dispatch_tool(
             &registry,
             RuntimeGatewayDispatchToolRequest {
-                tool_name: "Bash",
+                tool_name: "exec_command",
                 params: &json!({ "command": "echo hi" }),
                 working_directory: PathBuf::from("."),
                 session_id: "session-gateway-3".to_string(),

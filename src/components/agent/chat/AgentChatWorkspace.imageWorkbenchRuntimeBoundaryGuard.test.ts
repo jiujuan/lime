@@ -9,6 +9,13 @@ describe("AgentChatWorkspace image workbench runtime boundary", () => {
       join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
       "utf8",
     );
+    const commandWiringSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
+      ),
+      "utf8",
+    );
     const sendSurfaceSource = readFileSync(
       join(
         process.cwd(),
@@ -24,8 +31,10 @@ describe("AgentChatWorkspace image workbench runtime boundary", () => {
       "utf8",
     );
 
-    expect(workspaceSource).toContain("useWorkspaceSendSurfaceRuntime({");
+    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
+    expect(workspaceSource).not.toContain("useWorkspaceSendSurfaceRuntime({");
     expect(workspaceSource).not.toContain("useWorkspaceImageWorkbenchRuntime(");
+    expect(commandWiringSource).toContain("useWorkspaceSendSurfaceRuntime({");
     expect(sendSurfaceSource).toContain("useWorkspaceImageWorkbenchRuntime(");
     expect(ownerSource.split("\n").length).toBeLessThan(160);
     for (const retiredWorkspaceImageWorkbenchGlue of [

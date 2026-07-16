@@ -68,7 +68,7 @@ export interface SessionRecentMetadataSyncOptions {
 
 export type SessionRecentMetadataPatch = Pick<
   AgentRuntimeUpdateSessionRequest,
-  "recent_preferences" | "recent_team_selection"
+  "recent_preferences"
 >;
 
 export interface PendingSessionRecentMetadataSync {

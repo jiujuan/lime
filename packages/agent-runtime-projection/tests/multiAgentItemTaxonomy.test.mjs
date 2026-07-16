@@ -1,10 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  buildCodexMultiAgentItemTaxonomyProjectionEvent,
-  extractCodexMultiAgentItemTaxonomySnapshot,
-} from "../dist/index.js";
+import { extractCodexMultiAgentItemTaxonomySnapshot } from "../dist/index.js";
 
 const EXPECTED_TOOLS = [
   "spawn_agent",
@@ -66,61 +63,15 @@ function baseInput(overrides = {}) {
 }
 
 test("multi-agent item taxonomy covers Codex v2 team tools as structured items", () => {
-  const event = buildCodexMultiAgentItemTaxonomyProjectionEvent(baseInput(), {
-    sequence: 421,
-    sessionId: "session-root",
-    threadId: "thread-root",
-    turnId: "turn-root",
-    timestamp: "2026-07-09T00:00:00.000Z",
-  });
+  const snapshot = extractCodexMultiAgentItemTaxonomySnapshot(baseInput());
 
+  assert.deepEqual(snapshot.validationIssues, []);
+  assert.equal(snapshot.toolsCovered, true);
+  assert.equal(snapshot.statusesCovered, true);
+  assert.equal(snapshot.parentThreadBound, true);
+  assert.equal(snapshot.surfacesBoundToItems, true);
   assert.deepEqual(
-    {
-      type: event.type,
-      sourceType: event.sourceType,
-      sequence: event.sequence,
-      sessionId: event.sessionId,
-      threadId: event.threadId,
-      turnId: event.turnId,
-      owner: event.owner,
-      scope: event.scope,
-      phase: event.phase,
-      surface: event.surface,
-      persistence: event.persistence,
-      control: event.control,
-      topology: event.topology,
-      runtimeEntity: event.runtimeEntity,
-      runtimeStatus: event.runtimeStatus,
-    },
-    {
-      type: "team.changed",
-      sourceType: "multi_agent_item_taxonomy_projection",
-      sequence: 421,
-      sessionId: "session-root",
-      threadId: "thread-root",
-      turnId: "turn-root",
-      owner: "team",
-      scope: "team",
-      phase: "completed",
-      surface: "delegation_graph",
-      persistence: "snapshot",
-      control: "open_detail",
-      topology: "coordinator_team",
-      runtimeEntity: "work_item",
-      runtimeStatus: "completed",
-    },
-  );
-
-  assert.deepEqual(event.payload.validationIssues, []);
-  assert.equal(event.payload.toolsCovered, true);
-  assert.equal(event.payload.statusesCovered, true);
-  assert.equal(event.payload.parentThreadBound, true);
-  assert.equal(event.payload.surfacesBoundToItems, true);
-  assert.deepEqual(
-    event.payload.multiAgentItemTaxonomy.items.map((entry) => [
-      entry.toolName,
-      entry.status,
-    ]),
+    snapshot.items.map((entry) => [entry.toolName, entry.status]),
     [
       ["spawn_agent", "completed"],
       ["send_message", "running"],

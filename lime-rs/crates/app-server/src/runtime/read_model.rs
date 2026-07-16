@@ -119,7 +119,7 @@ fn runtime_session_read_detail_with_item_source(
             article_workspace,
             &article_workspace_actions,
         );
-    let thread_read = runtime_thread_read_from_stored_session_with_usage_events(
+    let mut thread_read = runtime_thread_read_from_stored_session_with_usage_events(
         stored,
         article_workspace.clone(),
         article_workspace_actions.clone(),
@@ -143,6 +143,9 @@ fn runtime_session_read_detail_with_item_source(
         },
         |items| items.to_vec(),
     );
+    if canonical_items.is_some() {
+        apply_canonical_item_views(&mut thread_read, &items);
+    }
     let thread_items = items.clone();
     let loaded_count = messages.len();
     let oldest_message_id = messages.first().and_then(messages::message_numeric_id);
@@ -253,6 +256,15 @@ fn canonical_item_to_agent_detail(item: &ThreadItem) -> serde_json::Value {
         );
     }
     detail.extend(payload);
+    if matches!(item.payload, ThreadItemPayload::Command { .. }) {
+        if let Some(command_id) = item
+            .metadata
+            .get("source_call_id")
+            .and_then(serde_json::Value::as_str)
+        {
+            detail.insert("command_id".to_string(), json!(command_id));
+        }
+    }
     serde_json::Value::Object(detail)
 }
 
@@ -331,10 +343,27 @@ fn canonical_payload_to_agent_detail(
             detail.insert("call_id".to_string(), json!(call_id));
             detail.insert("tool_name".to_string(), json!(name));
             detail.insert("arguments".to_string(), json!(arguments));
+            let is_web_search = is_canonical_web_search_tool(name);
+            if is_web_search {
+                let query = canonical_tool_argument(arguments, "query")
+                    .map(str::to_string)
+                    .or_else(|| canonical_web_search_action_field(arguments, "query"))
+                    .unwrap_or_default();
+                let action = canonical_web_search_action_field(arguments, "type")
+                    .or_else(|| canonical_tool_argument(arguments, "action").map(str::to_string))
+                    .filter(|value| !value.trim_start().starts_with('{'))
+                    .unwrap_or_else(|| "search_query".to_string());
+                detail.insert("query".to_string(), json!(query));
+                detail.insert("action".to_string(), json!(action));
+            }
             if let Some(output) = output {
                 insert_tool_output(&mut detail, output);
             }
-            "tool_call"
+            if is_web_search {
+                "web_search"
+            } else {
+                "tool_call"
+            }
         }
         ThreadItemPayload::McpToolCall {
             call_id,
@@ -501,6 +530,230 @@ fn insert_tool_output(
     detail.insert("truncated".to_string(), json!(output.truncated));
     if let Some(output_ref) = output.output_ref.as_ref() {
         detail.insert("output_ref".to_string(), json!(output_ref));
+    }
+}
+
+fn is_canonical_web_search_tool(name: &str) -> bool {
+    matches!(
+        name.trim(),
+        "web_search" | "webSearch" | "search_query" | "WebSearch" | "WebSearchTool"
+    )
+}
+
+fn canonical_tool_argument<'a>(
+    arguments: &'a [agent_protocol::ToolArgument],
+    name: &str,
+) -> Option<&'a str> {
+    arguments
+        .iter()
+        .find(|argument| argument.name == name)
+        .map(|argument| argument.value.as_str())
+}
+
+fn canonical_web_search_action_field(
+    arguments: &[agent_protocol::ToolArgument],
+    field: &str,
+) -> Option<String> {
+    let action = canonical_tool_argument(arguments, "action")?;
+    let action = serde_json::from_str::<serde_json::Value>(action).ok()?;
+    action
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn apply_canonical_item_views(thread_read: &mut serde_json::Value, items: &[serde_json::Value]) {
+    let Some(thread_read) = thread_read.as_object_mut() else {
+        return;
+    };
+    let canonical_commands = items
+        .iter()
+        .filter(|item| {
+            item.get("type").and_then(serde_json::Value::as_str) == Some("command_execution")
+        })
+        .map(canonical_command_view)
+        .collect::<Vec<_>>();
+    let canonical_tool_calls = items
+        .iter()
+        .filter(|item| item.get("type").and_then(serde_json::Value::as_str) == Some("tool_call"))
+        .map(canonical_tool_call_view)
+        .collect::<Vec<_>>();
+    let commands = merge_projection_views(
+        canonical_commands,
+        thread_read.get("commands"),
+        same_command_projection,
+    );
+    let tool_calls = merge_projection_views(
+        canonical_tool_calls,
+        thread_read.get("tool_calls"),
+        same_tool_call_projection,
+    );
+    let active_command_id = commands
+        .iter()
+        .rev()
+        .find(|command| {
+            command.get("status").and_then(serde_json::Value::as_str) == Some("running")
+        })
+        .and_then(|command| command.get("command_id"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    thread_read.insert("active_command_id".to_string(), active_command_id);
+    thread_read.insert(
+        "commands".to_string(),
+        serde_json::Value::Array(commands.clone()),
+    );
+    thread_read.insert(
+        "tool_calls".to_string(),
+        serde_json::Value::Array(tool_calls),
+    );
+    if let Some(diagnostics) = thread_read
+        .get_mut("diagnostics")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        diagnostics.insert("command_count".to_string(), json!(commands.len()));
+    }
+}
+
+fn merge_projection_views(
+    canonical: Vec<serde_json::Value>,
+    current: Option<&serde_json::Value>,
+    same_identity: fn(&serde_json::Value, &serde_json::Value) -> bool,
+) -> Vec<serde_json::Value> {
+    let mut current = current
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut merged = Vec::with_capacity(canonical.len().max(current.len()));
+
+    for mut canonical_view in canonical {
+        let Some(index) = current
+            .iter()
+            .position(|current_view| same_identity(&canonical_view, current_view))
+        else {
+            merged.push(canonical_view);
+            continue;
+        };
+        let current_view = current.remove(index);
+        if let (Some(canonical), Some(current)) =
+            (canonical_view.as_object_mut(), current_view.as_object())
+        {
+            canonical.extend(current.clone());
+        }
+        merged.push(canonical_view);
+    }
+    merged.extend(current);
+    merged
+}
+
+fn same_command_projection(left: &serde_json::Value, right: &serde_json::Value) -> bool {
+    same_non_empty_string(left, right, &["command_id"])
+        || (same_non_empty_string(left, right, &["turn_id"])
+            && same_non_empty_string(
+                left,
+                right,
+                &["command", "canonical_command", "command_summary"],
+            ))
+}
+
+fn same_tool_call_projection(left: &serde_json::Value, right: &serde_json::Value) -> bool {
+    same_non_empty_string(left, right, &["tool_call_id", "id"])
+}
+
+fn same_non_empty_string(
+    left: &serde_json::Value,
+    right: &serde_json::Value,
+    keys: &[&str],
+) -> bool {
+    let left = keys.iter().find_map(|key| {
+        left.get(*key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    });
+    let right = keys.iter().find_map(|key| {
+        right
+            .get(*key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    });
+    left.is_some() && left == right
+}
+
+fn canonical_command_view(item: &serde_json::Value) -> serde_json::Value {
+    let command_id = item
+        .pointer("/metadata/source_call_id")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| item.get("id").and_then(serde_json::Value::as_str))
+        .unwrap_or_default();
+    let command = item
+        .get("command")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    json!({
+        "command_id": command_id,
+        "turn_id": item.get("turn_id").cloned().unwrap_or(serde_json::Value::Null),
+        "status": canonical_view_status(item),
+        "command": command,
+        "canonical_command": command,
+        "command_summary": command,
+        "cwd": item.get("cwd").cloned().unwrap_or(serde_json::Value::Null),
+        "aggregated_output": item.get("aggregated_output").cloned().unwrap_or(serde_json::Value::Null),
+        "exit_code": item.get("exit_code").cloned().unwrap_or(serde_json::Value::Null),
+        "sequence": item.get("sequence").cloned().unwrap_or(serde_json::Value::Null),
+        "updated_at": item.get("updated_at").cloned().unwrap_or(serde_json::Value::Null),
+        "metadata": item.get("metadata").cloned().unwrap_or(serde_json::Value::Null),
+    })
+}
+
+fn canonical_tool_call_view(item: &serde_json::Value) -> serde_json::Value {
+    let call_id = item
+        .get("call_id")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| item.get("id").and_then(serde_json::Value::as_str))
+        .unwrap_or_default();
+    let mut view = serde_json::Map::from_iter([
+        ("id".to_string(), json!(call_id)),
+        ("tool_call_id".to_string(), json!(call_id)),
+        ("status".to_string(), json!(canonical_view_status(item))),
+        (
+            "turn_id".to_string(),
+            item.get("turn_id")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
+        ),
+        (
+            "timestamp".to_string(),
+            item.get("updated_at")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
+        ),
+    ]);
+    for key in [
+        "tool_name",
+        "arguments",
+        "structured_content",
+        "output",
+        "output_ref",
+        "duration_ms",
+        "error",
+        "metadata",
+    ] {
+        if let Some(value) = item.get(key).cloned() {
+            view.insert(key.to_string(), value);
+        }
+    }
+    serde_json::Value::Object(view)
+}
+
+fn canonical_view_status(item: &serde_json::Value) -> &str {
+    match item.get("status").and_then(serde_json::Value::as_str) {
+        Some("in_progress") => "running",
+        Some(status) => status,
+        None => "unknown",
     }
 }
 

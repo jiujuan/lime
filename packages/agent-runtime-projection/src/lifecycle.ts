@@ -13,13 +13,9 @@ import {
 } from "./normalization.js";
 import {
   buildTeamRuntimeFacts,
-  hasTeamRuntimeMetadata,
-  type AgentRuntimeStatusPhase,
   type AgentUiTeamRuntimeMetadata,
   normalizeRuntimePhaseFromRuntimeStatusPhase,
   normalizeRuntimeStatusFromRuntimePhase,
-  normalizeTeamRuntimePhase,
-  resolveTeamTopology,
 } from "./runtimeFacts.js";
 
 export interface AgentUiRunStartedProjectionInput {
@@ -60,14 +56,6 @@ export interface AgentUiRuntimeStatusProjectionInput {
   title?: string | null;
   detail?: string | null;
   checkpoints?: readonly unknown[] | null;
-  metadata?: AgentUiTeamRuntimeMetadata | null;
-}
-
-export interface AgentUiRuntimeTeamChangedProjectionInput {
-  sourceType?: AgentUiProjectionSourceType | string;
-  phase: AgentRuntimeStatusPhase;
-  title?: string | null;
-  detail?: string | null;
   metadata?: AgentUiTeamRuntimeMetadata | null;
 }
 
@@ -232,47 +220,6 @@ export function buildAgentUiRuntimeStatusEvent(
       checkpointCount: input.checkpoints?.length ?? 0,
       metadataKeys: metadataKeys(input.metadata),
       ...teamRuntimeFacts,
-    },
-  };
-}
-
-export function buildAgentUiRuntimeTeamChangedEvent(
-  input: AgentUiRuntimeTeamChangedProjectionInput,
-  context: AgentUiProjectionContext = {},
-): AgentUiProjectionEvent | null {
-  const metadata = input.metadata ?? undefined;
-  if (!hasTeamRuntimeMetadata(metadata)) {
-    return null;
-  }
-
-  const facts = compactProjectionFields(buildTeamRuntimeFacts(metadata));
-  const runtimeStatus = normalizeRuntimeStatusFromRuntimePhase(input.phase);
-
-  return {
-    ...buildAgentUiProjectionBase(
-      { sourceType: input.sourceType ?? "runtime_status" },
-      context,
-    ),
-    type: "team.changed",
-    owner: "team",
-    scope: "team",
-    phase: normalizeTeamRuntimePhase({
-      phase: input.phase,
-      metadata,
-    }),
-    surface: "team_roster",
-    persistence: "snapshot",
-    runtimeStatus,
-    latestTurnStatus: runtimeStatus,
-    topology: resolveTeamTopology(facts),
-    ...facts,
-    payload: {
-      teamEvent: "runtime_status_changed",
-      sourcePhase: input.phase,
-      title: definedString(input.title ?? undefined),
-      detailPreview: truncateText(input.detail),
-      concurrencyPhase: definedString(metadata?.concurrency_phase),
-      concurrencyScope: definedString(metadata?.concurrency_scope),
     },
   };
 }

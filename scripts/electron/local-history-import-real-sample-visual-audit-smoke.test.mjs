@@ -64,35 +64,12 @@ describe("local history import real sample visual audit smoke guard", () => {
 
     expect(content).toContain("openSessionFromSidebar");
     expect(content).toContain("inspectImportedConversationVisualState");
-    expect(content).toContain("inspectImportedRuntimeDetailDrilldown");
-    expect(content).toContain("readRuntimeEventsProbe");
-    expect(content).toContain(
+    expect(content).not.toContain("inspectImportedRuntimeDetailDrilldown");
+    expect(content).not.toContain("readRuntimeEventsProbe");
+    expect(content).not.toContain(
       '"conversationImport/thread/runtimeEvents/read"',
     );
-    expect(content).toContain(
-      '[data-testid="task-center-environment-trigger"]',
-    );
-    expect(content).toContain(
-      '[data-testid="task-center-environment-popover"]',
-    );
-    expect(content).toContain('[data-testid="imported-runtime-detail-toggle"]');
-    expect(content).toContain('[data-testid="imported-runtime-detail-panel"]');
-    expect(content).toContain('[data-testid="imported-runtime-detail-body"]');
-    expect(content).toContain('[data-testid="imported-runtime-detail-event"]');
-    expect(content).toContain('[data-testid="imported-runtime-detail-loading"]');
-    expect(content).toContain('[data-testid="imported-runtime-detail-error"]');
-    expect(content).toContain('[data-testid="imported-runtime-detail-empty"]');
-    expect(content).toContain("data-event-kind");
-    expect(content).toContain("runtimeDetailDrilldown");
-    expect(content).toContain("runtimeDetailDrilldownSnapshots");
-    expect(content).toContain("runtimeDetailFailure");
-    expect(content).toContain("panelTextPreview");
-    expect(content).toContain("bodyTextPreview");
-    expect(content).toContain("detailBodyTextPreview");
-    expect(content).toContain("toggleAriaExpanded");
-    expect(content).toContain("eventsContainerVisible");
-    expect(content).toContain("runtimeEventsProbe");
-    expect(content).toContain('page.keyboard.press("Escape")');
+    expect(content).not.toContain("imported-runtime-detail-");
     expect(content).toContain(
       'const SCROLL_POSITIONS = ["top", "middle", "bottom"]',
     );
@@ -105,7 +82,8 @@ describe("local history import real sample visual audit smoke guard", () => {
     expect(content).toContain("openSnapshot?.textareaSessionId");
     expect(content).toContain("inputbarVisible");
     expect(content).toContain("messageListVisible");
-    expect(content).toContain("hasCommandRecordVisible");
+    expect(content).toContain("hasCommandExecutionVisible");
+    expect(helper).toContain('[data-testid="tool-call-row"]');
     expect(content).toContain("hasPatchText");
     expect(content).toContain("hasSearchEvidence");
     expect(content).toContain("hasApprovalText");

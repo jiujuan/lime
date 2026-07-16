@@ -4,24 +4,24 @@ use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
 mod plan;
+mod rollout_event;
 #[cfg(test)]
 mod tests;
-mod tool_draft;
 
 use plan::{completed_plan_event, plan_final_from_response_item};
-use tool_draft::{
-    completed_turn_item_tool_event, imported_tool_started, imported_tool_terminal,
-    response_item_web_search_event, tool_finish_events_from_response_item,
-    tool_start_events_from_response_item,
+use rollout_event::{
+    completed_turn_item_tool_event, response_item_web_search_event,
+    tool_finish_events_from_response_item, tool_start_events_from_response_item, tool_started,
+    tool_terminal,
 };
-pub(in crate::runtime::conversation_import) use tool_draft::{
-    ImportedRuntimeEvent, ImportedToolDraft, ImportedToolPhase, ImportedToolSource,
+pub(in crate::runtime::conversation_import) use rollout_event::{
+    CodexRolloutEvent, CodexToolCall, CodexToolPhase, CodexToolSource,
 };
 
-pub(super) fn response_item_runtime_events(
+pub(super) fn response_item_rollout_events(
     payload: Option<&Value>,
     provenance: Option<&ConversationImportSourceProvenance>,
-) -> Vec<ImportedRuntimeEvent> {
+) -> Vec<CodexRolloutEvent> {
     let Some(payload) = payload else {
         return Vec::new();
     };
@@ -36,14 +36,14 @@ pub(super) fn response_item_runtime_events(
         Some("reasoning") => response_item_reasoning_event(payload).into_iter().collect(),
         _ => Vec::new(),
     };
-    apply_provenance_to_runtime_events(&mut events, provenance);
+    apply_provenance_to_rollout_events(&mut events, provenance);
     events
 }
 
-pub(super) fn event_msg_runtime_events(
+pub(super) fn event_msg_rollout_events(
     payload: Option<&Value>,
     provenance: Option<&ConversationImportSourceProvenance>,
-) -> Vec<ImportedRuntimeEvent> {
+) -> Vec<CodexRolloutEvent> {
     let Some(payload) = payload else {
         return Vec::new();
     };
@@ -88,7 +88,7 @@ pub(super) fn event_msg_runtime_events(
         Some("exec_approval_request") | Some("apply_patch_approval_request") => {
             vec![action_required_event(payload)]
         }
-        Some("turn_aborted") => vec![ImportedRuntimeEvent::new(
+        Some("turn_aborted") => vec![CodexRolloutEvent::new(
             "turn.canceled",
             compact_json(json!({
                 "reason": string_field(payload, &["reason"]),
@@ -98,12 +98,12 @@ pub(super) fn event_msg_runtime_events(
         )],
         _ => Vec::new(),
     };
-    apply_provenance_to_runtime_events(&mut events, provenance);
+    apply_provenance_to_rollout_events(&mut events, provenance);
     events
 }
 
-fn turn_complete_event(payload: &Value) -> ImportedRuntimeEvent {
-    ImportedRuntimeEvent::new(
+fn turn_complete_event(payload: &Value) -> CodexRolloutEvent {
+    CodexRolloutEvent::new(
         "turn.completed",
         compact_json(json!({
             "turnId": string_field(payload, &["turn_id", "turnId"]),
@@ -144,8 +144,8 @@ pub(super) fn enrich_source_provenance(
     provenance::enrich_source_provenance(provenance, source_thread_id, source_path)
 }
 
-fn apply_provenance_to_runtime_events(
-    events: &mut [ImportedRuntimeEvent],
+fn apply_provenance_to_rollout_events(
+    events: &mut [CodexRolloutEvent],
     provenance: Option<&ConversationImportSourceProvenance>,
 ) {
     let Some(provenance_value) = provenance.and_then(source_provenance_value) else {
@@ -156,7 +156,7 @@ fn apply_provenance_to_runtime_events(
     }
 }
 
-fn command_started_from_response_item(payload: &Value) -> ImportedRuntimeEvent {
+fn command_started_from_response_item(payload: &Value) -> CodexRolloutEvent {
     let arguments = parsed_arguments(payload);
     let command = arguments
         .as_ref()
@@ -164,7 +164,7 @@ fn command_started_from_response_item(payload: &Value) -> ImportedRuntimeEvent {
     let cwd = arguments
         .as_ref()
         .and_then(|value| string_field(value, &["workdir", "cwd"]));
-    ImportedRuntimeEvent::new(
+    CodexRolloutEvent::new(
         "command.started",
         compact_json(json!({
             "commandId": call_id(payload),
@@ -181,9 +181,9 @@ fn command_started_from_response_item(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn response_item_reasoning_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+fn response_item_reasoning_event(payload: &Value) -> Option<CodexRolloutEvent> {
     let text = reasoning_text(payload)?;
-    Some(ImportedRuntimeEvent::new(
+    Some(CodexRolloutEvent::new(
         "reasoning.completed",
         compact_json(json!({
             "text": text,
@@ -194,7 +194,7 @@ fn response_item_reasoning_event(payload: &Value) -> Option<ImportedRuntimeEvent
     ))
 }
 
-fn item_completed_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+fn item_completed_event(payload: &Value) -> Option<CodexRolloutEvent> {
     let item = payload.get("item")?;
     if !item
         .get("type")
@@ -206,10 +206,10 @@ fn item_completed_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
     completed_plan_event(item)
 }
 
-fn mcp_tool_call_begin_event(payload: &Value) -> ImportedRuntimeEvent {
+fn mcp_tool_call_begin_event(payload: &Value) -> CodexRolloutEvent {
     let invocation = payload.get("invocation").cloned();
     let tool_name = mcp_tool_name(invocation.as_ref());
-    imported_tool_started(
+    tool_started(
         call_id(payload),
         tool_name,
         invocation
@@ -227,12 +227,12 @@ fn mcp_tool_call_begin_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn mcp_tool_call_end_event(payload: &Value) -> ImportedRuntimeEvent {
+fn mcp_tool_call_end_event(payload: &Value) -> CodexRolloutEvent {
     let invocation = payload.get("invocation").cloned();
     let result = payload.get("result").cloned();
     let success = !mcp_result_is_error(result.as_ref());
     let tool_name = mcp_tool_name(invocation.as_ref());
-    imported_tool_terminal(
+    tool_terminal(
         call_id(payload),
         tool_name,
         invocation
@@ -254,9 +254,9 @@ fn mcp_tool_call_end_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn dynamic_tool_call_started_event(payload: &Value) -> ImportedRuntimeEvent {
+fn dynamic_tool_call_started_event(payload: &Value) -> CodexRolloutEvent {
     let tool_name = dynamic_tool_name(payload);
-    imported_tool_started(
+    tool_started(
         call_id(payload),
         tool_name,
         payload.get("arguments").cloned(),
@@ -269,14 +269,14 @@ fn dynamic_tool_call_started_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn dynamic_tool_call_finished_event(payload: &Value) -> ImportedRuntimeEvent {
+fn dynamic_tool_call_finished_event(payload: &Value) -> CodexRolloutEvent {
     let success = payload
         .get("success")
         .and_then(Value::as_bool)
         .unwrap_or(true);
     let tool_name = dynamic_tool_name(payload);
     let output = dynamic_tool_output(payload);
-    imported_tool_terminal(
+    tool_terminal(
         call_id(payload),
         tool_name,
         payload.get("arguments").cloned(),
@@ -295,10 +295,10 @@ fn dynamic_tool_call_finished_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn view_image_tool_call_event(payload: &Value) -> ImportedRuntimeEvent {
+fn view_image_tool_call_event(payload: &Value) -> CodexRolloutEvent {
     let path = string_field(payload, &["path"]);
     let output = path.as_ref().map(|path| format!("Viewed image: {path}"));
-    imported_tool_terminal(
+    tool_terminal(
         call_id(payload),
         Some("view_image".to_string()),
         path.as_ref().map(|path| json!({ "path": path })),
@@ -314,8 +314,8 @@ fn view_image_tool_call_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn image_generation_started_event(payload: &Value) -> ImportedRuntimeEvent {
-    imported_tool_started(
+fn image_generation_started_event(payload: &Value) -> CodexRolloutEvent {
+    tool_started(
         call_id(payload),
         Some("image_generation".to_string()),
         payload
@@ -330,7 +330,7 @@ fn image_generation_started_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn image_generation_finished_event(payload: &Value) -> ImportedRuntimeEvent {
+fn image_generation_finished_event(payload: &Value) -> CodexRolloutEvent {
     let status = string_field(payload, &["status"]).unwrap_or_else(|| "completed".to_string());
     let success = !matches!(
         status.as_str(),
@@ -339,7 +339,7 @@ fn image_generation_finished_event(payload: &Value) -> ImportedRuntimeEvent {
     let output = string_field(payload, &["result"])
         .or_else(|| string_field(payload, &["saved_path", "savedPath"]))
         .or_else(|| string_field(payload, &["revised_prompt", "revisedPrompt"]));
-    imported_tool_terminal(
+    tool_terminal(
         call_id(payload),
         Some("image_generation".to_string()),
         Some(json!({
@@ -358,11 +358,11 @@ fn image_generation_finished_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn web_search_end_event(payload: &Value) -> ImportedRuntimeEvent {
+fn web_search_end_event(payload: &Value) -> CodexRolloutEvent {
     let action = payload.get("action").cloned();
     let output = response_item_output(payload).or_else(|| action.as_ref().map(Value::to_string));
     let query = action.as_ref().and_then(web_search_action_query);
-    imported_tool_terminal(
+    tool_terminal(
         call_id(payload),
         Some("web_search".to_string()),
         action.as_ref().map(|action| {
@@ -386,7 +386,7 @@ fn web_search_end_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn patch_apply_end_event(payload: &Value) -> ImportedRuntimeEvent {
+fn patch_apply_end_event(payload: &Value) -> CodexRolloutEvent {
     let success = payload
         .get("success")
         .and_then(Value::as_bool)
@@ -402,7 +402,7 @@ fn patch_apply_end_event(payload: &Value) -> ImportedRuntimeEvent {
     } else {
         "patch.failed"
     };
-    ImportedRuntimeEvent::new(
+    CodexRolloutEvent::new(
         event_type,
         compact_json(json!({
             "patchId": call_id(payload),
@@ -421,9 +421,9 @@ fn patch_apply_end_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn patch_apply_begin_event(payload: &Value) -> ImportedRuntimeEvent {
+fn patch_apply_begin_event(payload: &Value) -> CodexRolloutEvent {
     let paths = changed_paths(payload);
-    ImportedRuntimeEvent::new(
+    CodexRolloutEvent::new(
         "patch.started",
         compact_json(json!({
             "patchId": call_id(payload),
@@ -437,7 +437,7 @@ fn patch_apply_begin_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn action_required_event(payload: &Value) -> ImportedRuntimeEvent {
+fn action_required_event(payload: &Value) -> CodexRolloutEvent {
     let request_id = call_id(payload)
         .or_else(|| string_field(payload, &["id", "request_id"]))
         .unwrap_or_else(|| "codex_import_approval".to_string());
@@ -449,7 +449,7 @@ fn action_required_event(payload: &Value) -> ImportedRuntimeEvent {
         .get("command")
         .or_else(|| payload.get("cmd"))
         .cloned();
-    ImportedRuntimeEvent::new(
+    CodexRolloutEvent::new(
         "action.required",
         compact_json(json!({
             "requestId": request_id,
@@ -467,9 +467,9 @@ fn action_required_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn hook_prompt_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+fn hook_prompt_event(payload: &Value) -> Option<CodexRolloutEvent> {
     let text = hook_prompt_text(payload)?;
-    Some(ImportedRuntimeEvent::new(
+    Some(CodexRolloutEvent::new(
         "reasoning.completed",
         compact_json(json!({
             "text": text,
@@ -480,8 +480,8 @@ fn hook_prompt_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
     ))
 }
 
-fn context_compaction_event(payload: &Value) -> ImportedRuntimeEvent {
-    ImportedRuntimeEvent::new(
+fn context_compaction_event(payload: &Value) -> CodexRolloutEvent {
+    CodexRolloutEvent::new(
         "context.compaction.completed",
         compact_json(json!({
             "compactionId": call_id(payload),
@@ -494,9 +494,9 @@ fn context_compaction_event(payload: &Value) -> ImportedRuntimeEvent {
     )
 }
 
-fn entered_review_mode_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+fn entered_review_mode_event(payload: &Value) -> Option<CodexRolloutEvent> {
     let review = review_text(payload).unwrap_or_else(|| "Review requested.".to_string());
-    Some(ImportedRuntimeEvent::new(
+    Some(CodexRolloutEvent::new(
         "reasoning.completed",
         compact_json(json!({
             "text": review,
@@ -507,9 +507,9 @@ fn entered_review_mode_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
     ))
 }
 
-fn exited_review_mode_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
+fn exited_review_mode_event(payload: &Value) -> Option<CodexRolloutEvent> {
     let review = review_text(payload)?;
-    Some(ImportedRuntimeEvent::new(
+    Some(CodexRolloutEvent::new(
         "message.delta",
         compact_json(json!({
             "text": review,
@@ -521,7 +521,9 @@ fn exited_review_mode_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
     ))
 }
 
-fn subagent_activity_event(payload: &Value) -> ImportedRuntimeEvent {
+fn subagent_activity_event(payload: &Value) -> CodexRolloutEvent {
+    let source_event_id =
+        string_field(payload, &["event_id", "eventId", "id"]).or_else(|| call_id(payload));
     let kind = string_field(payload, &["kind"]).unwrap_or_else(|| "started".to_string());
     let status_label = match kind.trim().to_ascii_lowercase().as_str() {
         "started" => "running",
@@ -531,11 +533,10 @@ fn subagent_activity_event(payload: &Value) -> ImportedRuntimeEvent {
         "failed" => "failed",
         _ => kind.as_str(),
     };
-    ImportedRuntimeEvent::new(
+    CodexRolloutEvent::new(
         "subagent.activity",
         compact_json(json!({
-            "activityId": string_field(payload, &["event_id", "eventId", "id"])
-                .or_else(|| call_id(payload)),
+            "activityId": source_event_id.clone(),
             "activity": kind,
             "statusLabel": status_label,
             "status": match status_label {
@@ -550,11 +551,14 @@ fn subagent_activity_event(payload: &Value) -> ImportedRuntimeEvent {
             "model": string_field(payload, &["model"]),
             "sourceClient": "codex",
             "sourceEventType": payload.get("type").and_then(Value::as_str),
+            "metadata": {
+                "source_event_id": source_event_id,
+            },
         })),
     )
 }
 
-fn collab_agent_tool_event(payload: &Value, in_progress: bool) -> ImportedRuntimeEvent {
+fn collab_agent_tool_event(payload: &Value, in_progress: bool) -> CodexRolloutEvent {
     let success = !collab_agent_failed(payload);
     let tool_name = collab_tool_name(payload);
     let metadata = json!({
@@ -564,14 +568,14 @@ fn collab_agent_tool_event(payload: &Value, in_progress: bool) -> ImportedRuntim
         "sourceEventType": payload.get("type").and_then(Value::as_str),
     });
     if in_progress {
-        imported_tool_started(
+        tool_started(
             call_id(payload),
             Some(tool_name),
             Some(collab_tool_arguments(payload)),
             metadata,
         )
     } else {
-        imported_tool_terminal(
+        tool_terminal(
             call_id(payload),
             Some(tool_name),
             Some(collab_tool_arguments(payload)),
@@ -685,7 +689,7 @@ fn approval_prompt(payload: &Value) -> Option<String> {
                     .join(" ")
             })
             .filter(|value| !value.trim().is_empty());
-        command.map(|command| format!("Approve imported command: {command}"))
+        command.map(|command| format!("Approve command: {command}"))
     })
 }
 

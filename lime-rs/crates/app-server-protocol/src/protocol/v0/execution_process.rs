@@ -61,6 +61,8 @@ pub struct ExecutionProcessStartParams {
     pub tool_name: String,
     pub command: Vec<String>,
     pub working_directory: String,
+    #[serde(default)]
+    pub tty: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_policy: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

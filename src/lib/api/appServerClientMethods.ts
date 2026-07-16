@@ -192,11 +192,6 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionMediaReadResponse>
     >;
-    readConversationImportRuntimeEvents(
-      params: appServer.AppServerConversationImportThreadRuntimeEventsReadParams,
-    ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerConversationImportThreadRuntimeEventsReadResponse>
-    >;
     readAgentSessionToolInventory(
       params?: appServer.AppServerAgentSessionToolInventoryReadParams,
     ): Promise<

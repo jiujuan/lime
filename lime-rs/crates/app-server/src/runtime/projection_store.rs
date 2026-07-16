@@ -102,7 +102,9 @@ impl ProjectionStore {
         let conn = Connection::open(&path)
             .map_err(|error| format!("无法打开 Projection DB {}: {error}", path.display()))?;
         create_schema(&conn)?;
-        Ok(Self { path })
+        let store = Self { path };
+        store.ensure_canonical_thread_store()?;
+        Ok(store)
     }
 
     pub fn path(&self) -> &Path {
@@ -368,7 +370,12 @@ fn query_projected_session(
                 archived_at, title, model, workspace_id, working_dir,
                 execution_strategy, metadata_json, last_event_sequence
          FROM projected_sessions
-         WHERE session_id = ?1",
+         WHERE session_id = ?1
+           AND NOT EXISTS (
+                SELECT 1 FROM canonical_thread_spawn_edges AS edge
+                WHERE edge.child_thread_id = projected_sessions.thread_id
+                  AND edge.status = 'pending'
+           )",
         params![session_id],
         projected_session_row,
     )
@@ -478,6 +485,11 @@ fn query_projected_session_overviews(
                 (?1 = 1 AND archived_at IS NOT NULL)
                 OR (?1 = 0 AND (?2 = 1 OR archived_at IS NULL))
             )
+           AND NOT EXISTS (
+                SELECT 1 FROM canonical_thread_spawn_edges AS edge
+                WHERE edge.child_thread_id = projected_sessions.thread_id
+                  AND edge.status = 'pending'
+           )
            {scope_filter_sql}
          ORDER BY updated_at DESC, session_id DESC
          LIMIT ?3"
@@ -1493,9 +1505,6 @@ fn merge_projected_session_metadata_json(
     );
     if let Some(value) = params.recent_preferences.as_ref() {
         metadata.insert("recentPreferences".to_string(), value.clone());
-    }
-    if let Some(value) = params.recent_team_selection.as_ref() {
-        metadata.insert("recentTeamSelection".to_string(), value.clone());
     }
     if let Some(value) = params.article_workspace_selected_object_ref.as_ref() {
         metadata.insert(

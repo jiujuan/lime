@@ -49,7 +49,6 @@ interface BuildHarnessPanelSectionNavItemsInput {
   fileChangeReviewEntriesLength: number;
   hasAgentUiProjectionSection: boolean;
   hasHandoffSection: boolean;
-  hasSelectedTeamConfig: boolean;
   hasToolInventorySection: boolean;
   harnessState: Pick<
     HarnessSessionState,
@@ -72,7 +71,6 @@ export function buildHarnessPanelSectionNavItems({
   fileChangeReviewEntriesLength,
   hasAgentUiProjectionSection,
   hasHandoffSection,
-  hasSelectedTeamConfig,
   hasToolInventorySection,
   harnessState,
   realTeamSummary,
@@ -81,10 +79,6 @@ export function buildHarnessPanelSectionNavItems({
   fileReviewTitle,
 }: BuildHarnessPanelSectionNavItemsInput): HarnessSectionNavItem[] {
   const sections: HarnessSectionNavItem[] = [];
-
-  if (hasSelectedTeamConfig) {
-    sections.push({ key: "team_config", label: "Subagents" });
-  }
 
   if (runtimeTaskPresentation) {
     sections.push({ key: "runtime", label: "任务进行时" });
@@ -147,7 +141,6 @@ interface BuildHarnessSummaryCardsInput {
   evidencePack: AgentRuntimeEvidencePack | null;
   hasAgentUiProjectionSection: boolean;
   hasHandoffSection: boolean;
-  hasSelectedTeamConfig: boolean;
   hasToolInventorySection: boolean;
   harnessState: Pick<
     HarnessSessionState,
@@ -157,9 +150,6 @@ interface BuildHarnessSummaryCardsInput {
   runtimeTaskPresentation: RuntimeTaskPresentation | null;
   runtimeToolTotal: number;
   runtimeToolVisibleTotal: number;
-  selectedTeamLabel: string | null;
-  selectedTeamRolesCount: number;
-  selectedTeamSummary: string | null;
   threadReliability: HarnessThreadReliabilitySummary;
   toolInventory: AgentRuntimeToolInventory | null;
   toolInventoryError: string | null;
@@ -175,16 +165,12 @@ export function buildHarnessSummaryCards({
   evidencePack,
   hasAgentUiProjectionSection,
   hasHandoffSection,
-  hasSelectedTeamConfig,
   hasToolInventorySection,
   harnessState,
   realTeamSummary,
   runtimeTaskPresentation,
   runtimeToolTotal,
   runtimeToolVisibleTotal,
-  selectedTeamLabel,
-  selectedTeamRolesCount,
-  selectedTeamSummary,
   threadReliability,
   toolInventory,
   toolInventoryError,
@@ -240,20 +226,6 @@ export function buildHarnessSummaryCards({
       value: threadReliability.statusLabel,
       hint: threadReliability.summary,
       icon: AlertCircle,
-    });
-  }
-
-  if (hasSelectedTeamConfig) {
-    cards.push({
-      sectionKey: "team_config",
-      title: "Subagents",
-      value: selectedTeamLabel?.trim() || `${selectedTeamRolesCount} 个子代理`,
-      hint:
-        selectedTeamSummary?.trim() ||
-        (selectedTeamRolesCount > 0
-          ? `已配置 ${selectedTeamRolesCount} 个子代理`
-          : "本次已启用 Subagents"),
-      icon: Bot,
     });
   }
 

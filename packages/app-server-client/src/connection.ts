@@ -208,12 +208,29 @@ export class AppServerConnection {
           options.timeoutMs,
           startedAt,
         );
-        const message = await this.#nextMessageForRequest(
-          id,
-          method,
-          remainingTimeoutMs,
-          options.signal,
-        );
+        let message: protocol.JsonRpcMessage;
+        try {
+          message = await this.#nextMessageForRequest(
+            id,
+            method,
+            remainingTimeoutMs,
+            options.signal,
+          );
+        } catch (error) {
+          if (
+            !isAppServerTransportReadTimeoutError(error) ||
+            options.timeoutMs === undefined
+          ) {
+            throw error;
+          }
+          if (Date.now() - startedAt >= options.timeoutMs) {
+            throw new Error(
+              `timed out waiting for app-server message after ${options.timeoutMs}ms`,
+            );
+          }
+          await this.#yieldReadTurn();
+          continue;
+        }
         throwIfRequestAborted(options.signal, method, id);
         messages.push(message);
 

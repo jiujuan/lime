@@ -52,8 +52,6 @@ import type {
   ServiceSkillHomeItem,
   ServiceSkillSlotValues,
 } from "../service-skills/types";
-import type { TeamDefinition } from "../utils/teamDefinitions";
-import { attachSelectedTeamToRequestMetadata } from "../utils/teamRequestMetadata";
 import {
   buildFallbackAutomationWorkspace,
   buildServiceSkillAutomationSetupState,
@@ -88,10 +86,6 @@ interface UseWorkspaceServiceSkillEntryActionsParams {
   input: string;
   chatToolPreferences: ChatToolPreferences;
   creationReplay?: CreationReplayMetadata;
-  preferredTeamPresetId?: string | null;
-  selectedTeam?: TeamDefinition | null;
-  selectedTeamLabel?: string | null;
-  selectedTeamSummary?: string | null;
   onNavigate?: (page: Page, params?: PageParams) => void;
   recordServiceSkillUsage: (input: RecordServiceSkillUsageInput) => void;
 }
@@ -107,10 +101,6 @@ export function useWorkspaceServiceSkillEntryActions({
   input,
   chatToolPreferences,
   creationReplay,
-  preferredTeamPresetId,
-  selectedTeam,
-  selectedTeamLabel,
-  selectedTeamSummary,
   onNavigate,
   recordServiceSkillUsage,
 }: UseWorkspaceServiceSkillEntryActionsParams) {
@@ -153,33 +143,12 @@ export function useWorkspaceServiceSkillEntryActions({
 
   const navigateToServiceSkillWorkspace = useCallback(
     (payload: WorkspaceEntryPayload): boolean => {
-      const payloadWithSelectedTeamMetadata: WorkspaceEntryPayload = {
-        ...payload,
-        initialRequestMetadata: attachSelectedTeamToRequestMetadata(
-          payload.initialRequestMetadata,
-          {
-            preferredTeamPresetId,
-            selectedTeam,
-            selectedTeamLabel,
-            selectedTeamSummary,
-          },
-        ),
-        initialAutoSendRequestMetadata: attachSelectedTeamToRequestMetadata(
-          payload.initialAutoSendRequestMetadata,
-          {
-            preferredTeamPresetId,
-            selectedTeam,
-            selectedTeamLabel,
-            selectedTeamSummary,
-          },
-        ),
-      };
       const resolved = resolveWorkspaceEntry({
         projectId: payload.projectId ?? currentProjectId,
         activeTheme,
         creationMode,
         defaultToolPreferences: chatToolPreferences,
-        payload: payloadWithSelectedTeamMetadata,
+        payload,
       });
 
       if (!resolved.ok) {
@@ -204,10 +173,6 @@ export function useWorkspaceServiceSkillEntryActions({
       chatToolPreferences,
       creationMode,
       currentProjectId,
-      preferredTeamPresetId,
-      selectedTeam,
-      selectedTeamLabel,
-      selectedTeamSummary,
       onNavigate,
     ],
   );
