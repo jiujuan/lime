@@ -15,9 +15,13 @@ import {
   type BrowserSessionOpenParams,
   type BrowserSessionOpenResponse,
   type BrowserSessionReadResponse,
+  type BrowserSessionState,
+  type BrowserSessionTargetInfo,
   type BrowserSessionTargetListParams,
   type BrowserSessionTargetListResponse,
 } from "../../../packages/app-server-client/src/protocol";
+
+export type { BrowserSessionState, BrowserSessionTargetInfo };
 
 export type BrowserRuntimeAppServerClient = Pick<AppServerClient, "request">;
 

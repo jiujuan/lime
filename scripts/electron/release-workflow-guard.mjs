@@ -155,7 +155,9 @@ function assertBuildSteps(buildJob) {
     throw new Error("release build must set up pnpm with pnpm/action-setup@v4");
   }
   if (pnpmSetupStep?.with && Object.hasOwn(pnpmSetupStep.with, "version")) {
-    throw new Error("release build must read pnpm version from packageManager, not workflow version");
+    throw new Error(
+      "release build must read pnpm version from packageManager, not workflow version",
+    );
   }
 
   const nodeSetupStep = stepByName(steps, "Setup Node.js");
@@ -163,7 +165,9 @@ function assertBuildSteps(buildJob) {
     throw new Error("release build must cache pnpm dependencies");
   }
   if (nodeSetupStep?.with?.["cache-dependency-path"] !== "pnpm-lock.yaml") {
-    throw new Error("release build must use pnpm-lock.yaml as cache dependency path");
+    throw new Error(
+      "release build must use pnpm-lock.yaml as cache dependency path",
+    );
   }
 
   const installStep = stepByName(steps, "Install dependencies");
@@ -393,6 +397,77 @@ function assertBuildSteps(buildJob) {
     "scripts/electron/stage-release-assets.mjs",
     "Electron release staging",
   );
+
+  const windowsNMinusOneStep = stepByName(
+    steps,
+    "Download Windows N-1 Squirrel installer",
+  );
+  assertIncludes(
+    windowsNMinusOneStep?.if,
+    "matrix.host_platform == 'win32'",
+    "Windows Squirrel N-1 download condition",
+  );
+  for (const required of [
+    "selectNMinusOneVersion",
+    "gh release download",
+    "Lime-$N_MINUS_ONE_VERSION.Setup.exe",
+  ]) {
+    assertIncludes(
+      windowsNMinusOneStep?.run,
+      required,
+      "Windows Squirrel N-1 download",
+    );
+  }
+
+  const windowsRcSmokeStep = stepByName(
+    steps,
+    "Smoke installed Windows Squirrel candidate",
+  );
+  assertIncludes(
+    windowsRcSmokeStep?.if,
+    "matrix.host_platform == 'win32'",
+    "Windows Squirrel RC smoke condition",
+  );
+  for (const required of [
+    "scripts/electron/windows-squirrel-rc-smoke.mjs",
+    '--installer-dir "release-assets/${{ matrix.target }}"',
+    '--candidate-feed-dir "release-assets/${{ matrix.target }}"',
+    "--evidence-dir",
+    "--n-minus-one-installer-dir",
+    "--n-minus-one-version",
+    "--version",
+  ]) {
+    assertIncludes(
+      windowsRcSmokeStep?.run,
+      required,
+      "Windows Squirrel RC smoke",
+    );
+  }
+
+  const windowsRcEvidenceStep = stepByName(
+    steps,
+    "Upload Windows Squirrel RC evidence",
+  );
+  assertIncludes(
+    windowsRcEvidenceStep?.if,
+    "always()",
+    "Windows Squirrel RC evidence upload condition",
+  );
+  assertIncludes(
+    windowsRcEvidenceStep?.if,
+    "matrix.host_platform == 'win32'",
+    "Windows Squirrel RC evidence upload condition",
+  );
+  if (windowsRcEvidenceStep?.uses !== "actions/upload-artifact@v4") {
+    throw new Error(
+      "Windows Squirrel RC evidence must use actions/upload-artifact@v4",
+    );
+  }
+  assertIncludes(
+    windowsRcEvidenceStep?.with?.path,
+    ".lime/qc/windows-squirrel-rc",
+    "Windows Squirrel RC evidence upload",
+  );
 }
 
 function assertPublishSteps(workflow) {
@@ -548,9 +623,16 @@ function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
     "MACOS_APP_ENTITLEMENTS",
     "isTopLevelAppBundle",
     '!normalized.includes(".app/")',
-    "return null",
+    "const releaseSigning =",
+    'env.LIME_ELECTRON_SIGN === "1"',
+    "Boolean(env.LIME_MACOS_KEYCHAIN)",
+    "identityValidation: releaseSigning",
+    "return releaseSigning",
+    ': { hardenedRuntime: false, timestamp: "none" }',
+    "if (!releaseSigning)",
+    'options.identity = "-"',
     "lime-rs/entitlements.plist",
-    "hardenedRuntime",
+    "hardenedRuntime: releaseSigning",
     "signatureFlags",
     "APPLE_SIGNING_IDENTITY",
     "LIME_MACOS_KEYCHAIN",

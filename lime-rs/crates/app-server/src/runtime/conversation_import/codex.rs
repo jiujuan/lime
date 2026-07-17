@@ -84,11 +84,16 @@ pub(super) fn scan_source(
     };
 
     threads.extend(session_index::scan(&source_root));
-    threads.extend(discover_rollout_threads(&source_root));
 
     for thread in &mut threads {
         repair_thread_source_path(&source_root, thread);
     }
+    let known_thread_ids = threads
+        .iter()
+        .map(|thread| thread.source_thread_id.clone())
+        .collect::<HashSet<_>>();
+    threads.extend(discover_rollout_threads(&source_root, &known_thread_ids));
+
     let threads = deduplicate_import_threads(threads);
     let missing_source_project_matches = project_path
         .as_deref()
@@ -178,9 +183,17 @@ pub(super) fn scan_source(
     })
 }
 
-fn discover_rollout_threads(source_root: &Path) -> Vec<ImportedThreadSummary> {
+fn discover_rollout_threads(
+    source_root: &Path,
+    known_thread_ids: &HashSet<String>,
+) -> Vec<ImportedThreadSummary> {
     paths::discover_rollout_paths(source_root)
         .into_iter()
+        .filter(|(path, _)| {
+            paths::rollout_thread_id(path)
+                .map(|thread_id| !known_thread_ids.contains(&thread_id))
+                .unwrap_or(true)
+        })
         .filter_map(|(path, archived)| read_rollout_thread_summary(&path, archived).ok())
         .collect()
 }

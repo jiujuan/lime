@@ -49,7 +49,7 @@ function buildImportedProjection(
 }
 
 describe("messageListItemProjection imported history", () => {
-  it("本地历史导入命令应保留 imported 元数据供渲染层默认展开", () => {
+  it("本地历史导入命令应保留 imported 元数据供历史摘要使用", () => {
     const projection = buildImportedProjection({
       id: "assistant-codex-import-command",
       role: "assistant",
@@ -57,32 +57,20 @@ describe("messageListItemProjection imported history", () => {
       timestamp: new Date("2026-06-02T10:02:00.000Z"),
     });
 
-    expect(projection.rendererContentParts?.[0]).toMatchObject({
-      type: "tool_use",
-      toolCall: {
-        name: "exec_command",
-        result: {
-          metadata: {
-            imported: true,
-            source_client: "codex",
-            exit_code: 0,
-          },
-        },
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "text",
+    ]);
+    expect(projection.primaryTimeline?.items).toHaveLength(1);
+    expect(projection.primaryTimeline?.items[0]).toMatchObject({
+      type: "command_execution",
+      metadata: {
+        imported: true,
+        source_client: "codex",
       },
-    });
-    const toolPart = projection.rendererContentParts?.[0];
-    expect(toolPart?.type).toBe("tool_use");
-    expect(
-      toolPart?.type === "tool_use"
-        ? JSON.parse(toolPart.toolCall.arguments || "{}")
-        : null,
-    ).toEqual({
-      command: "npm test",
-      cwd: "/workspace/imported-codex",
     });
   });
 
-  it("本地历史导入命令没有额外助手过程文本时应保留过程记录和最终正文", () => {
+  it("本地历史导入命令没有额外助手过程文本时仍只渲染最终正文", () => {
     const projection = buildImportedProjection(
       {
         id: "assistant-codex-import-command-only",
@@ -114,25 +102,12 @@ describe("messageListItemProjection imported history", () => {
     );
 
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
-      "tool_use",
       "text",
     ]);
-    expect(projection.rendererContentParts?.[0]).toMatchObject({
-      type: "tool_use",
-      toolCall: {
-        name: "exec_command",
-        result: {
-          metadata: {
-            imported: true,
-            source_client: "codex",
-            exit_code: 0,
-          },
-        },
-      },
-    });
-    expect(projection.rendererContentParts?.[1]).toEqual({
+    expect(projection.rendererContentParts?.[0]).toEqual({
       type: "text",
       text: "已完成修复。",
     });
+    expect(projection.primaryTimeline?.items).toHaveLength(1);
   });
 });

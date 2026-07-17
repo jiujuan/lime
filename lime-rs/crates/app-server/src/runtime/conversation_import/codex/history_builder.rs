@@ -155,7 +155,10 @@ impl CodexHistoryBuilder {
                     normalized.push(synthesized_command_output(&call_id, &tool));
                     normalized.push(synthesized_command_exit(&call_id, &tool));
                 }
-                normalized.push(CodexRolloutEvent::Tool(tool));
+                normalized.push(CodexRolloutEvent::Tool(tool.clone()));
+                if let Some(file_event) = imported_file_changed_event(&tool) {
+                    normalized.push(file_event);
+                }
             }
         }
         normalized
@@ -204,6 +207,42 @@ impl CodexHistoryBuilder {
     pub(super) fn has_terminal_event(&self) -> bool {
         self.saw_terminal_event
     }
+}
+
+fn imported_file_changed_event(tool: &CodexToolCall) -> Option<CodexRolloutEvent> {
+    if tool.name.as_deref()?.trim() != "read_file" {
+        return None;
+    }
+    let path = tool
+        .arguments
+        .as_ref()
+        .and_then(|arguments| string_value(arguments, &["path", "filePath", "file_path"]))?;
+    let content = tool_output_text(tool)?;
+    let call_id = tool.call_id.as_deref().unwrap_or("read_file");
+    Some(CodexRolloutEvent::new(
+        "file.changed",
+        json!({
+            "path": path,
+            "content": content,
+            "artifactId": format!("codex-import-file-{call_id}"),
+            "sourceClient": "codex",
+            "sourceEventType": "function_call_output",
+            "sourceProvenance": tool.source.source_provenance.clone(),
+            "imported": true,
+        }),
+    ))
+}
+
+fn string_value(value: &Value, keys: &[&str]) -> Option<String> {
+    let object = value.as_object()?;
+    keys.iter().find_map(|key| {
+        object.get(*key).and_then(|value| {
+            value
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| (!value.is_null()).then(|| value.to_string()))
+        })
+    })
 }
 
 fn enrich_history_payload(mut payload: Value) -> Value {

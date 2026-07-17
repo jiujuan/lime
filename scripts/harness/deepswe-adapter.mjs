@@ -43,6 +43,7 @@ function parseArgs(argv) {
     invokeUrl: "http://127.0.0.1:3030/invoke",
     logPrefix: "[harness:deepswe]",
     manifestPath: "internal/test/deepswe-coding-slice-v2.json",
+    maxOutputTokens: null,
     modelPreference: "",
     maxProviderSteps: 32,
     pierBin: fs.existsSync(localPierBin) ? localPierBin : "pier",
@@ -56,6 +57,7 @@ function parseArgs(argv) {
     tokenBudget: 500_000,
     timeoutMs: 5_400_000,
     transport: process.env.LIME_DEEPSWE_TRANSPORT || "dev-bridge",
+    enableThinking: null,
     verifierOnly: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -85,6 +87,7 @@ function parseArgs(argv) {
       ["--interval-ms", "intervalMs"],
       ["--invoke-url", "invokeUrl"],
       ["--manifest", "manifestPath"],
+      ["--max-output-tokens", "maxOutputTokens"],
       ["--model", "modelPreference"],
       ["--max-provider-steps", "maxProviderSteps"],
       ["--pier-bin", "pierBin"],
@@ -97,6 +100,7 @@ function parseArgs(argv) {
       ["--timeout-ms", "timeoutMs"],
       ["--token-budget", "tokenBudget"],
       ["--transport", "transport"],
+      ["--enable-thinking", "enableThinking"],
     ]);
     const key = valueOptions.get(arg);
     if (key && argv[index + 1]) {
@@ -108,6 +112,8 @@ function parseArgs(argv) {
   }
   options.intervalMs = Number(options.intervalMs);
   options.evidenceIntervalMs = Number(options.evidenceIntervalMs);
+  options.maxOutputTokens =
+    options.maxOutputTokens == null ? null : Number(options.maxOutputTokens);
   options.maxProviderSteps = Number(options.maxProviderSteps);
   options.tokenBudget = Number(options.tokenBudget);
   options.timeoutMs = Number(options.timeoutMs);
@@ -118,6 +124,12 @@ function parseArgs(argv) {
   options.appServerDataDir = options.appServerDataDir
     ? path.resolve(repoRoot, options.appServerDataDir)
     : "";
+  if (options.enableThinking != null) {
+    if (!new Set(["true", "false"]).has(options.enableThinking)) {
+      throw new Error("--enable-thinking must be true or false");
+    }
+    options.enableThinking = options.enableThinking === "true";
+  }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 30_000) {
     throw new Error("--timeout-ms must be >= 30000");
   }
@@ -135,6 +147,13 @@ function parseArgs(argv) {
     options.maxProviderSteps < 1
   ) {
     throw new Error("--max-provider-steps must be a positive integer");
+  }
+  if (
+    options.maxOutputTokens != null &&
+    (!Number.isSafeInteger(options.maxOutputTokens) ||
+      options.maxOutputTokens < 1)
+  ) {
+    throw new Error("--max-output-tokens must be a positive integer");
   }
   if (!Number.isSafeInteger(options.tokenBudget) || options.tokenBudget < 1) {
     throw new Error("--token-budget must be a positive integer");
@@ -159,6 +178,8 @@ Options:
   --task ID                Run one selected task
   --provider ID            Select a configured Lime provider
   --model MODEL             Select a configured model
+  --max-output-tokens N     Override provider output limit for this diagnostic run
+  --enable-thinking BOOL    Override thinking for this run: true or false
   --max-provider-steps N    Stop after N completed provider steps, default: 32
   --token-budget N          Non-cached input plus output token budget, default: 500000
   --evidence-interval-ms N  Budget evidence polling interval, default: 30000
@@ -191,7 +212,7 @@ function runContextBase(options, runId, task) {
       verifier: task.verifier,
     },
     executionContract: {
-      adapterVersion: "deepswe-current-chain-adapter-v4",
+      adapterVersion: "deepswe-current-chain-adapter-v5",
       agentPath: "Lime App Server JSON-RPC current chain",
       appServerMethods: [
         "workspace/ensure",
@@ -215,6 +236,11 @@ function runContextBase(options, runId, task) {
         enforcementOwner:
           "agent-runtime reply loop before tool execution and next sampling",
         adapterFallback: "token evidence polling for timeout races only",
+      },
+      generationControls: {
+        maxOutputTokens: options.maxOutputTokens,
+        enableThinking: options.enableThinking,
+        projection: "runtimeRequest.metadata.harness.generation",
       },
     },
   };
@@ -382,6 +408,12 @@ async function main() {
             ? ` message=${currentChain.terminalMessage}`
             : ""
         }`,
+      );
+    }
+    if (currentChain.providerStepExhaustion) {
+      stage = "agent-terminal";
+      throw new Error(
+        `DeepSWE provider budget exhausted: reasons=${currentChain.providerStepExhaustion.reasons.join(",")} steps=${currentChain.providerStepExhaustion.stepCount}`,
       );
     }
     if (patch.bytes === 0) {

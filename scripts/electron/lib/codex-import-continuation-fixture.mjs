@@ -244,7 +244,9 @@ function writeCodexRolloutFixture(rolloutPath, workspaceRoot) {
         type: "patch_apply_end",
         call_id: "call_patch",
         success: true,
-        changes: { [path.join(workspaceRoot, "src/lib.rs")]: { type: "modify" } },
+        changes: {
+          [path.join(workspaceRoot, "src/lib.rs")]: { type: "modify" },
+        },
       },
     },
     {
@@ -370,7 +372,9 @@ export function createPageAppServerClient(page) {
       const id = `codex-import-unified-exec-${++requestIndex}`;
       requests.push({ id, method });
       const decoded = await exchange({ jsonrpc: "2.0", id, method, params });
-      const error = decoded.find((message) => message?.id === id && message.error);
+      const error = decoded.find(
+        (message) => message?.id === id && message.error,
+      );
       if (error) {
         throw new Error(`${method} failed: ${JSON.stringify(error.error)}`);
       }
@@ -391,7 +395,46 @@ export function createPageAppServerClient(page) {
   };
 }
 
-export async function initializeAndCommitImport(client, runtimeEnv) {
+export async function waitForConversationImportJob(
+  client,
+  initialJob,
+  { timeoutMs = 120_000, intervalMs = 100 } = {},
+) {
+  assert(
+    initialJob?.jobId,
+    "conversationImport/thread/commit did not return jobId",
+  );
+  const startedAt = Date.now();
+  let job = initialJob;
+  while (Date.now() - startedAt < timeoutMs) {
+    if (job.status === "completed") {
+      assert(
+        job.result?.session?.sessionId,
+        "conversation import job completed without session result",
+      );
+      return job;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error || "conversation import job failed");
+    }
+    await sleep(intervalMs);
+    const read = await client.call("conversationImport/job/read", {
+      jobId: initialJob.jobId,
+    });
+    job = read?.job;
+    assert(
+      job?.jobId === initialJob.jobId,
+      "conversationImport/job/read returned a different job",
+    );
+  }
+  throw new Error(`conversation import job timed out: ${initialJob.jobId}`);
+}
+
+export async function initializeAndCommitImport(
+  client,
+  runtimeEnv,
+  options = {},
+) {
   const initialize = await client.call("initialize", {
     clientInfo: { name: "codex-import-unified-exec-fixture", version: "1.0.0" },
     capabilities: { eventMethods: ["agentSession/event"] },
@@ -405,13 +448,14 @@ export async function initializeAndCommitImport(client, runtimeEnv) {
     workspaceId: WORKSPACE_ID,
     confirmed: true,
   });
-  const sessionId = commit?.session?.sessionId;
-  assert(sessionId, "conversationImport/thread/commit did not return sessionId");
+  const job = await waitForConversationImportJob(client, commit?.job, options);
+  const sessionId = job.result?.session?.sessionId;
+  assert(sessionId, "conversation import job result did not return sessionId");
   const importedRead = await client.call("agentSession/read", {
     sessionId,
     historyLimit: 100,
   });
-  return { initialize, commit, importedRead, sessionId };
+  return { initialize, commit, job, importedRead, sessionId };
 }
 
 function runtimeOptions(provider, workspaceRoot, eventName) {
@@ -650,8 +694,7 @@ function historicalImportFacts(importedRead, runtimeEnv) {
         item?.path === path.join(runtimeEnv.workspaceRoot, "src/lib.rs"),
     ),
     hasWebSearchItem: items.some(
-      (item) =>
-        item?.type === "web_search" && item?.call_id === "call_search",
+      (item) => item?.type === "web_search" && item?.call_id === "call_search",
     ),
     hasApprovalItem: items.some(
       (item) =>
@@ -695,7 +738,10 @@ export function summarizeAndAssertFixture({
       (method) => !requestMethods.includes(method),
     ).join(", ")}`,
   );
-  assert(initial.commit?.canContinue === true, "导入会话未标记 canContinue");
+  assert(
+    initial.job?.result?.canContinue === true,
+    "导入会话未标记 canContinue",
+  );
   assert(historical.hasUserMessage, "导入用户消息未进入 read model");
   assert(historical.hasAssistantMessage, "导入助手消息未进入 read model");
   assert(historical.hasReasoningItem, "导入 reasoning 未进入 detail.items");
@@ -709,7 +755,10 @@ export function summarizeAndAssertFixture({
     JSON.stringify(importedShape) === JSON.stringify(normalShape),
     `导入续聊与普通会话 Command Item 不同构: ${JSON.stringify({ importedShape, normalShape })}`,
   );
-  assert(providerSummaries.length === 4, "两个 unified exec turn 应产生 4 次 provider 请求");
+  assert(
+    providerSummaries.length === 4,
+    "两个 unified exec turn 应产生 4 次 provider 请求",
+  );
   for (const request of providerSummaries) {
     assert(
       request.toolNames.includes("exec_command") &&
@@ -747,7 +796,10 @@ export function summarizeAndAssertBridge(client) {
     ),
     "App Server 调用未全部经过真实 Electron preload bridge",
   );
-  assert(turnStartCount === 2, "未通过 current method 发起导入/普通两次 turn start");
+  assert(
+    turnStartCount === 2,
+    "未通过 current method 发起导入/普通两次 turn start",
+  );
   return {
     electron: true,
     preloadInvoke: true,

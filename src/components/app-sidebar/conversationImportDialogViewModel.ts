@@ -44,6 +44,7 @@ export function firstImportableThread(
   threads: ImportedThreadSummary[],
 ): ImportedThreadSummary | null {
   return (
+    threads.find((thread) => thread.importStatus === "importing") ??
     threads.find((thread) => thread.importStatus === "not_imported") ??
     threads[0] ??
     null

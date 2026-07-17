@@ -105,6 +105,27 @@ describe("MessageList layout and scrolling", () => {
     expect(messageColumn?.className).not.toContain("justify-end");
   });
 
+  it("长消息流应让尾部 turn 保持即时渲染并隔离离屏历史工作", () => {
+    const container = render(createConversationMessages(8));
+    const groups = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        '[data-testid="message-turn-group"]',
+      ),
+    );
+
+    expect(groups).toHaveLength(4);
+    expect(groups.map((group) => group.dataset.renderPriority)).toEqual([
+      "offscreen-deferred",
+      "offscreen-deferred",
+      "tail",
+      "tail",
+    ]);
+    expect(document.head.textContent).toContain("content-visibility:auto");
+    expect(document.head.textContent).toContain(
+      "contain-intrinsic-size:auto 320px",
+    );
+  });
+
   it("对话列表顶部应保留工作台呼吸区，避免首条消息贴近窗口顶栏", () => {
     const container = render([
       {

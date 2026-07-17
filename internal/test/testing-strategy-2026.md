@@ -2,7 +2,7 @@
 
 > status: current
 > owner: quality-workflow
-> last_verified: 2026-07-15
+> last_verified: 2026-07-17
 > source: `internal/research/refactor/v2/**`
 
 ## 1. 事实源与分类
@@ -150,6 +150,14 @@ Responses WebSocket 场景必须让 localhost fixture 观察真实 Upgrade `GET`
 - `initialize` 必须先于业务 request 完成；初始化后用一个被控长请求和一个无冲突 list/read 证明 stdio 不发生 head-of-line blocking，响应按 request id 关联，不假设 notification/response 的到达位置。
 - PTY 测试通过私有 builder/fixture 注入确定性 shell，不继承真实用户 rc、prompt 或全局 process env。
 - Git/CLI 子进程测试必须覆盖 plain-directory fast path 和 deadline；production child 使用异步 wait、取消/kill-on-drop，测试不得靠机器上的挂起 Git 进程制造通过条件。
+
+### 5.8 Renderer projection 的 v2 运行态合同
+
+- `activeCurrentTurnId` 缺省不代表“所有带 turn identity 的消息都是历史态”。只有明确存在且不匹配的 active turn，或非发送态的 terminal turn，才能隐藏 reasoning、tool、action 和 streaming overlay；恢复中的 running/queued turn 必须保留结构化过程。
+- runtime failure 的友好 fallback 属于用户可见终态，优先级高于历史 compact 过滤；不能让孤立标点、内部 reasoning 或 provider diagnostic 覆盖 fallback，也不能把 fallback 重新过滤为空。
+- `file_changes_batch` 是过程汇总，canonical `file_artifact` 是结果快照；两者允许同时出现。artifact path 归一化只能用于真正相同的去重，不能用相对路径、项目根或文件名近似匹配误删 canonical 结果卡。
+- patch timeline 的 renderer content parts 必须先保留结构化 diff，再投影文本；测试应断言完整 part type 顺序和 artifact identity，不只断言正文包含某个词。
+- 这类规则优先落在 projection unit owner，覆盖 running tool、streaming final、reasoning 合并/替换、history restore、failure fallback、patch diff 和相对/绝对 artifact path；React 挂载测试只保留少量 DOM 接线回归。
 
 ## 6. 测试数据与 Fixture
 

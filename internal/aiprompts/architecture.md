@@ -315,13 +315,26 @@ canonical commit owner，按 reading/building/persisting/finalizing 阶段报告
 只有 terminal result 才向 GUI 暴露可继续的 session。job registry 只拥有调度状态、进度和
 terminal result，不保存第二份 Thread/Turn/Item，也不得绕过 EventLog、ThreadStore 或
 ProjectionStore。Renderer 只能通过 typed gateway 轮询，Electron 不得承接 job runner。
+批量确认时 Renderer 必须先为全部勾选会话启动或复用 job，再观察 terminal；关闭弹窗只
+abort 当前 Renderer observer，不取消 App Server job。再次打开时 source scan 投影
+`importing` 与 `importJobId`，Renderer 直接通过 `job/read` 继续观察；不得用第二次 commit
+代替显式 job identity，以免 terminal 竞态创建重复会话。
 
 Agent GUI 的聊天/工作台响应式布局同样不得按来源分叉。`LayoutTransition` 是唯一布局
 owner：实际工作区容器宽度大于 `900px` 时可以并排展示聊天与工作台；不大于 `900px`
 时必须切为聊天优先的单面板，并提供明确的“聊天 / 工作台”模式切换。断点切换只能改变
-排列和显隐，不能重挂载消息树，否则会丢失 canonical timeline 展开态、滚动位置或输入
-草稿。普通会话、历史恢复和导入续聊共享该 contract；真实 Electron 视觉门禁必须覆盖
+排列和显隐，不能重挂载消息树，否则会丢失 canonical timeline、滚动位置或输入草稿。
+普通会话、历史恢复和导入续聊共享该 contract；真实 Electron 视觉门禁必须覆盖
 desktop、compact、narrow，并拒绝模式控件与其他按钮发生矩形重叠。
+
+历史 GUI 投影遵循 Codex App 的运行态边界：canonical Thread/Turn/Item 和 read model 永远
+保留完整 command、reasoning、tool、approval、search、patch 等事实，但 Renderer 只有当前
+active turn 才挂载 operational details。terminal turn（completed、failed、canceled 或
+interrupted）只投影最终正文、附件、文件产物/变更与处理时长分隔；历史分隔是不可交互的
+`div`，没有展开、预览恢复或按历史 item 重新挂载的入口。该规则不区分普通、恢复或 Codex
+导入来源；read model 完整性必须由 App Server `thread/read` / `thread/items/list` 独立验证，
+不能用 GUI 隐藏推断 canonical item 被裁剪。运行中审批卡、command/tool/search/reasoning
+仍按当前 turn 的真实 lifecycle 展示，turn 终态后统一收口为 compact history。
 
 canonical identity/control read edge 使用 `thread/read`、`thread/list`、`thread/turns/list` 与 `thread/items/list`，由 App Server handler 直接查询 `ThreadStore` 并返回 Thread/Turn/ThreadItem DTO 和 store-owned opaque cursor。`thread/list.includeArchived=false` 只返回 active thread，`true` 返回 active 与 archived thread；过滤和 cursor 顺序必须由 store 在同一查询边界完成。携带单一 `threadId` 的 read method 由 protocol catalog 声明 Thread scope + shared-read access；App Server request serialization 必须消费该 metadata，不能在 handler、client 或 GUI 另建并发策略。`agentSession/read` 是同一 ThreadStore 事实源上的 current 产品 presentation endpoint，负责 GUI 所需的 session detail；两条 read edge 必须保持 session/thread/turn/item identity、ordinal 和 status 同源。canonical detail 缺失或 store 失败必须显式失败，禁止 event/app-data fallback 或 Renderer 合成空 history。
 

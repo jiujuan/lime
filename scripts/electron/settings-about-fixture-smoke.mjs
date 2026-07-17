@@ -18,8 +18,11 @@ import {
 } from "./mcp-config-fixture-smoke.mjs";
 import {
   applyFailedSettingsAboutEvidence,
+  applyFailedSettingsHomeEvidence,
   applyPassingSettingsAboutEvidence,
+  applyPassingSettingsHomeEvidence,
   createSettingsAboutEvidence,
+  createSettingsHomeEvidence,
   isLocalizedAboutVersionLine,
   parseSettingsAboutFixtureArgs,
   summarizeSettingsAboutTrace,
@@ -63,10 +66,35 @@ async function readAboutState(page, options, expectedVersion) {
         /electron-host-diagnostic|Desktop Host current|get_skill_package_file_association_status|尚未接入真实/i.test(
           bodyText,
         );
+      const traceRaw = window.localStorage.getItem(
+        "lime_invoke_trace_buffer_v1",
+      );
+      let traceEntries = [];
+      try {
+        const parsed = JSON.parse(traceRaw || "[]");
+        traceEntries = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        traceEntries = [];
+      }
+      const appServerIpcSeen = traceEntries.some(
+        (entry) =>
+          entry?.command === "app_server_handle_json_lines" &&
+          entry?.transport === "electron-ipc",
+      );
+      const hostCommands = new Set(
+        traceEntries
+          .filter((entry) => entry?.transport === "electron-ipc")
+          .map((entry) => entry?.command),
+      );
+      const hostReadsSeen =
+        hostCommands.has("check_for_updates") &&
+        hostCommands.has("get_update_install_session");
       if (
         aboutTab?.getAttribute("data-active") !== "true" ||
         loadingVisible ||
-        !bodyText.includes(version)
+        !bodyText.includes(version) ||
+        !appServerIpcSeen ||
+        !hostReadsSeen
       ) {
         return null;
       }
@@ -82,12 +110,42 @@ async function readAboutState(page, options, expectedVersion) {
         aboutActive: true,
         loadingVisible,
         internalDiagnosticVisible,
-        traceRaw: window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+        traceRaw,
         errorRaw: window.localStorage.getItem("lime_invoke_error_buffer_v1"),
       };
     },
     "About page did not reach a terminal version state",
     { expectedVersion },
+  );
+}
+
+async function readHomeState(page, options) {
+  return await waitForPageCondition(
+    page,
+    options,
+    () => {
+      const homeStartVisible = Boolean(
+        document.querySelector('[data-testid="home-start-surface"]'),
+      );
+      const accountButtonVisible = Boolean(
+        document.querySelector('[data-testid="app-sidebar-account-button"]'),
+      );
+      const settingsHeaderVisible = Boolean(
+        document.querySelector('[data-testid="settings-top-header"]'),
+      );
+      if (!homeStartVisible || !accountButtonVisible || settingsHeaderVisible) {
+        return null;
+      }
+      return {
+        url: window.location.href,
+        homeStartVisible,
+        accountButtonVisible,
+        settingsHeaderVisible,
+        traceRaw: window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+        errorRaw: window.localStorage.getItem("lime_invoke_error_buffer_v1"),
+      };
+    },
+    "Settings back-home action did not reach the current home surface",
   );
 }
 
@@ -117,6 +175,14 @@ async function run() {
     options.evidenceDir,
     `${options.prefix}-failure.png`,
   );
+  const homeSummaryPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-home-summary.json`,
+  );
+  const homeScreenshotPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-home.png`,
+  );
   const packageVersion = JSON.parse(
     fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
   ).version;
@@ -138,11 +204,17 @@ async function run() {
     backendMode: "unavailable",
     packageVersion,
   };
+  const homeSummary = createSettingsHomeEvidence({
+    candidateRunId: options.runId,
+    startedAt: summary.startedAt,
+    prefix: options.prefix,
+  });
 
   let handle = null;
   let page = null;
   const consoleErrors = [];
   const pageErrors = [];
+  const rawEvidence = {};
   try {
     handle = await launchElectronFixture({
       options,
@@ -177,20 +249,51 @@ async function run() {
       invokeErrorCount: parseInvokeTraceRaw(aboutState.errorRaw).length,
       screenshotWritten: fs.existsSync(screenshotPath),
     });
-    writeJsonFile(rawEvidencePath, {
+    rawEvidence.about = {
       url: aboutState.url,
       locale: aboutState.locale,
       versionLine: aboutState.versionLine,
       appServerMethods: trace.appServerMethods,
       hostCommands: trace.hostCommands,
-    });
+    };
     writeJsonFile(summaryPath, summary);
+
+    await page.locator('[data-testid="settings-home-button"]').click();
+    const homeState = await readHomeState(page, options);
+    const homeTrace = summarizeSettingsAboutTrace(homeState.traceRaw);
+    await page.screenshot({ path: homeScreenshotPath, fullPage: true });
+    applyPassingSettingsHomeEvidence(homeSummary, {
+      completedAt: new Date().toISOString(),
+      electronRenderer: handle.rendererSnapshot.electron,
+      preloadInvoke: handle.rendererSnapshot.hasInvokeBridge,
+      homeStartVisible: homeState.homeStartVisible,
+      settingsHeaderVisible: homeState.settingsHeaderVisible,
+      accountButtonVisible: homeState.accountButtonVisible,
+      trace: homeTrace,
+      consoleErrors,
+      pageErrors,
+      invokeErrorCount: parseInvokeTraceRaw(homeState.errorRaw).length,
+      screenshotWritten: fs.existsSync(homeScreenshotPath),
+    });
+    rawEvidence.home = {
+      url: homeState.url,
+      appServerMethods: homeTrace.appServerMethods,
+    };
+    writeJsonFile(rawEvidencePath, rawEvidence);
+    writeJsonFile(homeSummaryPath, homeSummary);
     console.log(`[smoke:settings-about-fixture] summary=${summaryPath}`);
+    console.log(`[smoke:settings-about-fixture] home=${homeSummaryPath}`);
   } catch (error) {
-    applyFailedSettingsAboutEvidence(summary, error);
+    if (!summary.settingsScenarioProof.complete) {
+      applyFailedSettingsAboutEvidence(summary, error);
+    }
+    if (!homeSummary.settingsScenarioProof.complete) {
+      applyFailedSettingsHomeEvidence(homeSummary, error);
+    }
     summary.consoleErrors = consoleErrors.map(sanitizeText);
     summary.pageErrors = pageErrors.map(sanitizeText);
     writeJsonFile(summaryPath, summary);
+    writeJsonFile(homeSummaryPath, homeSummary);
     if (page) {
       try {
         await page.screenshot({ path: failureScreenshotPath, fullPage: true });

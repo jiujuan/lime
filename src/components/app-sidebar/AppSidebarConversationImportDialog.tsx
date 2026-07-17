@@ -11,6 +11,7 @@ import { Modal } from "@/components/Modal";
 import {
   commitConversationImportThread,
   previewConversationImportThread,
+  readConversationImportJob,
   scanConversationImportSource,
   waitForConversationImportJob,
   type ConversationImportJob,
@@ -85,6 +86,7 @@ export function AppSidebarConversationImportDialog({
   const [activeImportJob, setActiveImportJob] =
     useState<ConversationImportJob | null>(null);
   const [activeImportIndex, setActiveImportIndex] = useState(0);
+  const importWaitAbortRef = useRef<AbortController | null>(null);
 
   const sourceRoot = normalizeOptional(sourceRootInput);
   const sourceRootRef = useRef<string | undefined>(sourceRoot);
@@ -118,6 +120,7 @@ export function AppSidebarConversationImportDialog({
   );
   const checkedCount = commitThreads.length;
   const checkedImportedCount = commitThreads.filter(isImportedThread).length;
+  const checkedImportingCount = commitThreads.filter(isImportingThread).length;
   const allSelectableChecked =
     selectableThreads.length > 0 &&
     selectableThreads.every((thread) =>
@@ -211,6 +214,8 @@ export function AppSidebarConversationImportDialog({
 
   useEffect(() => {
     if (!isOpen) {
+      importWaitAbortRef.current?.abort();
+      importWaitAbortRef.current = null;
       setStage("idle");
       setError(null);
       setSourceMessage(null);
@@ -221,6 +226,12 @@ export function AppSidebarConversationImportDialog({
     }
     void loadThreads(sourceRootRef.current);
   }, [isOpen, loadThreads]);
+
+  const handleDialogClose = useCallback(() => {
+    importWaitAbortRef.current?.abort();
+    importWaitAbortRef.current = null;
+    onClose();
+  }, [onClose]);
 
   const handleSelectThread = useCallback(
     async (thread: ImportedThreadSummary) => {
@@ -354,13 +365,28 @@ export function AppSidebarConversationImportDialog({
       return;
     }
 
+    const waitAbortController = new AbortController();
+    importWaitAbortRef.current?.abort();
+    importWaitAbortRef.current = waitAbortController;
     setStage("committing");
     setError(null);
     try {
       const resolvedSourceRoot = preview?.source.sourceRoot ?? sourceRoot;
+      const startedJobs: ConversationImportJob[] = [];
       const results: ConversationImportThreadCommitResponse[] = [];
       for (const [index, thread] of commitThreads.entries()) {
         setActiveImportIndex(index + 1);
+        const activeJobId = isImportingThread(thread)
+          ? normalizeOptional(thread.importJobId)
+          : undefined;
+        if (activeJobId) {
+          const resumed = await readConversationImportJob({
+            jobId: activeJobId,
+          });
+          setActiveImportJob(resumed.job);
+          startedJobs.push(resumed.job);
+          continue;
+        }
         const started = await commitConversationImportThread({
           sourceClient: DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT,
           sourceRoot: resolvedSourceRoot,
@@ -371,13 +397,25 @@ export function AppSidebarConversationImportDialog({
           ...(isImportedThread(thread) ? { replaceExisting: true } : {}),
         });
         setActiveImportJob(started.job);
-        const result = await waitForConversationImportJob(started.job, {
+        startedJobs.push(started.job);
+      }
+      for (const [index, job] of startedJobs.entries()) {
+        setActiveImportIndex(index + 1);
+        setActiveImportJob(job);
+        const result = await waitForConversationImportJob(job, {
+          signal: waitAbortController.signal,
           onProgress: setActiveImportJob,
         });
         results.push(result);
       }
       onImported(results);
     } catch (commitError) {
+      if (
+        commitError instanceof DOMException &&
+        commitError.name === "AbortError"
+      ) {
+        return;
+      }
       setError(
         commitError instanceof Error && commitError.message.trim()
           ? commitError.message.trim()
@@ -387,6 +425,9 @@ export function AppSidebarConversationImportDialog({
             ),
       );
     } finally {
+      if (importWaitAbortRef.current === waitAbortController) {
+        importWaitAbortRef.current = null;
+      }
       setStage("idle");
     }
   }, [
@@ -401,11 +442,11 @@ export function AppSidebarConversationImportDialog({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleDialogClose}
       className="p-0"
       maxWidth="max-w-[920px]"
       showCloseButton={false}
-      closeOnOverlayClick={!committing}
+      closeOnOverlayClick
     >
       <div
         className="relative flex max-h-[calc(100vh-4rem)] min-h-[540px] flex-col overflow-hidden bg-white text-slate-900"
@@ -418,8 +459,8 @@ export function AppSidebarConversationImportDialog({
             "Close import dialog",
           )}
           className="absolute right-4 top-4 z-10 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={committing}
-          onClick={onClose}
+          onClick={handleDialogClose}
+          data-testid="app-sidebar-conversation-import-close"
         >
           <X className="h-4 w-4" />
         </button>
@@ -735,27 +776,36 @@ export function AppSidebarConversationImportDialog({
               ) : null}
               <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                 <p className="max-w-xl text-xs leading-5 text-slate-500">
-                  {checkedImportedCount > 0
+                  {committing
                     ? t(
-                        "navigation.sidebar.importDialog.confirmNotice.replace",
-                        "Already imported conversations will be cleared and imported again.",
+                        "navigation.sidebar.importDialog.progress.background",
+                        "Import continues in the background.",
                       )
-                    : t(
-                        "navigation.sidebar.importDialog.confirmNotice",
-                        "Only checked conversations will be imported.",
-                      )}
+                    : checkedImportedCount > 0
+                      ? t(
+                          "navigation.sidebar.importDialog.confirmNotice.replace",
+                          "Already imported conversations will be cleared and imported again.",
+                        )
+                      : t(
+                          "navigation.sidebar.importDialog.confirmNotice",
+                          "Only checked conversations will be imported.",
+                        )}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={committing}
-                    onClick={onClose}
+                    onClick={handleDialogClose}
                   >
-                    {t(
-                      "navigation.sidebar.importDialog.action.cancel",
-                      "Cancel",
-                    )}
+                    {committing
+                      ? t(
+                          "navigation.sidebar.importDialog.action.close",
+                          "Close",
+                        )
+                      : t(
+                          "navigation.sidebar.importDialog.action.cancel",
+                          "Cancel",
+                        )}
                   </button>
                   <button
                     type="button"
@@ -779,10 +829,15 @@ export function AppSidebarConversationImportDialog({
                             "navigation.sidebar.importDialog.action.replace",
                             "Re-import",
                           )
-                        : t(
-                            "navigation.sidebar.importDialog.action.confirm",
-                            "Import Conversation",
-                          )}
+                        : checkedImportingCount > 0
+                          ? t(
+                              "navigation.sidebar.importDialog.action.monitor",
+                              "View progress",
+                            )
+                          : t(
+                              "navigation.sidebar.importDialog.action.confirm",
+                              "Import Conversation",
+                            )}
                   </button>
                 </div>
               </div>

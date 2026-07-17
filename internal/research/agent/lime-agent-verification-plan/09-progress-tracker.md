@@ -25,7 +25,6 @@
 | S4 P0 low-cost green | `done` | 100% | Phase A preflight 通过；8 个 P0 低成本 summaries pass；release startup 分层 summary 已补齐 |
 | S5 Scenario lane selector | `done` | 100% | 已跑通 deterministic contract、replay、workspace / GUI smoke、browser / adapter、Skill Forge、tool approval / sandbox、Claw current fixture、release startup lane |
 | S6 Supervisor policy | `done` | 80% | 使用边界已落盘；尚未接入具体 judge prompt |
-| S7 Flag differential harness | `done` | 100% | 最小样例已接入 benchmark plan / compare；Supervisor review input 与输出 schema 已固定 |
 | S8 30/60/90 路线图 | `done` | 100% | 路线图已落盘 |
 | S9 Managed Objective scene draft | `done` | 100% | 场景草案已落盘并挂入索引和进度追踪 |
 
@@ -61,7 +60,6 @@
 - `04-p0-green-plan.md`
 - `05-scenario-lanes.md`
 - `06-supervisor-and-judges.md`
-- `07-flag-differential-harness.md`
 - `08-30-60-90-roadmap.md`
 - `11-command-bridge-evidence-summary-example.md`
 - `12-harness-replay-evidence-summary-example.md`
@@ -160,34 +158,6 @@
 - 禁止 full qcloop
 - 禁止 live Provider
 
-### 3.3 Flag differential harness 最小样例
-
-状态：`in-progress`
-
-当前已有：
-
-- 已选 `Managed Objective auto continuation guard` 作为首个 baseline / candidate diff 对象。
-- baseline 复用最近 green 或稳定 sidecar，candidate 只切单个 flag。
-- `agent-qc:benchmark:plan` / `agent-qc:benchmark:compare` 已是现有入口，不需要另起平台。
-- 默认 benchmark manifest 已落到 `internal/test/agent-qc-benchmark.manifest.json`。
-- `benchmark:compare` 已输出 `scenarioDiffs[].deterministicDiff`，并能从 Managed Objective smoke sidecar 抽取 turn / objective / guard / evidence facts。
-- `benchmark:compare` 已输出 `supervisorReview.input`，schema 为 `agent-qc-supervisor-review-input-v1`。
-- Supervisor 输出 schema 已固定为 `agent-qc-supervisor-verdict-v1`，包含 `score / verdict / regressions / needsHumanReview / reason`。
-
-缺口：
-
-- 本阶段无阻断；真实 LLM judge 执行入口留作后续显式 opt-in，不作为默认 compare 行为。
-
-下一刀：
-
-1. 后续如需真实 LLM judge，再新增显式 opt-in 执行入口。
-2. 默认继续保持 `benchmark:compare` 只生成 review input，不调用 Provider。
-
-预算：
-
-- `budget:normal`
-- 先跑 deterministic diff，不默认启用 live Provider
-
 ## 4. 阻断与风险
 
 | 风险 | 当前处理 |
@@ -219,8 +189,6 @@
 | P1 | 给 `claw-chat-ready-streaming` 写低成本 runtime / GUI summary 示例 | `budget:tight` | `done` |
 | P1 | 给 `release-package-startup-smoke` 写 source-tree startup / release-artifact 分层 summary 示例 | `budget:tight` | `done` |
 | P2 | 把 Managed Objective 收成 Agent QC 场景草案 | `budget:normal` | `done` |
-| P2 | 设计 flag differential 最小样例 | `budget:normal` | `done` |
-| P2 | 接入 `benchmark:compare` deterministic diff 输出 | `budget:normal` | `done` |
 | P2 | 接入 Supervisor rubric 输入裁剪 | `budget:normal` | `done` |
 | P2 | objective checklist 缺 audit sidecar fail-closed | `budget:tight` | `done` |
 | P2 | local verify gate sidecar 脚本化 | `budget:tight` | `done` |
@@ -247,17 +215,12 @@
 - 新增 `11-command-bridge-evidence-summary-example.md`，把本次命令结果整理成 structured evidence summary；明确它不是 official Evidence Pack，不能 gate release。
 - 生成 `.lime/qc/qcloop-command-bridge-contract-payload.json`，只验证单场景 payload 和结构化 evidence prompt 约束，不提交 qcloop job。
 - Managed Objective 场景草案已落盘并挂入索引和进度追踪，S9 从 `in-progress` 收口为 `done`。
-- 新增 flag differential harness 最小样例，选 `Managed Objective auto continuation guard` 作为首个 baseline / candidate diff 对象；S7 从 `pending` 进入 `in-progress`，下一刀是接 `benchmark:compare` 和 Supervisor rubric。
-- 新增默认 benchmark manifest `internal/test/agent-qc-benchmark.manifest.json`，`agent-qc:benchmark:plan` 现在可以输出 Managed Objective differential scenario。
-- 扩展 `agent-qc:benchmark:compare`，从 baseline / candidate sidecar 抽取 deterministic facts 并输出 `scenarioDiffs[].deterministicDiff`；新增脚本回归覆盖默认 plan、字段 diff 和 Managed Objective sidecar compare。
-- 扩展 `agent-qc:benchmark:compare` 的 Supervisor review 输出：只有 deterministic diff 非空、两侧证据完整且无法机械分类时，才生成裁剪后的 `supervisorReview.input`；输出 schema 固定为 `agent-qc-supervisor-verdict-v1`，不调用 LLM / Provider。
-- 验证通过：`npx vitest run "scripts/agent-qc/benchmark-plan.test.mjs" "scripts/agent-qc/benchmark-compare.test.mjs"`、`npm run agent-qc:benchmark:check`、`npm run governance:scripts`、`git diff --check`。`governance:scripts` 仍提示本地 ignored `scripts/__pycache__` 缓存存在，不属于本轮改动。
 - 修复 `agent-qc:objective-checklist` 在 `.lime/qc/objective-completion-audit-current.json` 缺失时的 `ENOENT` 崩溃；新增 `scripts/agent-qc/objective-checklist.test.mjs` 和 core 回归，缺 sidecar 时输出明确 incomplete blocker。
 - 新增 `agent-qc:verify-local-gate` 与 `scripts/lib/agent-qc-local-verify-gate-core.mjs`，把真实 `npm run verify:local` 的退出结果写成 `.lime/qc/verify-local-current.json` / `.md`，供 completion audit 消费。
 - 刷新 current sidecar：`objective-completion-audit-current.json/.md`、`objective-completion-checklist-current.json/.md`、`qcloop-p0-single-owner-ready-current.json`、`qcloop-p0-single-owner-ready-coverage-current.json/.md`、`verify-local-current.json/.md`。
 - 最新 `agent-qc:audit -- --check` 为 `incomplete`：`16/18`，缺 `real-qcloop-evidence` 与 `local-verify-gate`；最新 `objective-checklist -- --check` 为 `5/7`，缺 official Evidence Pack 与完整 `verify:local` pass。
 - `npm run agent-qc:verify-local-gate -- --check` 已真实运行完整本地门禁入口，但在 `i18n:unused --check` 失败；因此未关闭 `local-verify-gate`，也未进入后续 lint / typecheck / Rust / GUI smoke。
-- 本轮新增 / 触碰脚本验证通过：`npx vitest run "scripts/lib/agent-qc-objective-checklist-core.test.ts" "scripts/agent-qc/objective-checklist.test.mjs" "scripts/lib/agent-qc-local-verify-gate-core.test.mjs" "scripts/agent-qc/verify-local-gate.test.mjs" "scripts/agent-qc/benchmark-plan.test.mjs" "scripts/agent-qc/benchmark-compare.test.mjs"`、`npm run agent-qc:benchmark:check`、`npm run agent-qc:check`、`npm run governance:scripts`、相关 ESLint、`node --check` 与 `git diff --check`。
+- 本轮新增 / 触碰脚本验证通过：`npx vitest run "scripts/lib/agent-qc-objective-checklist-core.test.ts" "scripts/agent-qc/objective-checklist.test.mjs" "scripts/lib/agent-qc-local-verify-gate-core.test.mjs" "scripts/agent-qc/verify-local-gate.test.mjs"`、`npm run agent-qc:check`、`npm run governance:scripts`、相关 ESLint、`node --check` 与 `git diff --check`。
 - 执行 `npm run harness:eval` 通过：suites=3，cases=2，ready=2，invalid=0，current observability gap=0，degraded observability gap=1。
 - 执行 `npm run harness:eval:trend` 通过：sampleCount=1，delta invalid=0；明确当前只能形成 trend seed，不能判断长期退化。
 - 新增 `12-harness-replay-evidence-summary-example.md`，把 replay summary / trend seed 整理成 structured evidence summary；明确它不能替代 official Evidence Pack。

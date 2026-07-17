@@ -40,7 +40,6 @@ token、时间、GUI owner、Provider 额度都会不可控。
 5. [P0 green 计划](./04-p0-green-plan.md)
 6. [场景分层与命令选择](./05-scenario-lanes.md)
 7. [Supervisor / LLM judge 使用边界](./06-supervisor-and-judges.md)
-8. [Flag differential harness](./07-flag-differential-harness.md)
 9. [30 / 60 / 90 天路线图](./08-30-60-90-roadmap.md)
 10. [推进进度追踪](./09-progress-tracker.md)
 11. [样例：command-bridge-contract Verification Contract](./10-example-contract-command-bridge.md)

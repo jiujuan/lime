@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { parse as parseToml } from "smol-toml";
+
 import {
   invokeAppServerMethod,
   readAgentRuntimeThreadCurrent,
@@ -111,14 +113,7 @@ export function taskIdsForSlice(manifest, sliceName) {
 }
 
 function readTaskToml(taskTomlPath) {
-  const script = [
-    "import json, pathlib, sys, tomllib",
-    "with pathlib.Path(sys.argv[1]).open('rb') as handle:",
-    "    payload = tomllib.load(handle)",
-    "print(json.dumps(payload))",
-  ].join("\n");
-  const output = commandOutput("python3", ["-c", script, taskTomlPath]);
-  return JSON.parse(output);
+  return parseToml(fs.readFileSync(taskTomlPath, "utf8"));
 }
 
 export function loadTaskDefinition({
@@ -732,6 +727,22 @@ export function currentChainFromError(error) {
     : null;
 }
 
+export function providerStepExhaustion(providerSteps) {
+  const steps = Array.isArray(providerSteps?.steps) ? providerSteps.steps : [];
+  const lastStep = steps.at(-1);
+  if (
+    !providerSteps?.budgets?.reasons?.includes("provider_steps") ||
+    normalizeString(lastStep?.finishReason).toLowerCase() !== "tool_call"
+  ) {
+    return null;
+  }
+  return {
+    reasons: [...providerSteps.budgets.reasons],
+    stepCount: providerSteps.stepCount,
+    usage: providerSteps.usage,
+  };
+}
+
 export function createCurrentChainRpc({
   invoke = invokeAppServerMethod,
   waitForReady = waitForHealth,
@@ -764,6 +775,15 @@ export async function runCurrentChainTask({
     maxProviderSteps: positiveInteger(options.maxProviderSteps),
     tokenBudget: positiveInteger(options.tokenBudget),
   };
+  const generation = {
+    max_output_tokens: positiveInteger(options.maxOutputTokens),
+    enable_thinking:
+      typeof options.enableThinking === "boolean"
+        ? options.enableThinking
+        : undefined,
+  };
+  const hasGenerationOverrides =
+    generation.max_output_tokens != null || generation.enable_thinking != null;
   const evidenceIntervalMs = Math.max(
     positiveInteger(options.evidenceIntervalMs) ?? 30_000,
     positiveInteger(options.intervalMs) ?? 100,
@@ -849,6 +869,7 @@ export async function runCurrentChainTask({
                     max_provider_steps: budgets.maxProviderSteps,
                     token_budget: budgets.tokenBudget,
                   },
+            ...(hasGenerationOverrides ? { generation } : {}),
           },
         },
       },
@@ -984,6 +1005,7 @@ export async function runCurrentChainTask({
       usage: evidenceCapture.providerSteps.usage,
     };
   }
+  const stepExhaustion = providerStepExhaustion(evidenceCapture.providerSteps);
   const finishedAt = new Date().toISOString();
   if (timeoutReason || !terminal) {
     let message;
@@ -1047,7 +1069,9 @@ export async function runCurrentChainTask({
     terminalMessage: normalizeString(
       (budgetCancellation
         ? `DeepSWE provider budget exhausted: reasons=${budgetCancellation.reasons.join(",")} steps=${budgetCancellation.stepCount} tokens=${budgetCancellation.usage.budgetTokens}`
-        : "") ||
+        : stepExhaustion
+          ? `DeepSWE provider budget exhausted: reasons=${stepExhaustion.reasons.join(",")} steps=${stepExhaustion.stepCount}`
+          : "") ||
         turn?.error?.message ||
         turn?.error ||
         turn?.failure?.message ||
@@ -1058,6 +1082,7 @@ export async function runCurrentChainTask({
     evidenceCapture: "terminal",
     providerSteps: evidenceCapture.providerSteps,
     budgetCancellation,
+    providerStepExhaustion: stepExhaustion,
     budgetEvidenceError: budgetEvidenceError || null,
   };
 }

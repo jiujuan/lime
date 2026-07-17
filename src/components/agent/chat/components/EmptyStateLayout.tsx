@@ -36,29 +36,8 @@ const PageContainer = styled.div.attrs({
   scroll-behavior: smooth;
   scroll-snap-type: y mandatory;
   isolation: isolate;
-  background:
-    radial-gradient(
-      circle at 8% 12%,
-      var(--lime-home-glow-primary, rgba(132, 204, 22, 0.08)),
-      transparent 28%
-    ),
-    radial-gradient(
-      circle at 76% 16%,
-      var(--lime-home-glow-secondary, rgba(186, 230, 253, 0.16)),
-      transparent 30%
-    ),
-    linear-gradient(
-      180deg,
-      var(--lime-home-bg-start, #f8fcf7) 0%,
-      var(--lime-home-bg-mid, #f9fbf8) 42%,
-      var(--lime-home-bg-end, #f5faf7) 100%
-    );
+  background: var(--lime-stage-surface, #fdf3f7);
 `;
-
-const FIRST_SCREEN_OFFSET_Y = "100px";
-const FIRST_SCREEN_OFFSET_STYLE = {
-  "--empty-state-first-screen-offset-y": FIRST_SCREEN_OFFSET_Y,
-} as React.CSSProperties;
 
 const ContentWrapper = styled.div.attrs({
   className: EMPTY_STATE_CONTENT_WRAPPER_CLASSNAME,
@@ -66,32 +45,22 @@ const ContentWrapper = styled.div.attrs({
   display: flex;
   flex: 0 0 auto;
   min-height: 100%;
-  height: 100%;
+  height: auto;
   width: 100%;
   box-sizing: border-box;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   scroll-snap-align: start;
   scroll-snap-stop: always;
   animation: ${contentReveal} 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  padding: calc(
-      0.45rem +
-        var(--empty-state-first-screen-offset-y, ${FIRST_SCREEN_OFFSET_Y})
-    )
-    0.25rem 4.7rem;
+  padding: 0.25rem 0.25rem 3.5rem;
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
   }
 
   @media (max-height: 860px) {
-    padding-top: calc(
-      0.45rem +
-        min(
-          var(--empty-state-first-screen-offset-y, ${FIRST_SCREEN_OFFSET_Y}),
-          8vh
-        )
-    );
+    padding-top: 0.15rem;
   }
 `;
 
@@ -108,14 +77,17 @@ const ComposerGlowFrame = styled.div`
     z-index: 0;
     height: clamp(24px, 4vw, 44px);
     border-radius: 999px;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(187, 247, 208, 0.08) 16%,
-      rgba(110, 231, 183, 0.16) 42%,
-      rgba(45, 212, 191, 0.14) 58%,
-      rgba(186, 230, 253, 0.08) 84%,
-      transparent 100%
+    background: var(
+      --lime-composer-glow,
+      linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(217, 95, 135, 0.05) 16%,
+        rgba(217, 95, 135, 0.16) 42%,
+        rgba(238, 130, 164, 0.14) 58%,
+        rgba(250, 196, 214, 0.08) 84%,
+        transparent 100%
+      )
     );
     filter: blur(20px);
     opacity: 0.46;
@@ -254,16 +226,14 @@ export function EmptyStateLayout({
 
   return (
     <PageContainer ref={pageContainerRef}>
-      <ContentWrapper
-        data-testid="empty-state-first-screen"
-        style={FIRST_SCREEN_OFFSET_STYLE}
-      >
+      <ContentWrapper data-testid="empty-state-first-screen">
         <EmptyStateHero
           eyebrow={heroCopy.eyebrow}
-          title=""
           slogan={heroCopy.slogan}
           description={heroCopy.description}
-          cards={[]}
+          skinBrandSubtitle={heroCopy.skinBrandSubtitle}
+          skinTagline={heroCopy.skinTagline}
+          skinStatus={heroCopy.skinStatus}
           prioritySlot={prioritySlot}
           supportingSlot={supportingSlot}
         />

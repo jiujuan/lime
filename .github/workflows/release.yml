@@ -386,6 +386,62 @@ jobs:
             --version "$RELEASE_TAG"
           find "release-assets/${{ matrix.target }}" -maxdepth 1 -type f | sort
 
+      - name: Download Windows N-1 Squirrel installer
+        if: matrix.host_platform == 'win32'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          N_MINUS_ONE_VERSION="$({
+            CANDIDATE_VERSION="$VERSION" node --input-type=module <<'NODE'
+          import { execFileSync } from "node:child_process";
+          import { selectNMinusOneVersion } from "./scripts/electron/windows-squirrel-rc-smoke.mjs";
+
+          const tags = execFileSync("git", ["tag", "--list"], {
+            encoding: "utf8",
+          }).split(/\r?\n/);
+          process.stdout.write(
+            selectNMinusOneVersion({
+              candidateVersion: process.env.CANDIDATE_VERSION,
+              tags,
+            }),
+          );
+          NODE
+          })"
+          N_MINUS_ONE_TAG="v$N_MINUS_ONE_VERSION"
+          mkdir -p windows-n-minus-one-package
+          gh release download "$N_MINUS_ONE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "Lime-$N_MINUS_ONE_VERSION.Setup.exe" \
+            --dir windows-n-minus-one-package
+          test -f "windows-n-minus-one-package/Lime-$N_MINUS_ONE_VERSION.Setup.exe"
+          echo "N_MINUS_ONE_VERSION=$N_MINUS_ONE_VERSION" >> "$GITHUB_ENV"
+
+      - name: Smoke installed Windows Squirrel candidate
+        if: matrix.host_platform == 'win32'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          node scripts/electron/windows-squirrel-rc-smoke.mjs \
+            --installer-dir "release-assets/${{ matrix.target }}" \
+            --candidate-feed-dir "release-assets/${{ matrix.target }}" \
+            --evidence-dir ".lime/qc/windows-squirrel-rc/$VERSION" \
+            --n-minus-one-installer-dir windows-n-minus-one-package \
+            --n-minus-one-version "$N_MINUS_ONE_VERSION" \
+            --version "$VERSION"
+
+      - name: Upload Windows Squirrel RC evidence
+        if: ${{ always() && matrix.host_platform == 'win32' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-squirrel-rc-evidence-${{ matrix.target }}
+          path: .lime/qc/windows-squirrel-rc
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload staged release assets artifact
         uses: actions/upload-artifact@v4
         with:

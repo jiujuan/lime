@@ -69,6 +69,7 @@ export function McpPageServerList({
             <div
               key={server.id}
               onClick={() => onSelectServer(server)}
+              data-testid="mcp-config-server"
               className={cn(
                 "p-2.5 rounded-lg cursor-pointer transition-colors",
                 selectedServerId === server.id

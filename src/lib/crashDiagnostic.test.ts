@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as logsApi from "@/lib/api/logs";
+import { apiKeyProviderApi } from "@/lib/api/apiKeyProvider";
+import { mcpApi } from "@/lib/api/mcp";
+import type { Config } from "@/lib/api/appConfig";
 import * as devBridge from "@/lib/dev-bridge";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
@@ -7,6 +10,7 @@ import {
   buildCrashDiagnosticFileName,
   buildCrashDiagnosticClipboardText,
   clearCrashDiagnosticHistory,
+  collectRuntimeSnapshotForDiagnostic,
   copyCrashDiagnosticJsonToClipboard,
   copyCrashDiagnosticToClipboard,
   detectDesktopPlatform,
@@ -18,6 +22,36 @@ import {
   clearWorkspaceRepairHistory,
   recordWorkspaceRepair,
 } from "./workspaceHealthTelemetry";
+
+describe("collectRuntimeSnapshotForDiagnostic", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("诊断采集应绕过 Provider 缓存读取当前快照", async () => {
+    const getProviders = vi
+      .spyOn(apiKeyProviderApi, "getProviders")
+      .mockResolvedValue([]);
+    vi.spyOn(mcpApi, "listServersWithStatus").mockResolvedValue([]);
+    const config = {
+      default_provider: "openai",
+      server: {
+        host: "127.0.0.1",
+        port: 8080,
+      },
+      minimize_to_tray: false,
+      language: "zh-CN",
+    } as Config;
+
+    const result = await collectRuntimeSnapshotForDiagnostic(config);
+
+    expect(getProviders).toHaveBeenCalledWith({ forceRefresh: true });
+    expect(result.runtimeSnapshot?.api_key_provider_summary).toMatchObject({
+      total_providers: 0,
+      total_api_keys: 0,
+    });
+  });
+});
 
 const payload = {
   generated_at: "2026-03-02T00:00:00.000Z",

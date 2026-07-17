@@ -28,7 +28,7 @@ describe("Electron Forge config", () => {
     expect(forgeConfig.makers[2].platformsToMakeOn).toEqual(["win32"]);
   });
 
-  it("builds macOS signing and notarization options only from GitHub Actions env", () => {
+  it("builds formal macOS signing and notarization options from release env", () => {
     const env = {
       APPLE_ID: "release@example.com",
       APPLE_PASSWORD: "app-specific-password",
@@ -74,6 +74,33 @@ describe("Electron Forge config", () => {
         platform: "darwin",
       }),
     ).toBeUndefined();
+  });
+
+  it("ad-hoc signs local macOS packages without enabling notarization", () => {
+    expect(macSignOptions({ env: {}, platform: "darwin" })).toEqual({
+      continueOnError: false,
+      identity: "-",
+      identityValidation: false,
+      optionsForFile: expect.any(Function),
+      preAutoEntitlements: false,
+      preEmbedProvisioningProfile: false,
+      strictVerify: true,
+    });
+    expect(
+      macSignOptions({ env: {}, platform: "darwin" }).optionsForFile(
+        "release-electron/Lime-darwin-arm64/Lime.app",
+      ),
+    ).toEqual({
+      entitlements: "lime-rs/entitlements.plist",
+      hardenedRuntime: false,
+      timestamp: "none",
+    });
+    expect(
+      macSignOptions({ env: {}, platform: "darwin" }).optionsForFile(
+        "release-electron/Lime-darwin-arm64/Lime.app/Contents/MacOS/Lime",
+      ),
+    ).toEqual({ hardenedRuntime: false, timestamp: "none" });
+    expect(macNotarizeOptions({ env: {}, platform: "darwin" })).toBeUndefined();
   });
 
   it("runs macOS branding before signing and notarization", () => {

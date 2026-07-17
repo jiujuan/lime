@@ -7,6 +7,7 @@ import {
   collectBareRuntimeImports,
   verifyElectronRuntimeBundles,
   verifyMacAppIdentity,
+  verifyMacAppSignatures,
 } from "./verify-package-resources.mjs";
 
 const tmpRoots = [];
@@ -114,8 +115,7 @@ describe("verify-electron-package-resources runtime bundles", () => {
 
   it("接受只包含 node/electron/相对导入的 runtime bundle", () => {
     const root = createRuntimeBundleRoot({
-      main:
-        'import path from "node:path";\nimport { Buffer } from "buffer";\nimport process from "process";\nimport "./chunk.js";\n',
+      main: 'import path from "node:path";\nimport { Buffer } from "buffer";\nimport process from "process";\nimport "./chunk.js";\n',
       preload:
         'const electron = require("electron");\nconst local = require("./local.cjs");\n',
     });
@@ -183,5 +183,62 @@ describe("verify-electron-package-resources macOS app identity", () => {
     );
 
     expect(verifyMacAppIdentity(root, { platform: "win32" })).toEqual([]);
+  });
+});
+
+describe("verify-electron-package-resources macOS app signature", () => {
+  it("用 deep strict codesign 验证主 app bundle", () => {
+    const root = createPackageRoot(cleanLimeInfoPlist());
+    const calls = [];
+
+    expect(
+      verifyMacAppSignatures(root, {
+        platform: "darwin",
+        execFileSyncImpl: (...args) => calls.push(args),
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        valid: true,
+        verification: "codesign --verify --deep --strict",
+      }),
+    ]);
+    expect(calls).toEqual([
+      [
+        "codesign",
+        ["--verify", "--deep", "--strict", expect.stringMatching(/Lime\.app$/)],
+        { encoding: "utf8", stdio: "pipe" },
+      ],
+    ]);
+  });
+
+  it("拒绝没有 sealed resources 的无效 app 签名", () => {
+    const root = createPackageRoot(cleanLimeInfoPlist());
+    const failure = Object.assign(new Error("codesign failed"), {
+      stderr: Buffer.from(
+        "code has no resources but signature indicates they must be present",
+      ),
+    });
+
+    expect(() =>
+      verifyMacAppSignatures(root, {
+        platform: "darwin",
+        execFileSyncImpl: () => {
+          throw failure;
+        },
+      }),
+    ).toThrow(/code has no resources/);
+  });
+
+  it("非 macOS 平台不调用 codesign", () => {
+    const root = createPackageRoot(cleanLimeInfoPlist());
+
+    expect(
+      verifyMacAppSignatures(root, {
+        platform: "win32",
+        execFileSyncImpl: () => {
+          throw new Error("unexpected codesign call");
+        },
+      }),
+    ).toEqual([]);
   });
 });

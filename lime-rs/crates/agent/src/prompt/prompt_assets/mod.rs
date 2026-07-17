@@ -4,7 +4,6 @@
 //! Agent 的 current prompt 事实源。业务代码不要散落手写同类 prompt。
 
 mod agents;
-mod apply_patch;
 mod compact;
 mod goals;
 mod permissions;
@@ -14,7 +13,6 @@ mod review_request;
 mod template;
 
 pub use agents::HIERARCHICAL_AGENTS_MESSAGE;
-pub use apply_patch::APPLY_PATCH_TOOL_INSTRUCTIONS;
 pub use compact::{SUMMARIZATION_PROMPT, SUMMARY_PREFIX};
 pub use goals::{
     budget_limit_prompt, continuation_prompt, objective_updated_prompt, ThreadGoalPromptInput,
@@ -39,7 +37,6 @@ mod tests {
     fn exports_all_reference_prompt_assets_without_reference_branding() {
         let assets = [
             HIERARCHICAL_AGENTS_MESSAGE,
-            APPLY_PATCH_TOOL_INSTRUCTIONS,
             SUMMARIZATION_PROMPT,
             SUMMARY_PREFIX,
             REALTIME_BACKEND_PROMPT,

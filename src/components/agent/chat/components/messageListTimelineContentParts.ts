@@ -195,6 +195,7 @@ export function buildTimelineVisibleTextContentParts(params: {
 
   if (
     params.displayContent.trim() &&
+    (includeCommentary || parts.length === 0) &&
     !parts.some(
       (part) =>
         part.type === "text" &&

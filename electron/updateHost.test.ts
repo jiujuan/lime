@@ -1,14 +1,59 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { appState, checkForUpdatesMock, quitAndInstallMock, setFeedURLMock } =
-  vi.hoisted(() => ({
+const {
+  appState,
+  autoUpdaterEmit,
+  autoUpdaterListeners,
+  checkForUpdatesMock,
+  onAutoUpdater,
+  onceAutoUpdater,
+  quitAndInstallMock,
+  removeAutoUpdaterListener,
+  setFeedURLMock,
+} = vi.hoisted(() => {
+  const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+  const removeListener = (
+    event: string,
+    listener: (...args: unknown[]) => void,
+  ) => {
+    const current = listeners.get(event) ?? [];
+    listeners.set(
+      event,
+      current.filter((candidate) => candidate !== listener),
+    );
+  };
+  const on = (event: string, listener: (...args: unknown[]) => void) => {
+    const current = listeners.get(event) ?? [];
+    current.push(listener);
+    listeners.set(event, current);
+  };
+  const once = (event: string, listener: (...args: unknown[]) => void) => {
+    const wrapped = (...args: unknown[]) => {
+      removeListener(event, wrapped);
+      listener(...args);
+    };
+    on(event, wrapped);
+  };
+  const emit = (event: string, ...args: unknown[]) => {
+    const current = listeners.get(event) ?? [];
+    for (const listener of [...current]) {
+      listener(...args);
+    }
+  };
+  return {
     appState: {
       isPackaged: false,
     },
+    autoUpdaterEmit: emit,
+    autoUpdaterListeners: listeners,
     checkForUpdatesMock: vi.fn(),
+    onAutoUpdater: on,
+    onceAutoUpdater: once,
     quitAndInstallMock: vi.fn(),
+    removeAutoUpdaterListener: removeListener,
     setFeedURLMock: vi.fn(),
-  }));
+  };
+});
 
 vi.mock("./electronRuntime", () => ({
   app: {
@@ -19,10 +64,10 @@ vi.mock("./electronRuntime", () => ({
   },
   autoUpdater: {
     checkForUpdates: checkForUpdatesMock,
-    on: vi.fn(),
-    once: vi.fn(),
+    on: onAutoUpdater,
+    once: onceAutoUpdater,
     quitAndInstall: quitAndInstallMock,
-    removeListener: vi.fn(),
+    removeListener: removeAutoUpdaterListener,
     setFeedURL: setFeedURLMock,
   },
 }));
@@ -36,6 +81,7 @@ describe("ElectronUpdateHost", () => {
     delete process.env.LIME_ELECTRON_E2E;
     delete process.env.LIME_ELECTRON_SMOKE;
     delete process.env.VITE_DEV_SERVER_URL;
+    autoUpdaterListeners.clear();
     checkForUpdatesMock.mockReset();
     quitAndInstallMock.mockReset();
     setFeedURLMock.mockReset();
@@ -139,5 +185,98 @@ describe("ElectronUpdateHost", () => {
         anchorRect: { x: 18, y: 816, width: 30, height: 30 },
       }),
     );
+  });
+
+  it("自动下载进行中启动安装会话不应再次检查并重复下载", async () => {
+    vi.useFakeTimers();
+    try {
+      appState.isPackaged = true;
+      checkForUpdatesMock.mockImplementation(() => {
+        autoUpdaterEmit("update-available");
+      });
+      const host = new ElectronUpdateHost(vi.fn());
+
+      await expect(host.invoke("check_for_updates")).resolves.toEqual(
+        expect.objectContaining({ hasUpdate: true }),
+      );
+      expect(checkForUpdatesMock).toHaveBeenCalledTimes(1);
+      await expect(host.invoke("get_update_install_session")).resolves.toEqual(
+        expect.objectContaining({ stage: "downloading" }),
+      );
+
+      const installSession = host.invoke("start_update_install_session");
+      autoUpdaterEmit(
+        "update-downloaded",
+        {},
+        "release notes",
+        "1.61.0",
+        new Date("2026-07-17T00:00:00.000Z"),
+        "https://updates.limecloud.com/Lime-1.61.0.zip",
+      );
+
+      await expect(installSession).resolves.toEqual(
+        expect.objectContaining({
+          stage: "restarting",
+          latestVersion: "1.61.0",
+        }),
+      );
+      expect(checkForUpdatesMock).toHaveBeenCalledTimes(1);
+      expect(quitAndInstallMock).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(250);
+      expect(quitAndInstallMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("多个自动检查在下载完成前只应触发一次 Electron 检查", async () => {
+    appState.isPackaged = true;
+    checkForUpdatesMock.mockImplementation(() => {
+      autoUpdaterEmit("update-available");
+    });
+    const host = new ElectronUpdateHost(vi.fn());
+
+    await expect(
+      host.invoke("check_for_updates", { automatic: true }),
+    ).resolves.toEqual(expect.objectContaining({ hasUpdate: true }));
+    await expect(
+      host.invoke("check_for_updates", { automatic: true }),
+    ).resolves.toEqual(expect.objectContaining({ hasUpdate: true }));
+
+    expect(checkForUpdatesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("多个安装请求只应触发一次重启安装", async () => {
+    vi.useFakeTimers();
+    try {
+      appState.isPackaged = true;
+      checkForUpdatesMock.mockImplementation(() => {
+        autoUpdaterEmit("update-available");
+      });
+      const host = new ElectronUpdateHost(vi.fn());
+
+      await host.invoke("check_for_updates");
+      const firstInstall = host.invoke("start_update_install_session");
+      const secondInstall = host.invoke("start_update_install_session");
+      autoUpdaterEmit(
+        "update-downloaded",
+        {},
+        "release notes",
+        "1.61.0",
+        new Date("2026-07-17T00:00:00.000Z"),
+        "https://updates.limecloud.com/Lime-1.61.0.zip",
+      );
+
+      await expect(Promise.all([firstInstall, secondInstall])).resolves.toEqual(
+        [
+          expect.objectContaining({ stage: "restarting" }),
+          expect.objectContaining({ stage: "restarting" }),
+        ],
+      );
+      await vi.advanceTimersByTimeAsync(250);
+      expect(quitAndInstallMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

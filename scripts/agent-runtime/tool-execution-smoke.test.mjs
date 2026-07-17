@@ -29,6 +29,7 @@ function readAgentControlGateBSources() {
   return [
     "scripts/agent-runtime/tool-execution-smoke.mjs",
     "scripts/agent-runtime/tool-execution-managed-smoke.mjs",
+    "scripts/agent-runtime/tool-execution-managed-restart.mjs",
     "scripts/agent-runtime/agent-control-visible-dom-gate-b.mjs",
     "src/components/agent/chat/components/AgentThreadTimelineItemRenderers.tsx",
   ]

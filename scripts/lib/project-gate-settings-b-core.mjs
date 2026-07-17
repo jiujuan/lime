@@ -51,7 +51,7 @@ export const SETTINGS_GATE_B_SCENARIOS = Object.freeze([
   {
     id: "chrome-relay-lifecycle",
     tab: "chrome-relay",
-    owner: "settings/desktop-host",
+    owner: "settings/app-server/browser-runtime",
   },
   {
     id: "automation-lifecycle",
@@ -237,7 +237,7 @@ function adaptSettingsScenario(summary, candidateRunId) {
   const valid =
     SCENARIO_IDS.has(scenarioId) &&
     proof?.complete === true &&
-    summary.proofLevel === "Gate B-F" &&
+    ["Gate B-F", "Gate B-R"].includes(summary.proofLevel) &&
     bridge.electron === true &&
     bridge.preloadInvoke === true &&
     bridge.transport === "electron-ipc" &&

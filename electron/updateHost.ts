@@ -156,6 +156,9 @@ export class ElectronUpdateHost {
       };
     }
     this.#configure();
+    if (this.#hasPendingUpdate()) {
+      return this.#currentVersionInfo();
+    }
 
     this.#setSession({
       stage: "checking",
@@ -200,6 +203,28 @@ export class ElectronUpdateHost {
       };
     }
     this.#configure();
+
+    if (this.#session.stage === "downloading") {
+      return {
+        success: true,
+        message: "更新下载已开始",
+        filePath: null,
+      };
+    }
+    if (this.#session.stage === "completed") {
+      return {
+        success: true,
+        message: "更新已下载，准备安装",
+        filePath: null,
+      };
+    }
+    if (this.#isInstallingUpdate()) {
+      return {
+        success: true,
+        message: "更新安装已开始",
+        filePath: null,
+      };
+    }
 
     this.#setSession({
       stage: "checking",
@@ -263,23 +288,31 @@ export class ElectronUpdateHost {
     this.#configure();
 
     try {
+      if (this.#isInstallingUpdate()) {
+        return this.#session;
+      }
       if (this.#session.stage !== "completed") {
-        this.#setSession({
-          stage: "checking",
-          message: "正在检查并下载更新",
-          isActive: true,
-        });
-        const info = await this.#checkForUpdatesOnce();
-        if (!info) {
+        if (this.#session.stage !== "downloading") {
           this.#setSession({
-            stage: "up_to_date",
-            message: "当前已是最新版本",
-            isActive: false,
-            completedAt: Date.now(),
+            stage: "checking",
+            message: "正在检查并下载更新",
+            isActive: true,
           });
-          return this.#session;
+          const info = await this.#checkForUpdatesOnce();
+          if (!info) {
+            this.#setSession({
+              stage: "up_to_date",
+              message: "当前已是最新版本",
+              isActive: false,
+              completedAt: Date.now(),
+            });
+            return this.#session;
+          }
         }
         await this.#waitForDownloadedUpdate();
+      }
+      if (this.#isInstallingUpdate()) {
+        return this.#session;
       }
       this.#setSession({
         stage: "restarting",
@@ -409,6 +442,21 @@ export class ElectronUpdateHost {
 
   #downloadUrl(info: UpdateInfo | null): string | null {
     return info?.updateURL ?? null;
+  }
+
+  #hasPendingUpdate(): boolean {
+    return (
+      this.#session.stage === "downloading" ||
+      this.#session.stage === "completed" ||
+      this.#isInstallingUpdate()
+    );
+  }
+
+  #isInstallingUpdate(): boolean {
+    return (
+      this.#session.stage === "installing" ||
+      this.#session.stage === "restarting"
+    );
   }
 
   async #checkForUpdatesOnce(): Promise<UpdateInfo | null> {

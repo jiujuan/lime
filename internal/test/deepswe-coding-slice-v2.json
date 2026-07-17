@@ -12,7 +12,7 @@
     "licensePolicy": "private-evaluation-only-until-source-and-task-repository-license-review"
   },
   "executionContract": {
-    "adapterVersion": "deepswe-current-chain-adapter-v4",
+    "adapterVersion": "deepswe-current-chain-adapter-v5",
     "adapterCommand": "npm run harness:deepswe:run",
     "agentPath": "Lime App Server JSON-RPC current chain",
     "workspace": "system temporary directory outside the Lime repository at the task base commit",
@@ -56,7 +56,8 @@
     ],
     "currentBlockers": [
       "Agnes produced no candidate in TS/Go/Rust diagnostics, including runtime-capped runs with a complete provider tool catalog",
-      "Pier is installed but no local container runtime is available"
+      "The local Pier wrapper cannot import its deleted editable package source",
+      "No local Docker, Podman, nerdctl, or Colima container runtime is available"
     ]
   },
   "slices": {

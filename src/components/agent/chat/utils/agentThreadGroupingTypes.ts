@@ -49,12 +49,3 @@ export interface AgentThreadDisplayModel {
   orderedBlocks: AgentThreadOrderedBlock[];
   summaryChips: AgentThreadSummaryChip[];
 }
-
-export type AgentThreadGroupingTranslate = (
-  key: string,
-  options?: Record<string, unknown>,
-) => unknown;
-
-export interface AgentThreadDisplayModelOptions {
-  t?: AgentThreadGroupingTranslate;
-}

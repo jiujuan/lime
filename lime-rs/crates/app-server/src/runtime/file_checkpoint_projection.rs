@@ -165,6 +165,7 @@ fn previous_content_from_payload(payload: &Value) -> Option<String> {
     string_field(
         payload,
         &[
+            "content",
             "previousContent",
             "previous_content",
             "beforeContent",

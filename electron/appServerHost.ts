@@ -39,14 +39,17 @@ const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_METHOD =
   "projectShell/session/drainEvents";
 const APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_METHOD =
   "conversationImport/thread/commit";
+const APP_SERVER_CONVERSATION_IMPORT_JOB_READ_METHOD =
+  "conversationImport/job/read";
 const APP_SERVER_PLUGIN_UI_RUNTIME_START_TIMEOUT_MS = 60_000;
 const APP_SERVER_PLUGIN_INSTALLED_SAVE_TIMEOUT_MS = 240_000;
 const APP_SERVER_PLUGIN_PACKAGE_INSPECT_TIMEOUT_MS = 240_000;
 const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_TIMEOUT_MS = 3_000;
 const APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_TIMEOUT_MS = 180_000;
+const APP_SERVER_CONVERSATION_IMPORT_SCAN_TIMEOUT_MS = 120_000;
+const APP_SERVER_CONVERSATION_IMPORT_PREVIEW_TIMEOUT_MS = 120_000;
 const APP_SERVER_REQUEST_TIMEOUT_OVERRIDE_CEILING_MS = 600_000;
 const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
-const APP_SERVER_STREAMING_TURN_IDENTITY_READ_TIMEOUT_MS = 2_000;
 const APP_SERVER_STREAMING_TURN_IDENTITY_READ_RETRY_MS = 25;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_CANCEL_REQUEST_METHOD = "$/cancelRequest";
@@ -141,6 +144,10 @@ export class ElectronAppServerHost {
       }
       if (isJsonRpcRequestLike(message)) {
         const proxiedMessage = this.#proxyRequestMessage(message);
+        const timeoutMs = resolveAppServerRequestTimeoutMs(
+          proxiedMessage.message.method,
+          request.timeoutMs,
+        );
         if (proxiedMessage.message.method === APP_SERVER_TURN_START_METHOD) {
           try {
             responses.push(
@@ -148,6 +155,7 @@ export class ElectronAppServerHost {
                 connected,
                 message,
                 proxiedMessage.message,
+                timeoutMs,
               )),
             );
           } catch (error) {
@@ -162,10 +170,6 @@ export class ElectronAppServerHost {
           }
           continue;
         }
-        const timeoutMs = resolveAppServerRequestTimeoutMs(
-          proxiedMessage.message.method,
-          request.timeoutMs,
-        );
         try {
           const result = await this.#withActiveProxyRequest(
             proxiedMessage.originalId,
@@ -362,7 +366,9 @@ export class ElectronAppServerHost {
     connected: ConnectedAppServerSidecar,
     originalMessage: JsonRpcRequest,
     message: JsonRpcRequest,
+    timeoutMs: number,
   ): Promise<JsonRpcMessage[]> {
+    const requestDeadlineAtMs = Date.now() + timeoutMs;
     try {
       const result = await this.#withActiveProxyRequest(
         originalMessage.id,
@@ -387,7 +393,11 @@ export class ElectronAppServerHost {
       const acceptedIdentity =
         identity && turnIdentityMatchesStart(identity, originalMessage)
           ? identity
-          : await this.#readCanonicalTurnIdentity(connected, originalMessage);
+          : await this.#readCanonicalTurnIdentity(
+              connected,
+              originalMessage,
+              requestDeadlineAtMs,
+            );
       return [
         streamingTurnStartAcceptedResponse(originalMessage, acceptedIdentity),
       ];
@@ -398,6 +408,7 @@ export class ElectronAppServerHost {
       const identity = await this.#readCanonicalTurnIdentity(
         connected,
         originalMessage,
+        requestDeadlineAtMs,
       );
       return [streamingTurnStartAcceptedResponse(originalMessage, identity)];
     }
@@ -406,6 +417,7 @@ export class ElectronAppServerHost {
   async #readCanonicalTurnIdentity(
     connected: ConnectedAppServerSidecar,
     originalMessage: JsonRpcRequest,
+    requestDeadlineAtMs: number,
   ): Promise<CanonicalTurnIdentity> {
     const params = turnStartParams(originalMessage);
     const sessionId = nonEmptyString(params?.sessionId);
@@ -416,11 +428,8 @@ export class ElectronAppServerHost {
       );
     }
 
-    const startedAt = Date.now();
     for (;;) {
-      const elapsedMs = Date.now() - startedAt;
-      const remainingMs =
-        APP_SERVER_STREAMING_TURN_IDENTITY_READ_TIMEOUT_MS - elapsedMs;
+      const remainingMs = requestDeadlineAtMs - Date.now();
       if (remainingMs <= 0) {
         break;
       }
@@ -430,10 +439,7 @@ export class ElectronAppServerHost {
         connected.connection.client.readSession({ sessionId }),
         "agentSession/read",
         {
-          timeoutMs: Math.min(
-            DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS,
-            remainingMs,
-          ),
+          timeoutMs: remainingMs,
         },
       );
       const identity = turnIdentityFromSessionRead(
@@ -447,11 +453,7 @@ export class ElectronAppServerHost {
 
       const retryDelayMs = Math.min(
         APP_SERVER_STREAMING_TURN_IDENTITY_READ_RETRY_MS,
-        Math.max(
-          0,
-          APP_SERVER_STREAMING_TURN_IDENTITY_READ_TIMEOUT_MS -
-            (Date.now() - startedAt),
-        ),
+        Math.max(0, requestDeadlineAtMs - Date.now()),
       );
       if (retryDelayMs <= 0) {
         break;
@@ -1205,6 +1207,15 @@ function resolveDefaultAppServerRequestTimeoutMs(method: string): number {
   }
   if (method === APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_METHOD) {
     return APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_TIMEOUT_MS;
+  }
+  if (method === APP_SERVER_CONVERSATION_IMPORT_JOB_READ_METHOD) {
+    return APP_SERVER_CONVERSATION_IMPORT_SCAN_TIMEOUT_MS;
+  }
+  if (method === "conversationImport/source/scan") {
+    return APP_SERVER_CONVERSATION_IMPORT_SCAN_TIMEOUT_MS;
+  }
+  if (method === "conversationImport/thread/preview") {
+    return APP_SERVER_CONVERSATION_IMPORT_PREVIEW_TIMEOUT_MS;
   }
   if (method !== APP_SERVER_TURN_START_METHOD) {
     return DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS;

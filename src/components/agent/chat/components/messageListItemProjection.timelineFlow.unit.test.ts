@@ -59,16 +59,18 @@ describe("messageListItemProjection timeline flow", () => {
         { type: "action_required" }
       > => part.type === "action_required",
     );
-    expect(approvalParts).toHaveLength(1);
-    expect(approvalParts?.[0]?.actionRequired.requestId).toBe(
-      "approval-terminal",
-    );
-    expect(projection.rendererActionRequests).toEqual([]);
-    expect(projection.primaryActionRequests).toBeUndefined();
-    expect(projection.primaryTimeline).toBeNull();
+    expect(approvalParts).toHaveLength(0);
+    expect(projection.rendererActionRequests).toBeUndefined();
+    expect(projection.primaryActionRequests).toEqual([]);
+    expect(projection.primaryTimeline?.items).toEqual([
+      expect.objectContaining({
+        id: "canonical-approval-item",
+        type: "approval_request",
+      }),
+    ]);
   });
 
-  it("历史 timeline 的审批和问答应按顺序进入交错过程", () => {
+  it("历史 timeline 的审批和问答应按顺序进入 compact 过程摘要", () => {
     const message: Message = {
       id: "assistant-history-actions",
       role: "assistant",
@@ -152,21 +154,12 @@ describe("messageListItemProjection timeline flow", () => {
     expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
-      "action_required",
-      "text",
-      "action_required",
-      "text",
     ]);
     expect(
       projection.rendererContentParts?.[0]?.type === "text"
         ? projection.rendererContentParts[0].text
         : "",
-    ).toBe("我需要先确认是否允许联网。");
-    expect(
-      projection.rendererContentParts?.[2]?.type === "text"
-        ? projection.rendererContentParts[2].text
-        : "",
-    ).toBe("确认后我再询问输出格式。");
+    ).toBe(expectedActionContent);
 
     const actionParts = projection.rendererContentParts?.filter(
       (
@@ -176,15 +169,14 @@ describe("messageListItemProjection timeline flow", () => {
         { type: "action_required" }
       > => part.type === "action_required",
     );
-    expect(actionParts?.map((part) => part.actionRequired.requestId)).toEqual([
+    expect(actionParts).toHaveLength(0);
+    expect(projection.primaryTimeline?.items.map((item) => item.id)).toEqual([
       "approval-search",
       "ask-format",
     ]);
-    expect(actionParts?.[0]?.actionRequired.status).toBe("pending");
-    expect(actionParts?.[1]?.actionRequired.status).toBe("submitted");
   });
 
-  it("历史图片查看工具应保持 timeline 顺序并保留图片 metadata", () => {
+  it("历史图片查看工具应保留 canonical timeline 与图片 metadata", () => {
     const message: Message = {
       id: "assistant-history-view-image",
       role: "assistant",
@@ -244,29 +236,17 @@ describe("messageListItemProjection timeline flow", () => {
     expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
-      "tool_use",
-      "text",
     ]);
-    expect(
-      projection.rendererContentParts?.[0]?.type === "text"
-        ? projection.rendererContentParts[0].text
-        : "",
-    ).toBe("我先查看你给的截图。");
-
-    const toolPart = projection.rendererContentParts?.find(
-      (
-        part,
-      ): part is Extract<
-        NonNullable<Message["contentParts"]>[number],
-        { type: "tool_use" }
-      > => part.type === "tool_use",
+    const imageTool = projection.primaryTimeline?.items.find(
+      (item) => item.id === "tool-view-image-history",
     );
-    expect(toolPart?.toolCall.result?.metadata?.image_url).toBe(
+    expect(imageTool?.type).toBe("tool_call");
+    expect(imageTool?.metadata?.image_url).toBe(
       "data:image/png;base64,ZGFzaGJvYXJk",
     );
   });
 
-  it("历史任务板工具应保持时间线穿插顺序且不把任务 JSON 当正文", () => {
+  it("历史任务板工具应保留最终文本且不把任务 JSON 当正文", () => {
     const message: Message = {
       id: "assistant-task-board-history",
       role: "assistant",
@@ -385,28 +365,19 @@ describe("messageListItemProjection timeline flow", () => {
       },
     ] as never);
 
-    const expectedActionContent = "最终结论：任务板已完成。";
+    const expectedActionContent =
+      "我先把工作拆成任务板。\n\n最终结论：任务板已完成。";
     expect(projection.actionContent).toBe(expectedActionContent);
     expect(projection.rendererRawContent).toBe(expectedActionContent);
     expect(projection.rendererRawContent).not.toContain("updatedFields");
     expect(projection.rendererRawContent).not.toContain("task_list_id");
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
-      "tool_use",
-      "tool_use",
-      "tool_use",
       "text",
     ]);
     expect(
-      projection.rendererContentParts?.[0]?.type === "text"
-        ? projection.rendererContentParts[0].text
-        : "",
-    ).toBe("我先把工作拆成任务板。");
-    expect(
-      projection.rendererContentParts?.filter(
-        (part) => part.type === "tool_use",
-      ),
-    ).toHaveLength(3);
+      projection.rendererContentParts?.every((part) => part.type === "text"),
+    ).toBe(true);
   });
 
   it("紧凑历史应保留同一 Turn 经工具分隔的全部显式 final identity", () => {
@@ -482,22 +453,8 @@ describe("messageListItemProjection timeline flow", () => {
       },
     );
 
-    expect(
-      projection.rendererContentParts
-        ?.filter((part) => part.type === "text")
-        .map((part) => ({
-          text: part.text,
-          threadItemId: part.metadata?.threadItemId,
-        })),
-    ).toEqual([
-      {
-        text: "第一段最终答复",
-        threadItemId: "first-explicit-final",
-      },
-      {
-        text: "第二段最终答复",
-        threadItemId: "second-explicit-final",
-      },
-    ]);
+    expect(projection.actionContent).toContain("第一段最终答复");
+    expect(projection.actionContent).toContain("第二段最终答复");
+    expect(projection.rendererContentParts).toBeUndefined();
   });
 });

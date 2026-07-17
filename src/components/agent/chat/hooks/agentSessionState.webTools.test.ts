@@ -172,7 +172,7 @@ describe("agentSessionState WebTools hydrate", () => {
     });
   });
 
-  it("同会话 hydrate 保护本地 WebSearch 工具时展开过程仍应显示 App Server 中间 reasoning", () => {
+  it("同会话 hydrate 应保留 canonical WebTools 顺序，但历史 GUI 只投影 final", () => {
     const turnId = "turn-web-tools-current";
     const topicId = "topic-web-tools-current";
     const currentMessages: Message[] = [
@@ -398,7 +398,6 @@ describe("agentSessionState WebTools hydrate", () => {
       activePendingA2UISource: null,
       canOpenSavedSiteContent: false,
       expandedHistoricalAssistantMessageIds: new Set(),
-      expandedHistoricalTimelineKeys: new Set(),
       expandedLongHistoricalMessageIds: new Set(),
       group: renderGroup as never,
       hasActiveInteractiveRuntime: false,
@@ -413,14 +412,13 @@ describe("agentSessionState WebTools hydrate", () => {
 
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
-      "tool_use",
-      "thinking",
-      "tool_use",
-      "text",
     ]);
-    expect(projection.rendererContentParts?.[2]).toMatchObject({
-      type: "thinking",
-      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
-    });
+    expect(projection.actionContent).toBe("网页搜索渲染结论。");
+    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(true);
+    expect(projection.primaryTimeline?.items.map((item) => item.id)).toEqual([
+      "tool-search-current",
+      "reasoning-web-tools-current",
+      "tool-fetch-current",
+    ]);
   });
 });

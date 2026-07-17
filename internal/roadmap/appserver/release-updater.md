@@ -195,4 +195,6 @@ npm run smoke:electron
 npm run electron:package:dir
 ```
 
-本地 macOS `electron-forge make --targets dmg,zip` 还依赖 `@electron-forge/maker-dmg` 的 optional DMG 工具链；如果本机 Node / native addon 环境无法安装该 optional dependency，可以先用 `electron:make:zip-local-feed` 验证 updater metadata，再把 DMG、签名与公证留给 GitHub Actions macOS runner 证明。Windows Squirrel 当前必须在 Windows runner 上验证，macOS 本机不作为 Windows installer 实机证据。
+本地 macOS `electron-forge make --targets dmg,zip` 还依赖 `@electron-forge/maker-dmg` 的 optional DMG 工具链；如果本机 Node / native addon 环境无法安装该 optional dependency，可以先用 `electron:make:zip-local-feed` 验证 updater metadata，再把 DMG、签名与公证留给 GitHub Actions macOS runner 证明。
+
+Windows Squirrel 的 L8 current 入口是 `scripts/electron/windows-squirrel-rc-smoke.mjs`。手工 Windows package workflow 与 release Windows matrix 都必须下载低于候选的最近稳定 GitHub Release Setup，安装 N-1 后通过真实 preload/IPC `autoUpdater` 请求仅监听 `127.0.0.1` 的候选 `RELEASES + full.nupkg` feed；只有 downloaded/restarting、旧进程退出、候选 app path 与候选 packaged `SHELL-01` 同时成立，summary 才可声明 N-1 passed。macOS 本机的 runner 单测、YAML/guard 通过都不构成 Windows installer/update 实机证据。

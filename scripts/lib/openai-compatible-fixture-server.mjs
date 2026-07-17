@@ -56,10 +56,7 @@ function requestToolNames(body) {
   return body.tools
     .map((tool) =>
       String(
-        tool?.function?.name ||
-          tool?.name ||
-          tool?.tool?.function?.name ||
-          "",
+        tool?.function?.name || tool?.name || tool?.tool?.function?.name || "",
       ).trim(),
     )
     .filter(Boolean);
@@ -429,7 +426,10 @@ function shouldDeferScriptedResponse(scripted, body, options) {
   return requestTools.length === 0;
 }
 
-function sendScriptedChatCompletion(response, { model, scripted, stream, body }) {
+function sendScriptedChatCompletion(
+  response,
+  { model, scripted, stream, body },
+) {
   if (!scripted || typeof scripted !== "object") {
     return false;
   }
@@ -471,16 +471,76 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
     String(options.apiKey || DEFAULT_FIXTURE_API_KEY).trim() ||
     DEFAULT_FIXTURE_API_KEY;
   const content = String(options.content || "MO_OK");
-  const scriptedResponses = normalizeScriptedResponses(options.scriptedResponses);
+  const scriptedResponses = normalizeScriptedResponses(
+    options.scriptedResponses,
+  );
   const scriptedOptions = {
     deferScriptedToolCallsUntilAvailable:
       options.deferScriptedToolCallsUntilAvailable === true,
   };
   let scriptedIndex = 0;
   const requests = [];
+  const connectionDiagnostics = [];
+  const connectionDiagnosticsEnabled =
+    options.connectionDiagnostics === true ||
+    process.env.LIME_FIXTURE_CONNECTION_DIAGNOSTICS === "1";
+  const socketIds = new Map();
+  const socketRequestCounts = new Map();
+  let nextSocketId = 1;
+  let nextRequestId = 1;
+
+  const socketSnapshot = (socket) => ({
+    socketId: socketIds.get(socket) || null,
+    localPort: socket.localPort || null,
+    remotePort: socket.remotePort || null,
+    destroyed: socket.destroyed,
+    readableEnded: socket.readableEnded,
+    writableEnded: socket.writableEnded,
+    requestCount: socketRequestCounts.get(socket) || 0,
+  });
+  const recordConnectionDiagnostic = (event, details = {}) => {
+    if (!connectionDiagnosticsEnabled) {
+      return;
+    }
+    const entry = {
+      at: new Date().toISOString(),
+      event,
+      ...details,
+    };
+    connectionDiagnostics.push(entry);
+    console.error(`[fixture:connection] ${JSON.stringify(entry)}`);
+  };
 
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || "/", "http://127.0.0.1");
+    const requestId = nextRequestId;
+    nextRequestId += 1;
+    const requestSocket = request.socket;
+    socketRequestCounts.set(
+      requestSocket,
+      (socketRequestCounts.get(requestSocket) || 0) + 1,
+    );
+    const requestDetails = () => ({
+      requestId,
+      method: request.method || null,
+      path: url.pathname,
+      requestComplete: request.complete,
+      responseFinished: response.writableFinished,
+      ...socketSnapshot(requestSocket),
+    });
+    recordConnectionDiagnostic("request-start", requestDetails());
+    request.once("end", () => {
+      recordConnectionDiagnostic("request-end", requestDetails());
+    });
+    request.once("close", () => {
+      recordConnectionDiagnostic("request-close", requestDetails());
+    });
+    response.once("finish", () => {
+      recordConnectionDiagnostic("response-finish", requestDetails());
+    });
+    response.once("close", () => {
+      recordConnectionDiagnostic("response-close", requestDetails());
+    });
     let requestRecord = null;
 
     if (request.method === "GET" && url.pathname === "/v1/models") {
@@ -584,6 +644,25 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
       });
     }
   });
+  server.on("connection", (socket) => {
+    const socketId = nextSocketId;
+    nextSocketId += 1;
+    socketIds.set(socket, socketId);
+    socketRequestCounts.set(socket, 0);
+    recordConnectionDiagnostic("socket-open", socketSnapshot(socket));
+    socket.once("end", () => {
+      recordConnectionDiagnostic("socket-end", socketSnapshot(socket));
+    });
+    socket.once("close", (hadError) => {
+      recordConnectionDiagnostic("socket-close", {
+        ...socketSnapshot(socket),
+        hadError,
+      });
+      socketIds.delete(socket);
+      socketRequestCounts.delete(socket);
+    });
+  });
+  server.keepAliveTimeout = 1_000;
 
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -603,9 +682,13 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
   return {
     baseUrl,
     requests,
+    connectionDiagnostics,
     provider: buildProviderDescriptor({ baseUrl, model, apiKey }),
-    close: () =>
-      new Promise((resolve, reject) => {
+    close: async () => {
+      recordConnectionDiagnostic("server-close-start", {
+        sockets: [...socketIds.keys()].map(socketSnapshot),
+      });
+      const closeResult = new Promise((resolve, reject) => {
         server.close((error) => {
           if (error) {
             reject(error);
@@ -613,6 +696,28 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
           }
           resolve();
         });
-      }),
+        server.closeIdleConnections?.();
+        recordConnectionDiagnostic("server-close-idle-requested", {
+          sockets: [...socketIds.keys()].map(socketSnapshot),
+        });
+      });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const unclaimedSockets = [...socketIds.keys()].filter(
+        (socket) =>
+          !socket.destroyed && (socketRequestCounts.get(socket) || 0) === 0,
+      );
+      // Node does not classify a TCP connection as HTTP-idle before its first request.
+      // Such a socket cannot own a provider response body, so targeted cleanup cannot hide one.
+      for (const socket of unclaimedSockets) {
+        socket.destroy();
+      }
+      recordConnectionDiagnostic("server-close-unclaimed-destroyed", {
+        sockets: unclaimedSockets.map(socketSnapshot),
+      });
+      await closeResult;
+      recordConnectionDiagnostic("server-close-complete", {
+        sockets: [...socketIds.keys()].map(socketSnapshot),
+      });
+    },
   };
 }

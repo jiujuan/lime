@@ -8,7 +8,6 @@ import App from "./App";
 import { UpdateNotificationPage } from "./pages/update-notification";
 import { BrowserRuntimeDebuggerPage } from "./pages";
 import { ResourceManagerPage } from "./features/resource-manager";
-import { BrowserConnectorGuideWindow } from "./components/settings-v2/system/chrome-relay/guide-window";
 import { AppCrashBoundary } from "./components/layout/AppCrashBoundary";
 import { finalizeCrashRecoveryAutoReload } from "./components/layout/CrashRecoveryPanel.helpers";
 import { getRuntimeAppVersion } from "./lib/appVersion";
@@ -25,8 +24,6 @@ const UPDATE_NOTIFICATION_ROUTE_ID = "update-notification";
 const UPDATE_NOTIFICATION_PATH = "/update-notification";
 const RESOURCE_MANAGER_ROUTE_ID = "resource-manager";
 const RESOURCE_MANAGER_PATH = "/resource-manager";
-const BROWSER_CONNECTOR_GUIDE_ROUTE_ID = "browser-connector-guide";
-const BROWSER_CONNECTOR_GUIDE_PATH = "/browser-connector-guide";
 
 function getEffectivePathname(location: Location): string {
   if (
@@ -44,10 +41,6 @@ function getEffectivePathname(location: Location): string {
   if (windowRoute === RESOURCE_MANAGER_ROUTE_ID) {
     return RESOURCE_MANAGER_PATH;
   }
-  if (windowRoute === BROWSER_CONNECTOR_GUIDE_ROUTE_ID) {
-    return BROWSER_CONNECTOR_GUIDE_PATH;
-  }
-
   return location.pathname;
 }
 
@@ -57,7 +50,6 @@ function getEffectivePathname(location: Location): string {
  * - /update-notification: 更新提醒悬浮窗口（独立 Desktop Host 窗口）
  * - /browser-runtime-debugger: 浏览器运行时独立调试窗口
  * - /resource-manager: 独立资源管理器窗口
- * - /browser-connector-guide: 浏览器连接器独立引导窗口
  * - 其他: 主应用
  */
 export function RootRouter() {
@@ -97,14 +89,6 @@ export function RootRouter() {
     return (
       <AppCrashBoundary>
         <ResourceManagerPage />
-      </AppCrashBoundary>
-    );
-  }
-
-  if (pathname === "/browser-connector-guide") {
-    return (
-      <AppCrashBoundary>
-        <BrowserConnectorGuideWindow />
       </AppCrashBoundary>
     );
   }

@@ -3,10 +3,38 @@ import { describe, expect, it } from "vitest";
 import {
   buildTimelineFileChangesContentPart,
   buildTimelineInlineContentParts,
+  buildTimelineVisibleTextContentParts,
 } from "./messageListTimelineContentParts";
 import { buildThreadItems } from "./messageListTimelineContentParts.testHarness";
 
 describe("messageListTimelineContentParts", () => {
+  it("历史 final 已存在时不应把混合 displayContent 重新灌回正文", () => {
+    const contentParts = buildTimelineVisibleTextContentParts({
+      displayContent: "先检查来源。\n\n最终结论。",
+      includeCommentary: false,
+      existingContentParts: [
+        {
+          type: "text",
+          text: "先检查来源。",
+          metadata: { phase: "commentary" },
+        },
+        {
+          type: "text",
+          text: "最终结论。",
+          metadata: { phase: "final_answer" },
+        },
+      ],
+    });
+
+    expect(contentParts).toEqual([
+      {
+        type: "text",
+        text: "最终结论。",
+        metadata: { phase: "final_answer" },
+      },
+    ]);
+  });
+
   it("多个 canonical patch 应聚合成一张文件变更汇总卡", () => {
     const contentPart = buildTimelineFileChangesContentPart(
       buildThreadItems([

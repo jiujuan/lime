@@ -780,6 +780,8 @@ function parseJsonRpcRequestsFromInvokeTrace(traceRaw) {
               request.params && typeof request.params === "object"
                 ? request.params
                 : {},
+            command: entry.command,
+            transport: entry.transport ?? null,
             status: entry.status,
           }));
       });
@@ -1116,7 +1118,11 @@ async function waitForSidebarSessionAbsent(page, options, sessionTitle) {
   );
 }
 
-async function runSettingsGuiRestorePhase(page, options) {
+async function runSettingsGuiRestorePhase(
+  page,
+  options,
+  { archivedScreenshotPath, recoveredScreenshotPath },
+) {
   await clearInvokeBuffers(page);
   await page.evaluate(() => {
     window.dispatchEvent(new Event("focus"));
@@ -1160,16 +1166,22 @@ async function runSettingsGuiRestorePhase(page, options) {
     state: "visible",
     timeout: options.timeoutMs,
   });
-  await page
-    .locator(
-      `${SETTINGS_ARCHIVED_RESTORE_SELECTOR}[data-session-id="${PERSISTED_SESSION_ID}"]`,
-    )
-    .click();
+  const restoreButton = page.locator(
+    `${SETTINGS_ARCHIVED_RESTORE_SELECTOR}[data-session-id="${PERSISTED_SESSION_ID}"]`,
+  );
+  await restoreButton.waitFor({ state: "visible", timeout: options.timeoutMs });
+  await page.screenshot({ path: archivedScreenshotPath, fullPage: true });
+  await restoreButton.click();
   const unarchiveTrace = await waitForSidebarGuiUpdateTrace(
     page,
     options,
     false,
   );
+  await restoreButton.waitFor({
+    state: "detached",
+    timeout: options.timeoutMs,
+  });
+  await page.screenshot({ path: recoveredScreenshotPath, fullPage: true });
   return {
     unarchiveTrace,
     requests: unarchiveTrace.requests,
@@ -1181,6 +1193,7 @@ async function launchElectronFixture({
   runtimeEnv,
   appServerEnv,
   consoleErrors,
+  pageErrors,
 }) {
   const app = await electron.launch({
     executablePath: electronPath,
@@ -1207,6 +1220,9 @@ async function launchElectronFixture({
   });
 
   const page = await app.firstWindow({ timeout: options.timeoutMs });
+  page.on("pageerror", (error) => {
+    pageErrors.push(sanitizeText(error.message));
+  });
   page.setDefaultTimeout(options.timeoutMs);
   await page.setViewportSize({ width: 1440, height: 1000 });
   const rendererSnapshot = await waitForRendererReady(page, options);
@@ -1991,6 +2007,14 @@ async function run() {
     options.evidenceDir,
     `${options.prefix}-failure.png`,
   );
+  const archivedScreenshotPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-settings-archived.png`,
+  );
+  const recoveredScreenshotPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-settings-recovered.png`,
+  );
 
   const runtimeEnv = createTempRuntimeEnv();
   const appServerBinary = resolveDevAppServerBinary({
@@ -2040,7 +2064,10 @@ async function run() {
     threadReadPageIsomorphicSummary: null,
     sidecarRestartReadback: false,
     consoleErrors: [],
+    pageErrors: [],
     screenshot: null,
+    archivedScreenshot: null,
+    recoveredScreenshot: null,
     rawEvidence: rawEvidencePath,
     summary: summaryPath,
   };
@@ -2048,6 +2075,7 @@ async function run() {
   let app = null;
   let page = null;
   const consoleErrors = [];
+  const pageErrors = [];
   const rawEvidence = {};
 
   try {
@@ -2057,6 +2085,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2087,6 +2116,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2109,6 +2139,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2134,6 +2165,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2158,6 +2190,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2181,6 +2214,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2200,12 +2234,14 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
     const settingsGuiRestoreResult = await runSettingsGuiRestorePhase(
       page,
       options,
+      { archivedScreenshotPath, recoveredScreenshotPath },
     );
     rawEvidence.settingsGuiRestore = sanitizeJson(settingsGuiRestoreResult);
     const settingsGuiRestoreSummary = assertGuiUpdateTrace(
@@ -2224,6 +2260,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2260,6 +2297,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2332,6 +2370,7 @@ async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -2372,9 +2411,16 @@ async function run() {
       consoleErrors.length === 0,
       `观察到 console error: ${consoleErrors.join(" | ")}`,
     );
+    assert(
+      pageErrors.length === 0,
+      `观察到 page error: ${pageErrors.join(" | ")}`,
+    );
 
     summary.screenshot = screenshotPath;
+    summary.archivedScreenshot = archivedScreenshotPath;
+    summary.recoveredScreenshot = recoveredScreenshotPath;
     summary.consoleErrors = consoleErrors;
+    summary.pageErrors = pageErrors;
     summary.sidecarRestartReadback = true;
     summary.ok = true;
     summary.completedAt = new Date().toISOString();
@@ -2388,6 +2434,7 @@ async function run() {
   } catch (error) {
     summary.error = error instanceof Error ? error.message : String(error);
     summary.consoleErrors = consoleErrors;
+    summary.pageErrors = pageErrors;
     if (Object.keys(rawEvidence).length > 0) {
       writeJsonFile(rawEvidencePath, rawEvidence);
     }

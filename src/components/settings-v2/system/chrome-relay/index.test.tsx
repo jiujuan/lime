@@ -1,791 +1,204 @@
 import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import {
-  cleanupMountedChromeRelaySettings,
-  cloneBrowserActionCapabilities,
-  findButton,
-  findTabButton,
-  flushEffects,
-  getBodyText,
-  openAdvancedTab,
-  renderComponent,
-} from "./chromeRelaySettingsTestFixtures";
+import { ChromeRelaySettings } from ".";
 
 const {
-  mockGetConfig,
-  mockSetBrowserConnectorInstallRoot,
-  mockGetBrowserConnectorSettings,
-  mockGetBrowserConnectorInstallStatus,
-  mockInstallBrowserConnectorExtension,
-  mockSetBrowserConnectorEnabled,
-  mockSetSystemConnectorEnabled,
-  mockSetBrowserActionCapabilityEnabled,
-  mockOpenBrowserExtensionsPage,
-  mockOpenBrowserRemoteDebuggingPage,
-  mockLaunchBrowserSession,
-  mockOpenBrowserRuntimeDebuggerWindow,
-  mockGetChromeProfileSessions,
-  mockGetChromeBridgeEndpointInfo,
-  mockGetChromeBridgeStatus,
-  mockDisconnectBrowserConnectorSession,
-  mockGetBrowserBackendPolicy,
-  mockGetBrowserBackendsStatus,
-  mockOpenBrowserConnectorGuideWindow,
+  mockCloseBrowserSession,
+  mockListBrowserSessionTargets,
+  mockOpenBrowserSession,
+  mockReadBrowserSession,
 } = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-  mockSetBrowserConnectorInstallRoot: vi.fn(),
-  mockGetBrowserConnectorSettings: vi.fn(),
-  mockGetBrowserConnectorInstallStatus: vi.fn(),
-  mockInstallBrowserConnectorExtension: vi.fn(),
-  mockSetBrowserConnectorEnabled: vi.fn(),
-  mockSetSystemConnectorEnabled: vi.fn(),
-  mockSetBrowserActionCapabilityEnabled: vi.fn(),
-  mockOpenBrowserExtensionsPage: vi.fn(),
-  mockOpenBrowserRemoteDebuggingPage: vi.fn(),
-  mockLaunchBrowserSession: vi.fn(),
-  mockOpenBrowserRuntimeDebuggerWindow: vi.fn(),
-  mockGetChromeProfileSessions: vi.fn(),
-  mockGetChromeBridgeEndpointInfo: vi.fn(),
-  mockGetChromeBridgeStatus: vi.fn(),
-  mockDisconnectBrowserConnectorSession: vi.fn(),
-  mockGetBrowserBackendPolicy: vi.fn(),
-  mockGetBrowserBackendsStatus: vi.fn(),
-  mockOpenBrowserConnectorGuideWindow: vi.fn(),
+  mockCloseBrowserSession: vi.fn(),
+  mockListBrowserSessionTargets: vi.fn(),
+  mockOpenBrowserSession: vi.fn(),
+  mockReadBrowserSession: vi.fn(),
 }));
 
-vi.mock("@/lib/api/appConfig", () => ({
-  getConfig: mockGetConfig,
+vi.mock("@/lib/api/browserRuntime", () => ({
+  closeBrowserSession: mockCloseBrowserSession,
+  listBrowserSessionTargets: mockListBrowserSessionTargets,
+  openBrowserSession: mockOpenBrowserSession,
+  readBrowserSession: mockReadBrowserSession,
 }));
 
-vi.mock("@/features/browser-runtime", () => ({
-  BrowserRuntimeDebugPanel: () => <div data-testid="browser-runtime-panel" />,
-}));
+interface MountedComponent {
+  container: HTMLDivElement;
+  root: Root;
+}
 
-vi.mock("./guide-window", () => ({
-  BrowserConnectorGuideWindow: () => (
-    <div data-testid="connector-guide-window" />
-  ),
-}));
+const mounted: MountedComponent[] = [];
+const target = {
+  id: "target-1",
+  title: "Fixture page",
+  url: "http://127.0.0.1/fixture",
+  targetType: "page",
+  webSocketDebuggerUrl: "ws://127.0.0.1/devtools/page/target-1",
+};
+const session = {
+  sessionId: "session-1",
+  profileKey: "manual-cdp-9222-target-1",
+  targetId: target.id,
+  targetTitle: target.title,
+  targetUrl: target.url,
+  remoteDebuggingPort: 9222,
+  wsDebuggerUrl: target.webSocketDebuggerUrl,
+  transportKind: "cdp_direct",
+  createdAt: "2026-07-17T00:00:00Z",
+  connected: true,
+  lifecycleState: "live",
+  controlMode: "agent",
+};
 
-vi.mock("./guide-window-launcher", () => ({
-  openBrowserConnectorGuideWindow: mockOpenBrowserConnectorGuideWindow,
-}));
+function renderComponent() {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => root.render(<ChromeRelaySettings />));
+  mounted.push({ container, root });
+  return container;
+}
 
-vi.mock("@/lib/webview-api", async () => {
-  const actual = await vi.importActual<object>("@/lib/webview-api");
-  return {
-    ...actual,
-    getBrowserConnectorSettings: mockGetBrowserConnectorSettings,
-    setBrowserConnectorInstallRoot: mockSetBrowserConnectorInstallRoot,
-    getBrowserConnectorInstallStatus: mockGetBrowserConnectorInstallStatus,
-    installBrowserConnectorExtension: mockInstallBrowserConnectorExtension,
-    setBrowserConnectorEnabled: mockSetBrowserConnectorEnabled,
-    setSystemConnectorEnabled: mockSetSystemConnectorEnabled,
-    setBrowserActionCapabilityEnabled: mockSetBrowserActionCapabilityEnabled,
-    openBrowserExtensionsPage: mockOpenBrowserExtensionsPage,
-    openBrowserRemoteDebuggingPage: mockOpenBrowserRemoteDebuggingPage,
-    launchBrowserSession: mockLaunchBrowserSession,
-    openBrowserRuntimeDebuggerWindow: mockOpenBrowserRuntimeDebuggerWindow,
-    getChromeProfileSessions: mockGetChromeProfileSessions,
-    getChromeBridgeEndpointInfo: mockGetChromeBridgeEndpointInfo,
-    getChromeBridgeStatus: mockGetChromeBridgeStatus,
-    disconnectBrowserConnectorSession: mockDisconnectBrowserConnectorSession,
-    getBrowserBackendPolicy: mockGetBrowserBackendPolicy,
-    getBrowserBackendsStatus: mockGetBrowserBackendsStatus,
-    closeChromeProfileSession: vi.fn(),
-    openChromeProfileWindow: vi.fn(),
-    setBrowserBackendPolicy: vi.fn(),
-    browserExecuteAction: vi.fn(),
-    chromeBridgeExecuteCommand: vi.fn(),
-  };
-});
+async function flushEffects() {
+  await act(async () => {
+    await Promise.resolve();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  });
+}
 
-const mockWriteClipboardText = vi.fn();
+function click(container: HTMLElement, testId: string) {
+  const button = container.querySelector<HTMLButtonElement>(
+    `[data-testid="${testId}"]`,
+  );
+  if (!button) throw new Error(`missing button: ${testId}`);
+  act(() => button.click());
+}
 
 beforeEach(async () => {
-  (
-    globalThis as typeof globalThis & {
-      IS_REACT_ACT_ENVIRONMENT?: boolean;
-    }
-  ).IS_REACT_ACT_ENVIRONMENT = true;
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: {
-      writeText: mockWriteClipboardText,
-    },
-  });
-
-  await changeLimeLocale("en-US");
-
-  mockWriteClipboardText.mockResolvedValue(undefined);
-
-  mockGetConfig.mockResolvedValue({
-    web_search: {
-      engine: "google",
-    },
-  });
-  mockGetBrowserConnectorSettings.mockResolvedValue({
-    enabled: true,
-    install_root_dir: null,
-    install_dir: null,
-    browser_action_capabilities: cloneBrowserActionCapabilities(),
-    system_connectors: [
-      {
-        id: "calendar",
-        label: "日历",
-        description: "读取和管理你的日历事件。",
-        enabled: false,
-        available: true,
-        visible: true,
-        authorization_status: "not_determined",
-        last_error: null,
-        capabilities: ["list_events", "create_event", "update_event"],
-      },
-    ],
-  });
-  mockSetBrowserConnectorInstallRoot.mockResolvedValue({
-    enabled: true,
-    install_root_dir: "/Users/test/connectors",
-    install_dir: "/Users/test/connectors/Lime Browser Connector",
-    browser_action_capabilities: cloneBrowserActionCapabilities(),
-    system_connectors: [
-      {
-        id: "calendar",
-        label: "日历",
-        description: "读取和管理你的日历事件。",
-        enabled: false,
-        available: true,
-        visible: true,
-        authorization_status: "not_determined",
-        last_error: null,
-        capabilities: ["list_events", "create_event", "update_event"],
-      },
-    ],
-  });
-  mockGetBrowserConnectorInstallStatus.mockResolvedValue({
-    status: "not_installed",
-    install_root_dir: null,
-    install_dir: null,
-    bundled_name: "Lime Browser Connector",
-    bundled_version: "0.2.0",
-    installed_name: null,
-    installed_version: null,
-    message: "尚未选择浏览器连接器安装目录",
-  });
-  mockInstallBrowserConnectorExtension.mockResolvedValue({
-    install_root_dir: "/Users/test/connectors",
-    install_dir: "/Users/test/connectors/Lime Browser Connector",
-    bundled_name: "Lime Browser Connector",
-    bundled_version: "0.2.0",
-    installed_version: "0.2.0",
-    auto_config_path:
-      "/Users/test/connectors/Lime Browser Connector/auto_config.json",
-  });
-  mockSetBrowserConnectorEnabled.mockResolvedValue({
-    enabled: false,
-    install_root_dir: null,
-    install_dir: null,
-    browser_action_capabilities: cloneBrowserActionCapabilities(),
-    system_connectors: [
-      {
-        id: "calendar",
-        label: "日历",
-        description: "读取和管理你的日历事件。",
-        enabled: false,
-        available: true,
-        visible: true,
-        authorization_status: "not_determined",
-        last_error: null,
-        capabilities: ["list_events", "create_event", "update_event"],
-      },
-    ],
-  });
-  mockSetSystemConnectorEnabled.mockResolvedValue({
-    enabled: true,
-    install_root_dir: null,
-    install_dir: null,
-    browser_action_capabilities: cloneBrowserActionCapabilities(),
-    system_connectors: [
-      {
-        id: "calendar",
-        label: "日历",
-        description: "读取和管理你的日历事件。",
-        enabled: true,
-        available: true,
-        visible: true,
-        authorization_status: "authorized",
-        last_error: null,
-        capabilities: ["list_events", "create_event", "update_event"],
-      },
-    ],
-  });
-  mockSetBrowserActionCapabilityEnabled.mockResolvedValue({
-    enabled: true,
-    install_root_dir: null,
-    install_dir: null,
-    browser_action_capabilities: [
-      {
-        key: "read_page",
-        label: "页面快照",
-        description: "抓取当前页面快照。",
-        group: "read",
-        enabled: true,
-      },
-      {
-        key: "find",
-        label: "页面内查找",
-        description: "在当前页面中查找文本。",
-        group: "read",
-        enabled: false,
-      },
-      {
-        key: "navigate",
-        label: "导航",
-        description: "导航到目标地址。",
-        group: "write",
-        enabled: true,
-      },
-      {
-        key: "click",
-        label: "点击元素",
-        description: "点击页面元素。",
-        group: "write",
-        enabled: true,
-      },
-    ],
-    system_connectors: [
-      {
-        id: "calendar",
-        label: "日历",
-        description: "读取和管理你的日历事件。",
-        enabled: true,
-        available: true,
-        visible: true,
-        authorization_status: "authorized",
-        last_error: null,
-        capabilities: ["list_events", "create_event", "update_event"],
-      },
-    ],
-  });
-  mockOpenBrowserExtensionsPage.mockResolvedValue(true);
-  mockOpenBrowserRemoteDebuggingPage.mockResolvedValue(true);
-  mockOpenBrowserConnectorGuideWindow.mockResolvedValue(undefined);
-  mockLaunchBrowserSession.mockResolvedValue({
-    profile: {
-      success: true,
-      reused: false,
-    },
-    session: {
-      session_id: "mock-session",
-      profile_key: "search_google",
-      target_id: "mock-target",
-      target_title: "Mock Target",
-      target_url: "https://www.google.com/search?q=lime+browser+assist",
-      remote_debugging_port: 13001,
-      ws_debugger_url: "ws://127.0.0.1:13001/devtools/page/mock-target",
-      created_at: "2026-03-14T00:00:00Z",
-      connected: true,
-    },
-  });
-  mockOpenBrowserRuntimeDebuggerWindow.mockResolvedValue(undefined);
-  mockGetChromeProfileSessions.mockResolvedValue([]);
-  mockGetChromeBridgeEndpointInfo.mockResolvedValue({
-    server_running: true,
-    host: "127.0.0.1",
-    port: 8999,
-    observer_ws_url: "ws://127.0.0.1:8999/observer",
-    control_ws_url: "ws://127.0.0.1:8999/control",
-    bridge_key: "proxy_cast",
-  });
-  mockGetChromeBridgeStatus.mockResolvedValue({
-    observer_count: 0,
-    control_count: 0,
-    pending_command_count: 0,
-    observers: [],
-    controls: [],
-    pending_commands: [],
-  });
-  mockDisconnectBrowserConnectorSession.mockResolvedValue({
-    disconnected_observer_count: 1,
-    disconnected_control_count: 1,
-    status: {
-      observer_count: 0,
-      control_count: 0,
-      pending_command_count: 0,
-      observers: [],
-      controls: [],
-      pending_commands: [],
-    },
-  });
-  mockGetBrowserBackendPolicy.mockResolvedValue({
-    priority: ["current", "lime_extension_bridge", "cdp_direct"],
-    auto_fallback: true,
-  });
-  mockGetBrowserBackendsStatus.mockResolvedValue({
-    policy: {
-      priority: ["current", "lime_extension_bridge", "cdp_direct"],
-      auto_fallback: true,
-    },
-    bridge_observer_count: 0,
-    bridge_control_count: 0,
-    running_profile_count: 0,
-    cdp_alive_profile_count: 0,
-    agent_native_host_supported: true,
-    agent_native_host_configured: false,
-    backends: [],
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await changeLimeLocale("zh-CN");
+  mockListBrowserSessionTargets.mockResolvedValue({ targets: [target] });
+  mockOpenBrowserSession.mockResolvedValue({ session });
+  mockReadBrowserSession.mockResolvedValue({ session });
+  mockCloseBrowserSession.mockResolvedValue({
+    sessionId: session.sessionId,
+    status: "closed",
   });
 });
 
 afterEach(async () => {
-  cleanupMountedChromeRelaySettings();
+  for (const item of mounted.splice(0)) {
+    act(() => item.root.unmount());
+    item.container.remove();
+  }
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   await changeLimeLocale("zh-CN");
 });
 
 describe("ChromeRelaySettings", () => {
-  it("默认应聚焦浏览器列表，并在高级工具中切换到浏览器实时调试面板", async () => {
+  it("初始页只展示真实连接入口，不会自动调用或展示旧连接器能力", () => {
     const container = renderComponent();
+
+    expect(container.textContent).toContain("浏览器连接");
+    expect(container.textContent).toContain("检测页面");
+    expect(container.textContent).not.toContain("扩展安装");
+    expect(container.textContent).not.toContain("后端策略");
+    expect(container.textContent).not.toContain("系统连接器");
+    expect(mockListBrowserSessionTargets).not.toHaveBeenCalled();
+  });
+
+  it("通过 current App Server browserSession 方法完成检测、连接、读回和断开", async () => {
+    mockListBrowserSessionTargets.mockResolvedValueOnce({
+      targets: [
+        target,
+        {
+          ...target,
+          id: "service-worker-1",
+          title: "Internal worker",
+          targetType: "service_worker",
+        },
+      ],
+    });
+    const container = renderComponent();
+
+    click(container, "browser-connection-check");
     await flushEffects();
 
-    expect(container.textContent).toContain("Browser List");
-    expect(container.textContent).toContain("Google Chrome");
-    expect(container.textContent).toContain("Connect via Extension");
-    expect(container.textContent).toContain("CDP Direct");
-    expect(container.textContent).not.toContain("Connection Methods");
-    expect(container.textContent).not.toContain("Advanced Control");
-    expect(container.textContent).not.toContain("浏览器列表");
-    expect(container.textContent).not.toContain("settings.chromeRelay.main");
+    expect(mockListBrowserSessionTargets).toHaveBeenCalledWith({
+      remoteDebuggingPort: 9222,
+    });
     expect(
-      container.querySelector('[data-testid="browser-runtime-panel"]'),
+      container.querySelectorAll('[data-testid="browser-connection-target"]'),
+    ).toHaveLength(1);
+    expect(container.textContent).not.toContain("Internal worker");
+    expect(
+      container
+        .querySelector('[data-testid="browser-connection-settings"]')
+        ?.getAttribute("data-connection-state"),
+    ).toBe("available");
+
+    click(container, "browser-connection-connect");
+    await flushEffects();
+
+    expect(mockOpenBrowserSession).toHaveBeenCalledWith({
+      profileKey: "manual-cdp-9222-target-1",
+      remoteDebuggingPort: 9222,
+      targetId: "target-1",
+    });
+    expect(mockReadBrowserSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
+    expect(
+      container
+        .querySelector('[data-testid="browser-connection-session"]')
+        ?.getAttribute("data-session-connected"),
+    ).toBe("true");
+
+    click(container, "browser-connection-disconnect");
+    await flushEffects();
+
+    expect(mockCloseBrowserSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
+    expect(
+      container
+        .querySelector('[data-testid="browser-connection-settings"]')
+        ?.getAttribute("data-connection-state"),
+    ).toBe("closed");
+    expect(
+      container.querySelector('[data-testid="browser-connection-session"]'),
     ).toBeNull();
-
-    await openAdvancedTab(container);
-
-    expect(container.textContent).toContain(
-      "Open a dedicated settings window for Google or Xiaohongshu first, then confirm account, browser language, and content preferences.",
-    );
-
-    const profileButton = findButton(container, "View Profile Details");
-    await act(async () => {
-      profileButton.click();
-      await flushEffects();
-    });
-
-    expect(container.textContent).toContain(
-      "A dedicated Profile for search preferences, browser language, and region settings.",
-    );
-
-    const tabButton = findTabButton(container, "Debug");
-    await act(async () => {
-      tabButton.click();
-      await flushEffects();
-    });
-
-    expect(
-      container.querySelector('[data-testid="browser-runtime-panel"]'),
-    ).not.toBeNull();
   });
 
-  it("核心页不应再用说明 tips 承载安装长文", async () => {
-    renderComponent();
-    await flushEffects();
-
-    expect(
-      document.body.querySelector("button[aria-label='连接器总览说明']"),
-    ).toBeNull();
-    expect(getBodyText()).not.toContain(
-      "核心页只保留当前浏览器状态和两种连接入口；安装步骤、远程调试步骤放到独立引导窗口。",
+  it("检测失败只展示可恢复的产品文案，不暴露协议或命令名", async () => {
+    mockListBrowserSessionTargets.mockRejectedValueOnce(
+      new Error("App Server browserSession/target/list runtime failure"),
     );
-  });
-
-  it("核心页不应展示扩展安装长步骤", async () => {
     const container = renderComponent();
+
+    click(container, "browser-connection-check");
     await flushEffects();
 
-    expect(container.textContent).not.toContain(
-      "不要直接加载仓库源码里的 `extensions/lime-chrome`",
-    );
-    expect(container.textContent).not.toContain(
-      "源码目录不带 `auto_config.json`，扩展会提示缺少 `serverUrl / bridgeKey`。",
-    );
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("请确认 Chrome 已开启远程调试后重试");
+    expect(alert?.textContent).not.toContain("browserSession");
+    expect(alert?.textContent).not.toContain("App Server");
   });
 
-  it("应复制默认连接器配置到剪贴板", async () => {
+  it.each([
+    ["zh-CN", "浏览器连接", "检测页面"],
+    ["zh-TW", "瀏覽器連線", "偵測頁面"],
+    ["en-US", "Browser connection", "Find pages"],
+    ["ja-JP", "ブラウザー接続", "ページを検出"],
+    ["ko-KR", "브라우저 연결", "페이지 찾기"],
+  ])("%s 应渲染稳定本地化文案", async (locale, title, action) => {
+    await changeLimeLocale(locale);
     const container = renderComponent();
-    await flushEffects();
-    await openAdvancedTab(container);
 
-    const button = findButton(container, "Copy Config");
-    await act(async () => {
-      button.click();
-      await flushEffects();
-    });
-
-    expect(mockWriteClipboardText).toHaveBeenCalledTimes(1);
-    expect(mockWriteClipboardText.mock.calls[0]?.[0]).toContain(
-      '"profileKey": "default"',
-    );
-    expect(mockWriteClipboardText.mock.calls[0]?.[0]).toContain(
-      '"bridgeKey": "proxy_cast"',
-    );
-    expect(container.textContent).toContain(
-      "Default Browser Connector configuration copied to the clipboard",
-    );
-  });
-
-  it("点击一键按钮时应启动浏览器协助", async () => {
-    const container = renderComponent();
-    await flushEffects();
-    await openAdvancedTab(container);
-
-    const button = findButton(container, "Start Browser Assist");
-    await act(async () => {
-      button.click();
-      await flushEffects();
-    });
-
-    expect(mockLaunchBrowserSession).toHaveBeenCalledTimes(1);
-    expect(mockLaunchBrowserSession).toHaveBeenCalledWith({
-      profile_key: "search_google",
-      url: "https://www.google.com/search?q=lime+browser+assist",
-      open_window: true,
-      stream_mode: "both",
-    });
-    expect(container.textContent).toContain("Browser assist started");
-  });
-
-  it("点击按钮时应打开独立浏览器调试窗口", async () => {
-    const container = renderComponent();
-    await flushEffects();
-    await openAdvancedTab(container);
-
-    const button = findButton(container, "Open Standalone Debugger");
-    await act(async () => {
-      button.click();
-      await flushEffects();
-    });
-
-    expect(mockOpenBrowserRuntimeDebuggerWindow).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain(
-      "Standalone browser debug window opened",
-    );
-  });
-
-  it("核心页应提供扩展与 CDP 独立引导入口", async () => {
-    const container = renderComponent();
-    await flushEffects();
-
-    expect(container.textContent).not.toContain("Connection Methods");
-    expect(container.textContent).toContain("Connection Guide");
-    expect(container.textContent).toContain("Configuration Guide");
-
-    const extensionGuideButton = findButton(container, "Connection Guide");
-    await act(async () => {
-      extensionGuideButton.click();
-      await flushEffects();
-    });
-
-    expect(mockOpenBrowserConnectorGuideWindow).toHaveBeenCalledWith({
-      mode: "extension",
-    });
-
-    const cdpGuideButton = findButton(container, "Configuration Guide");
-    await act(async () => {
-      cdpGuideButton.click();
-      await flushEffects();
-    });
-
-    expect(mockOpenBrowserConnectorGuideWindow).toHaveBeenCalledWith({
-      mode: "cdp",
-    });
-  });
-
-  it("高级工具仍保留扩展页与远程调试快捷入口", async () => {
-    const container = renderComponent();
-    await flushEffects();
-
-    await openAdvancedTab(container);
-
-    expect(container.textContent).toContain("Connection Methods");
-    expect(container.textContent).toContain("Browser Extension");
-    expect(container.textContent).toContain("CDP Direct");
-
-    const extensionButton = findButton(container, "Open Extensions Page");
-    await act(async () => {
-      extensionButton.click();
-      await flushEffects();
-    });
-
-    expect(mockOpenBrowserExtensionsPage).toHaveBeenCalledTimes(1);
-
-    const remoteDebuggingButton = findButton(
-      container,
-      "Open Remote Debugging Page",
-    );
-    await act(async () => {
-      remoteDebuggingButton.click();
-      await flushEffects();
-    });
-
-    expect(mockOpenBrowserRemoteDebuggingPage).toHaveBeenCalledTimes(1);
-  });
-
-  it("扩展已连接时应允许断开当前连接", async () => {
-    mockGetChromeBridgeStatus.mockReset();
-    mockGetChromeBridgeStatus.mockResolvedValue({
-      observer_count: 1,
-      control_count: 1,
-      pending_command_count: 0,
-      observers: [
-        {
-          client_id: "observer-1",
-          profile_key: "default",
-          connected_at: "2026-03-14T00:00:00Z",
-        },
-      ],
-      controls: [
-        {
-          client_id: "control-1",
-          connected_at: "2026-03-14T00:00:00Z",
-        },
-      ],
-      pending_commands: [],
-    });
-    mockGetBrowserBackendsStatus.mockResolvedValue({
-      policy: {
-        priority: ["current", "lime_extension_bridge", "cdp_direct"],
-        auto_fallback: true,
-      },
-      bridge_observer_count: 1,
-      bridge_control_count: 1,
-      running_profile_count: 1,
-      cdp_alive_profile_count: 1,
-      agent_native_host_supported: true,
-      agent_native_host_configured: false,
-      backends: [],
-    });
-
-    const container = renderComponent();
-    await flushEffects();
-    await flushEffects();
-
-    await openAdvancedTab(container);
-
-    const button = findButton(container, "Disconnect Connected Extension");
-    await act(async () => {
-      button.click();
-      await flushEffects();
-    });
-
-    expect(mockDisconnectBrowserConnectorSession).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain(
-      "Disconnected 1 extension observer connection(s) and 1 control connection(s)",
-    );
-  });
-
-  it("扩展桥接页应渲染接入信息与测试入口", async () => {
-    const container = renderComponent();
-    await flushEffects();
-    await openAdvancedTab(container);
-
-    const tabButton = findTabButton(container, "Bridge");
-    await act(async () => {
-      tabButton.click();
-      await flushEffects();
-    });
-
-    expect(container.textContent).toContain("Chrome Extension Bridge");
-    expect(container.textContent).toContain("Bridge service running");
-    expect(container.textContent).toContain("Observer pending");
-    expect(container.textContent).toContain("Extension Access Info");
-    expect(container.textContent).toContain("Observer WS:");
-    expect(container.textContent).toContain("Bridge Key:");
-    expect(container.textContent).toContain("Copy Google Config");
-    expect(container.textContent).toContain(
-      "No recent page information received yet",
-    );
-    expect(container.textContent).toContain(
-      "No extension observer connection detected.",
-    );
-    expect(container.textContent).toContain("Test Google Extension");
-    expect(container.textContent).toContain("Refresh Extension Status");
-  });
-
-  it("默认不再展示扩展桥接诊断详情与能力清单", async () => {
-    mockGetBrowserBackendsStatus.mockResolvedValueOnce({
-      policy: {
-        priority: ["current", "lime_extension_bridge", "cdp_direct"],
-        auto_fallback: true,
-      },
-      bridge_observer_count: 1,
-      bridge_control_count: 1,
-      running_profile_count: 1,
-      cdp_alive_profile_count: 1,
-      agent_native_host_supported: true,
-      agent_native_host_configured: false,
-      backends: [
-        {
-          backend: "lime_extension_bridge",
-          available: true,
-          capabilities: [
-            "navigate",
-            "read_page",
-            "get_page_text",
-            "find",
-            "form_input",
-            "tabs_context_mcp",
-            "open_url",
-            "click",
-            "type",
-            "scroll",
-            "scroll_page",
-            "get_page_info",
-            "refresh_page",
-            "go_back",
-            "go_forward",
-            "switch_tab",
-            "list_tabs",
-          ],
-        },
-      ],
-    });
-
-    const container = renderComponent();
-    await flushEffects();
-
-    expect(container.textContent).not.toContain("QoderWork");
-    expect(container.textContent).not.toContain("查看诊断详情");
-    expect(container.textContent).not.toContain("收起诊断详情");
-    expect(container.textContent).not.toContain("Lime Browser Bridge 负责");
-    expect(container.textContent).not.toContain("页面文本");
-    expect(container.textContent).not.toContain("表单输入");
-    expect(container.textContent).not.toContain("返回上一页");
-    expect(container.textContent).not.toContain("悬停");
-    expect(container.textContent).not.toContain("拖放");
-    expect(container.textContent).not.toContain("上传文件");
-    expect(container.textContent).not.toContain("处理弹窗");
-  });
-
-  it("后端策略页应渲染策略配置与可用性摘要", async () => {
-    mockGetBrowserBackendsStatus.mockResolvedValueOnce({
-      policy: {
-        priority: ["current", "lime_extension_bridge", "cdp_direct"],
-        auto_fallback: true,
-      },
-      bridge_observer_count: 0,
-      bridge_control_count: 0,
-      running_profile_count: 0,
-      cdp_alive_profile_count: 0,
-      agent_native_host_supported: true,
-      agent_native_host_configured: false,
-      backends: [
-        {
-          backend: "current",
-          available: false,
-          reason: null,
-          capabilities: [],
-        },
-      ],
-    });
-
-    const container = renderComponent();
-    await flushEffects();
-    await openAdvancedTab(container);
-
-    const tabButton = findTabButton(container, "Backend");
-    await act(async () => {
-      tabButton.click();
-      await flushEffects();
-    });
-
-    expect(container.textContent).toContain("Browser Backend Policy");
-    expect(container.textContent).toContain("Default Test Target");
-    expect(container.textContent).toContain("Auto Fallback");
-    expect(container.textContent).toContain("Priority 1");
-    expect(container.textContent).toContain("Current Availability");
-    expect(container.textContent).toContain(
-      "Capabilities: Waiting for runtime response",
-    );
-    expect(container.textContent).toContain(
-      "Agent native-host: Not configured",
-    );
-    expect(container.textContent).toContain("Platform Support: Yes");
-    expect(
-      container.querySelector(
-        'button[aria-label="Automatically fall back to the next backend"]',
-      ),
-    ).not.toBeNull();
-  });
-
-  it("应允许切换浏览器动作配置", async () => {
-    const container = renderComponent();
-    await flushEffects();
-    await openAdvancedTab(container);
-
-    expect(container.textContent).toContain("Browser Action Configuration");
-    expect(container.textContent).toContain("Read Permissions");
-    expect(container.textContent).toContain("Write Permissions");
-
-    const target = container.querySelector(
-      'button[aria-label="Toggle 页面内查找"]',
-    );
-    expect(target).not.toBeNull();
-
-    await act(async () => {
-      (target as HTMLButtonElement).click();
-      await flushEffects();
-    });
-
-    expect(mockSetBrowserActionCapabilityEnabled).toHaveBeenCalledWith({
-      key: "find",
-      enabled: false,
-    });
-    expect(container.textContent).toContain("页面内查找 disabled");
-  });
-
-  it("应渲染系统连接器卡片并允许切换系统能力", async () => {
-    const container = renderComponent();
-    await flushEffects();
-    await openAdvancedTab(container);
-
-    expect(container.textContent).toContain(
-      "Enable system capabilities as needed, with authorization and OS access managed here.",
-    );
-    expect(container.textContent).toContain("0 / 1 enabled");
-    expect(container.textContent).toContain("Awaiting authorization");
-    expect(container.textContent).toContain(
-      "Capabilities: list_events / create_event / update_event",
-    );
-
-    const target = container.querySelector('button[aria-label="Toggle 日历"]');
-    expect(target).not.toBeNull();
-
-    await act(async () => {
-      (target as HTMLButtonElement).click();
-      await flushEffects();
-    });
-
-    expect(mockSetSystemConnectorEnabled).toHaveBeenCalledWith({
-      id: "calendar",
-      enabled: true,
-    });
-    expect(container.textContent).toContain("日历 authorized and enabled");
-  });
-
-  it("系统连接器为空时不应渲染 macOS 连接器卡片", async () => {
-    mockGetBrowserConnectorSettings.mockResolvedValueOnce({
-      enabled: true,
-      install_root_dir: null,
-      install_dir: null,
-      system_connectors: [],
-    });
-
-    const container = renderComponent();
-    await flushEffects();
-    await openAdvancedTab(container);
-
-    expect(container.textContent).not.toContain("macOS Connector");
-    expect(container.textContent).not.toContain("0 / 0 enabled");
+    expect(container.textContent).toContain(title);
+    expect(container.textContent).toContain(action);
+    expect(container.textContent).not.toContain("settings.browserConnection");
   });
 });

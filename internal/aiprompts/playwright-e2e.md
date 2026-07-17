@@ -560,15 +560,12 @@ Runtime prompt 层的禁止证据：
 
 ### 连接器页验证
 
-1. 进入 `设置 -> 连接器`
-2. macOS 下确认首页能看到“我的浏览器”“macOS 连接器”“高级控制”三块主区域；Windows 与其他非 macOS 平台默认不应出现系统连接器卡片
-3. 点击“展开高级控制”，确认 `总览 / Profile / 桥接 / 后端 / 调试` 页签可切换
-4. 如当前环境允许目录选择，点击“选择目录并安装”或“同步更新扩展”，确认安装目录最终落到固定子目录 `Lime Browser Connector`
-5. 点击“复制配置”，确认剪贴板内容包含 `serverUrl / bridgeKey / profileKey`
-6. 确认“连接方式”区块同时展示“浏览器扩展 / CDP 直连”两种说明，并包含 `chrome://extensions` 与 `chrome://inspect/#remote-debugging` 的打开或复制入口
-7. 在“动作配置”区块临时关闭一个能力，例如“页面内查找”，确认开关状态立即更新，且后端能力列表同步隐藏对应动作
-8. 如当前环境已有 observer 连接，再确认“断开已连接扩展”能把页面状态回退到等待连接
-9. 如当前环境接通真实后端，再确认“打开 Chrome 扩展页”与“打开远程调试页”可成功唤起对应 Chrome 页面
+1. 进入 `设置 -> 浏览器`
+2. 填入隔离 Chrome 的远程调试端口并点击“检测页面”，确认只展示带 debugger endpoint 的普通 `page` target，不展示 extension background page、service worker 或其它内部 target
+3. 选择目标页面并点击“连接所选页面”，确认可见状态进入“已连接”且出现当前连接区
+4. 从 trace 确认动作经 `electron-ipc -> app_server_handle_json_lines` 命中 `browserSession/target/list`、`browserSession/open` 与 `browserSession/read`
+5. 点击“断开连接”，确认可见状态进入“已断开”、当前连接区消失，并命中 `browserSession/close`
+6. 全程不得命中旧 connector install、Chrome relay endpoint、backend policy、renderer mock 或 Electron diagnostic facade
 
 ### 自动化设置页验证
 

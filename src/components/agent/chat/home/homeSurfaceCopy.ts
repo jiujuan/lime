@@ -4,6 +4,7 @@ import type {
   HomeSkillCategory,
   HomeStarterChip,
 } from "./homeSurfaceTypes";
+import type { LimeSkinHomeCopy } from "@/lib/appearance/skinContent";
 
 export type HomeSurfaceCopyKey =
   | "agentChat.home.composer.placeholder"
@@ -147,6 +148,9 @@ export interface HomeSurfaceHeroCopy {
   slogan: string;
   description: string;
   supportingDescription: string;
+  skinBrandSubtitle?: string;
+  skinTagline?: string;
+  skinStatus?: string;
 }
 
 export interface HomeSurfaceToastCopy {
@@ -269,17 +273,24 @@ const HOME_RECOVERY_COPY_KEYS = {
 
 export function buildHomeSurfaceCopy(
   translate: HomeSurfaceCopyTranslate,
+  skinHomeCopy?: LimeSkinHomeCopy,
 ): HomeSurfaceCopy {
   const starterMoreLabel = translate("agentChat.home.starter.more.label");
 
   return {
     hero: {
-      eyebrow: translate("agentChat.home.hero.eyebrow"),
-      slogan: translate("agentChat.home.hero.slogan"),
-      description: translate("agentChat.home.hero.description"),
+      eyebrow:
+        skinHomeCopy?.eyebrow ?? translate("agentChat.home.hero.eyebrow"),
+      slogan: skinHomeCopy?.slogan ?? translate("agentChat.home.hero.slogan"),
+      description:
+        skinHomeCopy?.description ??
+        translate("agentChat.home.hero.description"),
       supportingDescription: translate(
         "agentChat.home.hero.supportingDescription",
       ),
+      skinBrandSubtitle: skinHomeCopy?.brandSubtitle,
+      skinTagline: skinHomeCopy?.tagline,
+      skinStatus: skinHomeCopy?.status,
     },
     composerPlaceholder: translate("agentChat.home.composer.placeholder"),
     composerAutoLaunchPlaceholder: (example) =>

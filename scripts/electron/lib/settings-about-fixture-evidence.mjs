@@ -1,6 +1,7 @@
 import path from "node:path";
 
 export const ABOUT_VERSION_SCENARIO_ID = "about-version-truth";
+export const SETTINGS_HOME_SCENARIO_ID = "home-navigation";
 export const ABOUT_REQUIRED_HOST_COMMANDS = [
   "check_for_updates",
   "get_update_install_session",
@@ -239,6 +240,60 @@ export function createSettingsAboutEvidence({
   };
 }
 
+export function createSettingsHomeEvidence({
+  candidateRunId,
+  startedAt,
+  prefix,
+}) {
+  const runId = validateRunId(candidateRunId);
+  return {
+    schemaVersion: 1,
+    scenarioId: "SETTINGS-01-home-navigation",
+    priority: "P0",
+    proofLevel: "Gate B-F",
+    claimBoundary:
+      "Real Electron navigation from Settings back to the current Agent home surface. It does not claim other Settings tabs or workspace navigation.",
+    candidateRunId: runId,
+    testOnly: true,
+    startedAt,
+    result: "fail",
+    failureClass: "settings-home-navigation-not-completed",
+    nextAction:
+      "Run the real Electron Settings back-home action to a terminal home surface.",
+    settingsScenarioProof: {
+      scenarioId: SETTINGS_HOME_SCENARIO_ID,
+      complete: false,
+    },
+    assertions: {
+      total: 1,
+      passed: 0,
+      failed: ["notCompleted"],
+      details: {},
+    },
+    bridge: {
+      electron: false,
+      preloadInvoke: false,
+      transport: null,
+      command: APP_SERVER_COMMAND,
+      appServerIpcHitCount: 0,
+      methods: [],
+    },
+    errors: {
+      consoleErrorCount: 0,
+      pageErrorCount: 0,
+      invokeErrorCount: 0,
+      legacyCommandHitCount: 0,
+      legacyCommands: [],
+      mockFallbackHitCount: 0,
+    },
+    artifacts: {
+      screenshot: `${prefix}-home.png`,
+      rawEvidence: `${prefix}-raw.json`,
+      summary: `${prefix}-home-summary.json`,
+    },
+  };
+}
+
 export function applyPassingSettingsAboutEvidence(
   summary,
   {
@@ -331,6 +386,90 @@ export function applyFailedSettingsAboutEvidence(summary, error) {
   summary.failureClass = "settings-about-version-fixture";
   summary.nextAction =
     "Fix the About version or real Desktop Host boundary and rerun with the same candidate run-id.";
+  summary.error = String(error instanceof Error ? error.message : error).slice(
+    0,
+    500,
+  );
+  return summary;
+}
+
+export function applyPassingSettingsHomeEvidence(
+  summary,
+  {
+    completedAt,
+    electronRenderer,
+    preloadInvoke,
+    homeStartVisible,
+    settingsHeaderVisible,
+    accountButtonVisible,
+    trace,
+    consoleErrors,
+    pageErrors,
+    invokeErrorCount,
+    screenshotWritten,
+  },
+) {
+  summary.bridge = {
+    electron: electronRenderer === true,
+    preloadInvoke: preloadInvoke === true,
+    transport: trace.appServerIpcHitCount > 0 ? "electron-ipc" : null,
+    command: APP_SERVER_COMMAND,
+    appServerIpcHitCount: trace.appServerIpcHitCount,
+    methods: trace.appServerMethods,
+  };
+  summary.errors = {
+    consoleErrorCount: consoleErrors.length,
+    pageErrorCount: pageErrors.length,
+    invokeErrorCount,
+    legacyCommandHitCount: trace.legacyCommands.length,
+    legacyCommands: trace.legacyCommands,
+    mockFallbackHitCount: trace.mockFallbackHitCount,
+  };
+  const checks = [
+    ["realElectronRenderer", summary.bridge.electron],
+    ["preloadInvokeBridge", summary.bridge.preloadInvoke],
+    ["appServerElectronIpc", summary.bridge.appServerIpcHitCount > 0],
+    ["appServerCurrentMethod", summary.bridge.methods.length > 0],
+    ["homeStartVisible", homeStartVisible === true],
+    ["settingsHeaderHidden", settingsHeaderVisible === false],
+    ["accountButtonVisible", accountButtonVisible === true],
+    ["consoleErrorsZero", consoleErrors.length === 0],
+    ["pageErrorsZero", pageErrors.length === 0],
+    ["invokeErrorsZero", invokeErrorCount === 0],
+    ["legacyCommandsZero", trace.legacyCommands.length === 0],
+    ["mockFallbackZero", trace.mockFallbackHitCount === 0],
+    ["screenshotWritten", screenshotWritten === true],
+  ];
+  const failed = checks.filter(([, passed]) => !passed).map(([name]) => name);
+  if (failed.length > 0) {
+    throw new Error(`SETTINGS home evidence failed: ${failed.join(", ")}`);
+  }
+  summary.result = "pass";
+  summary.completedAt = completedAt;
+  summary.settingsScenarioProof.complete = true;
+  summary.assertions = {
+    total: checks.length,
+    passed: checks.length,
+    failed: [],
+    details: Object.fromEntries(checks),
+  };
+  delete summary.failureClass;
+  delete summary.nextAction;
+  return summary;
+}
+
+export function applyFailedSettingsHomeEvidence(summary, error) {
+  summary.result = "fail";
+  summary.settingsScenarioProof.complete = false;
+  summary.assertions = {
+    total: 1,
+    passed: 0,
+    failed: ["scenarioFailed"],
+    details: {},
+  };
+  summary.failureClass = "settings-home-navigation-fixture";
+  summary.nextAction =
+    "Fix the real Settings back-home navigation and rerun with the same candidate run-id.";
   summary.error = String(error instanceof Error ? error.message : error).slice(
     0,
     500,

@@ -19,7 +19,14 @@ impl RuntimeCore {
         &self,
         params: ConversationImportSourceScanParams,
     ) -> Result<ConversationImportSourceScanResponse, RuntimeCoreError> {
-        let mut response = scan_conversation_import_source(params)?;
+        let mut response =
+            tokio::task::spawn_blocking(move || scan_conversation_import_source(params))
+                .await
+                .map_err(|error| {
+                    RuntimeCoreError::Backend(format!(
+                        "conversation import source scan worker failed: {error}"
+                    ))
+                })??;
         import_status::apply_scan_import_status(self, &mut response);
         Ok(response)
     }
@@ -28,7 +35,14 @@ impl RuntimeCore {
         &self,
         params: ConversationImportThreadPreviewParams,
     ) -> Result<ConversationImportThreadPreviewResponse, RuntimeCoreError> {
-        let mut response = preview_conversation_import_thread(params)?;
+        let mut response =
+            tokio::task::spawn_blocking(move || preview_conversation_import_thread(params))
+                .await
+                .map_err(|error| {
+                    RuntimeCoreError::Backend(format!(
+                        "conversation import thread preview worker failed: {error}"
+                    ))
+                })??;
         import_status::apply_preview_import_status(self, &mut response);
         Ok(response)
     }

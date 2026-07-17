@@ -185,11 +185,6 @@ describe("i18n namespace loader", () => {
         "agentChat.decisionPanel.permission.resultLabel",
         "agentChat.decisionPanel.permission.result.allowed",
         "agentChat.decisionPanel.permission.result.denied",
-        "agentChat.decisionPanel.permission.result.importedReadOnly",
-        "agentChat.decisionPanel.permission.importedReadOnlyTitle",
-        "agentChat.decisionPanel.permission.importedReadOnlyRecordLabel",
-        "agentChat.decisionPanel.permission.importedReadOnlyRecordValue",
-        "agentChat.decisionPanel.permission.importedReadOnlyDescription",
         "agentChat.messageList.history.windowSummaryRestored",
         "agentChat.messageList.taskCenterEmpty.title",
         "agentChat.navbar.appSwitcher.finder",
@@ -1022,28 +1017,13 @@ describe("i18n namespace loader", () => {
         "settings.about.update.errorDownload",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.chromeRelay.guide.header.extension.title",
+        "settings.browserConnection.title",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.chromeRelay.guide.action.openRemoteDebugging",
+        "settings.browserConnection.action.check",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.chromeRelay.guide.message.copySuccess",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.chromeRelay.main.engine.xiaohongshu.label",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.chromeRelay.main.profile.title",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.chromeRelay.main.profile.status.running",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.chromeRelay.main.action.openAdvancedTools",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.chromeRelay.main.message.copyConfigSuccess",
+        "settings.browserConnection.error.unavailable",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.group.system",
@@ -1070,7 +1050,13 @@ describe("i18n namespace loader", () => {
         "settings.appearance.hero.title",
       );
       expect(resources[locale].settings).toHaveProperty(
+        "settings.appearance.colorScheme.options.dream-blossom.label",
+      );
+      expect(resources[locale].settings).toHaveProperty(
         "settings.appearance.colorScheme.options.lime-classic.label",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.appearance.colorScheme.options.lime-future.label",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.experimental.updateCheck.title",
@@ -1806,6 +1792,11 @@ describe("i18n namespace loader", () => {
     ).toBe("第 {{currentStep}}/{{totalSteps}} 步");
     expect(
       loadNamespaceResource("fr-FR", "settings")[
+        "settings.appearance.colorScheme.options.dream-blossom.label"
+      ],
+    ).toBe("梦樱花境");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
         "settings.layout.sidebar.experimentalBadge"
       ],
     ).toBe("实验");
@@ -1813,7 +1804,7 @@ describe("i18n namespace loader", () => {
       loadNamespaceResource("fr-FR", "settings")[
         "settings.about.version.label"
       ],
-    ).toBe("Version {{version}} ({{build}})");
+    ).toBe("版本 {{version}}（{{build}}）");
     expect(
       loadNamespaceResource("fr-FR", "settings")[
         "settings.about.update.errorDownload"
@@ -1821,44 +1812,19 @@ describe("i18n namespace loader", () => {
     ).toBe("暂时无法自动安装更新，请使用网页下载最新版。");
     expect(
       loadNamespaceResource("fr-FR", "settings")[
-        "settings.chromeRelay.guide.header.extension.title"
+        "settings.browserConnection.title"
       ],
-    ).toBe("安装 Lime Browser Bridge");
+    ).toBe("浏览器连接");
     expect(
       loadNamespaceResource("fr-FR", "settings")[
-        "settings.chromeRelay.guide.action.openRemoteDebugging"
+        "settings.browserConnection.action.check"
       ],
-    ).toBe("打开 chrome://inspect/#remote-debugging");
+    ).toBe("检测页面");
     expect(
       loadNamespaceResource("fr-FR", "settings")[
-        "settings.chromeRelay.guide.message.copySuccess"
+        "settings.browserConnection.error.unavailable"
       ],
-    ).toBe("{{label}} 已复制到剪贴板");
-    expect(
-      loadNamespaceResource("fr-FR", "settings")[
-        "settings.chromeRelay.main.engine.xiaohongshu.label"
-      ],
-    ).toBe("小红书");
-    expect(
-      loadNamespaceResource("fr-FR", "settings")[
-        "settings.chromeRelay.main.profile.title"
-      ],
-    ).toBe("Profile 会话");
-    expect(
-      loadNamespaceResource("fr-FR", "settings")[
-        "settings.chromeRelay.main.profile.status.running"
-      ],
-    ).toBe("会话运行中");
-    expect(
-      loadNamespaceResource("fr-FR", "settings")[
-        "settings.chromeRelay.main.action.openAdvancedTools"
-      ],
-    ).toBe("打开高级工具");
-    expect(
-      loadNamespaceResource("fr-FR", "settings")[
-        "settings.chromeRelay.main.message.copyConfigSuccess"
-      ],
-    ).toBe("{{label}} 配置已复制到剪贴板");
+    ).toBe("请确认 Chrome 已开启远程调试后重试。");
     expect(
       loadNamespaceResource("fr-FR", "settings")["settings.developer.title"],
     ).toBe("开发者");
@@ -1881,7 +1847,7 @@ describe("i18n namespace loader", () => {
       loadNamespaceResource("fr-FR", "settings")[
         "settings.appearance.colorScheme.options.lime-classic.label"
       ],
-    ).toBe("墨绿");
+    ).toBe("森野秘境");
     expect(
       loadNamespaceResource("fr-FR", "settings")[
         "settings.experimental.updateCheck.title"

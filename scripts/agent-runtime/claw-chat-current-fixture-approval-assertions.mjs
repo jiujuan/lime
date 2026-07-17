@@ -45,14 +45,13 @@ function noLegacyRuntimeRespond(appServerRequestMethods) {
   return !appServerRequestMethods.includes(LEGACY_RESPOND_ACTION_METHOD);
 }
 
-function compactApprovalRecordVisible(snapshot) {
+function historicalApprovalDetailsHidden(snapshot) {
   const shape = snapshot?.approvalRecordShape;
   return (
-    shape?.recordCount === 1 &&
-    shape?.promptInRecord === false &&
-    shape?.maxLineBreaks <= 1 &&
-    Array.isArray(shape?.legacyDetailFragmentHits) &&
-    shape.legacyDetailFragmentHits.length === 0
+    Number(snapshot?.compactTimelinePreviewCount || 0) > 0 &&
+    shape?.recordCount === 0 &&
+    Array.isArray(shape?.texts) &&
+    shape.texts.length === 0
   );
 }
 
@@ -231,9 +230,10 @@ export function buildApprovalRequestResumeScenarioAssertions({
       summary.guiApprovalRequestResumeCompleted?.textareaVisible === true &&
       summary.guiApprovalRequestResumeCompleted?.textareaDisabled === false &&
       summary.guiApprovalRequestResumeCompleted?.stopButtonVisible === false,
-    guiApprovalRequestResumeRecordCompact: compactApprovalRecordVisible(
-      summary.guiApprovalRequestResumeCompleted,
-    ),
+    guiApprovalRequestResumeHistoricalDetailsHidden:
+      historicalApprovalDetailsHidden(
+        summary.guiApprovalRequestResumeCompleted,
+      ),
     readModelApprovalRequestResumeCompleted:
       summary.readModelApprovalRequestResumeCompleted?.latestTurnStatus ===
         "completed" &&
@@ -310,9 +310,10 @@ export function buildApprovalRequestResumeScenarioAssertions({
         false &&
       summary.guiApprovalRequestResumeSecondCompleted?.stopButtonVisible ===
         false,
-    guiApprovalRequestResumeSecondRecordCompact: compactApprovalRecordVisible(
-      summary.guiApprovalRequestResumeSecondCompleted,
-    ),
+    guiApprovalRequestResumeSecondHistoricalDetailsHidden:
+      historicalApprovalDetailsHidden(
+        summary.guiApprovalRequestResumeSecondCompleted,
+      ),
     readModelApprovalRequestResumeSecondCompleted:
       summary.readModelApprovalRequestResumeSecondCompleted
         ?.latestTurnStatus === "completed" &&
@@ -420,9 +421,10 @@ export function buildApprovalRequestDecisionScenarioAssertions({
               false &&
             summary.guiApprovalRequestDeclineCompleted?.stopButtonVisible ===
               false,
-          guiApprovalRequestDeclineRecordCompact: compactApprovalRecordVisible(
-            summary.guiApprovalRequestDeclineCompleted,
-          ),
+          guiApprovalRequestDeclineHistoricalDetailsHidden:
+            historicalApprovalDetailsHidden(
+              summary.guiApprovalRequestDeclineCompleted,
+            ),
           readModelApprovalRequestDeclineCompleted:
             summary.readModelApprovalRequestDeclineCompleted
               ?.latestTurnStatus === "completed" &&
@@ -458,9 +460,10 @@ export function buildApprovalRequestDecisionScenarioAssertions({
               false &&
             summary.guiApprovalRequestCancelCompleted?.stopButtonVisible ===
               false,
-          guiApprovalRequestCancelRecordCompact: compactApprovalRecordVisible(
-            summary.guiApprovalRequestCancelCompleted,
-          ),
+          guiApprovalRequestCancelHistoricalDetailsHidden:
+            historicalApprovalDetailsHidden(
+              summary.guiApprovalRequestCancelCompleted,
+            ),
           readModelApprovalRequestCancelCanceled:
             summary.readModelApprovalRequestCancelCanceled
               ?.latestTurnCanceled === true &&

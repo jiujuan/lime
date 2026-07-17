@@ -153,6 +153,20 @@ npm run smoke:mcp-current -- --allow-write-fixture
 npm run smoke:mcp-current -- --allow-plugin-runtime-fixture
 npm run smoke:mcp-current -- --allow-oauth-fixture
 npm run smoke:mcp-config-electron-fixture
+npm run smoke:settings-about-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-stats-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-environment-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-media-services-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-web-search-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-profile-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-appearance-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-developer-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-automation-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-execution-policy-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-mcp-lifecycle-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-provider-crud-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-memory-soul-electron-fixture -- --run-id <run-id>
+npm run smoke:settings-archived-lifecycle-electron-fixture -- --run-id <run-id>
 npm run smoke:mcp-workspace-plugin-runtime-electron-fixture
 npm run smoke:mcp-context7-live-electron-fixture
 npm run smoke:mcp-elicitation-gate-b
@@ -161,7 +175,35 @@ npm run smoke:mcp-elicitation-gate-b
 默认入口只通过 `app_server_handle_json_lines -> App Server JSON-RPC` 验证 `mcpServer/list`、`mcpServerStatus/list`、`mcpTool/list|listForContext|search`、`mcpPrompt/list`、`mcpResource/list` 读链，并禁止旧 `mcp_*` / `get_mcp_servers` Tauri facade 作为成功证据。`--allow-write-fixture` 会创建临时 stdio MCP server，覆盖 `mcpServer/create|start|stop|delete`、`mcpTool/call` 与 `mcpResource/read`，并断言工具 `outputSchema` 暴露 `structuredContent`、调用结果保留 `structuredContent`。同一轮还会启动一个必然失败的 server，要求其 `mcpServer/start` 错误以 JSON-RPC error 穿过 Desktop Host 返回，同时健康 server 继续保持 running，且 tool list/call 与 resource read 均可用。`--allow-plugin-runtime-fixture` 会复用临时 stdio MCP server，覆盖 `agentSession/toolInventory/read` 中 `plugin_runtime_capabilities.mcpBindings` 到 `plugin_mcp_targets` 的投影、caller-scoped `mcpTool/listForContext` proof、显式 `mcpTool/callWithCaller` proof，并断言无显式 `callProof` 时默认 list proof 不会调用工具。
 `--allow-oauth-fixture` 会创建本地 OAuth provider，覆盖 `mcpServer/oauth/login`、Electron `open_external_url` 系统浏览器网关、callback token exchange 与 `runtime_status.auth_status` 授权回流，用于复验动态 OAuth current 链路；该模式不依赖真实外部账号或 live Provider。
 
-`npm run smoke:mcp-config-electron-fixture` 是真实 Electron 设置页配置闭环 fixture：从桌面壳侧栏进入设置页，切到 MCP 配置管理，选择 Context7 preset，编辑 streamable HTTP URL 与 `env_http_headers` 环境变量名并保存，再通过 preload `app_server_handle_json_lines -> mcpServer/list` 验证 App Server current read model。该入口不启动 Context7、不调用真实 provider、不读取或写入真实 key，不走 App Server mock backend、renderer mock fallback 或旧 `mcp_*` Desktop facade。
+`npm run smoke:mcp-config-electron-fixture -- --run-id <run-id>` 是真实 Electron 设置页配置闭环 fixture：从桌面壳侧栏进入设置页，切到 MCP 配置管理，选择 Context7 preset，编辑 streamable HTTP URL 与 `env_http_headers` 环境变量名并保存，再通过 preload `app_server_handle_json_lines -> mcpServer/create|list` 验证 App Server current read model。显式 run-id 时证据写入 `.lime/qc/project-gates/<run-id>/settings-mcp-create-list/`，只有 Electron、preload、`electron-ipc`、current methods、GUI readback、零 legacy/mock/error 与截图全部成立才输出 `settingsScenarioProof={scenarioId:mcp-create-list,complete:true}`。该入口不启动 Context7、不调用真实 provider、不读取或写入真实 key，不走 App Server mock backend、renderer mock fallback 或旧 `mcp_*` Desktop facade。
+
+`npm run smoke:settings-mcp-lifecycle-electron-fixture -- --run-id <run-id>` 在隔离 userData 中从真实 MCP Settings GUI 创建配置、修改描述与 Lime 启用状态、冷重启读回、从 GUI 删除并再次冷重启确认不存在；要求命中 `mcpServer/list|create|update|delete`，且 Electron、preload、`electron-ipc`、`app_server_handle_json_lines`、零 legacy/mock/error 与三张终态截图同时成立。该 Gate B-F claim 不启动 live MCP server、不调用工具、不访问配置 URL，也不在 JSON evidence 中保存 server 配置、名称、描述、ID、路径、凭证、prompt、resource 或 tool output。
+
+`npm run smoke:settings-provider-crud-electron-fixture -- --run-id <run-id>` 使用隔离 userData 与 localhost `/v1/models` fixture，从真实 Provider Settings GUI 创建自定义 Provider，先观察错误密钥导致的 401 可见状态，再从 GUI 修正密钥、获取并选择模型、完成连接测试、冷重启读回、从 GUI 删除并再次冷重启确认不存在。要求命中 `modelProvider/list|catalog/list|create|update|fetchModels|testConnection|delete` 与 `modelProviderKey/create`，且 Electron、preload、`electron-ipc`、`app_server_handle_json_lines`、零 legacy/mock/unexpected error 同时成立。该 Gate B-R claim 不访问 live Provider、不证明生产凭证或真实模型 Turn；JSON 与截图不保存 Provider 值、模型 ID、API Host、端口、密钥、路径、请求头或响应正文。
+
+`npm run smoke:settings-memory-soul-electron-fixture -- --run-id <run-id>` 在隔离 userData 中从真实 Memory/Soul Settings GUI 选择 canonical style profile、应用模板、保存并冷重启读回；同时以同一 profile 调用现有 isolated `soul-style` Electron runtime fixture，只提取 `hasInteractionSoul`、`hasMemorySoulSchema`、`hasSavedConfigSource` 等 marker booleans。GUI 侧要求 `get_config/save_config`、`soulStylePack/list`、Electron/preload/IPC、零 legacy/mock/error；runtime 侧必须证明 prompt marker 完整。该 claim 不保存 Soul 文本、完整 prompt、用户内容、Provider request/response、路径或凭证，也明确不声称 GUI 与 runtime 两次启动共享同一进程或 app-data 目录。
+
+`npm run smoke:settings-archived-lifecycle-electron-fixture -- --run-id <run-id>` 复用 current session-history owner fixture，在隔离 userData 与 unavailable model backend 中从真实侧栏归档持久化对话、冷启动读回归档态、从 Settings 已归档对话页恢复，并再次冷启动读回恢复态。Settings adapter 只保留 `agentSession/list|read|update`、Electron/preload/IPC、生命周期布尔、独立 console/page/invoke/legacy/mock error 计数和归档/恢复截图，不保存对话正文、session/thread identity、数据库行、路径或 import payload。
+
+`npm run smoke:settings-about-electron-fixture -- --run-id <run-id>` 在同一真实 Electron 窗口验证 About 与返回首页两个独立 Settings 场景：About 要求构建时 `VITE_APP_VERSION`、Desktop Host `app.getVersion()` 和用户可见版本一致，同时观察 `check_for_updates`、`get_update_install_session` 与 current App Server IPC；返回首页要求点击 `settings-home-button` 后 `home-start-surface` 可见、Settings header 消失。证据分别写入 `settings-about-fixture-summary.json` 和 `settings-about-fixture-home-summary.json`，两者各自带独立 `settingsScenarioProof`，不得互相代替。
+
+`npm run smoke:settings-stats-electron-fixture -- --run-id <run-id>` 验证 Stats 页只走 `usageStats/read`、`usageStats/modelRanking/list`、`usageStats/dailyTrends/list` 三个 App Server current method；隔离数据为空时允许合法零值/空排行/空趋势，但不允许 loading、读取错误、旧 `get_usage_stats*` facade 或 mock fallback。`npm run smoke:settings-environment-electron-fixture -- --run-id <run-id>` 验证 Settings GUI 经真实 `get_config` 与 `get_environment_preview` 读取 current config 和最终合并预览；其 JSON evidence 只记录 method/command 与断言，不记录环境变量名或值。
+
+`npm run smoke:settings-media-services-electron-fixture -- --run-id <run-id>` 验证服务模型页经真实 `get_config`、`model/list`、`modelPreferences/list`、`modelSyncState/read` 与 `voice_models_list_catalog` 进入终态，并同时展示服务模型、图片、视频和语音四个 current 配置区域。隔离环境允许 Provider 清单为空，但配置控件必须可用，且证据不得记录 Provider 配置、模型 ID、凭证或本机路径；该场景不声称真实 Provider 生成请求成功。
+
+`npm run smoke:settings-web-search-electron-fixture -- --run-id <run-id>` 在隔离用户目录中经 Web Search GUI 切换搜索引擎路由并命中 `get_config/save_config`，冷重启读回后恢复原值，再次冷重启确认恢复完成。结构化 JSON 只记录生命周期布尔与 current method/command，不记录搜索路由值、Provider 配置或任何搜索 Key；截图只包含页面正常可见的路由状态。
+
+`npm run smoke:settings-profile-electron-fixture -- --run-id <run-id>` 使用正式 window OEM runtime override 的 `enabled=false` 在隔离用户目录中进入 non-OEM local Profile，经 GUI 修改昵称并命中 `get_config/save_config`，冷重启读回后恢复原值，再次冷重启确认恢复完成。该场景不声称默认 managed-account 登录面已完成资料持久化；结构化 evidence 不记录资料原值、fixture 标记值或完整 config。
+
+`npm run smoke:settings-appearance-electron-fixture -- --run-id <run-id>` 同时验证 Appearance 的两个 current owner：主题模式写入 renderer localStorage，推荐行为写入 `get_config/save_config`。fixture 在隔离用户目录中修改两者、冷重启读回、恢复两者并再次冷重启确认；结构化 evidence 不记录外观原值或完整 config。
+
+`npm run smoke:settings-developer-electron-fixture -- --run-id <run-id>` 从 Developer GUI 点击“复制纯 JSON”，真实采集 `get_config`、`log/list`、`log/persistedTail`、`diagnostics/server/read`、`diagnostics/logStorage/read`、`diagnostics/windowsStartup/read`、`modelProvider/list` 与 `mcpServerStatus/list`。fixture 只用显式 test-only renderer sink 替代最终系统剪贴板写入，不替换任何诊断采集或 bridge；JSON evidence 仅记录写入次数、文本长度、payload shape 布尔与 current method/command，不记录剪贴板正文、日志、配置、路径、Provider/MCP 数据或凭证，也不声称系统剪贴板交付已验证。
+
+`npm run smoke:settings-automation-electron-fixture -- --run-id <run-id>` 验证 Automation Settings 的真实 owner：经 GUI 修改调度器启用、历史记录和轮询间隔，命中 `automationScheduler/config/read|update`、`automationScheduler/status`、`automationJob/list` 与 `automationJob/health`，冷重启读回后从 GUI 恢复，再次冷重启确认恢复。该 claim 不包含已归 Automation Workspace 的 job CRUD/runNow；结构化 evidence 不记录调度器值、job 数据、prompt、路径或运行输出。
+
+`npm run smoke:settings-execution-policy-electron-fixture -- --run-id <run-id>` 验证 Execution Policy Settings 的持久化策略输入和 Host 错误恢复：从 GUI 保存严格工作区限制与 Bash warning-bypass 输入，冷重启读回；再在隔离 userData 中把临时 `config.yaml` 短暂替换成同名目录，要求真实 `save_config` 返回且页面展示 `EISDIR`，随即恢复文件、重新加载、恢复原策略并再次冷重启确认。expected save failure 单列计数，`errors.*` 只统计 unexpected errors；evidence 不保存配置值、规则、prompt、路径或错误正文。该 B-F claim 不证明 RuntimeCore 实际执行某条允许/拒绝工具，后者必须单列 B-R。
+
+`npm run smoke:settings-browser-session-electron-fixture -- --run-id <run-id>` 启动隔离的本地 Chromium CDP 页面，并从真实 Browser Settings GUI 经 Electron preload/IPC、`app_server_handle_json_lines`、`browserSession/target/list|open|read|close` 与 RuntimeCore 完成检测、连接、读回和断开。该 Gate B-R 只证明 current CDP 会话生命周期，不声称扩展 relay、持久化 Profile、真实网站、用户浏览器数据或 packaged 平台行为；结构化 evidence 不记录页面正文、URL、session identity、端口、本机路径或浏览器日志。
 
 `npm run smoke:mcp-workspace-plugin-runtime-electron-fixture` 是真实 Electron + Workspace Harness 点击骨架 fixture：创建临时 stdio MCP server，在页面内注入最小 `harness-status-panel` 点击面板，点击“准备 MCP”后经 preload `app_server_handle_json_lines` 执行 `agentSession/toolInventory/read`、candidate `mcpServer/start`、caller-scoped `mcpTool/listForContext`、显式 `mcpTool/callWithCaller`，并断言默认 list proof 不自动调用工具。该入口使用 `APP_SERVER_BACKEND_MODE=runtime` 读取 current tool inventory，但不调用正式模型后端或 live Provider；它证明 Electron / preload / App Server / MCP current JSON-RPC 与点击触发骨架可闭环，不声称完整插件安装、插件选择或生产 React Workspace UX 已验收。
 
@@ -177,15 +219,17 @@ npm run smoke:mcp-elicitation-gate-b
 
 ```bash
 npm run smoke:automation-current
+npm run smoke:settings-automation-electron-fixture -- --run-id <run-id>
 ```
 
 该入口使用 Chrome + DevBridge `/invoke` 验证持续流程页面读取走
 `app_server_handle_json_lines -> automationJob/list`，只归类为 Gate A / browser mirror；
 它不能替代真实 Electron preload/IPC 和自动化任务执行的 Gate B。
+Settings scheduler 的 Gate B-F 使用 `smoke:settings-automation-electron-fixture`；Automation Workspace 的 job CRUD/runNow 仍需在对应 Workspace surface 单独取证，不能由 Settings summary 代替。
 
 ### Electron 脚本
 
-Electron release / updater 领域新增脚本进入 `scripts/electron/`。当前 `scripts/electron/update-feed-r2-upload-plan.mjs` 负责 R2 updater 上传计划，`scripts/electron/make-zip-local-feed.mjs` 负责用本地临时 feed 验证 Forge macOS ZIP / `RELEASES.json` 生成链路，`scripts/electron/release-workflow-guard.mjs` 负责结构化校验 GitHub Actions release workflow 的 Forge maker、签名、公证、Windows Squirrel 与旧链路拒绝规则。
+Electron release / updater 领域新增脚本进入 `scripts/electron/`。当前 `scripts/electron/update-feed-r2-upload-plan.mjs` 负责 R2 updater 上传计划，`scripts/electron/make-zip-local-feed.mjs` 负责用本地临时 feed 验证 Forge macOS ZIP / `RELEASES.json` 生成链路，`scripts/electron/windows-squirrel-rc-smoke.mjs` 负责 Windows N-1 Setup -> current updater -> candidate packaged `SHELL-01` 的 L8 证据，`scripts/electron/release-workflow-guard.mjs` 负责结构化校验 GitHub Actions release workflow 的 Forge maker、签名、公证、Windows Squirrel 与旧链路拒绝规则。N-1 的 CDP 与隔离 feed 驱动只属于 `scripts/electron/lib/windows-squirrel-n-minus-one.mjs` 测试 helper，不是 production updater API。
 
 对外优先使用 `package.json` 里的 `electron:*` npm scripts。`npm run electron:make:zip-local-feed -- --arch arm64` 只写 `.tmp/electron-forge-local-feed`，不能替代 `electron:dist`、release workflow、DMG、签名、公证或 Windows Squirrel 实机证据。
 
@@ -228,7 +272,7 @@ Agent QC report、GUI flow、qcloop、evidence、release summary 与 owner/check
 
 `npm run agent-qc:project-gate-settings-a -- --run-id <run-id>` 是 `SETTINGS-01` 的专用 Gate A browser-mirror runner：通过稳定 `data-testid` 覆盖全部 current primary tabs、desktop/compact/narrow 三视口、五个 locale 的关键 tab、导航恢复、raw key、loading/error buffer、console/page error 和页面级横向溢出；同时用显式 test-only `agentSession/list` 网络夹具验证已归档对话的 loading、empty、error 与 retry 状态。证据写入 `.lime/qc/project-gates/<run-id>/settings-01-gate-a/`，三种组件态、截图和常规矩阵全部完成时才写 `surfaceProof.complete=true`；它仍明确不声明 Electron main/preload/IPC 或 Gate B。
 
-`npm run agent-qc:project-gate-settings-b -- --run-id <run-id> --source <kind>=<summary.json>...` 聚合同一 run-id 下的 SETTINGS-01 Gate B-F owner evidence。当前合同覆盖 16 个 primary tab 对应的 19 个稳定场景；source 必须位于 `.lime/qc/project-gates/<run-id>/`，且 candidateRunId、真实 Electron/preload/IPC、`app_server_handle_json_lines`、current method、零 legacy/mock 与 owner assertions 全部匹配。现有 `shell-memory` 只完成 `memory-ready`，`provider-migration` 只完成 `provider-migration-recovery`，不得冒充 Soul 持久化或 Provider GUI CRUD；其余场景使用 `settings-scenario` 结构化证据逐项补齐。聚合结果写入同一 run 的 `settings-01-gate-b-f/summary.json`，19 项未全部完成前 `surfaceProof.complete=false`。
+`npm run agent-qc:project-gate-settings-b -- --run-id <run-id> --source <kind>=<summary.json>...` 聚合同一 run-id 下的 SETTINGS-01 Gate B-F owner evidence。当前合同覆盖 16 个 primary tab 对应的 19 个稳定场景；source 必须位于 `.lime/qc/project-gates/<run-id>/`，且 candidateRunId、真实 Electron/preload/IPC、`app_server_handle_json_lines`、current method、零 legacy/mock 与 owner assertions 全部匹配。现有 `shell-memory` 只完成 `memory-ready`，`provider-migration` 只完成 `provider-migration-recovery`，不得冒充 Soul 持久化或 Provider GUI CRUD；MCP、About/Home、Stats、Environment、Media Services、Web Search、Profile、Appearance、Developer、Automation、Execution Policy、Browser Session fixture 分别完成 `mcp-create-list`、`about-version-truth`、`home-navigation`、`stats-current-read`、`environment-current-read`、`media-services-readiness`、`web-search-route`、`profile-persistence`、`appearance-persistence`、`developer-current-diagnostics`、`automation-lifecycle`、`execution-policy-allow-deny-error`、`chrome-relay-lifecycle`。Browser Session 来源可使用更强的 Gate B-R，聚合器只折算其已证明的 Settings claim。其余场景继续使用 `settings-scenario` 结构化证据逐项补齐。聚合结果写入同一 run 的 `settings-01-gate-b-f/summary.json`，19 项未全部完成前 `surfaceProof.complete=false`。
 
 每个 Wave 结束后使用 `npm run agent-qc:project-gate-candidate -- --verify-candidate .lime/qc/project-gates/<run-id>/candidate.json` 重算当前 snapshot；Git HEAD、product digest、tracked diff digest、changed paths 或 exclusion 任一漂移都会非零退出，并只输出 digest、计数和最多 50 个路径差异，不输出文件正文。
 
@@ -247,6 +291,8 @@ surface 的证据。聚合器只读取 evidence JSON 中显式声明的 `surface
 Agent Runtime smoke 与 Service Skill 入口 smoke 已迁到 `scripts/agent-runtime/`。对外继续使用 `package.json` 里的 `smoke:agent-runtime-*` 与 `smoke:agent-service-skill-entry` npm scripts，不直接依赖根目录脚本路径。
 
 `npm run smoke:agent-runtime-current-fixture` 是 Claw / Agent Runtime current 主路径的离线 fixture 回归聚合入口，覆盖历史 / 缓存恢复、流式终态收尾、Claw 终态 UI、Electron session history / 代码产物工作台 fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard，以及真实 Electron `cancel-then-continue` 场景。它默认禁止 live Provider 和 mock backend，只能作为进入 Electron / Playwright 真实闭环前的快速回归门槛，不能替代完整 GUI E2E。
+
+`npm run smoke:agent-runtime-soak-current-fixture` 在同一真实 Electron/App Server 生命周期连续运行 10 轮 AgentControl current fixture，并执行两次 cold restart。它逐轮读取 public JSON-RPC 的 Thread/Turn/Item、PID/RSS 和 terminal 状态，重启后比较所有 canonical identity，最后验证 6 条工具 row、4 条 SubAgent activity、零 invoke/console error 和全部进程退出。该入口使用 localhost controlled provider，只关闭 fixture 的 idle connection；active provider request 必须由 Lime 正常释放，因此不会用强制断连掩盖 SSE 生命周期缺陷。它证明本地 SOAK 实现合同，不替代 live Provider、冻结 RC 或真实平台长稳。
 
 `npm run smoke:agent-session-recovery-cdp-gate` 是未完成 Agent 会话恢复的真实 Electron CDP Gate B 骨架入口：启动 Electron Desktop Host，通过 `chromium.connectOverCDP` attach 到真实 renderer，验证 `window.__LIME_ELECTRON__`、preload invoke、`app_server_handle_json_lines`、`agentSession/start/read/list` 与侧栏打开同一 session。它使用 `APP_SERVER_BACKEND_MODE=unavailable`，不触发 `agentSession/turn/start`，不调用正式模型后端，也不证明 live Provider 或运行中 turn 输出。
 

@@ -380,11 +380,11 @@ export function ProfileSettings() {
         [key]: value,
       };
       const completeProfile: UserProfile = {
-        avatar_url: newProfile.avatar_url || profile.avatar_url || "",
-        nickname: newProfile.nickname || profile.nickname || "",
-        bio: newProfile.bio || profile.bio || "",
-        email: newProfile.email || profile.email || "",
-        tags: newProfile.tags || profile.tags || [],
+        avatar_url: newProfile.avatar_url ?? "",
+        nickname: newProfile.nickname ?? "",
+        bio: newProfile.bio ?? "",
+        email: newProfile.email ?? "",
+        tags: newProfile.tags ?? [],
       };
       const updatedFullConfig = {
         ...config,

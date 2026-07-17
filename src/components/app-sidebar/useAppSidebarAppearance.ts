@@ -38,7 +38,7 @@ export function useAppSidebarAppearance() {
     };
   });
   const [colorSchemeId, setColorSchemeId] = useState<LimeColorSchemeId>(() =>
-    typeof window === "undefined" ? "lime-classic" : loadLimeColorSchemeId(),
+    typeof window === "undefined" ? "dream-blossom" : loadLimeColorSchemeId(),
   );
   const [appearancePopoverOpen, setAppearancePopoverOpen] = useState(false);
   const appearanceControlRef = useRef<HTMLDivElement | null>(null);
@@ -205,114 +205,134 @@ export function useAppSidebarAppearance() {
     },
   } satisfies Record<LimeThemeMode, { label: string; description: string }>;
   const appearanceColorSchemeCopy = {
+    "dream-blossom": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.dreamBlossom.label",
+        "梦樱花境",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.dreamBlossom.description",
+        "梦樱人物、粉白花幕与酒红重点色。",
+      ),
+    },
     "lime-classic": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeClassic.label",
-        "墨绿",
+        "森野秘境",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeClassic.description",
-        "经典深绿，温暖米色背景。",
+        "墨绿森林、晨雾与低干扰工作表面。",
       ),
     },
     "lime-forest": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeForest.label",
-        "自然",
+        "财神打工",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeForest.description",
-        "舒适放松的清新自然风。",
+        "财神程序员、朱红鎏金与轻松国潮。",
       ),
     },
     "lime-ocean": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeOcean.label",
-        "海洋",
+        "奥特曼守护",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeOcean.description",
-        "沉静专业的蓝色调。",
+        "银红英雄、深海蓝未来城市与电光青。",
       ),
     },
     "lime-sand": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeSand.label",
-        "复古",
+        "东方国潮",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeSand.description",
-        "温暖怀旧的琥珀色调。",
+        "东方人物、山河云纹与胭脂红宣纸白。",
       ),
     },
     "lime-neon": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeNeon.label",
-        "霓虹",
+        "初音未来",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeNeon.description",
-        "赛博明亮的粉紫色调。",
+        "青蓝歌姬、粉紫舞台与冰白表面。",
       ),
     },
     "lime-citron": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeCitron.label",
-        "青柠",
+        "灵感少年",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeCitron.description",
-        "活力清新的黄绿配紫。",
+        "ENFP 动漫少年、青柠黄与薄荷青。",
       ),
     },
     "lime-dusk": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeDusk.label",
-        "黄昏",
+        "黑金舞台",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeDusk.description",
-        "柔和温暖的暮色调。",
+        "黑金明星、唱片舞台与香槟金光线。",
       ),
     },
     "lime-minimal": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeMinimal.label",
-        "极简",
+        "极简未来",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeMinimal.description",
-        "清晰专业的深蓝商务风。",
+        "冷白建筑、石墨灰与钴蓝光门。",
       ),
     },
     "lime-vivid": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeVivid.label",
-        "活力",
+        "爆燃涂鸦",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeVivid.description",
-        "时尚有冲击力的现代科技风。",
+        "街头动漫创作者、珊瑚红与湖蓝。",
       ),
     },
     "lime-literary": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeLiterary.label",
-        "文艺",
+        "清透少年",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeLiterary.description",
-        "宁静高雅的灰蓝文艺风。",
+        "明星定制、鼠尾草绿与自然窗光。",
       ),
     },
     "lime-luxury": {
       label: t(
         "navigation.sidebar.appearance.colorScheme.limeLuxury.label",
-        "奢华",
+        "蓝紫星夜",
       ),
       description: t(
         "navigation.sidebar.appearance.colorScheme.limeLuxury.description",
-        "尊贵权威的黑金商务风。",
+        "星夜明星、宝石蓝与星紫银白。",
+      ),
+    },
+    "lime-future": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeFuture.label",
+        "红白未来城",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeFuture.description",
+        "红色天体、冷白城市与中国红轨道。",
       ),
     },
   } satisfies Record<LimeColorSchemeId, { label: string; description: string }>;
@@ -346,7 +366,7 @@ export function useAppSidebarAppearance() {
     copy: {
       colorSchemeGroupLabel: t(
         "navigation.sidebar.appearance.colorScheme.group",
-        "配色",
+        "皮肤",
       ),
       entryLabel: t(
         "navigation.sidebar.appearance.entry.label",
@@ -355,7 +375,7 @@ export function useAppSidebarAppearance() {
       formatColorSchemeSwitchAria: (colorScheme: string) =>
         t("navigation.sidebar.appearance.colorScheme.switchAria", {
           colorScheme,
-          defaultValue: "切换配色为{{colorScheme}}",
+          defaultValue: "切换皮肤为{{colorScheme}}",
         }),
       formatThemeSwitchAria: (theme: string) =>
         t("navigation.sidebar.appearance.theme.switchAria", {
@@ -364,7 +384,7 @@ export function useAppSidebarAppearance() {
         }),
       randomColorSchemeAriaLabel: t(
         "navigation.sidebar.appearance.colorScheme.random.ariaLabel",
-        "随机切换配色",
+        "随机切换皮肤",
       ),
       randomColorSchemeLabel: t(
         "navigation.sidebar.appearance.colorScheme.random.label",
@@ -372,17 +392,14 @@ export function useAppSidebarAppearance() {
       ),
       randomColorSchemeTitle: t(
         "navigation.sidebar.appearance.colorScheme.random.title",
-        "随机切换一个颜色主题",
+        "随机切换一套皮肤",
       ),
       summaryLabel: t("navigation.sidebar.appearance.dialog.summary", {
         theme: currentThemeLabel,
         colorScheme: currentColorSchemeLabel,
         defaultValue: "{{theme}} · {{colorScheme}}",
       }),
-      themeGroupLabel: t(
-        "navigation.sidebar.appearance.theme.group",
-        "主题",
-      ),
+      themeGroupLabel: t("navigation.sidebar.appearance.theme.group", "主题"),
       titleLabel: t("navigation.sidebar.appearance.dialog.title", "外观"),
     },
   };

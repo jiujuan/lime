@@ -301,13 +301,12 @@ const ConversationMoreButton = styled.button<{ $open: boolean }>`
 `;
 
 const ConversationMorePanel = styled.div`
+  width: 100%;
   margin-top: 0.34rem;
   max-height: 220px;
   overflow-y: auto;
   scrollbar-width: thin;
 `;
-
-const HOME_PROJECT_CONVERSATIONS_VISIBLE_LIMIT = 3;
 
 export interface HomeSupplementalAction {
   id: string;
@@ -406,17 +405,16 @@ export function HomeStartSurface({
     (group) => group.conversations.length > 0,
   );
   const hasConversationGroups = visibleConversationGroups.length > 0;
-  const { visibleGroups, overflowGroups, overflowCount } =
-    splitConversationGroups(
-      visibleConversationGroups,
-      HOME_PROJECT_CONVERSATIONS_VISIBLE_LIMIT,
-    );
+  const conversationCount = visibleConversationGroups.reduce(
+    (total, group) => total + group.conversations.length,
+    0,
+  );
 
   useEffect(() => {
-    if (overflowCount === 0) {
+    if (conversationCount === 0) {
       setConversationMoreOpen(false);
     }
-  }, [overflowCount]);
+  }, [conversationCount]);
 
   return (
     <Surface data-testid="home-start-surface">
@@ -475,31 +473,25 @@ export function HomeStartSurface({
 
       {!resolvedGuideOpen && hasConversationGroups ? (
         <ConversationShelf data-testid="home-project-conversations">
-          <ConversationGroups
-            groups={visibleGroups}
-            onSelectConversation={onSelectConversation}
-          />
-          {overflowCount > 0 ? (
-            <ConversationMoreWrap data-testid="home-project-conversation-more">
-              <ConversationMoreButton
-                type="button"
-                $open={conversationMoreOpen}
-                aria-expanded={conversationMoreOpen}
-                onClick={() => setConversationMoreOpen((current) => !current)}
-              >
-                {copy.projectConversationsMoreLabel(overflowCount)}
-                <ChevronDown size={14} strokeWidth={2.2} aria-hidden />
-              </ConversationMoreButton>
-              {conversationMoreOpen ? (
-                <ConversationMorePanel>
-                  <ConversationGroups
-                    groups={overflowGroups}
-                    onSelectConversation={onSelectConversation}
-                  />
-                </ConversationMorePanel>
-              ) : null}
-            </ConversationMoreWrap>
-          ) : null}
+          <ConversationMoreWrap data-testid="home-project-conversation-more">
+            <ConversationMoreButton
+              type="button"
+              $open={conversationMoreOpen}
+              aria-expanded={conversationMoreOpen}
+              onClick={() => setConversationMoreOpen((current) => !current)}
+            >
+              {copy.projectConversationsMoreLabel(conversationCount)}
+              <ChevronDown size={14} strokeWidth={2.2} aria-hidden />
+            </ConversationMoreButton>
+            {conversationMoreOpen ? (
+              <ConversationMorePanel>
+                <ConversationGroups
+                  groups={visibleConversationGroups}
+                  onSelectConversation={onSelectConversation}
+                />
+              </ConversationMorePanel>
+            ) : null}
+          </ConversationMoreWrap>
         </ConversationShelf>
       ) : null}
 
@@ -533,50 +525,6 @@ export function HomeStartSurface({
       />
     </Surface>
   );
-}
-
-function splitConversationGroups(
-  groups: HomeProjectConversationGroup[],
-  visibleLimit: number,
-): {
-  visibleGroups: HomeProjectConversationGroup[];
-  overflowGroups: HomeProjectConversationGroup[];
-  overflowCount: number;
-} {
-  let remainingVisible = Math.max(0, visibleLimit);
-  const visibleGroups: HomeProjectConversationGroup[] = [];
-  const overflowGroups: HomeProjectConversationGroup[] = [];
-
-  for (const group of groups) {
-    const visibleConversations = group.conversations.slice(0, remainingVisible);
-    const overflowConversations = group.conversations.slice(
-      visibleConversations.length,
-    );
-
-    if (visibleConversations.length > 0) {
-      visibleGroups.push({
-        ...group,
-        conversations: visibleConversations,
-      });
-      remainingVisible -= visibleConversations.length;
-    }
-
-    if (overflowConversations.length > 0) {
-      overflowGroups.push({
-        ...group,
-        conversations: overflowConversations,
-      });
-    }
-  }
-
-  return {
-    visibleGroups,
-    overflowGroups,
-    overflowCount: overflowGroups.reduce(
-      (total, group) => total + group.conversations.length,
-      0,
-    ),
-  };
 }
 
 function ConversationGroups({

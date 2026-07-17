@@ -208,21 +208,6 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.decisionPanel.permission.resultLabel", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.permission.result.allowed", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.permission.result.denied", { ns: "agent" });
-  i18n.t("agentChat.decisionPanel.permission.result.importedReadOnly", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.decisionPanel.permission.importedReadOnlyTitle", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.decisionPanel.permission.importedReadOnlyRecordLabel", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.decisionPanel.permission.importedReadOnlyRecordValue", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.decisionPanel.permission.importedReadOnlyDescription", {
-    ns: "agent",
-  });
   i18n.t("agentChat.messageList.history.windowSummaryRestored", {
     ns: "agent",
     loaded: "40",
@@ -986,32 +971,9 @@ function assertI18nKeyTypes() {
     build: "1.10.0",
   });
   i18n.t("settings.about.update.errorDownload", { ns: "settings" });
-  i18n.t("settings.chromeRelay.guide.header.extension.title", {
-    ns: "settings",
-  });
-  i18n.t("settings.chromeRelay.guide.action.openRemoteDebugging", {
-    ns: "settings",
-  });
-  i18n.t("settings.chromeRelay.guide.message.copySuccess", {
-    ns: "settings",
-    label: "URL",
-  });
-  i18n.t("settings.chromeRelay.main.engine.xiaohongshu.label", {
-    ns: "settings",
-  });
-  i18n.t("settings.chromeRelay.main.profile.title", {
-    ns: "settings",
-  });
-  i18n.t("settings.chromeRelay.main.profile.status.running", {
-    ns: "settings",
-  });
-  i18n.t("settings.chromeRelay.main.action.openAdvancedTools", {
-    ns: "settings",
-  });
-  i18n.t("settings.chromeRelay.main.message.copyConfigSuccess", {
-    ns: "settings",
-    label: "Default Browser Connector",
-  });
+  i18n.t("settings.browserConnection.title", { ns: "settings" });
+  i18n.t("settings.browserConnection.action.check", { ns: "settings" });
+  i18n.t("settings.browserConnection.error.unavailable", { ns: "settings" });
   i18n.t("settings.group.system", { ns: "settings" });
   i18n.t("settings.tab.developerLab", { ns: "settings" });
   i18n.t("settings.developerLab.title", { ns: "settings" });

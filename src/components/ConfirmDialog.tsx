@@ -70,6 +70,7 @@ export function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
+            data-testid="confirm-dialog-confirm"
             className={`rounded-lg px-4 py-2 text-sm ${styles.button}`}
           >
             {resolvedConfirmText}

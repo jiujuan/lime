@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   AGENT_PROVIDER_CONFIGURATION_BOUNDARY,
+  AGENT_PROVIDER_RUNTIME_ADAPTER_BOUNDARY,
   AGENT_SESSION_CONFIGURATION_BOUNDARY,
   AGENT_TURN_CONTEXT_CONFIGURATION_BOUNDARY,
   ALLOWED_AGENT_COUPLING_OWNER_FILES,
@@ -188,6 +189,11 @@ describe("app-server runtime boundary", () => {
       join(REPO_ROOT, AGENT_PROVIDER_CONFIGURATION_BOUNDARY),
       "utf8",
     );
+    const agentProviderRuntimeAdapter = readFileSync(
+      join(REPO_ROOT, AGENT_PROVIDER_RUNTIME_ADAPTER_BOUNDARY),
+      "utf8",
+    );
+    const agentProviderOwner = `${agentBoundary}\n${agentProviderRuntimeAdapter}`;
     const appServerProviderAdapter = productionSource(
       join(
         REPO_ROOT,
@@ -195,25 +201,25 @@ describe("app-server runtime boundary", () => {
       ),
     );
 
-    expect(agentBoundary).toContain("create_configured_reply_provider");
-    expect(agentBoundary).toContain("install_provider_for_session");
-    expect(agentBoundary).toContain("RuntimeProviderProtocol");
-    expect(agentBoundary).toContain("SessionProviderConfig");
-    expect(agentBoundary).toContain("ModelProviderProtocol");
-    expect(agentBoundary).toContain("ProtocolKind");
-    expect(agentBoundary).toContain(
+    expect(agentProviderOwner).toContain("create_configured_reply_provider");
+    expect(agentProviderOwner).toContain("install_provider_for_session");
+    expect(agentProviderOwner).toContain("RuntimeProviderProtocol");
+    expect(agentProviderOwner).toContain("SessionProviderConfig");
+    expect(agentProviderOwner).toContain("ModelProviderProtocol");
+    expect(agentProviderOwner).toContain("ProtocolKind");
+    expect(agentProviderOwner).toContain(
       "route_protocol_from_session_provider_config",
     );
-    expect(agentBoundary).toContain("ModelRouteProviderConfiguration");
-    expect(agentBoundary).toContain(
+    expect(agentProviderOwner).toContain("ModelRouteProviderConfiguration");
+    expect(agentProviderOwner).toContain(
       "configure_model_route_provider_for_session",
     );
-    expect(agentBoundary).toContain("ProviderConfigurationRequest");
-    expect(agentBoundary).toContain("RuntimeProviderProtocol::Responses");
-    expect(agentBoundary).toContain("ModelProviderProtocol::Responses");
-    expect(agentBoundary).toContain("ProtocolKind::OpenaiResponses");
-    expect(agentBoundary).not.toContain(".configure_provider(");
-    expect(agentBoundary).not.toContain("configure_provider_from_pool(");
+    expect(agentProviderOwner).toContain("ProviderConfigurationRequest");
+    expect(agentProviderOwner).toContain("RuntimeProviderProtocol::Responses");
+    expect(agentProviderOwner).toContain("ModelProviderProtocol::Responses");
+    expect(agentProviderOwner).toContain("ProtocolKind::OpenaiResponses");
+    expect(agentProviderOwner).not.toContain(".configure_provider(");
+    expect(agentProviderOwner).not.toContain("configure_provider_from_pool(");
     expect(appServerProviderAdapter).not.toContain(
       "configure_provider_for_session",
     );
@@ -655,6 +661,11 @@ describe("app-server runtime boundary", () => {
       join(REPO_ROOT, AGENT_PROVIDER_CONFIGURATION_BOUNDARY),
       "utf8",
     );
+    const agentProviderRuntimeAdapter = readFileSync(
+      join(REPO_ROOT, AGENT_PROVIDER_RUNTIME_ADAPTER_BOUNDARY),
+      "utf8",
+    );
+    const agentProviderOwner = `${agentProviderConfiguration}\n${agentProviderRuntimeAdapter}`;
 
     expect(runtimeBackend).toContain("run_agent_turn_with_policy");
     expect(runtimeBackend).toContain("AgentTurnExecutionRequest");
@@ -685,13 +696,11 @@ describe("app-server runtime boundary", () => {
     expect(agentTurnExecution).not.toContain("mark_healthy(");
     expect(agentTurnExecution).toContain("create_cancel_token(");
     expect(agentTurnExecution).toContain("remove_cancel_token(");
-    expect(agentProviderConfiguration).toContain(
-      "create_configured_reply_provider",
-    );
-    expect(agentProviderConfiguration).toContain(
+    expect(agentProviderOwner).toContain("create_configured_reply_provider");
+    expect(agentProviderOwner).toContain(
       "install_provider_for_session",
     );
-    expect(agentProviderConfiguration).not.toContain("mark_healthy(");
+    expect(agentProviderOwner).not.toContain("mark_healthy(");
   });
 
   it("App Server 不应直接构造 Agent SessionConfig", () => {

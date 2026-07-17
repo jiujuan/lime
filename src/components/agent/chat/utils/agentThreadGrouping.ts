@@ -7,8 +7,6 @@ import {
 } from "./agentThreadGroupingItemSummary";
 import type {
   AgentThreadDisplayModel,
-  AgentThreadDisplayModelOptions,
-  AgentThreadGroupingTranslate,
   AgentThreadGroupKind,
   AgentThreadOrderedBlock,
   AgentThreadSemanticGroup,
@@ -21,38 +19,11 @@ import {
 
 export type {
   AgentThreadDisplayModel,
-  AgentThreadDisplayModelOptions,
-  AgentThreadGroupingTranslate,
   AgentThreadGroupKind,
   AgentThreadOrderedBlock,
   AgentThreadSemanticGroup,
   AgentThreadSummaryChip,
 } from "./agentThreadGroupingTypes";
-
-function interpolateFallbackText(
-  value: string,
-  options?: Record<string, unknown>,
-): string {
-  if (!options) {
-    return value;
-  }
-  return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, name: string) => {
-    const option = options[name.trim()];
-    return option === undefined || option === null ? "" : String(option);
-  });
-}
-
-function translateGroupingText(
-  t: AgentThreadGroupingTranslate | undefined,
-  key: string,
-  defaultValue: string,
-  options?: Record<string, unknown>,
-): string {
-  if (!t) {
-    return interpolateFallbackText(defaultValue, options);
-  }
-  return String(t(key, { defaultValue, ...options }));
-}
 
 function resolveItemTimestamp(item: AgentThreadItem): string {
   return item.completed_at || item.updated_at || item.started_at;
@@ -172,7 +143,6 @@ function resolveCountLabel(kind: AgentThreadGroupKind, count: number): string {
 function shouldDefaultExpand(
   kind: AgentThreadGroupKind,
   status: AgentThreadItemStatus,
-  items: AgentThreadItem[] = [],
 ): boolean {
   if (kind === "approval" || kind === "alert") {
     return true;
@@ -203,7 +173,6 @@ function buildSummaryText(items: AgentThreadItem[]): string | null {
 
 export function buildAgentThreadDisplayModel(
   items: AgentThreadItem[],
-  options: AgentThreadDisplayModelOptions = {},
 ): AgentThreadDisplayModel {
   const sortedItems = [...items].sort(compareItems);
   const thinkingItems = sortedItems.filter(
@@ -261,7 +230,7 @@ export function buildAgentThreadDisplayModel(
             : current.kind === "subagent"
               ? "查看子任务详情"
               : "查看执行过程"),
-      defaultExpanded: shouldDefaultExpand(current.kind, status, current.items),
+      defaultExpanded: shouldDefaultExpand(current.kind, status),
       startedAt,
       completedAt,
     };

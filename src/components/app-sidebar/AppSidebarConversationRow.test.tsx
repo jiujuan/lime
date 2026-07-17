@@ -71,6 +71,11 @@ describe("AppSidebarConversationRow", () => {
     expect(
       container.querySelector('[data-testid="app-sidebar-conversation-open"]'),
     ).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="app-sidebar-conversation-open"]')
+        ?.getAttribute("data-session-id"),
+    ).toBe("session-1");
 
     act(() => root.unmount());
   });

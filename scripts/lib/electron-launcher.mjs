@@ -23,6 +23,7 @@ export function spawnElectron({
   env = process.env,
   platform = process.platform,
   repoRoot = process.cwd(),
+  shell,
   stdio = "inherit",
   runner = spawn,
 } = {}) {
@@ -36,7 +37,7 @@ export function spawnElectron({
   return runner(command, args, {
     env,
     stdio,
-    shell: platform === "win32",
+    shell: shell ?? platform === "win32",
   });
 }
 

@@ -1,8 +1,10 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight } from "lucide-react";
 import type { AgentThreadItem } from "../types";
+import type { ConfirmResponse, SiteSavedContentTarget } from "../types";
+import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { TimelineItemDetails } from "./AgentThreadTimelineItemRenderers";
 import {
   formatHistoricalContentLength,
   summarizeHistoricalTimelineItems,
@@ -85,14 +87,31 @@ export const HistoricalTimelinePreview: React.FC<{
   detailsDeferred?: boolean;
   startedAt?: string | null;
   completedAt?: string | null;
-  onExpand: () => void;
+  onFileClick?: (fileName: string, content: string) => void;
+  onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
+  onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
+  onOpenSubagentSession?: (sessionId: string) => void;
+  onPermissionResponse?: (response: ConfirmResponse) => void;
+  onSaveFileArtifactAsKnowledge?: (source: {
+    messageId: string;
+    content: string;
+    sourceName?: string;
+    description?: string | null;
+  }) => void;
+  sourceMessageId?: string;
 }> = ({
   items,
   placement,
   detailsDeferred = false,
   startedAt,
   completedAt,
-  onExpand,
+  onFileClick,
+  onOpenArtifactFromTimeline,
+  onOpenSavedSiteContent,
+  onOpenSubagentSession,
+  onPermissionResponse,
+  onSaveFileArtifactAsKnowledge,
+  sourceMessageId,
 }) => {
   const { t } = useTranslation("agent");
   const summary = useMemo(
@@ -155,20 +174,37 @@ export const HistoricalTimelinePreview: React.FC<{
         duration: durationLabel,
       })
     : t("agentChat.messageList.historicalTimeline.title");
+  const fileArtifacts = items.filter(
+    (item): item is Extract<AgentThreadItem, { type: "file_artifact" }> =>
+      item.type === "file_artifact",
+  );
 
   return (
-    <button
-      type="button"
-      data-testid={`message-list-historical-timeline-preview:${placement}`}
-      className="group flex w-full items-center gap-1.5 border-b border-slate-200 py-2 text-left text-sm text-slate-500 transition-colors hover:text-slate-800"
-      onClick={onExpand}
-      aria-label={`${title}. ${metaText}`}
-    >
-      <span className="font-medium">{title}</span>
-      <ChevronRight
-        className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5"
-        aria-hidden="true"
-      />
-    </button>
+    <div className="space-y-1.5">
+      <div
+        data-testid={`message-list-historical-timeline-preview:${placement}`}
+        className="flex w-full items-center gap-1.5 border-b border-slate-200 py-2 text-left text-sm text-slate-500"
+      >
+        <span className="font-medium">{title}</span>
+        <span className="sr-only">{metaText}</span>
+      </div>
+      {fileArtifacts.length > 0 ? (
+        <div data-testid="historical-file-artifact-group" className="space-y-1">
+          {fileArtifacts.map((item) => (
+            <TimelineItemDetails
+              key={item.id}
+              item={item}
+              onFileClick={onFileClick}
+              onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+              onOpenSavedSiteContent={onOpenSavedSiteContent}
+              onOpenSubagentSession={onOpenSubagentSession}
+              onPermissionResponse={onPermissionResponse}
+              sourceMessageId={sourceMessageId}
+              onSaveFileArtifactAsKnowledge={onSaveFileArtifactAsKnowledge}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 };

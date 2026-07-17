@@ -125,6 +125,7 @@ beforeEach(async () => {
   document.documentElement.removeAttribute("data-lime-theme");
   document.documentElement.removeAttribute("data-lime-theme-effective");
   document.documentElement.removeAttribute("data-lime-color-scheme");
+  document.documentElement.removeAttribute("data-lime-skin");
   document.documentElement.removeAttribute("style");
   await changeLimeLocale("zh-CN");
   mockGetConfig.mockResolvedValue(createMockConfig());
@@ -166,29 +167,29 @@ describe("AppearanceSettings", () => {
     );
 
     expect(text).toContain("外观");
-    expect(text).toContain(
-      "管理主题、界面语言、回复语言和推荐行为。",
-    );
+    expect(text).toContain("管理主题、界面语言、回复语言和推荐行为。");
     expect(text).toContain("主题：跟随系统");
-    expect(text).toContain("配色：墨绿");
+    expect(text).toContain("皮肤：梦樱花境");
     expect(text).toContain("界面：简体中文");
     expect(text).toContain("回复：自动判断");
     expect(text).not.toContain("提示音效");
     expect(text).toContain("基础外观");
     expect(text).toContain("主题模式");
-    expect(text).toContain("色彩方案");
+    expect(text).toContain("全局皮肤");
     expect(text).toContain("随机");
-    expect(text).toContain("墨绿");
-    expect(text).toContain("自然");
-    expect(text).toContain("海洋");
-    expect(text).toContain("复古");
-    expect(text).toContain("霓虹");
-    expect(text).toContain("青柠");
-    expect(text).toContain("黄昏");
-    expect(text).toContain("极简");
-    expect(text).toContain("活力");
-    expect(text).toContain("文艺");
-    expect(text).toContain("奢华");
+    expect(text).toContain("梦樱花境");
+    expect(text).toContain("森野秘境");
+    expect(text).toContain("财神打工");
+    expect(text).toContain("奥特曼守护");
+    expect(text).toContain("东方国潮");
+    expect(text).toContain("初音未来");
+    expect(text).toContain("灵感少年");
+    expect(text).toContain("黑金舞台");
+    expect(text).toContain("极简未来");
+    expect(text).toContain("爆燃涂鸦");
+    expect(text).toContain("清透少年");
+    expect(text).toContain("蓝紫星夜");
+    expect(text).toContain("红白未来城");
     expect(text).toContain("界面语言");
     expect(text).toContain("回复语言");
     expect(text).not.toContain("持续流程");
@@ -214,13 +215,13 @@ describe("AppearanceSettings", () => {
 
     expect(text).toContain("Appearance");
     expect(text).toContain("Theme: System");
-    expect(text).toContain("Palette: Graphite Green");
+    expect(text).toContain("Skin: Dream Blossom");
     expect(text).toContain("UI: English");
     expect(text).toContain("Reply: Auto");
     expect(text).not.toContain("Sound cues");
     expect(text).toContain("Base Appearance");
     expect(text).toContain("Theme Mode");
-    expect(text).toContain("Color Palette");
+    expect(text).toContain("Global Skin");
     expect(text).toContain("Reply Language");
     expect(text).toContain("Random");
     expect(text).not.toContain("Setup & Recovery");
@@ -322,10 +323,10 @@ describe("AppearanceSettings", () => {
     );
   });
 
-  it("切换色彩方案时应持久化并立即应用到根节点", async () => {
+  it("切换全局皮肤时应持久化并立即应用到根节点", async () => {
     const { container } = await renderPage();
     const luxuryButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("奢华"),
+      (button) => button.textContent?.includes("黑金舞台"),
     );
 
     expect(luxuryButton).toBeInstanceOf(HTMLButtonElement);
@@ -336,18 +337,19 @@ describe("AppearanceSettings", () => {
     });
 
     expect(localStorage.getItem(LIME_COLOR_SCHEME_STORAGE_KEY)).toBe(
-      "lime-luxury",
+      "lime-dusk",
     );
     expect(document.documentElement.dataset.limeColorScheme).toBe(
-      "lime-luxury",
+      "lime-dusk",
     );
+    expect(document.documentElement.dataset.limeSkin).toBe("lime-dusk");
     expect(
       document.documentElement.style.getPropertyValue("--lime-chrome-rail"),
-    ).toBe("#f4efe2");
-    expect(container.textContent ?? "").toContain("配色：奢华");
+    ).toBe("#eadfce");
+    expect(container.textContent ?? "").toContain("皮肤：黑金舞台");
   });
 
-  it("点击随机配色时应落到真实预设并持久化", async () => {
+  it("点击随机皮肤时应落到真实预设并持久化", async () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
 
     try {
@@ -364,12 +366,12 @@ describe("AppearanceSettings", () => {
       });
 
       expect(localStorage.getItem(LIME_COLOR_SCHEME_STORAGE_KEY)).toBe(
-        "lime-forest",
+        "lime-classic",
       );
       expect(document.documentElement.dataset.limeColorScheme).toBe(
-        "lime-forest",
+        "lime-classic",
       );
-      expect(container.textContent ?? "").toContain("配色：自然");
+      expect(container.textContent ?? "").toContain("皮肤：森野秘境");
     } finally {
       randomSpy.mockRestore();
     }
@@ -394,7 +396,7 @@ describe("AppearanceSettings", () => {
     expect(document.documentElement.dataset.limeThemeEffective).toBe("dark");
     expect(
       document.documentElement.style.getPropertyValue("--lime-app-bg"),
-    ).toBe("#0b1120");
+    ).toBe("#160f14");
     expect(container.textContent ?? "").toContain("主题：深色");
   });
 

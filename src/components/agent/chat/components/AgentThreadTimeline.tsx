@@ -1,5 +1,4 @@
 import React, {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -76,7 +75,11 @@ interface AgentThreadTimelineProps {
   deferCompletedSingleDetails?: boolean;
   collapseInactiveDetails?: boolean;
   expandCompletedProcessDetails?: boolean;
+  showOperationalDetails?: boolean;
 }
+
+const INITIAL_DETAIL_ITEM_COUNT = 24;
+const DETAIL_ITEM_BATCH_SIZE = 24;
 
 function TimelineBlockCard({
   block,
@@ -95,6 +98,7 @@ function TimelineBlockCard({
   preferInlineDetails,
   deferCompletedSingleDetails,
   expandCompletedProcessDetails,
+  allowOperationalDetails,
 }: {
   block: AgentThreadOrderedBlock;
   index: number;
@@ -103,6 +107,7 @@ function TimelineBlockCard({
   preferInlineDetails: boolean;
   deferCompletedSingleDetails: boolean;
   expandCompletedProcessDetails: boolean;
+  allowOperationalDetails: boolean;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
   sourceMessageId?: string;
@@ -118,6 +123,7 @@ function TimelineBlockCard({
   focusedItemId?: string | null;
   focusRequestKey?: number;
 }) {
+  const { t } = useTranslation("agent");
   const openSubagentLabel = resolveCollaborationOpenSubagentLabel();
   const dataTestId = `agent-thread-block:${index + 1}:${block.kind}`;
   const summaryLines = resolveBlockSummaryLines(block);
@@ -128,16 +134,28 @@ function TimelineBlockCard({
     block,
     isExpanded,
     preferInlineDetails,
-    deferCompletedSingleDetails,
+    deferCompletedSingleDetails:
+      deferCompletedSingleDetails || !allowOperationalDetails,
     focusedItemId,
     hasStructuredThinkingInlinePreview,
   });
   const [open, setOpen] = useState(isExpanded || initialPlan.hasFocusedItem);
+  const focusedItemIndex = focusedItemId
+    ? block.items.findIndex((item) => item.id === focusedItemId)
+    : -1;
+  const initialMaterializedItemCount = Math.min(
+    block.items.length,
+    Math.max(INITIAL_DETAIL_ITEM_COUNT, focusedItemIndex + 1),
+  );
+  const [materializedItemCount, setMaterializedItemCount] = useState(
+    initialMaterializedItemCount,
+  );
   const renderPlan = buildTimelineBlockRenderPlan({
     block,
     isExpanded: open,
     preferInlineDetails,
-    deferCompletedSingleDetails,
+    deferCompletedSingleDetails:
+      deferCompletedSingleDetails || !allowOperationalDetails,
     focusedItemId,
     hasStructuredThinkingInlinePreview,
   });
@@ -145,6 +163,10 @@ function TimelineBlockCard({
   useEffect(() => {
     setOpen(isExpanded || renderPlan.hasFocusedItem);
   }, [block.id, isExpanded, renderPlan.hasFocusedItem]);
+
+  useEffect(() => {
+    setMaterializedItemCount(initialMaterializedItemCount);
+  }, [block.id, initialMaterializedItemCount]);
 
   useEffect(() => {
     if (!renderPlan.hasFocusedItem || !focusRequestKey) {
@@ -157,12 +179,48 @@ function TimelineBlockCard({
       block: "center",
     });
   }, [focusRequestKey, renderPlan.hasFocusedItem]);
-  const detailEntries = useMemo(() => {
-    if (!renderPlan.shouldMaterializeDetailEntries) {
+  const fileArtifactItems = block.items.filter(
+    (item): item is Extract<AgentThreadItem, { type: "file_artifact" }> =>
+      item.type === "file_artifact",
+  );
+  const containsOnlyFileArtifacts =
+    fileArtifactItems.length === block.items.length;
+  const rendersFileChangeCollection =
+    fileArtifactItems.length > 1 &&
+    containsOnlyFileArtifacts &&
+    fileArtifactItems.every(hasTimelineFileChangeEvidence);
+  const rendersAttachmentCollection =
+    fileArtifactItems.length > 1 &&
+    containsOnlyFileArtifacts &&
+    fileArtifactItems.every(isPlainTimelineFileAttachment);
+  const rendersAggregatedArtifactCollection =
+    rendersFileChangeCollection || rendersAttachmentCollection;
+  const hasInteractiveDetails =
+    renderPlan.hasDetailEntries &&
+    (block.kind === "artifact" || allowOperationalDetails);
+  const materializedDetailItems = useMemo(() => {
+    if (
+      !renderPlan.shouldMaterializeDetailEntries ||
+      !hasInteractiveDetails ||
+      rendersAggregatedArtifactCollection
+    ) {
       return [];
     }
 
-    return block.items.flatMap((item) => {
+    return block.items.slice(0, materializedItemCount);
+  }, [
+    block.items,
+    materializedItemCount,
+    hasInteractiveDetails,
+    renderPlan.shouldMaterializeDetailEntries,
+    rendersAggregatedArtifactCollection,
+  ]);
+  const detailEntries = useMemo(() => {
+    if (materializedDetailItems.length === 0) {
+      return [];
+    }
+
+    return materializedDetailItems.flatMap((item) => {
       const content = (
         <TimelineItemDetails
           item={item}
@@ -184,6 +242,7 @@ function TimelineBlockCard({
     });
   }, [
     block.items,
+    materializedDetailItems,
     onFileClick,
     onOpenArtifactFromTimeline,
     sourceMessageId,
@@ -192,10 +251,17 @@ function TimelineBlockCard({
     onOpenSubagentSession,
     onPermissionResponse,
     openSubagentLabel,
-    renderPlan.shouldMaterializeDetailEntries,
     renderPlan.shouldRenderGroupedToolRows,
     expandCompletedProcessDetails,
   ]);
+  const remainingDetailItemCount = Math.max(
+    0,
+    block.items.length - materializedDetailItems.length,
+  );
+  const nextDetailBatchCount = Math.min(
+    DETAIL_ITEM_BATCH_SIZE,
+    remainingDetailItemCount,
+  );
 
   if (renderPlan.shouldRenderArtifactCardsInline) {
     return (
@@ -204,22 +270,15 @@ function TimelineBlockCard({
         data-testid={dataTestId}
         data-emphasis={emphasis}
       >
-        {block.items.length > 1 &&
-        block.items.every(hasTimelineFileChangeEvidence) ? (
+        {rendersFileChangeCollection ? (
           <AgentThreadTimelineFileChangesCard
-            items={block.items.filter(
-              (
-                item,
-              ): item is Extract<AgentThreadItem, { type: "file_artifact" }> =>
-                item.type === "file_artifact",
-            )}
+            items={fileArtifactItems}
             onFileClick={onFileClick}
             onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
           />
-        ) : block.items.length > 1 &&
-          block.items.every(isPlainTimelineFileAttachment) ? (
+        ) : rendersAttachmentCollection ? (
           <AgentThreadTimelineAttachmentList
-            items={block.items}
+            items={fileArtifactItems}
             onFileClick={onFileClick}
             onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
             sourceMessageId={sourceMessageId}
@@ -286,13 +345,18 @@ function TimelineBlockCard({
     );
   }
 
-  const visibleHeadline = headline;
+  const visibleHeadline = allowOperationalDetails ? headline : block.title;
   const visibleSupportingLines =
-    renderPlan.isThinkingOnlyBlock && open ? [] : supportingLines;
+    !allowOperationalDetails || (renderPlan.isThinkingOnlyBlock && open)
+      ? []
+      : supportingLines;
   const summaryCountLabel = block.items.length > 1 ? block.countLabel : null;
   const processMixLabel = resolveProcessMixLabel(block);
   const summaryDetailHint =
-    renderPlan.hasDetailEntries && block.items.length > 1 && !open
+    allowOperationalDetails &&
+    renderPlan.hasDetailEntries &&
+    block.items.length > 1 &&
+    !open
       ? processMixLabel || block.rawDetailLabel
       : null;
   const summaryToneClassName = cn(
@@ -313,18 +377,19 @@ function TimelineBlockCard({
       <details
         data-testid={dataTestId}
         data-emphasis={emphasis}
-        open={renderPlan.hasDetailEntries ? open : true}
+        data-details-available={hasInteractiveDetails ? "true" : "false"}
+        open={hasInteractiveDetails ? open : false}
       >
         <summary
           className={cn(
             "list-none rounded-md px-2 py-1.5",
-            renderPlan.hasDetailEntries ? "cursor-pointer" : "cursor-default",
+            hasInteractiveDetails ? "cursor-pointer" : "cursor-default",
             emphasis === "active" &&
               !renderPlan.isThinkingOnlyBlock &&
               "bg-sky-50/45",
           )}
           onClick={(event) => {
-            if (!renderPlan.hasDetailEntries) {
+            if (!hasInteractiveDetails) {
               event.preventDefault();
               return;
             }
@@ -374,7 +439,7 @@ function TimelineBlockCard({
               ) : null}
             </div>
 
-            {renderPlan.hasDetailEntries ? (
+            {hasInteractiveDetails ? (
               <ChevronDown
                 className={cn(
                   "mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform",
@@ -385,7 +450,7 @@ function TimelineBlockCard({
           </div>
         </summary>
 
-        {renderPlan.hasDetailEntries && open ? (
+        {hasInteractiveDetails && open ? (
           <div
             className="ml-6 space-y-2 pb-1 pl-3"
             data-testid={`${dataTestId}:details`}
@@ -403,6 +468,26 @@ function TimelineBlockCard({
                 {entry.content}
               </div>
             ))}
+            {remainingDetailItemCount > 0 ? (
+              <button
+                type="button"
+                data-testid={`${dataTestId}:show-more-details`}
+                className="flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+                onClick={() =>
+                  setMaterializedItemCount((current) =>
+                    Math.min(
+                      block.items.length,
+                      current + DETAIL_ITEM_BATCH_SIZE,
+                    ),
+                  )
+                }
+              >
+                {t("agentChat.messageList.historicalTimeline.showMoreSteps", {
+                  count: nextDetailBatchCount,
+                })}
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         ) : null}
       </details>
@@ -429,13 +514,8 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
   deferCompletedSingleDetails = false,
   collapseInactiveDetails = false,
   expandCompletedProcessDetails = false,
+  showOperationalDetails = true,
 }) => {
-  const { t } = useTranslation("agent");
-  const translateThreadGrouping = useCallback(
-    (key: string, options?: Record<string, unknown>): string =>
-      String(t(key as never, options as never)),
-    [t],
-  );
   const pendingRuntimeConfirmationPrompt = useMemo(
     () => resolvePendingRuntimeConfirmationPrompt({ items, actionRequests }),
     [actionRequests, items],
@@ -450,11 +530,8 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
   );
 
   const displayModel = useMemo(
-    () =>
-      buildAgentThreadDisplayModel(visibleItems, {
-        t: translateThreadGrouping,
-      }),
-    [translateThreadGrouping, visibleItems],
+    () => buildAgentThreadDisplayModel(visibleItems),
+    [visibleItems],
   );
   const activeBlockIndex = resolveActiveBlockIndex(displayModel.orderedBlocks);
   const focusBlockIndex = resolveFocusBlockIndex({
@@ -507,6 +584,7 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
             preferInlineDetails={isCurrentTurn}
             deferCompletedSingleDetails={deferCompletedSingleDetails}
             expandCompletedProcessDetails={expandCompletedProcessDetails}
+            allowOperationalDetails={showOperationalDetails}
             onFileClick={onFileClick}
             onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
             sourceMessageId={sourceMessageId}

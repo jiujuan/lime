@@ -462,7 +462,7 @@ fn validate_shell_execution_process_command(
     match check_shell_command_permission(tool_name, command_text, working_directory) {
         ShellPermissionDecision::Allow => Ok(()),
         ShellPermissionDecision::Deny(reason) => Err(reason),
-        ShellPermissionDecision::RequiresConfirmation(message)
+        ShellPermissionDecision::RequiresConfirmation(_)
             if approval_policy.is_some_and(|policy| policy.eq_ignore_ascii_case("never"))
                 || sandbox_policy
                     .is_some_and(|policy| policy.eq_ignore_ascii_case("danger-full-access")) =>

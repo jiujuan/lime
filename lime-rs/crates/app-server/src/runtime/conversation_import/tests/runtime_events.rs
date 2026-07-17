@@ -143,10 +143,15 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
             && command["status"] == "completed"
     }));
     assert_eq!(thread_read["change_summary"]["applied_patch_count"], 1);
-    assert_eq!(
-        thread_read["change_summary"]["changed_files"][0],
-        "/workspace/app/src/lib.rs"
-    );
+    let changed_files = thread_read["change_summary"]["changed_files"]
+        .as_array()
+        .expect("changed files");
+    assert!(changed_files
+        .iter()
+        .any(|path| path == "/workspace/app/src/lib.rs"));
+    assert!(changed_files
+        .iter()
+        .any(|path| path == "/workspace/app/docs/imported-preview.md"));
 
     let items = detail["items"].as_array().expect("timeline items");
     let first_turn_id = messages[1]["runtimeTurnId"]

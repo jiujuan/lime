@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   isGuiCanceledSnapshotReady,
-  shouldExpandCompactApprovalTimeline,
 } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
 
 const BASE_CANCELED_SNAPSHOT = {
@@ -48,50 +47,25 @@ describe("claw chat GUI canceled waits", () => {
     ).toBe(true);
   });
 
-  it("approval cancel 必须等到 current approval record 投影出现", () => {
-    expect(
-      isGuiCanceledSnapshotReady(BASE_CANCELED_SNAPSHOT, {
-        requireApprovalRecord: true,
-      }),
-    ).toBe(false);
+  it("approval cancel 终态不依赖历史 operational record", () => {
     expect(
       isGuiCanceledSnapshotReady(
         {
           ...BASE_CANCELED_SNAPSHOT,
-          approvalRecordShape: {
-            recordCount: 1,
-          },
-        },
-        {
-          requireApprovalRecord: true,
+          hasStoppedCopy: true,
+          compactTimelinePreviewCount: 1,
         },
       ),
     ).toBe(true);
-  });
-
-  it("terminal approval 折叠后应先展开 current timeline 再等待只读记录", () => {
     expect(
-      shouldExpandCompactApprovalTimeline(BASE_CANCELED_SNAPSHOT, {
-        requireApprovalRecord: true,
-      }),
-    ).toBe(false);
-    expect(
-      shouldExpandCompactApprovalTimeline(
+      isGuiCanceledSnapshotReady(
         {
           ...BASE_CANCELED_SNAPSHOT,
+          hasStoppedCopy: true,
           compactTimelinePreviewCount: 1,
+          approvalRecordShape: { recordCount: 1 },
         },
-        { requireApprovalRecord: true },
       ),
     ).toBe(true);
-    expect(
-      shouldExpandCompactApprovalTimeline(
-        {
-          ...BASE_CANCELED_SNAPSHOT,
-          compactTimelinePreviewCount: 1,
-        },
-        { requireApprovalRecord: false },
-      ),
-    ).toBe(false);
   });
 });

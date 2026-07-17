@@ -275,7 +275,7 @@ describe("MessageList failure and web tools", () => {
     expect(container.textContent).not.toContain("execution backend error");
   });
 
-  it("完成态 App Server reasoning 应与 WebSearch/WebFetch 按 turn 顺序进入同一内联过程", () => {
+  it("完成态 App Server reasoning 与 WebSearch/WebFetch 应折叠为过程摘要", () => {
     const turnId = "turn-web-tools-reasoning";
     const messages: Message[] = [
       {
@@ -293,7 +293,7 @@ describe("MessageList failure and web tools", () => {
       },
     ];
 
-    render(messages, {
+    const container = render(messages, {
       currentTurnId: turnId,
       turns: [
         {
@@ -383,19 +383,23 @@ describe("MessageList failure and web tools", () => {
       | StreamingRendererCallProps
       | undefined;
 
-    expect(call?.contentParts?.map((part) => part.type)).toEqual([
-      "tool_use",
-      "thinking",
-      "tool_use",
-      "text",
+    expect(call?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: "网页搜索渲染结论：最终正文继续输出。",
+      }),
     ]);
-    expect(call?.contentParts?.[1]).toMatchObject({
-      type: "thinking",
-      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
-    });
+    expect(
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain(
+      "搜索结果还需要继续筛掉广告软文",
+    );
   });
 
-  it("实时 WebSearch/WebFetch 已在消息层时仍应显示 timeline 中间 reasoning", () => {
+  it("完成态消息层 WebSearch/WebFetch 与 timeline reasoning 应折叠为过程摘要", () => {
     const turnId = "turn-realtime-web-tools-sparse-reasoning";
     const finalText =
       "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。";
@@ -460,7 +464,7 @@ describe("MessageList failure and web tools", () => {
       },
     ];
 
-    render(messages, {
+    const container = render(messages, {
       currentTurnId: turnId,
       turns: [
         {
@@ -506,19 +510,18 @@ describe("MessageList failure and web tools", () => {
       | StreamingRendererCallProps
       | undefined;
 
-    expect(call?.contentParts?.map((part) => part.type)).toEqual([
-      "tool_use",
-      "thinking",
-      "tool_use",
-      "text",
-    ]);
-    expect(call?.contentParts?.[1]).toMatchObject({
-      type: "thinking",
-      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
-    });
+    expect(call?.contentParts).toEqual([{ type: "text", text: finalText }]);
+    expect(
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain(
+      "搜索结果还需要继续筛掉广告软文",
+    );
   });
 
-  it("完成后 currentTurnId 已清空时仍应把 WebSearch/WebFetch 中间 reasoning 合入消息层过程", () => {
+  it("完成后 currentTurnId 已清空时仍应只展示 final 与过程摘要", () => {
     const turnId = "turn-completed-web-tools-sparse-reasoning";
     const finalText =
       "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。";
@@ -583,7 +586,7 @@ describe("MessageList failure and web tools", () => {
       },
     ];
 
-    render(messages, {
+    const container = render(messages, {
       currentTurnId: null,
       turns: [
         {
@@ -629,15 +632,14 @@ describe("MessageList failure and web tools", () => {
       | StreamingRendererCallProps
       | undefined;
 
-    expect(call?.contentParts?.map((part) => part.type)).toEqual([
-      "tool_use",
-      "thinking",
-      "tool_use",
-      "text",
-    ]);
-    expect(call?.contentParts?.[1]).toMatchObject({
-      type: "thinking",
-      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
-    });
+    expect(call?.contentParts).toEqual([{ type: "text", text: finalText }]);
+    expect(
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain(
+      "搜索结果还需要继续筛掉广告软文",
+    );
   });
 });

@@ -17,6 +17,7 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-lime-theme");
   document.documentElement.removeAttribute("data-lime-theme-effective");
   document.documentElement.removeAttribute("data-lime-color-scheme");
+  document.documentElement.removeAttribute("data-lime-skin");
   document.documentElement.removeAttribute("style");
   vi.unstubAllGlobals();
 });
@@ -36,7 +37,7 @@ describe("themeMode", () => {
     expect(document.documentElement.dataset.limeThemeEffective).toBe("dark");
     expect(
       document.documentElement.style.getPropertyValue("--lime-app-bg"),
-    ).toBe("#0b1120");
+    ).toBe("#160f14");
   });
 
   it("持久化主题模式后应可重新读取", () => {

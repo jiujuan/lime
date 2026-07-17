@@ -6,9 +6,7 @@ import {
   renderZh,
   upsertAgentStreamTextOverlay,
 } from "./MessageList.testHarness";
-import type {
-  Message,
-} from "./MessageList.testHarness";
+import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList streaming turns", () => {
   it("首字前等待态遇到提前完成的 turn 时，应保留消息区等待态且不在尾部显示已完成", async () => {
@@ -258,7 +256,7 @@ describe("MessageList streaming turns", () => {
     );
   });
 
-  it("第二轮流式输出时，第一轮完整正文与工具过程不应被截断或覆盖", () => {
+  it("第二轮流式输出时，第一轮完整正文与 compact 过程摘要不应被截断或覆盖", () => {
     const firstTurnCompletedText = [
       "第一轮已经完成。",
       "这一轮包含完整的结果说明和一段较长的正文，用来模拟用户反馈里被截断的历史回复。",
@@ -331,7 +329,7 @@ describe("MessageList streaming turns", () => {
       updatedAt: Date.parse("2026-04-15T09:00:12.000Z"),
     });
 
-    render(messages, {
+    const container = render(messages, {
       isSending: true,
       currentTurnId: "turn-second-running",
       turns: [
@@ -384,20 +382,19 @@ describe("MessageList streaming turns", () => {
     expect(firstAssistantCall?.content).toContain("第一轮已经完成。");
     expect(firstAssistantCall?.content).toContain("## 第一轮结论");
     expect(firstAssistantCall?.isStreaming).toBe(false);
-    expect(firstAssistantCall?.contentParts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "tool_use",
-        }),
-        expect.objectContaining({
-          type: "text",
-          text: firstTurnCompletedText,
-        }),
-      ]),
-    );
+    expect(firstAssistantCall?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: firstTurnCompletedText,
+      }),
+    ]);
+    expect(
+      container.querySelector(
+        '[data-runtime-turn-id="turn-first-complete"] [data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
     expect(secondAssistantCall?.content).toBe("第二轮正在继续输出。");
     expect(secondAssistantCall?.content).not.toContain("第一轮已经完成。");
     expect(secondAssistantCall?.isStreaming).toBe(true);
   });
-
 });

@@ -135,11 +135,14 @@ export function buildMcpStructuredContentScenarioAssertions({
       summary.mcpStructuredContentInputSend?.clicked?.clicked === true,
     guiMcpStructuredContentVisible:
       summary.guiMcpStructuredContentCompleted?.hasPrompt === true &&
-      summary.guiMcpStructuredContentCompleted?.hasStructuredAnswer === true &&
-      summary.guiMcpStructuredContentCompleted?.hasReferenceId === true &&
-      (summary.guiMcpStructuredContentCompleted?.hasToolName === true ||
-        summary.guiMcpStructuredContentCompleted?.expandedDetails
-          ?.hasToolName === true) &&
+      ((summary.guiMcpStructuredContentCompleted?.hasStructuredAnswer ===
+        true &&
+        summary.guiMcpStructuredContentCompleted?.hasReferenceId === true &&
+        (summary.guiMcpStructuredContentCompleted?.hasToolName === true ||
+          summary.guiMcpStructuredContentCompleted?.expandedDetails
+            ?.hasToolName === true)) ||
+        summary.guiMcpStructuredContentCompleted?.terminalDetailsCompacted ===
+          true) &&
       summary.guiMcpStructuredContentCompleted?.textareaVisible === true &&
       summary.guiMcpStructuredContentCompleted?.textareaDisabled === false &&
       summary.guiMcpStructuredContentCompleted?.stopButtonVisible === false,

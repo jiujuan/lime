@@ -411,6 +411,9 @@ describe("Electron current package entrypoints", () => {
     expect(smokeScript).toContain("mkdtempSync");
     expect(smokeScript).toContain("ELECTRON_E2E_USER_DATA_DIR");
     expect(smokeScript).toContain('LIME_ELECTRON_E2E: "1"');
+    expect(smokeScript).toContain(
+      'packagedExecutable ? { LIME_ELECTRON_BRAND_DEV_APP: "0" } : {}',
+    );
     expect(smokeScript).toContain("LIME_ELECTRON_SMOKE_VISIBLE");
     expect(smokeScript).toContain("LIME_GATE_RUN_ID");
     expect(smokeScript).toContain("LIME_ELECTRON_SMOKE_EVIDENCE_DIR");

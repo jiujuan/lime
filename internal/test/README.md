@@ -2,7 +2,7 @@
 
 > status: current / Refactor v2
 > owner: quality-workflow
-> last_verified: 2026-07-15
+> last_verified: 2026-07-17
 
 ## 1. 事实源
 
@@ -22,22 +22,22 @@ Electron Desktop Host
 
 ## 2. 文档导航
 
-| 文档 | 作用 |
-| --- | --- |
-| [testing-strategy-2026.md](testing-strategy-2026.md) | 分层、测试作者合同、CI/release lane、旧测试迁移规则 |
-| [unit-tests.md](unit-tests.md) | 纯单元和组件测试边界 |
-| [integration-tests.md](integration-tests.md) | Rust domain 与 App Server public JSON-RPC 集成测试 |
-| [e2e-tests.md](e2e-tests.md) | Gate A、Gate B、Vitest e2e 和 Electron smoke 的关系 |
-| [agent-evaluation.md](agent-evaluation.md) | live provider、grader、pass@k/pass^k 和非确定性评估 |
-| [harness-evals.md](harness-evals.md) | 现有 replay/harness 资产；第二期迁移输入，不是默认 release gate |
-| [../aiprompts/playwright-e2e.md](../aiprompts/playwright-e2e.md) | 真实 GUI 续测与 Playwright 操作细则 |
-| [../roadmap/benchmark/scenario-matrix.md](../roadmap/benchmark/scenario-matrix.md) | 第二期稳定场景 ID 与证据等级 |
+| 文档                                                                               | 作用                                                            |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| [testing-strategy-2026.md](testing-strategy-2026.md)                               | 分层、测试作者合同、CI/release lane、旧测试迁移规则             |
+| [unit-tests.md](unit-tests.md)                                                     | 纯单元和组件测试边界                                            |
+| [integration-tests.md](integration-tests.md)                                       | Rust domain 与 App Server public JSON-RPC 集成测试              |
+| [e2e-tests.md](e2e-tests.md)                                                       | Gate A、Gate B、Vitest e2e 和 Electron smoke 的关系             |
+| [agent-evaluation.md](agent-evaluation.md)                                         | live provider、grader、pass@k/pass^k 和非确定性评估             |
+| [harness-evals.md](harness-evals.md)                                               | 现有 replay/harness 资产；第二期迁移输入，不是默认 release gate |
+| [../aiprompts/playwright-e2e.md](../aiprompts/playwright-e2e.md)                   | 真实 GUI 续测与 Playwright 操作细则                             |
+| [../roadmap/benchmark/scenario-matrix.md](../roadmap/benchmark/scenario-matrix.md) | 第二期稳定场景 ID 与证据等级                                    |
 
 机器可读资产：
 
 - `agent-qc-scenarios.manifest.json`、`agent-qc-gui-flows.manifest.json`、`agent-qc-evidence.schema.json`：现有 Agent QC 输入，第二期 T0 逐项审计前不自动算新门禁。
 - `harness-evals.manifest.json`、`harness-fixtures/**`：replay/eval 输入，只能证明 manifest 声明的场景。
-- `deepswe-coding-slice-v2.json`：DeepSWE Smoke 10 / Release 20 的版本化选题与 adapter v4 执行合同；当前已有真实 request tool catalog、runtime step cap 和诊断 true run，Agnes 预算内无 patch，Verifier 因无 candidate 且本机缺容器运行时阻塞。
+- `deepswe-coding-slice-v2.json`：DeepSWE Smoke 10 / Release 20 的版本化选题与 adapter v5 执行合同；当前已有真实 request tool catalog、runtime step/token cap、generation controls 和诊断 true run。Agnes 正式题预算内仍无 candidate；本地 Pier editable package 已失效且无容器运行时，Verifier 双重阻塞。
 
 旧 `benchmark-release` 和 `agent-qc-benchmark` manifest 已删除，禁止恢复同名入口。
 
@@ -88,16 +88,16 @@ npm run verify:local:full
 
 ## 4. 分层
 
-| 层 | 适合验证 | 不适合验证 |
-| --- | --- | --- |
-| unit | parser、selector、projection、lowering、state transition | React/进程/网络/文件系统 |
-| component | DOM 渲染、事件、hook 生命周期、关键接线 | Agent 状态机和跨进程主链 |
-| contract | schema、typed client、command/catalog/preload 边界 | runtime 行为正确性 |
-| integration | domain owner、App Server public API、store、provider fixture | Electron 可见状态 |
-| current fixture | RuntimeCore/tool/provider/event/read model | live provider，除非显式使用 |
-| Gate A | Renderer projection 与交互 | Electron/preload/IPC |
-| Gate B | 真实 Electron 产品链 | 未运行的 provider/平台 |
-| live/eval | 模型能力和非确定性稳定性 | 确定性协议正确性 |
+| 层              | 适合验证                                                     | 不适合验证                  |
+| --------------- | ------------------------------------------------------------ | --------------------------- |
+| unit            | parser、selector、projection、lowering、state transition     | React/进程/网络/文件系统    |
+| component       | DOM 渲染、事件、hook 生命周期、关键接线                      | Agent 状态机和跨进程主链    |
+| contract        | schema、typed client、command/catalog/preload 边界           | runtime 行为正确性          |
+| integration     | domain owner、App Server public API、store、provider fixture | Electron 可见状态           |
+| current fixture | RuntimeCore/tool/provider/event/read model                   | live provider，除非显式使用 |
+| Gate A          | Renderer projection 与交互                                   | Electron/preload/IPC        |
+| Gate B          | 真实 Electron 产品链                                         | 未运行的 provider/平台      |
+| live/eval       | 模型能力和非确定性稳定性                                     | 确定性协议正确性            |
 
 ## 5. Current / Deprecated / Dead
 

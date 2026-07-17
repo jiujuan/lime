@@ -67,11 +67,16 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("hasToolTimelineProjection");
     expect(content).toContain("toolTimelineProjectionPersisted");
     expect(content).toContain("codingProjectionPersisted");
-    expect(content).toContain("expandTimelineProcessGroups");
-    expect(content).toContain('logStage("expand-timeline-process-groups")');
+    expect(content).toContain("inspectHistoricalTimelineSummary");
+    expect(content).toContain(
+      'logStage("inspect-historical-timeline-summary")',
+    );
     expect(content).toContain("timelineProcessEvidence");
-    expect(content).toContain('[data-testid="streaming-process-group"]');
-    expect(content).toContain("hasGuiToolTimelineEvidence");
+    expect(content).toContain("hasHistoricalOperationalDetailsHidden");
+    expect(content).toContain(
+      '[data-testid^="message-list-historical-timeline-preview:"]',
+    );
+    expect(content).toContain('[data-testid="tool-call-row"]');
     expect(content).toContain("collectCodingWorkbenchGuiEvidence");
     expect(content).toContain("codingWorkbenchGuiEvidence");
     expect(content).toContain("gui-coding-input");
@@ -117,20 +122,19 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain('type: "command.exited"');
     expect(content).toContain('type: "test.started"');
     expect(content).toContain('type: "test.completed"');
-    expect(content).toContain("guiToolTimelineEvidencePresent");
-    expect(content).toContain("toolTimelineEvidencePresent");
-    const toolTimelineEvidenceAssertion = content.slice(
-      content.indexOf("toolTimelineEvidencePresent:"),
+    expect(content).toContain("historicalOperationalDetailsHidden");
+    const historicalDetailsAssertion = content.slice(
+      content.indexOf("historicalOperationalDetailsHidden,"),
       content.indexOf(
         "noInvokeErrors:",
-        content.indexOf("toolTimelineEvidencePresent:"),
+        content.indexOf("historicalOperationalDetailsHidden,"),
       ),
     );
-    expect(toolTimelineEvidenceAssertion).not.toContain(
+    expect(historicalDetailsAssertion).not.toContain(
       "toolTimelineProjectionPersisted",
     );
-    expect(toolTimelineEvidenceAssertion).toContain(
-      "guiToolTimelineEvidencePresent",
+    expect(content).toContain(
+      "timelineProcessEvidence?.toolCallRowCount === 0",
     );
     expect(content).toContain('type: "artifact.snapshot"');
     expect(content).toContain('type: "turn.completed"');
@@ -146,14 +150,11 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("openWorkbench");
     expect(content).toContain("hasUserPrompt");
     expect(content).toContain("function hasHydratedSessionSnapshot(snapshot)");
-    expect(content).toContain(
-      "function hasGuiCodingInputHydratedSession(snapshot)",
-    );
+    expect(content).not.toContain("hasGuiCodingInputHydratedSession");
     expect(content).toContain(
       "guiHydratedSession: hasHydratedSessionSnapshot(",
     );
-    expect(content).toContain("isGuiCodingInput");
-    expect(content).toContain("hasToolTimelineText");
+    expect(content).not.toContain("hasToolTimelineText");
     expect(content).toContain("hasTaskCenterShell");
     expect(content).toContain("hasTaskCenterWorkbenchTab");
     expect(content).toContain("task-center-chrome-shell");

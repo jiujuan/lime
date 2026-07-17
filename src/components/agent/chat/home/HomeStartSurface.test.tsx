@@ -438,7 +438,7 @@ describe("HomeStartSurface", () => {
     expect(container.textContent).toContain("怎么添加模型？");
   });
 
-  it("有项目会话时以左对齐目录替代补充入口", () => {
+  it("有项目会话时默认收纳目录并替代补充入口", () => {
     const onSelect = vi.fn();
     const { container } = renderSurface({
       onSelectConversation: onSelect,
@@ -475,10 +475,19 @@ describe("HomeStartSurface", () => {
     expect(
       container.querySelector('[data-testid="entry-recent-session-resume"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("选题复盘");
+    expect(container.textContent).toContain("更多 1 个对话");
+    expect(container.textContent).not.toContain("选题复盘");
     expect(container.textContent).not.toContain("内容项目");
     expect(container.textContent).not.toContain("已记录 8 条消息。");
 
+    const moreButton = container.querySelector(
+      '[data-testid="home-project-conversation-more"] button',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      moreButton?.click();
+    });
+
+    expect(container.textContent).toContain("选题复盘");
     const conversation = container.querySelector(
       '[data-testid="home-project-conversation"]',
     ) as HTMLButtonElement | null;
@@ -489,7 +498,7 @@ describe("HomeStartSurface", () => {
     expect(onSelect).toHaveBeenCalledWith("topic-1", "workspace_error");
   });
 
-  it("项目会话超过上限时应收进更多下拉", () => {
+  it("项目会话应全部收进更多下拉", () => {
     const { container } = renderSurface({
       conversationGroups: [
         {
@@ -508,16 +517,16 @@ describe("HomeStartSurface", () => {
 
     expect(
       container.querySelectorAll('[data-testid="home-project-conversation"]'),
-    ).toHaveLength(3);
-    expect(container.textContent).toContain("对话 1");
-    expect(container.textContent).toContain("对话 3");
+    ).toHaveLength(0);
+    expect(container.textContent).not.toContain("对话 1");
+    expect(container.textContent).not.toContain("对话 3");
     expect(container.textContent).not.toContain("对话 4");
     expect(container.textContent).not.toContain("默认项目");
 
     const more = container.querySelector(
       '[data-testid="home-project-conversation-more"]',
     );
-    expect(more?.textContent).toContain("更多 2 个对话");
+    expect(more?.textContent).toContain("更多 5 个对话");
 
     const moreButton = more?.querySelector(
       "button",
@@ -529,6 +538,10 @@ describe("HomeStartSurface", () => {
     });
 
     expect(moreButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      container.querySelectorAll('[data-testid="home-project-conversation"]'),
+    ).toHaveLength(5);
+    expect(container.textContent).toContain("对话 1");
     expect(container.textContent).toContain("对话 4");
     expect(container.textContent).toContain("对话 5");
   });

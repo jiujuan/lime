@@ -14,8 +14,8 @@
 
 ### App Server 公共边界
 
-| ID     | Pri | 主要层 | 场景                            | 核心断言                                                                 |
-| ------ | --- | ------ | ------------------------------- | ------------------------------------------------------------------------ |
+| ID     | Pri | 主要层 | 场景                            | 核心断言                                                                |
+| ------ | --- | ------ | ------------------------------- | ----------------------------------------------------------------------- |
 | ASV-01 | P0  | L3     | default-stack JSON-RPC dispatch | 默认 2 MiB 栈从 initialize 进入 MCP/public method，无 stack overflow    |
 | ASV-02 | P0  | L3/L6  | stdio request concurrency       | initialize 有序；长 turn 不阻塞无冲突 list/read；response 按 id 关联    |
 | ASV-03 | P1  | L2/L3  | shell/git host process          | 测试 shell 不读用户 rc；plain dir 零 Git；仓库 Git 进程有 5 秒 deadline |
@@ -57,31 +57,31 @@
 
 ## 5. Provider、Context 与使用量
 
-| ID     | Pri | 主要层 | 场景                         | 核心断言                                              |
-| ------ | --- | ------ | ---------------------------- | ----------------------------------------------------- |
-| PRV-01 | P0  | L2     | Responses request lowering   | captured request 与 capability/parts/tool schema 匹配 |
-| PRV-02 | P0  | L2     | Chat/Anthropic lowering      | provider-specific wire shape 不泄漏到 runtime algebra |
-| PRV-03 | P0  | L2     | stream delta + terminal      | usage、finish reason、response identity 完整          |
-| PRV-04 | P0  | L2     | unsupported capability/media | 发送前 fail closed，错误可见                          |
-| PRV-05 | P0  | L2     | auth/rate-limit/server error | 401/403 与 429 请求层零重试；5xx 有界重试；terminal 分类与 retryable 分离 |
+| ID     | Pri | 主要层   | 场景                         | 核心断言                                                                                                                                          |
+| ------ | --- | -------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PRV-01 | P0  | L2       | Responses request lowering   | captured request 与 capability/parts/tool schema 匹配                                                                                             |
+| PRV-02 | P0  | L2       | Chat/Anthropic lowering      | provider-specific wire shape 不泄漏到 runtime algebra                                                                                             |
+| PRV-03 | P0  | L2       | stream delta + terminal      | usage、finish reason、response identity 完整；terminal event 交付前释放 HTTP body                                                                  |
+| PRV-04 | P0  | L2       | unsupported capability/media | 发送前 fail closed，错误可见                                                                                                                      |
+| PRV-05 | P0  | L2       | auth/rate-limit/server error | 401/403 与 429 请求层零重试；5xx 有界重试；terminal 分类与 retryable 分离                                                                         |
 | PRV-06 | P1  | L2/L4/L6 | websocket/SSE fallback       | capability 贯穿 TS/Rust；真实 Upgrade/response.create；连接串行复用；426/重试耗尽/首事件前断线 HTTP replay；跨 Turn sticky；完整 Electron fixture |
-| PRV-07 | P1  | L2/L7  | provider step/token budget   | 预算在 runtime 内于工具执行和下一次 sampling 前生效   |
-| CTX-01 | P0  | L2/L4  | context construction         | delta/batch/completed snapshot、边界顺序和下一轮 provider history 一致 |
-| CTX-02 | P0  | L2/L4  | compaction/truncation        | durable history 保留；摘要接续被移除前缀；provider 只取 bounded tail，工具 full sidecar 不回灌 |
-| CTX-03 | P1  | L2     | prompt cache stability       | 无意义变更不破坏稳定前缀/cache key                    |
+| PRV-07 | P1  | L2/L7    | provider step/token budget   | 预算在 runtime 内于工具执行和下一次 sampling 前生效                                                                                               |
+| CTX-01 | P0  | L2/L4    | context construction         | delta/batch/completed snapshot、边界顺序和下一轮 provider history 一致                                                                            |
+| CTX-02 | P0  | L2/L4    | compaction/truncation        | durable history 保留；摘要接续被移除前缀；provider 只取 bounded tail，工具 full sidecar 不回灌                                                    |
+| CTX-03 | P1  | L2       | prompt cache stability       | 无意义变更不破坏稳定前缀/cache key                                                                                                                |
 
 ## 6. 工具、审批与 Sandbox
 
-| ID     | Pri | 主要层 | 场景                            | 核心断言                                         |
-| ------ | --- | ------ | ------------------------------- | ------------------------------------------------ |
-| TOL-01 | P0  | L2/L4  | read/search/apply/shell success | current registry、结构化 args/output、终态完整   |
-| TOL-02 | P0  | L2/L4  | tool failure/timeout            | error output 回传模型且 turn 可继续/终止符合合同 |
-| TOL-03 | P0  | L2/L4  | oversized/binary output         | 截断、artifact/reference 和上下文上限正确        |
-| APR-01 | P0  | L2/L3/L6 | approval allow                | request/response id 对齐，执行一次；compact terminal 展开后唯一脱敏记录可见 |
-| APR-02 | P0  | L2/L3/L6 | approval deny                 | 不执行工具，结果回传，turn 收敛；compact terminal 记录可展开              |
-| APR-03 | P0  | L2/L3/L6 | approval cancel/restart       | pending request 可恢复或显式关闭；canceled terminal 记录可展开             |
-| SBX-01 | P0  | L2     | sandbox allowed path            | 权限范围精确，不扩大到父目录                     |
-| SBX-02 | P0  | L2     | sandbox/network denied          | 拒绝可解释，不通过 fallback 绕过                 |
+| ID     | Pri | 主要层   | 场景                            | 核心断言                                                                    |
+| ------ | --- | -------- | ------------------------------- | --------------------------------------------------------------------------- |
+| TOL-01 | P0  | L2/L4    | read/search/apply/shell success | current registry、结构化 args/output、终态完整                              |
+| TOL-02 | P0  | L2/L4    | tool failure/timeout            | error output 回传模型且 turn 可继续/终止符合合同                            |
+| TOL-03 | P0  | L2/L4    | oversized/binary output         | 截断、artifact/reference 和上下文上限正确                                   |
+| APR-01 | P0  | L2/L3/L6 | approval allow                  | request/response id 对齐，执行一次；compact terminal 展开后唯一脱敏记录可见 |
+| APR-02 | P0  | L2/L3/L6 | approval deny                   | 不执行工具，结果回传，turn 收敛；compact terminal 记录可展开                |
+| APR-03 | P0  | L2/L3/L6 | approval cancel/restart         | pending request 可恢复或显式关闭；canceled terminal 记录可展开              |
+| SBX-01 | P0  | L2       | sandbox allowed path            | 权限范围精确，不扩大到父目录                                                |
+| SBX-02 | P0  | L2       | sandbox/network denied          | 拒绝可解释，不通过 fallback 绕过                                            |
 
 ## 7. MCP、Skills 与 Multi-Agent
 
@@ -116,16 +116,16 @@
 
 ## 9. Live、平台与非功能
 
-| ID      | Pri | 主要层 | 场景                    | 核心断言                                                                                                             |
-| ------- | --- | ------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| LIV-01  | P1  | L7     | live text turn          | provider/model/config/usage/latency/transcript 可复核                                                                |
-| LIV-02  | P1  | L7     | live tool loop          | 多轮工具成功率、恢复率和成本                                                                                         |
-| LIV-03  | P1  | L2/L3/L7 | live multimodal       | 图片只在 provider wire hydrate；direct-answer tools=0；generation controls 下沉；read/evidence 无 inline payload；live turn 真实 completed |
-| EVAL-01 | P2  | L7     | product task suite      | outcome grader + pass@k/pass^k + 样本版本                                                                            |
-| PLT-01  | P0  | L8     | macOS RC                | install/start/update/path/permissions/current chain                                                                  |
-| PLT-02  | P0  | L8     | Windows RC              | Squirrel install/start/update/path/permissions/current chain                                                         |
-| PERF-01 | P1  | L8     | long thread/read model  | pagination、内存、首帧/首 token 不随历史失控；1200-command Codex import 在 30s owner budget 内完成且 fidelity 不丢项 |
-| SOAK-01 | P1  | L8     | repeated turns/restarts | 无资源泄漏、幽灵进程、重复 terminal 或数据漂移                                                                       |
+| ID      | Pri | 主要层   | 场景                    | 核心断言                                                                                                                                   |
+| ------- | --- | -------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| LIV-01  | P1  | L7       | live text turn          | provider/model/config/usage/latency/transcript 可复核                                                                                      |
+| LIV-02  | P1  | L7       | live tool loop          | 多轮工具成功率、恢复率和成本                                                                                                               |
+| LIV-03  | P1  | L2/L3/L7 | live multimodal         | 图片只在 provider wire hydrate；direct-answer tools=0；generation controls 下沉；read/evidence 无 inline payload；live turn 真实 completed |
+| EVAL-01 | P2  | L7       | product task suite      | outcome grader + pass@k/pass^k + 样本版本                                                                                                  |
+| PLT-01  | P0  | L8       | macOS RC                | 本地 Forge package 严格签名与 packaged Gate B；正式 Developer ID/notarization/DMG 的 install/update/path/permissions/current chain         |
+| PLT-02  | P0  | L8       | Windows RC              | Forge Squirrel N-1 install；真实 preload/IPC updater 请求隔离候选 feed，downloaded/restarting 与 candidate path 可证；候选 `Lime.exe` Gate B |
+| PERF-01 | P1  | L8       | long thread/read model  | pagination、内存、首帧/首 token 不随历史失控；1200-command Codex import 在 30s owner budget 内完成且 fidelity 不丢项                       |
+| SOAK-01 | P1  | L8       | repeated turns/restarts | 同一 Electron/App Server 生命周期逐轮记录 Thread/Turn/Item、唯一 terminal、PID/RSS 趋势；至少两次 cold restart 后无幽灵进程或数据漂移      |
 
 ## 10. DeepSWE Coding
 
@@ -137,6 +137,7 @@
 | DSW-03 | P1  | L7     | Release 20                 | 语言与 focus 分层，不低于冻结 baseline 的 non-inferiority 门槛           |
 | DSW-04 | P2  | L7     | three-trial bake-off       | pass@3/pass^3、成本和稳定性在相同配置下可比较                            |
 | DSW-05 | P1  | L2/L7  | runtime budget enforcement | token 用尽后零工具执行、零额外 sampling，adapter 只记录终态而不抢先取消  |
+| DSW-06 | P1  | L2/L7  | apply_patch write probe    | 真实 provider tool catalog 含 `apply_patch`；patch 生命周期成功、文件精确变更、git patch 非空，最后一步仍为 `tool_call` 时归 `provider_steps` exhaustion |
 
 具体任务见 [deepswe-coding-slice.md](./deepswe-coding-slice.md)。
 

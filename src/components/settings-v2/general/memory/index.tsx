@@ -629,6 +629,7 @@ export function MemorySettings() {
             </span>
             <Switch
               aria-label={memoryT(t, "settings.memory.toggle.aria")}
+              data-testid="settings-memory-toggle"
               checked={draft.enabled}
               onCheckedChange={(checked) =>
                 setDraft((previous) => ({
@@ -695,7 +696,11 @@ export function MemorySettings() {
                 </p>
               </div>
             </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+            <div
+              className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600"
+              data-testid="settings-memory-soul-current-status"
+              data-state={soulEnabledWithContent ? "enabled" : "disabled"}
+            >
               {soulEnabledWithContent
                 ? memoryT(t, "settings.memory.soul.current.enabled")
                 : memoryT(t, "settings.memory.soul.current.disabled")}
@@ -778,6 +783,7 @@ export function MemorySettings() {
                     <button
                       type="button"
                       onClick={() => handleSoulTemplateApply(template)}
+                      data-testid={`settings-memory-soul-template-${template.id}`}
                       className="mt-4 rounded-md border border-slate-950 bg-slate-950 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-800"
                     >
                       {memoryT(t, "settings.memory.soul.template.apply")}
@@ -968,6 +974,7 @@ export function MemorySettings() {
             type="button"
             onClick={handleCancel}
             disabled={!dirty || saving}
+            data-testid="settings-memory-cancel"
             className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
           >
             {memoryT(t, "settings.memory.action.cancel")}
@@ -976,6 +983,7 @@ export function MemorySettings() {
             type="button"
             onClick={handleSave}
             disabled={!dirty || saving}
+            data-testid="settings-memory-save"
             className="rounded-md border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
           >
             {saving

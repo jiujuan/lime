@@ -109,23 +109,8 @@ export function selectCompactExpectedMessages(readResult) {
     .filter((message) => isExpectedText(message.text));
 }
 
-export function selectExpandedExpectedMessages(readResult) {
-  return readCanonicalItems(readResult)
-    .filter(
-      (item) => item?.type === "user_message" || item?.type === "agent_message",
-    )
-    .map(expectedMessage)
-    .filter((message) => isExpectedText(message.text));
-}
-
 export function selectCompactExpectedMessageTexts(readResult) {
   return selectCompactExpectedMessages(readResult).map(
-    (message) => message.text,
-  );
-}
-
-export function selectExpandedExpectedMessageTexts(readResult) {
-  return selectExpandedExpectedMessages(readResult).map(
     (message) => message.text,
   );
 }

@@ -91,8 +91,7 @@ function resolveCanonicalMessageItemId(
   ];
   return (
     candidates.find(
-      (item) =>
-        item.type === itemType && (!turnId || item.turn_id === turnId),
+      (item) => item.type === itemType && (!turnId || item.turn_id === turnId),
     )?.id ?? null
   );
 }
@@ -111,7 +110,6 @@ export interface MessageListItemProps {
   compactLeadingSpacing: boolean;
   copiedId: string | null;
   expandedHistoricalAssistantMessageIds: Set<string>;
-  expandedHistoricalTimelineKeys: Set<string>;
   expandedLongHistoricalMessageIds: Set<string>;
   focusedTimelineItemId?: string | null;
   hasActiveInteractiveRuntime: boolean;
@@ -131,7 +129,6 @@ export interface MessageListItemProps {
   timelineFocusRequestKey: number;
   handleCopy: (content: string, id: string) => void | Promise<void>;
   handleExpandHistoricalAssistantMessage: (messageId: string) => void;
-  handleExpandHistoricalTimeline: (timelineKey: string) => void;
   handleExpandLongHistoricalMessage: (messageId: string) => void;
   onA2UIFormChange?: (formId: string, formData: A2UIFormData) => void;
   onA2UISubmit?: (formData: A2UIFormData, messageId: string) => void;
@@ -181,7 +178,6 @@ export function MessageListItem({
   compactLeadingSpacing,
   copiedId,
   expandedHistoricalAssistantMessageIds,
-  expandedHistoricalTimelineKeys,
   expandedLongHistoricalMessageIds,
   focusedTimelineItemId,
   hasActiveInteractiveRuntime,
@@ -201,7 +197,6 @@ export function MessageListItem({
   timelineFocusRequestKey,
   handleCopy,
   handleExpandHistoricalAssistantMessage,
-  handleExpandHistoricalTimeline,
   handleExpandLongHistoricalMessage,
   onA2UIFormChange,
   onA2UISubmit,
@@ -227,7 +222,6 @@ export function MessageListItem({
     activePendingA2UISource,
     canOpenSavedSiteContent: Boolean(onOpenSavedSiteContent),
     expandedHistoricalAssistantMessageIds,
-    expandedHistoricalTimelineKeys,
     expandedLongHistoricalMessageIds,
     focusedTimelineItemId,
     group,
@@ -387,11 +381,6 @@ export function MessageListItem({
       focusRequestKey={timelineFocusRequestKey}
       isCurrentTurnSending={isSending}
       messageId={msg.id}
-      onExpandPreview={
-        primaryTimelineKey
-          ? () => handleExpandHistoricalTimeline(primaryTimelineKey)
-          : undefined
-      }
       onFileClick={onFileClick}
       onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
       onOpenSavedSiteContent={onOpenSavedSiteContent}
@@ -426,6 +415,7 @@ export function MessageListItem({
         onPermissionResponse={onPermissionResponse}
         onSaveMessageAsKnowledge={onSaveMessageAsKnowledge}
         placement="trailing"
+        renderCompactPreview={trailingTimeline.turn.id !== activeCurrentTurnId}
         shouldDeferHistoricalTimelineDetails={
           shouldDeferHistoricalTimelineDetails
         }
@@ -456,8 +446,7 @@ export function MessageListItem({
             data-message-role={msg.role}
             data-runtime-turn-id={msg.runtimeTurnId || ""}
             data-thread-item-id={
-              resolveCanonicalMessageItemId(msg, group, threadRead) ||
-              undefined
+              resolveCanonicalMessageItemId(msg, group, threadRead) || undefined
             }
             data-message-content-part-types={contentPartDebugSignature(
               msg.contentParts,

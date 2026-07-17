@@ -61,13 +61,12 @@ impl McpBridgeRuntimeRegistry {
             let Some(snapshot) = snapshots_by_bridge_name.get(&bridge_name) else {
                 continue;
             };
-            let client: Arc<Mutex<Box<dyn McpConnection>>> = Arc::new(Mutex::new(Box::new(
-                McpBridgeClient::new(
+            let client: Arc<Mutex<Box<dyn McpConnection>>> =
+                Arc::new(Mutex::new(Box::new(McpBridgeClient::new(
                     Arc::clone(&snapshot.manager),
                     Arc::clone(&snapshot.running_service),
                     snapshot.tool_timeout,
-                ),
-            )));
+                ))));
             let surface = registration.config.clone();
 
             connections

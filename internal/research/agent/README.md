@@ -18,7 +18,7 @@
 3. [Lime Agent 可验证研发体系计划](./lime-agent-verification-plan/README.md)
    - 把文章里的判断拆成可执行计划骨架。
    - 重点处理 Agent QC token 成本过高的问题：默认低 token、证据复用优先、按风险升级 qcloop / live Provider / LLM judge。
-   - 包含当前资产地图、Token 预算策略、Agent QC 分级、验证合同模板、P0 green 计划、场景分层、Supervisor 边界、flag differential harness 和 30 / 60 / 90 天路线图。
+   - 包含当前资产地图、Token 预算策略、Agent QC 分级、验证合同模板、P0 green 计划、场景分层、Supervisor 边界和 30 / 60 / 90 天路线图。
 
 4. [Managed Objective 场景草案](./lime-agent-verification-plan/19-managed-objective-scenario-draft.md)
    - 把 `objective-checklist`、`managed-objective-continuation`、`managed-objective-automation` 收敛成低 token 的 P1 / P2 场景入口。

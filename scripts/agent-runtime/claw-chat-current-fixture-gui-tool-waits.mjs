@@ -67,6 +67,11 @@ export async function waitForGuiMcpStructuredContentCompleted(page, options) {
           hasStructuredAnswer: text.includes(answer),
           hasReferenceId: text.includes(referenceId),
           hasToolName: text.includes(toolName),
+          terminalDetailsCompacted:
+            !text.includes(answer) &&
+            !text.includes(toolName) &&
+            /\d+\s*步/.test(text) &&
+            text.includes("工具步骤"),
           envelopeVisible: forbiddenEnvelopeFragments.some((value) =>
             text.includes(value),
           ),
@@ -111,10 +116,17 @@ export async function waitForGuiMcpStructuredContentCompleted(page, options) {
       const expandedSnapshot =
         snapshot.hasStructuredAnswer && snapshot.hasToolName
           ? snapshot
-          : await expandAndInspectGuiMcpStructuredContentProcess(page, options);
+          : snapshot.terminalDetailsCompacted
+            ? snapshot
+            : await expandAndInspectGuiMcpStructuredContentProcess(
+                page,
+                options,
+              );
       if (
-        expandedSnapshot.hasStructuredAnswer &&
-        expandedSnapshot.hasReferenceId &&
+        (expandedSnapshot.hasStructuredAnswer ||
+          expandedSnapshot.terminalDetailsCompacted) &&
+        (expandedSnapshot.hasReferenceId ||
+          expandedSnapshot.terminalDetailsCompacted) &&
         expandedSnapshot.envelopeVisible === false
       ) {
         return sanitizeJson({

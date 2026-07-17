@@ -1,38 +1,38 @@
-## Lime v1.106.0
+## Lime v1.107.0
 
 ### 新功能
 
-- Provider current 链新增 Responses WebSocket transport：`supportsWebsockets` 能力从 TypeScript client 贯穿 App Server、Agent Runtime 到 `model-provider`，支持真实 Upgrade、`response.create`、同会话串行复用，以及 426、连接重试耗尽和首个可见事件前断线时的会话级 HTTP 回退。
-- 多模态输入进入 canonical message part 主链：当前回合图片可落盘为 sidecar reference 后注入 provider，历史恢复只携带受控引用；text-only 模型在网络请求前 fail closed，provider capture 与 read model 不泄露 base64。
-- 新增 SETTINGS-01 standalone Gate A runner，覆盖 5 种语言、3 个视口、16 个主设置页及归档会话 loading / empty / error 状态，并输出结构化 surface proof。
+- Electron 更新主链新增可恢复的检查、下载、完成、安装和重启状态；重复触发会复用当前会话，不再重复下载或重启。
+- Windows Squirrel 发布流水线新增 N-1 安装包下载、候选安装升级 smoke 和结构化证据上传，覆盖真实 updater feed 与回滚前置条件。
+- Browser Runtime 设置页收口到当前会话 API，支持远程调试端口校验、目标页读取、打开/关闭会话和连接状态反馈。
+- 首页新增 Dream Blossom 皮肤与多套本地 hero artwork，皮肤资源、展示文案和五语言导航/设置文案进入统一 appearance owner。
 
 ### 修复
 
-- 修复 App Server 大型 async dispatcher 在默认线程栈上的溢出，并在初始化后并发调度独立 JSON-RPC request；长 turn、MCP 或宿主 I/O 不再阻塞无冲突的 list/read 请求，response 继续按 request id 和资源序列化范围关联。
-- 修复 provider history 对 batch/completed content part、commentary/final snapshot 与 compaction 后 bounded tail 的遗漏，避免下一轮请求丢消息、重复内容或重新注入已压缩的完整历史前缀。
-- 修复 Multi-Agent mailbox Result 的 canonical lifecycle、并发 child 隔离与冷重启恢复；多个 Result 现在以稳定 item identity 完成，partial delta 不会被提前 ack，失败 child 不污染已完成 sibling。
-- 修复 Plan reload 后 canonical revision identity 被 message 副本覆盖，以及 Content Factory 多文档场景按 DOM 顺序选错 artifact 的问题；工作台恢复改为按 canonical revision / artifact reference 对账。
-- 修复 macOS arm64 环境中不兼容的用户级 Git 或 shell 配置阻塞质量 runner 和 App Server project status；原生可执行 PATH、plain-directory Git preflight、异步子进程 deadline 与 `kill_on_drop` 统一进入 current owner。
+- 修复 Codex 导入扫描重复发现 rollout thread、历史 item 读取和 canonical item detail 投影边界，避免同一会话重复展示或丢失稳定 item identity。
+- 修复 Agent timeline 中历史/实时消息、工具调用、文件 artifact、reasoning 和 web retrieval 的排序、过滤与恢复状态，窄屏布局不再重挂载消息树。
+- 修复设置页和 Browser Runtime 在加载、错误、断开、关闭与重试状态下的文案和控件不一致问题，并移除已脱离 current 主链的旧 Chrome Relay guide 双轨。
+- 修复 Electron updater、App Server host 和 Windows 启动路径的并发/重入边界，补齐 macOS 未签名开发打包的确定性配置。
 
 ### 优化与重构
 
-- Codex 本地历史导入进一步收口到 canonical Thread/Turn/Item：覆盖 reasoning、command、approval、MCP、web search、file artifact、附件和多格式预览；大历史改为后台 job 执行并在 GUI 展示阶段、条目与会话进度，普通会话与导入会话共用消息投影、工具生命周期和续聊路径。
-- 导入 commit 改为增量 materialization，1,200 条 command 的 owner 基准从 106.7 秒降至 3.51 秒且 fidelity 零丢项；大样本可视化审计覆盖 desktop / compact / narrow 和多滚动位置。
-- Agent GUI 统一历史与实时 timeline、process group、附件、diff/file artifact 和 tool result projection；compact/narrow 布局改为聊天优先单面板，并通过显式模式控件切换工作台，不因缩放重挂载消息树。
-- 删除 imported runtime event、imported-only Renderer 分支、旧 Codex content-studio smoke，以及未真正提供系统设置能力的 `.skill` 文件关联 Host/API/UI 双轨；旧名称只保留负向治理守卫。
+- 将 App Server read model 的 canonical item 转换拆到独立 current module，统一 Thread/Turn/Item payload、metadata、tool output、approval、media、sub-agent 和 compaction 投影。
+- 将 Codex 本地历史导入继续收口到 canonical Thread/Turn/Item，补齐大历史、归档路径和可视化审计的恢复与续聊链路。
+- 扩展 Agent managed tool execution、cold restart、soak evidence 和 Settings fixture harness，脚本入口、证据格式和 fail-closed 治理保持单一 owner。
+- 清理旧 Chrome Relay guide、无效 `.skill` 系统设置路径和脱离构建图的测试 artifact，保留必要的负向治理守卫。
 
 ### 测试与质量
 
-- 扩展 Responses WebSocket/HTTP fallback、provider error/retry、multimodal capture、context compaction、AgentControl 并发/恢复、Codex 导入性能与 canonical lifecycle 的 Rust/TypeScript 回归。
-- 强化真实 Electron Gate B：Agent current fixture、Codex 导入 click-through、大样本 visual audit、Provider migration、Settings、MCP 与 Content Factory 均验证 Electron/preload/IPC/App Server/read model/GUI 同一 identity，生产 mock fallback 为零。
-- 统一质量脚本的原生可执行环境与 fail-closed Git 检查，并同步 protocol schema、generated client、command catalog、五语言资源、脚本治理和项目 Gate evidence contract。
+- 新增 Windows Squirrel RC、updater 重入、Browser Runtime 会话、Settings 多页面和 Dream Blossom 皮肤回归覆盖。
+- 扩展 Agent timeline、Codex import、canonical read model、provider stream、Electron host/preload/IPC、协议 catalog 与五语言资源测试。
+- 新增 managed execution evidence、soak、cold-restart 和脚本治理检查，生产路径继续禁止 mock fallback。
 
 ### 文档
 
-- 更新全局架构、Codex 导入路线图、Refactor V2 第二期测试计划、DeepSWE 场景矩阵和项目 Gate A/B 记录，明确 App Server 并发、Provider transport、canonical import、GUI 响应式布局及剩余 Windows/live/eval 验收边界。
+- 更新全局架构、App Server release updater、Codex 导入路线图、Refactor V2 测试计划、Agent 验证研究和项目 Gate A/B 记录，明确当前 owner、Windows RC 证据和剩余 live/eval 验收边界。
 
 ### 其他
 
-- 版本事实源更新到 `1.106.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.107.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.105.0` -> `v1.106.0`
+**完整变更**: `v1.106.0` -> `v1.107.0`

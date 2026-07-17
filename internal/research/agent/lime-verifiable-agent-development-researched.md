@@ -521,7 +521,7 @@ agent-qc:audit complete
 
 可以先不用做复杂工具，先在执行计划里强制写。
 
-后续再让 `quality-task-selector` 或 `agent-qc:benchmark:plan` 根据 diff 自动推荐场景。
+后续由 current quality workflow 根据 diff 自动推荐场景；不得恢复旧 Benchmark runner。
 
 建议把这一层收敛成固定三步：
 
@@ -590,62 +590,11 @@ managed-objective-evidence-continuation
 
 这会把 Managed Objective 从“路线图能力”变成“Agent 自主闭环的可验收能力”。
 
-### 4.6 第六优先级：做 flag differential harness，但先绑定已有 benchmark 能力
+### 4.6 第六优先级：基于 current 场景证据做差异比较
 
-上一篇提到 flag differential，但没有说怎么落。
+差异验证仍然必要，但实现必须消费 current 场景与 evidence，不能恢复已退役的 `agent-qc:benchmark:*` runner 或旧 manifest。第二期事实源统一见 `internal/roadmap/benchmark/**`。
 
-Lime 现在已经有：
-
-```bash
-npm run agent-qc:benchmark:plan
-npm run agent-qc:benchmark:compare
-```
-
-这可以作为切入口。
-
-后续每个高风险 Agent 行为，都应该能跑：
-
-```text
-baseline config / flag off
-candidate config / flag on
-same scenario set
-same evidence contract
-deterministic diff
-Supervisor semantic diff
-regression decision
-```
-
-适合先做的场景：
-
-- tool selection 策略
-- streaming completion / cancel 语义
-- SkillTool gate
-- Supervisor rubric
-- Managed Objective auto continuation guard
-- Plugin UI runtime lifecycle
-
-这一步不是为了 A/B 实验好看。
-
-它是为了回答一个真实问题：
-
-**新功能到底让什么变好了，又悄悄弄坏了什么？**
-
-建议把 `agent-qc:benchmark:plan` 与 `agent-qc:benchmark:compare` 视为两段式：
-
-```text
-benchmark:plan
-  -> 生成 baseline / candidate / requiredEvidence / failureModes
-benchmark:compare
-  -> 读取两侧结果，产出 deterministic diff + promotion decision
-```
-
-比较结果不直接决定发布，只负责把问题归类：
-
-- pass
-- regression
-- needs-human-review
-
-只有当 deterministic diff 已经明确后，才把摘要交给 Supervisor 看语义差异。
+高风险 Agent 行为的 baseline / candidate 必须固定相同场景、证据合同、provider/tool policy 和预算。确定性差异先由 owner 测试和 current fixture 判断；只有语义仍不明确时，才把裁剪后的 evidence 交给 Supervisor。
 
 ### 4.7 第七优先级：把 Supervisor 限定成“第二层裁判”
 
@@ -762,8 +711,8 @@ agent-qc:audit complete
 
 交付物：
 
-- flag differential harness
-- benchmark plan / compare 接入 Agent QC evidence
+- current 场景 baseline / candidate 结构化差异
+- 第二期 Benchmark evidence 与 Agent QC evidence 边界收敛
 - Supervisor semantic diff
 - trend / cleanup / release summary 三侧消费同一份 evidence
 - Managed Objective continuation 纳入 Agent QC 场景

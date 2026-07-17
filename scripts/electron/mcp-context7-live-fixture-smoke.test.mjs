@@ -49,4 +49,13 @@ describe("MCP Context7 live Electron fixture smoke guard", () => {
     expect(positiveCallSurface).not.toContain("mcp_start_server");
     expect(positiveCallSurface).not.toContain("add_mcp_server");
   });
+
+  it("does not execute the live fixture when imported as a helper module", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain('import { pathToFileURL } from "node:url"');
+    expect(content).toContain(
+      'import.meta.url === pathToFileURL(process.argv[1] || "").href',
+    );
+  });
 });

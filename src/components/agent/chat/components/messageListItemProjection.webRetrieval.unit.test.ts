@@ -407,17 +407,14 @@ describe("messageListItemProjection web retrieval", () => {
     const serialized = JSON.stringify(projection.rendererContentParts);
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
-      "tool_use",
-      "thinking",
-      "tool_use",
       "text",
     ]);
-    expect(serialized).toContain("live commentary before search");
-    expect(serialized).toContain("live reasoning between tools");
+    expect(serialized).not.toContain("live commentary before search");
+    expect(serialized).not.toContain("live reasoning between tools");
     expect(serialized).toContain("live final answer");
     expect(serialized).not.toContain("timeline commentary should not replace");
     expect(serialized).not.toContain("timeline reasoning should not replace");
-    expect(serialized).not.toContain("timeline final should not replace");
+    expect(serialized).toContain("timeline final should not replace");
   });
 
   it("搜索运行中 commentary overlay 不应作为最终正文，commentary item 应按序作为可见文本渲染", () => {
@@ -694,7 +691,7 @@ describe("messageListItemProjection web retrieval", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
+    expect(parts.map((part) => part.type)).toEqual(["text"]);
     expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
     expect(projection.rendererContent).toBe(
       "## 今日 AI 新闻\n\n- 第一条要闻。",
@@ -702,12 +699,10 @@ describe("messageListItemProjection web retrieval", () => {
     expect(projection.rendererRawContent).toBe(
       "## 今日 AI 新闻\n\n- 第一条要闻。",
     );
-    expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
-      "completed",
-    );
-    expect(parts[1]?.type === "text" ? parts[1].text : "").toContain(
+    expect(parts[0]?.type === "text" ? parts[0].text : "").toContain(
       "今日 AI 新闻",
     );
+    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(true);
   });
 
   it("turn 暂标完成且发送态未释放时，final_answer 已到达也不应被 running 搜索残留吞掉", () => {
@@ -754,7 +749,7 @@ describe("messageListItemProjection web retrieval", () => {
     );
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual(["tool_use", "text"]);
+    expect(parts.map((part) => part.type)).toEqual(["text"]);
     expect(projection.actionContent).toBe("## 今日 AI 新闻\n\n- 第一条要闻。");
     expect(projection.rendererContent).toBe(
       "## 今日 AI 新闻\n\n- 第一条要闻。",
@@ -762,12 +757,10 @@ describe("messageListItemProjection web retrieval", () => {
     expect(projection.rendererRawContent).toBe(
       "## 今日 AI 新闻\n\n- 第一条要闻。",
     );
-    expect(parts[0]?.type === "tool_use" ? parts[0].toolCall.status : "").toBe(
-      "running",
-    );
-    expect(parts[1]?.type === "text" ? parts[1].text : "").toContain(
+    expect(parts[0]?.type === "text" ? parts[0].text : "").toContain(
       "今日 AI 新闻",
     );
+    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(true);
   });
 
   it("无 timeline 的完成态 contentParts running 搜索残留不应吞掉最终正文", () => {
@@ -922,57 +915,65 @@ describe("messageListItemProjection web retrieval", () => {
       isThinking: true,
     };
 
-    const projection = buildProjection(message, [
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "assistant-search-plan",
+          type: "agent_message",
+          turn_id: "turn-live-search-running",
+          sequence: 1,
+          phase: "commentary",
+          text: "我先设计几组搜索查询，并对比权威来源。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:01.000Z",
+          completed_at: "2026-06-02T10:00:02.000Z",
+          updated_at: "2026-06-02T10:00:02.000Z",
+        },
+        {
+          id: "web-search-first",
+          type: "web_search",
+          turn_id: "turn-live-search-running",
+          sequence: 2,
+          action: "search",
+          query: "学习机 权威 评测 对比",
+          output: "搜索结果摘要",
+          status: "completed",
+          started_at: "2026-06-02T10:00:03.000Z",
+          completed_at: "2026-06-02T10:00:04.000Z",
+          updated_at: "2026-06-02T10:00:04.000Z",
+        },
+        {
+          id: "web-search-running",
+          type: "web_search",
+          turn_id: "turn-live-search-running",
+          sequence: 3,
+          action: "search",
+          query: "科大讯飞 学习机 评测 竞品",
+          output: "",
+          status: "in_progress",
+          started_at: "2026-06-02T10:00:05.000Z",
+          updated_at: "2026-06-02T10:00:05.000Z",
+        },
+        {
+          id: "assistant-search-progress",
+          type: "agent_message",
+          turn_id: "turn-live-search-running",
+          sequence: 4,
+          phase: "commentary",
+          text: "来帮你搜索和分析一下不同学习机的评测结论。",
+          status: "completed",
+          started_at: "2026-06-02T10:00:06.000Z",
+          completed_at: "2026-06-02T10:00:07.000Z",
+          updated_at: "2026-06-02T10:00:07.000Z",
+        },
+      ] as never,
       {
-        id: "assistant-search-plan",
-        type: "agent_message",
-        turn_id: "turn-live-search-running",
-        sequence: 1,
-        phase: "commentary",
-        text: "我先设计几组搜索查询，并对比权威来源。",
-        status: "completed",
-        started_at: "2026-06-02T10:00:01.000Z",
-        completed_at: "2026-06-02T10:00:02.000Z",
-        updated_at: "2026-06-02T10:00:02.000Z",
+        isSending: true,
+        turnId: "turn-live-search-running",
+        turnStatus: "running",
       },
-      {
-        id: "web-search-first",
-        type: "web_search",
-        turn_id: "turn-live-search-running",
-        sequence: 2,
-        action: "search",
-        query: "学习机 权威 评测 对比",
-        output: "搜索结果摘要",
-        status: "completed",
-        started_at: "2026-06-02T10:00:03.000Z",
-        completed_at: "2026-06-02T10:00:04.000Z",
-        updated_at: "2026-06-02T10:00:04.000Z",
-      },
-      {
-        id: "web-search-running",
-        type: "web_search",
-        turn_id: "turn-live-search-running",
-        sequence: 3,
-        action: "search",
-        query: "科大讯飞 学习机 评测 竞品",
-        output: "",
-        status: "in_progress",
-        started_at: "2026-06-02T10:00:05.000Z",
-        updated_at: "2026-06-02T10:00:05.000Z",
-      },
-      {
-        id: "assistant-search-progress",
-        type: "agent_message",
-        turn_id: "turn-live-search-running",
-        sequence: 4,
-        phase: "commentary",
-        text: "来帮你搜索和分析一下不同学习机的评测结论。",
-        status: "completed",
-        started_at: "2026-06-02T10:00:06.000Z",
-        completed_at: "2026-06-02T10:00:07.000Z",
-        updated_at: "2026-06-02T10:00:07.000Z",
-      },
-    ] as never);
+    );
 
     expect(projection.actionContent).toBe("");
     expect(projection.rendererRawContent).toBe("");
@@ -1043,7 +1044,7 @@ describe("messageListItemProjection web retrieval", () => {
     });
   });
 
-  it("网页检索工具已在消息内联时应把 timeline 中间 reasoning 合并进同一渲染过程", () => {
+  it("完成态网页检索工具已在消息内联时应折叠 timeline reasoning", () => {
     const message: Message = {
       id: "assistant-web-tools-inline",
       role: "assistant",
@@ -1139,14 +1140,14 @@ describe("messageListItemProjection web retrieval", () => {
     );
 
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
-      "tool_use",
-      "thinking",
-      "tool_use",
       "text",
     ]);
-    expect(projection.rendererContentParts?.[1]).toMatchObject({
-      type: "thinking",
-      text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
-    });
+    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(true);
+    expect(projection.primaryTimeline?.items).toEqual([
+      expect.objectContaining({
+        id: "reasoning-web-tools-inline",
+        type: "reasoning",
+      }),
+    ]);
   });
 });

@@ -16,7 +16,8 @@ export interface BuildProjectionOptions {
   lastAssistantMessageId?: string | null;
   shouldDeferMessageDetails?: boolean;
   streamingTextOverlay?: AgentStreamTextOverlaySnapshot | null;
-  expandHistoricalTimeline?: boolean;
+  timelineMessageId?: string | null;
+  lastAssistantId?: string | null;
   turnId?: string;
   turnStatus?: AgentThreadTurn["status"] | "queued";
 }
@@ -32,12 +33,10 @@ export function buildProjection(
     activePendingA2UISource: options.activePendingA2UISource ?? null,
     canOpenSavedSiteContent: false,
     expandedHistoricalAssistantMessageIds: new Set(),
-    expandedHistoricalTimelineKeys: options.expandHistoricalTimeline
-      ? new Set([`leading:${turnId}`])
-      : new Set(),
     expandedLongHistoricalMessageIds: new Set(),
     group: {
-      lastAssistantId: message.id,
+      lastAssistantId: options.lastAssistantId ?? message.id,
+      timelineMessageId: options.timelineMessageId ?? undefined,
       timeline: timelineItems
         ? ({
             turn: {

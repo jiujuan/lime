@@ -364,6 +364,29 @@ function runtimeRequestFromAppServerParams(params) {
   return appServerRuntimeOptions(params).runtimeRequest || {};
 }
 
+function runtimeRequestProviderModel(runtimeRequest) {
+  const request = runtimeRequest || {};
+  const modelPolicy = request?.metadata?.harness?.model_request_policy || {};
+  return {
+    provider:
+      request.providerPreference ||
+      modelPolicy.provider_id ||
+      modelPolicy.providerId ||
+      null,
+    model:
+      request.modelPreference ||
+      modelPolicy.model_id ||
+      modelPolicy.modelId ||
+      null,
+    source:
+      request.providerPreference || request.modelPreference
+        ? "runtime-request"
+        : modelPolicy.provider_id || modelPolicy.model_id
+          ? "model-request-policy"
+          : null,
+  };
+}
+
 function appServerTurnEvidenceFromRecord(record) {
   const params = record?.params || {};
   return {
@@ -1692,7 +1715,7 @@ async function openSessionFromSidebar(page, sessionId) {
           return { opened: false, reason: "session-entry-missing" };
         }
         target.click();
-        return { opened: true, reason: "clicked-sidebar-session" };
+        return { opened: true, reason: "clicked-sidebar-session-id" };
       },
       { sessionId },
     )
@@ -1700,6 +1723,21 @@ async function openSessionFromSidebar(page, sessionId) {
       opened: false,
       reason: error instanceof Error ? error.message : String(error),
     }));
+}
+
+async function waitForSessionFromSidebar(page, sessionId, timeoutMs = 20_000) {
+  return waitForCondition(
+    "等待目标会话出现在 sidebar",
+    async () => {
+      const result = await openSessionFromSidebar(page, sessionId);
+      return result.opened ? result : null;
+    },
+    timeoutMs,
+    250,
+  ).catch((error) => ({
+    opened: false,
+    reason: error instanceof Error ? error.message : String(error),
+  }));
 }
 
 function writeJsonFile(filePath, value) {
@@ -2377,9 +2415,10 @@ async function main() {
     await waitForComposerReady(page, 60_000).catch(() => undefined);
 
     logStage("restore-interrupted-session-before-recovery");
-    summary.beforeRecoveryOpenAttempt = await openSessionFromSidebar(
+    summary.beforeRecoveryOpenAttempt = await waitForSessionFromSidebar(
       page,
       sessionId,
+      20_000,
     );
     summary.beforeRecoverySnapshot = await waitForCondition(
       "等待中断会话重新挂载",
@@ -2513,9 +2552,10 @@ async function main() {
       summary.recoveryDetachedSnapshot = detachedSnapshot;
       if (isLikelyDetachedBlankTaskSnapshot(detachedSnapshot)) {
         logStage("restore-session-after-recovery-persisted");
-        summary.recoveryVisibleRestoreAttempt = await openSessionFromSidebar(
+        summary.recoveryVisibleRestoreAttempt = await waitForSessionFromSidebar(
           page,
           followSessionId,
+          20_000,
         );
         recoverySnapshot = await waitForCondition(
           "等待重新打开目标会话后 GUI 出现恢复结果",
@@ -2723,6 +2763,18 @@ async function main() {
       latestSession?.execution_runtime?.routing_decision ||
       threadRead?.model_routing ||
       {};
+    const longProviderModel = runtimeRequestProviderModel(
+      longRequest.runtimeRequest,
+    );
+    summary.longRoutingEvidence = {
+      provider: longProviderModel.provider,
+      model: longProviderModel.model,
+      source: longProviderModel.source,
+      note:
+        longProviderModel.source === "model-request-policy"
+          ? "首次空任务 turn 使用 harness model_request_policy 锁定 provider/model，未重复写入顶层 runtimeRequest。"
+          : "长 turn 显式提交 runtimeRequest provider/model。",
+    };
     const followProviderPreferenceHonored =
       followRequest.runtimeRequest?.providerPreference === preferredProvider ||
       latestRuntimeRouting?.selectedProvider === preferredProvider ||
@@ -3013,9 +3065,8 @@ async function main() {
           Boolean(recoverySnapshot?.recoveryVisible)),
       recoveryVisibleInGui: Boolean(recoverySnapshot?.recoveryVisible),
       longProviderPreferenceHonored:
-        longRequest.runtimeRequest?.providerPreference === preferredProvider,
-      longModelPreferenceHonored:
-        longRequest.runtimeRequest?.modelPreference === preferredModel,
+        longProviderModel.provider === preferredProvider,
+      longModelPreferenceHonored: longProviderModel.model === preferredModel,
       followProviderPreferenceHonored,
       followModelPreferenceHonored,
       liveWebProviderPreferenceHonored,

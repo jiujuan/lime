@@ -11,6 +11,10 @@ on:
         description: "Artifact 保留天数"
         required: false
         default: "7"
+      n_minus_one_tag:
+        description: "可选 N-1 release tag；留空时自动选择低于候选的最新稳定 tag"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -40,12 +44,15 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.source_ref || github.ref }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-          cache-dependency-path: "package-lock.json"
+          cache: "pnpm"
+          cache-dependency-path: "pnpm-lock.yaml"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -64,7 +71,7 @@ jobs:
           cache-all-crates: true
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile --config.node-linker=hoisted
 
       - name: Build Electron Windows test package
         shell: bash
@@ -89,6 +96,69 @@ jobs:
             --out-dir windows-test-package \
             --target-triple x86_64-pc-windows-msvc \
             --version "$VERSION"
+
+      - name: Download Windows N-1 Squirrel installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_N_MINUS_ONE_TAG: ${{ github.event.inputs.n_minus_one_tag }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          N_MINUS_ONE_VERSION="$({
+            CANDIDATE_VERSION="$VERSION" node --input-type=module <<'NODE'
+          import { execFileSync } from "node:child_process";
+          import {
+            normalizeVersion,
+            selectNMinusOneVersion,
+          } from "./scripts/electron/windows-squirrel-rc-smoke.mjs";
+
+          const requested = process.env.REQUESTED_N_MINUS_ONE_TAG?.trim();
+          if (requested) {
+            process.stdout.write(normalizeVersion(requested));
+          } else {
+            const tags = execFileSync("git", ["tag", "--list"], {
+              encoding: "utf8",
+            }).split(/\r?\n/);
+            process.stdout.write(
+              selectNMinusOneVersion({
+                candidateVersion: process.env.CANDIDATE_VERSION,
+                tags,
+              }),
+            );
+          }
+          NODE
+          })"
+          N_MINUS_ONE_TAG="v$N_MINUS_ONE_VERSION"
+          mkdir -p windows-n-minus-one-package
+          gh release download "$N_MINUS_ONE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "Lime-$N_MINUS_ONE_VERSION.Setup.exe" \
+            --dir windows-n-minus-one-package
+          test -f "windows-n-minus-one-package/Lime-$N_MINUS_ONE_VERSION.Setup.exe"
+          echo "N_MINUS_ONE_VERSION=$N_MINUS_ONE_VERSION" >> "$GITHUB_ENV"
+
+      - name: Smoke installed Windows Squirrel candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          node scripts/electron/windows-squirrel-rc-smoke.mjs \
+            --installer-dir windows-test-package \
+            --candidate-feed-dir windows-test-package \
+            --evidence-dir ".lime/qc/windows-squirrel-rc/$VERSION" \
+            --n-minus-one-installer-dir windows-n-minus-one-package \
+            --n-minus-one-version "$N_MINUS_ONE_VERSION" \
+            --version "$VERSION"
+
+      - name: Upload Windows Squirrel RC evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: lime-windows-squirrel-rc-evidence
+          if-no-files-found: warn
+          retention-days: ${{ github.event.inputs.retention_days || 7 }}
+          path: .lime/qc/windows-squirrel-rc
 
       - name: Upload Windows test package
         uses: actions/upload-artifact@v4

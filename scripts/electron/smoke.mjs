@@ -26,7 +26,18 @@ const evidenceDir = path.resolve(
     ),
 );
 const summaryPath = path.join(evidenceDir, "summary.json");
-const appServerEnv = resolveElectronAppServerRuntimeEnv();
+const packagedExecutable = process.env.LIME_ELECTRON_SMOKE_EXECUTABLE?.trim();
+const smokeExecutable = packagedExecutable
+  ? path.resolve(packagedExecutable)
+  : electronPath;
+if (packagedExecutable && !existsSync(smokeExecutable)) {
+  throw new Error(
+    `LIME_ELECTRON_SMOKE_EXECUTABLE does not exist: ${smokeExecutable}`,
+  );
+}
+const appServerEnv = packagedExecutable
+  ? { APP_SERVER_BIN: "" }
+  : resolveElectronAppServerRuntimeEnv();
 const userDataDir =
   process.env.ELECTRON_E2E_USER_DATA_DIR?.trim() ||
   mkdtempSync(path.join(os.tmpdir(), "lime-electron-smoke-userdata-"));
@@ -154,18 +165,22 @@ function createStandaloneRunId() {
 }
 
 const child = spawnElectron({
-  electronPath,
-  args: ["--use-mock-keychain", "."],
+  electronPath: smokeExecutable,
+  args: packagedExecutable
+    ? ["--use-mock-keychain"]
+    : ["--use-mock-keychain", "."],
   env: {
     ...process.env,
     ...appServerEnv,
     ELECTRON_E2E_USER_DATA_DIR: userDataDir,
     LIME_ELECTRON_E2E: "1",
+    ...(packagedExecutable ? { LIME_ELECTRON_BRAND_DEV_APP: "0" } : {}),
     LIME_ELECTRON_SMOKE: "1",
     LIME_ELECTRON_SMOKE_VISIBLE: smokeVisible ? "1" : "0",
     LIME_GATE_RUN_ID: runId,
     LIME_ELECTRON_SMOKE_EVIDENCE_DIR: evidenceDir,
   },
+  shell: packagedExecutable ? false : undefined,
 });
 
 const timeout = setTimeout(() => {

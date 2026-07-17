@@ -1,3 +1,8 @@
+import fs from "node:fs";
+import net from "node:net";
+import path from "node:path";
+import { once } from "node:events";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -33,6 +38,15 @@ afterEach(async () => {
 });
 
 describe("openai-compatible-fixture-server", () => {
+  it("不得通过强杀 active connection 掩盖 provider 生命周期缺陷", () => {
+    const source = fs.readFileSync(
+      path.resolve("scripts/lib/openai-compatible-fixture-server.mjs"),
+      "utf8",
+    );
+    expect(source).toContain("closeIdleConnections");
+    expect(source).not.toContain("closeAllConnections");
+  });
+
   it("应返回 Direct providerConfig，默认只指向 localhost fixture", async () => {
     const fixture = await startFixture();
 
@@ -95,6 +109,47 @@ describe("openai-compatible-fixture-server", () => {
       authorization: `Bearer ${DEFAULT_FIXTURE_API_KEY}`,
     });
     expect(fixture.requests[0].body.stream).toBe(true);
+  });
+
+  it("关闭 fixture 时不等待已完成请求的 keep-alive 超时", async () => {
+    const fixture = await startOpenAiCompatibleFixtureServer({
+      content: "MO_OK_CLOSE",
+    });
+    const response = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [{ role: "user", content: "ping" }],
+      }),
+    });
+    expect(response.ok).toBe(true);
+    await response.json();
+
+    const closeStartedAt = Date.now();
+    await expect(fixture.close()).resolves.toBeUndefined();
+    expect(Date.now() - closeStartedAt).toBeLessThan(2_000);
+  });
+
+  it("关闭 fixture 时只清理从未承载 HTTP request 的预连接", async () => {
+    const fixture = await startOpenAiCompatibleFixtureServer();
+    const { port } = new URL(fixture.baseUrl);
+    const socket = net.createConnection(Number(port), "127.0.0.1");
+    await once(socket, "connect");
+    const socketClosed = new Promise((resolve) =>
+      socket.once("close", resolve),
+    );
+    let socketError = null;
+    socket.once("error", (error) => {
+      socketError = error;
+    });
+
+    const closeStartedAt = Date.now();
+    await expect(fixture.close()).resolves.toBeUndefined();
+    await socketClosed;
+    expect(Date.now() - closeStartedAt).toBeLessThan(2_000);
+    expect(socket.destroyed).toBe(true);
+    expect([null, "ECONNRESET"]).toContain(socketError?.code || null);
   });
 
   it("应支持非 streaming JSON chat completions，方便后续 smoke 复用", async () => {

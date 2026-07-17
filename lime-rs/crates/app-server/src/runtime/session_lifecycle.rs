@@ -9,6 +9,8 @@ use app_server_protocol::*;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 
+const DEFAULT_SESSION_LIST_LIMIT: u32 = 100;
+
 fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
     let session = &stored.session;
     let runtime_state = resolve_agent_session_runtime_state(
@@ -336,6 +338,12 @@ impl RuntimeCore {
         &self,
         mut params: AgentSessionListParams,
     ) -> Result<AgentSessionListParams, RuntimeCoreError> {
+        // Session overviews are a bounded navigation read. Callers that need a
+        // larger archive must request an explicit limit instead of blocking the
+        // App Server with the entire projection.
+        if params.limit.is_none() {
+            params.limit = Some(DEFAULT_SESSION_LIST_LIMIT);
+        }
         if params.cwd.is_some() {
             params.workspace_id = None;
             return Ok(params);

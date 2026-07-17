@@ -42,7 +42,6 @@ import {
 import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
-  MESSAGE_LIST_HISTORICAL_TIMELINE_COMPACT_ITEM_THRESHOLD,
   MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_PREVIEW_CHARS,
   MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_THRESHOLD,
 } from "./messageListConstants";
@@ -91,7 +90,6 @@ export function resolveMessageListItemProjection({
   activePendingA2UISource,
   canOpenSavedSiteContent,
   expandedHistoricalAssistantMessageIds,
-  expandedHistoricalTimelineKeys,
   expandedLongHistoricalMessageIds,
   focusedTimelineItemId,
   group,
@@ -177,6 +175,23 @@ export function resolveMessageListItemProjection({
       : isTimelineOwnerAssistant
         ? group.timeline
         : null;
+  const groupTimelineTurnId = group.timeline?.turn.id?.trim() || null;
+  const messageTurnId = message.runtimeTurnId?.trim() || groupTimelineTurnId;
+  // 一个 canonical turn 可能在 hydration 后对应多个 assistant message。
+  // 非 timeline owner 没有自己的 timeline，但仍必须继承所在 group 的终态，
+  // 否则历史消息会把完整工具 contentParts 当作当前运行态重新渲染。
+  const messageTurnStatus =
+    messageTurnId && groupTimelineTurnId === messageTurnId
+      ? group.timeline?.turn.status
+      : timeline?.turn.status;
+  const hasKnownActiveTurn =
+    typeof activeCurrentTurnId === "string" &&
+    activeCurrentTurnId.trim().length > 0;
+  const shouldHideHistoricalRuntimeDetails = Boolean(
+    messageTurnId &&
+    ((hasKnownActiveTurn && messageTurnId !== activeCurrentTurnId) ||
+      (!isSending && isTerminalThreadTurnStatus(messageTurnStatus))),
+  );
   const rawTimelineItems = timeline?.items;
   const hasProcessTimelineItems = hasTimelineProcessItems(rawTimelineItems);
   const hasPersistedReasoningTimeline =
@@ -305,22 +320,10 @@ export function resolveMessageListItemProjection({
   const primaryTimelineKey = timeline ? `leading:${timeline.turn.id}` : null;
   const shouldPreferCompactHistoricalTimeline =
     Boolean(primaryTimelineKey) &&
-    !focusedTimelineItemId &&
     isTerminalThreadTurnStatus(timeline?.turn.status) &&
-    timeline?.turn.id !== activeCurrentTurnId &&
-    !expandedHistoricalTimelineKeys.has(primaryTimelineKey!) &&
-    (shouldDeferThreadItemsScan ||
-      (timelineItemsForDisplay?.length || 0) >=
-        MESSAGE_LIST_HISTORICAL_TIMELINE_COMPACT_ITEM_THRESHOLD);
-  const shouldKeepExpandedHistoricalTimelineInTimeline =
-    Boolean(primaryTimelineKey) &&
-    !focusedTimelineItemId &&
-    isTerminalThreadTurnStatus(timeline?.turn.status) &&
-    timeline?.turn.id !== activeCurrentTurnId &&
-    expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
+    timeline?.turn.id !== activeCurrentTurnId;
   const shouldProjectHistoricalProcessThroughTimeline =
-    shouldPreferCompactHistoricalTimeline ||
-    shouldKeepExpandedHistoricalTimelineInTimeline;
+    shouldPreferCompactHistoricalTimeline;
   const hasStreamingOverlayText = Boolean(
     streamingFinalTextOverlayContent?.trim(),
   );
@@ -365,7 +368,7 @@ export function resolveMessageListItemProjection({
         canMergeTimelineAsSparseProcessPatch(timelineItemsForDisplay)) ||
       shouldMergeTimelineProcessWithInlineThinking) &&
     !shouldPreferCompactHistoricalTimeline &&
-    !shouldKeepExpandedHistoricalTimelineInTimeline
+    !shouldHideHistoricalRuntimeDetails
       ? buildTimelineInlineContentParts({
           displayContent: shouldHideAssistantTextWhileRunning
             ? ""
@@ -380,6 +383,8 @@ export function resolveMessageListItemProjection({
         })
       : undefined;
   const includeInlineProcessFlow =
+    !shouldPreferCompactHistoricalTimeline &&
+    !shouldHideHistoricalRuntimeDetails &&
     !shouldDeferMessageDetails &&
     !shouldSuppressRendererProcessFlow &&
     message.role === "assistant" &&
@@ -411,7 +416,7 @@ export function resolveMessageListItemProjection({
             ? ""
             : displayContent,
           existingContentParts: filteredConversationDisplayContentParts,
-          includeCommentary: shouldKeepExpandedHistoricalTimelineInTimeline,
+          includeCommentary: false,
           items: timelineItemsForDisplay,
         })
       : undefined;
@@ -423,6 +428,9 @@ export function resolveMessageListItemProjection({
   const timelineOwnedConversationContentParts =
     timelineVisibleTextContentParts || timelineFileChangesContentPart
       ? [
+          ...(timelineFileChangesContentPart
+            ? [timelineFileChangesContentPart]
+            : []),
           ...(timelineVisibleTextContentParts || []),
           ...(filteredConversationDisplayContentParts || []).filter(
             (part) =>
@@ -430,9 +438,6 @@ export function resolveMessageListItemProjection({
               (!timelineFileChangesContentPart ||
                 part.type !== "file_changes_batch"),
           ),
-          ...(timelineFileChangesContentPart
-            ? [timelineFileChangesContentPart]
-            : []),
         ]
       : undefined;
   const ensuredConversationContentParts =
@@ -564,8 +569,14 @@ export function resolveMessageListItemProjection({
     isTerminalThreadTurnStatus(timeline?.turn.status) &&
     timeline?.turn.id !== activeCurrentTurnId;
   const compactPrimaryTimelineItems = shouldPreferCompactHistoricalTimeline
-    ? [...visiblePrimaryTimelineItems, ...trailingTimelineItems]
+    ? [
+        ...visiblePrimaryTimelineItems,
+        ...trailingTimelineItems.filter(
+          (item) => item.type !== "file_artifact",
+        ),
+      ]
     : visiblePrimaryTimelineItems;
+  const visibleTrailingTimelineItems = trailingTimelineItems;
   const primaryTimeline =
     !shouldSuppressImageProcessFlow &&
     timeline &&
@@ -575,10 +586,9 @@ export function resolveMessageListItemProjection({
       : null;
   const trailingTimeline =
     !shouldSuppressImageProcessFlow &&
-    !shouldPreferCompactHistoricalTimeline &&
     timeline &&
-    trailingTimelineItems.length > 0
-      ? { ...timeline, items: trailingTimelineItems }
+    visibleTrailingTimelineItems.length > 0
+      ? { ...timeline, items: visibleTrailingTimelineItems }
       : null;
   const hasTrailingArtifactTimelineItems = trailingTimelineItems.some(
     (item) => item.type === "file_artifact",
@@ -631,9 +641,14 @@ export function resolveMessageListItemProjection({
     (shouldProjectHistoricalProcessThroughTimeline ||
       messageContentPartsOwnInlineProcessFlow ||
       !displayContent.trim())
-      ? resolveTimelineOwnedVisibleText(conversationContentParts, {
-          includeCommentary: shouldKeepExpandedHistoricalTimelineInTimeline,
-        })
+      ? resolveTimelineOwnedVisibleText(
+          shouldProjectHistoricalProcessThroughTimeline
+            ? rendererConversationContentParts
+            : conversationContentParts,
+          {
+            includeCommentary: false,
+          },
+        )
       : null;
   const rawActionContent =
     timelineOwnedActionContent ??
@@ -768,7 +783,16 @@ export function resolveMessageListItemProjection({
     shouldCollapseLongHistoricalMessage ||
     shouldFlattenHistoricalAssistantContent
       ? undefined
-      : runtimeFailureTextContentParts || rendererConversationContentParts;
+      : runtimeFailureTextContentParts ||
+        (shouldPreferCompactHistoricalTimeline ||
+        shouldHideHistoricalRuntimeDetails
+          ? rendererConversationContentParts?.filter(
+              (part) =>
+                part.type === "text" ||
+                part.type === "file_changes_batch" ||
+                part.type === "media_reference",
+            )
+          : rendererConversationContentParts);
   const rendererHasProvenanceThinkingContentPart = Boolean(
     rendererContentParts?.some(
       (part) =>
@@ -780,18 +804,26 @@ export function resolveMessageListItemProjection({
           typeof part.metadata?.sequence === "number"),
     ),
   );
-  const rendererThinkingContent = shouldCollapseLongHistoricalMessage
-    ? undefined
-    : rendererHasProvenanceThinkingContentPart
+  const rendererThinkingContent =
+    shouldPreferCompactHistoricalTimeline ||
+    shouldHideHistoricalRuntimeDetails ||
+    shouldCollapseLongHistoricalMessage
       ? undefined
-      : conversationThinkingContent;
+      : rendererHasProvenanceThinkingContentPart
+        ? undefined
+        : conversationThinkingContent;
   const rendererToolCalls =
+    shouldPreferCompactHistoricalTimeline ||
+    shouldHideHistoricalRuntimeDetails ||
     shouldCollapseLongHistoricalMessage ||
     hasInlineToolUseContentPart(rendererConversationContentParts)
       ? undefined
       : conversationToolCalls;
   const rendererActionRequests =
-    shouldCollapseLongHistoricalMessage || shouldSuppressRendererProcessFlow
+    shouldPreferCompactHistoricalTimeline ||
+    shouldHideHistoricalRuntimeDetails ||
+    shouldCollapseLongHistoricalMessage ||
+    shouldSuppressRendererProcessFlow
       ? undefined
       : filteredActionRequests;
   const rendererMarkdownRenderMode =
@@ -896,11 +928,9 @@ export function resolveMessageListItemProjection({
     primaryTimeline?.turn.id !== activeCurrentTurnId;
   const shouldRenderCompactPrimaryTimeline =
     Boolean(primaryTimelineKey) &&
-    !focusedTimelineItemId &&
     isTerminalThreadTurnStatus(primaryTimeline?.turn.status) &&
     primaryTimeline?.turn.id !== activeCurrentTurnId &&
-    shouldPreferCompactHistoricalTimeline &&
-    !expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
+    shouldPreferCompactHistoricalTimeline;
   const shouldRenderPrimaryTimelineOutsideBubble =
     message.role === "assistant" &&
     Boolean(primaryTimeline) &&

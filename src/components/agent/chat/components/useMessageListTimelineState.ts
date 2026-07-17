@@ -36,7 +36,6 @@ interface UseMessageListTimelineStateOptions {
   activePendingA2UISource: PendingA2UISource | null;
   canonicalChildren: CanonicalChildThreadSummary[];
   currentTurnId: string | null;
-  expandedHistoricalTimelineKeys: Set<string>;
   focusedTimelineItemId: string | null;
   hiddenHistoryCount: number;
   isRestoredHistoryWindow: boolean;
@@ -58,7 +57,6 @@ export function useMessageListTimelineState({
   activePendingA2UISource,
   canonicalChildren,
   currentTurnId,
-  expandedHistoricalTimelineKeys,
   focusedTimelineItemId,
   hiddenHistoryCount,
   isRestoredHistoryWindow,
@@ -186,20 +184,10 @@ export function useMessageListTimelineState({
     pendingActions.length === 0 &&
     queuedTurns.length === 0 &&
     (threadRead?.pending_requests?.length ?? 0) === 0;
-  const shouldDeferRestoredThreadItemsUntilExpand =
-    isRestoredHistoryWindow &&
-    !focusedTimelineItemId &&
-    !activeCurrentTurnId &&
-    (!isSending || shouldProtectHistoricalWindowDuringSending) &&
-    canBuildHistoricalTimeline &&
-    !renderedTurns.some((turn) =>
-      expandedHistoricalTimelineKeys.has(`leading:${turn.id}`),
-    ) &&
-    hasLargeHistoricalThreadItems;
   const shouldDeferThreadItemsScan =
     !activeCurrentTurnId &&
-    ((shouldDeferHistoricalTimeline && !isHistoricalTimelineReady) ||
-      shouldDeferRestoredThreadItemsUntilExpand);
+    shouldDeferHistoricalTimeline &&
+    !isHistoricalTimelineReady;
   const renderedThreadItemsMeasurement = useMemo(
     () =>
       measureMessageListComputation(() =>
@@ -296,7 +284,8 @@ export function useMessageListTimelineState({
   ]);
   const currentTurnTimeline = useMemo(() => {
     return buildCurrentTurnTimelineProjection({
-      activeCurrentTurnId,
+      // completed turn 仍需作为选中锚点投影 canonical ThreadStore 项，但不改变运行态 active id。
+      activeCurrentTurnId: currentTurnId,
       activeCurrentTurn,
       lastAssistantMessageId,
       timelineByMessageId,
@@ -305,7 +294,7 @@ export function useMessageListTimelineState({
     });
   }, [
     activeCurrentTurn,
-    activeCurrentTurnId,
+    currentTurnId,
     lastAssistantMessageId,
     renderedMessages,
     renderedThreadItems,

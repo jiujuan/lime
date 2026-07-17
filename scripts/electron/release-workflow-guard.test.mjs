@@ -104,6 +104,20 @@ describe("Electron release workflow guard", () => {
     );
   });
 
+  it("rejects release workflow without installed Windows Squirrel Gate B", () => {
+    const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
+    const workflowPath = tempWorkflowPath(
+      current.replace(
+        "          node scripts/electron/windows-squirrel-rc-smoke.mjs \\\n",
+        "          node scripts/electron/verify-package-resources.mjs \\\n",
+      ),
+    );
+
+    expect(() => validateReleaseWorkflow({ workflowPath })).toThrow(
+      /Windows Squirrel RC smoke must include scripts\/electron\/windows-squirrel-rc-smoke\.mjs/,
+    );
+  });
+
   it("rejects missing explicit Forge package step before make", () => {
     const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
     const workflowPath = tempWorkflowPath(
@@ -234,6 +248,34 @@ describe("Electron release workflow guard", () => {
 
     expect(() => validateReleaseWorkflow({ forgeConfigPath })).toThrow(
       /macOS branding hook must run before signing/,
+    );
+  });
+
+  it("rejects macOS release signing that ignores the release keychain", () => {
+    const forgeConfig = fs.readFileSync("forge.config.mjs", "utf8");
+    const forgeConfigPath = tempForgeConfigPath(
+      forgeConfig.replace(
+        'env.LIME_ELECTRON_SIGN === "1" || Boolean(env.LIME_MACOS_KEYCHAIN)',
+        'env.LIME_ELECTRON_SIGN === "1"',
+      ),
+    );
+
+    expect(() => validateReleaseWorkflow({ forgeConfigPath })).toThrow(
+      /Forge macOS signing config must include Boolean\(env\.LIME_MACOS_KEYCHAIN\)/,
+    );
+  });
+
+  it("rejects local macOS packaging without ad-hoc signing", () => {
+    const forgeConfig = fs.readFileSync("forge.config.mjs", "utf8");
+    const forgeConfigPath = tempForgeConfigPath(
+      forgeConfig.replace(
+        'options.identity = "-"',
+        "options.identity = undefined",
+      ),
+    );
+
+    expect(() => validateReleaseWorkflow({ forgeConfigPath })).toThrow(
+      /Forge macOS signing config must include options\.identity = "-"/,
     );
   });
 

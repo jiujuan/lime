@@ -347,7 +347,7 @@ describe("EmptyStateComposerPanel", () => {
     ).toContain("content-workbench");
   });
 
-  it("首页空态输入区应使用新的浮层输入壳，而不是旧默认输入壳", () => {
+  it("首页空态输入区应使用紧凑输入壳，避免遮挡主视觉", () => {
     const container = renderPanel({
       isGeneralTheme: true,
     });
@@ -357,7 +357,7 @@ describe("EmptyStateComposerPanel", () => {
     ) as HTMLDivElement | null;
 
     expect(composer).toBeTruthy();
-    expect(composer?.className).toContain("floating-composer");
+    expect(composer?.className).not.toContain("floating-composer");
   });
 
   it("首页空态输入区应在右下角显示语音和发送主操作", () => {
@@ -381,9 +381,9 @@ describe("EmptyStateComposerPanel", () => {
     expect(
       dictationButton?.closest('[data-testid="inputbar-primary-actions"]'),
     ).toBe(primaryActions);
-    expect(sendButton?.closest('[data-testid="inputbar-primary-actions"]')).toBe(
-      primaryActions,
-    );
+    expect(
+      sendButton?.closest('[data-testid="inputbar-primary-actions"]'),
+    ).toBe(primaryActions);
     expect(
       container.querySelector('[data-testid="inputbar-expand-toggle"]'),
     ).toBeNull();

@@ -2,6 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+const BACKGROUND_IMPORT_FILLER_COMMAND_COUNT = 180;
+
 export const SOURCE_THREAD_ID = "local-history-click-through-thread";
 export const IMPORTED_USER_TEXT = "请运行测试并修复失败";
 export const IMPORTED_REASONING_TEXT =
@@ -703,6 +705,44 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
       },
     },
   ];
+  const backgroundImportFiller = Array.from(
+    { length: BACKGROUND_IMPORT_FILLER_COMMAND_COUNT },
+    (_, index) => {
+      const callId = `call_background_import_${index}`;
+      return [
+        {
+          timestamp: "2026-06-16T00:00:09.100Z",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            id: callId,
+            call_id: callId,
+            name: "exec_command",
+            arguments: JSON.stringify({
+              cmd: `printf background-import-${index}`,
+              workdir: importedCwd,
+            }),
+          },
+        },
+        {
+          timestamp: "2026-06-16T00:00:09.200Z",
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: callId,
+            output: "Exit code: 0\\nWall time: 0 seconds\\nOutput:\\nok",
+          },
+        },
+      ];
+    },
+  ).flat();
+  const filePreviewStartIndex = lines.findIndex(
+    (line) => line.payload?.call_id === "call_read_md",
+  );
+  if (filePreviewStartIndex < 0) {
+    throw new Error("click-through fixture is missing call_read_md");
+  }
+  lines.splice(filePreviewStartIndex, 0, ...backgroundImportFiller);
   fs.writeFileSync(
     rolloutPath,
     `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`,

@@ -34,9 +34,7 @@ import {
   EMPTY_STATE_PASSIVE_BADGE_CLASSNAME,
   EMPTY_STATE_SELECT_TRIGGER_CLASSNAME,
 } from "./emptyStateSurfaceTokens";
-import {
-  resolveEmptyStateActiveCapability,
-} from "./EmptyStateComposerPanelViewModel";
+import { resolveEmptyStateActiveCapability } from "./EmptyStateComposerPanelViewModel";
 import { MetaIconButton } from "./Inputbar/styles";
 import {
   buildSkillSelectionBindings,
@@ -71,20 +69,64 @@ import type { BaseComposerSendMetadata } from "@/components/input-kit";
 
 const ConnectedComposerShell = styled.div`
   width: 100%;
-  border-radius: 34px;
-  transition: none;
+  border: 1px solid var(--lime-composer-border, rgba(110, 231, 183, 0.84));
+  border-radius: 22px;
+  background: var(--lime-composer-surface);
+  box-shadow:
+    0 12px 30px var(--lime-shadow-color),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+
+  > div:first-child {
+    padding: 0;
+  }
+
+  [data-testid="inputbar-core-container"] {
+    border: 0;
+    border-radius: 21px 21px 0 0;
+    box-shadow: none;
+  }
+
+  textarea {
+    min-height: 88px;
+    padding-top: 7px;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  [data-testid="inputbar-context-bar-slot"] {
+    border: 0;
+    border-top: 1px solid var(--lime-surface-border, rgba(226, 232, 240, 0.9));
+    border-radius: 0 0 21px 21px;
+  }
+
+  &:focus-within {
+    border-color: var(--lime-composer-border-focus, rgba(74, 222, 128, 0.7));
+    box-shadow:
+      0 0 0 3px var(--lime-focus-ring, rgba(74, 222, 128, 0.24)),
+      0 14px 32px var(--lime-shadow-color),
+      inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  }
+
+  &:focus-within [data-testid="inputbar-core-container"] {
+    border: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+    box-shadow: none;
+  }
 
   &:focus-within [data-testid="inputbar-context-bar-slot"] {
-    border-color: rgba(74, 222, 128, 0.38);
-    background: linear-gradient(
-      180deg,
-      rgba(236, 253, 245, 0.18) 0%,
-      rgba(248, 253, 250, 0.44) 48%,
-      rgba(255, 255, 255, 0.7) 100%
+    border-top-color: var(
+      --lime-surface-border-strong,
+      rgba(203, 213, 225, 0.96)
     );
-    box-shadow:
-      0 14px 36px -40px var(--lime-shadow-color),
-      inset 0 -1px 0 rgba(74, 222, 128, 0.1);
+    background: var(
+      --lime-composer-context-surface-focus,
+      var(--lime-composer-surface-focus)
+    );
+    box-shadow: none;
   }
 `;
 
@@ -711,7 +753,7 @@ export function EmptyStateComposerPanel({
   const projectContextBar = (
     <div
       data-testid="inputbar-context-bar-slot"
-      className="-mt-px flex min-h-11 w-full items-center rounded-b-[34px] border border-t-0 border-[color:var(--lime-composer-border,rgba(110,231,183,0.84))] bg-gradient-to-b from-white/35 via-white/50 to-white/60 px-5 py-2 shadow-none"
+      className="flex min-h-10 w-full items-center bg-[image:var(--lime-composer-context-surface,var(--lime-composer-surface))] px-4 py-1.5"
     >
       <InputbarProjectContextBar
         projectId={projectId}
@@ -788,7 +830,7 @@ export function EmptyStateComposerPanel({
           placeholder={placeholder}
           activeTheme={activeTheme}
           showDragHandle={false}
-          visualVariant="floating"
+          visualVariant="default"
           connectedContextBar
           deferSendOnEnter
           sendOnPointerDown

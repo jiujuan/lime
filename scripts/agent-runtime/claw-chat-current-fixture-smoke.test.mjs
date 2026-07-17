@@ -1242,8 +1242,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     });
   });
 
-  it("requires exactly one compact approval record", () => {
-    const buildAssertions = (recordCount) =>
+  it("hides terminal approval details behind a non-interactive history summary", () => {
+    const buildAssertions = ({ previewCount, recordCount }) =>
       buildApprovalRequestDecisionScenarioAssertions({
         appServerRequestMethods: [],
         approvalRequestResumeTurnStart: { turnId: "turn-1" },
@@ -1252,22 +1252,27 @@ describe("claw chat current Electron fixture smoke guard", () => {
         isApprovalRequestDeclineScenario: true,
         summary: {
           guiApprovalRequestDeclineCompleted: {
+            compactTimelinePreviewCount: previewCount,
             approvalRecordShape: {
               recordCount,
-              promptInRecord: false,
-              maxLineBreaks: 0,
-              legacyDetailFragmentHits: [],
+              texts: recordCount === 0 ? [] : ["approval record"],
             },
           },
         },
       });
 
-    expect(buildAssertions(1).guiApprovalRequestDeclineRecordCompact).toBe(
-      true,
-    );
-    expect(buildAssertions(2).guiApprovalRequestDeclineRecordCompact).toBe(
-      false,
-    );
+    expect(
+      buildAssertions({ previewCount: 1, recordCount: 0 })
+        .guiApprovalRequestDeclineHistoricalDetailsHidden,
+    ).toBe(true);
+    expect(
+      buildAssertions({ previewCount: 1, recordCount: 1 })
+        .guiApprovalRequestDeclineHistoricalDetailsHidden,
+    ).toBe(false);
+    expect(
+      buildAssertions({ previewCount: 0, recordCount: 0 })
+        .guiApprovalRequestDeclineHistoricalDetailsHidden,
+    ).toBe(false);
   });
 
   it("covers Inputbar pending steer rich draft queue and restore", () => {

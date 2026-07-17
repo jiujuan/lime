@@ -198,14 +198,14 @@ export function FileChangesSummaryCard({
     >
       <div
         data-testid="file-changes-summary-card-header"
-        className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2.5"
+        className="flex min-h-16 items-center justify-between gap-3 border-b border-slate-200 px-3 py-2.5"
       >
         <div className="flex min-w-0 items-center gap-2">
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600">
             <FileDiff className="h-4 w-4" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <div className="truncate text-[13px] font-semibold leading-5 text-slate-900">
+            <div className="truncate text-sm font-semibold leading-5 text-slate-900">
               {isStreaming
                 ? t("agentChat.fileChangesSummary.writing")
                 : t("agentChat.fileChangesSummary.summary", {

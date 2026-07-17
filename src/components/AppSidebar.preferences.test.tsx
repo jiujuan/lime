@@ -276,7 +276,7 @@ describe("AppSidebar preferences", () => {
     expect(container.textContent).not.toContain("桌宠");
   });
 
-  it("底部外观入口应弹出轻量快捷面板并同步主题与配色", async () => {
+  it("底部外观入口应弹出轻量快捷面板并同步主题与皮肤", async () => {
     const container = mountSidebarContainer({
       currentPageParams: {
         agentEntry: "new-task",
@@ -303,21 +303,23 @@ describe("AppSidebar preferences", () => {
     expect(popover?.textContent).toContain("深色");
     expect(popover?.textContent).toContain("跟随系统");
     expect(popover?.textContent).toContain("随机");
-    expect(popover?.textContent).toContain("墨绿");
-    expect(popover?.textContent).toContain("自然");
-    expect(popover?.textContent).toContain("海洋");
-    expect(popover?.textContent).toContain("复古");
-    expect(popover?.textContent).toContain("霓虹");
-    expect(popover?.textContent).toContain("青柠");
-    expect(popover?.textContent).toContain("黄昏");
-    expect(popover?.textContent).toContain("极简");
-    expect(popover?.textContent).toContain("活力");
-    expect(popover?.textContent).toContain("文艺");
-    expect(popover?.textContent).toContain("奢华");
+    expect(popover?.textContent).toContain("梦樱花境");
+    expect(popover?.textContent).toContain("森野秘境");
+    expect(popover?.textContent).toContain("财神打工");
+    expect(popover?.textContent).toContain("奥特曼守护");
+    expect(popover?.textContent).toContain("东方国潮");
+    expect(popover?.textContent).toContain("初音未来");
+    expect(popover?.textContent).toContain("灵感少年");
+    expect(popover?.textContent).toContain("黑金舞台");
+    expect(popover?.textContent).toContain("极简未来");
+    expect(popover?.textContent).toContain("爆燃涂鸦");
+    expect(popover?.textContent).toContain("清透少年");
+    expect(popover?.textContent).toContain("蓝紫星夜");
+    expect(popover?.textContent).toContain("红白未来城");
 
     await act(async () => {
       container
-        .querySelector<HTMLButtonElement>('button[aria-label="切换配色为海洋"]')
+        .querySelector<HTMLButtonElement>('button[aria-label="切换皮肤为奥特曼守护"]')
         ?.click();
       await Promise.resolve();
     });
@@ -363,25 +365,23 @@ describe("AppSidebar preferences", () => {
       '[data-testid="app-sidebar-appearance-popover"]',
     );
     expect(popover?.textContent).toContain("Appearance");
-    expect(popover?.textContent).toContain("Follow system · Ink Green");
+    expect(popover?.textContent).toContain("Follow system · Dream Blossom");
     expect(popover?.textContent).toContain("Theme");
-    expect(popover?.textContent).toContain("Color");
+    expect(popover?.textContent).toContain("Skin");
     expect(popover?.textContent).toContain("Light");
     expect(popover?.textContent).toContain("Dark");
     expect(popover?.textContent).toContain("Follow system");
     expect(popover?.textContent).toContain("Random");
-    expect(popover?.textContent).toContain("Ocean");
+    expect(popover?.textContent).toContain("Ultraman Guardian");
     expect(
       container.querySelector('button[aria-label="Switch theme to Dark"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector(
-        'button[aria-label="Switch color scheme to Ocean"]',
-      ),
+      container.querySelector('button[aria-label="Switch skin to Ultraman Guardian"]'),
     ).not.toBeNull();
   });
 
-  it("外观弹层的随机配色应持久化到一个真实预设", async () => {
+  it("外观弹层的随机皮肤应持久化到一个真实预设", async () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
 
     try {
@@ -402,20 +402,19 @@ describe("AppSidebar preferences", () => {
 
       await act(async () => {
         container
-          .querySelector<HTMLButtonElement>('button[aria-label="随机切换配色"]')
+          .querySelector<HTMLButtonElement>('button[aria-label="随机切换皮肤"]')
           ?.click();
         await Promise.resolve();
       });
 
       expect(localStorage.getItem(LIME_COLOR_SCHEME_STORAGE_KEY)).toBe(
-        "lime-forest",
+        "lime-classic",
       );
       expect(document.documentElement.dataset.limeColorScheme).toBe(
-        "lime-forest",
+        "lime-classic",
       );
     } finally {
       randomSpy.mockRestore();
     }
   });
-
 });

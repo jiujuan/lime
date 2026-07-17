@@ -121,3 +121,68 @@ fn missing_tool_call_ids_are_unique_and_structured_output_is_preserved() {
     );
     assert_eq!(completed["item"]["payload"]["output"]["text"], "first");
 }
+
+#[test]
+fn imported_structured_tool_output_is_reduced_to_historical_summary() {
+    let mut terminal = match tool_event(
+        CodexToolPhase::Completed,
+        Some("call-large-output"),
+        Some(json!({
+            "text": "Script completed\nOutput:\nready",
+            "structuredContent": [{"type": "input_text", "text": "large raw payload"}]
+        })),
+    ) {
+        CodexRolloutEvent::Tool(tool) => tool,
+        CodexRolloutEvent::Runtime { .. } => unreachable!(),
+    };
+    terminal.source.imported = true;
+    terminal.source.output_bytes = Some(42_000_000);
+
+    let lowered = project_rollout_events_to_canonical(
+        &[CodexRolloutEvent::Tool(terminal)],
+        "session-1",
+        "thread-1",
+        "turn-1",
+    );
+    let completed = lowered
+        .iter()
+        .find(|event| event.event_type() == "item.completed")
+        .and_then(CodexRolloutEvent::payload)
+        .expect("canonical completed item");
+    let output = &completed["item"]["payload"]["output"];
+    assert_eq!(output["text"], "Script completed\nOutput:\nready");
+    assert_eq!(output["structuredContent"], Value::Null);
+    assert_eq!(output["outputBytes"], Value::Null);
+}
+
+#[test]
+fn read_file_terminal_projects_a_file_changed_event_for_history_artifacts() {
+    let mut normalizer = CodexHistoryBuilder::new();
+    let start = CodexRolloutEvent::Tool(CodexToolCall {
+        phase: CodexToolPhase::Started,
+        call_id: Some("call-read".to_string()),
+        name: Some("read_file".to_string()),
+        arguments: Some(json!({ "path": "/workspace/docs/readme.md" })),
+        output: None,
+        source: CodexToolSource::default(),
+    });
+    let terminal = CodexRolloutEvent::Tool(CodexToolCall {
+        phase: CodexToolPhase::Completed,
+        call_id: Some("call-read".to_string()),
+        name: Some("read_file".to_string()),
+        arguments: Some(json!({ "path": "/workspace/docs/readme.md" })),
+        output: Some(json!("readme content")),
+        source: CodexToolSource::default(),
+    });
+
+    let mut events = normalizer.push(start);
+    events.extend(normalizer.push(terminal));
+
+    let file_event = events
+        .iter()
+        .find(|event| event.event_type() == "file.changed")
+        .expect("read_file should produce a history file artifact event");
+    let payload = file_event.payload().expect("file event payload");
+    assert_eq!(payload["path"], "/workspace/docs/readme.md");
+    assert_eq!(payload["content"], "readme content");
+}

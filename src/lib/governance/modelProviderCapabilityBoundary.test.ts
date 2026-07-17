@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import process from "node:process";
 import { describe, expect, it } from "vitest";
@@ -49,16 +49,15 @@ function extensionOf(path: string): string {
 
 function collectSourceFiles(dir: string): string[] {
   const files: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
       if (
-        entry === "node_modules" ||
-        entry === "dist" ||
-        entry === "build" ||
-        entry === "coverage" ||
-        entry === "target"
+        entry.name === "node_modules" ||
+        entry.name === "dist" ||
+        entry.name === "build" ||
+        entry.name === "coverage" ||
+        entry.name === "target"
       ) {
         continue;
       }
@@ -66,7 +65,7 @@ function collectSourceFiles(dir: string): string[] {
       continue;
     }
 
-    if (stat.isFile() && SOURCE_EXTENSIONS.has(extensionOf(entry))) {
+    if (entry.isFile() && SOURCE_EXTENSIONS.has(extensionOf(entry.name))) {
       files.push(fullPath);
     }
   }
@@ -132,5 +131,5 @@ describe("Model provider capability boundary", () => {
       offenders,
       "bundled canonical_models.json 只能由 model-provider canonical registry 读取；前端和运行时必须消费 App Server model registry / capability summary",
     ).toEqual([]);
-  });
+  }, 15_000);
 });

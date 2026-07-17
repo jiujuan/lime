@@ -264,6 +264,7 @@ export function renderTimeline(
     focusRequestKey?: number;
     deferCompletedSingleDetails?: boolean;
     collapseInactiveDetails?: boolean;
+    showOperationalDetails?: boolean;
   },
 ): HTMLDivElement {
   const container = document.createElement("div");
@@ -287,6 +288,7 @@ export function renderTimeline(
         focusRequestKey={props?.focusRequestKey}
         deferCompletedSingleDetails={props?.deferCompletedSingleDetails}
         collapseInactiveDetails={props?.collapseInactiveDetails}
+        showOperationalDetails={props?.showOperationalDetails}
       />,
     );
   });

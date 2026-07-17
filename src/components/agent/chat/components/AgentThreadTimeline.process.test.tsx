@@ -64,6 +64,7 @@ describe("AgentThreadTimeline", () => {
       turn: {
         status: "completed",
       },
+      isCurrentTurn: true,
     });
 
     const block = container.querySelector<HTMLDetailsElement>(
@@ -91,6 +92,63 @@ describe("AgentThreadTimeline", () => {
     expect(toolRows[1]?.dataset.grouped).toBe("yes");
     expect(toolRows[1]?.dataset.groupMarker).toBe("·");
   });
+  it("超长过程展开后应分批挂载详情，同时保留全部 canonical 步骤", () => {
+    const items: AgentThreadItem[] = Array.from({ length: 70 }, (_, index) => ({
+      ...createBaseItem(`command-${index + 1}`, index + 1),
+      type: "command_execution",
+      command: `printf ${index + 1}`,
+      cwd: "/workspace/large-history",
+      aggregated_output: `output ${index + 1}`,
+      exit_code: 0,
+    }));
+    const container = renderTimeline(items, {
+      turn: { status: "completed" },
+      collapseInactiveDetails: true,
+      isCurrentTurn: true,
+    });
+    const block = container.querySelector<HTMLDetailsElement>(
+      '[data-testid="agent-thread-block:1:process"]',
+    );
+
+    expect(block?.open).toBe(false);
+    expect(
+      container.querySelectorAll('[data-testid="tool-call-item"]'),
+    ).toHaveLength(0);
+
+    act(() => {
+      block
+        ?.querySelector("summary")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(
+      container.querySelectorAll('[data-testid="tool-call-item"]'),
+    ).toHaveLength(24);
+    const showMore = container.querySelector<HTMLButtonElement>(
+      '[data-testid="agent-thread-block:1:process:show-more-details"]',
+    );
+    expect(showMore?.textContent).toContain("再显示 24 步");
+
+    act(() => {
+      showMore?.click();
+    });
+    expect(
+      container.querySelectorAll('[data-testid="tool-call-item"]'),
+    ).toHaveLength(48);
+
+    act(() => {
+      showMore?.click();
+    });
+    expect(
+      container.querySelectorAll('[data-testid="tool-call-item"]'),
+    ).toHaveLength(70);
+    expect(
+      container.querySelector(
+        '[data-testid="agent-thread-block:1:process:show-more-details"]',
+      ),
+    ).toBeNull();
+    expect(items).toHaveLength(70);
+  });
   it("历史非活跃过程即使残留运行中状态也应默认折叠明细", () => {
     const container = renderTimeline(
       [
@@ -116,6 +174,7 @@ describe("AgentThreadTimeline", () => {
           status: "completed",
         },
         collapseInactiveDetails: true,
+        showOperationalDetails: false,
       },
     );
 
@@ -130,7 +189,7 @@ describe("AgentThreadTimeline", () => {
     ).toHaveLength(0);
   });
 
-  it("本地历史完成态应与普通历史一样默认折叠并可展开", () => {
+  it("本地历史完成态应只保留过程摘要，不挂载运行期工具明细", () => {
     const container = renderTimeline(
       [
         {
@@ -162,6 +221,7 @@ describe("AgentThreadTimeline", () => {
           status: "completed",
         },
         collapseInactiveDetails: true,
+        showOperationalDetails: false,
       },
     );
 
@@ -170,17 +230,14 @@ describe("AgentThreadTimeline", () => {
     );
 
     expect(block?.open).toBe(false);
-    act(() => {
-      block
-        ?.querySelector("summary")
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(block?.open).toBe(true);
-    expect(container.textContent).toContain("npm test");
-    expect(container.textContent).toContain("Lime history import");
+    expect(block?.querySelector("summary")?.textContent).toContain("2 步");
+    expect(container.textContent).not.toContain("npm test");
+    expect(container.textContent).not.toContain("Exit code");
+    expect(container.textContent).not.toContain("search result summary");
+    expect(container.textContent).not.toContain("Lime history import");
     expect(
       container.querySelectorAll('[data-testid="tool-call-item"]'),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
   });
 
   it("本地历史过程摘要不应使用 imported-only 文案", async () => {

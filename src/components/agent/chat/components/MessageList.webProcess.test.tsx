@@ -105,7 +105,7 @@ describe("MessageList web process", () => {
     );
   });
 
-  it("历史 web_search timeline 应统一投影为同一回复内的网页搜索过程", () => {
+  it("历史 web_search timeline 应收拢为同一回复内的 compact 过程摘要", () => {
     const now = new Date("2026-06-02T09:00:10.000Z");
     const messages: Message[] = [
       {
@@ -205,28 +205,19 @@ describe("MessageList web process", () => {
       | undefined;
     const contentParts = call?.contentParts || [];
 
-    expect(contentParts.map((part) => part.type)).toEqual([
-      "text",
-      "tool_use",
-      "tool_use",
-      "text",
-    ]);
-    expect(contentParts[0]?.text).toContain("我先联网核实今天的国际新闻");
-    expect(contentParts[1]?.toolCall?.name).toBe("web_search");
-    expect(contentParts[1]?.toolCall?.arguments).toContain(
-      "today international news",
-    );
-    expect(contentParts[2]?.toolCall?.name).toBe("web_search");
-    expect(contentParts[2]?.toolCall?.arguments).toContain("openPage");
-    expect(contentParts[3]?.text).toContain("国际新闻简报");
-    expect(contentParts[3]?.text).not.toContain("我先联网核实今天的国际新闻");
+    expect(contentParts.map((part) => part.type)).toEqual(["text"]);
+    expect(contentParts[0]?.text).toContain("国际新闻简报");
+    expect(contentParts[0]?.text).not.toContain("我先联网核实今天的国际新闻");
     expect(call?.rawContent).toContain("国际新闻简报");
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
   });
 
-  it("内联高层工具过程不应吞掉不同工具名的底层执行轨迹", () => {
+  it("完成态内联高层工具与底层执行轨迹应统一收拢为 compact 摘要", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -255,7 +246,7 @@ describe("MessageList web process", () => {
       },
     ];
 
-    render(messages, {
+    const container = render(messages, {
       currentTurnId: "turn-service-tool",
       turns: [
         {
@@ -299,24 +290,21 @@ describe("MessageList web process", () => {
       ],
     });
 
-    const rendererCall = findStreamingRendererCallByContent(
-      "文章已经保存到项目。",
-    );
+    const rendererCall =
+      findStreamingRendererCallByContent("文章已经保存到项目。");
     const toolNames = (rendererCall?.contentParts || [])
       .filter(isMockToolUsePart)
       .map((part) => part.toolCall.name);
-    expect(toolNames).toEqual(["lime_run_service_skill"]);
-
-    const timelineCall = mockAgentThreadTimeline.mock.calls.find(
-      ([props]) => props.turn?.id === "turn-service-tool",
-    )?.[0];
-    const timelineToolNames = (timelineCall?.items || [])
-      .filter((item) => item.type === "tool_call")
-      .map((item) => item.tool_name);
-    expect(timelineToolNames).toEqual(["Read", "Write"]);
+    expect(toolNames).toEqual([]);
+    expect(
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
   });
 
-  it("完成态 timeline 只有计划时应保留内联执行轨迹但不重复渲染计划卡", () => {
+  it("完成态 timeline 只有计划时应保留 compact 计划摘要而不重复渲染计划卡", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -368,26 +356,21 @@ describe("MessageList web process", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:trailing"]',
+      ),
     ).toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
         renderProposedPlanBlocks: false,
         thinkingContent: undefined,
-        contentParts: [
-          {
-            type: "thinking",
-            text: "先对照用户截图，再确认 thread item 是否有重复来源。",
-          },
-          {
-            type: "text",
-            text: "<proposed_plan>\n1. 合并 assistant turn\n2. 收拢补充 timeline\n</proposed_plan>",
-          },
-          { type: "text", text: "已经整理完执行思路。" },
-        ],
+        contentParts: [{ type: "text", text: "已经整理完执行思路。" }],
       }),
     );
   });
@@ -414,5 +397,4 @@ describe("MessageList web process", () => {
       }),
     );
   });
-
 });

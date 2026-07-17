@@ -45,6 +45,15 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("clickSidebarImport");
     expect(content).toContain("waitForImportPreview");
     expect(content).toContain("confirmImport");
+    expect(content).toContain("app-sidebar-conversation-import-close");
+    expect(content).toContain("app-sidebar-conversation-import-progress");
+    expect(content).toContain("重新打开导入弹窗后未附着后台 job");
+    expect(content).toContain("backgroundImportResume");
+    expect(content).toContain("commitRequestCount");
+    expect(content).toContain("jobReadRequestCount");
+    expect(content).toContain("BACKGROUND_IMPORT_FILLER_COMMAND_COUNT");
+    expect(content).toContain("filePreviewStartIndex");
+    expect(content).toContain("click-through fixture is missing call_read_md");
     expect(content).toContain("sendFollowUpFromGui");
   });
 
@@ -73,13 +82,13 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("| 场景 | 过程 | 正文 |");
     expect(content).toContain("bodyText.includes(importedReasoningText)");
     expect(content).toContain("hasReasoningItem");
-    expect(content).toContain("hasReasoningVisible");
-    expect(content).toContain("hasCommandExecutionVisible");
+    expect(content).toContain("hasHistoricalReasoningVisible");
+    expect(content).toContain("hasHistoricalCommandExecutionVisible");
     expect(content).toContain("hasCommandOutput");
     expect(content).toContain('bodyText.includes("npm test")');
     expect(content).toContain("hasCommandText");
     expect(content).toContain("hasPatchText");
-    expect(content).toContain("hasSearchEvidence");
+    expect(content).toContain("hasSearchItem");
     expect(content).toContain("IMPORTED_WEB_SEARCH_TITLE");
     expect(content).toContain("IMPORTED_WEB_SEARCH_SOURCE_LABEL");
     expect(content).toContain("IMPORTED_WEB_SEARCH_URL");
@@ -88,7 +97,7 @@ describe("codex import click-through Electron fixture smoke guard", () => {
       "https://example.com/lime-codex-import-rendering",
     );
     expect(content).toContain("Yahoo Scout");
-    expect(content).toContain("hasApprovalText");
+    expect(content).toContain("hasHistoricalApprovalText");
     expect(content).toContain('bodyText.includes("权限记录")');
     expect(content).toContain("IMPORTED_ATTACHMENT_DATA_URL");
     expect(content).toContain("inspectImportedAttachmentPreview");
@@ -113,6 +122,8 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("call_read_xlsx");
     expect(content).toContain("call_read_pptx");
     expect(content).toContain("waitForTimelineToolFileButton");
+    expect(content).toContain('expected.kind !== "html"');
+    expect(content).toContain('expected.kind !== "system_open"');
     expect(content).toContain("tool-call-row");
     expect(content).toContain("timeline-tool");
     expect(content).not.toContain("inline-tool-open-file");
@@ -128,19 +139,18 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("summarizeImportedFilePreviewArtifacts");
   });
 
-  it("asserts imported Markdown and WebSearch render through the current canonical timeline", () => {
+  it("asserts historical Markdown stays visible while operational details stay folded", () => {
     const content = readSmokeSurface();
 
     expect(content).toContain("inspectImportedMarkdownAndSearchRendering");
     expect(content).toContain("importedMarkdownAndSearchRenderingSummary");
-    expect(content).toContain("expandImportedSearchToolResult");
+    expect(content).toContain("inspectImportedHistoricalTimelineSummary");
+    expect(content).toContain("operationalDetailRowCount");
     expect(content).toContain("markdownHeadingVisible");
     expect(content).toContain("markdownStrongVisible");
     expect(content).toContain("markdownTableVisible");
     expect(content).toContain("rawMarkdownVisible");
-    expect(content).toContain("hasImportedSearchResult");
-    expect(content).toContain("searchTimelineVisible");
-    expect(content).toContain("searchQueryVisible");
+    expect(content).toContain("historicalOperationalDetailsHidden");
     expect(content).toContain("searchNoiseVisible");
     expect(content).toContain("hasFullSearchUrlVisible");
     expect(content).toContain("markdown-table-scroll");
@@ -151,9 +161,8 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("导入 Markdown 加粗未渲染为 strong");
     expect(content).toContain("导入 Markdown 表格未渲染为 table");
     expect(content).toContain("导入正文暴露了原始 Markdown 语法");
-    expect(content).toContain("导入搜索结果未展示有效来源");
-    expect(content).toContain("导入搜索过程未进入 canonical timeline");
-    expect(content).toContain("导入搜索过程未展示真实 query");
+    expect(content).toContain("导入历史铺开了运行期工具明细");
+    expect(content).toContain("视口铺开了历史运行期工具明细");
     expect(content).toContain("导入搜索结果暴露了搜索导航噪音");
     expect(content).toContain("导入搜索结果暴露了完整 URL");
   });
@@ -203,7 +212,8 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain(
       'String(item?.command || "").includes("npm test")',
     );
-    expect(content).not.toContain('!bodyText.includes("npm test")');
+    expect(content).toContain("hasHistoricalCommandExecutionVisible");
+    expect(content).toContain("historicalOperationalDetailsHidden");
     expect(content).not.toContain('"npm test",\n      "thread-codex"');
   });
 

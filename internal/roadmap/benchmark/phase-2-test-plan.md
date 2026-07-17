@@ -1,6 +1,6 @@
 # 第二期测试实施计划
 
-> status: active / T7 + LIV-03 multimodal and T9 runtime budgets closed; scoring/platform blocked
+> status: active / EVAL-01 Agnes diagnostic evidence collected; gpt-5.5 attribution pass; scoring and full platform RC blocked
 > owner: quality-workflow
 > started: 2026-07-15
 > target: Refactor v2 current chain
@@ -117,6 +117,12 @@ TestRuntimeBuilder
 
 Rust CI 在测试量和平台矩阵稳定后可引入 `cargo nextest` archive/shard；它是执行加速器，不改变测试 owner、场景定义或本地 related-first 规则。
 
+Windows RC 的 current 入口是 `scripts/electron/windows-squirrel-rc-smoke.mjs`，由手工 Windows package workflow 和 release Windows matrix 共用。单版本模式运行精确 Forge Squirrel Setup、验证 install root/shortcut，并让 installed `Lime.exe` 复用 `SHELL-01`；N-1 模式必须从低于候选的最近稳定 GitHub Release 安装旧版，经真实 preload/IPC/current updater 从隔离 `RELEASES + full.nupkg` feed 下载并进入 restarting，观察候选 `app-<version>/Lime.exe` 落盘后再跑候选 `SHELL-01`。summary 只有 N-1 version/install、feed request、downloaded terminal、install request 与 candidate path 六项全真才可写 `passed`；单版本安装不得冒充 N-1 receipt，任一模式都不得冒充 `SOAK-01`。
+
+macOS 本地 packaged current 入口是 `forge.config.mjs -> electron-forge package -> scripts/electron/verify-package-resources.mjs -> packaged SHELL-01`。本地无 Developer ID 时必须生成完整 ad-hoc sealed-resource signature，所有 per-file option 均关闭 hardened runtime 并禁用 timestamp；正式 signing 路径仍必须启用 hardened runtime、runtime signature flag 和后续 notarization。`codesign --verify --deep --strict`、Helper/sidecar flags 与 packaged Gate B 缺一不可。该本地闭环不能冒充 Developer ID、notarization、DMG 安装或 N-1 update receipt。
+
+SOAK-01 先用 current controlled provider 做短校准，证明 repeated turns、cancel/continue terminal、read model 与 Electron restart oracle 能发现实现漂移；再在冻结候选上复跑。稳定入口为 `npm run smoke:agent-runtime-soak-current-fixture`。完整 receipt 必须在同一 Electron/App Server 生命周期记录逐轮 Thread/Turn/Item 数量、唯一 terminal、Electron/App Server PID 与 RSS 趋势，并至少执行两次 cold restart；独立启动多次且每次清空 app data 只能证明 cleanup 基线，不能证明长生命周期无泄漏。2026-07-17 修后 `10 rounds x 2 cold restarts` receipt 已满足本地实现合同：每轮唯一 completed turn、Thread/Turn/Item identity 在两次重启后稳定，RSS 在预算内，旧/最终进程树全部退出。fixture 只清 idle connection，active provider request 必须由 current `model-provider` 在 terminal 前释放；冻结 RC 仍须重跑，但不再扩建平行 SOAK runner。
+
 ## 8. 退役账本
 
 2026-07-15 已删除：
@@ -127,15 +133,26 @@ Rust CI 在测试量和平台矩阵稳定后可引入 `cargo nextest` archive/sh
 - `agent-qc:benchmark*` / `agent-qc:benchmark-release*` npm 入口；
 - 旧 dataset selection、version test plan、progress；
 - 不对应真实代码 owner 的三份伪代码 test-case 指南。
+- 仍把 `agent-qc:benchmark:plan/compare` 和旧 manifest 当作 current 的专用 flag differential research 页；关联导航、进度记录和方案稿已收敛到第二期 Benchmark 事实源。
 
 禁止恢复同名 wrapper。未来若需要聚合器，必须消费第二期机器可读场景结果，且放入已有测试领域目录，不在 `scripts/` 根或 `agent-qc` 下重建平行事实源。
 
 DeepSWE 数据集不属于退役 surface。新的选题与执行合同见 [deepswe-coding-slice.md](./deepswe-coding-slice.md)；旧 runner 删除是为了防止 dry-run 结果冒充真实 Lime coding score。
 
-本地 `.lime/benchmark/runs` 中 45 个旧 runner 产物已于 2026-07-15 删除；固定 source cache 保留给 current adapter。随后 9 个已被回归覆盖的 bring-up run 和两条诊断 run 内的仓库内 clone 也已删除，只保留当前有效 JSON/patch evidence。T9 的 source preflight、adapter v4、provider step/token/usage、真实 request tool catalog、runtime step/token cap、wall-timeout terminal cleanup 和 TS/Go/Rust 诊断 true run 已完成；Pier separate verifier 因 Agnes 无 candidate 且本机无容器运行时仍阻塞。
+本地 `.lime/benchmark/runs` 中 45 个旧 runner 产物已于 2026-07-15 删除；固定 source cache 保留给 current adapter。随后 9 个已被回归覆盖的 bring-up run 和两条诊断 run 内的仓库内 clone 也已删除，只保留当前有效 JSON/patch evidence。T9 的 source preflight、adapter v5、provider step/token/usage、真实 request tool catalog、runtime step/token cap、generation diagnostics、wall-timeout terminal cleanup 和 TS/Go/Rust 诊断 true run 已完成；Agnes thinking on/off 及 Smoke 10 短题对照仍为 0-byte patch。DSW-06 最小写入探针已通过，确认 `apply_patch` schema 合同和 patch lifecycle 正常，并补上 provider step exhaustion 误分类守卫。Pier separate verifier 因无 candidate、本地 editable package 失效且本机无容器运行时仍阻塞。
 
 ## 9. 当前下一刀
 
-T7 已证明 inline 图片 sidecar 持久化、provider-only hydrate、历史恢复、text-only capability 和 provider failure 语义。PRV-05、CTX-01 与 CTX-02 已分别关闭错误重试集合、provider history batch/completed 丢失和 compaction 后仍发送完整旧前缀。PRV-06 已从公开 capture 证明旧实现 capability=true 仍只发 HTTP POST，并在 current owner 落地显式 capability、session client、真实 Responses WebSocket、串行连接复用和 sticky HTTP fallback。扩大门禁继续发现 TS client capability 丢失、App Server dispatcher 默认栈溢出和 stdio 非 turn request head-of-line blocking；current owner 修复后 App Server 1175/1175、contracts 291 项与完整 Electron fixture 通过，短问候 text-delta-to-paint 为 25ms，预算未放宽。宿主门禁同时移除真实用户 zsh rc 和无界 Git 子进程对测试的污染。LIV-03 已用确定性 capture 证明 Agnes request 的图片、零工具面、128 token 上限与 thinking=false，再由 Agnes live completed turn 识别 apple/red。T9 已证明 provider idle timeout、workspace/base 隔离、App Server evidence、逐步 usage、真实 request tool catalog、runtime step/token budget 与 wall-timeout terminal cleanup 有效；Agnes coding 仍未产生 candidate，Pier 仍缺容器 runtime。下一刀处理 Windows/L8；DeepSWE 暂停重复只读 trial。
+T7、PRV-05/06、CTX-01/02、App Server transport 与 LIV-03 已关闭。T9 的完整题目仍无 candidate 且 Pier package/container blocked；最新 Agnes/gpt-5.5 happy-dom 对照及 Agnes superjson 短题复测均保持 0-byte patch，未发现新的 Lime owner 缺陷，因此不计入 score，也不继续无差别刷题。DSW-06 最小写入探针已证明 Lime current `apply_patch` 写链可用，并关闭了 schema 歧义与 provider-step 完成态误分类。T11 已关闭 macOS 本地 package 的外层签名、ad-hoc hardened runtime 和 packaged smoke launcher 三项缺陷；fresh package 严格签名与真实 Gate B 通过。SOAK-01 同生命周期校准发现并关闭 Host 2 秒 turn admission、历史 operational details 永久隐藏，以及三种 SSE terminal 延迟释放 HTTP body 的产品缺陷；修后 10x2 receipt 全绿。Windows N-1 runner 又发现并关闭重复 `checkForUpdates`/`quitAndInstall` 竞态，手工 Windows workflow 的 dead `package-lock.json + npm ci` 也已删除；N-1 current updater、候选 feed 与 packaged SHELL-01 已接入，但真实 Windows receipt 和 macOS 正式签名/notarization/DMG 尚未完成。EVAL-01 的 sidebar identity 已关闭；无 watcher Agnes 复核无 WebSearch/WebFetch tool event，而固定 gpt-5.5 在同一 Host 完整通过，故保持 `current / diagnostic`，不冻结 Agnes baseline。下一刀运行 L8 平台实证并等待 Agnes 路由/模型行为变化后再恢复 EVAL-01 scoring，不能用本地确定性 runner 绿灯冒充平台 RC。
 
 测试体系基线为 `100%`；按 T0-T11 退出条件计算，第二期实现整体完成度为 `80%`。
+
+## 10. EVAL-01 首次真实 Gate B 归因（2026-07-17）
+
+- 场景入口：`npm run smoke:claw-chat-ready-streaming -- --provider-preference custom-637ea2d5-e430-43de-86de-39c5f1735438 --model-preference agnes-2.0-flash --timeout-ms 240000 --prefix phase2-eval01-agnes-stable`。
+- 真实链路：Chromium GUI -> DevBridge `electron-host` -> Electron Desktop Host -> App Server JSON-RPC -> RuntimeCore/provider -> Thread/Turn/Item/read model；不是 fixture、不是 renderer mock、不是 App Server mock backend。
+- 首次失败归因：恢复 turn 已在 App Server/read model 完成，但 sidebar 在发送热路径延迟刷新期间没有新 session identity，标题回退把重复的旧“E2E 中断测试：请输出 80 行。”会话当成目标；同时 helper 原先没有稳定 DOM identity。该失败属于 current GUI/session navigation owner 与测试观察层的真实缺口，已修复。
+- current 修复：`useAppSidebarSessions` 在 `reason=created` 时立即加入带 id 的“未命名对话”占位项；`AppSidebarConversationRow` 投影 `data-session-id`；smoke 只按 id 定位并在短窗口重试，不再按标题猜会话。sidebar 相关 5 项定向回归通过。
+- 修复后观察：sidebar identity 已关闭。无 watcher 的 3030 Host 下，Agnes 两次复核均完成长流、中断、同 session recovery，但 WebSearch/WebFetch 无 tool event，120 秒后由 public cancel 收敛；固定 gpt-5.5 对照在同一 Host 完整 `pass`，无 mock/阻塞 console error。EVAL-01 仍为 `current / diagnostic`，不能写 Agnes pass@k 或 score。
+- 观察器修复：首次空任务 turn 的 provider/model 可能位于 `metadata.harness.model_request_policy` 而非顶层 runtimeRequest；smoke 已按 policy 读取并记录来源，避免把合法 session-default routing 判成失败。
+- 退出条件：只有 Agnes 在隔离 Host 中同一 session 同时满足 WebSearch/WebFetch tool started/result、terminal event、read-after-event、GUI 正文和无 blocking error，才冻结 EVAL-01 baseline。gpt-5.5 仅作 Lime/provider 归因对照，不替代 Agnes baseline。

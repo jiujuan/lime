@@ -629,10 +629,12 @@ fn tool_output(tool: &CodexToolCall, failed: bool) -> Value {
     if let Some(text) = text {
         output.insert("text".to_string(), Value::String(text));
     }
-    if let Some(structured_content) = structured_content {
-        output.insert("structuredContent".to_string(), structured_content);
-    } else if let Some(raw_output) = raw_output.filter(|value| !value.is_string()) {
-        output.insert("structuredContent".to_string(), raw_output);
+    if !tool.source.imported {
+        if let Some(structured_content) = structured_content {
+            output.insert("structuredContent".to_string(), structured_content);
+        } else if let Some(raw_output) = raw_output.filter(|value| !value.is_string()) {
+            output.insert("structuredContent".to_string(), raw_output);
+        }
     }
     if let Some(error) = error {
         output.insert("error".to_string(), Value::String(error));

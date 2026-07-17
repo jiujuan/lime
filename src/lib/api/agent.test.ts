@@ -527,11 +527,12 @@ describe("Agent API 治理护栏", () => {
           status: "running",
         },
       ],
-      detail: {
-        thread_read: {
-          thread_id: "thread-runtime",
-          status: "blocked",
-          queued_turns: [
+        detail: {
+          thread_read: {
+            thread_id: "thread-runtime",
+            status: "blocked",
+            active_turn_id: "turn-runtime",
+            queued_turns: [
             {
               queued_turn_id: "queued-turn-1",
               message_preview: "继续执行",

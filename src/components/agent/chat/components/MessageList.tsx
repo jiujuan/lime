@@ -1,7 +1,11 @@
 import React, { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { MessageListContainer, MessageListFrame } from "../styles";
+import {
+  MessageListContainer,
+  MessageListFrame,
+  MessageTurnGroup,
+} from "../styles";
 import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
 import type { Message } from "../types";
 import { MessageListItem } from "./MessageListItem";
@@ -85,9 +89,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
     expandedHistoricalAssistantMessageIds,
     setExpandedHistoricalAssistantMessageIds,
   ] = useState<Set<string>>(() => new Set());
-  const [expandedHistoricalTimelineKeys, setExpandedHistoricalTimelineKeys] =
-    useState<Set<string>>(() => new Set());
-
   const scrollController = useMessageListScrollController();
   const renderWindow = useMessageListRenderWindow({
     isSending,
@@ -100,7 +101,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
     activePendingA2UISource,
     canonicalChildren,
     currentTurnId,
-    expandedHistoricalTimelineKeys,
     focusedTimelineItemId,
     hiddenHistoryCount: renderWindow.hiddenHistoryCount,
     isRestoredHistoryWindow: renderWindow.isRestoredHistoryWindow,
@@ -204,18 +204,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
     },
     [],
   );
-  const handleExpandHistoricalTimeline = useCallback((timelineKey: string) => {
-    setExpandedHistoricalTimelineKeys((current) => {
-      if (current.has(timelineKey)) {
-        return current;
-      }
-
-      const next = new Set(current);
-      next.add(timelineKey);
-      return next;
-    });
-  }, []);
-
   const handleCopy = useCallback(
     async (content: string, id: string) => {
       try {
@@ -254,7 +242,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
         expandedHistoricalAssistantMessageIds={
           expandedHistoricalAssistantMessageIds
         }
-        expandedHistoricalTimelineKeys={expandedHistoricalTimelineKeys}
         expandedLongHistoricalMessageIds={expandedLongHistoricalMessageIds}
         focusedTimelineItemId={focusedTimelineItemId}
         hasActiveInteractiveRuntime={timelineState.hasActiveInteractiveRuntime}
@@ -280,7 +267,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
         handleExpandHistoricalAssistantMessage={
           handleExpandHistoricalAssistantMessage
         }
-        handleExpandHistoricalTimeline={handleExpandHistoricalTimeline}
         handleExpandLongHistoricalMessage={handleExpandLongHistoricalMessage}
         onA2UIFormChange={onA2UIFormChange}
         onA2UISubmit={onA2UISubmit}
@@ -309,12 +295,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
       compactLeadingSpacing,
       copiedId,
       expandedHistoricalAssistantMessageIds,
-      expandedHistoricalTimelineKeys,
       expandedLongHistoricalMessageIds,
       focusedTimelineItemId,
       handleCopy,
       handleExpandHistoricalAssistantMessage,
-      handleExpandHistoricalTimeline,
       handleExpandLongHistoricalMessage,
       historicalHydration.shouldDeferHistoricalAssistantMessageDetails,
       isSending,
@@ -421,14 +405,23 @@ const MessageListInner: React.FC<MessageListProps> = ({
               )?.status ||
               "";
             return (
-              <section
+              <MessageTurnGroup
                 key={group.id}
+                $deferOffscreenWork={
+                  groupIndex < timelineState.renderGroups.length - 2 &&
+                  groupRuntimeTurnStatus !== "running"
+                }
                 data-testid="message-turn-group"
                 data-group-index={groupIndex + 1}
                 data-runtime-turn-id={groupRuntimeTurnId}
                 data-runtime-turn-status={groupRuntimeTurnStatus}
                 data-last-assistant-message-id={group.lastAssistantId || ""}
                 data-timeline-message-id={group.timelineMessageId || ""}
+                data-render-priority={
+                  groupIndex < timelineState.renderGroups.length - 2
+                    ? "offscreen-deferred"
+                    : "tail"
+                }
                 className="py-2"
               >
                 <div className="space-y-1">
@@ -444,7 +437,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     />
                   ))}
                 </div>
-              </section>
+              </MessageTurnGroup>
             );
           })}
           {trailingContent ? (

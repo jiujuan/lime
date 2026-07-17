@@ -16,7 +16,123 @@ function buildTimelineProjection(
 }
 
 describe("messageListItemProjection timeline", () => {
-  it("已完成长过程应在折叠态只显示 final，展开后恢复 commentary 与 canonical 过程", () => {
+  it("已完成回合隐藏工具细节时仍保留媒体引用卡片", () => {
+    const turnId = "turn-completed-media-reference";
+    const message: Message = {
+      id: "assistant-completed-media-reference",
+      role: "assistant",
+      content: "媒体引用已进入对话。",
+      timestamp: new Date("2026-07-16T10:01:00.000Z"),
+      contentParts: [
+        {
+          type: "text",
+          text: "媒体引用已进入对话。",
+          metadata: { phase: "final_answer", turnId },
+        },
+        {
+          type: "media_reference",
+          reference: {
+            kind: "image",
+            uri: "sidecar://media/fixture-image-1",
+            mimeType: "image/png",
+            caption: "结果图",
+          },
+          metadata: { turnId },
+        },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "media-tool",
+            name: "media_probe",
+            arguments: "{}",
+            status: "completed",
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-07-16T10:00:01.000Z"),
+            endTime: new Date("2026-07-16T10:00:02.000Z"),
+          },
+          metadata: { turnId },
+        },
+      ],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "canonical-media-tool",
+          type: "tool_call",
+          thread_id: "thread-completed-media-reference",
+          turn_id: turnId,
+          sequence: 1,
+          tool_name: "media_probe",
+          arguments: {},
+          output: "ok",
+          success: true,
+          status: "completed",
+          started_at: "2026-07-16T10:00:01.000Z",
+          completed_at: "2026-07-16T10:00:02.000Z",
+          updated_at: "2026-07-16T10:00:02.000Z",
+        },
+      ],
+      {
+        turnId,
+        turnStatus: "completed",
+        isSending: false,
+      },
+    );
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "media_reference",
+    ]);
+    expect(
+      projection.rendererContentParts?.some((part) => part.type === "tool_use"),
+    ).toBe(false);
+  });
+
+  it("同一终态 turn 的非 timeline owner assistant 也隐藏运行期工具明细", () => {
+    const turnId = "turn-completed-non-owner-process";
+    const message = {
+      id: "assistant-process-fragment",
+      role: "assistant" as const,
+      content: "已完成修复。",
+      runtimeTurnId: turnId,
+      timestamp: new Date("2026-07-16T10:01:00.000Z"),
+      contentParts: [
+        {
+          type: "tool_use" as const,
+          toolCall: {
+            id: "historical-tool",
+            name: "exec_command",
+            arguments: "{}",
+            status: "completed" as const,
+            result: { success: true, output: "ok" },
+            startTime: new Date("2026-07-16T10:00:01.000Z"),
+            endTime: new Date("2026-07-16T10:00:02.000Z"),
+          },
+        },
+        { type: "text" as const, text: "已完成修复。" },
+      ],
+    } satisfies Message;
+
+    const projection = buildProjection(message, [], {
+      turnId,
+      turnStatus: "completed",
+      isSending: false,
+      lastAssistantId: "assistant-final-owner",
+      timelineMessageId: "assistant-final-owner",
+    });
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "text",
+    ]);
+    expect(
+      projection.rendererContentParts?.some((part) => part.type === "tool_use"),
+    ).toBe(false);
+    expect(projection.actionContent).toBe("已完成修复。");
+  });
+
+  it("已完成长过程应只投影 final 与不可交互的 canonical 过程摘要", () => {
     const turnId = "turn-completed-compact-process";
     const commentary = "我先核对当前 tracker，再给出结论。";
     const finalAnswer = "核对完成，当前实现已经对齐。";
@@ -83,21 +199,6 @@ describe("messageListItemProjection timeline", () => {
       "text",
     ]);
     expect(collapsed.actionContent).toBe(finalAnswer);
-
-    const expanded = buildProjection(message, timelineItems, {
-      turnId,
-      turnStatus: "completed",
-      isSending: false,
-      expandHistoricalTimeline: true,
-    });
-
-    expect(expanded.shouldRenderCompactPrimaryTimeline).toBe(false);
-    expect(expanded.primaryTimeline?.items).toHaveLength(10);
-    expect(expanded.rendererContentParts?.map((part) => part.type)).toEqual([
-      "text",
-      "text",
-    ]);
-    expect(expanded.actionContent).toBe(`${commentary}\n\n${finalAnswer}`);
   });
 
   it("canonical compact 在历史细节延迟时仍应保留同一 turn 的全部 final", () => {
@@ -239,32 +340,25 @@ describe("messageListItemProjection timeline", () => {
       },
     ];
 
-    for (const expandHistoricalTimeline of [false, true]) {
-      const projection = buildProjection(message, timelineItems, {
-        turnId,
-        turnStatus: "canceled",
-        isSending: false,
-        expandHistoricalTimeline,
-      });
+    const projection = buildProjection(message, timelineItems, {
+      turnId,
+      turnStatus: "canceled",
+      isSending: false,
+    });
 
-      expect(projection.rendererContentParts?.map((part) => part.type)).toEqual(
-        expandHistoricalTimeline ? ["text", "text"] : ["text"],
-      );
-      expect(projection.actionContent).toBe(
-        expandHistoricalTimeline
-          ? `${commentary}\n\n${finalAnswer}`
-          : finalAnswer,
-      );
-      expect(
-        projection.rendererContentParts?.some(
-          (part) => part.type === "thinking" || part.type === "tool_use",
-        ),
-      ).toBe(false);
-      expect(projection.primaryTimeline?.items).toHaveLength(10);
-    }
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "text",
+    ]);
+    expect(projection.actionContent).toBe(finalAnswer);
+    expect(
+      projection.rendererContentParts?.some(
+        (part) => part.type === "thinking" || part.type === "tool_use",
+      ),
+    ).toBe(false);
+    expect(projection.primaryTimeline?.items).toHaveLength(10);
   });
 
-  it("展开态应按 canonical identity 保留同文 agent messages", () => {
+  it("历史态应隐藏同文 commentary，只保留 final answer", () => {
     const turnId = "turn-repeated-agent-messages";
     const repeatedText = "继续检查。";
     const finalAnswer = "检查完成。";
@@ -322,23 +416,13 @@ describe("messageListItemProjection timeline", () => {
         turnId,
         turnStatus: "completed",
         isSending: false,
-        expandHistoricalTimeline: true,
       },
     );
 
     const textParts = (projection.rendererContentParts || []).filter(
       (part) => part.type === "text",
     );
-    expect(textParts.map((part) => part.text)).toEqual([
-      repeatedText,
-      repeatedText,
-      finalAnswer,
-    ]);
-    expect(textParts.map((part) => part.metadata?.threadItemId)).toEqual([
-      "commentary-1",
-      "commentary-2",
-      "final-1",
-    ]);
+    expect(textParts.map((part) => part.text)).toEqual([finalAnswer]);
   });
 
   it("running process 中的无 phase streaming overlay 不应作为孤立正文显示", () => {
@@ -497,7 +581,7 @@ describe("messageListItemProjection timeline", () => {
     expect(projection.actionContent).toContain("要求我帮忙整理今天的国际新闻");
   });
 
-  it("timeline 中的 commentary 首句应保留在工具过程之前，且不污染最终正文", () => {
+  it("已完成 timeline 应隐藏 commentary 与工具过程，只保留最终正文", () => {
     const message: Message = {
       id: "assistant-commentary-process",
       role: "assistant",
@@ -551,27 +635,16 @@ describe("messageListItemProjection timeline", () => {
     ]);
 
     const parts = projection.rendererContentParts || [];
-    expect(parts.map((part) => part.type)).toEqual([
-      "text",
-      "tool_use",
-      "text",
-    ]);
+    expect(parts.map((part) => part.type)).toEqual(["text"]);
     expect(parts[0]?.type === "text" ? parts[0].text : "").toBe(
-      "我来帮你分析这个项目的改进空间。先让我了解一下项目结构和关键文件。",
-    );
-    expect(parts[0]?.type === "text" ? parts[0].metadata : {}).toMatchObject({
-      phase: "commentary",
-      source: "agent_thread_item",
-      threadItemId: "assistant-commentary-intro",
-      turnId: "turn-commentary-process-final",
-      sequence: 1,
-    });
-    expect(parts[1]?.type === "tool_use" ? parts[1].toolCall.id : "").toBe(
-      "command-list-project",
-    );
-    expect(parts[2]?.type === "text" ? parts[2].text : "").toBe(
       "我已经看完关键文件，下面是改进建议。",
     );
+    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(true);
+    expect(
+      projection.primaryTimeline?.items.some(
+        (item) => item.id === "command-list-project",
+      ),
+    ).toBe(true);
     expect(projection.actionContent).toBe(
       "我已经看完关键文件，下面是改进建议。",
     );
@@ -684,7 +757,7 @@ describe("messageListItemProjection timeline", () => {
     expect(projection.trailingTimeline).toBeNull();
   });
 
-  it("reasoning 已在 contentParts 中且 timeline 只有等价 reasoning 时不应再显示第二个思考卡片", () => {
+  it("已完成历史的等价 reasoning 应只保留 canonical 摘要，不进入正文", () => {
     const finalText = "你好。直接说事，我来处理，省得我们俩先拿空气开会。";
     const message: Message = {
       id: "assistant-cheeky-greeting-history",
@@ -737,11 +810,16 @@ describe("messageListItemProjection timeline", () => {
     );
 
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
-      "thinking",
       "text",
     ]);
     expect(projection.rendererThinkingContent).toBeUndefined();
-    expect(projection.primaryTimeline).toBeNull();
+    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(true);
+    expect(projection.primaryTimeline?.items).toEqual([
+      expect.objectContaining({
+        id: "reasoning-cheeky-greeting-timeline",
+        type: "reasoning",
+      }),
+    ]);
     expect(projection.trailingTimeline).toBeNull();
   });
 });

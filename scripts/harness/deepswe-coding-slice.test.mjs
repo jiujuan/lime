@@ -34,7 +34,7 @@ describe("DeepSWE coding slice v2", () => {
       "outside the Lime repository",
     );
     expect(manifest.executionContract).toMatchObject({
-      adapterVersion: "deepswe-current-chain-adapter-v4",
+      adapterVersion: "deepswe-current-chain-adapter-v5",
       primaryModel:
         "custom-637ea2d5-e430-43de-86de-39c5f1735438 / agnes-2.0-flash",
       comparisonModel: "custom-1ae93b42-e57f-4a83-ac6e-3f5275a7b376 / gpt-5.5",
@@ -72,7 +72,8 @@ describe("DeepSWE coding slice v2", () => {
     );
     expect(manifest.executionContract.currentBlockers).toEqual([
       "Agnes produced no candidate in TS/Go/Rust diagnostics, including runtime-capped runs with a complete provider tool catalog",
-      "Pier is installed but no local container runtime is available",
+      "The local Pier wrapper cannot import its deleted editable package source",
+      "No local Docker, Podman, nerdctl, or Colima container runtime is available",
     ]);
   });
 

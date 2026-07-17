@@ -328,6 +328,19 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "read-codex-import-job",
+              method: "conversationImport/job/read",
+              params: { jobId: "import-job-1" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-import");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "ui-runtime-start",
               method: "pluginUiRuntime/start",
               params: {

@@ -86,6 +86,7 @@ pub(super) fn openai_chat_sse(
         while let Some(frame) = frames.next().await {
             let frame = frame?;
             if frame.data.trim() == "[DONE]" {
+                drop(frames);
                 for id in state.text_ids.drain() {
                     yield LlmEvent::TextEnd { id };
                 }
@@ -452,11 +453,15 @@ pub(super) fn responses_sse(
             let payload: Value = serde_json::from_str(&frame.data)
                 .map_err(|error| CurrentProviderError::new(format!("解析 Responses SSE event 失败: {error}")))?;
             let batch = reducer.push(&payload)?;
+            if batch.terminal {
+                drop(frames);
+                for event in batch.events {
+                    yield event;
+                }
+                return;
+            }
             for event in batch.events {
                 yield event;
-            }
-            if batch.terminal {
-                return;
             }
         }
         for event in reducer.finish_incomplete() {
@@ -702,6 +707,7 @@ pub(super) fn anthropic_sse(
                     state.finish_reason = delta.stop_reason.as_deref().map(anthropic_finish_reason);
                 }
                 anthropic::AnthropicStreamEvent::MessageStop => {
+                    drop(frames);
                     for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
                     for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
                     yield LlmEvent::Finish {

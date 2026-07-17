@@ -1,15 +1,12 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { Sparkles } from "lucide-react";
 import styled, { keyframes } from "styled-components";
-import {
-  EMPTY_STATE_CARD_SURFACE_CLASSNAME,
-  EMPTY_STATE_ICON_TONE_CLASSNAMES,
-  type EmptyStateTone,
-} from "./emptyStateSurfaceTokens";
+import { useHomeSkinPresentation } from "./homeSkinPresentation";
 
 const heroReveal = keyframes`
   from {
     opacity: 0;
-    transform: translateY(20px) scale(0.994);
+    transform: translateY(14px) scale(0.996);
   }
   to {
     opacity: 1;
@@ -17,55 +14,13 @@ const heroReveal = keyframes`
   }
 `;
 
-const cardReveal = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
-
-const sloganShine = keyframes`
-  0% {
-    background-position: 250% center, 250% center, 0% 50%;
-  }
-  45% {
-    background-position: -50% center, -50% center, 100% 50%;
-  }
-  50% {
-    background-position: -50% center, -50% center, 100% 50%;
-  }
-  95% {
-    background-position: 250% center, 250% center, 0% 50%;
-  }
-  100% {
-    background-position: 250% center, 250% center, 0% 50%;
-  }
-`;
-
-const dotPulse = keyframes`
-  0%, 100% {
-    transform: scale(0.95);
-    opacity: 0.7;
-    filter: brightness(1);
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 1;
-    filter: brightness(1.2);
-  }
-`;
-
 const HeroSection = styled.section`
   position: relative;
   display: flex;
+  width: 100%;
+  min-width: 0;
   flex: 1 1 auto;
-  min-height: 100%;
-  overflow: visible;
-  animation: ${heroReveal} 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: ${heroReveal} 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
@@ -75,426 +30,400 @@ const HeroSection = styled.section`
 const HeroContent = styled.div`
   position: relative;
   display: flex;
-  flex: 1 1 auto;
-  min-height: clamp(620px, calc(100dvh - 168px), 900px);
-  flex-direction: column;
-  gap: 1.35rem;
-  padding: 0.45rem 0.55rem 0.85rem;
-
-  @media (min-width: 1024px) {
-    gap: 1.55rem;
-    padding: 0.5rem 0.7rem 1rem;
-  }
-
-  @media (max-height: 940px) {
-    gap: 0.625rem;
-  }
-`;
-
-const StageGrid = styled.div`
-  display: block;
-`;
-
-const LeadColumn = styled.div`
-  display: flex;
+  width: 100%;
   min-width: 0;
   flex-direction: column;
-  align-items: center;
-  gap: 0.56rem;
-  max-width: min(1100px, 100%);
+  gap: 0.65rem;
+  padding: 0 0.5rem 1rem;
+`;
+
+const ArtworkStage = styled.div`
+  position: relative;
+  isolation: isolate;
+  width: min(1180px, 100%);
+  min-height: 310px;
   margin: 0 auto;
-`;
+  overflow: hidden;
+  border: 1px solid
+    var(--home-hero-border, var(--lime-home-hero-border, #efc2d2));
+  border-radius: 24px;
+  background: var(
+    --home-hero-fallback,
+    var(--lime-home-hero-fallback, #fbe8ef)
+  );
+  box-shadow: var(
+    --home-hero-shadow,
+    0 28px 54px -42px rgba(91, 43, 62, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82)
+  );
 
-const LeadBlock = styled.div`
-  min-width: 0;
-  animation: ${cardReveal} 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  @media (min-width: 1280px) and (min-height: 900px) {
+    min-height: 340px;
+  }
 
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
+  @media (max-width: 760px) {
+    min-height: 270px;
+    border-radius: 18px;
+  }
+
+  @media (max-height: 780px) {
+    min-height: 250px;
   }
 `;
 
-const LeadTopRow = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  min-height: 0;
+const ArtworkImage = styled.img`
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: var(--home-hero-art-fit, cover);
+  object-position: var(--home-hero-art-position, 58% top);
+  filter: var(--home-hero-art-filter, none);
+  user-select: none;
+  pointer-events: none;
+
+  @media (max-width: 760px) {
+    object-position: var(
+      --home-hero-art-position-mobile,
+      var(--home-hero-art-position, 66% top)
+    );
+  }
 `;
 
-const LeadBody = styled.div`
+const ArtworkTint = styled.div`
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(
+    --home-hero-scrim,
+    linear-gradient(
+      90deg,
+      rgba(255, 251, 252, 0.98) 0%,
+      rgba(255, 248, 251, 0.92) 32%,
+      rgba(255, 245, 249, 0.62) 48%,
+      rgba(255, 245, 249, 0.08) 68%,
+      transparent 82%
+    ),
+    linear-gradient(0deg, rgba(82, 34, 52, 0.12), transparent 38%)
+  );
+
+  @media (max-width: 760px) {
+    background: var(--home-hero-scrim);
+  }
+`;
+
+const SkinMetaBar = styled.div`
+  position: absolute;
+  top: 1rem;
+  left: clamp(1.75rem, 4vw, 3.5rem);
+  right: clamp(1.25rem, 3vw, 2.5rem);
+  z-index: 1;
   display: flex;
-  min-height: 0;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  pointer-events: none;
+  color: var(--home-hero-meta-color, var(--lime-text-muted, #8e6e7a));
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+
+  @media (max-width: 760px) {
+    left: 1.35rem;
+    right: 1rem;
+    top: 0.8rem;
+    gap: 0.5rem;
+    font-size: 9px;
+  }
+`;
+
+const SkinMetaCopy = styled.div`
+  display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.18rem;
+`;
+
+const SkinBrand = styled.span`
+  overflow: hidden;
+  color: var(--home-hero-brand-color, var(--lime-brand-strong, #963958));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const SkinTagline = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const SkinStatus = styled.span`
+  flex: 0 0 auto;
+  border: 1px solid
+    var(--home-hero-status-border, var(--lime-surface-border, #efceda));
+  border-radius: 999px;
+  background: var(--home-hero-status-bg, rgba(255, 255, 255, 0.48));
+  padding: 0.34rem 0.58rem;
+  color: var(--home-hero-status-color, var(--lime-brand-strong, #963958));
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+`;
+
+const ArtworkBlend = styled.div`
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--home-hero-art-blend-left, 100%);
+  z-index: 0;
+  width: var(--home-hero-art-blend-width, 0%);
+  background: linear-gradient(
+    90deg,
+    var(--home-hero-art-blend-color, transparent) 0%,
+    color-mix(
+        in srgb,
+        var(--home-hero-art-blend-color, transparent) 72%,
+        transparent
+      )
+      38%,
+    transparent 100%
+  );
+  pointer-events: none;
 `;
 
 const LeadTextGroup = styled.div`
+  position: relative;
   display: flex;
-  width: 100%;
+  width: min(var(--home-hero-content-width, 48%), 520px);
+  min-height: 310px;
   flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.9rem;
+  padding: 2rem 0 2rem clamp(1.75rem, 4vw, 3.5rem);
+  color: var(--home-hero-title-color, var(--lime-text-strong, #402530));
+  text-align: left;
+  z-index: 1;
+
+  @media (min-width: 1280px) and (min-height: 900px) {
+    min-height: 340px;
+  }
+
+  @media (max-width: 760px) {
+    width: 58%;
+    min-height: 270px;
+    gap: 0.7rem;
+    padding-left: 1.35rem;
+  }
+
+  @media (max-height: 780px) {
+    min-height: 250px;
+  }
+`;
+
+const Eyebrow = styled.span`
+  display: inline-flex;
+  min-height: 28px;
   align-items: center;
-  gap: 0.34rem;
-  max-width: 56rem;
-  text-align: center;
+  gap: 0.4rem;
+  border: 1px solid var(--lime-surface-border-strong, #dfafc1);
+  border-radius: 999px;
+  background: var(--home-hero-badge-bg, var(--lime-surface, #fffafd));
+  border-color: var(
+    --home-hero-badge-border,
+    var(--lime-surface-border-strong, #dfafc1)
+  );
+  padding: 0.36rem 0.7rem;
+  color: var(--home-hero-badge-text, var(--lime-brand-strong, #963958));
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1;
+  box-shadow: 0 8px 20px -18px rgba(91, 43, 62, 0.45);
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
 `;
 
-const SloganWrap = styled.div`
-  position: relative;
-  width: fit-content;
-  margin-bottom: 0.4rem;
-  overflow: visible;
-`;
-
-const SloganLine = styled.div`
-  position: relative;
+const SloganText = styled.h1`
+  max-width: var(--home-hero-title-max-width, 9ch);
   margin: 0;
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  justify-content: center;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-`;
-
-const SloganPulseDot = styled.span`
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  border-radius: 9999px;
-  background: var(--lime-home-dot-gradient);
-  box-shadow: var(--lime-home-dot-shadow);
-  animation: ${dotPulse} 4s ease-in-out infinite;
-`;
-
-const SloganText = styled.span`
-  background: 
-    /* Layer 1: Prismatic Holographic Sweep */
-    linear-gradient(
-      110deg,
-      transparent 35%,
-      rgba(255, 255, 255, 0) 42%,
-      rgba(255, 255, 255, 0.4) 47%,
-      var(--lime-brand, rgba(134, 239, 172, 0.8)) 49%,
-      rgba(255, 255, 255, 1) 50%,
-      rgba(56, 189, 248, 0.8) 51%,
-      rgba(255, 255, 255, 0.4) 53%,
-      rgba(255, 255, 255, 0) 58%,
-      transparent 65%
-    ),
-    /* Layer 2: Crystal Facet Intersection */
-    linear-gradient(
-        70deg,
-        transparent 40%,
-        rgba(255, 255, 255, 0) 46%,
-        rgba(255, 255, 255, 0.4) 49%,
-        rgba(255, 255, 255, 0.9) 50%,
-        rgba(255, 255, 255, 0.4) 51%,
-        rgba(255, 255, 255, 0) 54%,
-        transparent 60%
-      ),
-    /* Layer 3: Base Text Gradient */ var(--lime-home-title-gradient);
-  background-size:
-    250% 100%,
-    250% 100%,
-    400% auto;
-  background-repeat: no-repeat;
-  -webkit-background-clip: text, text, text;
-  background-clip: text, text, text;
-  color: transparent;
-
-  font-size: clamp(36px, 4vw, 52px);
-  line-height: 1.15;
-  font-weight: 700;
+  color: var(--home-hero-title-color, var(--lime-text-strong, #402530));
+  font-size: 46px;
+  font-weight: 680;
   letter-spacing: 0;
+  line-height: 1.1;
+  text-shadow: var(
+    --home-hero-text-shadow,
+    0 2px 18px rgba(255, 255, 255, 0.72)
+  );
 
-  text-shadow: var(--lime-home-title-shadow);
-  animation: ${sloganShine} 10s ease-in-out infinite;
-`;
+  @media (max-width: 900px) {
+    font-size: 38px;
+  }
 
-const SloganBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2.1rem;
-  height: 2.1rem;
-  border-radius: 9999px;
-  border: 1px solid rgb(134 239 172 / 0.46);
-  background:
-    radial-gradient(
-      circle at 32% 24%,
-      rgb(255 255 255 / 0.94),
-      transparent 45%
-    ),
-    linear-gradient(145deg, rgb(232 250 233 / 0.94), rgb(182 231 196 / 0.68));
-  color: rgb(39 104 65 / 0.95);
-  box-shadow:
-    0 13px 30px -23px rgb(21 128 61 / 0.86),
-    inset 0 1px 0 rgb(255 255 255 / 0.82);
-  font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-
-  @media (min-width: 768px) {
-    min-width: 2.35rem;
-    height: 2.35rem;
-    font-size: 0.78rem;
+  @media (max-width: 620px) {
+    font-size: 30px;
   }
 `;
 
-const PriorityShell = styled.div<{ $delay: number }>`
-  animation: ${cardReveal} 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: ${({ $delay }) => `${$delay}ms`};
+const Description = styled.p`
+  max-width: 30rem;
+  margin: 0;
+  color: var(--home-hero-description-color, var(--lime-text, #654652));
+  font-size: 15px;
+  font-weight: 520;
+  line-height: 1.7;
+  text-shadow: var(
+    --home-hero-description-shadow,
+    0 1px 10px rgba(255, 255, 255, 0.86)
+  );
 
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
+  @media (max-width: 620px) {
+    font-size: 13px;
+    line-height: 1.55;
   }
 `;
 
-const SupportingShell = styled.div<{ $delay: number }>`
-  animation: ${cardReveal} 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: ${({ $delay }) => `${$delay}ms`};
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-  }
-`;
-
-const CardsShell = styled.div`
-  display: grid;
-  margin-top: auto;
-  gap: 0.7rem;
-  padding-top: clamp(1rem, 4vh, 2.6rem);
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-  align-items: stretch;
-  grid-auto-rows: minmax(0, 1fr);
-
-  @media (min-width: 720px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (min-width: 1120px) {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  @media (max-height: 940px) {
-    gap: 0.625rem;
-  }
-`;
-
-const HeroCard = styled.article.attrs({
-  className: EMPTY_STATE_CARD_SURFACE_CLASSNAME,
-})<{ $index: number }>`
+const PriorityShell = styled.div`
   position: relative;
-  display: flex;
-  height: 100%;
-  min-height: 210px;
-  flex-direction: column;
-  transition:
-    transform 220ms ease,
-    box-shadow 220ms ease,
-    border-color 220ms ease;
-  animation: ${cardReveal} 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: ${({ $index }) => `${160 + $index * 70}ms`};
+  z-index: 2;
+  width: min(1180px, 100%);
+  margin: 0 auto;
 
-  &:hover {
-    transform: translateY(-2px);
-    border-color: var(--lime-home-card-hover-border, #93c5fd);
-    box-shadow: 0 14px 28px -24px var(--lime-shadow-color);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-    transition: none;
-  }
-
-  @media (max-width: 1180px), (max-height: 940px) {
-    padding: 0.8rem;
-
-    .card-icon {
-      height: 1.9rem;
-      width: 1.9rem;
-      border-radius: 0.95rem;
-    }
-
-    .card-content {
-      margin-top: 0.5rem;
-      min-height: 0;
-    }
-
-    .card-title {
-      font-size: 0.92rem;
-      line-height: 1.3;
-    }
-  }
-
-  .card-media {
-    margin-top: auto;
-    padding-top: 0.8rem;
+  @media (max-width: 760px) {
+    width: 100%;
   }
 `;
 
-const CardValueText = styled.div`
-  margin-top: 0.2rem;
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--lime-text-muted, #6b826b);
+const SupportingShell = styled.div`
+  width: min(1180px, 100%);
+  margin: 0 auto;
 `;
-
-const CardEyebrow = styled.span`
-  border-radius: 9999px;
-  border: 1px solid var(--lime-surface-border, rgba(226, 232, 240, 0.88));
-  background: var(--lime-surface, rgba(255, 255, 255, 0.92));
-  padding: 0.18rem 0.5rem;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  color: var(--lime-text-muted, #6b826b);
-`;
-
-export interface EmptyStateHeroCard {
-  key: string;
-  eyebrow: string;
-  title: string;
-  value: string;
-  description: string;
-  icon: ReactNode;
-  imageSrc?: string;
-  imageAlt?: string;
-  tone?: EmptyStateTone;
-  action?: ReactNode;
-  onMediaAction?: () => void;
-  mediaActionLabel?: string;
-  mediaActionDisabled?: boolean;
-}
 
 interface EmptyStateHeroProps {
   eyebrow: string;
-  title: string;
-  slogan?: string;
+  slogan: string;
   description: string;
-  cards: EmptyStateHeroCard[];
+  skinBrandSubtitle?: string;
+  skinTagline?: string;
+  skinStatus?: string;
   prioritySlot?: ReactNode;
   supportingSlot?: ReactNode;
-  headerControls?: ReactNode;
 }
 
 export function EmptyStateHero({
   eyebrow,
-  title,
   slogan,
-  cards,
+  description,
+  skinBrandSubtitle,
+  skinTagline,
+  skinStatus,
   prioritySlot,
   supportingSlot,
-  headerControls,
 }: EmptyStateHeroProps) {
+  const presentation = useHomeSkinPresentation();
+  const isDarkArtwork = presentation.tone === "dark";
+  const presentationStyle = {
+    "--home-hero-art-position": presentation.artPosition,
+    "--home-hero-art-position-mobile": presentation.artPositionMobile,
+    "--home-hero-art-fit": presentation.artFit,
+    "--home-hero-art-filter": presentation.artFilter,
+    "--home-hero-scrim": presentation.scrim,
+    "--home-hero-fallback": presentation.fallback,
+    "--home-hero-border": presentation.border,
+    "--home-hero-shadow": presentation.shadow,
+    "--home-hero-content-width": presentation.contentWidth,
+    "--home-hero-title-max-width": presentation.titleMaxWidth,
+    "--home-hero-title-color": isDarkArtwork
+      ? "#f7fbff"
+      : "var(--lime-text-strong, #402530)",
+    "--home-hero-description-color": isDarkArtwork
+      ? "#d9e5e9"
+      : "var(--lime-text, #654652)",
+    "--home-hero-badge-bg": isDarkArtwork
+      ? "rgba(10, 14, 20, 0.48)"
+      : "var(--lime-surface, #fffafd)",
+    "--home-hero-badge-border": isDarkArtwork
+      ? "rgba(232, 244, 247, 0.34)"
+      : "var(--lime-surface-border-strong, #dfafc1)",
+    "--home-hero-badge-text": isDarkArtwork
+      ? "#f1fbf8"
+      : "var(--lime-brand-strong, #963958)",
+    "--home-hero-text-shadow": isDarkArtwork
+      ? "0 2px 18px rgba(0, 0, 0, 0.42)"
+      : "0 2px 18px rgba(255, 255, 255, 0.72)",
+    "--home-hero-description-shadow": isDarkArtwork
+      ? "0 1px 10px rgba(0, 0, 0, 0.4)"
+      : "0 1px 10px rgba(255, 255, 255, 0.86)",
+    "--home-hero-meta-color": isDarkArtwork
+      ? "rgba(232, 244, 247, 0.76)"
+      : "var(--lime-text-muted, #8e6e7a)",
+    "--home-hero-brand-color": isDarkArtwork
+      ? "#f1fbf8"
+      : "var(--lime-brand-strong, #963958)",
+    "--home-hero-status-bg": isDarkArtwork
+      ? "rgba(10, 14, 20, 0.48)"
+      : "rgba(255, 255, 255, 0.48)",
+    "--home-hero-status-border": isDarkArtwork
+      ? "rgba(232, 244, 247, 0.34)"
+      : "var(--lime-surface-border, #efceda)",
+    "--home-hero-status-color": isDarkArtwork
+      ? "#f1fbf8"
+      : "var(--lime-brand-strong, #963958)",
+    "--home-hero-art-blend-left": presentation.artBlendLeft ?? "100%",
+    "--home-hero-art-blend-width": presentation.artBlendWidth ?? "0%",
+    "--home-hero-art-blend-color": presentation.fallback,
+  } as CSSProperties;
+
   return (
     <HeroSection>
       <HeroContent>
-        <StageGrid>
-          <LeadColumn>
-            <LeadBlock className="flex w-full min-w-0 flex-col gap-2.5 px-2.5 py-2.5 text-left md:gap-3 md:px-4 md:py-3.5">
-              {headerControls ? (
-                <LeadTopRow>{headerControls}</LeadTopRow>
-              ) : null}
-
-              <LeadBody>
-                <LeadTextGroup>
-                  {slogan ? (
-                    <SloganWrap>
-                      <SloganLine>
-                        <SloganPulseDot aria-hidden="true" />
-                        <SloganText>{slogan}</SloganText>
-                        <SloganBadge data-testid="empty-state-hero-eyebrow-badge">
-                          {eyebrow}
-                        </SloganBadge>
-                      </SloganLine>
-                    </SloganWrap>
+        <ArtworkStage
+          data-testid="dream-blossom-home-artwork"
+          data-home-skin-tone={presentation.tone}
+          style={presentationStyle}
+        >
+          <ArtworkImage src={presentation.image} alt="" aria-hidden="true" />
+          <ArtworkTint aria-hidden="true" />
+          <ArtworkBlend aria-hidden="true" />
+          {skinBrandSubtitle || skinTagline || skinStatus ? (
+            <SkinMetaBar>
+              {skinBrandSubtitle || skinTagline ? (
+                <SkinMetaCopy>
+                  {skinBrandSubtitle ? (
+                    <SkinBrand>{skinBrandSubtitle}</SkinBrand>
                   ) : null}
-                  {title ? (
-                    <h1
-                      className="max-w-[18ch] text-[28px] font-semibold leading-[1.04] tracking-tight text-[color:var(--lime-text-strong)] md:text-[38px]"
-                      style={{ textShadow: "var(--lime-home-title-shadow)" }}
-                    >
-                      {title}
-                    </h1>
+                  {skinTagline ? (
+                    <SkinTagline>{skinTagline}</SkinTagline>
                   ) : null}
-                </LeadTextGroup>
-              </LeadBody>
-            </LeadBlock>
-          </LeadColumn>
-        </StageGrid>
+                </SkinMetaCopy>
+              ) : (
+                <span />
+              )}
+              {skinStatus ? <SkinStatus>{skinStatus}</SkinStatus> : null}
+            </SkinMetaBar>
+          ) : null}
+          <LeadTextGroup>
+            <Eyebrow data-testid="empty-state-hero-eyebrow-badge">
+              <Sparkles aria-hidden="true" />
+              {eyebrow}
+            </Eyebrow>
+            <SloganText>{slogan}</SloganText>
+            <Description>{description}</Description>
+          </LeadTextGroup>
+        </ArtworkStage>
 
-        {prioritySlot ? (
-          <PriorityShell $delay={120} className="w-full">
-            {prioritySlot}
-          </PriorityShell>
-        ) : null}
-
+        {prioritySlot ? <PriorityShell>{prioritySlot}</PriorityShell> : null}
         {supportingSlot ? (
-          <SupportingShell $delay={180} className="w-full">
-            {supportingSlot}
-          </SupportingShell>
-        ) : null}
-
-        {cards.length > 0 ? (
-          <CardsShell>
-            {cards.map((card, index) => (
-              <HeroCard key={card.key} $index={index}>
-                <div className="flex items-start justify-between gap-3">
-                  <div
-                    className={`card-icon flex h-9 w-9 items-center justify-center rounded-2xl border ${
-                      EMPTY_STATE_ICON_TONE_CLASSNAMES[card.tone || "slate"]
-                    }`}
-                  >
-                    {card.icon}
-                  </div>
-                  <CardEyebrow>{card.eyebrow}</CardEyebrow>
-                </div>
-
-                <div className="card-content mt-2.5">
-                  <div className="card-title text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                    {card.title}
-                  </div>
-                  <CardValueText>{card.value}</CardValueText>
-                </div>
-
-                {card.imageSrc || card.action ? (
-                  <div className="card-media mt-3 space-y-2.5">
-                    {card.imageSrc ? (
-                      card.onMediaAction ? (
-                        <button
-                          type="button"
-                          onClick={card.onMediaAction}
-                          disabled={card.mediaActionDisabled}
-                          aria-label={card.mediaActionLabel || card.title}
-                          className="card-preview block overflow-hidden rounded-[16px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] text-left transition hover:border-[color:var(--lime-surface-border-strong)] disabled:cursor-default disabled:opacity-70"
-                        >
-                          <img
-                            src={card.imageSrc}
-                            alt={card.imageAlt || card.title}
-                            className="block h-[82px] w-full object-cover object-center opacity-95 md:h-[90px] xl:h-[86px]"
-                          />
-                        </button>
-                      ) : (
-                        <div className="card-preview overflow-hidden rounded-[16px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)]">
-                          <img
-                            src={card.imageSrc}
-                            alt={card.imageAlt || card.title}
-                            className="block h-[82px] w-full object-cover object-center opacity-95 md:h-[90px] xl:h-[86px]"
-                          />
-                        </div>
-                      )
-                    ) : null}
-
-                    {card.action ? <div>{card.action}</div> : null}
-                  </div>
-                ) : null}
-              </HeroCard>
-            ))}
-          </CardsShell>
+          <SupportingShell>{supportingSlot}</SupportingShell>
         ) : null}
       </HeroContent>
     </HeroSection>

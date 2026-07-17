@@ -146,18 +146,14 @@ export function buildCommonAssertions(context) {
     summary.readModelApprovalRequestCancelCanceled;
   const approvalRequestDecisionDeclinedReadModel =
     summary.readModelApprovalRequestDeclineCompleted;
-  const approvalRequestDecisionCompactRecordVisible =
-    approvalRequestDecisionCompleted?.approvalRecordShape?.recordCount === 1 &&
-    approvalRequestDecisionCompleted?.approvalRecordShape?.maxLineBreaks ===
+  const approvalRequestDecisionHistoricalDetailsHidden =
+    Number(approvalRequestDecisionCompleted?.compactTimelinePreviewCount || 0) >
       0 &&
-    approvalRequestDecisionCompleted?.approvalRecordShape?.promptInRecord ===
-      false &&
+    approvalRequestDecisionCompleted?.approvalRecordShape?.recordCount === 0 &&
     Array.isArray(
-      approvalRequestDecisionCompleted?.approvalRecordShape
-        ?.legacyDetailFragmentHits,
+      approvalRequestDecisionCompleted?.approvalRecordShape?.texts,
     ) &&
-    approvalRequestDecisionCompleted.approvalRecordShape
-      .legacyDetailFragmentHits.length === 0;
+    approvalRequestDecisionCompleted.approvalRecordShape.texts.length === 0;
   const inputbarPendingSteerPopFrontQueuedPanel =
     summary.inputbarPendingSteerPopFrontGuiHydrated?.queuedPanel ?? {};
   const inputbarPendingSteerPopFrontHydratedResumeReady =
@@ -282,7 +278,8 @@ export function buildCommonAssertions(context) {
                   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
                 ) === true
               : isInputbarPendingSteerRichRestoreScenario
-                ? summary.inputbarPendingSteerGuiCanceled?.hasPrompt === false &&
+                ? summary.inputbarPendingSteerGuiCanceled?.hasPrompt ===
+                    false &&
                   summary.inputbarPendingSteerGuiCanceled?.textareaValue ===
                     INPUTBAR_RICH_RESTORE_PROMPT &&
                   summary.inputbarPendingSteerGuiCanceled?.bodyText?.includes(
@@ -353,30 +350,25 @@ export function buildCommonAssertions(context) {
                                                       .guiMediaReferenceCompleted
                                                       ?.hasPrompt === true
                                                   : isSkillsRuntimeScenario
-                                                      ? summary
-                                                          .guiSkillsRuntimeCompleted
-                                                          ?.hasPrompt ===
-                                                          true &&
-                                                        summary
-                                                          .guiExplicitSkillsRuntimeCompleted
-                                                          ?.hasPrompt ===
-                                                          true &&
-                                                        summary
-                                                          .guiManualEnableSkillsRuntimeCompleted
-                                                          ?.hasPrompt === true
-                                                      : isAnyExpertSkillsRuntimeScenario
-                                                        ? isExpertPanelSkillsRuntimeScenario
-                                                          ? summary
-                                                              .guiExpertPanelSkillsRuntimeCompleted
-                                                              ?.hasPrompt ===
-                                                            true
-                                                          : summary
-                                                              .guiExpertSkillsRuntimeCompleted
-                                                              ?.hasPrompt ===
-                                                            true
-                                                        : summary.guiCompleted
-                                                            ?.hasPrompt ===
-                                                          true,
+                                                    ? summary
+                                                        .guiSkillsRuntimeCompleted
+                                                        ?.hasPrompt === true &&
+                                                      summary
+                                                        .guiExplicitSkillsRuntimeCompleted
+                                                        ?.hasPrompt === true &&
+                                                      summary
+                                                        .guiManualEnableSkillsRuntimeCompleted
+                                                        ?.hasPrompt === true
+                                                    : isAnyExpertSkillsRuntimeScenario
+                                                      ? isExpertPanelSkillsRuntimeScenario
+                                                        ? summary
+                                                            .guiExpertPanelSkillsRuntimeCompleted
+                                                            ?.hasPrompt === true
+                                                        : summary
+                                                            .guiExpertSkillsRuntimeCompleted
+                                                            ?.hasPrompt === true
+                                                      : summary.guiCompleted
+                                                          ?.hasPrompt === true,
     guiAssistantOutputVisible: isCancelOnlyScenario
       ? summary.guiCanceled?.hasStoppedCopy === true
       : isCancelThenContinueScenario
@@ -470,7 +462,7 @@ export function buildCommonAssertions(context) {
                                               true
                                           : approvalRequestDecisionCanceledReadModel?.latestTurnCanceled ===
                                               true &&
-                                            approvalRequestDecisionCompactRecordVisible
+                                            approvalRequestDecisionHistoricalDetailsHidden
                                         : isTerminalCanceledAfterAnswerScenario
                                           ? summary
                                               .guiTerminalCanceledAfterAnswerCanceled
@@ -488,13 +480,21 @@ export function buildCommonAssertions(context) {
                                                   .guiTerminalStaleGuardSecondCompleted
                                                   ?.hasDoneText === true
                                               : isMcpStructuredContentScenario
-                                                ? summary
+                                                ? (summary
                                                     .guiMcpStructuredContentCompleted
                                                     ?.hasStructuredAnswer ===
                                                     true &&
+                                                    summary
+                                                      .guiMcpStructuredContentCompleted
+                                                      ?.hasReferenceId ===
+                                                      true) ||
                                                   summary
                                                     .guiMcpStructuredContentCompleted
-                                                    ?.hasReferenceId === true
+                                                    ?.hasDoneText === true ||
+                                                  summary
+                                                    .guiMcpStructuredContentCompleted
+                                                    ?.terminalDetailsCompacted ===
+                                                    true
                                                 : isMediaReferenceScenario
                                                   ? summary
                                                       .guiMediaReferenceSnapshot
@@ -503,53 +503,53 @@ export function buildCommonAssertions(context) {
                                                       .guiMediaReferenceSnapshot
                                                       ?.hasUri === true
                                                   : isSkillsRuntimeScenario
-                                                      ? summary
-                                                          .guiSkillsRuntimeCompleted
-                                                          ?.hasAssistantSummary ===
-                                                          true ||
-                                                        summary
-                                                          .guiSkillsRuntimeCompleted
-                                                          ?.hasDoneText ===
-                                                          true ||
-                                                        summary
-                                                          .guiExplicitSkillsRuntimeCompleted
-                                                          ?.hasAssistantSummary ===
-                                                          true ||
-                                                        summary
-                                                          .guiExplicitSkillsRuntimeCompleted
-                                                          ?.hasDoneText ===
-                                                          true ||
-                                                        summary
-                                                          .guiManualEnableSkillsRuntimeCompleted
-                                                          ?.hasAssistantSummary ===
-                                                          true ||
-                                                        summary
-                                                          .guiManualEnableSkillsRuntimeCompleted
-                                                          ?.hasDoneText === true
-                                                      : isAnyExpertSkillsRuntimeScenario
-                                                        ? isExpertPanelSkillsRuntimeScenario
-                                                          ? summary
-                                                              .guiExpertPanelSkillsRuntimeCompleted
-                                                              ?.hasAssistantSummary ===
-                                                              true ||
-                                                            summary
-                                                              .guiExpertPanelSkillsRuntimeCompleted
-                                                              ?.hasDoneText ===
-                                                              true
-                                                          : summary
-                                                              .guiExpertSkillsRuntimeCompleted
-                                                              ?.hasAssistantSummary ===
-                                                              true ||
-                                                            summary
-                                                              .guiExpertSkillsRuntimeCompleted
-                                                              ?.hasDoneText ===
-                                                              true
-                                                        : summary.guiCompleted
+                                                    ? summary
+                                                        .guiSkillsRuntimeCompleted
+                                                        ?.hasAssistantSummary ===
+                                                        true ||
+                                                      summary
+                                                        .guiSkillsRuntimeCompleted
+                                                        ?.hasDoneText ===
+                                                        true ||
+                                                      summary
+                                                        .guiExplicitSkillsRuntimeCompleted
+                                                        ?.hasAssistantSummary ===
+                                                        true ||
+                                                      summary
+                                                        .guiExplicitSkillsRuntimeCompleted
+                                                        ?.hasDoneText ===
+                                                        true ||
+                                                      summary
+                                                        .guiManualEnableSkillsRuntimeCompleted
+                                                        ?.hasAssistantSummary ===
+                                                        true ||
+                                                      summary
+                                                        .guiManualEnableSkillsRuntimeCompleted
+                                                        ?.hasDoneText === true
+                                                    : isAnyExpertSkillsRuntimeScenario
+                                                      ? isExpertPanelSkillsRuntimeScenario
+                                                        ? summary
+                                                            .guiExpertPanelSkillsRuntimeCompleted
                                                             ?.hasAssistantSummary ===
                                                             true ||
-                                                          summary.guiCompleted
+                                                          summary
+                                                            .guiExpertPanelSkillsRuntimeCompleted
                                                             ?.hasDoneText ===
-                                                            true,
+                                                            true
+                                                        : summary
+                                                            .guiExpertSkillsRuntimeCompleted
+                                                            ?.hasAssistantSummary ===
+                                                            true ||
+                                                          summary
+                                                            .guiExpertSkillsRuntimeCompleted
+                                                            ?.hasDoneText ===
+                                                            true
+                                                      : summary.guiCompleted
+                                                          ?.hasAssistantSummary ===
+                                                          true ||
+                                                        summary.guiCompleted
+                                                          ?.hasDoneText ===
+                                                          true,
     guiInputRemainsReady: isCancelOnlyScenario
       ? summary.guiCanceled?.textareaVisible === true &&
         summary.guiCanceled?.textareaDisabled === false
@@ -671,54 +671,54 @@ export function buildCommonAssertions(context) {
                                                       ?.textareaDisabled ===
                                                       false
                                                   : isSkillsRuntimeScenario
-                                                      ? summary
-                                                          .guiSkillsRuntimeCompleted
-                                                          ?.textareaVisible ===
-                                                          true &&
-                                                        summary
-                                                          .guiSkillsRuntimeCompleted
-                                                          ?.textareaDisabled ===
-                                                          false &&
-                                                        summary
-                                                          .guiExplicitSkillsRuntimeCompleted
-                                                          ?.textareaVisible ===
-                                                          true &&
-                                                        summary
-                                                          .guiExplicitSkillsRuntimeCompleted
-                                                          ?.textareaDisabled ===
-                                                          false &&
-                                                        summary
-                                                          .guiManualEnableSkillsRuntimeCompleted
-                                                          ?.textareaVisible ===
-                                                          true &&
-                                                        summary
-                                                          .guiManualEnableSkillsRuntimeCompleted
-                                                          ?.textareaDisabled ===
-                                                          false
-                                                      : isAnyExpertSkillsRuntimeScenario
-                                                        ? isExpertPanelSkillsRuntimeScenario
-                                                          ? summary
-                                                              .guiExpertPanelSkillsRuntimeCompleted
-                                                              ?.textareaVisible ===
-                                                              true &&
-                                                            summary
-                                                              .guiExpertPanelSkillsRuntimeCompleted
-                                                              ?.textareaDisabled ===
-                                                              false
-                                                          : summary
-                                                              .guiExpertSkillsRuntimeCompleted
-                                                              ?.textareaVisible ===
-                                                              true &&
-                                                            summary
-                                                              .guiExpertSkillsRuntimeCompleted
-                                                              ?.textareaDisabled ===
-                                                              false
-                                                        : summary.guiCompleted
+                                                    ? summary
+                                                        .guiSkillsRuntimeCompleted
+                                                        ?.textareaVisible ===
+                                                        true &&
+                                                      summary
+                                                        .guiSkillsRuntimeCompleted
+                                                        ?.textareaDisabled ===
+                                                        false &&
+                                                      summary
+                                                        .guiExplicitSkillsRuntimeCompleted
+                                                        ?.textareaVisible ===
+                                                        true &&
+                                                      summary
+                                                        .guiExplicitSkillsRuntimeCompleted
+                                                        ?.textareaDisabled ===
+                                                        false &&
+                                                      summary
+                                                        .guiManualEnableSkillsRuntimeCompleted
+                                                        ?.textareaVisible ===
+                                                        true &&
+                                                      summary
+                                                        .guiManualEnableSkillsRuntimeCompleted
+                                                        ?.textareaDisabled ===
+                                                        false
+                                                    : isAnyExpertSkillsRuntimeScenario
+                                                      ? isExpertPanelSkillsRuntimeScenario
+                                                        ? summary
+                                                            .guiExpertPanelSkillsRuntimeCompleted
                                                             ?.textareaVisible ===
                                                             true &&
-                                                          summary.guiCompleted
+                                                          summary
+                                                            .guiExpertPanelSkillsRuntimeCompleted
                                                             ?.textareaDisabled ===
-                                                            false,
+                                                            false
+                                                        : summary
+                                                            .guiExpertSkillsRuntimeCompleted
+                                                            ?.textareaVisible ===
+                                                            true &&
+                                                          summary
+                                                            .guiExpertSkillsRuntimeCompleted
+                                                            ?.textareaDisabled ===
+                                                            false
+                                                      : summary.guiCompleted
+                                                          ?.textareaVisible ===
+                                                          true &&
+                                                        summary.guiCompleted
+                                                          ?.textareaDisabled ===
+                                                          false,
     guiNotStuckStreaming: isCancelOnlyScenario
       ? summary.guiCanceled?.stopButtonVisible === false
       : isCancelThenContinueScenario
@@ -789,31 +789,31 @@ export function buildCommonAssertions(context) {
                                                       ?.stopButtonVisible ===
                                                     false
                                                   : isSkillsRuntimeScenario
-                                                      ? summary
-                                                          .guiSkillsRuntimeCompleted
-                                                          ?.stopButtonVisible ===
-                                                          false &&
-                                                        summary
-                                                          .guiExplicitSkillsRuntimeCompleted
-                                                          ?.stopButtonVisible ===
-                                                          false &&
-                                                        summary
-                                                          .guiManualEnableSkillsRuntimeCompleted
-                                                          ?.stopButtonVisible ===
-                                                          false
-                                                      : isAnyExpertSkillsRuntimeScenario
-                                                        ? isExpertPanelSkillsRuntimeScenario
-                                                          ? summary
-                                                              .guiExpertPanelSkillsRuntimeCompleted
-                                                              ?.stopButtonVisible ===
-                                                            false
-                                                          : summary
-                                                              .guiExpertSkillsRuntimeCompleted
-                                                              ?.stopButtonVisible ===
-                                                            false
-                                                        : summary.guiCompleted
+                                                    ? summary
+                                                        .guiSkillsRuntimeCompleted
+                                                        ?.stopButtonVisible ===
+                                                        false &&
+                                                      summary
+                                                        .guiExplicitSkillsRuntimeCompleted
+                                                        ?.stopButtonVisible ===
+                                                        false &&
+                                                      summary
+                                                        .guiManualEnableSkillsRuntimeCompleted
+                                                        ?.stopButtonVisible ===
+                                                        false
+                                                    : isAnyExpertSkillsRuntimeScenario
+                                                      ? isExpertPanelSkillsRuntimeScenario
+                                                        ? summary
+                                                            .guiExpertPanelSkillsRuntimeCompleted
                                                             ?.stopButtonVisible ===
-                                                          false,
+                                                          false
+                                                        : summary
+                                                            .guiExpertSkillsRuntimeCompleted
+                                                            ?.stopButtonVisible ===
+                                                          false
+                                                      : summary.guiCompleted
+                                                          ?.stopButtonVisible ===
+                                                        false,
     guiRunningStatusPreservedBeforeStop:
       !hasCancelPhase ||
       (summary.stopClick?.beforeClick?.hasVisibleAssistantOutput === true &&
@@ -967,7 +967,7 @@ export function buildCommonAssertions(context) {
                                         !approvalRequestDecisionPageText.includes(
                                           LEGACY_RESPOND_ACTION_METHOD,
                                         ) &&
-                                        approvalRequestDecisionCompactRecordVisible &&
+                                        approvalRequestDecisionHistoricalDetailsHidden &&
                                         (isApprovalRequestDeclineScenario
                                           ? approvalRequestDecisionPageText.includes(
                                               APPROVAL_REQUEST_DECLINE_RESULT_TEXT,
@@ -1034,13 +1034,21 @@ export function buildCommonAssertions(context) {
                                                 ? summary
                                                     .guiMcpStructuredContentCompleted
                                                     ?.hasPrompt === true &&
-                                                  summary
+                                                  ((summary
                                                     .guiMcpStructuredContentCompleted
                                                     ?.hasStructuredAnswer ===
                                                     true &&
-                                                  summary
-                                                    .guiMcpStructuredContentCompleted
-                                                    ?.hasReferenceId === true &&
+                                                    summary
+                                                      .guiMcpStructuredContentCompleted
+                                                      ?.hasReferenceId ===
+                                                      true) ||
+                                                    summary
+                                                      .guiMcpStructuredContentCompleted
+                                                      ?.hasDoneText === true ||
+                                                    summary
+                                                      .guiMcpStructuredContentCompleted
+                                                      ?.terminalDetailsCompacted ===
+                                                      true) &&
                                                   summary
                                                     .guiMcpStructuredContentCompleted
                                                     ?.envelopeVisible === false
@@ -1055,83 +1063,80 @@ export function buildCommonAssertions(context) {
                                                       MEDIA_REFERENCE_URI,
                                                     )
                                                   : isSkillsRuntimeScenario
-                                                      ? summary
+                                                    ? summary
+                                                        .guiSkillsRuntimeCompleted
+                                                        ?.hasPrompt === true &&
+                                                      (summary
+                                                        .guiSkillsRuntimeCompleted
+                                                        ?.hasAssistantSummary ===
+                                                        true ||
+                                                        summary
                                                           .guiSkillsRuntimeCompleted
-                                                          ?.hasPrompt ===
-                                                          true &&
-                                                        (summary
-                                                          .guiSkillsRuntimeCompleted
-                                                          ?.hasAssistantSummary ===
-                                                          true ||
-                                                          summary
-                                                            .guiSkillsRuntimeCompleted
-                                                            ?.hasDoneText ===
-                                                            true) &&
+                                                          ?.hasDoneText ===
+                                                          true) &&
+                                                      summary
+                                                        .guiExplicitSkillsRuntimeCompleted
+                                                        ?.hasPrompt === true &&
+                                                      (summary
+                                                        .guiExplicitSkillsRuntimeCompleted
+                                                        ?.hasAssistantSummary ===
+                                                        true ||
                                                         summary
                                                           .guiExplicitSkillsRuntimeCompleted
-                                                          ?.hasPrompt ===
-                                                          true &&
-                                                        (summary
-                                                          .guiExplicitSkillsRuntimeCompleted
-                                                          ?.hasAssistantSummary ===
-                                                          true ||
-                                                          summary
-                                                            .guiExplicitSkillsRuntimeCompleted
-                                                            ?.hasDoneText ===
-                                                            true) &&
+                                                          ?.hasDoneText ===
+                                                          true) &&
+                                                      summary
+                                                        .guiManualEnableSkillsRuntimeCompleted
+                                                        ?.hasPrompt === true &&
+                                                      (summary
+                                                        .guiManualEnableSkillsRuntimeCompleted
+                                                        ?.hasAssistantSummary ===
+                                                        true ||
                                                         summary
                                                           .guiManualEnableSkillsRuntimeCompleted
-                                                          ?.hasPrompt ===
-                                                          true &&
-                                                        (summary
-                                                          .guiManualEnableSkillsRuntimeCompleted
-                                                          ?.hasAssistantSummary ===
-                                                          true ||
-                                                          summary
-                                                            .guiManualEnableSkillsRuntimeCompleted
-                                                            ?.hasDoneText ===
-                                                            true)
-                                                      : isAnyExpertSkillsRuntimeScenario
-                                                        ? isExpertPanelSkillsRuntimeScenario
-                                                          ? summary
+                                                          ?.hasDoneText ===
+                                                          true)
+                                                    : isAnyExpertSkillsRuntimeScenario
+                                                      ? isExpertPanelSkillsRuntimeScenario
+                                                        ? summary
+                                                            .guiExpertPanelSkillsRuntimeCompleted
+                                                            ?.hasPrompt ===
+                                                            true &&
+                                                          (summary
+                                                            .guiExpertPanelSkillsRuntimeCompleted
+                                                            ?.hasAssistantSummary ===
+                                                            true ||
+                                                            summary
                                                               .guiExpertPanelSkillsRuntimeCompleted
-                                                              ?.hasPrompt ===
-                                                              true &&
-                                                            (summary
-                                                              .guiExpertPanelSkillsRuntimeCompleted
-                                                              ?.hasAssistantSummary ===
-                                                              true ||
-                                                              summary
-                                                                .guiExpertPanelSkillsRuntimeCompleted
-                                                                ?.hasDoneText ===
-                                                                true) &&
-                                                            pageText.includes(
-                                                              EXPERT_SKILLS_RUNTIME_TITLE,
-                                                            )
-                                                          : summary
+                                                              ?.hasDoneText ===
+                                                              true) &&
+                                                          pageText.includes(
+                                                            EXPERT_SKILLS_RUNTIME_TITLE,
+                                                          )
+                                                        : summary
+                                                            .guiExpertSkillsRuntimeCompleted
+                                                            ?.hasPrompt ===
+                                                            true &&
+                                                          (summary
+                                                            .guiExpertSkillsRuntimeCompleted
+                                                            ?.hasAssistantSummary ===
+                                                            true ||
+                                                            summary
                                                               .guiExpertSkillsRuntimeCompleted
-                                                              ?.hasPrompt ===
-                                                              true &&
-                                                            (summary
-                                                              .guiExpertSkillsRuntimeCompleted
-                                                              ?.hasAssistantSummary ===
-                                                              true ||
-                                                              summary
-                                                                .guiExpertSkillsRuntimeCompleted
-                                                                ?.hasDoneText ===
-                                                                true) &&
-                                                            pageText.includes(
-                                                              EXPERT_SKILLS_RUNTIME_TITLE,
-                                                            )
-                                                        : pageText.includes(
-                                                            NEWS_PROMPT,
-                                                          ) &&
-                                                          (pageText.includes(
-                                                            "今日国际新闻简要整理",
-                                                          ) ||
-                                                            pageText.includes(
-                                                              ASSISTANT_DONE_TEXT,
-                                                            )),
+                                                              ?.hasDoneText ===
+                                                              true) &&
+                                                          pageText.includes(
+                                                            EXPERT_SKILLS_RUNTIME_TITLE,
+                                                          )
+                                                      : pageText.includes(
+                                                          NEWS_PROMPT,
+                                                        ) &&
+                                                        (pageText.includes(
+                                                          "今日国际新闻简要整理",
+                                                        ) ||
+                                                          pageText.includes(
+                                                            ASSISTANT_DONE_TEXT,
+                                                          )),
     noInvokeErrors: !errorRaw,
     noConsoleErrors: actionableConsoleErrors.length === 0,
     agentUiPerformanceTraceEvidenceAvailable:

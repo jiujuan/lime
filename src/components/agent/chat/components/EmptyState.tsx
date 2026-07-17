@@ -68,6 +68,8 @@ import { useEmptyStateHomeActions } from "./useEmptyStateHomeActions";
 import type { AgentI18nKey, EmptyStateProps } from "./EmptyState.types";
 import type { BaseComposerSendMetadata } from "@/components/input-kit";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
+import { getLimeSkinCopy } from "@/lib/appearance/skinContent";
+import { useHomeSkinPresentation } from "./homeSkinPresentation";
 
 const CREATION_THEMES: string[] = [];
 
@@ -148,7 +150,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   fileManagerOpen = false,
   onToggleFileManager,
 }) => {
-  const { t } = useTranslation("agent");
+  const { t, i18n } = useTranslation("agent");
+  const homeSkinPresentation = useHomeSkinPresentation();
   const translateAgentCopyKey = useCallback(
     (key: string, values?: Record<string, number | string>) =>
       t(key as AgentI18nKey, values ?? {}),
@@ -162,9 +165,13 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     () => buildServiceSkillHomeCopy(translateAgentCopyKey),
     [translateAgentCopyKey],
   );
+  const skinCopy = useMemo(
+    () => getLimeSkinCopy(homeSkinPresentation.skinId, i18n.language),
+    [homeSkinPresentation.skinId, i18n.language],
+  );
   const homeSurfaceCopy = useMemo(
-    () => buildHomeSurfaceCopy(translateAgentCopyKey),
-    [translateAgentCopyKey],
+    () => buildHomeSurfaceCopy(translateAgentCopyKey, skinCopy),
+    [skinCopy, translateAgentCopyKey],
   );
   const inputbarCoreCopy = useMemo(
     () => buildInputbarCoreCopy(translateAgentCopyKey),

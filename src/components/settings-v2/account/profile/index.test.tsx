@@ -250,6 +250,27 @@ describe("ProfileSettings", () => {
     expect(findInput(container, "profile-field-nickname").value).toBe("赵六");
   });
 
+  it("保存空昵称时应清除旧值", async () => {
+    const container = renderComponent();
+    await waitForLoad();
+
+    await clickButton(findButtonByLabel(container, "Edit Nickname"));
+    await setInputValue(findInput(container, "profile-field-nickname"), "");
+    await clickButton(findButtonByLabel(container, "Save Nickname"));
+
+    expect(mockSaveConfig).toHaveBeenCalledTimes(1);
+    expect(mockSaveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_profile: expect.objectContaining({
+          nickname: "",
+          bio: "专注 AI 产品与工程效率，喜欢把复杂流程做得更顺手。",
+          email: "zhangsan@example.com",
+          tags: ["编程", "设计"],
+        }),
+      }),
+    );
+  });
+
   it("添加自定义标签后应写回配置", async () => {
     const container = renderComponent();
     await waitForLoad();

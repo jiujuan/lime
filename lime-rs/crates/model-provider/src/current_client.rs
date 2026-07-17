@@ -36,6 +36,8 @@ use tokio_tungstenite::tungstenite::Error as WebSocketError;
 
 mod lowering;
 mod stream;
+#[cfg(test)]
+mod stream_tests;
 mod transport;
 mod websocket;
 

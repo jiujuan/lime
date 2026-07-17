@@ -32,6 +32,11 @@ describe("ToolCallDisplay", () => {
     });
 
     const row = container.querySelector('[data-testid="tool-call-row"]');
+    expect(row?.getAttribute("data-tool-call-id")).toBe(
+      "tool-soul-lifecycle-display-1",
+    );
+    expect(row?.getAttribute("data-tool-name")).toBe("WebSearch");
+    expect(row?.getAttribute("data-tool-status")).toBe("running");
     expect(row?.getAttribute("data-soul-lifecycle")).toBe("yes");
     expect(row?.getAttribute("data-soul-surface")).toBe("tool_lifecycle");
     expect(row?.getAttribute("data-soul-phase")).toBe("before_tool");
@@ -346,5 +351,4 @@ describe("ToolCallDisplay", () => {
     expect(container.textContent).not.toContain("中文日期检索");
     expect(container.textContent).not.toContain("头条检索");
   });
-
 });

@@ -25,7 +25,7 @@ import {
   clickSidebarImport,
   collectImportedSessionVisualAudit,
   confirmImport,
-  expandImportedHistoricalTimeline,
+  inspectImportedHistoricalTimelineSummary,
   inspectEnvironmentPopoverImportBoundary,
   inspectImportedAttachmentPreview,
   inspectImportedFilePreviewArtifacts,
@@ -414,6 +414,7 @@ async function extractClickThroughSummary(
       importedUserText,
       importedAssistantText,
       importedReasoningText,
+      importedWebSearchQuery,
       continueUserText,
       continueAssistantText,
       readModelSummary,
@@ -439,13 +440,11 @@ async function extractClickThroughSummary(
         hasImportedSourceTaskRail: bodyText.includes(sourceThreadId),
         hasImportedUserMessage: bodyText.includes(importedUserText),
         hasImportedAssistantMessage: bodyText.includes(importedAssistantText),
-        hasReasoningVisible: bodyText.includes(importedReasoningText),
+        hasHistoricalReasoningVisible: bodyText.includes(importedReasoningText),
         hasReasoningItem: readModelSummary?.hasReasoningItem === true,
-        hasCommandExecutionVisible: bodyText.includes("npm test"),
-        hasCommandText:
-          bodyText.includes("npm test") ||
-          readModelSummary?.hasCommandItem === true,
-        hasCommandOutput: bodyText.includes("ok"),
+        hasHistoricalCommandExecutionVisible: bodyText.includes("npm test"),
+        hasCommandText: readModelSummary?.hasCommandItem === true,
+        hasHistoricalCommandOutput: bodyText.includes("ok"),
         hidesRawImportedCommand:
           !bodyText.includes("Approve imported command") &&
           !bodyText.includes("imported_read_only"),
@@ -455,12 +454,9 @@ async function extractClickThroughSummary(
           bodyText.includes("Patch") ||
           bodyText.includes("patch") ||
           (bodyText.includes("lib.rs") && bodyText.includes("打开文件")),
-        hasSearchEvidence:
-          bodyText.includes("搜索") ||
-          bodyText.includes("Search") ||
-          bodyText.includes("web search") ||
-          readModelSummary?.hasWebSearchItem === true,
-        hasApprovalText:
+        hasSearchItem: readModelSummary?.hasWebSearchItem === true,
+        hasApprovalItem: readModelSummary?.hasApprovalItem === true,
+        hasHistoricalApprovalText:
           bodyText.includes("导入的权限记录") ||
           bodyText.includes("已导入，只读记录") ||
           bodyText.includes("权限记录") ||
@@ -479,6 +475,19 @@ async function extractClickThroughSummary(
           ? backendLedger.length
           : 0,
         requiredMethods,
+        historicalOperationalDetailsHidden:
+          !bodyText.includes(importedReasoningText) &&
+          !bodyText.includes("npm test") &&
+          !bodyText.includes("ok") &&
+          !bodyText.includes(importedWebSearchQuery) &&
+          !bodyText.includes("导入的权限记录") &&
+          !bodyText.includes("已导入，只读记录") &&
+          !bodyText.includes("权限记录") &&
+          !bodyText.includes("审批") &&
+          !bodyText.includes("确认") &&
+          !bodyText.includes("权限请求") &&
+          !bodyText.includes("Approval") &&
+          !bodyText.includes("approval"),
       };
     },
     {
@@ -487,6 +496,7 @@ async function extractClickThroughSummary(
       importedUserText: IMPORTED_USER_TEXT,
       importedAssistantText: IMPORTED_ASSISTANT_SUMMARY_TEXT,
       importedReasoningText: IMPORTED_REASONING_TEXT,
+      importedWebSearchQuery: IMPORTED_WEB_SEARCH_QUERY,
       continueUserText: CONTINUE_USER_TEXT,
       continueAssistantText: CONTINUE_ASSISTANT_TEXT,
       readModelSummary,
@@ -655,13 +665,46 @@ async function run() {
 
     logStage("confirm-import");
     importedPageSnapshot = await confirmImport(page, options);
+    assert(
+      importedPageSnapshot.backgroundResume?.started === true &&
+        importedPageSnapshot.backgroundResume?.closed === true &&
+        importedPageSnapshot.backgroundResume?.reattached === true &&
+        importedPageSnapshot.backgroundResume?.commitRequestCount === 1 &&
+        importedPageSnapshot.backgroundResume?.jobReadRequestCount > 0,
+      "后台导入未完成关闭弹窗并重新附着同一 job 的闭环",
+    );
+    summary.backgroundImportResume = sanitizeJson(
+      importedPageSnapshot.backgroundResume,
+    );
 
-    logStage("expand-imported-historical-timeline");
+    logStage("inspect-imported-historical-timeline-summary");
     importedHistoricalTimelineExpansion =
-      await expandImportedHistoricalTimeline(page, options);
+      await inspectImportedHistoricalTimelineSummary(page, options);
+    assert(
+      importedHistoricalTimelineExpansion.historicalSummaryVisible,
+      "导入历史未显示 terminal 摘要",
+    );
+    assert(
+      !importedHistoricalTimelineExpansion.interactive,
+      "导入历史摘要不应是可交互控件",
+    );
     assert(
       importedHistoricalTimelineExpansion.previewText.includes("9s"),
       `导入历史过程耗时未使用源事件时间: ${importedHistoricalTimelineExpansion.previewText}`,
+    );
+    assert(
+      importedHistoricalTimelineExpansion.operationalDetailRowCount === 0,
+      "导入历史仍挂载运行期工具明细",
+    );
+    assert(
+      importedHistoricalTimelineExpansion.operationalTimelineDetailsCount ===
+        0,
+      "导入历史仍挂载 operational details",
+    );
+    assert(
+      importedHistoricalTimelineExpansion.deferredHistoricalPreviewCount ===
+        0,
+      "导入历史仍挂载 deferred preview",
     );
 
     logStage("wait-imported-details");
@@ -796,8 +839,8 @@ async function run() {
       "页面未显示导入助手消息",
     );
     assert(
-      importedDetailsSummary.hasReasoningVisible,
-      "页面未显示导入 reasoning 原文",
+      importedDetailsSummary.historicalOperationalDetailsHidden,
+      "历史页面铺开了 reasoning / command / search / approval 运行期明细",
     );
     assert(
       readModel.summary.hasReasoningItem,
@@ -810,20 +853,15 @@ async function run() {
       "read model 未保留导入图片附件",
     );
     assert(
-      importedDetailsSummary.hasCommandExecutionVisible,
-      "页面未显示 canonical npm test 命令卡",
-    );
-    assert(importedDetailsSummary.hasCommandOutput, "页面未显示命令输出 ok");
-    assert(
       importedDetailsSummary.hidesRawImportedCommand,
       "页面暴露了原始审批命令或导入内部字段",
     );
     assert(importedDetailsSummary.hasPatchText, "页面未显示导入 patch");
     assert(
-      importedDetailsSummary.hasSearchEvidence,
-      "页面或 read model 未保留导入 web search",
+      readModel.summary.hasWebSearchItem,
+      "read model 未保留导入 web search",
     );
-    assert(importedDetailsSummary.hasApprovalText, "页面未显示导入 approval");
+    assert(readModel.summary.hasApprovalItem, "read model 未保留导入 approval");
     assert(
       continuationSummary.hasContinueUserMessage,
       "页面未显示续聊用户消息",

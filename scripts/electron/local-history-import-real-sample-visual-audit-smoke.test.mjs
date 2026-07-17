@@ -4,8 +4,6 @@ import { renderExpectedVisibleExcerptHtml } from "./lib/local-history-import-smo
 import {
   selectCompactExpectedMessages,
   selectCompactExpectedMessageTexts,
-  selectExpandedExpectedMessages,
-  selectExpandedExpectedMessageTexts,
 } from "./lib/local-history-import-read-model-expectations.mjs";
 import { assessExpectedMessageVisibility } from "./lib/local-history-import-visual-expectations.mjs";
 import {
@@ -54,7 +52,7 @@ describe("local history import real sample visual audit smoke guard", () => {
     expect(DEFAULT_REAL_SAMPLE_STABILITY_MS).toBe(10 * 60 * 1_000);
   });
 
-  it("derives compact and expanded text expectations from canonical item phases", () => {
+  it("derives final-only historical text expectations from canonical item phases", () => {
     const readResult = {
       detail: {
         items: [
@@ -113,14 +111,6 @@ describe("local history import real sample visual audit smoke guard", () => {
       }),
       expect.objectContaining({ itemId: "legacy-final", role: "assistant" }),
     ]);
-    expect(selectExpandedExpectedMessageTexts(readResult)).toEqual([
-      "请核对完整的 canonical timeline。",
-      "先读取所有 canonical item。",
-      "canonical timeline 已核对完成。",
-      "继续检查旧的无 phase 消息。",
-      "旧消息最终正文已经恢复。",
-    ]);
-    expect(selectExpandedExpectedMessages(readResult)).toHaveLength(5);
   });
 
   it("compares canonical markdown through its rendered visible text", () => {
@@ -227,7 +217,9 @@ describe("local history import real sample visual audit smoke guard", () => {
 
     expect(content).toContain("openSessionFromSidebar");
     expect(content).toContain("inspectImportedConversationVisualState");
-    expect(content).toContain("captureImportedConversationCompactVisualState");
+    expect(content).not.toContain(
+      "captureImportedConversationCompactVisualState",
+    );
     expect(content).not.toContain("inspectImportedRuntimeDetailDrilldown");
     expect(content).not.toContain("readRuntimeEventsProbe");
     expect(content).not.toContain(
@@ -257,9 +249,9 @@ describe("local history import real sample visual audit smoke guard", () => {
     expect(content).toContain("userMessageBubbleCount");
     expect(content).toContain("assistantMessageBubbleCount");
     expect(content).toContain("agentMessagePhaseCounts");
-    expect(content).toContain("selectExpandedExpectedMessageTexts");
-    expect(content).toContain("compactExpectedExcerptHtml");
-    expect(content).toContain("expandedExpectedExcerptHtml");
+    expect(content).toContain("expectedExcerptHtml");
+    expect(content).not.toContain("selectExpandedExpectedMessageTexts");
+    expect(content).not.toContain("expandedExpectedExcerptHtml");
     expect(content).toContain("agentMessageTextPartCount");
     expect(content).toContain("uniqueAgentMessageTextPartCount");
     expect(helper).toContain('data-testid="agent-message-text-part"');
@@ -272,24 +264,27 @@ describe("local history import real sample visual audit smoke guard", () => {
     expect(helper).toContain("timeline-file-artifact-card");
     expect(helper).toContain("file-changes-summary-file-row");
     expect(content).toContain("imageAttachmentCount");
-    expect(content).toContain("historicalPreviewCount");
     expect(content).toContain("historicalTimelinePreviewCount");
-    expect(content).toContain("assertCompactVisualAudits");
+    expect(content).toContain("deferredHistoricalPreviewCount");
+    expect(content).toContain("operationalTimelineDetailsCount");
+    expect(content).not.toContain("assertCompactVisualAudits");
     expect(content).toContain("hasRawContentPartJson");
     expect(content).toContain("missingExpectedExcerpts");
     expect(content).toContain("missingExpectedDomExcerpts");
     expect(content).toContain("expectedCounts");
-    expect(content).toContain("collapsedCanonicalTimelineDetailsCount");
+    expect(content).toContain(
+      "readSummary.itemsLength === importSummary.willImportTimelineItems",
+    );
     expect(content).toContain("audit.scroll.maxScroll > 0");
-    expect(content).toContain("hasCommandExecutionVisible");
+    expect(content).toContain("audit.toolCallRowCount === 0");
     expect(helper).toContain('[data-testid="tool-call-row"]');
     expect(content).toContain("hasPatchText");
-    expect(content).toContain("hasSearchEvidence");
-    expect(content).toContain("hasApprovalText");
+    expect(content).not.toContain("hasHistoricalCommandExecutionVisible");
+    expect(content).not.toContain("hasSearchItem");
+    expect(content).not.toContain("hasHistoricalApprovalText");
     expect(content).toContain("visibleTextCaptured");
     expect(helper).toContain("path: screenshotPath");
     expect(helper).toContain("fullPage: false");
-    expect(content).toContain("assertCompactVisualAudit(audit");
     expect(helper).toContain("assessExpectedMessageVisibility");
     expect(helper).toContain("scrollMessageSurface");
     expect(sessionOpenHelper).toContain(
@@ -300,14 +295,10 @@ describe("local history import real sample visual audit smoke guard", () => {
     expect(helper).toContain("snapshot.messageContentTextLength > 0");
     expect(helper).toContain("audit.messageContentTextLength > 0");
     expect(helper).toContain("new DOMParser().parseFromString");
-    expect(helper).toContain("expandCanonicalTimelineDetails");
+    expect(helper).not.toContain("expandCanonicalTimelineDetails");
     expect(helper).toContain(
       '[data-testid^="message-list-historical-timeline-preview:"]',
     );
-    expect(helper).toContain(
-      'details[data-testid^="agent-thread-block:"]:not([open]) > summary',
-    );
-    expect(helper).toContain("await control.click()");
     expect(helper).toContain("unavailable-");
   });
 

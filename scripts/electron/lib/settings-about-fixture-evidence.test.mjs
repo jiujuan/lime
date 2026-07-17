@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyPassingSettingsAboutEvidence,
+  applyPassingSettingsHomeEvidence,
   createSettingsAboutEvidence,
+  createSettingsHomeEvidence,
   isLocalizedAboutVersionLine,
   parseSettingsAboutFixtureArgs,
   summarizeSettingsAboutTrace,
@@ -146,5 +148,34 @@ describe("Settings About Gate B evidence", () => {
         screenshotWritten: true,
       }),
     ).toThrow(/versionTruth.*versionLabelLocalized.*mockFallbackZero/);
+  });
+
+  it("keeps back-home navigation as an independent scenario claim", () => {
+    const summary = createSettingsHomeEvidence({
+      candidateRunId: RUN_ID,
+      startedAt: "2026-07-17T00:00:00.000Z",
+      prefix: "settings-about-fixture",
+    });
+    applyPassingSettingsHomeEvidence(summary, {
+      completedAt: "2026-07-17T00:02:00.000Z",
+      electronRenderer: true,
+      preloadInvoke: true,
+      homeStartVisible: true,
+      settingsHeaderVisible: false,
+      accountButtonVisible: true,
+      trace: summarizeSettingsAboutTrace(traceRaw()),
+      consoleErrors: [],
+      pageErrors: [],
+      invokeErrorCount: 0,
+      screenshotWritten: true,
+    });
+
+    expect(summary.settingsScenarioProof).toEqual({
+      scenarioId: "home-navigation",
+      complete: true,
+    });
+    expect(summary.artifacts.screenshot).toBe(
+      "settings-about-fixture-home.png",
+    );
   });
 });

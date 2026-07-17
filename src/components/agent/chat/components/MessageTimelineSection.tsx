@@ -1,4 +1,3 @@
-import React from "react";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { AgentThreadTimeline } from "./AgentThreadTimeline";
 import { HistoricalTimelinePreview } from "./MessageListHistoricalPreviews";
@@ -9,6 +8,8 @@ import type {
   Message,
   SiteSavedContentTarget,
 } from "../types";
+import { isTerminalThreadTurnStatus } from "./messageListItemProjectionHelpers";
+import { isActiveThreadTurnStatus } from "./messageListProjectionWebRetrieval";
 
 type MessageTimelineProjection = NonNullable<
   MessageListRenderGroup["timeline"]
@@ -23,7 +24,6 @@ interface MessageTimelineSectionProps {
   focusRequestKey: number;
   isCurrentTurnSending: boolean;
   messageId: string;
-  onExpandPreview?: () => void;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
@@ -51,7 +51,6 @@ export function MessageTimelineSection({
   focusRequestKey,
   isCurrentTurnSending,
   messageId,
-  onExpandPreview,
   onFileClick,
   onOpenArtifactFromTimeline,
   onOpenSavedSiteContent,
@@ -64,7 +63,14 @@ export function MessageTimelineSection({
   threadRead,
   timeline,
 }: MessageTimelineSectionProps) {
-  if (renderCompactPreview) {
+  const isActiveOperationalTurn =
+    timeline.turn.id === activeCurrentTurnId &&
+    isActiveThreadTurnStatus(timeline.turn.status) &&
+    !isTerminalThreadTurnStatus(timeline.turn.status);
+  const shouldRenderHistoricalCompactPreview =
+    renderCompactPreview || !isActiveOperationalTurn;
+
+  if (shouldRenderHistoricalCompactPreview) {
     return (
       <HistoricalTimelinePreview
         items={timeline.items}
@@ -72,7 +78,13 @@ export function MessageTimelineSection({
         detailsDeferred={detailsDeferred}
         startedAt={timeline.turn.started_at}
         completedAt={timeline.turn.completed_at}
-        onExpand={() => onExpandPreview?.()}
+        onFileClick={onFileClick}
+        onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+        onOpenSavedSiteContent={onOpenSavedSiteContent}
+        onOpenSubagentSession={onOpenSubagentSession}
+        onPermissionResponse={onPermissionResponse}
+        onSaveFileArtifactAsKnowledge={onSaveMessageAsKnowledge}
+        sourceMessageId={messageId}
       />
     );
   }
@@ -86,6 +98,7 @@ export function MessageTimelineSection({
       isCurrentTurn={timeline.turn.id === activeCurrentTurnId}
       collapseInactiveDetails={!isCurrentTurnSending}
       expandCompletedProcessDetails={expandCompletedProcessDetails}
+      showOperationalDetails={true}
       deferCompletedSingleDetails={
         shouldDeferHistoricalTimelineDetails &&
         timeline.turn.id !== activeCurrentTurnId

@@ -65,7 +65,9 @@ describe("MessageList artifacts timeline", () => {
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:trailing"]',
+      ),
     ).not.toBeNull();
     const pinnedFileTimeline = container.querySelector(
       '[data-testid="assistant-pinned-file-timeline-shell"]',
@@ -77,13 +79,17 @@ describe("MessageList artifacts timeline", () => {
       '[data-testid="streaming-renderer"]',
     );
     const trailingTimeline = container.querySelector(
-      '[data-testid="agent-thread-timeline:trailing"]',
+      '[data-testid="message-list-historical-timeline-preview:trailing"]',
     );
 
     expect(pinnedFileTimeline).toBeNull();
     expect(assistantBubble).not.toBeNull();
     expect(streamingRenderer).not.toBeNull();
     expect(trailingTimeline).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="timeline-file-attachment-card"]'),
+    ).not.toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(assistantBubble?.contains(trailingTimeline)).toBe(true);
     expect(
       Boolean(
@@ -210,7 +216,7 @@ describe("MessageList artifacts timeline", () => {
       '[data-testid="streaming-renderer"]',
     );
     const trailingTimeline = container.querySelector(
-      '[data-testid="agent-thread-timeline:trailing"]',
+      '[data-testid="message-list-historical-timeline-preview:trailing"]',
     );
     const articleFrame = container.querySelector(
       '[data-testid="article-artifact-frame"]',
@@ -236,7 +242,7 @@ describe("MessageList artifacts timeline", () => {
     expect(articleFrame?.textContent).toContain("公众号文章草稿");
   });
 
-  it("内容工厂文章产物前应展开已完成的搜索工具过程", () => {
+  it("内容工厂文章产物前应折叠已完成的搜索工具过程", () => {
     const now = new Date();
     const fullArticle = "# Go 学习文章\n\n这是最终正文。";
     const messages: Message[] = [
@@ -324,41 +330,25 @@ describe("MessageList artifacts timeline", () => {
     const articleFrame = container.querySelector(
       '[data-testid="article-artifact-frame"]',
     );
+    const processSummary = container.querySelector(
+      '[data-testid="message-list-historical-timeline-preview:leading"]',
+    );
     const rendererCall =
       findStreamingRendererCallByContent("我会先检索资料，再输出文章草稿。");
-    const contentFactoryToolParts = (rendererCall?.contentParts || []).filter(
-      (part) => {
-        const metadata = part.metadata as Record<string, unknown> | undefined;
-        return (
-          part.type === "tool_use" &&
-          (metadata?.source === "workspace_patch_host_tool_requests" ||
-            metadata?.workflowKey === "content_article_workflow" ||
-            metadata?.workflow_key === "content_article_workflow")
-        );
-      },
-    );
 
     expect(streamingRenderer).not.toBeNull();
-    expect(contentFactoryToolParts).toHaveLength(2);
-    expect(contentFactoryToolParts[0]?.metadata).toEqual(
-      expect.objectContaining({
-        source: "agent_thread_item",
-        threadItemId: "item-content-factory-search-1",
-        turnId: "turn-content-factory-process",
-        sequence: 1,
-        workflowKey: "content_article_workflow",
-      }),
-    );
-    expect(contentFactoryToolParts[1]?.metadata).toEqual(
-      expect.objectContaining({
-        source: "agent_thread_item",
-        threadItemId: "item-content-factory-search-2",
-        turnId: "turn-content-factory-process",
-        sequence: 2,
-        workflow_key: "content_article_workflow",
-      }),
-    );
+    expect(processSummary).not.toBeNull();
+    expect(rendererCall?.contentParts).toEqual([
+      { type: "text", text: "我会先检索资料，再输出文章草稿。" },
+    ]);
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(articleFrame).not.toBeNull();
+    expect(
+      Boolean(
+        processSummary!.compareDocumentPosition(streamingRenderer!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
     expect(
       Boolean(
         streamingRenderer!.compareDocumentPosition(articleFrame!) &
@@ -513,7 +503,7 @@ describe("MessageList artifacts timeline", () => {
       },
     ];
 
-    render(messages, {
+    const container = render(messages, {
       currentTurnId: "turn-duplicate-artifact",
       turns: [
         {
@@ -559,15 +549,12 @@ describe("MessageList artifacts timeline", () => {
       ],
     });
 
-    const trailingTimelineProps = mockAgentThreadTimeline.mock.calls.find(
-      ([props]) => props?.placement === "trailing",
-    )?.[0] as { items?: Array<Record<string, unknown>> } | undefined;
+    const fileArtifactCards = container.querySelectorAll(
+      '[data-testid="historical-file-artifact-group"] [data-testid="timeline-file-attachment-card"]',
+    );
 
-    expect(trailingTimelineProps?.items).toHaveLength(2);
-    expect(trailingTimelineProps?.items?.map((item) => item.id)).toEqual([
-      "item-artifact-duplicate-empty",
-      "item-artifact-duplicate-rich",
-    ]);
+    expect(fileArtifactCards).toHaveLength(2);
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
   });
 
   it("同一路径产物同时存在消息 artifacts 与尾部 file_artifact 时只显示时间线卡片", () => {
@@ -634,7 +621,9 @@ describe("MessageList artifacts timeline", () => {
       container.querySelector('[data-testid="message-artifact-card"]'),
     ).toBeNull();
     expect(
-      container.querySelectorAll('[data-testid="timeline-file-artifact-card"]'),
+      container.querySelectorAll(
+        '[data-testid="timeline-file-attachment-card"]',
+      ),
     ).toHaveLength(1);
   });
 
@@ -703,7 +692,9 @@ describe("MessageList artifacts timeline", () => {
       container.querySelector('[data-testid="message-artifact-card"]'),
     ).toBeNull();
     expect(
-      container.querySelectorAll('[data-testid="timeline-file-artifact-card"]'),
+      container.querySelectorAll(
+        '[data-testid="timeline-file-attachment-card"]',
+      ),
     ).toHaveLength(1);
   });
 
@@ -1038,24 +1029,21 @@ describe("MessageList artifacts timeline", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:trailing"]',
+      ),
     ).toBeNull();
     expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
-        contentParts: [
-          expect.objectContaining({
-            type: "tool_use",
-            toolCall: expect.objectContaining({
-              id: "tool-finished-1",
-            }),
-          }),
-          { type: "text", text: "已经打开 GitHub 并完成搜索。" },
-        ],
+        contentParts: [{ type: "text", text: "已经打开 GitHub 并完成搜索。" }],
       }),
     );
+    expect(container.textContent).not.toContain("已打开 GitHub 搜索页面");
   });
 });

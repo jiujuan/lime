@@ -68,6 +68,14 @@ pub(super) fn discover_rollout_paths(source_root: &Path) -> Vec<(PathBuf, bool)>
     paths
 }
 
+pub(super) fn rollout_thread_id(path: &Path) -> Option<String> {
+    plain_rollout_file_name(path).and_then(|name| {
+        name.strip_suffix(".jsonl")
+            .and_then(|stem| stem.strip_prefix("rollout-"))
+            .map(ToString::to_string)
+    })
+}
+
 fn count_rollout_files_in_subdir(source_root: &Path, subdir: &str) -> usize {
     let root = source_root.join(subdir);
     if !root.is_dir() {

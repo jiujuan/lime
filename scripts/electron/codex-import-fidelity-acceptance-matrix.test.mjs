@@ -49,6 +49,8 @@ const CONVERSATION_IMPORT_API_TEST_PATH =
   "src/lib/api/conversationImport.test.ts";
 const CONVERSATION_IMPORT_PROGRESS_TEST_PATH =
   "src/components/app-sidebar/AppSidebarConversationImportProgress.test.tsx";
+const CONVERSATION_IMPORT_DIALOG_PATH =
+  "src/components/app-sidebar/AppSidebarConversationImportDialog.tsx";
 const CONVERSATION_IMPORT_PROTOCOL_PATH =
   "lime-rs/crates/app-server-protocol/src/protocol/v0/conversation_import.rs";
 
@@ -128,6 +130,7 @@ describe("codex import fidelity acceptance matrix guard", () => {
       "context / review / subagent / collab",
       "incomplete lifecycle",
       "high-volume rollout",
+      "background import lifecycle",
       "continue same session",
       "responsive chat / workbench",
       "evidence / replay",
@@ -169,18 +172,22 @@ describe("codex import fidelity acceptance matrix guard", () => {
     }
 
     const apiTests = readFile(CONVERSATION_IMPORT_API_TEST_PATH);
+    const importDialog = readFile(CONVERSATION_IMPORT_DIALOG_PATH);
     expect(apiTests).toContain("sourceHomeExists");
     expect(apiTests).toContain("stateDbReadable");
     expect(apiTests).toContain("rolloutFileCount");
     expect(apiTests).toContain("waitForConversationImportJob");
+    expect(apiTests).toContain('name: "AbortError"');
+    expect(importDialog).toContain("readConversationImportJob");
+    expect(importDialog).toContain("thread.importJobId");
 
     const requiredGuiEvidence = [
-      "hasReasoningVisible",
-      "hasCommandExecutionVisible",
+      "hasHistoricalReasoningVisible",
+      "hasHistoricalCommandExecutionVisible",
       "hasCommandOutput",
       "hasPatchText",
-      "hasSearchEvidence",
-      "hasApprovalText",
+      "hasSearchItem",
+      "hasHistoricalApprovalText",
       "openedAllImportedPreviewArtifacts",
       "Markdown",
       "HTML",
@@ -192,6 +199,9 @@ describe("codex import fidelity acceptance matrix guard", () => {
       "conversationImport/job/read",
       "waitForConversationImportJob",
       "app-sidebar-conversation-import-progress",
+      "app-sidebar-conversation-import-close",
+      "backgroundImportResume",
+      "重新打开导入弹窗后未附着后台 job",
     ];
 
     for (const token of requiredGuiEvidence) {

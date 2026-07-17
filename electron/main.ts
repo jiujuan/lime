@@ -34,6 +34,7 @@ import {
 import { installMainWindowMediaPermissionHandler } from "./mainWindowMediaPermissions";
 import { ElectronUpdateHost } from "./updateHost";
 import { createElectronSmokeRunner } from "./smokeChecks";
+import { resolveWindowsSquirrelStartupPlan } from "./windowsSquirrelStartup";
 import {
   buildUpdateNotificationWindowBounds,
   type RectangleLike,
@@ -1407,37 +1408,40 @@ app.on("before-quit", () => {
 });
 
 function handleWindowsSquirrelStartup(): boolean {
-  if (process.platform !== "win32") {
+  const plan = resolveWindowsSquirrelStartupPlan({
+    argv: process.argv,
+    execPath: process.execPath,
+    platform: process.platform,
+  });
+  if (!plan) {
     return false;
   }
-
-  const command = process.argv[1];
-  const executableName = path.basename(process.execPath);
-  const updateExecutable = path.resolve(
-    path.dirname(process.execPath),
-    "..",
-    "Update.exe",
-  );
-  const runUpdate = (args: string[]) => {
-    spawn(updateExecutable, args, { detached: true }).once("close", () => {
-      app.quit();
-    });
-  };
-
-  if (command === "--squirrel-install" || command === "--squirrel-updated") {
-    runUpdate([`--createShortcut=${executableName}`]);
-    return true;
-  }
-  if (command === "--squirrel-uninstall") {
-    runUpdate([`--removeShortcut=${executableName}`]);
-    return true;
-  }
-  if (command === "--squirrel-obsolete") {
+  if (plan.action === "quit") {
     app.quit();
     return true;
   }
 
-  return false;
+  try {
+    spawn(plan.updateExecutable, plan.args, { detached: true }).once(
+      "error",
+      (error) => {
+        console.error(
+          `[electron-host] Squirrel Update.exe failed: ${error.message}`,
+        );
+      },
+    );
+    // Squirrel gives lifecycle handlers a short deadline. Update.exe is detached,
+    // so the host should not wait for its process lifetime before quitting.
+    setTimeout(() => app.quit(), 1_000);
+  } catch (error) {
+    console.error(
+      `[electron-host] unable to start Squirrel Update.exe: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    app.quit();
+  }
+  return true;
 }
 
 async function warmupAppServer(): Promise<void> {

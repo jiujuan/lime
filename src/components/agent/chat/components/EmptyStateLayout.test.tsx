@@ -2,10 +2,12 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LIME_COLOR_SCHEME_CHANGED_EVENT } from "@/lib/appearance/colorSchemes";
 import { EmptyStateLayout } from "./EmptyStateLayout";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean })
-  .IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const heroCopy = {
   eyebrow: "创作",
@@ -35,6 +37,7 @@ afterEach(() => {
   host?.remove();
   root = null;
   host = null;
+  localStorage.clear();
 });
 
 function renderLayout() {
@@ -59,20 +62,43 @@ function renderLayout() {
 }
 
 describe("EmptyStateLayout", () => {
-  it("首屏应整体下移 100px，而不是只移动输入区", () => {
+  it("首屏应展示 Dream Blossom 主视觉并保留原生输入区", () => {
     const container = renderLayout();
     const firstScreen = container.querySelector(
       '[data-testid="empty-state-first-screen"]',
     ) as HTMLElement | null;
+    const artwork = container.querySelector(
+      '[data-testid="dream-blossom-home-artwork"]',
+    );
     const prioritySlot = container.querySelector(
       '[data-testid="priority-slot"]',
     );
 
     expect(firstScreen).toBeTruthy();
-    expect(firstScreen?.style.getPropertyValue(
-      "--empty-state-first-screen-offset-y",
-    )).toBe("100px");
+    expect(artwork).toBeTruthy();
     expect(firstScreen?.textContent).toContain("青柠一下，灵感即来");
     expect(firstScreen?.contains(prioritySlot)).toBe(true);
+    expect(artwork?.querySelector("img")?.getAttribute("src")).toContain(
+      "home-hero.webp",
+    );
+  });
+
+  it("切换皮肤时应实时更换首页 hero 图片", () => {
+    const container = renderLayout();
+    const artwork = container.querySelector(
+      '[data-testid="dream-blossom-home-artwork"] img',
+    );
+
+    expect(artwork?.getAttribute("src")).toContain("home-hero.webp");
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(LIME_COLOR_SCHEME_CHANGED_EVENT, {
+          detail: { colorSchemeId: "lime-ocean" },
+        }),
+      );
+    });
+
+    expect(artwork?.getAttribute("src")).toContain("midnight-aurora.jpg");
   });
 });

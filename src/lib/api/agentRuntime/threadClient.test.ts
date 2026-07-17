@@ -3588,12 +3588,18 @@ describe("agentRuntime threadClient", () => {
         thread_id: "thread-1",
         status: "blocked",
         profile_status: "blocked",
-        active_turn_id: "turn-1",
         pending_requests: [
           expect.objectContaining({
             id: "request-1",
             request_type: "ask_user",
             status: "pending",
+          }),
+        ],
+        turns: [
+          expect.objectContaining({
+            turn_id: "turn-1",
+            status: "running",
+            native_status: "running",
           }),
         ],
       }),

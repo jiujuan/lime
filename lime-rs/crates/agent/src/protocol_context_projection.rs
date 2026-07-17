@@ -291,8 +291,7 @@ fn build_team_memory_ref_from_object(
         repo_scope: read_object_string(object, &["repo_scope", "repoScope"]).or(repo_scope),
         updated_at: read_object_i64(object, &["updated_at", "updatedAt"]),
         priority: read_object_u32(object, &["priority"]).or_else(|| u32::try_from(index).ok()),
-        source: read_object_string(object, &["source"])
-            .or_else(|| Some("context".to_string())),
+        source: read_object_string(object, &["source"]).or_else(|| Some("context".to_string())),
     })
 }
 

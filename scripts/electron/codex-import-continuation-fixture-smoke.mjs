@@ -228,7 +228,11 @@ async function run() {
     const client = createPageAppServerClient(page);
 
     logStage("commit-import-zero-replay");
-    const initial = await initializeAndCommitImport(client, runtimeEnv);
+    const initial = await initializeAndCommitImport(
+      client,
+      runtimeEnv,
+      options,
+    );
     const providerRequestsAfterCommit = providerFixture.requests.length;
     assert(
       providerRequestsAfterCommit === 0,

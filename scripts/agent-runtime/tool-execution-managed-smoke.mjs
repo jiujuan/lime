@@ -3,7 +3,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import electronPath from "electron";
@@ -21,12 +20,31 @@ import {
   DEFERRED_MCP_TOOL_SEARCH_FINAL_TEXT,
   DEFERRED_MCP_TOOL_SEARCH_GATE_B_BATCH_ID,
 } from "./deferred-mcp-tool-search-gate-b.mjs";
+import {
+  buildSoakSummary,
+  childArgsForRound,
+  collectProcessTreeSnapshot,
+  collectRestoredSoakRounds,
+  collectSoakRoundObservation,
+  resolveSoakConfig,
+  roundEvidencePath,
+  waitForProcessIdsExit,
+} from "./tool-execution-soak-evidence.mjs";
+import { runManagedColdRestarts } from "./tool-execution-managed-restart.mjs";
+import {
+  cleanupToolExecutionTempRoot,
+  createToolExecutionTempRuntimeEnv,
+} from "./tool-execution-managed-runtime-env.mjs";
+import {
+  readToolExecutionEvidence,
+  resolveToolExecutionEvidencePath,
+  screenshotPathForEvidence,
+  writeToolExecutionEvidence,
+} from "./tool-execution-managed-evidence.mjs";
 
 const LOG_PREFIX = "[smoke:agent-runtime-tool-execution:managed]";
 const DEFAULT_TIMEOUT_MS = 300_000;
 const INTERVAL_MS = 500;
-const TEMP_CLEANUP_RETRY_COUNT = 8;
-const TEMP_CLEANUP_RETRY_DELAY_MS = 250;
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const DEFAULT_EVIDENCE_OUTPUT = path.resolve(
   ".lime/qc/agent-runtime-tool-execution-smoke.json",
@@ -74,70 +92,6 @@ function visibleDomGateBKindFromArgs(args) {
     return "deferred-mcp";
   }
   return null;
-}
-
-function evidenceOutputFromArgs(args) {
-  const explicitOutput = valueFromArgs(args, "--output");
-  return explicitOutput
-    ? path.resolve(process.cwd(), explicitOutput)
-    : DEFAULT_EVIDENCE_OUTPUT;
-}
-
-function screenshotPathForEvidence(outputPath, stage = "visible-dom") {
-  const extension = path.extname(outputPath);
-  const stem = extension ? outputPath.slice(0, -extension.length) : outputPath;
-  return `${stem}-${stage}.png`;
-}
-
-function createTempRuntimeEnv() {
-  const tempRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), "tool-execution-managed-electron-"),
-  );
-  const home = path.join(tempRoot, "home");
-  const xdgDataHome = path.join(tempRoot, "xdg-data");
-  const localAppData = path.join(tempRoot, "local-app-data");
-  const roamingAppData = path.join(tempRoot, "roaming-app-data");
-  const electronUserDataDir = path.join(tempRoot, "electron-user-data");
-  const agentRoot = path.join(tempRoot, "agent");
-
-  for (const dir of [
-    home,
-    xdgDataHome,
-    localAppData,
-    roamingAppData,
-    electronUserDataDir,
-    agentRoot,
-  ]) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  return {
-    tempRoot,
-    electronUserDataDir,
-    env: {
-      ...process.env,
-      HOME: home,
-      XDG_DATA_HOME: xdgDataHome,
-      APPDATA: roamingAppData,
-      LOCALAPPDATA: localAppData,
-      LIME_AGENT_RUNTIME_ROOT: agentRoot,
-    },
-  };
-}
-
-function cleanupTempRoot(tempRoot) {
-  try {
-    fs.rmSync(tempRoot, {
-      recursive: true,
-      force: true,
-      maxRetries: TEMP_CLEANUP_RETRY_COUNT,
-      retryDelay: TEMP_CLEANUP_RETRY_DELAY_MS,
-    });
-  } catch (error) {
-    console.warn(
-      `${LOG_PREFIX} temp cleanup skipped path=${tempRoot} error=${sanitizeText(error)}`,
-    );
-  }
 }
 
 async function waitForRendererReady(page, timeoutMs) {
@@ -248,23 +202,6 @@ function writeJson(response, status, payload) {
   response.end(`${JSON.stringify(payload)}\n`);
 }
 
-function readEvidence(outputPath) {
-  const evidence = JSON.parse(fs.readFileSync(outputPath, "utf8"));
-  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
-    throw new Error(`tool execution evidence 结构非法: ${outputPath}`);
-  }
-  return evidence;
-}
-
-function writeEvidence(outputPath, evidence) {
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(
-    outputPath,
-    `${JSON.stringify(evidence, null, 2)}\n`,
-    "utf8",
-  );
-}
-
 async function readInvokeDiagnostics(page) {
   return await page.evaluate(
     ({ errorKey, traceKey }) => {
@@ -344,17 +281,34 @@ async function waitForDomCountToDrop(page, selector, previousCount, timeoutMs) {
 async function expandHistoricalToolRows(page, timeoutMs) {
   const historicalPreviewSelector =
     '[data-testid^="message-list-historical-timeline-preview:"]';
+  const materializedTimelineSelector = '[data-testid="agent-thread-flow"]';
   const historicalPreviews = page.locator(historicalPreviewSelector);
+  const materializedTimelines = page.locator(materializedTimelineSelector);
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const previousCount = await historicalPreviews.count();
     if (previousCount === 0) break;
+    const previousTimelineCount = await materializedTimelines.count();
     await historicalPreviews.first().click();
-    await waitForDomCountToDrop(
-      page,
-      historicalPreviewSelector,
-      previousCount,
-      timeoutMs,
+    await page.waitForFunction(
+      ({
+        historicalPreviewSelector,
+        materializedTimelineSelector,
+        previousCount,
+        previousTimelineCount,
+      }) =>
+        document.querySelectorAll(historicalPreviewSelector).length <
+          previousCount ||
+        document.querySelectorAll(materializedTimelineSelector).length >
+          previousTimelineCount,
+      {
+        historicalPreviewSelector,
+        materializedTimelineSelector,
+        previousCount,
+        previousTimelineCount,
+      },
+      { timeout: Math.min(timeoutMs, 30_000) },
     );
+    if ((await materializedTimelines.count()) > previousTimelineCount) break;
   }
 
   const closedProcessSelector =
@@ -735,6 +689,7 @@ async function main() {
   const timeoutMs = timeoutFromArgs(childArgs);
   const visibleDomGateBKind = visibleDomGateBKindFromArgs(childArgs);
   const coldRestartRequested = childArgs.includes("--cold-restart");
+  const soakConfig = resolveSoakConfig(childArgs);
   if (coldRestartRequested && visibleDomGateBKind !== "agent-control") {
     throw new Error("--cold-restart 只允许用于 agent-control-tools batch");
   }
@@ -746,8 +701,14 @@ async function main() {
   if (visibleDomGateBKind && childArgs.includes("--no-write")) {
     throw new Error("visible-DOM Gate B 需要写入结构化 evidence");
   }
-  const outputPath = evidenceOutputFromArgs(childArgs);
-  const runtimeEnv = createTempRuntimeEnv();
+  if (soakConfig.enabled && visibleDomGateBKind !== "agent-control") {
+    throw new Error("SOAK 多轮模式当前只允许用于 agent-control-tools batch");
+  }
+  const outputPath = resolveToolExecutionEvidencePath(
+    childArgs,
+    DEFAULT_EVIDENCE_OUTPUT,
+  );
+  const runtimeEnv = createToolExecutionTempRuntimeEnv();
   const appServerBinary = resolveDevAppServerBinary({
     env: runtimeEnv.env,
     repoRoot: process.cwd(),
@@ -762,6 +723,10 @@ async function main() {
   let page = null;
   let bridge = null;
   const consoleErrors = [];
+  const processSnapshots = [];
+  const restartRecords = [];
+  const soakRounds = [];
+  const soakRoundEvidencePaths = [];
   try {
     console.log(`${LOG_PREFIX} stage=launch-electron`);
     const launched = await launchManagedElectron({
@@ -782,17 +747,60 @@ async function main() {
     bridge = await startBridgeProxy(page);
     console.log(`${LOG_PREFIX} bridge=${bridge.baseUrl}`);
 
-    const result = await runChild(
-      childArgs.filter((arg) => arg !== "--cold-restart"),
-      bridge.baseUrl,
-    );
-    if (result.code !== 0) {
-      process.exitCode = result.code;
-      return;
+    for (let roundIndex = 0; roundIndex < soakConfig.rounds; roundIndex += 1) {
+      const roundStartedAt = Date.now();
+      const roundOutputPath = roundEvidencePath(
+        outputPath,
+        roundIndex,
+        soakConfig.rounds,
+      );
+      console.log(
+        `${LOG_PREFIX} stage=runtime-round round=${roundIndex + 1}/${soakConfig.rounds}`,
+      );
+      const childStartedAt = Date.now();
+      const result = await runChild(
+        childArgsForRound(childArgs, roundOutputPath),
+        bridge.baseUrl,
+      );
+      const childDurationMs = Date.now() - childStartedAt;
+      if (result.code !== 0) {
+        process.exitCode = result.code;
+        return;
+      }
+      if (soakConfig.enabled) {
+        soakRoundEvidencePaths.push(roundOutputPath);
+        const evidenceReadStartedAt = Date.now();
+        const evidence = readToolExecutionEvidence(roundOutputPath);
+        const evidenceReadDurationMs = Date.now() - evidenceReadStartedAt;
+        const processSnapshotStartedAt = Date.now();
+        const processSnapshot = collectProcessTreeSnapshot(
+          app.process().pid,
+          `round-${roundIndex + 1}`,
+        );
+        const processSnapshotDurationMs = Date.now() - processSnapshotStartedAt;
+        processSnapshots.push(processSnapshot);
+        const observationStartedAt = Date.now();
+        const observation = await collectSoakRoundObservation({
+          evidence,
+          outputPath: roundOutputPath,
+          page,
+          processSnapshot,
+          roundIndex,
+        });
+        const observationDurationMs = Date.now() - observationStartedAt;
+        observation.phaseTimings = {
+          childDurationMs,
+          evidenceReadDurationMs,
+          processSnapshotDurationMs,
+          observationDurationMs,
+        };
+        observation.durationMs = Date.now() - roundStartedAt;
+        soakRounds.push(observation);
+      }
     }
     if (visibleDomGateBKind) {
       console.log(`${LOG_PREFIX} stage=visible-dom-gate-b`);
-      const evidence = readEvidence(outputPath);
+      const evidence = readToolExecutionEvidence(outputPath);
       const sessionId = String(evidence?.runtime?.sessionId || "").trim();
       consoleErrors.length = 0;
       let coldRestart = null;
@@ -828,33 +836,38 @@ async function main() {
           ),
         };
         consoleErrors.length = 0;
-        console.log(`${LOG_PREFIX} stage=cold-restart-electron`);
-        await closeServer(bridge?.server);
-        bridge = null;
-        await closeElectronApp(app);
-        app = null;
-        const restarted = await launchManagedElectron({
+        const restartResult = await runManagedColdRestarts({
+          app,
           appServerEnv,
+          bridge,
+          closeElectronApp,
+          closeServer,
           consoleErrors,
-          runtimeEnv,
-          timeoutMs,
-        });
-        app = restarted.app;
-        page = restarted.page;
-        const restartedElectronPid = app.process().pid;
-        coldRestart = {
+          count: soakConfig.coldRestarts,
           initialElectronPid,
-          restartedElectronPid,
-          electronProcessReplaced:
-            Number.isInteger(initialElectronPid) &&
-            Number.isInteger(restartedElectronPid) &&
-            initialElectronPid !== restartedElectronPid,
-        };
-        rendererSnapshot = await restoreAgentSessionRoute(
-          page,
+          launchManagedElectron,
+          logPrefix: LOG_PREFIX,
+          readAgentControlDomState,
+          restoreAgentSessionRoute,
+          runtimeEnv,
           sessionId,
           timeoutMs,
-        );
+        });
+        app = restartResult.app;
+        bridge = restartResult.bridge;
+        page = restartResult.page;
+        rendererSnapshot = restartResult.rendererSnapshot;
+        processSnapshots.push(...restartResult.processSnapshots);
+        restartRecords.push(...restartResult.restartRecords);
+        coldRestart = {
+          initialElectronPid,
+          restartedElectronPid: app.process().pid,
+          restartCount: restartRecords.length,
+          restarts: restartRecords,
+          electronProcessReplaced: restartRecords.every(
+            (restart) => restart.electronProcessReplaced === true,
+          ),
+        };
       } else {
         rendererSnapshot = await restoreAgentSessionRoute(
           page,
@@ -906,7 +919,7 @@ async function main() {
         ...failedAssertions,
       ];
       evidence.status = evidence.failedAssertions.length > 0 ? "fail" : "pass";
-      writeEvidence(outputPath, evidence);
+      writeToolExecutionEvidence(outputPath, evidence);
       if (failedAssertions.length > 0) {
         throw new Error(
           `${visibleDomGateBKind} visible-DOM Gate B 失败: ${failedAssertions.join(", ")}`,
@@ -916,11 +929,65 @@ async function main() {
         `${LOG_PREFIX} visible-dom-gate-b=pass evidence=${outputPath} screenshot=${visibleDomGateB.snapshot.screenshotPath}`,
       );
     }
+    if (soakConfig.enabled) {
+      const finalProcessSnapshot = collectProcessTreeSnapshot(
+        app.process().pid,
+        "pre-final-shutdown",
+      );
+      const restoredRounds = await collectRestoredSoakRounds({
+        evidencePaths: soakRoundEvidencePaths,
+        page,
+        processSnapshot: finalProcessSnapshot,
+        readEvidence: readToolExecutionEvidence,
+      });
+      await closeElectronApp(app);
+      app = null;
+      const finalShutdown = await waitForProcessIdsExit(
+        finalProcessSnapshot.processes.map((entry) => entry.pid),
+      );
+      const evidence = readToolExecutionEvidence(outputPath);
+      const soak = buildSoakSummary({
+        finalShutdown,
+        processSnapshots,
+        restoredRounds,
+        restarts: restartRecords,
+        rounds: soakRounds,
+      });
+      const failedSoakAssertions = Object.entries(soak.assertions)
+        .filter(([, passed]) => passed !== true)
+        .map(([name]) => name);
+      evidence.soak = soak;
+      evidence.assertions = {
+        ...(evidence.assertions && typeof evidence.assertions === "object"
+          ? evidence.assertions
+          : {}),
+        ...soak.assertions,
+      };
+      evidence.failedAssertions = [
+        ...new Set([
+          ...(Array.isArray(evidence.failedAssertions)
+            ? evidence.failedAssertions
+            : []),
+          ...failedSoakAssertions,
+        ]),
+      ];
+      evidence.status = evidence.failedAssertions.length > 0 ? "fail" : "pass";
+      writeToolExecutionEvidence(outputPath, evidence);
+      if (failedSoakAssertions.length > 0) {
+        throw new Error(`SOAK-01 失败: ${failedSoakAssertions.join(", ")}`);
+      }
+      console.log(
+        `${LOG_PREFIX} soak=pass rounds=${soak.roundCount} restarts=${soak.restartCount} evidence=${outputPath}`,
+      );
+    }
     process.exitCode = 0;
   } finally {
     await closeServer(bridge?.server);
     await closeElectronApp(app);
-    cleanupTempRoot(runtimeEnv.tempRoot);
+    cleanupToolExecutionTempRoot(runtimeEnv.tempRoot, {
+      logPrefix: LOG_PREFIX,
+      sanitizeText,
+    });
   }
 }
 

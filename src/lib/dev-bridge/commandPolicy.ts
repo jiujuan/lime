@@ -7,6 +7,7 @@ export type DevBridgeCommandTimeoutProfile =
   | "agent-session-patch"
   | "agent-session-create"
   | "app-server-turn-start"
+  | "app-server-import"
   | "app-server-long-running"
   | "app-server-read"
   | "agent-runtime"
@@ -114,6 +115,12 @@ const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
 const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
+const APP_SERVER_CONVERSATION_IMPORT_METHODS = new Set([
+  "conversationImport/job/read",
+  "conversationImport/source/scan",
+  "conversationImport/thread/preview",
+  "conversationImport/thread/commit",
+]);
 const APP_SERVER_PLUGIN_UI_RUNTIME_START_METHOD = "pluginUiRuntime/start";
 const APP_SERVER_KNOWLEDGE_COMPILE_METHOD = "knowledgePack/compile";
 const APP_SERVER_LONG_RUNNING_METHODS = new Set(["automationJob/runNow"]);
@@ -250,6 +257,7 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "voiceTranscription/transcribeAudio",
   "voiceTranscription/polishText",
   "conversationImport/source/scan",
+  "conversationImport/job/read",
   "conversationImport/thread/preview",
   "conversationImport/thread/commit",
   "projectGit/status",
@@ -337,6 +345,9 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerAgentTurnStartCommand(command, args)) {
     return "app-server-turn-start";
   }
+  if (isAppServerConversationImportCommand(command, args)) {
+    return "app-server-import";
+  }
   if (isAppServerPluginUiRuntimeStartCommand(command, args)) {
     return "plugin-ui-runtime-start";
   }
@@ -409,6 +420,18 @@ function isAppServerAgentTurnStartCommand(
   }
   return extractAppServerJsonLines(args).some((line) =>
     jsonRpcLineHasMethod(line, APP_SERVER_AGENT_TURN_START_METHOD),
+  );
+}
+
+function isAppServerConversationImportCommand(
+  command: string,
+  args: unknown,
+): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasAnyMethod(line, APP_SERVER_CONVERSATION_IMPORT_METHODS),
   );
 }
 

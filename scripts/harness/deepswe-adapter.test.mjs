@@ -15,6 +15,7 @@ import {
   preflightSelectedTasks,
   preparePierReplayTask,
   prepareTaskWorkspace,
+  providerStepExhaustion,
   providerStepsFromEvidence,
   readJson,
   runCurrentChainTask,
@@ -251,6 +252,8 @@ describe("DeepSWE current-chain adapter", () => {
         timeoutMs: 30_000,
         maxProviderSteps: 2,
         tokenBudget: 1_000,
+        maxOutputTokens: 4_096,
+        enableThinking: false,
       },
       task: { id: "task-1", instruction: "Fix the task" },
       workspaceDir,
@@ -276,6 +279,10 @@ describe("DeepSWE current-chain adapter", () => {
             provider_budget: {
               max_provider_steps: 2,
               token_budget: 1_000,
+            },
+            generation: {
+              max_output_tokens: 4_096,
+              enable_thinking: false,
             },
           },
         },
@@ -413,6 +420,7 @@ describe("DeepSWE current-chain adapter", () => {
     const workspaceDir = path.join(root, "workspace");
     fs.mkdirSync(workspaceDir);
     let readCount = 0;
+    let turnStartParams = null;
     const rpc = {
       waitForHealth: async () => ({ status: "ok" }),
       invoke: async (_options, method) => {
@@ -438,7 +446,8 @@ describe("DeepSWE current-chain adapter", () => {
         source: "test",
       }),
       updateSession: async () => {},
-      startTurn: async () => {
+      startTurn: async (_options, params) => {
+        turnStartParams = params;
         throw new Error("Provider tool call omitted tool name");
       },
       readThread: async () => ({ status: "in_progress", turns: [] }),
@@ -456,6 +465,9 @@ describe("DeepSWE current-chain adapter", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe("Provider tool call omitted tool name");
+    expect(
+      turnStartParams?.runtimeRequest?.metadata?.harness,
+    ).not.toHaveProperty("generation");
     expect(currentChainFromError(error)).toMatchObject({
       status: "failed",
       sessionId: "deepswe-run-failed",
@@ -665,6 +677,10 @@ describe("DeepSWE current-chain adapter", () => {
     expect(result).toMatchObject({
       status: "completed",
       budgetCancellation: null,
+      providerStepExhaustion: {
+        reasons: ["provider_steps"],
+        stepCount: 2,
+      },
       providerSteps: {
         stepCount: 2,
         budgets: {
@@ -673,6 +689,17 @@ describe("DeepSWE current-chain adapter", () => {
         },
       },
     });
+  });
+
+  it("does not classify a natural final answer at the step limit as exhausted", () => {
+    expect(
+      providerStepExhaustion({
+        stepCount: 2,
+        budgets: { reasons: ["provider_steps"] },
+        usage: { budgetTokens: 200 },
+        steps: [{ finishReason: "tool_call" }, { finishReason: "stop" }],
+      }),
+    ).toBeNull();
   });
 
   it("records runtime token exhaustion after the turn is already terminal", async () => {
@@ -968,6 +995,7 @@ describe("DeepSWE current-chain adapter", () => {
       "internal/roadmap/benchmark/dataset-selection.md",
       "internal/roadmap/benchmark/progress.md",
       "internal/roadmap/benchmark/version-test-plan.md",
+      "internal/research/agent/lime-agent-verification-plan/07-flag-differential-harness.md",
     ];
     expect(
       retiredPaths.every((entry) => !fs.existsSync(path.join(repoRoot, entry))),
@@ -986,6 +1014,21 @@ describe("DeepSWE current-chain adapter", () => {
         name.startsWith("agent-qc:benchmark"),
       ),
     ).toEqual([]);
+    const researchPaths = [
+      "internal/research/agent/README.md",
+      "internal/research/agent/lime-verifiable-agent-development-researched.md",
+      "internal/research/agent/lime-agent-verification-plan/README.md",
+      "internal/research/agent/lime-agent-verification-plan/08-30-60-90-roadmap.md",
+      "internal/research/agent/lime-agent-verification-plan/09-progress-tracker.md",
+    ];
+    const researchText = researchPaths
+      .map((entry) => fs.readFileSync(path.join(repoRoot, entry), "utf8"))
+      .join("\n");
+    expect(researchText).not.toContain("npm run agent-qc:benchmark");
+    expect(researchText).not.toContain(
+      "internal/test/agent-qc-benchmark.manifest.json",
+    );
+    expect(researchText).not.toContain("./07-flag-differential-harness.md");
   });
 
   it("fails closed before live execution without explicit authorization", () => {
@@ -1002,6 +1045,37 @@ describe("DeepSWE current-chain adapter", () => {
     expect(result.status).toBe(1);
     expect(`${result.stdout}${result.stderr}`).toContain(
       "--allow-live-provider",
+    );
+  });
+
+  it("parses explicit generation controls and rejects invalid tri-state values", () => {
+    const valid = spawnSync(
+      process.execPath,
+      [
+        "scripts/harness/deepswe-adapter.mjs",
+        "--help",
+        "--max-output-tokens",
+        "4096",
+        "--enable-thinking",
+        "false",
+      ],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    expect(valid.status).toBe(0);
+
+    const invalid = spawnSync(
+      process.execPath,
+      [
+        "scripts/harness/deepswe-adapter.mjs",
+        "--help",
+        "--enable-thinking",
+        "auto",
+      ],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    expect(invalid.status).toBe(1);
+    expect(`${invalid.stdout}${invalid.stderr}`).toContain(
+      "--enable-thinking must be true or false",
     );
   });
 

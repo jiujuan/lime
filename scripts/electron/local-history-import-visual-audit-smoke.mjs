@@ -55,7 +55,7 @@ Local History Import Visual Audit Smoke
 
 用途:
   复用真实 Electron 本地历史导入点击闭环，再对采集到的 GUI 可见文本做
-  产品边界审计：长历史会话页必须可读、输入框可用、导入细节可见，
+  产品边界审计：长历史会话页必须可读、输入框可用、terminal 历史只显示摘要，
   且除导入来源 / provenance / fixture / 协议枚举外，普通可见文本不得
   泄漏来源品牌字眼。
 
@@ -202,11 +202,19 @@ function summarizeVisualAudit(summary) {
     hasImportedAssistantMessage: entry.hasImportedAssistantMessage === true,
     hasContinueUserMessage: entry.hasContinueUserMessage === true,
     hasContinueAssistantMessage: entry.hasContinueAssistantMessage === true,
-    hasCommandExecutionVisible: entry.hasCommandExecutionVisible === true,
-    hasCommandOutput: entry.hasCommandOutput === true,
+    historicalOperationalDetailsHidden:
+      entry.historicalOperationalDetailsHidden === true,
+    toolCallRowCount: Number(entry.toolCallRowCount || 0),
+    operationalTimelineDetailsCount: Number(
+      entry.operationalTimelineDetailsCount || 0,
+    ),
+    deferredHistoricalPreviewCount: Number(
+      entry.deferredHistoricalPreviewCount || 0,
+    ),
+    historicalTimelinePreviewCount: Number(
+      entry.historicalTimelinePreviewCount || 0,
+    ),
     hasPatchText: entry.hasPatchText === true,
-    hasSearchEvidence: entry.hasSearchEvidence === true,
-    hasApprovalText: entry.hasApprovalText === true,
     importedBannerVisible: entry.importedBannerVisible === true,
     importedRunControlVisible: entry.importedRunControlVisible === true,
     hidesRawImportedCommand: entry.hidesRawImportedCommand === true,
@@ -236,17 +244,29 @@ function assertVisualAudit(visualAudit) {
       "hasImportedAssistantMessage",
       "hasContinueUserMessage",
       "hasContinueAssistantMessage",
-      "hasCommandExecutionVisible",
-      "hasCommandOutput",
+      "historicalOperationalDetailsHidden",
       "hasPatchText",
-      "hasSearchEvidence",
-      "hasApprovalText",
       "hidesRawImportedCommand",
       "hidesSourceBrandText",
     ]) {
       if (entry[key] !== true) {
         throw new Error(`${label} 视口 ${key} 未通过`);
       }
+    }
+    if (
+      entry.toolCallRowCount !== 0 ||
+      entry.operationalTimelineDetailsCount !== 0 ||
+      entry.deferredHistoricalPreviewCount !== 0 ||
+      entry.historicalTimelinePreviewCount < 1
+    ) {
+      throw new Error(
+        `${label} terminal 历史必须只保留摘要: ${JSON.stringify({
+          toolCallRowCount: entry.toolCallRowCount,
+          operationalTimelineDetailsCount: entry.operationalTimelineDetailsCount,
+          deferredHistoricalPreviewCount: entry.deferredHistoricalPreviewCount,
+          historicalTimelinePreviewCount: entry.historicalTimelinePreviewCount,
+        })}`,
+      );
     }
     if (entry.importedBannerVisible || entry.importedRunControlVisible) {
       throw new Error(`${label} 视口不应展示导入主线 banner / run control 卡`);

@@ -112,8 +112,15 @@ describe("MessageList artifact filtering", () => {
       container.querySelector('[data-testid="message-artifact-card"]'),
     ).toBeNull();
     expect(
-      container.querySelectorAll('[data-testid="timeline-file-artifact-card"]'),
+      container.querySelectorAll(
+        '[data-testid="timeline-file-attachment-card"]',
+      ),
     ).toHaveLength(2);
+    expect(
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:trailing"]',
+      ),
+    ).not.toBeNull();
     expect(
       container
         .querySelector('[data-testid="streaming-renderer"]')
@@ -227,7 +234,7 @@ describe("MessageList artifact filtering", () => {
     expect(container.textContent).not.toContain("report.artifact.json");
   });
 
-  it("应先渲染思考与过程，再渲染正文，最后再落产物", () => {
+  it("完成态应先渲染 compact 过程摘要，再渲染正文和产物", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -286,22 +293,26 @@ describe("MessageList artifact filtering", () => {
     const streaming = container.querySelector(
       '[data-testid="streaming-renderer"]',
     );
+    const processSummary = container.querySelector(
+      '[data-testid="message-list-historical-timeline-preview:leading"]',
+    );
     const artifactButton = Array.from(
       container.querySelectorAll("button"),
     ).find((node) => node.textContent?.includes("publish.md"));
 
+    expect(processSummary).not.toBeNull();
     expect(streaming).not.toBeNull();
     expect(artifactButton).toBeDefined();
+    const processSummaryNode = processSummary as Node;
     const streamingNode = streaming as Node;
     const artifactButtonNode = artifactButton as Node;
     expect(
       findStreamingRendererCallByContent("已生成发布文案")?.contentParts,
-    ).toEqual([
-      expect.objectContaining({
-        type: "text",
-        text: expect.stringContaining("<proposed_plan>"),
-      }),
-    ]);
+    ).toEqual([{ type: "text", text: "已生成发布文案" }]);
+    expect(
+      processSummaryNode.compareDocumentPosition(streamingNode) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       streamingNode.compareDocumentPosition(artifactButtonNode) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -577,7 +588,7 @@ describe("MessageList artifact filtering", () => {
     ]);
   });
 
-  it("继续回合的执行过程应挂在第二次对话组而不是第一次失败组", () => {
+  it("继续回合的 compact 过程摘要应挂在第二次对话组", () => {
     const messages: Message[] = [
       {
         id: "msg-user-first",
@@ -668,14 +679,26 @@ describe("MessageList artifact filtering", () => {
     expect(firstAssistant).toBeTruthy();
     expect(continueAssistant).toBeTruthy();
     expect(findStreamingRendererCallByContent("好的")?.contentParts).toEqual([
-      expect.objectContaining({
-        type: "text",
-        text: expect.stringContaining("<proposed_plan>"),
-      }),
+      { type: "text", text: "好的" },
     ]);
+    expect(
+      container.querySelector(
+        '[data-runtime-turn-id="turn-continue"] [data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-runtime-turn-id="turn-continue"] [data-timeline-items="plan:process-continue"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-runtime-turn-id="turn-first"] [data-timeline-items="plan:process-continue"]',
+      ),
+    ).toBeNull();
     expect(
       findStreamingRendererCallByContent("执行失败：402 Payment Required")
         ?.contentParts,
-    ).toBeUndefined();
+    ).toEqual([{ type: "text", text: "执行失败：402 Payment Required" }]);
   });
 });

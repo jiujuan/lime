@@ -20,6 +20,8 @@ import {
   recordCuratedTaskRecommendationSignalFromMemoryReference,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "../utils/curatedTaskRecommendationSignals";
+import { DEFAULT_LIME_COLOR_SCHEME_ID } from "@/lib/appearance/colorSchemes";
+import { getLimeSkinCopy } from "@/lib/appearance/skinContent";
 
 const {
   mockGetConfig,
@@ -671,9 +673,7 @@ describe("EmptyState", () => {
       container.querySelector('[data-testid="empty-state-hero-eyebrow-badge"]')
         ?.textContent,
     ).toBe("创作");
-    expect(container.textContent).not.toContain(
-      "说一句目标，Lime 就接着帮你做。",
-    );
+    expect(container.textContent).toContain("说一句目标，Lime 就接着帮你做。");
     expect(container.textContent).not.toContain(
       "文案、图片、视频、搜索和网页任务围绕同一目标持续推进，并沉淀上下文、偏好和做法。",
     );
@@ -1021,6 +1021,7 @@ describe("EmptyState", () => {
 
   it("通用首页静态起手与引导文案应跟随 en-US 资源", async () => {
     await changeLimeLocale("en-US");
+    const skinCopy = getLimeSkinCopy(DEFAULT_LIME_COLOR_SCHEME_ID, "en-US");
     const container = renderEmptyState({
       activeTheme: "general",
       serviceSkills: [],
@@ -1030,11 +1031,12 @@ describe("EmptyState", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("Creation");
-    expect(container.textContent).toContain("Ask Lime, spark the idea");
-    expect(container.textContent).not.toContain(
-      "Say the goal and Lime will keep going with you.",
-    );
+    expect(container.textContent).toContain(skinCopy.brandSubtitle);
+    expect(container.textContent).toContain(skinCopy.tagline);
+    expect(container.textContent).toContain(skinCopy.eyebrow);
+    expect(container.textContent).toContain(skinCopy.slogan);
+    expect(container.textContent).toContain(skinCopy.description);
+    expect(container.textContent).toContain(skinCopy.status);
     expect(container.textContent).toContain("Guide help");
     expect(container.textContent).toContain("Writing");
     expect(container.textContent).toContain("Add knowledge");
@@ -3806,9 +3808,19 @@ describe("EmptyState", () => {
     expect(
       container.querySelector('[data-testid="entry-recent-session-resume"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("发布计划");
+    expect(container.textContent).toContain("更多 1 个对话");
+    expect(container.textContent).not.toContain("发布计划");
     expect(container.textContent).not.toContain("内容项目");
     expect(container.textContent).not.toContain("已记录 6 条消息。");
+
+    const moreButton = container.querySelector(
+      '[data-testid="home-project-conversation-more"] button',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("发布计划");
 
     const conversationButton = container.querySelector(
       '[data-testid="home-project-conversation"]',

@@ -153,6 +153,12 @@ fn apply_provenance_to_rollout_events(
     };
     for event in events {
         event.enrich_source_provenance(provenance_value.clone());
+        if let CodexRolloutEvent::Tool(tool) = event {
+            // Imported tool output is a historical projection. Keep its
+            // provenance explicit so canonical lowering can omit large raw
+            // structured payloads without changing live tool behavior.
+            tool.source.imported = true;
+        }
     }
 }
 

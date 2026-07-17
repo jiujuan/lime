@@ -1,4 +1,3 @@
-import { act } from "react";
 import { describe, expect, it } from "vitest";
 import {
   mockAgentThreadTimeline,
@@ -292,61 +291,10 @@ describe("MessageList imported history codex import", () => {
       ),
     ).toBe(false);
 
-    const preview = container.querySelector<HTMLButtonElement>(
+    const preview = container.querySelector<HTMLElement>(
       '[data-testid="message-list-historical-timeline-preview:leading"]',
     );
-    act(() => {
-      preview?.click();
-    });
-
-    const expandedTimelineProps = mockAgentThreadTimeline.mock.calls.find(
-      ([props]) => props.turn?.id === importedTurn.id,
-    )?.[0];
-    expect(expandedTimelineProps?.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "imported-command",
-          type: "command_execution",
-          metadata: expect.objectContaining(importedMetadata),
-        }),
-        expect.objectContaining({
-          id: "imported-search",
-          type: "web_search",
-          metadata: expect.objectContaining(importedMetadata),
-        }),
-        expect.objectContaining({
-          id: "imported-read-docx",
-          type: "tool_call",
-          metadata: expect.objectContaining(importedMetadata),
-        }),
-        expect.objectContaining({
-          id: "imported-patch",
-          type: "patch",
-          metadata: expect.objectContaining(importedMetadata),
-        }),
-      ]),
-    );
-    const expandedArtifactTimelineProps = mockAgentThreadTimeline.mock.calls
-      .slice()
-      .reverse()
-      .find(([props]) =>
-        props.items?.some((item) => item.id === "imported-file-artifact"),
-      )?.[0];
-    expect(expandedArtifactTimelineProps?.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "imported-file-artifact",
-          type: "file_artifact",
-          metadata: expect.objectContaining(importedMetadata),
-        }),
-      ]),
-    );
-    const expandedAssistantRendererCall = mockStreamingRenderer.mock.calls
-      .slice()
-      .reverse()
-      .find(([props]) =>
-        props.content?.includes("我会先运行测试并检查失败。"),
-      )?.[0];
-    expect(expandedAssistantRendererCall?.content).toContain("已完成修复。");
+    expect(preview?.tagName).toBe("DIV");
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
   });
 });

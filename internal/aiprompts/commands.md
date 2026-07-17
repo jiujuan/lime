@@ -68,3 +68,11 @@ MCP server-originated elicitation 使用独立 reverse JSON-RPC method `mcpServe
 MCP model Tool surface 与 GUI 管理读必须分层：`tool-runtime::McpStepSnapshot` 只冻结同一次 provider sampling 的 tool definitions、caller policy、exact route 和 connection handle；`mcpPrompt/*`、`mcpResource/*`、`mcpServerStatus/list` 继续由 App Server 直接向 `lime-mcp::McpClientManager` 做 live read。禁止让管理面经过 model bridge、让 GUI inventory 替换 in-flight snapshot，或用 caller-unaware live registry dispatch 绕过当前 step allowlist。
 
 旧 MCP Desktop facade 已统一归类为 `dead / retired guard-only`：`get_mcp_servers`、`mcp_list_servers_with_status`、`mcp_list_tools`、`mcp_list_prompts`、`mcp_list_resources`、`mcp_call_tool`、`mcp_start_server`、`sync_all_mcp_to_live` 只能出现在负向 guard 或历史 evidence，禁止回到前端网关、Desktop Host、mock 或 App Server current 主链。
+
+## Browser Session 主链
+
+浏览器会话检测、连接、读回、动作与关闭只允许走：
+
+`src/lib/api/browserRuntime.ts -> AppServerClient.request(...) -> app_server_handle_json_lines -> App Server browserSession/* -> BrowserRuntimeManager`
+
+Settings 的浏览器页只消费 `browserSession/target/list`、`browserSession/open`、`browserSession/read` 与 `browserSession/close`；Renderer 只展示带 debugger endpoint 的 `page` target。旧 connector install、Chrome relay endpoint、backend priority 与静态 Electron diagnostic facade 不得回到 Settings 产品面。Browser Workspace 尚未迁完的旧 facade 属于 PAGE-08 blocker，不能作为 Settings 或 Browser Runtime current evidence。

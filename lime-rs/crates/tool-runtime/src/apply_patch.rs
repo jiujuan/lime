@@ -83,13 +83,13 @@ pub fn runtime_apply_patch_executor_handle() -> RuntimeToolExecutorHandle {
 pub fn apply_patch_tool_definition() -> RuntimeToolDefinition {
     RuntimeToolDefinition::new(
         APPLY_PATCH_TOOL_NAME,
-        "Apply a structured patch to files inside the current workspace. Use this for multi-file add, update, delete, or move edits.",
+        "Use this tool to edit files inside the current workspace. Send a structured patch in the patch field. For update hunks, every content line must start immediately with ' ' (context), '-' (remove), or '+' (add); do not add a space after '-' or '+' unless that space belongs in the file.",
         json!({
             "type": "object",
             "properties": {
                 "patch": {
                     "type": "string",
-                    "description": "Patch text with *** Begin Patch and *** End Patch markers"
+                    "description": "Patch text with *** Begin Patch and *** End Patch markers. Example: *** Begin Patch\n*** Update File: probe.txt\n@@\n-before\n+after\n*** End Patch"
                 }
             },
             "required": ["patch"]
@@ -526,6 +526,17 @@ mod tests {
         assert!(file_change["checkpointRef"]
             .as_str()
             .is_some_and(|value| value.starts_with("checkpoint:file:")));
+    }
+
+    #[test]
+    fn runtime_apply_patch_tool_contract_includes_an_exact_update_example() {
+        let definition = apply_patch_tool_definition();
+        let patch_description = definition.input_schema["properties"]["patch"]["description"]
+            .as_str()
+            .expect("patch description");
+
+        assert!(patch_description.contains("\n-before\n+after\n"));
+        assert!(!patch_description.contains("\n- before\n+ after\n"));
     }
 
     #[test]

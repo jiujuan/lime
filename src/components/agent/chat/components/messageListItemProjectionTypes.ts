@@ -7,7 +7,6 @@ export interface ResolveMessageListItemProjectionOptions {
   activePendingA2UISource: PendingA2UISource | null;
   canOpenSavedSiteContent: boolean;
   expandedHistoricalAssistantMessageIds: Set<string>;
-  expandedHistoricalTimelineKeys: Set<string>;
   expandedLongHistoricalMessageIds: Set<string>;
   focusedTimelineItemId?: string | null;
   group: MessageListRenderGroup;

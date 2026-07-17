@@ -90,8 +90,8 @@ pub use prompt::{
     permissions_instructions, render_review_exit_interrupted, render_review_exit_success,
     resolve_review_prompt, review_prompt, PermissionsPromptInput, PromptApprovalPolicy,
     PromptNetworkAccess, PromptSandboxMode, ResolvedReviewPrompt, ReviewPromptTarget,
-    ThreadGoalPromptInput, APPLY_PATCH_TOOL_INSTRUCTIONS, HIERARCHICAL_AGENTS_MESSAGE,
-    REALTIME_BACKEND_PROMPT, REALTIME_END_INSTRUCTIONS, REALTIME_START_INSTRUCTIONS, REVIEW_PROMPT,
+    ThreadGoalPromptInput, HIERARCHICAL_AGENTS_MESSAGE, REALTIME_BACKEND_PROMPT,
+    REALTIME_END_INSTRUCTIONS, REALTIME_START_INSTRUCTIONS, REVIEW_PROMPT,
     RUNTIME_AGENTS_PROMPT_MARKER, SUMMARIZATION_PROMPT, SUMMARY_PREFIX,
 };
 pub use protocol::{

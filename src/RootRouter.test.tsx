@@ -32,12 +32,6 @@ vi.mock("./features/resource-manager", () => ({
   ResourceManagerPage: () => <div data-testid="resource-manager-page" />,
 }));
 
-vi.mock("./components/settings-v2/system/chrome-relay/guide-window", () => ({
-  BrowserConnectorGuideWindow: () => (
-    <div data-testid="browser-connector-guide-page" />
-  ),
-}));
-
 vi.mock("./components/layout/AppCrashBoundary", () => ({
   AppCrashBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -93,16 +87,6 @@ describe("RootRouter", () => {
 
     expect(container.textContent).toContain("主应用");
     expect(container.querySelector('[data-sonner-toaster]')).toBeNull();
-  });
-
-  it("Windows 独立窗口从 index.html 入口启动时应映射到连接器引导页", async () => {
-    const { container } = await renderRootRouter(
-      "/index.html?lime_window=browser-connector-guide&mode=cdp",
-    );
-
-    expect(
-      container.querySelector('[data-testid="browser-connector-guide-page"]'),
-    ).not.toBeNull();
   });
 
   it("独立更新窗口从 index.html 入口启动时应映射到更新提醒页", async () => {

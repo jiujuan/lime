@@ -91,6 +91,16 @@ async function waitForUiSnapshot(page, options, predicate, failureLabel) {
                 '[data-testid="app-sidebar-conversation-import-confirm"]',
               ).disabled
             : null,
+        importProgressVisible: Boolean(
+          document.querySelector(
+            '[data-testid="app-sidebar-conversation-import-progress"]',
+          ),
+        ),
+        importCloseVisible: Boolean(
+          document.querySelector(
+            '[data-testid="app-sidebar-conversation-import-close"]',
+          ),
+        ),
         textareaVisible: textarea instanceof HTMLTextAreaElement,
         textareaDisabled:
           textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
@@ -99,6 +109,15 @@ async function waitForUiSnapshot(page, options, predicate, failureLabel) {
         sendButtonVisible: sendButton instanceof HTMLButtonElement,
         sendButtonDisabled:
           sendButton instanceof HTMLButtonElement ? sendButton.disabled : null,
+        operationalDetailRowCount: document.querySelectorAll(
+          '[data-testid="tool-call-row"]',
+        ).length,
+        operationalTimelineDetailsCount: document.querySelectorAll(
+          'details[data-testid^="agent-thread-block:"][data-testid$=":process"], details[data-testid^="agent-thread-block:"][data-testid$=":approval"]',
+        ).length,
+        deferredHistoricalPreviewCount: document.querySelectorAll(
+          '[data-testid="message-list-historical-markdown-preview"], [data-testid="message-list-historical-assistant-preview"], [data-testid="message-list-long-history-preview"]',
+        ).length,
         environmentTriggerVisible: Boolean(
           document.querySelector(
             '[data-testid="task-center-environment-trigger"]',
@@ -141,6 +160,10 @@ export async function clickSidebarImport(page, options) {
 }
 
 function extractPreviewTraceMethods(rawTrace) {
+  return Array.from(new Set(extractPreviewTraceMethodCalls(rawTrace)));
+}
+
+function extractPreviewTraceMethodCalls(rawTrace) {
   const methods = [];
   let entries = [];
   try {
@@ -167,7 +190,7 @@ function extractPreviewTraceMethods(rawTrace) {
       }
     }
   }
-  return Array.from(new Set(methods));
+  return methods;
 }
 
 export async function waitForImportPreview(page, options) {
@@ -224,7 +247,46 @@ export async function confirmImport(page, options) {
   await page
     .locator('[data-testid="app-sidebar-conversation-import-confirm"]')
     .click();
-  return await waitForUiSnapshot(
+  const runningSnapshot = await waitForUiSnapshot(
+    page,
+    options,
+    (snapshot) =>
+      snapshot.dialogVisible &&
+      snapshot.importProgressVisible &&
+      snapshot.importCloseVisible &&
+      snapshot.bodyText.includes("导入将在后台继续"),
+    "后台导入启动后未显示可关闭进度",
+  );
+
+  await page
+    .locator('[data-testid="app-sidebar-conversation-import-close"]')
+    .click();
+  const closedSnapshot = await waitForUiSnapshot(
+    page,
+    options,
+    (snapshot) => !snapshot.dialogVisible && snapshot.importButtonVisible,
+    "关闭导入弹窗后侧栏入口未恢复",
+  );
+
+  await page
+    .locator('[data-testid="app-sidebar-import-conversation-button"]')
+    .click();
+  const resumedSnapshot = await waitForUiSnapshot(
+    page,
+    options,
+    (snapshot) =>
+      snapshot.dialogVisible &&
+      snapshot.importConfirmVisible &&
+      snapshot.importConfirmDisabled === false &&
+      snapshot.bodyText.includes("正在导入") &&
+      snapshot.bodyText.includes("查看进度"),
+    "重新打开导入弹窗后未附着后台 job",
+  );
+
+  await page
+    .locator('[data-testid="app-sidebar-conversation-import-confirm"]')
+    .click();
+  const importedSnapshot = await waitForUiSnapshot(
     page,
     options,
     (snapshot) =>
@@ -234,9 +296,26 @@ export async function confirmImport(page, options) {
       snapshot.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "确认导入后未进入可继续对话的会话页",
   );
+  const traceMethodCalls = extractPreviewTraceMethodCalls(
+    importedSnapshot.traceRaw,
+  );
+  return {
+    ...importedSnapshot,
+    backgroundResume: {
+      started: runningSnapshot.importProgressVisible,
+      closed: !closedSnapshot.dialogVisible,
+      reattached: resumedSnapshot.bodyText.includes("查看进度"),
+      commitRequestCount: traceMethodCalls.filter(
+        (method) => method === "conversationImport/thread/commit",
+      ).length,
+      jobReadRequestCount: traceMethodCalls.filter(
+        (method) => method === "conversationImport/job/read",
+      ).length,
+    },
+  };
 }
 
-export async function expandImportedHistoricalTimeline(page, options) {
+export async function inspectImportedHistoricalTimelineSummary(page, options) {
   const selector =
     '[data-testid="message-list-historical-timeline-preview:leading"]';
   const startedAt = Date.now();
@@ -245,41 +324,56 @@ export async function expandImportedHistoricalTimeline(page, options) {
     lastSnapshot = await page.evaluate((timelineSelector) => {
       const preview = document.querySelector(timelineSelector);
       return {
-        previewVisible: preview instanceof HTMLButtonElement,
+        previewVisible: preview instanceof HTMLDivElement,
+        historicalSummaryVisible: preview instanceof HTMLDivElement,
+        interactive:
+          preview instanceof HTMLButtonElement ||
+          preview instanceof HTMLAnchorElement ||
+          preview?.getAttribute("role") === "button",
         previewText: preview?.textContent || "",
+        toolRowSamples: Array.from(
+          document.querySelectorAll('[data-testid="tool-call-row"]'),
+        )
+          .slice(0, 3)
+          .map((row) => ({
+            text: row.textContent || "",
+            outer: row.outerHTML.slice(0, 500),
+            parentTestId:
+              row.parentElement?.getAttribute("data-testid") || null,
+          })),
       };
     }, selector);
     if (!lastSnapshot?.previewVisible) {
       await sleep(options.intervalMs);
       continue;
     }
-    await page.locator(selector).click();
-    const detailSelector =
-      'details[data-testid^="agent-thread-block:"]:not([open]) > summary';
-    const detailStartedAt = Date.now();
-    let expandedDetailCount = 0;
-    while (Date.now() - detailStartedAt < Math.min(options.timeoutMs, 15_000)) {
-      const details = page.locator(detailSelector);
-      const count = await details.count();
-      if (count === 0) {
-        if (expandedDetailCount > 0) {
-          break;
-        }
-        await sleep(options.intervalMs);
-        continue;
-      }
-      await details.first().click();
-      expandedDetailCount += 1;
-      await sleep(options.intervalMs);
-    }
+    const operationalDetailRowCount = await page
+      .locator('[data-testid="tool-call-row"]')
+      .count();
+    const operationalTimelineDetailsCount = await page
+      .locator(
+        'details[data-testid^="agent-thread-block:"][data-testid$=":process"], details[data-testid^="agent-thread-block:"][data-testid$=":approval"]',
+      )
+      .count();
+    const deferredHistoricalPreviewCount = await page
+      .locator(
+        '[data-testid="message-list-historical-markdown-preview"], [data-testid="message-list-historical-assistant-preview"], [data-testid="message-list-long-history-preview"]',
+      )
+      .count();
     return {
-      expanded: true,
-      expandedDetailCount,
+      expanded: false,
+      previewVisible: lastSnapshot.previewVisible,
+      historicalSummaryVisible: lastSnapshot.historicalSummaryVisible,
+      interactive: lastSnapshot.interactive === true,
+      operationalDetailRowCount,
+      operationalTimelineDetailsCount,
+      deferredHistoricalPreviewCount,
       previewText: lastSnapshot.previewText,
+      toolRowSamples: lastSnapshot.toolRowSamples,
     };
   }
   throw new Error(
-    `导入历史过程折叠入口未出现: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+    `导入历史摘要未出现: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
   );
 }
 
@@ -297,43 +391,47 @@ function hasPatchEvidenceText(bodyText) {
   );
 }
 
-function hasVisibleImportedReasoningText(bodyText) {
-  return bodyText.includes(IMPORTED_REASONING_TEXT);
-}
-
 export function summarizeImportedDetailsSnapshot(
   snapshot,
   readModelSummary = null,
 ) {
   const bodyText = snapshot?.bodyText || "";
+  const hasOperationalDomSnapshot =
+    Number.isFinite(snapshot?.operationalDetailRowCount) &&
+    Number.isFinite(snapshot?.operationalTimelineDetailsCount);
+  const hasHistoricalReasoningText = bodyText.includes(IMPORTED_REASONING_TEXT);
+  const hasHistoricalCommandText = bodyText.includes("npm test");
+  const hasHistoricalCommandOutput = bodyText.includes("ok");
+  const hasHistoricalApprovalText = hasAnyText({ bodyText }, [
+    "导入的权限记录",
+    "已导入，只读记录",
+    "权限记录",
+    "审批",
+    "确认",
+    "权限请求",
+    "Approval",
+    "approval",
+  ]);
   return {
     hasImportedUserMessage: bodyText.includes(IMPORTED_USER_TEXT),
     hasImportedAssistantMessage: bodyText.includes(
       IMPORTED_ASSISTANT_SUMMARY_TEXT,
     ),
-    hasReasoningVisible: hasVisibleImportedReasoningText(bodyText),
-    hasReasoningStatusVisible: bodyText.includes("已完成思考"),
     hasReasoningItem: readModelSummary?.hasReasoningItem === true,
-    hasCommandExecutionVisible: bodyText.includes("npm test"),
-    hasCommandText:
-      bodyText.includes("npm test") ||
-      readModelSummary?.hasCommandItem === true,
-    hasCommandOutput: bodyText.includes("ok"),
+    hasCommandText: readModelSummary?.hasCommandItem === true,
     hasCommandItem: readModelSummary?.hasCommandItem === true,
+    hasSearchItem: readModelSummary?.hasWebSearchItem === true,
+    hasApprovalItem: readModelSummary?.hasApprovalItem === true,
     hasPatchText: hasPatchEvidenceText(bodyText),
-    hasSearchEvidence:
-      hasAnyText({ bodyText }, ["搜索", "Search", "web search"]) ||
-      readModelSummary?.hasWebSearchItem === true,
-    hasApprovalText: hasAnyText({ bodyText }, [
-      "导入的权限记录",
-      "已导入，只读记录",
-      "权限记录",
-      "审批",
-      "确认",
-      "权限请求",
-      "Approval",
-      "approval",
-    ]),
+    historicalOperationalDetailsHidden: hasOperationalDomSnapshot
+      ? snapshot.operationalDetailRowCount === 0 &&
+        snapshot.operationalTimelineDetailsCount === 0 &&
+        snapshot.deferredHistoricalPreviewCount === 0
+      : !hasHistoricalReasoningText &&
+        !hasHistoricalCommandText &&
+        !hasHistoricalCommandOutput &&
+        !bodyText.includes(IMPORTED_WEB_SEARCH_QUERY) &&
+        !hasHistoricalApprovalText,
     hidesRawImportedCommand:
       !bodyText.includes("Approve imported command") &&
       !bodyText.includes("imported_read_only"),
@@ -818,6 +916,8 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
     }
     result.selectionHistory = selectionHistory;
     if (
+      expected.kind !== "html" &&
+      expected.kind !== "system_open" &&
       result.workbenchVisible &&
       result.previewPanelVisible &&
       (result.previewPanelText || result.workbenchText).includes(
@@ -1020,16 +1120,11 @@ async function inspectImportedSessionVisualViewport(
       bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT) &&
       bodyText.includes(CONTINUE_USER_TEXT) &&
       bodyText.includes(CONTINUE_ASSISTANT_TEXT) &&
-      bodyText.includes("npm test") &&
       hasPatchEvidenceText(bodyText) &&
-      (bodyText.includes("搜索") ||
-        bodyText.includes("Search") ||
-        bodyText.includes("web search")) &&
-      (bodyText.includes("导入的权限记录") ||
-        bodyText.includes("已导入，只读记录") ||
-        bodyText.includes("权限记录") ||
-        bodyText.includes("审批") ||
-        bodyText.includes("Approval")) &&
+      bodyText.includes(IMPORTED_PREVIEW_MARKDOWN_FILE) &&
+      current.operationalDetailRowCount === 0 &&
+      current.operationalTimelineDetailsCount === 0 &&
+      current.deferredHistoricalPreviewCount === 0 &&
       !bodyText.includes("imported_read_only") &&
       !bodyText.includes("thread-codex") &&
       !bodyText.includes("Approve Codex command")
@@ -1091,29 +1186,71 @@ async function inspectImportedSessionVisualViewport(
         compactModeControl instanceof HTMLElement
           ? compactModeControl.getBoundingClientRect()
           : null;
+      const clippedVisibleRect = (element) => {
+        const source = element.getBoundingClientRect();
+        let left = Math.max(0, source.left);
+        let top = Math.max(0, source.top);
+        let right = Math.min(window.innerWidth, source.right);
+        let bottom = Math.min(window.innerHeight, source.bottom);
+        for (
+          let ancestor = element.parentElement;
+          ancestor;
+          ancestor = ancestor.parentElement
+        ) {
+          const style = window.getComputedStyle(ancestor);
+          const ancestorRect = ancestor.getBoundingClientRect();
+          if (["auto", "clip", "hidden", "scroll"].includes(style.overflowX)) {
+            left = Math.max(left, ancestorRect.left);
+            right = Math.min(right, ancestorRect.right);
+          }
+          if (["auto", "clip", "hidden", "scroll"].includes(style.overflowY)) {
+            top = Math.max(top, ancestorRect.top);
+            bottom = Math.min(bottom, ancestorRect.bottom);
+          }
+        }
+        return right > left && bottom > top
+          ? { left, top, right, bottom }
+          : null;
+      };
+      const compactModeOverlapButtons = compactModeControlRect
+        ? Array.from(document.querySelectorAll("button"))
+            .filter((button) => {
+              if (
+                compactModeControl.contains(button) ||
+                !button.isConnected ||
+                button.hidden
+              ) {
+                return false;
+              }
+              const rect = clippedVisibleRect(button);
+              return (
+                rect &&
+                rect.left < compactModeControlRect.right &&
+                rect.right > compactModeControlRect.left &&
+                rect.top < compactModeControlRect.bottom &&
+                rect.bottom > compactModeControlRect.top
+              );
+            })
+            .slice(0, 5)
+            .map((button) => ({
+              text: button.textContent || "",
+              testId: button.getAttribute("data-testid") || null,
+              rect: (() => {
+                const value = button.getBoundingClientRect();
+                return {
+                  left: value.left,
+                  top: value.top,
+                  width: value.width,
+                  height: value.height,
+                };
+              })(),
+            }))
+        : [];
       const compactModeControlOverlapsOtherButton = Boolean(
         compactModeControlRect &&
         compactModeControlRect.width > 0 &&
         compactModeControlRect.height > 0 &&
-        Array.from(document.querySelectorAll("button")).some((button) => {
-          if (
-            compactModeControl.contains(button) ||
-            !button.isConnected ||
-            button.hidden
-          ) {
-            return false;
-          }
-          const rect = button.getBoundingClientRect();
-          if (rect.width <= 0 || rect.height <= 0) {
-            return false;
-          }
-          return (
-            rect.left < compactModeControlRect.right &&
-            rect.right > compactModeControlRect.left &&
-            rect.top < compactModeControlRect.bottom &&
-            rect.bottom > compactModeControlRect.top
-          );
-        }),
+        compactModeOverlapButtons.length > 0,
       );
       const forbiddenMainTexts = [
         "imported_read_only",
@@ -1152,9 +1289,10 @@ async function inspectImportedSessionVisualViewport(
           'details[data-testid^="agent-thread-block:"][data-testid$=":process"]',
         ),
       );
-      const searchToolContainer = Array.from(
+      const operationalDetailRows = Array.from(
         document.querySelectorAll('[data-testid="tool-call-row"]'),
-      )
+      );
+      const searchToolContainer = operationalDetailRows
         .map((row) => row.parentElement)
         .find((container) =>
           (container?.textContent || "").includes(importedWebSearchQuery),
@@ -1195,6 +1333,9 @@ async function inspectImportedSessionVisualViewport(
         hasFullSearchUrlVisible:
           Boolean(searchRegionText) &&
           searchRegionText.includes(importedWebSearchUrl),
+        operationalDetailRowCount: operationalDetailRows.length,
+        historicalOperationalDetailsHidden:
+          operationalDetailRows.length === 0 && !searchToolContainer,
         hasContinueUserMessage: bodyText.includes(continueUserText),
         hasContinueAssistantMessage: bodyText.includes(continueAssistantText),
         hasReasoningVisible: bodyText.includes(importedReasoningText),
@@ -1242,6 +1383,7 @@ async function inspectImportedSessionVisualViewport(
           compactModeControlRect.height > 0,
         ),
         compactModeControlOverlapsOtherButton,
+        compactModeOverlapButtons,
         hidesRawImportedCommand: !forbiddenMainTexts.some((text) =>
           bodyText.includes(text),
         ),
@@ -1319,12 +1461,8 @@ export async function collectImportedSessionVisualAudit(
       `${viewport.label} 视口暴露了导入原始 Markdown 语法`,
     );
     assert(
-      audit.searchTimelineVisible,
-      `${viewport.label} 视口缺少 canonical timeline 搜索工具行`,
-    );
-    assert(
-      audit.hasImportedSearchResult,
-      `${viewport.label} 视口缺少导入搜索结果来源`,
+      audit.historicalOperationalDetailsHidden,
+      `${viewport.label} 视口铺开了历史运行期工具明细`,
     );
     assert(
       !audit.searchNoiseVisible,
@@ -1342,15 +1480,7 @@ export async function collectImportedSessionVisualAudit(
       audit.hasContinueAssistantMessage,
       `${viewport.label} 视口缺少续聊助手消息`,
     );
-    assert(audit.hasReasoningVisible, `${viewport.label} 视口缺少导入思考记录`);
-    assert(
-      audit.hasCommandExecutionVisible,
-      `${viewport.label} 视口缺少 canonical npm test 命令卡`,
-    );
-    assert(audit.hasCommandOutput, `${viewport.label} 视口缺少命令输出 ok`);
     assert(audit.hasPatchText, `${viewport.label} 视口缺少导入补丁记录`);
-    assert(audit.hasSearchEvidence, `${viewport.label} 视口缺少导入搜索记录`);
-    assert(audit.hasApprovalText, `${viewport.label} 视口缺少导入审批记录`);
     assert(
       !audit.importedBannerVisible,
       `${viewport.label} 视口不应展示导入主线 banner`,
@@ -1368,7 +1498,7 @@ export async function collectImportedSessionVisualAudit(
     assert(audit.messageListVisible, `${viewport.label} 视口消息列表不可见`);
     assert(
       !audit.compactModeControlOverlapsOtherButton,
-      `${viewport.label} 视口聊天/工作台模式控件与其他按钮重叠`,
+      `${viewport.label} 视口聊天/工作台模式控件与其他按钮重叠: ${JSON.stringify(audit.compactModeOverlapButtons)}`,
     );
     assert(
       audit.hidesRawImportedCommand,
@@ -1383,88 +1513,6 @@ export async function collectImportedSessionVisualAudit(
   return audits;
 }
 
-async function expandImportedSearchToolResult(page, options) {
-  const startedAt = Date.now();
-  let lastSnapshot = null;
-  while (Date.now() - startedAt < Math.min(options.timeoutMs, 15_000)) {
-    lastSnapshot = await page.evaluate((importedWebSearchQuery) => {
-      const rows = Array.from(
-        document.querySelectorAll('[data-testid="tool-call-row"]'),
-      ).map((row, index) => {
-        const container = row.parentElement;
-        const buttons = Array.from(row.querySelectorAll("button")).map(
-          (button, buttonIndex) => ({
-            index: buttonIndex,
-            title: button.getAttribute("title") || "",
-            ariaLabel: button.getAttribute("aria-label") || "",
-          }),
-        );
-        return {
-          index,
-          rowText: row.textContent || "",
-          containerText: container?.textContent || "",
-          buttons,
-        };
-      });
-      return {
-        processBlockCount: document.querySelectorAll(
-          'details[data-testid^="agent-thread-block:"][data-testid$=":process"]',
-        ).length,
-        rows,
-        importedWebSearchQuery,
-      };
-    }, IMPORTED_WEB_SEARCH_QUERY);
-    const searchRow = lastSnapshot.rows.find((row) =>
-      row.containerText.includes(IMPORTED_WEB_SEARCH_QUERY),
-    );
-    if (!searchRow) {
-      await sleep(options.intervalMs);
-      continue;
-    }
-    if (
-      searchRow.containerText.includes(IMPORTED_WEB_SEARCH_TITLE) ||
-      searchRow.containerText.includes(IMPORTED_WEB_SEARCH_SOURCE_LABEL)
-    ) {
-      return {
-        expanded: true,
-        reason: "already-expanded",
-        rowIndex: searchRow.index,
-        rowText: searchRow.rowText,
-      };
-    }
-    const toggleButton = searchRow.buttons.find((button) =>
-      /(?:结果|result)/i.test(`${button.title}\n${button.ariaLabel}`),
-    );
-    if (!toggleButton) {
-      return {
-        expanded: false,
-        reason: "search-tool-row-has-no-result-toggle",
-        rowIndex: searchRow.index,
-        rowText: searchRow.rowText,
-        buttons: searchRow.buttons,
-      };
-    }
-    await page
-      .locator('[data-testid="tool-call-row"]')
-      .nth(searchRow.index)
-      .locator("button")
-      .nth(toggleButton.index)
-      .click();
-    return {
-      expanded: true,
-      reason: "clicked",
-      rowIndex: searchRow.index,
-      buttonIndex: toggleButton.index,
-      rowText: searchRow.rowText,
-    };
-  }
-  throw new Error(
-    `未找到 canonical timeline 导入搜索工具行: ${JSON.stringify(
-      sanitizeJson(lastSnapshot),
-    )}`,
-  );
-}
-
 export async function inspectImportedMarkdownAndSearchRendering(page, options) {
   const snapshot = await waitForUiSnapshot(
     page,
@@ -1475,11 +1523,6 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
       current.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "导入会话页未稳定，无法检查 Markdown 与搜索渲染",
   );
-  const searchToolExpansion = await expandImportedSearchToolResult(
-    page,
-    options,
-  );
-
   const rendering = await page.evaluate(
     ({
       importedMarkdownHeadingText,
@@ -1557,6 +1600,9 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
         ),
         hasFullSearchUrlVisible:
           searchTimelineText.includes(importedWebSearchUrl),
+        operationalDetailRowCount: toolRows.length,
+        historicalOperationalDetailsHidden:
+          toolRows.length === 0 && !searchToolContainer,
       };
     },
     {
@@ -1593,18 +1639,8 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
     )}`,
   );
   assert(
-    rendering.hasImportedSearchResult,
-    `导入搜索结果未展示有效来源: ${JSON.stringify(sanitizeJson(rendering))}`,
-  );
-  assert(
-    rendering.searchTimelineVisible,
-    `导入搜索过程未进入 canonical timeline: ${JSON.stringify(
-      sanitizeJson(rendering),
-    )}`,
-  );
-  assert(
-    rendering.searchQueryVisible,
-    `导入搜索过程未展示真实 query: ${JSON.stringify(sanitizeJson(rendering))}`,
+    rendering.historicalOperationalDetailsHidden,
+    `导入历史铺开了运行期工具明细: ${JSON.stringify(sanitizeJson(rendering))}`,
   );
   assert(
     !rendering.searchNoiseVisible,
@@ -1619,7 +1655,6 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
 
   return {
     ...rendering,
-    searchToolExpansion,
     snapshotUrl: snapshot.url,
   };
 }
@@ -1634,15 +1669,12 @@ export async function waitForImportedSessionDetails(page, options) {
         snapshot.textareaVisible &&
         summary.hasImportedUserMessage &&
         summary.hasImportedAssistantMessage &&
-        summary.hasReasoningVisible &&
-        summary.hasCommandExecutionVisible &&
-        summary.hasCommandOutput &&
         summary.hasPatchText &&
-        summary.hasApprovalText &&
+        summary.historicalOperationalDetailsHidden &&
         summary.hidesRawImportedCommand
       );
     },
-    "导入后的会话页未还原本地历史细节",
+    "导入后的会话页未稳定为历史摘要形态",
   );
 }
 

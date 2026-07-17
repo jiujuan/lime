@@ -16,6 +16,8 @@ import {
   setStoredOemCloudSessionState as setStoredOemCloudSessionStateImpl,
 } from "@/lib/oemCloudSession";
 import type {
+  ConversationImportJob,
+  ConversationImportThreadCommitResponse,
   ConversationImportThreadPreviewResponse,
   ImportedThreadSummary,
 } from "@/lib/api/conversationImport";
@@ -52,6 +54,8 @@ const {
   mockScanConversationImportSource,
   mockPreviewConversationImportThread,
   mockCommitConversationImportThread,
+  mockReadConversationImportJob,
+  mockWaitForConversationImportJob,
   mockSetI18nLanguage,
   mockScheduleMinimumDelayIdleTask,
   mockLogoutClient,
@@ -93,6 +97,8 @@ const {
   mockScanConversationImportSource: vi.fn(),
   mockPreviewConversationImportThread: vi.fn(),
   mockCommitConversationImportThread: vi.fn(),
+  mockReadConversationImportJob: vi.fn(),
+  mockWaitForConversationImportJob: vi.fn(),
   mockSetI18nLanguage: vi.fn(),
   mockScheduleMinimumDelayIdleTask: vi.fn((task: () => void) => {
     task();
@@ -155,6 +161,8 @@ export {
   mockLogoutClient,
   mockPreviewConversationImportThread,
   mockCommitConversationImportThread,
+  mockReadConversationImportJob,
+  mockWaitForConversationImportJob,
   mockOpenExternalUrl,
   mockOpenUpdateWindow,
   mockRecordUpdateNotificationAction,
@@ -197,6 +205,8 @@ vi.mock("@/lib/api/conversationImport", () => ({
   scanConversationImportSource: mockScanConversationImportSource,
   previewConversationImportThread: mockPreviewConversationImportThread,
   commitConversationImportThread: mockCommitConversationImportThread,
+  readConversationImportJob: mockReadConversationImportJob,
+  waitForConversationImportJob: mockWaitForConversationImportJob,
 }));
 
 vi.mock("@/lib/api/plugins", () => ({
@@ -728,76 +738,104 @@ export async function resetAppSidebarTest() {
   mockPreviewConversationImportThread.mockResolvedValue(
     buildMockConversationImportPreview(),
   );
-  mockCommitConversationImportThread.mockImplementation(async (params) => ({
-    session: {
-      sessionId:
-        params.sourceThreadId === "codex-thread-2"
-          ? "session-imported-2"
-          : "session-imported",
-      threadId:
-        params.sourceThreadId === "codex-thread-2"
-          ? "thread-imported-2"
-          : "thread-imported",
-      appId: "content-studio",
-      workspaceId: "project-1",
-      status: "completed",
-      createdAt: "2026-06-16T00:00:00.000Z",
-      updatedAt: "2026-06-16T00:00:01.000Z",
+  mockWaitForConversationImportJob.mockImplementation(
+    async (job: ConversationImportJob) => {
+      if (job.status !== "completed" || !job.result) {
+        throw new Error("Test import job did not complete");
+      }
+      return job.result;
     },
-    thread: {
-      sourceClient: "codex",
-      sourceThreadId: params.sourceThreadId ?? "codex-thread-1",
-      title:
-        params.sourceThreadId === "codex-thread-2"
-          ? "本地历史第二条记录"
-          : "本地历史修复记录",
-      createdAt: "2026-06-15T00:00:00.000Z",
-      updatedAt: "2026-06-16T00:00:00.000Z",
-      cwd: "/repo/project-1",
-      source: "cli",
-      modelProvider: "openai",
-      archived: false,
-      sourcePath:
-        params.sourcePath ??
-        "/Users/example/.codex/sessions/codex-thread-1.jsonl",
-      importStatus: "imported",
-    },
-    summary: {
-      lineCount: 8,
-      messageCount: 2,
-      rolloutEventItems: 2,
-      unsupportedCount: 1,
-      dryRun: {
-        willCreateSession: true,
-        willAppendToExistingSession: false,
-        willImportMessages: 2,
-        willImportTurns: 1,
-        willImportTimelineItems: 4,
-        willImportAttachments: 1,
-        unsupportedItems: 1,
+  );
+  mockCommitConversationImportThread.mockImplementation(async (params) => {
+    const response: ConversationImportThreadCommitResponse = {
+      session: {
+        sessionId:
+          params.sourceThreadId === "codex-thread-2"
+            ? "session-imported-2"
+            : "session-imported",
+        threadId:
+          params.sourceThreadId === "codex-thread-2"
+            ? "thread-imported-2"
+            : "thread-imported",
+        appId: "content-studio",
+        workspaceId: "project-1",
+        status: "completed",
+        createdAt: "2026-06-16T00:00:00.000Z",
+        updatedAt: "2026-06-16T00:00:01.000Z",
       },
-      fidelity: {
-        messages: 2,
-        reasoning: 0,
-        tools: 2,
-        commands: 1,
-        patches: 1,
-        approvals: 0,
-        mcp: 0,
-        webSearch: 0,
-        attachments: 1,
-        unsupported: 1,
-        provenanceOnly: 1,
-        budgetDropped: 0,
+      thread: {
+        sourceClient: "codex",
+        sourceThreadId: params.sourceThreadId ?? "codex-thread-1",
+        title:
+          params.sourceThreadId === "codex-thread-2"
+            ? "本地历史第二条记录"
+            : "本地历史修复记录",
+        createdAt: "2026-06-15T00:00:00.000Z",
+        updatedAt: "2026-06-16T00:00:00.000Z",
+        cwd: "/repo/project-1",
+        source: "cli",
+        modelProvider: "openai",
+        archived: false,
+        sourcePath:
+          params.sourcePath ??
+          "/Users/example/.codex/sessions/codex-thread-1.jsonl",
+        importStatus: "imported",
       },
-      truncated: false,
+      summary: {
+        lineCount: 8,
+        messageCount: 2,
+        rolloutEventItems: 2,
+        unsupportedCount: 1,
+        dryRun: {
+          willCreateSession: true,
+          willAppendToExistingSession: false,
+          willImportMessages: 2,
+          willImportTurns: 1,
+          willImportTimelineItems: 4,
+          willImportAttachments: 1,
+          unsupportedItems: 1,
+        },
+        fidelity: {
+          messages: 2,
+          reasoning: 0,
+          tools: 2,
+          commands: 1,
+          patches: 1,
+          approvals: 0,
+          mcp: 0,
+          webSearch: 0,
+          attachments: 1,
+          unsupported: 1,
+          provenanceOnly: 1,
+          budgetDropped: 0,
+        },
+        truncated: false,
+        warnings: [],
+      },
+      importedMessages: 2,
+      importedTurns: 1,
+      canContinue: true,
       warnings: [],
-    },
-    importedMessages: 2,
-    importedTurns: 1,
-    canContinue: true,
-    warnings: [],
-  }));
+    };
+    return {
+      job: {
+        jobId: `import-job-${params.sourceThreadId ?? "codex-thread-1"}`,
+        sourceClient: "codex",
+        sourceThreadId: params.sourceThreadId ?? "codex-thread-1",
+        status: "completed",
+        progress: {
+          phase: "completed",
+          completedItems: response.summary.rolloutEventItems,
+          totalItems: response.summary.rolloutEventItems,
+          completedTurns: response.importedTurns,
+          totalTurns: response.importedTurns,
+        },
+        result: response,
+        createdAt: "2026-06-16T00:00:00.000Z",
+        updatedAt: "2026-06-16T00:00:01.000Z",
+      },
+    };
+  });
   mockCheckForUpdates.mockResolvedValue({
     current: "1.57.0",
     latest: null,

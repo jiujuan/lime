@@ -53,7 +53,6 @@ const TOOL_CALL_ID = "code-artifact-workbench-electron:tool:webfetch";
 const TOOL_NAME = "WebFetch";
 const TOOL_OUTPUT_PREVIEW =
   "已获取 fixture 工具事实: https://example.com/lime-workbench-tool";
-const TOOL_TIMELINE_GUI_TEXT = "已获取 1 项数据";
 const CODING_FILE_PATH =
   ".lime/qc/code-artifact-workbench-electron-fixture/src/coding-target.ts";
 const CODING_ARTIFACT_ID = "code-artifact-workbench-electron:coding-target";
@@ -738,30 +737,11 @@ function hasToolTimelineProjection(readResult) {
   return status === "completed" && output.includes(TOOL_OUTPUT_PREVIEW);
 }
 
-function hasGuiToolTimelineEvidence({
-  sessionHydrated,
-  timelineProcessEvidence,
-  workbench,
-  pageText,
-}) {
-  const visibleText = [
-    pageText,
-    sessionHydrated?.bodyText,
-    timelineProcessEvidence?.bodyText,
-    workbench?.snapshot?.bodyText,
-  ]
-    .filter((value) => typeof value === "string" && value.length > 0)
-    .join("\n");
+function hasHistoricalOperationalDetailsHidden(timelineProcessEvidence) {
   return (
-    sessionHydrated?.hasToolName === true ||
-    sessionHydrated?.hasToolOutputPreview === true ||
-    sessionHydrated?.hasToolTimelineText === true ||
-    timelineProcessEvidence?.hasToolName === true ||
-    timelineProcessEvidence?.hasToolOutputPreview === true ||
-    timelineProcessEvidence?.hasToolTimelineText === true ||
-    visibleText.includes(TOOL_NAME) ||
-    visibleText.includes(TOOL_OUTPUT_PREVIEW) ||
-    visibleText.includes(TOOL_TIMELINE_GUI_TEXT)
+    timelineProcessEvidence?.historicalTimelinePreviewCount > 0 &&
+    timelineProcessEvidence?.toolCallRowCount === 0 &&
+    timelineProcessEvidence?.operationalTimelineDetailsCount === 0
   );
 }
 
@@ -791,16 +771,6 @@ function hasSessionArtifactAnchor(snapshot) {
   );
 }
 
-function hasGuiCodingInputHydratedSession(snapshot) {
-  return (
-    snapshot?.isGuiCodingInput === true &&
-    snapshot?.hasUserPrompt === true &&
-    snapshot?.hasToolTimelineText === true &&
-    hasSessionWorkbenchAnchor(snapshot) &&
-    hasSessionConversationShell(snapshot)
-  );
-}
-
 function hasHydratedSessionSnapshot(snapshot) {
   if (!snapshot || snapshot.isRestoringSession === true) {
     return false;
@@ -815,94 +785,68 @@ function hasHydratedSessionSnapshot(snapshot) {
   const hasWorkbenchShellHydration =
     snapshot.hasUserPrompt === true &&
     (hasAssistantCompletionCopy ||
-      snapshot.hasToolName === true ||
-      snapshot.hasToolOutputPreview === true ||
       snapshot.hasArtifactPath === true ||
       snapshot.hasCodeText === true) &&
     (snapshot.hasWorkbenchToggle === true ||
       snapshot.hasTaskCenterWorkbenchTab === true) &&
     hasSessionConversationShell(snapshot);
 
-  return (
-    hasDirectArtifactHydration ||
-    hasWorkbenchShellHydration ||
-    hasGuiCodingInputHydratedSession(snapshot)
-  );
+  return hasDirectArtifactHydration || hasWorkbenchShellHydration;
 }
 
-async function expandTimelineProcessGroups(page, options) {
+async function inspectHistoricalTimelineSummary(page, options) {
   const startedAt = Date.now();
   const timeoutMs = Math.min(options.timeoutMs, 15_000);
   let lastSnapshot = null;
 
   while (Date.now() - startedAt < timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(
-      page,
-      ({ toolName, toolOutputPreview, toolTimelineText }) => {
-        const isVisible = (element) => {
-          if (!(element instanceof HTMLElement)) {
-            return false;
-          }
-          const style = window.getComputedStyle(element);
-          const rect = element.getBoundingClientRect();
-          return (
-            style.display !== "none" &&
-            style.visibility !== "hidden" &&
-            rect.width > 0 &&
-            rect.height > 0
-          );
-        };
-        const groups = Array.from(
-          document.querySelectorAll('[data-testid="streaming-process-group"]'),
-        ).filter(isVisible);
-        const buttons = groups
-          .map((group) => group.querySelector("button"))
-          .filter(
-            (button) => button instanceof HTMLElement && isVisible(button),
-          );
-        let clicked = 0;
-        for (const button of buttons) {
-          if (button.getAttribute("aria-expanded") === "true") {
-            continue;
-          }
-          button.click();
-          clicked += 1;
+    const snapshot = await evaluatePageSnapshot(page, () => {
+      const isVisible = (element) => {
+        if (!(element instanceof HTMLElement)) {
+          return false;
         }
-        const text = document.body?.innerText || "";
-        return {
-          groupCount: groups.length,
-          buttonCount: buttons.length,
-          clicked,
-          expandedCount: buttons.filter(
-            (button) => button.getAttribute("aria-expanded") === "true",
-          ).length,
-          hasToolName: text.includes(toolName),
-          hasToolOutputPreview: text.includes(toolOutputPreview),
-          hasToolTimelineText:
-            text.includes(toolTimelineText) ||
-            text.includes("已获取 1 项数据") ||
-            text.includes("获取中 1 项") ||
-            text.includes("Tool 结果") ||
-            text.includes("Tool result") ||
-            text.includes(toolOutputPreview),
-          bodyText: text,
-        };
-      },
-      {
-        toolName: TOOL_NAME,
-        toolOutputPreview: TOOL_OUTPUT_PREVIEW,
-        toolTimelineText: TOOL_TIMELINE_GUI_TEXT,
-      },
-    );
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return (
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      const historicalTimelinePreviews = Array.from(
+        document.querySelectorAll(
+          '[data-testid^="message-list-historical-timeline-preview:"]',
+        ),
+      ).filter(isVisible);
+      const toolCallRows = Array.from(
+        document.querySelectorAll('[data-testid="tool-call-row"]'),
+      ).filter(isVisible);
+      const operationalTimelineDetails = Array.from(
+        document.querySelectorAll(
+          [
+            'details[data-testid^="agent-thread-block:"][data-testid$=":process"]',
+            'details[data-testid^="agent-thread-block:"][data-testid$=":approval"]',
+          ].join(","),
+        ),
+      ).filter(isVisible);
+      const text = document.body?.innerText || "";
+      return {
+        historicalTimelinePreviewCount: historicalTimelinePreviews.length,
+        toolCallRowCount: toolCallRows.length,
+        operationalTimelineDetailsCount: operationalTimelineDetails.length,
+        bodyText: text,
+      };
+    });
     if (!snapshot) {
       await sleep(options.intervalMs);
       continue;
     }
     lastSnapshot = snapshot;
     if (
-      snapshot.hasToolName ||
-      snapshot.hasToolOutputPreview ||
-      snapshot.hasToolTimelineText
+      snapshot.historicalTimelinePreviewCount > 0 &&
+      snapshot.toolCallRowCount === 0 &&
+      snapshot.operationalTimelineDetailsCount === 0
     ) {
       return snapshot;
     }
@@ -1856,15 +1800,7 @@ async function waitForSessionHydrated(page, options) {
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({
-        artifactPath,
-        doneText,
-        userPrompt,
-        assistantArtifactText,
-        toolName,
-        toolOutputPreview,
-        isGuiCodingInput,
-      }) => {
+      ({ artifactPath, doneText, userPrompt, assistantArtifactText }) => {
         const text = document.body?.innerText || "";
         const normalizeText = (value) =>
           String(value || "")
@@ -1883,15 +1819,6 @@ async function waitForSessionHydrated(page, options) {
               normalizedText.includes(normalizedUserPrompt)),
           hasDoneText: text.includes(doneText),
           hasGeneratedText: text.includes(assistantArtifactText),
-          hasToolName: text.includes(toolName),
-          hasToolOutputPreview: text.includes(toolOutputPreview),
-          hasToolTimelineText:
-            text.includes("已获取 1 项数据") ||
-            text.includes("获取中 1 项") ||
-            text.includes("Tool 结果") ||
-            text.includes("Tool result") ||
-            text.includes(toolOutputPreview),
-          isGuiCodingInput,
           hasArtifactPath: text.includes(artifactPath),
           hasCodeText: text.includes("Hello Lime Workbench"),
           hasMessageList: Boolean(
@@ -1949,9 +1876,6 @@ async function waitForSessionHydrated(page, options) {
         doneText: FINAL_DONE_TEXT,
         userPrompt: expectedUserPrompt(options),
         assistantArtifactText: ASSISTANT_ARTIFACT_TEXT,
-        toolName: TOOL_NAME,
-        toolOutputPreview: TOOL_OUTPUT_PREVIEW,
-        isGuiCodingInput: options.scenario === "gui-coding-input",
       },
     );
     if (!snapshot) {
@@ -2793,9 +2717,9 @@ async function run() {
     const sessionHydrated = await waitForSessionHydrated(page, options);
     summary.sessionHydrated = sanitizeJson(sessionHydrated);
 
-    logStage("expand-timeline-process-groups");
+    logStage("inspect-historical-timeline-summary");
     summary.timelineProcessEvidence = sanitizeJson(
-      await expandTimelineProcessGroups(page, options),
+      await inspectHistoricalTimelineSummary(page, options),
     );
 
     logStage("open-workbench");
@@ -2925,12 +2849,8 @@ async function run() {
       capturedRecoveryContext?.schemaVersion ===
         "coding-workbench-recovery/v1" ||
       traceRecoveryContext?.schemaVersion === "coding-workbench-recovery/v1";
-    const guiToolTimelineEvidencePresent = hasGuiToolTimelineEvidence({
-      sessionHydrated: summary.sessionHydrated,
-      timelineProcessEvidence: summary.timelineProcessEvidence,
-      workbench: summary.workbench,
-      pageText,
-    });
+    const historicalOperationalDetailsHidden =
+      hasHistoricalOperationalDetailsHidden(summary.timelineProcessEvidence);
     const codingOutputsSnapshot =
       options.scenario === "gui-coding-input"
         ? summary.codingWorkbenchGuiEvidenceAfterRecovery?.outputs
@@ -2974,7 +2894,7 @@ async function run() {
         pageText.includes(ARTIFACT_PATH) ||
         pageText.includes("Hello Lime Workbench") ||
         pageText.includes("产物"),
-      toolTimelineEvidencePresent: guiToolTimelineEvidencePresent,
+      historicalOperationalDetailsHidden,
       codingChangesEvidencePresent:
         summary.codingWorkbenchGuiEvidence?.changes?.panelVisible === true &&
         summary.codingWorkbenchGuiEvidence?.changes?.expectedTextsPresent ===
@@ -3056,7 +2976,8 @@ async function run() {
     summary.backendKinds = backendLedger.map((entry) => entry.kind);
     summary.backendEmittedEventTypes = backendEmittedEventTypes;
     summary.traceRecoveryTurnStart = sanitizeJson(traceRecoveryTurnStart);
-    summary.guiToolTimelineEvidencePresent = guiToolTimelineEvidencePresent;
+    summary.historicalOperationalDetailsHidden =
+      historicalOperationalDetailsHidden;
     summary.assertions = assertions;
     summary.ok = true;
     summary.completedAt = new Date().toISOString();

@@ -223,22 +223,27 @@ export async function launchElectronFixture({
     timeout: options.timeoutMs,
   });
 
-  app.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(sanitizeText(message.text()));
-    }
-  });
+  try {
+    app.on("console", (message) => {
+      if (message.type() === "error") {
+        consoleErrors.push(sanitizeText(message.text()));
+      }
+    });
 
-  const page = await app.firstWindow({ timeout: options.timeoutMs });
-  page.on("pageerror", (error) => {
-    pageErrors.push(sanitizeText(error.message));
-  });
-  page.setDefaultTimeout(options.timeoutMs);
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  const rendererSnapshot = await waitForRendererReady(page, options);
-  await clearInvokeBuffers(page);
+    const page = await app.firstWindow({ timeout: options.timeoutMs });
+    page.on("pageerror", (error) => {
+      pageErrors.push(sanitizeText(error.message));
+    });
+    page.setDefaultTimeout(options.timeoutMs);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const rendererSnapshot = await waitForRendererReady(page, options);
+    await clearInvokeBuffers(page);
 
-  return { app, page, rendererSnapshot };
+    return { app, page, rendererSnapshot };
+  } catch (error) {
+    await app.close().catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function closeElectronFixture(handle) {

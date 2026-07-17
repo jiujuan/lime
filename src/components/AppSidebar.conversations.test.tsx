@@ -27,6 +27,7 @@ import {
   mockToastSuccess,
   mockUpdateProject,
   mockUpdateAgentRuntimeSession,
+  mockWaitForConversationImportJob,
   mountSidebar,
   mountSidebarContainer,
   openConversationMenu,
@@ -542,6 +543,19 @@ describe("AppSidebar conversations", () => {
       workspaceId: "project-1",
       confirmed: true,
     });
+    expect(mockWaitForConversationImportJob).toHaveBeenCalledTimes(1);
+    expect(mockWaitForConversationImportJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "completed",
+        result: expect.objectContaining({
+          importedMessages: 2,
+        }),
+      }),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onProgress: expect.any(Function),
+      }),
+    );
     expect(mockToastSuccess).toHaveBeenCalledWith("已导入 2 条历史消息");
     const projectSection = container.querySelector(
       '[data-testid="app-sidebar-project-conversations"]',
@@ -1652,6 +1666,38 @@ describe("AppSidebar conversations", () => {
       limit: 11,
     });
     expect(container.textContent).toContain("外部创建的会话");
+  });
+
+  it("创建会话事件应立即显示带稳定身份的占位入口", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([]);
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, {
+          detail: {
+            reason: "created",
+            sessionId: "session-created-immediately",
+            workspaceId: null,
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+    await flushEffects(1);
+
+    const openButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="app-sidebar-conversation-open"][data-session-id="session-created-immediately"]',
+    );
+    expect(openButton).not.toBeNull();
+    expect(openButton?.getAttribute("title")).toBe("未命名对话");
   });
 
   it("首页发送热路径期间会话列表变更不应立即抢占 listSessions", async () => {

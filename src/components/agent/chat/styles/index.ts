@@ -72,14 +72,7 @@ export const MessageListContainer = styled(ScrollArea)<{
     $taskCenterSurface ? "6px 0 16px" : "22px 0 16px"};
   overscroll-behavior: contain;
   background: ${({ $taskCenterSurface }) =>
-    $taskCenterSurface
-      ? LIME_STAGE_SURFACE
-      : `linear-gradient(
-          180deg,
-          rgba(248, 250, 252, 0.62) 0%,
-          rgba(255, 255, 255, 0.48) 24%,
-          rgba(255, 255, 255, 0) 100%
-        )`};
+    $taskCenterSurface ? LIME_STAGE_SURFACE : "#ffffff"};
 `;
 
 export const MessageListFrame = styled.div`
@@ -88,6 +81,15 @@ export const MessageListFrame = styled.div`
   flex: 1;
   min-height: 0;
   height: 100%;
+`;
+
+export const MessageTurnGroup = styled.section<{
+  $deferOffscreenWork: boolean;
+}>`
+  content-visibility: ${({ $deferOffscreenWork }) =>
+    $deferOffscreenWork ? "auto" : "visible"};
+  contain-intrinsic-size: ${({ $deferOffscreenWork }) =>
+    $deferOffscreenWork ? "auto 320px" : "none"};
 `;
 
 // Linear Layout Wrapper: Always Row, Left Aligned

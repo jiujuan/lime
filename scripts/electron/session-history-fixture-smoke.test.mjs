@@ -53,6 +53,11 @@ describe("agent session history Electron fixture smoke guard", () => {
     );
     expect(content).toContain("window.electronAPI.supportsCommand");
     expect(content).toContain("app_server_handle_json_lines");
+    expect(content).toContain('page.on("pageerror"');
+    expect(content).toContain("summary.pageErrors = pageErrors");
+    expect(content).toContain("pageErrors.length === 0");
+    expect(content).toContain("command: entry.command");
+    expect(content).toContain("transport: entry.transport");
   });
 
   it("uses deterministic session history methods without live model backend", () => {

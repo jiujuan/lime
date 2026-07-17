@@ -5,13 +5,10 @@ import {
   mockAgentThreadTimeline,
   render,
 } from "./MessageList.testHarness";
-import type {
-  AgentThreadItem,
-  Message,
-} from "./MessageList.testHarness";
+import type { AgentThreadItem, Message } from "./MessageList.testHarness";
 
 describe("MessageList reasoning flow", () => {
-  it("较长已完成回答应保留安全思考入口但不泄露 reasoning 正文", () => {
+  it("较长已完成回答应保留 compact 过程摘要但不泄露 reasoning 正文", () => {
     const now = new Date("2026-05-09T07:12:00.000Z");
     const messages: Message[] = [
       {
@@ -92,17 +89,12 @@ describe("MessageList reasoning flow", () => {
       ],
     });
 
-    const leadingTimelineProps = mockAgentThreadTimeline.mock.calls.find(
-      ([props]) => props?.placement === "leading",
-    )?.[0] as { items?: AgentThreadItem[] } | undefined;
-
-    expect(leadingTimelineProps?.items).toEqual([
-      expect.objectContaining({
-        type: "reasoning",
-        id: "reasoning-long-answer-thinking-status",
-      }),
-    ]);
-    expect(container.textContent).toContain("执行轨迹");
+    expect(
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain("我们被要求解释首字等待");
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -415,7 +407,7 @@ describe("MessageList reasoning flow", () => {
     );
   });
 
-  it("恢复历史对话时只有内联思考的已完成助手消息也应按正文顺序渲染", () => {
+  it("恢复历史对话时只有内联思考的已完成助手消息也应折叠过程", () => {
     const messages: Message[] = [
       {
         id: "msg-user-restored-inline-thinking",
@@ -479,21 +471,22 @@ describe("MessageList reasoning flow", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
         content: "总结完成。",
-        thinkingContent: "先拆解历史恢复的消息结构。",
-        contentParts: [
-          { type: "thinking", text: "先拆解历史恢复的消息结构。" },
-          { type: "text", text: "总结完成。" },
-        ],
+        thinkingContent: undefined,
+        contentParts: undefined,
+        markdownRenderMode: "light",
       }),
     );
   });
 
-  it("已完成工具调用应保留在正文内与文字按顺序穿插展示", () => {
+  it("已完成工具调用应折叠为过程摘要并保留最终正文", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -555,29 +548,26 @@ describe("MessageList reasoning flow", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
+      container.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      ),
+    ).not.toBeNull();
     expect(
       container.querySelector(
         '[data-testid="assistant-primary-timeline-shell"]',
       ),
-    ).toBeNull();
+    ).not.toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
         suppressProcessFlow: false,
-        contentParts: [
-          { type: "thinking", text: "先检查文件变更。" },
-          expect.objectContaining({ type: "tool_use" }),
-          { type: "text", text: "已经定位到问题根因。" },
-        ],
+        thinkingContent: undefined,
+        contentParts: [{ type: "text", text: "已经定位到问题根因。" }],
       }),
     );
   });
 
-  it("WebTools 已由内联 contentParts 持有时完成态 timeline 不应再渲染第二组过程流", () => {
+  it("WebTools 已由内联 contentParts 持有时完成态应折叠为单一过程摘要", () => {
     const now = new Date("2026-06-24T10:00:00.000Z");
     const messages: Message[] = [
       {
@@ -741,23 +731,26 @@ describe("MessageList reasoning flow", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="assistant-primary-timeline-shell"]',
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
       ),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
+    ).not.toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
-        contentParts: [
+        thinkingContent: undefined,
+        contentParts: expect.arrayContaining([
           expect.objectContaining({ type: "text" }),
-          expect.objectContaining({ type: "tool_use" }),
-          expect.objectContaining({ type: "thinking" }),
-          expect.objectContaining({ type: "tool_use" }),
-          expect.objectContaining({ type: "text" }),
-        ],
+        ]),
       }),
     );
+    const webToolsRendererCall = findStreamingRendererCallByContent(
+      "timeline final should not render separately\n\n最终整理完成。",
+    );
+    expect(
+      webToolsRendererCall?.contentParts?.some(
+        (part) => part.type === "tool_use" || part.type === "thinking",
+      ),
+    ).toBe(false);
   });
 
   it("恢复历史对话时有内联过程的已完成助手消息不应退化成纯最终正文", () => {
@@ -820,9 +813,8 @@ describe("MessageList reasoning flow", () => {
     });
 
     expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
-    const rendererCall = findStreamingRendererCallByContent(
-      "已经修好消息顺序。",
-    );
+    const rendererCall =
+      findStreamingRendererCallByContent("已经修好消息顺序。");
     expect(rendererCall).toMatchObject({
       suppressProcessFlow: false,
       thinkingContent: "先定位历史恢复路径。",
@@ -906,9 +898,8 @@ describe("MessageList reasoning flow", () => {
       },
     });
 
-    const rendererCall = findStreamingRendererCallByContent(
-      "正在分析依赖关系。",
-    );
+    const rendererCall =
+      findStreamingRendererCallByContent("正在分析依赖关系。");
     expect(rendererCall).toMatchObject({ toolCalls: undefined });
     expect(rendererCall?.contentParts).toEqual([
       expect.objectContaining({
@@ -924,5 +915,4 @@ describe("MessageList reasoning flow", () => {
       },
     ]);
   });
-
 });

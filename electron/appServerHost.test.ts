@@ -1086,6 +1086,12 @@ describe("ElectronAppServerHost", () => {
       "agentSession/turn/start",
       "agentSession/read",
     ]);
+    const requestCalls = fakeConnection.request.mock.calls as unknown as Array<
+      [JsonRpcRequest, string, { timeoutMs?: number }]
+    >;
+    expect(requestCalls[0]?.[1]).toBe("agentSession/read");
+    expect(requestCalls[0]?.[2].timeoutMs).toBeGreaterThanOrEqual(29_000);
+    expect(requestCalls[0]?.[2].timeoutMs).toBeLessThanOrEqual(30_000);
   });
 
   it("首条 streaming 通知属于旧 turn 时应丢弃该通知身份并读取 requested canonical turn", async () => {
@@ -1164,12 +1170,13 @@ describe("ElectronAppServerHost", () => {
   });
 
   it("App Server 未返回精确 canonical turn 时应拒绝伪造回合身份", async () => {
+    vi.useFakeTimers();
     const { ElectronAppServerHost } = await import("./appServerHost");
     setTurnStartRequestMode("hang-non-admission-read-invalid");
     const host = new ElectronAppServerHost();
 
-    await expect(
-      host.handleJsonLines({
+    try {
+      const request = host.handleJsonLines({
         lines: [
           encodeMessage({
             id: 1,
@@ -1181,10 +1188,16 @@ describe("ElectronAppServerHost", () => {
             },
           }),
         ],
-      }),
-    ).rejects.toThrow(
-      "app-server turn/start did not resolve a canonical turn identity",
-    );
+      });
+      const rejection = expect(request).rejects.toThrow(
+        "app-server turn/start did not resolve a canonical turn identity",
+      );
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("长 turn/start 返回 accepted 后不应阻塞后续读模型请求", async () => {
@@ -1375,5 +1388,42 @@ describe("ElectronAppServerHost", () => {
     >;
     expect(requestCalls[0]?.[1]).toBe("conversationImport/thread/commit");
     expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 240000 });
+  });
+
+  it("current conversation import scan/preview 使用独立长读取窗口", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: "conversation-import-scan",
+          method: "conversationImport/source/scan",
+          params: { sourceClient: "codex" },
+        }),
+        encodeMessage({
+          id: "conversation-import-preview",
+          method: "conversationImport/thread/preview",
+          params: { sourceClient: "codex", sourceThreadId: "thread-1" },
+        }),
+        encodeMessage({
+          id: "conversation-import-job-read",
+          method: "conversationImport/job/read",
+          params: { jobId: "import-job-1" },
+        }),
+      ],
+    });
+
+    const requestCalls = fakeConnection.request.mock.calls as unknown as Array<
+      [JsonRpcRequest, string, { timeoutMs?: number }]
+    >;
+    expect(requestCalls.map(([, method]) => method)).toEqual([
+      "conversationImport/source/scan",
+      "conversationImport/thread/preview",
+      "conversationImport/job/read",
+    ]);
+    expect(requestCalls.map(([, , options]) => options.timeoutMs)).toEqual([
+      120000, 120000, 120000,
+    ]);
   });
 });

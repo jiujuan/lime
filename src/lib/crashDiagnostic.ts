@@ -391,7 +391,7 @@ export async function collectRuntimeSnapshotForDiagnostic(
   const [configResult, apiKeyProviderResult, mcpResult] =
     await Promise.allSettled([
       configTask,
-      apiKeyProviderApi.getProviders(),
+      apiKeyProviderApi.getProviders({ forceRefresh: true }),
       mcpApi.listServersWithStatus(),
     ]);
 

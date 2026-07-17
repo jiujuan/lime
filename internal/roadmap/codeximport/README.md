@@ -46,7 +46,13 @@ next user turn
 6. Electron 只提供目录选择与 App Server JSONL 转发，不承接导入业务逻辑。
 7. 普通对话与导入会话必须同构；导入只增加 provenance，不改变 Item schema、执行器或 UI。
 8. GUI 响应式布局由 shared `LayoutTransition` 按实际内容容器宽度决策；窄态默认展示完整
-   聊天，并通过明确模式控件切换工作台，不允许因窗口缩放重挂载消息树或丢失展开状态。
+   聊天，并通过明确模式控件切换工作台，不允许因窗口缩放重挂载消息树或丢失滚动位置与输入草稿。
+
+历史 GUI 显示策略固定为 Codex App 语义：canonical Thread/Turn/Item 永不裁剪，read model
+完整保留 command、reasoning、tool、approval、search 等运行事实；但 terminal turn 的消息主线
+只投影 final 正文、附件、文件产物/变更与“已处理 Xs”分隔。分隔是不可交互的历史标记，不再
+点击展开 operational timeline。只有当前 active turn 才挂载 reasoning、command、tool、search
+和 approval 过程；普通对话、历史恢复与 Codex 导入共享这一规则。
 
 ## 治理分类
 
@@ -56,7 +62,7 @@ next user turn
 | source discovery、只读安全校验、provenance                                      | current | 保留并收敛到 source adapter                                                                        |
 | `ImportedRuntimeEvent` / `commit_events/tool_lowering`                          | dead    | 已删除；禁止先造 imported product wire 再二次 lowering                                             |
 | `conversationImport/thread/runtimeEvents/read` sidecar 下钻                     | dead    | 已删除；旧 method 只允许负向 guard                                                                 |
-| `source_client=codex` 驱动的“导入的命令记录”展示                                | dead    | 删除；复用普通 command/tool item UI                                                                |
+| terminal 历史里的 operational command/tool/approval 展开入口                     | dead    | 删除；历史只投影 final、附件、文件产物/变更与处理时长，canonical item 仍由 read model 保留          |
 | `smoke:codex-import-content-studio` 真实数据脚本                                | dead    | 已删除；由 Rust corpus、点击导入 Gate B 与有界真实样本审计承接                                     |
 | Claude Code importer 占位与 unsupported 分支                                    | dead    | 当前无需求，不保留扩展壳                                                                           |
 
@@ -89,12 +95,12 @@ next user turn
 ### S3：GUI 单轨
 
 - [x] 删除 imported-only command/tool group、标题和展开策略。
-- [x] 历史 command 显示命令、cwd、输出、exit code、duration；工具显示 name、arguments、
-      output、status，遵循普通 Item 的折叠规则。
+- [x] active turn 显示 command/tool/approval 运行过程；terminal 历史只保留 final、附件、文件
+      产物/变更与处理时长，canonical operational item 由 read model 完整保留。
 - [x] 来源与导入时间只出现在会话详情/诊断，不进入消息主线。
 - [x] 五语言同步删除过时的 imported command 文案与正向断言。
 - [x] desktop 保持聊天/工作台分栏；compact/narrow 使用聊天优先单面板，并保留工作台入口。
-- [x] 断点切换保持消息树稳定，不丢 timeline 展开态、滚动位置和输入草稿。
+- [x] 断点切换保持消息树稳定，不丢历史摘要、滚动位置和输入草稿；历史摘要不可交互。
 
 ### S4：验证与删除证明
 
@@ -104,14 +110,16 @@ next user turn
 - [x] runtime provider fixture：follow-up 触发真实 shell/tool，断言输出、终态和审批。
 - [x] 有界真实样本、多视口、控制台错误、bridge trace 与 source leak 审计。
 - [x] 超大历史 commit 统一进入可观测后台 job；GUI 展示阶段/百分比，重复提交复用 active job。
+- [x] 批量确认先启动全部 job；关闭弹窗不取消后台任务，重开优先展示 importing 会话并按 `importJobId -> job/read` 重新附着同一 active job。
 - [x] `test:contracts`、`governance:legacy-report`、`verify:gui-smoke` 通过。
 
 ## 2026-07-17 证据
 
 - 点击导入 Gate B：`codex-import-click-through-v30-summary.json`，15 个 canonical item、4 条消息，覆盖 reasoning、command、approval、tool、web search、file artifact、六类文件预览、附件与同 session 续聊；desktop / compact / narrow 均通过，输入框与消息列表可用，模式控件无按钮重叠，console error 为 0。
-- 真实 Codex 样本 Gate B：`local-history-import-real-sample-visual-audit-v4-summary.json`，来自当前工作区的只读 source，5 个 turn 组、5 条用户消息、5 条 assistant 消息、346 个 tool row、10 个文件产物；三视口乘三滚动位置无 source leak、console error、工具栏遮挡或输入框阻塞。默认预算为 5,000 rollout 行、200 消息、1,200 timeline item。
+- 真实 Codex 样本 Gate B：`local-history-import-real-sample-visual-audit-v4-summary.json`，来自当前工作区的只读 source，canonical item 全量保留；terminal 历史 tool row 与 operational details 为 0，仍可见 final、附件、文件产物/变更与处理时长。三视口乘三滚动位置无 source leak、console error、工具栏遮挡或输入框阻塞。默认预算为 5,000 rollout 行、200 消息、1,200 timeline item。
 - `app-server` Rust 单元测试 1181/1181；contracts 291 项；后台导入 gateway / View Model / DOM 与 Electron guards 46/46；治理扫描零边界违规；`smoke:agent-runtime-current-fixture` 与 `verify:gui-smoke` 通过。
 - 后台导入 Gate B：`codex-import-click-through-background-v1-summary.json` 的 trace 包含 `conversationImport/job/read`，15 items / 4 messages、六类预览、同 session 续聊与三视口审计保持通过；`local-history-import-real-sample-background-v1-summary.json` 覆盖 1,500 source lines、785 个预估导入项、5 turns，最终 434 canonical items、346 tool rows、10 file artifacts 与 9 组视觉审计通过。
+- 后台关闭/重附着 Gate B：`codex-import-click-through-background-resume-v1-summary.json` 明确记录 `started / closed / reattached = true`，并断言整个闭环只有 1 次 `thread/commit` / 1 次 `job/read`；181 条 command 压力来源最终形成 195 个 canonical item / 4 条消息，`agentSession/turn/start` 同 session 续聊、六类预览与 desktop / compact / narrow 审计保持通过，console error 为 0。
 - 多 turn 压力回归把 1,200 commands 分布到 40 turns：commit-start 在 2 秒预算内返回，后台 5.59 秒完成，进度 40/40、`budgetDropped=0`。长导入不再受单次 JSON-RPC commit 超时限制。
 
 ## 完成定义
@@ -120,7 +128,7 @@ next user turn
 
 1. 仓库不存在 imported-only tool lifecycle producer/consumer。
 2. 导入历史与实时历史由同一 `ThreadItem` schema、read model 和 GUI renderer 消费。
-3. 真实 Electron 导入可见，导入后真实 provider tool loop 可执行 command/tool。
+3. 真实 Electron 导入可见，导入后真实 provider tool loop 可执行 command/tool；历史 operational detail 不挂载。
 4. 历史工具零重放，source 目录零写入，生产零 mock fallback。
 5. current / deprecated / dead 守卫、架构确认、定向测试和 Gate B evidence 齐全。
 

@@ -33,6 +33,21 @@ describe("MCP config Electron fixture smoke guard", () => {
     expect(content).toContain("window.electronAPI.supportsCommand");
   });
 
+  it("closes Electron when renderer startup fails before returning a handle", () => {
+    const content = readSmokeScript();
+    const launchFunction = content.slice(
+      content.indexOf("export async function launchElectronFixture"),
+      content.indexOf("export async function closeElectronFixture"),
+    );
+
+    expect(launchFunction).toContain("try {");
+    expect(launchFunction).toContain("catch (error)");
+    expect(launchFunction).toContain(
+      "await app.close().catch(() => undefined)",
+    );
+    expect(launchFunction).toContain("throw error");
+  });
+
   it("creates Context7 through the GUI and verifies current MCP methods", () => {
     const content = readSmokeScript();
     const evidenceCore = readEvidenceCore();

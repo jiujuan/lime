@@ -246,6 +246,47 @@ export function verifyMacAppIdentity(packageRoot, { platform }) {
   return appBundles.map((bundle) => verifyMacAppBundleIdentity(bundle));
 }
 
+export function verifyMacAppSignatures(
+  packageRoot,
+  { platform, execFileSyncImpl = execFileSync },
+) {
+  if (platform !== "darwin") {
+    return [];
+  }
+
+  const mainAppBundles = findMacAppBundles(packageRoot).filter(
+    ({ appPath }) => path.basename(appPath) === `${MAC_PRODUCT_NAME}.app`,
+  );
+  if (mainAppBundles.length === 0) {
+    throw new Error(
+      `no macOS ${MAC_PRODUCT_NAME}.app bundle found under ${packageRoot}`,
+    );
+  }
+
+  return mainAppBundles.map(({ appPath }) => {
+    try {
+      execFileSyncImpl(
+        "codesign",
+        ["--verify", "--deep", "--strict", appPath],
+        { encoding: "utf8", stdio: "pipe" },
+      );
+    } catch (error) {
+      const stderr = error?.stderr?.toString?.("utf8").trim();
+      const detail = stderr || error?.message || String(error);
+      throw new Error(
+        `macOS app bundle signature is invalid: ${appPath}\n${detail}`,
+        { cause: error },
+      );
+    }
+
+    return {
+      appPath,
+      valid: true,
+      verification: "codesign --verify --deep --strict",
+    };
+  });
+}
+
 function verifyMacAppBundleIdentity({ appPath, infoPlistPath }) {
   const content = readFileSync(infoPlistPath, "utf8");
   if (/<key>\d+<\/key>\s*<string>/.test(content)) {
@@ -350,6 +391,7 @@ function main() {
 
   verifyMainBundle(repoRoot);
   const macAppInfoPlists = verifyMacAppIdentity(packageRoot, { platform });
+  const macAppSignatures = verifyMacAppSignatures(packageRoot, { platform });
   const resourceRoots = findResourceRoots(packageRoot);
   if (resourceRoots.length === 0) {
     throw new Error(
@@ -365,6 +407,7 @@ function main() {
       {
         packageRoot,
         macAppInfoPlists,
+        macAppSignatures,
         verified,
       },
       null,

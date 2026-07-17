@@ -65,31 +65,37 @@ function macSignOptions({
   env = process.env,
   platform = process.platform,
 } = {}) {
-  if (
-    platform !== "darwin" ||
-    (env.LIME_ELECTRON_SIGN !== "1" && !env.LIME_MACOS_KEYCHAIN)
-  ) {
+  if (platform !== "darwin") {
     return undefined;
   }
 
+  const releaseSigning =
+    env.LIME_ELECTRON_SIGN === "1" || Boolean(env.LIME_MACOS_KEYCHAIN);
+
   const options = {
     continueOnError: false,
-    identityValidation: true,
+    identityValidation: releaseSigning,
     preAutoEntitlements: false,
     preEmbedProvisioningProfile: false,
     optionsForFile: (filePath) => {
       if (!isTopLevelAppBundle(filePath)) {
-        return null;
+        return releaseSigning
+          ? null
+          : { hardenedRuntime: false, timestamp: "none" };
       }
       return {
         entitlements: MACOS_APP_ENTITLEMENTS,
-        hardenedRuntime: true,
-        signatureFlags: ["runtime"],
+        hardenedRuntime: releaseSigning,
+        ...(releaseSigning
+          ? { signatureFlags: ["runtime"] }
+          : { timestamp: "none" }),
       };
     },
     strictVerify: true,
   };
-  if (env.APPLE_SIGNING_IDENTITY) {
+  if (!releaseSigning) {
+    options.identity = "-";
+  } else if (env.APPLE_SIGNING_IDENTITY) {
     options.identity = env.APPLE_SIGNING_IDENTITY;
   }
   if (env.LIME_MACOS_KEYCHAIN) {

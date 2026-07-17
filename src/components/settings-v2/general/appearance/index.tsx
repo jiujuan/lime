@@ -177,7 +177,7 @@ export function AppearanceSettings() {
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<LimeThemeMode>("system");
   const [colorSchemeId, setColorSchemeId] =
-    useState<LimeColorSchemeId>("lime-classic");
+    useState<LimeColorSchemeId>("dream-blossom");
   const [language, setLanguageState] = useState<LocalePreference>("zh-CN");
   const [agentResponseLanguage, setAgentResponseLanguage] =
     useState<LocalePreference>("auto");
@@ -651,16 +651,16 @@ export function AppearanceSettings() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                      {t("settings.appearance.colorScheme.title", "色彩方案")}
+                      {t("settings.appearance.colorScheme.title", "全局皮肤")}
                     </h3>
                     <WorkbenchInfoTip
                       ariaLabel={t(
                         "settings.appearance.colorScheme.tipAria",
-                        "色彩方案说明",
+                        "全局皮肤说明",
                       )}
                       content={t(
                         "settings.appearance.colorScheme.tip",
-                        "只切换品牌色、页面底色和卡片层级；明暗主题仍由主题模式控制。",
+                        "同时切换应用外壳、侧栏、主舞台、卡片和输入区；明暗观感仍由主题模式控制。",
                       )}
                       tone="slate"
                     />
@@ -694,7 +694,7 @@ export function AppearanceSettings() {
                   <p className="mt-1 text-xs leading-5 text-[color:var(--lime-text-muted)]">
                     {t(
                       "settings.appearance.colorScheme.random.description",
-                      "每次点击随机切换一个配色。",
+                      "每次点击随机切换一套全局皮肤。",
                     )}
                   </p>
                 </button>
@@ -890,7 +890,6 @@ export function AppearanceSettings() {
                 })}
               </div>
             </div>
-
           </div>
         </SurfacePanel>
       </section>

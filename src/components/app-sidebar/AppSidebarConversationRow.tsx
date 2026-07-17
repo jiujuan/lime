@@ -209,6 +209,7 @@ export function AppSidebarConversationRow({
         type="button"
         $active={active}
         data-testid="app-sidebar-conversation-open"
+        data-session-id={session.id}
         aria-current={active ? "page" : undefined}
         onClick={() => {
           recordAgentUiPerformanceMetric("sidebar.conversation.click", {

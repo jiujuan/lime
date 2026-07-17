@@ -590,6 +590,34 @@ export function useAppSidebarSessions({
 
     const handleSessionsChanged = (event: Event) => {
       const detail = event instanceof CustomEvent ? event.detail : undefined;
+      const createdSessionId =
+        detail?.reason === "created" && typeof detail.sessionId === "string"
+          ? detail.sessionId.trim()
+          : "";
+      if (createdSessionId) {
+        const now = Math.floor(Date.now() / 1000);
+        const optimisticSession: AgentSessionInfo = {
+          id: createdSessionId,
+          name: conversationUntitledLabel,
+          created_at: now,
+          updated_at: now,
+          messages_count: 0,
+          workspace_id:
+            typeof detail.workspaceId === "string"
+              ? detail.workspaceId.trim() || undefined
+              : undefined,
+        };
+        optimisticSidebarSessionsRef.current.set(
+          createdSessionId,
+          optimisticSession,
+        );
+        setSidebarSessions((current) =>
+          sortSidebarSessions([
+            optimisticSession,
+            ...current.filter((session) => session.id !== createdSessionId),
+          ]),
+        );
+      }
       if (
         shouldDeferCurrentSessionMetadataRefresh({
           currentSessionId,
@@ -616,6 +644,7 @@ export function useAppSidebarSessions({
     };
   }, [
     currentSessionId,
+    conversationUntitledLabel,
     refreshSidebarSessions,
     scheduleRecentSidebarReload,
     shouldLoadSidebarConversations,

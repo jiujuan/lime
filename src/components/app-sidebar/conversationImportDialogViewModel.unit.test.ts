@@ -111,12 +111,20 @@ describe("conversationImportDialogViewModel", () => {
     expect(resolveImportSourceClientLabel(t)).toBe("本地历史");
   });
 
-  it("默认选择第一条未导入对话，全部已导入时回退第一条", () => {
+  it("默认优先选择后台导入中的对话，其次选择未导入对话", () => {
     const imported = thread({
       sourceThreadId: "imported-thread",
       importStatus: "imported",
     });
     const fresh = thread({ sourceThreadId: "fresh-thread" });
+    const importing = thread({
+      sourceThreadId: "importing-thread",
+      importStatus: "importing",
+      importJobId: "import-job-1",
+    });
+    expect(
+      firstImportableThread([imported, fresh, importing])?.sourceThreadId,
+    ).toBe("importing-thread");
     expect(firstImportableThread([imported, fresh])?.sourceThreadId).toBe(
       "fresh-thread",
     );

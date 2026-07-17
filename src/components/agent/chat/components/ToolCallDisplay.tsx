@@ -726,6 +726,9 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         <div
           className="flex items-start gap-2 py-1.5"
           data-testid="tool-call-row"
+          data-tool-call-id={toolCall.id}
+          data-tool-name={toolCall.name}
+          data-tool-status={toolCall.status}
           {...soulLifecycleAttributes}
         >
           <span className="pt-0.5 font-mono text-xs text-slate-400">
@@ -768,6 +771,9 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         <div
           className="flex items-start gap-2.5 py-1.5"
           data-testid="tool-call-row"
+          data-tool-call-id={toolCall.id}
+          data-tool-name={toolCall.name}
+          data-tool-status={toolCall.status}
           {...soulLifecycleAttributes}
         >
           <span

@@ -447,4 +447,16 @@ describe("conversationImport API", () => {
     ).rejects.toThrow("source history is invalid");
     expect(appServerRequestMock).not.toHaveBeenCalled();
   });
+
+  it("关闭导入弹窗时只中止 Renderer 观察，不取消 App Server job", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      waitForConversationImportJob(appServerImportJob(), {
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
 });

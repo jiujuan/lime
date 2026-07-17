@@ -44,6 +44,36 @@ describe("electron launcher", () => {
     ]);
   });
 
+  it("Windows packaged executable 可关闭 shell，保留含空格路径和参数边界", () => {
+    const calls = [];
+    const child = { once() {} };
+
+    spawnElectron({
+      electronPath:
+        "C:\\Users\\runner\\AppData\\Local\\lime\\app-1.2.3\\Lime.exe",
+      args: ["--use-mock-keychain"],
+      env: { LIME_ELECTRON_SMOKE: "1" },
+      platform: "win32",
+      shell: false,
+      runner(command, args, options) {
+        calls.push({ command, args, options });
+        return child;
+      },
+    });
+
+    expect(calls).toEqual([
+      {
+        command: "C:\\Users\\runner\\AppData\\Local\\lime\\app-1.2.3\\Lime.exe",
+        args: ["--use-mock-keychain"],
+        options: {
+          env: { LIME_ELECTRON_SMOKE: "1" },
+          stdio: "inherit",
+          shell: false,
+        },
+      },
+    ]);
+  });
+
   it("macOS 默认解析 branded dev bundle 可执行路径", () => {
     const result = resolveElectronLaunchPath({
       electronPath: ELECTRON_EXECUTABLE,

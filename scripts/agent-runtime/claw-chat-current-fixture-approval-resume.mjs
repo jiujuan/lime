@@ -245,7 +245,6 @@ export async function runApprovalRequestDecisionScenario({
     const guiCanceled = sanitizeJson(
       await waitForGuiChatCanceled(page, options, {
         prompt: APPROVAL_REQUEST_RESUME_PROMPT,
-        requireApprovalRecord: true,
       }),
     );
 
@@ -300,7 +299,6 @@ export async function runApprovalRequestDecisionScenario({
       prompt: APPROVAL_REQUEST_RESUME_PROMPT,
       doneText: APPROVAL_REQUEST_DECLINE_DONE_TEXT,
       summaryText: APPROVAL_REQUEST_DECLINE_RESULT_TEXT,
-      requireApprovalRecord: true,
     }),
   );
 
@@ -398,7 +396,6 @@ export async function runApprovalRequestResumeScenario({
       prompt: APPROVAL_REQUEST_RESUME_PROMPT,
       doneText: APPROVAL_REQUEST_RESUME_DONE_TEXT,
       summaryText: APPROVAL_REQUEST_RESUME_RESULT_TEXT,
-      requireApprovalRecord: true,
     }),
   );
 

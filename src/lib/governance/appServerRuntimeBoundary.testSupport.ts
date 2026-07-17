@@ -126,6 +126,8 @@ export const PROCESSOR_SPLIT_MODULES = [
 ];
 export const AGENT_PROVIDER_CONFIGURATION_BOUNDARY =
   "lime-rs/crates/agent/src/provider_configuration.rs";
+export const AGENT_PROVIDER_RUNTIME_ADAPTER_BOUNDARY =
+  "lime-rs/crates/agent/src/credential_bridge/runtime_provider_adapter.rs";
 export const AGENT_SESSION_CONFIGURATION_BOUNDARY =
   "lime-rs/crates/agent/src/session_configuration.rs";
 export const AGENT_TURN_CONTEXT_CONFIGURATION_BOUNDARY =

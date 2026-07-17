@@ -6,7 +6,7 @@ import {
 } from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection legacy tool sources", () => {
-  it("旧 timeline 缺少 phase 时应保留过程前导语并只把最后一条 agent_message 当作最终正文", () => {
+  it("旧 timeline 缺少 phase 时应折叠过程并只把最后一条 agent_message 当作最终正文", () => {
     const message: Message = {
       id: "assistant-history",
       role: "assistant",
@@ -88,21 +88,11 @@ describe("messageListItemProjection legacy tool sources", () => {
     expect(projection.rendererRawContent).not.toContain("交叉核对");
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
-      "tool_use",
-      "text",
-      "tool_use",
-      "text",
     ]);
-    expect(
-      projection.rendererContentParts?.[0]?.type === "text"
-        ? projection.rendererContentParts[0].text
-        : "",
-    ).toBe("我会先做几组中英文检索。");
-    expect(
-      projection.rendererContentParts?.[2]?.type === "text"
-        ? projection.rendererContentParts[2].text
-        : "",
-    ).toBe("我再打开几个页面交叉核对。");
+    expect(projection.primaryTimeline?.items.map((item) => item.id)).toEqual([
+      "tool-web-search",
+      "tool-web-fetch-failed",
+    ]);
   });
 
   it("timeline 已有工具 item 时不应再把 legacy message.toolCalls 作为第二套过程源", () => {
@@ -158,7 +148,6 @@ describe("messageListItemProjection legacy tool sources", () => {
 
     expect(projection.rendererToolCalls).toBeUndefined();
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
-      "tool_use",
       "text",
     ]);
     const toolParts = projection.rendererContentParts?.filter(
@@ -169,8 +158,10 @@ describe("messageListItemProjection legacy tool sources", () => {
         { type: "tool_use" }
       > => part.type === "tool_use",
     );
-    expect(toolParts).toHaveLength(1);
-    expect(toolParts?.[0]?.toolCall.id).toBe("tool-web-search-current");
+    expect(toolParts).toHaveLength(0);
+    expect(projection.primaryTimeline?.items).toEqual([
+      expect.objectContaining({ id: "tool-web-search-current" }),
+    ]);
     expect(JSON.stringify(projection.rendererContentParts)).not.toContain(
       "legacy duplicate",
     );
@@ -310,7 +301,7 @@ describe("messageListItemProjection legacy tool sources", () => {
     );
   });
 
-  it("Codex 导入 timeline 应继续保留只读工具过程渲染", () => {
+  it("Codex 导入 timeline 应继续保留只读 compact 过程摘要", () => {
     const importedMetadata = {
       imported: true,
       imported_synthetic: true,
@@ -368,12 +359,13 @@ describe("messageListItemProjection legacy tool sources", () => {
 
     expect(projection.rendererToolCalls).toBeUndefined();
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
-      "thinking",
-      "tool_use",
       "text",
     ]);
-    expect(projection.primaryTimeline?.items).toBeUndefined();
-    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(false);
+    expect(projection.primaryTimeline?.items.map((item) => item.id)).toEqual([
+      "imported-reasoning",
+      "imported-command",
+    ]);
+    expect(projection.shouldRenderCompactPrimaryTimeline).toBe(true);
     expect(projection.actionContent).toBe("已完成导入会话复盘。");
   });
 });

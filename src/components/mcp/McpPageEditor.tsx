@@ -154,6 +154,7 @@ export function McpPageEditor({
           {selectedServer && (
             <button
               onClick={() => onDelete(selectedServer.id)}
+              data-testid="mcp-config-delete"
               className="p-1.5 rounded hover:bg-destructive/10 text-destructive"
               title={t("settings.mcpPage.action.delete", "删除")}
             >
@@ -235,6 +236,7 @@ export function McpPageEditor({
             >
               <input
                 type="checkbox"
+                data-testid={`mcp-config-enabled-${toggle.key}`}
                 checked={toggle.checked}
                 onChange={(event) => toggle.onChange(event.target.checked)}
                 className="w-3.5 h-3.5 rounded border-gray-300"
@@ -459,6 +461,7 @@ export function McpPageEditor({
       <div className="p-3 border-t flex justify-end gap-2">
         <button
           onClick={onCancel}
+          data-testid="mcp-config-cancel"
           className="px-3 py-1.5 rounded border hover:bg-muted text-sm"
         >
           {t("settings.mcpPage.action.cancel", "取消")}
