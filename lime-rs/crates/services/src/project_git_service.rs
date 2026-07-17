@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::Output;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::process::Command;
+use tokio::time::timeout;
+
+const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,27 +69,21 @@ pub enum ProjectGitDiffBase {
     PreviousConversation,
 }
 
-pub fn read_status(root_path: &str) -> Result<ProjectGitStatus, String> {
+pub async fn read_status(root_path: &str) -> Result<ProjectGitStatus, String> {
     let root = required_root_path(root_path)?;
-    let repository_root = match git_output(&root, &["rev-parse", "--show-toplevel"]) {
+    if !has_git_ancestor(&root) {
+        return Ok(non_repository_status(root_path));
+    }
+    let repository_root = match git_output(&root, &["rev-parse", "--show-toplevel"]).await {
         Ok(output) => output,
-        Err(_) => {
-            return Ok(ProjectGitStatus {
-                root_path: root_path.to_string(),
-                repository_root: None,
-                has_git_repository: false,
-                current_branch: None,
-                branches: Vec::new(),
-                uncommitted_file_count: 0,
-            });
-        }
+        Err(_) => return Ok(non_repository_status(root_path)),
     };
 
     let repository_root = repository_root.trim().to_string();
     let repository_path = PathBuf::from(&repository_root);
-    let current_branch = read_current_branch(&root)?;
-    let branches = read_branches(&repository_path)?;
-    let uncommitted_file_count = read_uncommitted_file_count(&root)?;
+    let current_branch = read_current_branch(&root).await?;
+    let branches = read_branches(&repository_path).await?;
+    let uncommitted_file_count = read_uncommitted_file_count(&root).await?;
 
     Ok(ProjectGitStatus {
         root_path: root_path.to_string(),
@@ -97,13 +95,38 @@ pub fn read_status(root_path: &str) -> Result<ProjectGitStatus, String> {
     })
 }
 
-pub fn read_diff(
+fn has_git_ancestor(root: &Path) -> bool {
+    let absolute_root = if root.is_absolute() {
+        root.to_path_buf()
+    } else {
+        match std::env::current_dir() {
+            Ok(current_dir) => current_dir.join(root),
+            Err(_) => return false,
+        }
+    };
+    absolute_root
+        .ancestors()
+        .any(|ancestor| ancestor.join(".git").exists())
+}
+
+fn non_repository_status(root_path: &str) -> ProjectGitStatus {
+    ProjectGitStatus {
+        root_path: root_path.to_string(),
+        repository_root: None,
+        has_git_repository: false,
+        current_branch: None,
+        branches: Vec::new(),
+        uncommitted_file_count: 0,
+    }
+}
+
+pub async fn read_diff(
     root_path: &str,
     context_lines: Option<u32>,
     base: Option<ProjectGitDiffBase>,
     commit_sha: Option<&str>,
 ) -> Result<ProjectGitDiff, String> {
-    let status = read_status(root_path)?;
+    let status = read_status(root_path).await?;
     if !status.has_git_repository {
         return Ok(ProjectGitDiff {
             root_path: status.root_path,
@@ -121,7 +144,7 @@ pub fn read_diff(
     let base = base.unwrap_or_default();
     let diff_result = match base {
         ProjectGitDiffBase::Unstaged => {
-            ProjectGitPatchResult::new(read_unstaged_patch(&root, unified_arg.as_str())?)
+            ProjectGitPatchResult::new(read_unstaged_patch(&root, unified_arg.as_str()).await?)
         }
         ProjectGitDiffBase::Staged => git_diff_output(
             &root,
@@ -136,16 +159,19 @@ pub fn read_diff(
                 unified_arg.as_str(),
             ],
         )
+        .await
         .map(ProjectGitPatchResult::new)?,
         ProjectGitDiffBase::Commit => {
             let commit_sha = validate_commit_sha(commit_sha)?;
             ProjectGitPatchResult {
-                patch: read_commit_patch(&root, commit_sha, unified_arg.as_str())?,
+                patch: read_commit_patch(&root, commit_sha, unified_arg.as_str()).await?,
                 current_ref: status.current_branch.clone(),
                 comparison_base_ref: Some(commit_sha.to_string()),
             }
         }
-        ProjectGitDiffBase::Branch => read_branch_patch(&root, &status, unified_arg.as_str())?,
+        ProjectGitDiffBase::Branch => {
+            read_branch_patch(&root, &status, unified_arg.as_str()).await?
+        }
         ProjectGitDiffBase::PreviousConversation => {
             return Err("上轮对话基准不由 Git 后端读取".to_string());
         }
@@ -162,8 +188,11 @@ pub fn read_diff(
     })
 }
 
-pub fn list_commits(root_path: &str, limit: Option<u32>) -> Result<ProjectGitCommitList, String> {
-    let status = read_status(root_path)?;
+pub async fn list_commits(
+    root_path: &str,
+    limit: Option<u32>,
+) -> Result<ProjectGitCommitList, String> {
+    let status = read_status(root_path).await?;
     if !status.has_git_repository {
         return Ok(ProjectGitCommitList {
             root_path: status.root_path,
@@ -184,7 +213,8 @@ pub fn list_commits(root_path: &str, limit: Option<u32>) -> Result<ProjectGitCom
             "-n",
             &limit,
         ],
-    )?;
+    )
+    .await?;
     let commits = output
         .split('\x1e')
         .filter_map(parse_commit_log_record)
@@ -198,7 +228,7 @@ pub fn list_commits(root_path: &str, limit: Option<u32>) -> Result<ProjectGitCom
     })
 }
 
-fn read_unstaged_patch(root: &Path, unified_arg: &str) -> Result<String, String> {
+async fn read_unstaged_patch(root: &Path, unified_arg: &str) -> Result<String, String> {
     let tracked_patch = git_diff_output(
         root,
         &[
@@ -210,13 +240,14 @@ fn read_unstaged_patch(root: &Path, unified_arg: &str) -> Result<String, String>
             "--no-color",
             unified_arg,
         ],
-    )?;
-    let untracked_patch = read_untracked_patch(root, unified_arg)?;
+    )
+    .await?;
+    let untracked_patch = read_untracked_patch(root, unified_arg).await?;
     Ok(join_patch_sections([tracked_patch, untracked_patch]))
 }
 
-fn read_untracked_patch(root: &Path, unified_arg: &str) -> Result<String, String> {
-    let output = git_output(root, &["ls-files", "--others", "--exclude-standard"])?;
+async fn read_untracked_patch(root: &Path, unified_arg: &str) -> Result<String, String> {
+    let output = git_output(root, &["ls-files", "--others", "--exclude-standard"]).await?;
     let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
     let mut patch = String::new();
 
@@ -240,7 +271,8 @@ fn read_untracked_patch(root: &Path, unified_arg: &str) -> Result<String, String
                 null_path,
                 file,
             ],
-        )?;
+        )
+        .await?;
         append_patch_section(&mut patch, &diff);
     }
 
@@ -265,7 +297,11 @@ fn append_patch_section(patch: &mut String, section: &str) {
     patch.push_str(section.trim());
 }
 
-fn read_commit_patch(root: &Path, commit_sha: &str, unified_arg: &str) -> Result<String, String> {
+async fn read_commit_patch(
+    root: &Path,
+    commit_sha: &str,
+    unified_arg: &str,
+) -> Result<String, String> {
     git_diff_output(
         root,
         &[
@@ -280,19 +316,22 @@ fn read_commit_patch(root: &Path, commit_sha: &str, unified_arg: &str) -> Result
             commit_sha,
         ],
     )
+    .await
 }
 
-fn read_branch_patch(
+async fn read_branch_patch(
     root: &Path,
     status: &ProjectGitStatus,
     unified_arg: &str,
 ) -> Result<ProjectGitPatchResult, String> {
-    let preferred_ref = resolve_current_upstream_ref(root, status)?
+    let preferred_ref = resolve_current_upstream_ref(root, status)
+        .await?
         .or_else(|| resolve_default_base_branch(status).map(ToString::to_string));
     let Some(preferred_ref) = preferred_ref else {
         return Ok(ProjectGitPatchResult::new(String::new()));
     };
-    let Some(merge_base) = git_output_optional(root, &["merge-base", "HEAD", &preferred_ref])?
+    let Some(merge_base) =
+        git_output_optional(root, &["merge-base", "HEAD", &preferred_ref]).await?
     else {
         return Ok(ProjectGitPatchResult::new(String::new()));
     };
@@ -310,8 +349,9 @@ fn read_branch_patch(
                 unified_arg,
                 &merge_base,
             ],
-        )?,
-        read_untracked_patch(root, unified_arg)?,
+        )
+        .await?,
+        read_untracked_patch(root, unified_arg).await?,
     ]);
 
     Ok(ProjectGitPatchResult {
@@ -362,7 +402,7 @@ fn resolve_default_base_branch(status: &ProjectGitStatus) -> Option<&str> {
         })
 }
 
-fn resolve_current_upstream_ref(
+async fn resolve_current_upstream_ref(
     root: &Path,
     status: &ProjectGitStatus,
 ) -> Result<Option<String>, String> {
@@ -378,6 +418,7 @@ fn resolve_current_upstream_ref(
             &format!("{current_branch}@{{upstream}}"),
         ],
     )
+    .await
 }
 
 fn validate_commit_sha(commit_sha: Option<&str>) -> Result<&str, String> {
@@ -394,26 +435,26 @@ fn validate_commit_sha(commit_sha: Option<&str>) -> Result<&str, String> {
     Ok(commit_sha)
 }
 
-pub fn checkout_branch(root_path: &str, branch: &str) -> Result<ProjectGitStatus, String> {
+pub async fn checkout_branch(root_path: &str, branch: &str) -> Result<ProjectGitStatus, String> {
     let root = required_root_path(root_path)?;
     validate_branch_name(branch)?;
-    git_output(&root, &["switch", branch])?;
-    read_status(root_path)
+    git_output(&root, &["switch", branch]).await?;
+    read_status(root_path).await
 }
 
-pub fn create_branch(root_path: &str, branch: &str) -> Result<ProjectGitStatus, String> {
+pub async fn create_branch(root_path: &str, branch: &str) -> Result<ProjectGitStatus, String> {
     let root = required_root_path(root_path)?;
     validate_branch_name(branch)?;
-    git_output(&root, &["switch", "-c", branch])?;
-    read_status(root_path)
+    git_output(&root, &["switch", "-c", branch]).await?;
+    read_status(root_path).await
 }
 
-pub fn create_worktree(
+pub async fn create_worktree(
     root_path: &str,
     name: Option<&str>,
     base_branch: Option<&str>,
 ) -> Result<ProjectGitWorktree, String> {
-    let status = read_status(root_path)?;
+    let status = read_status(root_path).await?;
     if !status.has_git_repository {
         return Err("当前项目不是 Git 仓库".to_string());
     }
@@ -449,9 +490,9 @@ pub fn create_worktree(
         ));
     }
 
-    git_worktree_add(&repository_path, &branch, &worktree_path)?;
+    git_worktree_add(&repository_path, &branch, &worktree_path).await?;
     let worktree_path_string = worktree_path.to_string_lossy().to_string();
-    let status = read_status(&worktree_path_string)?;
+    let status = read_status(&worktree_path_string).await?;
     Ok(ProjectGitWorktree {
         worktree_path: worktree_path_string,
         branch,
@@ -467,19 +508,19 @@ fn required_root_path(root_path: &str) -> Result<PathBuf, String> {
     Ok(PathBuf::from(trimmed))
 }
 
-fn read_current_branch(root: &Path) -> Result<Option<String>, String> {
-    let branch = git_output(root, &["branch", "--show-current"])?;
+async fn read_current_branch(root: &Path) -> Result<Option<String>, String> {
+    let branch = git_output(root, &["branch", "--show-current"]).await?;
     let branch = branch.trim();
     if !branch.is_empty() {
         return Ok(Some(branch.to_string()));
     }
 
-    let commit = git_output(root, &["rev-parse", "--short", "HEAD"])?;
+    let commit = git_output(root, &["rev-parse", "--short", "HEAD"]).await?;
     let commit = commit.trim();
     Ok((!commit.is_empty()).then(|| commit.to_string()))
 }
 
-fn read_branches(root: &Path) -> Result<Vec<String>, String> {
+async fn read_branches(root: &Path) -> Result<Vec<String>, String> {
     let output = git_output(
         root,
         &[
@@ -489,7 +530,8 @@ fn read_branches(root: &Path) -> Result<Vec<String>, String> {
             "refs/heads",
             "refs/remotes",
         ],
-    )?;
+    )
+    .await?;
     Ok(output
         .lines()
         .map(str::trim)
@@ -515,31 +557,21 @@ impl ProjectGitPatchResult {
     }
 }
 
-fn read_uncommitted_file_count(root: &Path) -> Result<u32, String> {
-    let output = git_output(root, &["status", "--porcelain", "--untracked-files=all"])?;
+async fn read_uncommitted_file_count(root: &Path) -> Result<u32, String> {
+    let output = git_output(root, &["status", "--porcelain", "--untracked-files=all"]).await?;
     Ok(output
         .lines()
         .filter(|line| !line.trim().is_empty())
         .count() as u32)
 }
 
-fn git_output(root: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .map_err(|error| format!("无法执行 git: {error}"))?;
+async fn git_output(root: &Path, args: &[&str]) -> Result<String, String> {
+    let output = git_command_output_from(Path::new("git"), root, args, GIT_COMMAND_TIMEOUT).await?;
     output_to_string(output)
 }
 
-fn git_output_optional(root: &Path, args: &[&str]) -> Result<Option<String>, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .map_err(|error| format!("无法执行 git: {error}"))?;
+async fn git_output_optional(root: &Path, args: &[&str]) -> Result<Option<String>, String> {
+    let output = git_command_output_from(Path::new("git"), root, args, GIT_COMMAND_TIMEOUT).await?;
     if output.status.success() {
         let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
         return Ok((!value.is_empty()).then_some(value));
@@ -547,13 +579,8 @@ fn git_output_optional(root: &Path, args: &[&str]) -> Result<Option<String>, Str
     Ok(None)
 }
 
-fn git_diff_output(root: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .map_err(|error| format!("无法执行 git: {error}"))?;
+async fn git_diff_output(root: &Path, args: &[&str]) -> Result<String, String> {
+    let output = git_command_output_from(Path::new("git"), root, args, GIT_COMMAND_TIMEOUT).await?;
     let code = output.status.code();
     if output.status.success() || code == Some(1) {
         return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
@@ -561,18 +588,35 @@ fn git_diff_output(root: &Path, args: &[&str]) -> Result<String, String> {
     output_to_string(output)
 }
 
-fn git_worktree_add(root: &Path, branch: &str, path: &Path) -> Result<(), String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .arg("worktree")
-        .arg("add")
-        .arg("--detach")
-        .arg(path)
-        .arg(branch)
-        .output()
-        .map_err(|error| format!("无法执行 git: {error}"))?;
+async fn git_worktree_add(root: &Path, branch: &str, path: &Path) -> Result<(), String> {
+    let path = path.to_string_lossy();
+    let output = git_command_output_from(
+        Path::new("git"),
+        root,
+        &["worktree", "add", "--detach", path.as_ref(), branch],
+        GIT_COMMAND_TIMEOUT,
+    )
+    .await?;
     output_to_string(output).map(|_| ())
+}
+
+async fn git_command_output_from(
+    git: &Path,
+    root: &Path,
+    args: &[&str],
+    command_timeout: Duration,
+) -> Result<Output, String> {
+    let mut command = Command::new(git);
+    command
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .args(args)
+        .current_dir(root)
+        .kill_on_drop(true);
+
+    match timeout(command_timeout, command.output()).await {
+        Ok(result) => result.map_err(|error| format!("无法执行 git: {error}")),
+        Err(_) => Err(format!("git 命令超时（{}ms）", command_timeout.as_millis())),
+    }
 }
 
 fn output_to_string(output: Output) -> Result<String, String> {
@@ -651,14 +695,17 @@ fn resolve_worktree_slug(name: Option<&str>) -> String {
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Command as StdCommand;
+    #[cfg(unix)]
+    use std::time::Instant;
     use tempfile::TempDir;
 
     fn git_available() -> bool {
-        Command::new("git").arg("--version").output().is_ok()
+        StdCommand::new("git").arg("--version").output().is_ok()
     }
 
     fn run_git(root: &Path, args: &[&str]) {
-        let output = Command::new("git")
+        let output = StdCommand::new("git")
             .arg("-C")
             .arg(root)
             .args(args)
@@ -688,23 +735,48 @@ mod tests {
         Some((temp, repo))
     }
 
-    #[test]
-    fn status_returns_local_mode_for_plain_directory() {
+    #[tokio::test]
+    async fn status_returns_local_mode_for_plain_directory() {
         let temp = TempDir::new().expect("temp dir");
-        let status = read_status(&temp.path().to_string_lossy()).expect("status");
+        let status = read_status(&temp.path().to_string_lossy())
+            .await
+            .expect("status");
         assert!(!status.has_git_repository);
         assert!(status.current_branch.is_none());
         assert!(status.branches.is_empty());
     }
 
-    #[test]
-    fn status_reads_branch_and_dirty_count() {
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn git_command_timeout_stops_waiting_for_a_stuck_process() {
+        let temp = TempDir::new().expect("temp dir");
+        let started = Instant::now();
+
+        let error = git_command_output_from(
+            Path::new("/bin/sh"),
+            temp.path(),
+            &["-c", "sleep 30"],
+            Duration::from_millis(50),
+        )
+        .await
+        .expect_err("command should time out");
+
+        assert!(error.contains("git 命令超时"), "unexpected error: {error}");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "timeout did not bound the command: {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[tokio::test]
+    async fn status_reads_branch_and_dirty_count() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
         fs::write(repo.join("note.txt"), "dirty").expect("write dirty");
 
-        let status = read_status(&repo.to_string_lossy()).expect("status");
+        let status = read_status(&repo.to_string_lossy()).await.expect("status");
 
         assert!(status.has_git_repository);
         assert_eq!(status.current_branch.as_deref(), Some("main"));
@@ -712,8 +784,8 @@ mod tests {
         assert_eq!(status.uncommitted_file_count, 1);
     }
 
-    #[test]
-    fn status_reads_remote_tracking_branches() {
+    #[tokio::test]
+    async fn status_reads_remote_tracking_branches() {
         let Some((temp, repo)) = init_repo() else {
             return;
         };
@@ -725,20 +797,22 @@ mod tests {
         );
         run_git(&repo, &["push", "-u", "origin", "main"]);
 
-        let status = read_status(&repo.to_string_lossy()).expect("status");
+        let status = read_status(&repo.to_string_lossy()).await.expect("status");
 
         assert!(status.branches.iter().any(|branch| branch == "main"));
         assert!(status.branches.iter().any(|branch| branch == "origin/main"));
     }
 
-    #[test]
-    fn diff_reads_unstaged_patch() {
+    #[tokio::test]
+    async fn diff_reads_unstaged_patch() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
         fs::write(repo.join("README.md"), "hello\nworld\n").expect("write readme");
 
-        let diff = read_diff(&repo.to_string_lossy(), Some(1), None, None).expect("diff");
+        let diff = read_diff(&repo.to_string_lossy(), Some(1), None, None)
+            .await
+            .expect("diff");
 
         assert!(diff.has_git_repository);
         assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
@@ -746,8 +820,8 @@ mod tests {
         assert_eq!(diff.uncommitted_file_count, 1);
     }
 
-    #[test]
-    fn diff_reads_staged_patch() {
+    #[tokio::test]
+    async fn diff_reads_staged_patch() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
@@ -760,6 +834,7 @@ mod tests {
             Some(ProjectGitDiffBase::Staged),
             None,
         )
+        .await
         .expect("diff");
 
         assert!(diff.has_git_repository);
@@ -767,8 +842,8 @@ mod tests {
         assert!(diff.patch.contains("+staged"));
     }
 
-    #[test]
-    fn diff_reads_branch_merge_base_patch() {
+    #[tokio::test]
+    async fn diff_reads_branch_merge_base_patch() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
@@ -783,6 +858,7 @@ mod tests {
             Some(ProjectGitDiffBase::Branch),
             None,
         )
+        .await
         .expect("diff");
 
         assert!(diff.has_git_repository);
@@ -792,8 +868,8 @@ mod tests {
         assert!(diff.patch.contains("+branch"));
     }
 
-    #[test]
-    fn diff_reads_current_branch_upstream_patch() {
+    #[tokio::test]
+    async fn diff_reads_current_branch_upstream_patch() {
         let Some((temp, repo)) = init_repo() else {
             return;
         };
@@ -815,6 +891,7 @@ mod tests {
             Some(ProjectGitDiffBase::Branch),
             None,
         )
+        .await
         .expect("diff");
 
         assert!(diff.has_git_repository);
@@ -828,8 +905,8 @@ mod tests {
         assert!(diff.patch.contains("+untracked"));
     }
 
-    #[test]
-    fn branch_diff_includes_untracked_files() {
+    #[tokio::test]
+    async fn branch_diff_includes_untracked_files() {
         let Some((temp, repo)) = init_repo() else {
             return;
         };
@@ -848,6 +925,7 @@ mod tests {
             Some(ProjectGitDiffBase::Branch),
             None,
         )
+        .await
         .expect("diff");
 
         assert!(diff
@@ -856,16 +934,18 @@ mod tests {
         assert!(diff.patch.contains("+untracked"));
     }
 
-    #[test]
-    fn diff_returns_empty_patch_for_plain_directory() {
+    #[tokio::test]
+    async fn diff_returns_empty_patch_for_plain_directory() {
         let temp = TempDir::new().expect("temp dir");
-        let diff = read_diff(&temp.path().to_string_lossy(), Some(3), None, None).expect("diff");
+        let diff = read_diff(&temp.path().to_string_lossy(), Some(3), None, None)
+            .await
+            .expect("diff");
         assert!(!diff.has_git_repository);
         assert!(diff.patch.is_empty());
     }
 
-    #[test]
-    fn commits_list_reads_recent_commits() {
+    #[tokio::test]
+    async fn commits_list_reads_recent_commits() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
@@ -873,7 +953,9 @@ mod tests {
         run_git(&repo, &["add", "README.md"]);
         run_git(&repo, &["commit", "-m", "second change"]);
 
-        let list = list_commits(&repo.to_string_lossy(), Some(5)).expect("commits");
+        let list = list_commits(&repo.to_string_lossy(), Some(5))
+            .await
+            .expect("commits");
 
         assert!(list.has_git_repository);
         assert!(list.commits.len() >= 2);
@@ -882,15 +964,17 @@ mod tests {
         assert!(!list.commits[0].short_sha.is_empty());
     }
 
-    #[test]
-    fn diff_reads_commit_patch() {
+    #[tokio::test]
+    async fn diff_reads_commit_patch() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
         fs::write(repo.join("README.md"), "hello\ncommitted\n").expect("write readme");
         run_git(&repo, &["add", "README.md"]);
         run_git(&repo, &["commit", "-m", "committed change"]);
-        let commit_sha = git_output(&repo, &["rev-parse", "HEAD"]).expect("head");
+        let commit_sha = git_output(&repo, &["rev-parse", "HEAD"])
+            .await
+            .expect("head");
 
         let diff = read_diff(
             &repo.to_string_lossy(),
@@ -898,6 +982,7 @@ mod tests {
             Some(ProjectGitDiffBase::Commit),
             Some(commit_sha.trim()),
         )
+        .await
         .expect("diff");
 
         assert!(diff.has_git_repository);
@@ -905,8 +990,8 @@ mod tests {
         assert!(diff.patch.contains("+committed"));
     }
 
-    #[test]
-    fn diff_commit_requires_sha() {
+    #[tokio::test]
+    async fn diff_commit_requires_sha() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
@@ -917,22 +1002,26 @@ mod tests {
             Some(ProjectGitDiffBase::Commit),
             None,
         )
+        .await
         .expect_err("commit sha required");
 
         assert!(error.contains("commitSha"));
     }
 
-    #[test]
-    fn branch_create_and_checkout_refresh_status() {
+    #[tokio::test]
+    async fn branch_create_and_checkout_refresh_status() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
 
-        let created =
-            create_branch(&repo.to_string_lossy(), "feature/demo").expect("create branch");
+        let created = create_branch(&repo.to_string_lossy(), "feature/demo")
+            .await
+            .expect("create branch");
         assert_eq!(created.current_branch.as_deref(), Some("feature/demo"));
 
-        let checked_out = checkout_branch(&repo.to_string_lossy(), "main").expect("checkout");
+        let checked_out = checkout_branch(&repo.to_string_lossy(), "main")
+            .await
+            .expect("checkout");
         assert_eq!(checked_out.current_branch.as_deref(), Some("main"));
     }
 
@@ -944,13 +1033,14 @@ mod tests {
         assert!(validate_branch_name("bad~name").is_err());
     }
 
-    #[test]
-    fn worktree_create_returns_new_worktree_status() {
+    #[tokio::test]
+    async fn worktree_create_returns_new_worktree_status() {
         let Some((_temp, repo)) = init_repo() else {
             return;
         };
 
         let worktree = create_worktree(&repo.to_string_lossy(), Some("agent-demo"), Some("main"))
+            .await
             .expect("worktree");
 
         assert!(PathBuf::from(&worktree.worktree_path).exists());

@@ -2,7 +2,27 @@ import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeError
 import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
 import { sanitizeMessageTextForDisplay } from "../utils/messageDisplaySanitizer";
 import { isUpdatePlanToolName } from "../utils/toolNameFamily";
-import type { AgentThreadItem, Message, PendingA2UISource } from "../types";
+import type {
+  AgentThreadItem,
+  AgentThreadTurn,
+  Message,
+  PendingA2UISource,
+} from "../types";
+
+const TERMINAL_THREAD_TURN_STATUSES = new Set<AgentThreadTurn["status"]>([
+  "completed",
+  "failed",
+  "canceled",
+  "cancelled",
+  "aborted",
+  "interrupted",
+]);
+
+export function isTerminalThreadTurnStatus(
+  status?: AgentThreadTurn["status"] | string | null,
+): boolean {
+  return TERMINAL_THREAD_TURN_STATUSES.has(status as AgentThreadTurn["status"]);
+}
 
 function normalizeFailureContentForCompare(value?: string | null): string {
   return (value || "").trim().replace(/\s+/g, " ");
@@ -244,6 +264,7 @@ export function canTimelineOwnInlineProcessFlow(
 
 export function resolveTimelineOwnedVisibleText(
   parts?: Message["contentParts"],
+  options: { includeCommentary?: boolean } = {},
 ): string | null {
   const text = (parts || [])
     .filter(
@@ -254,10 +275,12 @@ export function resolveTimelineOwnedVisibleText(
         { type: "text"; text: string }
       > => part.type === "text" && part.text.trim().length > 0,
     )
-    .filter((part) =>
-      shouldUseAgentMessageAsFinalText(
-        typeof part.metadata?.phase === "string" ? part.metadata.phase : null,
-      ),
+    .filter(
+      (part) =>
+        options.includeCommentary === true ||
+        shouldUseAgentMessageAsFinalText(
+          typeof part.metadata?.phase === "string" ? part.metadata.phase : null,
+        ),
     )
     .map((part) => part.text.trim())
     .join("\n\n")

@@ -29,6 +29,14 @@ pub(super) fn apply_preview_import_status(
 }
 
 pub(super) fn apply_thread_import_status(core: &RuntimeCore, thread: &mut ImportedThreadSummary) {
+    if let Some(job) =
+        super::job::active_job_for_thread(core, thread.source_client, &thread.source_thread_id)
+    {
+        thread.import_status = ConversationImportThreadStatus::Importing;
+        thread.import_job_id = Some(job.job_id);
+        return;
+    }
+    thread.import_job_id = None;
     if imported_session_for_thread(core, thread.source_client, &thread.source_thread_id).is_some() {
         thread.import_status = ConversationImportThreadStatus::Imported;
     }

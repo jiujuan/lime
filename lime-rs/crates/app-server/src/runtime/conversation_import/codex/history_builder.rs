@@ -1,5 +1,7 @@
 use super::canonical_items::project_rollout_events_to_canonical;
-use super::events::{CodexRolloutEvent, CodexToolCall, CodexToolPhase, CodexToolSource};
+use super::events::{
+    visible_tool_output_text, CodexRolloutEvent, CodexToolCall, CodexToolPhase, CodexToolSource,
+};
 use crate::RuntimeEvent;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -359,15 +361,7 @@ fn synthesized_command_exit(command_id: &str, terminal: &CodexToolCall) -> Codex
 pub(super) fn tool_output_text(tool: &CodexToolCall) -> Option<String> {
     tool.output
         .as_ref()
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .or_else(|| {
-            tool.output
-                .as_ref()
-                .and_then(|value| value.get("text"))
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
+        .and_then(visible_tool_output_text)
         .or_else(|| tool.source.output_preview.clone())
 }
 
@@ -376,6 +370,7 @@ pub(in crate::runtime::conversation_import) fn build_canonical_history_events(
     session_id: &str,
     thread_id: &str,
     turn_id: &str,
+    completed_at: Option<&str>,
 ) -> Vec<RuntimeEvent> {
     let mut builder = CodexHistoryBuilder::new();
     let mut normalized = Vec::new();
@@ -388,10 +383,16 @@ pub(in crate::runtime::conversation_import) fn build_canonical_history_events(
         normalized.push(CodexRolloutEvent::new(
             "turn.completed",
             json!({
+                "completedAt": completed_at,
                 "imported": true,
                 "sourceClient": "codex",
             }),
         ));
+    }
+    if let Some(completed_at) = completed_at {
+        for event in &mut normalized {
+            attach_imported_terminal_timestamp(event, completed_at);
+        }
     }
 
     project_rollout_events_to_canonical(&normalized, session_id, thread_id, turn_id)
@@ -403,6 +404,28 @@ pub(in crate::runtime::conversation_import) fn build_canonical_history_events(
             RuntimeEvent::new(event_type, enrich_history_payload(payload))
         })
         .collect()
+}
+
+fn attach_imported_terminal_timestamp(event: &mut CodexRolloutEvent, completed_at: &str) {
+    let CodexRolloutEvent::Runtime {
+        event_type,
+        payload,
+    } = event
+    else {
+        return;
+    };
+    if !matches!(
+        *event_type,
+        "turn.completed" | "turn.failed" | "turn.canceled"
+    ) {
+        return;
+    }
+    let Some(payload) = payload.as_object_mut() else {
+        return;
+    };
+    payload
+        .entry("completedAt".to_string())
+        .or_insert_with(|| Value::String(completed_at.to_string()));
 }
 
 fn historical_action_resolved(action_id: &str) -> CodexRolloutEvent {

@@ -1,11 +1,19 @@
 import { AppServerClient } from "@/lib/api/appServer";
 import {
+  CONVERSATION_IMPORT_JOB_PHASES,
+  CONVERSATION_IMPORT_JOB_STATUSES,
   CONVERSATION_IMPORT_SOURCE_CLIENTS,
   CONVERSATION_IMPORT_SOURCE_STATUSES,
   CONVERSATION_IMPORT_THREAD_STATUSES,
+  METHOD_CONVERSATION_IMPORT_JOB_READ,
   METHOD_CONVERSATION_IMPORT_SOURCE_SCAN,
   METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
   METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
+  type ConversationImportJob,
+  type ConversationImportJobPhase,
+  type ConversationImportJobReadParams,
+  type ConversationImportJobReadResponse,
+  type ConversationImportJobStatus,
   type ConversationImportSourceClient,
   type ConversationImportSourceProvenance,
   type ConversationImportSourceScanParams,
@@ -13,6 +21,7 @@ import {
   type ConversationImportSourceStatus,
   type ConversationImportThreadCommitParams,
   type ConversationImportThreadCommitResponse,
+  type ConversationImportThreadCommitStartResponse,
   type ConversationImportThreadStatus,
   type ConversationImportThreadPreviewParams,
   type ConversationImportThreadPreviewResponse,
@@ -20,6 +29,11 @@ import {
 } from "../../../packages/app-server-client/src/protocol";
 
 export type {
+  ConversationImportJob,
+  ConversationImportJobPhase,
+  ConversationImportJobReadParams,
+  ConversationImportJobReadResponse,
+  ConversationImportJobStatus,
   ConversationImportSourceProvenance,
   ConversationImportSourceClient,
   ConversationImportSourceScanParams,
@@ -28,6 +42,7 @@ export type {
   ConversationImportThreadStatus,
   ConversationImportThreadCommitParams,
   ConversationImportThreadCommitResponse,
+  ConversationImportThreadCommitStartResponse,
   ConversationImportThreadPreviewParams,
   ConversationImportThreadPreviewResponse,
   ImportedThreadSummary,
@@ -35,9 +50,17 @@ export type {
 
 type ConversationImportAppServerClient = Pick<AppServerClient, "request">;
 
-const SOURCE_CLIENT_VALUES = new Set<string>(CONVERSATION_IMPORT_SOURCE_CLIENTS);
-const SOURCE_STATUS_VALUES = new Set<string>(CONVERSATION_IMPORT_SOURCE_STATUSES);
-const THREAD_STATUS_VALUES = new Set<string>(CONVERSATION_IMPORT_THREAD_STATUSES);
+const SOURCE_CLIENT_VALUES = new Set<string>(
+  CONVERSATION_IMPORT_SOURCE_CLIENTS,
+);
+const SOURCE_STATUS_VALUES = new Set<string>(
+  CONVERSATION_IMPORT_SOURCE_STATUSES,
+);
+const THREAD_STATUS_VALUES = new Set<string>(
+  CONVERSATION_IMPORT_THREAD_STATUSES,
+);
+const JOB_STATUS_VALUES = new Set<string>(CONVERSATION_IMPORT_JOB_STATUSES);
+const JOB_PHASE_VALUES = new Set<string>(CONVERSATION_IMPORT_JOB_PHASES);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -95,11 +118,24 @@ function isImportedThreadSummary(
     isOptionalString(value.modelProvider) &&
     typeof value.archived === "boolean" &&
     isOptionalString(value.sourcePath) &&
+    isOptionalString(value.importJobId) &&
     isConversationImportThreadStatus(value.importStatus) &&
     (value.metadata === undefined ||
       value.metadata === null ||
       typeof value.metadata !== "function")
   );
+}
+
+function isConversationImportJobStatus(
+  value: unknown,
+): value is ConversationImportJobStatus {
+  return typeof value === "string" && JOB_STATUS_VALUES.has(value);
+}
+
+function isConversationImportJobPhase(
+  value: unknown,
+): value is ConversationImportJobPhase {
+  return typeof value === "string" && JOB_PHASE_VALUES.has(value);
 }
 
 function isOptionalNumber(value: unknown): value is number | undefined {
@@ -279,6 +315,57 @@ function assertConversationImportThreadCommitResponse(
   }
 }
 
+function isConversationImportJob(
+  value: unknown,
+): value is ConversationImportJob {
+  if (
+    !isRecord(value) ||
+    typeof value.jobId !== "string" ||
+    !isConversationImportSourceClient(value.sourceClient) ||
+    !isOptionalString(value.sourceThreadId) ||
+    !isConversationImportJobStatus(value.status) ||
+    !isRecord(value.progress) ||
+    !isConversationImportJobPhase(value.progress.phase) ||
+    typeof value.progress.completedItems !== "number" ||
+    typeof value.progress.totalItems !== "number" ||
+    typeof value.progress.completedTurns !== "number" ||
+    typeof value.progress.totalTurns !== "number" ||
+    !isOptionalString(value.error) ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string"
+  ) {
+    return false;
+  }
+  if (value.result !== undefined) {
+    try {
+      assertConversationImportThreadCommitResponse(value.result);
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+function assertConversationImportThreadCommitStartResponse(
+  value: unknown,
+): asserts value is ConversationImportThreadCommitStartResponse {
+  if (!isRecord(value) || !isConversationImportJob(value.job)) {
+    throw new Error(
+      `${METHOD_CONVERSATION_IMPORT_THREAD_COMMIT} did not return an import job`,
+    );
+  }
+}
+
+function assertConversationImportJobReadResponse(
+  value: unknown,
+): asserts value is ConversationImportJobReadResponse {
+  if (!isRecord(value) || !isConversationImportJob(value.job)) {
+    throw new Error(
+      `${METHOD_CONVERSATION_IMPORT_JOB_READ} did not return an import job`,
+    );
+  }
+}
+
 export async function scanConversationImportSource(
   params: ConversationImportSourceScanParams = {},
   appServerClient: ConversationImportAppServerClient = new AppServerClient(),
@@ -308,12 +395,86 @@ export async function previewConversationImportThread(
 export async function commitConversationImportThread(
   params: ConversationImportThreadCommitParams,
   appServerClient: ConversationImportAppServerClient = new AppServerClient(),
-): Promise<ConversationImportThreadCommitResponse> {
+): Promise<ConversationImportThreadCommitStartResponse> {
   const response =
-    await appServerClient.request<ConversationImportThreadCommitResponse>(
+    await appServerClient.request<ConversationImportThreadCommitStartResponse>(
       METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
       params,
     );
-  assertConversationImportThreadCommitResponse(response.result);
+  assertConversationImportThreadCommitStartResponse(response.result);
   return response.result;
+}
+
+export async function readConversationImportJob(
+  params: ConversationImportJobReadParams,
+  appServerClient: ConversationImportAppServerClient = new AppServerClient(),
+): Promise<ConversationImportJobReadResponse> {
+  const response =
+    await appServerClient.request<ConversationImportJobReadResponse>(
+      METHOD_CONVERSATION_IMPORT_JOB_READ,
+      params,
+    );
+  assertConversationImportJobReadResponse(response.result);
+  return response.result;
+}
+
+export interface WaitForConversationImportJobOptions {
+  intervalMs?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  onProgress?: (job: ConversationImportJob) => void;
+}
+
+export async function waitForConversationImportJob(
+  initialJob: ConversationImportJob,
+  options: WaitForConversationImportJobOptions = {},
+  appServerClient: ConversationImportAppServerClient = new AppServerClient(),
+): Promise<ConversationImportThreadCommitResponse> {
+  const intervalMs = Math.max(100, options.intervalMs ?? 250);
+  const timeoutMs = Math.max(intervalMs, options.timeoutMs ?? 30 * 60_000);
+  const deadline = Date.now() + timeoutMs;
+  let job = initialJob;
+
+  while (true) {
+    options.onProgress?.(job);
+    if (job.status === "completed") {
+      if (!job.result) {
+        throw new Error("Conversation import completed without a result");
+      }
+      return job.result;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error || "Conversation import failed");
+    }
+    if (options.signal?.aborted) {
+      throw new DOMException(
+        "Conversation import wait was aborted",
+        "AbortError",
+      );
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`Conversation import job timed out: ${job.jobId}`);
+    }
+
+    await waitForPoll(intervalMs, options.signal);
+    job = (
+      await readConversationImportJob({ jobId: job.jobId }, appServerClient)
+    ).job;
+  }
+}
+
+function waitForPoll(intervalMs: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const handleAbort = () => {
+      window.clearTimeout(timeout);
+      reject(
+        new DOMException("Conversation import wait was aborted", "AbortError"),
+      );
+    };
+    const timeout = window.setTimeout(() => {
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }, intervalMs);
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
 }

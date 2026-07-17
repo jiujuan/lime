@@ -16,7 +16,7 @@ use model_provider::current_client::{
     CanonicalLlmEvent, CurrentProvider, CurrentProviderContent, CurrentProviderError,
     CurrentProviderMessage, CurrentProviderRequest, CurrentProviderRole, CurrentProviderStream,
     CurrentProviderTool, CurrentProviderToolCall, CurrentProviderToolResult, CurrentProviderUsage,
-    FinishReason, Usage,
+    FailureClassification, FinishReason, GenerationOptions, ProviderMetadata, Usage,
 };
 use model_provider::provider_stream::RuntimeReplyModelRequestPolicy;
 use model_provider::provider_stream::RuntimeReplyProviderTraceMetadata;
@@ -195,6 +195,8 @@ where
     let mut errors = Vec::new();
     let mut emitted_any = false;
     let mut emitted_tool_call = false;
+    let mut provider_budget_tokens_used = 0_u64;
+    let (generation, provider_options) = provider_request_controls(&session_config);
 
     loop {
         if is_cancelled(&cancel_token) {
@@ -252,6 +254,8 @@ where
         let request = CurrentProviderRequest::new(initial_messages.clone())
             .with_system_prompt(session_config.system_prompt.clone())
             .with_tools(tools.clone())
+            .with_generation(generation.clone())
+            .with_provider_options(provider_options.clone())
             .with_model_request_policy(model_request_policy.clone());
         let mut provider_trace_attempt = provider_trace_metadata.as_ref().map(|metadata| {
             RuntimeProviderTraceAttempt::new(
@@ -261,10 +265,11 @@ where
             )
         });
         if let Some(trace) = provider_trace_attempt.as_ref() {
+            let tool_names = tools.iter().map(|tool| tool.name.clone());
             emit_provider_trace(
                 &mut on_event,
                 provider_trace_metadata.as_ref(),
-                trace.request_started(),
+                trace.request_started().with_tool_names(tool_names),
             );
         }
         let mut stream =
@@ -291,11 +296,7 @@ where
                         emit_provider_trace(
                             &mut on_event,
                             provider_trace_metadata.as_ref(),
-                            trace.failed(ProviderTraceFailure::new(
-                                "provider_request_failed",
-                                false,
-                                false,
-                            )),
+                            trace.failed(provider_trace_failure_from_error(&error)),
                         );
                     }
                     return Err(RuntimeReplyAttemptError::new(error.message, emitted_any));
@@ -341,11 +342,7 @@ where
                         emit_provider_trace(
                             &mut on_event,
                             provider_trace_metadata.as_ref(),
-                            trace.failed(ProviderTraceFailure::new(
-                                "provider_stream_failed",
-                                false,
-                                false,
-                            )),
+                            trace.failed(provider_trace_failure_from_error(&error)),
                         );
                     }
                     return Err(RuntimeReplyAttemptError::new(error.message, emitted_any));
@@ -492,15 +489,18 @@ where
                     );
                     completed = true;
                 }
-                CanonicalLlmEvent::ProviderError { message, .. } => {
+                CanonicalLlmEvent::ProviderError {
+                    message,
+                    classification,
+                    retryable,
+                } => {
                     if let Some(trace) = provider_trace_attempt.as_ref() {
                         emit_provider_trace(
                             &mut on_event,
                             provider_trace_metadata.as_ref(),
-                            trace.failed(ProviderTraceFailure::new(
-                                "provider_event_failed",
-                                false,
-                                false,
+                            trace.failed(provider_trace_failure(
+                                classification,
+                                retryable.unwrap_or(false),
                             )),
                         );
                     }
@@ -545,8 +545,14 @@ where
             text_output_chars: step_text_output_chars,
             reasoning_output_chars: step_reasoning_output_chars,
             tool_call_count: calls.len().min(u32::MAX as usize) as u32,
-            usage: step_usage,
+            usage: step_usage.clone(),
         });
+        provider_budget_tokens_used = provider_budget_tokens_used.saturating_add(
+            step_usage
+                .as_ref()
+                .map(provider_budget_tokens)
+                .unwrap_or_default(),
+        );
 
         if !assistant_content.is_empty() {
             initial_messages.push(CurrentProviderMessage::assistant(assistant_content));
@@ -568,6 +574,21 @@ where
                 attempts_summary(&loop_state),
                 false,
             ));
+        }
+
+        if let Some(limit) = session_config.provider_token_budget {
+            if provider_budget_tokens_used >= limit {
+                errors.push(format!(
+                    "Provider token budget exhausted after attempt {attempt}: used={provider_budget_tokens_used} limit={limit}"
+                ));
+                return Ok(RuntimeReplyExecution::new(
+                    text_output,
+                    errors,
+                    emitted_any,
+                    attempts_summary(&loop_state),
+                    true,
+                ));
+            }
         }
 
         let results = execute_calls(
@@ -593,6 +614,73 @@ where
                 .collect(),
         ));
     }
+}
+
+fn provider_request_controls(
+    session_config: &AgentSessionConfig,
+) -> (GenerationOptions, ProviderMetadata) {
+    let mut generation = GenerationOptions::default();
+    let mut provider_options = ProviderMetadata::new();
+    let Some(harness_generation) = session_config
+        .turn_context
+        .as_ref()
+        .and_then(|context| context.metadata.get("runtime_request"))
+        .and_then(|metadata| metadata.pointer("/harness/generation"))
+    else {
+        return (generation, provider_options);
+    };
+
+    generation.max_tokens = harness_generation
+        .get("max_output_tokens")
+        .or_else(|| harness_generation.get("maxOutputTokens"))
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 0);
+    if let Some(enable_thinking) = harness_generation
+        .get("enable_thinking")
+        .or_else(|| harness_generation.get("enableThinking"))
+        .and_then(serde_json::Value::as_bool)
+    {
+        provider_options.insert("enable_thinking".to_string(), enable_thinking.into());
+    }
+
+    (generation, provider_options)
+}
+
+fn provider_trace_failure_from_error(error: &CurrentProviderError) -> ProviderTraceFailure {
+    provider_trace_failure(error.classification, error.retryable)
+}
+
+fn provider_trace_failure(
+    classification: Option<FailureClassification>,
+    retryable: bool,
+) -> ProviderTraceFailure {
+    let category = match classification {
+        Some(FailureClassification::Authentication) => "auth",
+        Some(FailureClassification::RateLimit | FailureClassification::Quota) => "rate_limit",
+        Some(FailureClassification::ProviderInternal) => "server",
+        Some(
+            FailureClassification::Permission
+            | FailureClassification::InvalidRequest
+            | FailureClassification::ContextOverflow
+            | FailureClassification::ContentPolicy,
+        ) => "request",
+        Some(FailureClassification::Transport) => "execution",
+        Some(FailureClassification::Unknown) | None => "unknown",
+    };
+    let non_retryable_provider_rejection = !retryable
+        && matches!(
+            classification,
+            Some(
+                FailureClassification::Authentication
+                    | FailureClassification::Permission
+                    | FailureClassification::Quota
+                    | FailureClassification::InvalidRequest
+                    | FailureClassification::ContextOverflow
+                    | FailureClassification::ContentPolicy
+            )
+        );
+    ProviderTraceFailure::new(category, retryable, non_retryable_provider_rejection)
 }
 
 fn insert_environment_context_before_current_user(
@@ -676,6 +764,15 @@ fn current_provider_usage(usage: Usage) -> CurrentProviderUsage {
             .cache_write_input_tokens
             .map(|value| value.min(u32::MAX as u64) as u32),
     }
+}
+
+fn provider_budget_tokens(usage: &CurrentProviderUsage) -> u64 {
+    u64::from(
+        usage
+            .input_tokens
+            .saturating_sub(usage.cached_input_tokens.unwrap_or_default()),
+    )
+    .saturating_add(u64::from(usage.output_tokens))
 }
 
 fn finish_reason_name(reason: FinishReason) -> &'static str {

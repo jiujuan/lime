@@ -17,6 +17,7 @@ fn runtime_config() -> RuntimeProviderConfig {
         credential_uuid: "credential-1".to_string(),
         reasoning_effort: Some("medium".to_string()),
         protocol: Some(RuntimeProviderProtocol::Responses),
+        supports_websockets: true,
         toolshim: true,
         toolshim_model: Some("gpt-4o-mini".to_string()),
     }
@@ -708,137 +709,6 @@ fn provider_stream_first_text_delta_chars_uses_first_non_empty_text() {
         Some(2)
     );
     assert_eq!(provider_stream_first_text_delta_chars(["", " \n\t"]), None);
-}
-
-#[test]
-fn provider_stream_model_supports_image_input_uses_canonical_modalities() {
-    assert_eq!(
-        provider_stream_model_supports_image_input("openai", "gpt-5.2"),
-        Some(true)
-    );
-    assert_eq!(
-        provider_stream_model_supports_image_input("deepseek", "deepseek-r1"),
-        Some(false)
-    );
-    assert_eq!(
-        provider_stream_model_supports_image_input("unknown-provider", "unknown-model"),
-        None
-    );
-}
-
-#[test]
-fn provider_stream_image_input_policy_disables_provider_images_from_runtime_metadata() {
-    let runtime_metadata = json!({
-        "image_input_policy": {
-            "submittedImageCount": 1,
-            "forwardedImageCount": 0,
-            "droppedImageCount": 1,
-            "providerSupportsVision": true
-        }
-    });
-    assert!(provider_stream_image_input_policy_disables_provider_images(
-        Some(&runtime_metadata)
-    ));
-
-    let runtime_metadata = json!({
-        "imageInputPolicy": {
-            "submitted_image_count": 1,
-            "forwarded_image_count": 0,
-            "dropped_image_count": 0,
-            "provider_supports_vision": false
-        }
-    });
-    assert!(provider_stream_image_input_policy_disables_provider_images(
-        Some(&runtime_metadata)
-    ));
-
-    let runtime_metadata = json!({
-        "image_input_policy": {
-            "forwardedImageCount": 1,
-            "droppedImageCount": 0,
-            "providerSupportsVision": true
-        }
-    });
-    assert!(!provider_stream_image_input_policy_disables_provider_images(Some(&runtime_metadata)));
-}
-
-#[test]
-fn provider_stream_should_omit_image_input_combines_model_and_turn_policy() {
-    assert!(provider_stream_should_omit_image_input(Some(false), None));
-    assert!(!provider_stream_should_omit_image_input(Some(true), None));
-
-    let runtime_metadata = json!({
-        "image_input_policy": {
-            "droppedImageCount": 1,
-            "providerSupportsVision": true
-        }
-    });
-    assert!(provider_stream_should_omit_image_input(
-        Some(true),
-        Some(&runtime_metadata)
-    ));
-}
-
-#[test]
-fn provider_stream_image_omission_notices_are_owned_by_model_provider() {
-    assert_eq!(provider_stream_omitted_message_images_notice(0), None);
-    assert_eq!(provider_stream_omitted_tool_result_images_notice(0), None);
-    assert!(!provider_stream_should_warn_omitted_provider_images(0));
-
-    assert_eq!(
-        provider_stream_omitted_message_images_notice(2).as_deref(),
-        Some("[系统提示] 这条历史消息包含 2 张图片，但当前模型不支持图片输入；图片已在发送给模型前省略。")
-    );
-    assert_eq!(
-        provider_stream_omitted_tool_result_images_notice(3).as_deref(),
-        Some("[系统提示] 这个工具结果包含 3 张图片，但当前模型不支持图片输入；图片已在发送给模型前省略。")
-    );
-    assert!(provider_stream_should_warn_omitted_provider_images(5));
-}
-
-#[test]
-fn provider_stream_input_modality_policy_resolves_nested_metadata() {
-    let metadata = json!({
-        "runtime_options": {
-            "request_metadata": {
-                "model_request_policy": {
-                    "input_modality_policy": {
-                        "input_modalities": ["text"],
-                        "supports_image_input": false
-                    }
-                }
-            }
-        }
-    });
-    let policy =
-        provider_stream_input_modality_policy_from_metadata(&metadata).expect("input policy");
-
-    assert!(!provider_stream_input_modality_policy_allows_image_input(
-        Some(policy)
-    ));
-    assert!(!provider_stream_metadata_allows_image_input(Some(
-        &metadata
-    )));
-}
-
-#[test]
-fn provider_stream_input_modality_policy_defaults_to_image_allowed() {
-    assert!(provider_stream_input_modality_policy_allows_image_input(
-        None
-    ));
-    assert!(provider_stream_metadata_allows_image_input(None));
-
-    let metadata = json!({
-        "harness": {
-            "modelRequestPolicy": {
-                "inputModalityPolicy": {
-                    "inputModalities": ["text", "image"]
-                }
-            }
-        }
-    });
-
-    assert!(provider_stream_metadata_allows_image_input(Some(&metadata)));
 }
 
 #[test]

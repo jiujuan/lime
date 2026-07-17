@@ -1,13 +1,13 @@
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
 use crate::{
+    AgentRuntimeState, AgentSessionConfig, AgentTurnContext, SessionConfigBuilder,
     artifact_protocol::{
         extend_unique_artifact_protocol_paths, push_unique_artifact_protocol_path,
     },
     request_tool_policy::{
-        resolve_request_tool_policy_with_mode, stream_runtime_message_reply_with_policy,
-        ReplyInput, ReplyInputImage, RequestToolPolicyMode,
+        ReplyInput, ReplyInputImage, RequestToolPolicyMode, resolve_request_tool_policy_with_mode,
+        stream_runtime_message_reply_with_policy,
     },
-    AgentRuntimeState, AgentSessionConfig, AgentTurnContext, SessionConfigBuilder,
 };
 use lime_skills::{ExecutionCallback, LoadedSkillDefinition};
 use serde::{Deserialize, Serialize};
@@ -220,9 +220,11 @@ fn build_reply_input(
     let mut input = ReplyInput::text(user_input);
     input.images = images
         .iter()
-        .map(|image| ReplyInputImage {
-            data: image.data.clone(),
+        .enumerate()
+        .map(|(index, image)| ReplyInputImage {
+            uri: format!("transient://skill-input/image-{index}"),
             media_type: image.media_type.clone(),
+            provider_data: Some(image.data.clone()),
         })
         .collect();
     if should_hide_execution_input_from_user(user_input, user_visible_input) {

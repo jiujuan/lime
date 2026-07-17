@@ -139,6 +139,86 @@ describe("planImplementationDecision", () => {
     );
   });
 
+  it("较新消息与 current thread item 计划相同时应保留 canonical revision identity", () => {
+    const planText = "- 核对历史恢复\n- 复测计划确认";
+    const decision = selectProposedPlanImplementationDecision({
+      messages: [
+        createAssistantMessage(
+          "assistant-plan",
+          `<proposed_plan>\n${planText}\n</proposed_plan>`,
+          "2026-06-18T09:00:00.000Z",
+        ),
+      ],
+      threadItems: [
+        createPlanThreadItem({
+          id: "plan-item-canonical",
+          turn_id: "turn-canonical",
+          completed_at: "2026-06-18T08:00:00.000Z",
+          updated_at: "2026-06-18T08:00:00.000Z",
+          text: planText,
+          metadata: {
+            revisionId: "proposed_plan:canonical",
+            source: "thread_item",
+          },
+        }),
+      ],
+    });
+
+    expect(decision).toMatchObject({
+      planText,
+      action: {
+        arguments: {
+          source: "thread_item",
+          plan_revision_id: "proposed_plan:canonical",
+          source_item_id: "plan-item-canonical",
+          turn_id: "turn-canonical",
+          plan_source: "thread_item",
+        },
+      },
+    });
+    expect(decision?.action.requestId).toContain(
+      "local-plan-implementation:thread:turn-canonical:plan-item-canonical",
+    );
+  });
+
+  it("较新消息与 current thread item 计划不同时应保留较新消息", () => {
+    const decision = selectProposedPlanImplementationDecision({
+      messages: [
+        createAssistantMessage(
+          "assistant-new-plan",
+          "<proposed_plan>\n- 执行新计划\n</proposed_plan>",
+          "2026-06-18T09:00:00.000Z",
+        ),
+      ],
+      threadItems: [
+        createPlanThreadItem({
+          id: "plan-item-stale",
+          completed_at: "2026-06-18T08:00:00.000Z",
+          updated_at: "2026-06-18T08:00:00.000Z",
+          text: "- 执行旧计划",
+          metadata: {
+            revisionId: "proposed_plan:stale",
+            source: "thread_item",
+          },
+        }),
+      ],
+    });
+
+    expect(decision).toMatchObject({
+      planText: "- 执行新计划",
+      action: {
+        arguments: {
+          source: "message",
+          source_item_id: "assistant-new-plan",
+        },
+      },
+    });
+    expect(decision?.action.arguments).not.toHaveProperty("plan_revision_id");
+    expect(decision?.action.requestId).toContain(
+      "local-plan-implementation:message:assistant-new-plan",
+    );
+  });
+
   it("未闭合的流式计划不应触发实施确认", () => {
     const decision = selectProposedPlanImplementationDecision({
       messages: [

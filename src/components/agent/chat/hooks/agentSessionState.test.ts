@@ -558,7 +558,14 @@ describe("agentSessionState", () => {
       }),
     ];
     const currentTurns = [createTurn({ id: "turn-local" })];
-    const currentItems = [createItem({ id: "item-local" })];
+    const currentItems = [
+      createItem({
+        id: "item-local",
+        type: "tool_call",
+        tool_name: "exec_command",
+        arguments: { cmd: "pwd" },
+      } as Partial<AgentThreadItem>),
+    ];
     const currentExecutionRuntime = {
       session_id: "topic-1",
       provider_name: "openai",
@@ -571,7 +578,14 @@ describe("agentSessionState", () => {
       updated_at: 1700000001,
       messages: [],
       turns: [createTurn({ id: "turn-remote" })],
-      items: [createItem({ id: "item-remote" })],
+      items: [
+        createItem({
+          id: "item-remote",
+          type: "tool_call",
+          tool_name: "exec_command",
+          arguments: { cmd: "pwd" },
+        } as Partial<AgentThreadItem>),
+      ],
       queued_turns: [
         {
           queued_turn_id: "queued-1",

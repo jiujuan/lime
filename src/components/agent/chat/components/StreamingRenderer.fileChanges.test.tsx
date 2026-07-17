@@ -141,12 +141,12 @@ describe("StreamingRenderer file changes", () => {
       '[data-testid="file-changes-summary-card"]',
     );
     expect(card?.textContent).toContain("已编辑 8 个文件");
-    expect(card?.textContent).toContain("收起文件");
+    expect(card?.textContent).toContain("展开其余 5 个文件");
     expect(
       container.querySelectorAll(
         '[data-testid="file-changes-summary-file-row"]',
       ),
-    ).toHaveLength(8);
+    ).toHaveLength(3);
 
     const undoButton = Array.from(card?.querySelectorAll("button") || []).find(
       (button) => button.textContent?.includes("撤销"),
@@ -161,12 +161,12 @@ describe("StreamingRenderer file changes", () => {
       toggle?.click();
     });
 
-    expect(card?.textContent).toContain("展开其余 2 个文件");
+    expect(card?.textContent).toContain("收起文件");
     expect(
       container.querySelectorAll(
         '[data-testid="file-changes-summary-file-row"]',
       ),
-    ).toHaveLength(6);
+    ).toHaveLength(8);
   });
 
   it("文件变更审查卡撤销应通过 session checkpoint 调用真实恢复命令", async () => {

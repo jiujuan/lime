@@ -36,6 +36,7 @@ export function buildSessionHistoryMergePlan(params: {
       compactCompletedHistory: shouldCompactCompletedSessionHistory(
         params.detail,
       ),
+      includeTimelineFallback: false,
     },
   );
   const mergedMessages = mergeHydratedMessagesWithLocalState(

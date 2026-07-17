@@ -229,8 +229,6 @@ const retiredVoiceModelTestTranscribeFacadeCommands = new Set([
 const currentSkillDesktopHostShellCommands = new Set([
   "get_local_skills_for_app",
   "take_pending_skill_package_open_requests",
-  "get_skill_package_file_association_status",
-  "set_skill_package_file_association_default",
 ]);
 const currentLayeredDesignDesktopHostShellCommands = new Set([
   "save_layered_design_project_export",
@@ -338,6 +336,8 @@ const retiredSkillManagementFacadeCommands = new Set([
   "create_skill_scaffold_for_app",
   "import_local_skill_for_app",
   "inspect_remote_skill",
+  "get_skill_package_file_association_status",
+  "set_skill_package_file_association_default",
 ]);
 const retiredSkillRevealFacadeCommands = new Set([
   "reveal_local_skill_for_app",
@@ -3358,17 +3358,17 @@ function collectCurrentSkillDesktopHostShellSourceFailures() {
     {
       path: "src/lib/governance/agentCommandCatalog.json",
       message:
-        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能继续作为 runtime gateway command",
+        "Skill list/open-request 是 Electron Desktop Host 壳能力，不能继续作为 runtime gateway command",
     },
     {
       path: "lime-rs/src/app/runner.rs",
       message:
-        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能回到 legacy Tauri generate_handler",
+        "Skill list/open-request 是 Electron Desktop Host 壳能力，不能回到 legacy Tauri generate_handler",
     },
     {
       path: "lime-rs/src/dev_bridge/dispatcher/skills.rs",
       message:
-        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能回到 Rust DevBridge skills dispatcher",
+        "Skill list/open-request 是 Electron Desktop Host 壳能力，不能回到 Rust DevBridge skills dispatcher",
     },
   ];
 

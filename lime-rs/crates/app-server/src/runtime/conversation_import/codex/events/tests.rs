@@ -76,6 +76,84 @@ fn codex_tool_search_stays_in_provider_history() {
 }
 
 #[test]
+fn codex_web_search_response_item_preserves_top_level_query_without_null_arguments() {
+    let payload = json!({
+        "type": "web_search_call",
+        "id": "search-flat-1",
+        "action": "search_query",
+        "query": "Lime history import rendering"
+    });
+
+    let events = response_item_rollout_events(Some(&payload), None);
+    assert_eq!(events.len(), 1);
+    let tool = events[0]
+        .tool_call()
+        .expect("web search response item must become a canonical tool draft");
+    assert_eq!(
+        tool.source.query.as_deref(),
+        Some("Lime history import rendering")
+    );
+    assert_eq!(
+        tool.arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get("query"))
+            .and_then(serde_json::Value::as_str),
+        Some("Lime history import rendering")
+    );
+    assert_ne!(
+        tool.arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get("query")),
+        Some(&serde_json::Value::Null)
+    );
+}
+
+#[test]
+fn codex_web_search_end_preserves_protocol_query_and_structured_results() {
+    let payload = json!({
+        "type": "web_search_end",
+        "call_id": "search-protocol-1",
+        "query": "Codex app web search protocol",
+        "action": {"type": "search"},
+        "results": [{
+            "title": "Codex Web Search",
+            "url": "https://example.com/codex-search",
+            "snippet": "Canonical search result"
+        }]
+    });
+
+    let events = event_msg_rollout_events(Some(&payload), None);
+    assert_eq!(events.len(), 1);
+    let tool = events[0]
+        .tool_call()
+        .expect("web search end must become a canonical terminal tool draft");
+    assert_eq!(
+        tool.source.query.as_deref(),
+        Some("Codex app web search protocol")
+    );
+    assert_eq!(
+        tool.arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get("query"))
+            .and_then(serde_json::Value::as_str),
+        Some("Codex app web search protocol")
+    );
+    assert_eq!(
+        tool.source
+            .structured_content
+            .as_ref()
+            .and_then(|content| content.pointer("/results/0/title"))
+            .and_then(serde_json::Value::as_str),
+        Some("Codex Web Search")
+    );
+    assert!(tool
+        .output
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|output| output.contains("Codex Web Search")));
+}
+
+#[test]
 fn approval_prompt_uses_the_canonical_command_fallback() {
     let payload = json!({
         "type": "exec_approval_request",

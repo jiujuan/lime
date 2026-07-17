@@ -502,7 +502,7 @@ describe("MessageList artifacts timeline", () => {
     ).toBeNull();
   });
 
-  it("同一路径的 file_artifact 重复出现时，尾部时间线只应保留更完整的一条", () => {
+  it("同一路径的不同 canonical file_artifact 应按 identity 全量保留", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -563,13 +563,11 @@ describe("MessageList artifacts timeline", () => {
       ([props]) => props?.placement === "trailing",
     )?.[0] as { items?: Array<Record<string, unknown>> } | undefined;
 
-    expect(trailingTimelineProps?.items).toHaveLength(1);
-    expect(trailingTimelineProps?.items?.[0]).toEqual(
-      expect.objectContaining({
-        path: "exports/x-article-export/google/index.md",
-        content: "# 最新导出\n\n这里是完整预览。",
-      }),
-    );
+    expect(trailingTimelineProps?.items).toHaveLength(2);
+    expect(trailingTimelineProps?.items?.map((item) => item.id)).toEqual([
+      "item-artifact-duplicate-empty",
+      "item-artifact-duplicate-rich",
+    ]);
   });
 
   it("同一路径产物同时存在消息 artifacts 与尾部 file_artifact 时只显示时间线卡片", () => {

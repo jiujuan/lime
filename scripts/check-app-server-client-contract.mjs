@@ -14,6 +14,9 @@ function normalizeContractSnippet(value) {
     .replace(/\b(?:protocol|appServer|constants)\./gu, "")
     .replace(/(\w+)\s*:\s*([A-Za-z0-9_<>,\[\]\s|&]+)\s*=\s*\{\}/gu, "$1?: $2")
     .replace(/\basync\s+(?=[A-Za-z_$][\w$]*\()/gu, "")
+    .replace(/\.await\b/gu, "")
+    .replace(/\.boxed\(\)/gu, "")
+    .replace(/\bready\(/gu, "")
     .replace(/,\s*\)/gu, ")")
     .replace(/\s+/gu, "");
 }
@@ -670,6 +673,7 @@ const checks = [
       "lime-rs/crates/app-server/src/agent_ui_sequence_verifier.rs",
       "lime-rs/crates/app-server/src/runtime.rs",
       "lime-rs/crates/app-server/src/runtime/event_store.rs",
+      "lime-rs/crates/app-server/src/runtime/event_store/validation.rs",
       "lime-rs/crates/app-server/src/runtime/tool_lifecycle.rs",
       "lime-rs/crates/app-server/src/runtime/tool_lifecycle_tests.rs",
       "lime-rs/crates/app-server/src/runtime/tests.rs",
@@ -685,14 +689,18 @@ const checks = [
       "agent-runtime-event.v0.1.schema.json",
       "agent-runtime-state-delta.v0.1.schema.json",
       "jsonschema::validator_for",
-      "validation_context_for_event(stored, &events, turn_id)",
+      "mod validation;",
+      "use self::validation::EventValidationContext;",
+      "EventValidationContext::from_events(&stored.events, session_id, turn_id)",
       "agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?",
-      "agent_ui_sequence_verifier::validate_agent_event_sequence(validation_events, &event)",
-      "tool_lifecycle::validate_tool_lifecycle_event(&context, &event)",
+      "validation.validate_and_observe(",
       "events.push(event)",
       "stored.events.push(event)",
-      "pub(crate) fn validate_agent_event_sequence",
-      "pub(super) fn validate_tool_lifecycle_event",
+      "struct EventValidationContext",
+      "AgentEventSequenceValidator::from_events",
+      "ToolLifecycleValidator::from_events",
+      "self.sequence.validate_and_observe(event)?",
+      "self.tool_lifecycle.validate_and_observe(event)?",
       "agent runtime event sequence validation failed",
       "agent runtime tool lifecycle validation failed",
       "rejects_policy_event_for_inactive_tool",
@@ -3646,8 +3654,10 @@ const checks = [
       "AgentRuntimeState::new()",
       "direct_provider_config_from_request",
       "configure_provider_for_session(",
-      "install_provider_for_session(&runtime_config).await?",
-      "create_configured_reply_provider(runtime_config)",
+      "install_provider_for_session(agent_state, request.session_id, &runtime_config).await?",
+      "create_configured_reply_provider(config)?",
+      "provider_for_session(request.session_id)",
+      "close_provider_session(session_id).await",
       "configure_model_route_provider_for_session_with_provider(",
       "pub struct SessionProviderConfig",
       "ProviderConfigurationRequest",
@@ -3842,12 +3852,22 @@ const checks = [
     ],
   },
   {
+    name: "Standalone App Server stdio smoke isolates persistent state",
+    file: "scripts/app-server/stdio-smoke.mjs",
+    snippets: [
+      'mkdtemp(path.join(tmpdir(), "app-server-stdio-"))',
+      'stdioSidecar(binaryPath, undefined, path.join(tempDir, "data"))',
+      "nextResponseForRequest(",
+      "rm(tempDir, { recursive: true, force: true })",
+    ],
+  },
+  {
     name: "Standalone App Server external backend smoke proves controlled fixture event bridge",
     file: "scripts/app-server/external-backend-smoke.mjs",
     snippets: [
       "[smoke:app-server-external-backend] ok",
       "connectAppServerSidecar",
-      "stdioSidecar(binaryPath, policyPath)",
+      'stdioSidecar(binaryPath, policyPath, path.join(tempDir, "data"))',
       'backendMode: "external"',
       "backendCommand: process.execPath",
       "backendArgs: [backendPath]",
@@ -5791,13 +5811,9 @@ const checks = [
       "buildAgentUiTeamControlProjectionEvents",
       'type: "task.changed"',
       'type: "agent.handoff"',
-      "sourceType: \"team_control_projection\"",
+      'sourceType: "team_control_projection"',
     ],
-    absentSnippets: [
-      'type: "team.changed"',
-      'owner: "team"',
-      'scope: "team"',
-    ],
+    absentSnippets: ['type: "team.changed"', 'owner: "team"', 'scope: "team"'],
   },
   {
     name: "Renderer Agent UI permission projection delegates runtime permission builders to standard projection package",
@@ -8046,6 +8062,7 @@ const checks = [
       "startPackagedAppServerSidecar",
       "defaultReleaseManifestPath",
       "resourcesPath",
+      'dataDir: path.join(tempDir, "data")',
       'backendMode: "unavailable"',
       "connection.listCapabilities",
       "connection.startSession",
@@ -8082,6 +8099,8 @@ const checks = [
       'backendMode: "external"',
       "backendCommand: process.execPath",
       "backendArgs: [backendPath]",
+      'dataDir: path.join(tempDir, "data")',
+      "copyElectronAppServerRuntimeLibraries",
       "writeFailingExternalBackend(backendPath)",
       "packaged external backend crashed after partial output",
       "agentEventsFromNotifications(",

@@ -96,6 +96,7 @@ describe("MessageArtifactCards", () => {
     const artifact = createArtifact({
       content: fullArticle,
       meta: {
+        appServerArtifactRef: "artifact-article-canonical",
         openedFrom: "right_surface_article_workspace",
         articleWorkspace: {
           objectKind: "articleDraft",
@@ -190,6 +191,11 @@ describe("MessageArtifactCards", () => {
     expect(
       container.querySelector('[data-testid="article-artifact-frame"]'),
     ).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="article-artifact-frame"]')
+        ?.getAttribute("data-artifact-ref"),
+    ).toBe("artifact-article-canonical");
     expect(
       container.querySelector('[data-testid="article-artifact-frame-body"]'),
     ).not.toBeNull();

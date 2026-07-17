@@ -1,6 +1,7 @@
+import { act } from "react";
 import { describe, expect, it } from "vitest";
 import {
-  isMockToolUsePart,
+  mockAgentThreadTimeline,
   mockStreamingRenderer,
   render,
 } from "./MessageList.testHarness";
@@ -11,7 +12,7 @@ import type {
 } from "./MessageList.testHarness";
 
 describe("MessageList imported history codex import", () => {
-  it("续聊后的本地历史导入过程不应折叠掉命令记录入口", () => {
+  it("续聊后的本地历史导入过程应默认折叠，展开后保留完整 canonical 记录", () => {
     const importedMetadata = {
       imported: true,
       imported_synthetic: true,
@@ -73,6 +74,7 @@ describe("MessageList imported history codex import", () => {
         thread_id: importedTurn.thread_id,
         turn_id: importedTurn.id,
         sequence: 2,
+        phase: "commentary",
         text: "我会先运行测试并检查失败。",
         status: "completed",
         started_at: "2026-06-17T06:50:48.060Z",
@@ -193,6 +195,21 @@ describe("MessageList imported history codex import", () => {
         metadata: importedMetadata,
       },
       {
+        id: "imported-file-artifact",
+        type: "file_artifact",
+        thread_id: importedTurn.thread_id,
+        turn_id: importedTurn.id,
+        sequence: 16,
+        path: "/workspace/imported-codex/src/lib.rs",
+        source: "tool_result",
+        content: "fn imported() {}",
+        status: "completed",
+        started_at: "2026-06-17T06:50:48.151Z",
+        completed_at: "2026-06-17T06:50:48.160Z",
+        updated_at: "2026-06-17T06:50:48.160Z",
+        metadata: importedMetadata,
+      },
+      {
         id: "imported-final",
         type: "agent_message",
         thread_id: importedTurn.thread_id,
@@ -224,18 +241,14 @@ describe("MessageList imported history codex import", () => {
       container.querySelector(
         '[data-testid="message-list-historical-timeline-preview:leading"]',
       ),
-    ).toBeNull();
+    ).not.toBeNull();
     const importedAssistantRendererCall = mockStreamingRenderer.mock.calls.find(
       ([props]) => {
         const rendererProps = props as {
           content?: string;
           contentParts?: Array<Record<string, unknown>>;
         };
-        return rendererProps.contentParts?.some(
-          (part) =>
-            isMockToolUsePart(part) &&
-            part.toolCall.id === "imported-command",
-        );
+        return rendererProps.content?.includes("已完成修复。");
       },
     )?.[0] as
       | { content?: string; contentParts?: Array<Record<string, unknown>> }
@@ -244,87 +257,22 @@ describe("MessageList imported history codex import", () => {
     const importedContentParts =
       importedAssistantRendererCall?.contentParts || [];
     expect(importedAssistantRendererCall?.content).toContain("已完成修复。");
+    expect(importedAssistantRendererCall?.content).not.toContain(
+      "我会先运行测试并检查失败。",
+    );
     expect(
       importedContentParts
         .filter((part) => part.type === "text")
         .map((part) => part.text),
-    ).toEqual(
-      expect.arrayContaining([
-        "我会先运行测试并检查失败。",
-        "已完成修复。",
-      ]),
-    );
+    ).toEqual(["已完成修复。"]);
     expect(importedContentParts.map((part) => part.type)).toEqual(
-      expect.arrayContaining([
-        "thinking",
-        "tool_use",
-        "file_changes_batch",
-        "text",
-      ]),
+      expect.arrayContaining(["file_changes_batch", "text"]),
     );
     expect(
-      importedContentParts.find((part) => part.type === "thinking"),
-    ).toMatchObject({
-      type: "thinking",
-      text: "需要先确认测试失败点。",
-    });
-    expect(
-      importedContentParts.find(
-        (part) =>
-          isMockToolUsePart(part) && part.toolCall.id === "imported-command",
+      importedContentParts.some(
+        (part) => part.type === "thinking" || part.type === "tool_use",
       ),
-    ).toMatchObject({
-      type: "tool_use",
-      toolCall: {
-        id: "imported-command",
-        name: "exec_command",
-        result: {
-          metadata: expect.objectContaining({
-            imported: true,
-            imported_synthetic: true,
-            source_client: "codex",
-          }),
-        },
-      },
-    });
-    expect(
-      importedContentParts.find(
-        (part) =>
-          isMockToolUsePart(part) && part.toolCall.id === "imported-search",
-      ),
-    ).toMatchObject({
-      type: "tool_use",
-      toolCall: {
-        id: "imported-search",
-        name: "web_search",
-        result: {
-          metadata: expect.objectContaining({
-            imported: true,
-            imported_synthetic: true,
-            source_client: "codex",
-          }),
-        },
-      },
-    });
-    expect(
-      importedContentParts.find(
-        (part) =>
-          isMockToolUsePart(part) && part.toolCall.id === "imported-read-docx",
-      ),
-    ).toMatchObject({
-      type: "tool_use",
-      toolCall: {
-        id: "imported-read-docx",
-        name: "read_file",
-        result: {
-          metadata: expect.objectContaining({
-            imported: true,
-            imported_synthetic: true,
-            source_client: "codex",
-          }),
-        },
-      },
-    });
+    ).toBe(false);
     expect(
       importedContentParts.find((part) => part.type === "file_changes_batch"),
     ).toMatchObject({
@@ -338,5 +286,67 @@ describe("MessageList imported history codex import", () => {
         ],
       },
     });
+    expect(
+      mockAgentThreadTimeline.mock.calls.some(([props]) =>
+        props.items?.some((item) => item.id === "imported-file-artifact"),
+      ),
+    ).toBe(false);
+
+    const preview = container.querySelector<HTMLButtonElement>(
+      '[data-testid="message-list-historical-timeline-preview:leading"]',
+    );
+    act(() => {
+      preview?.click();
+    });
+
+    const expandedTimelineProps = mockAgentThreadTimeline.mock.calls.find(
+      ([props]) => props.turn?.id === importedTurn.id,
+    )?.[0];
+    expect(expandedTimelineProps?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "imported-command",
+          type: "command_execution",
+          metadata: expect.objectContaining(importedMetadata),
+        }),
+        expect.objectContaining({
+          id: "imported-search",
+          type: "web_search",
+          metadata: expect.objectContaining(importedMetadata),
+        }),
+        expect.objectContaining({
+          id: "imported-read-docx",
+          type: "tool_call",
+          metadata: expect.objectContaining(importedMetadata),
+        }),
+        expect.objectContaining({
+          id: "imported-patch",
+          type: "patch",
+          metadata: expect.objectContaining(importedMetadata),
+        }),
+      ]),
+    );
+    const expandedArtifactTimelineProps = mockAgentThreadTimeline.mock.calls
+      .slice()
+      .reverse()
+      .find(([props]) =>
+        props.items?.some((item) => item.id === "imported-file-artifact"),
+      )?.[0];
+    expect(expandedArtifactTimelineProps?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "imported-file-artifact",
+          type: "file_artifact",
+          metadata: expect.objectContaining(importedMetadata),
+        }),
+      ]),
+    );
+    const expandedAssistantRendererCall = mockStreamingRenderer.mock.calls
+      .slice()
+      .reverse()
+      .find(([props]) =>
+        props.content?.includes("我会先运行测试并检查失败。"),
+      )?.[0];
+    expect(expandedAssistantRendererCall?.content).toContain("已完成修复。");
   });
 });

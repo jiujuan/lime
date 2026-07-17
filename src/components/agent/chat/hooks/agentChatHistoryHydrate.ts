@@ -51,7 +51,10 @@ import {
   hydrateSessionDetailMessagesFromThreadReadToolCalls,
 } from "./agentChatHistoryReadModel";
 import { dedupeAdjacentHistoryMessages } from "./agentChatHistorySignatures";
-import { hydrateSessionDetailMessagesFromThreadItems } from "./agentChatHistoryThreadItems";
+import {
+  collectDetailThreadItems,
+  hydrateSessionDetailMessagesFromThreadItems,
+} from "./agentChatHistoryThreadItems";
 import { hydrateSessionDetailMessagesFromTurns } from "./agentChatHistoryTimelineBasics";
 import {
   mergeMissingUserMessagesFromTimeline,
@@ -417,6 +420,9 @@ export const hydrateSessionDetailMessages = (
     options.includeTimelineFallback === false
       ? []
       : hydrateSessionDetailMessagesFromThreadItems(detail, topicId);
+  const hasCanonicalConversationItems = collectDetailThreadItems(detail).some(
+    (item) => item.type === "user_message" || item.type === "agent_message",
+  );
   const artifactTimelineMessages =
     options.includeTimelineFallback === false
       ? []
@@ -455,6 +461,30 @@ export const hydrateSessionDetailMessages = (
             ...artifactTimelineMessages,
           ]),
         );
+
+  if (hasCanonicalConversationItems && threadItemTimelineMessages.length > 0) {
+    const canonicalMessages =
+      timelineMessages.length > 0
+        ? timelineMessages
+        : threadItemTimelineMessages;
+    const enrichedCanonicalMessages =
+      hydratedMessages.length > 0
+        ? mergeHydratedMessagesWithLocalState(
+            hydratedMessages,
+            canonicalMessages,
+            { preferHydratedAssistantOutput: true },
+          )
+        : canonicalMessages;
+    return projectConversationMessagesByRuntimeTurn(
+      options.includeTimelineFallbackUsers === true
+        ? mergeMissingUserMessagesFromTimeline(
+            enrichedCanonicalMessages,
+            detail,
+            topicId,
+          )
+        : enrichedCanonicalMessages,
+    );
+  }
 
   if (hydratedMessages.length > 0) {
     const hydratedWithTimelineProcess = shouldMergeTimelineProcessMessages(

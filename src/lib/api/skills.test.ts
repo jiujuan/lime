@@ -383,36 +383,9 @@ describe("skillsApi", () => {
           bytesWritten: 512,
         },
       });
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce(["/Users/demo/article-typesetting-master.skill"])
-      .mockResolvedValueOnce({
-        platform: "macos",
-        extension: "skill",
-        mimeType: "application/vnd.lime.skill+zip",
-        appIdentifier: "com.limecloud.lime",
-        isDefault: false,
-        canSetDefault: true,
-        requiresUserConfirmation: false,
-        currentHandler: "com.anthropic.claude",
-        settingsUrl: null,
-        detail: null,
-      })
-      .mockResolvedValueOnce({
-        changed: true,
-        message: "updated",
-        status: {
-          platform: "macos",
-          extension: "skill",
-          mimeType: "application/vnd.lime.skill+zip",
-          appIdentifier: "com.limecloud.lime",
-          isDefault: true,
-          canSetDefault: true,
-          requiresUserConfirmation: false,
-          currentHandler: "com.limecloud.lime",
-          settingsUrl: null,
-          detail: null,
-        },
-      });
+    vi.mocked(safeInvoke).mockResolvedValueOnce([
+      "/Users/demo/article-typesetting-master.skill",
+    ]);
 
     await expect(
       skillsApi.inspectLocalSkillDetail("article-typesetting-master"),
@@ -484,24 +457,6 @@ describe("skillsApi", () => {
       skillsApi.takePendingSkillPackageOpenRequests(),
     ).resolves.toEqual(["/Users/demo/article-typesetting-master.skill"]);
     await expect(
-      skillsApi.getSkillPackageFileAssociationStatus(),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        isDefault: false,
-        currentHandler: "com.anthropic.claude",
-      }),
-    );
-    await expect(
-      skillsApi.setSkillPackageFileAssociationDefault(),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        changed: true,
-        status: expect.objectContaining({
-          isDefault: true,
-        }),
-      }),
-    );
-    await expect(
       skillsApi.exportLocalSkillPackage(
         "article-typesetting-master",
         "/Users/demo/article-typesetting-master.skills",
@@ -569,12 +524,10 @@ describe("skillsApi", () => {
       1,
       "take_pending_skill_package_open_requests",
     );
-    expect(safeInvoke).toHaveBeenNthCalledWith(
-      2,
+    expect(safeInvoke).not.toHaveBeenCalledWith(
       "get_skill_package_file_association_status",
     );
-    expect(safeInvoke).toHaveBeenNthCalledWith(
-      3,
+    expect(safeInvoke).not.toHaveBeenCalledWith(
       "set_skill_package_file_association_default",
     );
     expect(safeInvoke).not.toHaveBeenCalledWith(
@@ -895,43 +848,6 @@ describe("skillsApi", () => {
       ),
     ).rejects.toThrow(
       "skillPackage/export did not return skill package export result",
-    );
-  });
-
-  it("Skill package 文件关联状态遇到假成功或缺字段时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({
-        platform: "macos",
-        extension: "skill",
-        mimeType: "application/vnd.lime.skill+zip",
-        appIdentifier: "com.limecloud.lime",
-        isDefault: false,
-        canSetDefault: true,
-      });
-
-    await expect(
-      skillsApi.getSkillPackageFileAssociationStatus(),
-    ).rejects.toThrow(
-      "get_skill_package_file_association_status did not return file association status",
-    );
-    await expect(
-      skillsApi.getSkillPackageFileAssociationStatus(),
-    ).rejects.toThrow(
-      "get_skill_package_file_association_status did not return file association status",
-    );
-  });
-
-  it("Skill package 文件关联设置结果缺少状态时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      changed: true,
-      message: "updated",
-    });
-
-    await expect(
-      skillsApi.setSkillPackageFileAssociationDefault(),
-    ).rejects.toThrow(
-      "set_skill_package_file_association_default did not return file association apply result",
     );
   });
 });

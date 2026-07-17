@@ -1,4 +1,6 @@
 import type { AgentThreadItem, Message } from "../types";
+import { aggregateFileChangeSummaries } from "../utils/fileChangeSummary";
+import { resolveFinalAgentMessageItemIds } from "../utils/agentMessagePhase";
 import { isUpdatePlanToolName } from "../utils/toolNameFamily";
 import {
   buildTimelineActionContentPart,
@@ -17,13 +19,16 @@ import {
   hasFinalTextContentPart,
   hasOnlyDuplicateReasoningItems,
   mergeExistingLeadAndFinalParts,
+  shouldRenderTimelineAgentMessageAsCommentaryText,
   shouldRenderTimelineAgentMessageAsVisibleText,
 } from "./messageListTimelineContentPartText";
 import {
+  areComparableContentTextsEqual,
   areComparableContentTextsRelated,
   normalizeComparableContentText,
   readableContentTextScore,
 } from "./messageListComparableText";
+import { selectFinalTextContentParts } from "./messageListProjectionContentParts";
 
 function normalizeTimelineReasoningText(text: string): string {
   return normalizeComparableContentText(text);
@@ -47,12 +52,16 @@ function scoreTimelineReasoningItem(item: AgentThreadItem): number {
   return score;
 }
 
-function dedupeTimelineReasoningItems(items: AgentThreadItem[]): AgentThreadItem[] {
+function dedupeTimelineReasoningItems(
+  items: AgentThreadItem[],
+): AgentThreadItem[] {
   const nextItems: AgentThreadItem[] = [];
 
   for (const item of items) {
     const normalizedText =
-      item.type === "reasoning" ? normalizeTimelineReasoningText(item.text) : "";
+      item.type === "reasoning"
+        ? normalizeTimelineReasoningText(item.text)
+        : "";
     if (item.type !== "reasoning" || !normalizedText) {
       nextItems.push(item);
       continue;
@@ -72,7 +81,8 @@ function dedupeTimelineReasoningItems(items: AgentThreadItem[]): AgentThreadItem
     const existingItem = nextItems[existingIndex];
     if (
       existingItem &&
-      scoreTimelineReasoningItem(item) >= scoreTimelineReasoningItem(existingItem)
+      scoreTimelineReasoningItem(item) >=
+        scoreTimelineReasoningItem(existingItem)
     ) {
       nextItems[existingIndex] = item;
     }
@@ -105,6 +115,132 @@ function shouldPrependDisplayContentBeforeActiveTimelineProcess(params: {
   return params.items.some(
     (item) => isTimelineProcessItem(item) && item.status === "in_progress",
   );
+}
+
+export function buildTimelineVisibleTextContentParts(params: {
+  displayContent: string;
+  existingContentParts?: Message["contentParts"];
+  includeCommentary?: boolean;
+  items?: AgentThreadItem[];
+}): Message["contentParts"] | undefined {
+  const includeCommentary = params.includeCommentary !== false;
+  const compactFinalAgentMessageIds = includeCommentary
+    ? null
+    : resolveFinalAgentMessageItemIds(params.items || []);
+  const timelineParts: MessageContentPart[] = [];
+  for (const item of params.items || []) {
+    if (
+      item.type !== "agent_message" ||
+      !shouldRenderTimelineAgentMessageAsVisibleText(item) ||
+      (!includeCommentary &&
+        (!compactFinalAgentMessageIds?.has(item.id) ||
+          shouldRenderTimelineAgentMessageAsCommentaryText(item)))
+    ) {
+      continue;
+    }
+    appendTextContentPart(timelineParts, item.text, timelineTextMetadata(item));
+  }
+
+  const existingTextParts = (params.existingContentParts || []).filter(
+    (part): part is Extract<MessageContentPart, { type: "text" }> =>
+      part.type === "text" && part.text.trim().length > 0,
+  );
+  const existingCommentaryParts = existingTextParts.filter(
+    (part) => part.metadata?.phase === "commentary",
+  );
+  const existingFinalParts = selectFinalTextContentParts(existingTextParts);
+  const parts: MessageContentPart[] = [];
+  const readPartIdentity = (
+    part: Extract<MessageContentPart, { type: "text" }>,
+  ): string | null => {
+    for (const value of [part.metadata?.threadItemId, part.metadata?.itemId]) {
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+    return null;
+  };
+  const appendUniquePart = (
+    part: Extract<MessageContentPart, { type: "text" }>,
+  ) => {
+    const identity = readPartIdentity(part);
+    for (const candidate of parts) {
+      if (candidate.type !== "text") {
+        continue;
+      }
+      const candidateIdentity = readPartIdentity(candidate);
+      if (identity && candidateIdentity === identity) {
+        return;
+      }
+      if (
+        !identity &&
+        !candidateIdentity &&
+        areComparableContentTextsEqual(candidate.text, part.text)
+      ) {
+        return;
+      }
+    }
+    parts.push(part);
+  };
+
+  if (includeCommentary) {
+    existingCommentaryParts.forEach(appendUniquePart);
+  }
+  timelineParts.forEach((part) => {
+    if (part.type === "text") {
+      appendUniquePart(part);
+    }
+  });
+  existingFinalParts.forEach(appendUniquePart);
+
+  if (
+    params.displayContent.trim() &&
+    !parts.some(
+      (part) =>
+        part.type === "text" &&
+        areComparableContentTextsEqual(part.text, params.displayContent),
+    )
+  ) {
+    appendTextContentPart(parts, params.displayContent);
+  }
+
+  return parts.length > 0 ? parts : undefined;
+}
+
+export function buildTimelineFileChangesContentPart(
+  items?: AgentThreadItem[],
+): Extract<MessageContentPart, { type: "file_changes_batch" }> | undefined {
+  const patchParts = (items || []).flatMap((item) => {
+    const part = buildTimelinePatchContentPart(item);
+    return part?.type === "file_changes_batch" ? [part] : [];
+  });
+  if (patchParts.length === 0) {
+    return undefined;
+  }
+  if (patchParts.length === 1) {
+    return patchParts[0];
+  }
+
+  const patchItems = (items || []).filter(
+    (item): item is Extract<AgentThreadItem, { type: "patch" }> =>
+      item.type === "patch",
+  );
+  const firstPatchItem = patchItems[0];
+  const aggregate = aggregateFileChangeSummaries(
+    patchParts.flatMap((part) => part.aggregate.files),
+  );
+  if (!firstPatchItem || aggregate.fileCount === 0) {
+    return undefined;
+  }
+
+  return {
+    type: "file_changes_batch",
+    aggregate,
+    metadata: {
+      ...timelineItemMetadata(firstPatchItem, "thread_item_patch"),
+      threadItemIds: patchItems.map((item) => item.id),
+    },
+  };
 }
 
 export function buildTimelineInlineContentParts(params: {

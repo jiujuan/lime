@@ -44,6 +44,7 @@ import {
   hasRunningThreadReadActivity,
   hasRunningTurnRecordActivity,
 } from "../projection/threadReadActivity";
+import { resolveFinalAgentMessageItemIds } from "../utils/agentMessagePhase";
 import {
   buildInterruptedMessageContentPatch,
   markInterruptedAgentMessageThreadItems,
@@ -763,6 +764,13 @@ export function buildHydratedAgentSessionSnapshot(
   const incomingItems = normalizeLegacyThreadItems(
     collectDetailThreadItems(detail),
   );
+  const hasIncomingCanonicalUserMessage = incomingItems.some(
+    (item) => item.type === "user_message",
+  );
+  const hasIncomingCanonicalAssistantOutput =
+    resolveFinalAgentMessageItemIds(incomingItems).size > 0;
+  const hasIncomingCanonicalConversationItems =
+    hasIncomingCanonicalUserMessage || hasIncomingCanonicalAssistantOutput;
   const hasIncomingTerminalTimeline = hasTerminalDetailTimeline({
     thread_read: detail.thread_read,
     turns: incomingTurns,
@@ -783,10 +791,13 @@ export function buildHydratedAgentSessionSnapshot(
     {
       compactCompletedHistory: shouldCompactCompletedSessionHistory(detail),
       includeTimelineFallback:
+        hasIncomingCanonicalConversationItems ||
         shouldReconcileTerminalRuntimeDetail ||
         !mayPreserveExistingTimelineBySession ||
         effectiveCurrentMessages.length === 0,
-      includeTimelineFallbackUsers: shouldReconcileTerminalRuntimeDetail,
+      includeTimelineFallbackUsers:
+        hasIncomingCanonicalConversationItems ||
+        shouldReconcileTerminalRuntimeDetail,
     },
   );
   const hydratedMessagesForCompatibility =
@@ -850,6 +861,7 @@ export function buildHydratedAgentSessionSnapshot(
             hydratedMessages,
             {
               preferHydratedAssistantOutput:
+                hasIncomingCanonicalAssistantOutput ||
                 shouldReconcileTerminalRuntimeDetail,
             },
           )

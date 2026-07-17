@@ -95,6 +95,8 @@ describe("workspaceArticleWorkspacePreviewArtifact", () => {
         isSourceBacked: true,
         source: "artifact",
         sourceRef: "artifact-article-1",
+        artifactRef: "artifact-article-1",
+        appServerArtifactRef: "artifact-article-1",
         contentKind: "markdown",
         renderMode: "canvas",
         openedFrom: "right_surface_article_workspace",
@@ -242,6 +244,7 @@ describe("workspaceArticleWorkspacePreviewArtifact", () => {
         mimeType: "image/png",
       }),
     });
+    expect(artifact?.meta).not.toHaveProperty("appServerArtifactRef");
   });
 
   it("图片对象没有远程 URL 时应优先使用本地缓存文件打开预览", () => {

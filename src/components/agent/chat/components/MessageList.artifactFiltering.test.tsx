@@ -5,12 +5,10 @@ import {
   mockAgentThreadTimeline,
   render,
 } from "./MessageList.testHarness";
-import type {
-  Message,
-} from "./MessageList.testHarness";
+import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList artifact filtering", () => {
-  it("文件变更汇总已覆盖同一路径时不应再渲染重复 artifact 卡片", () => {
+  it("文件变更汇总不应吞掉 canonical file artifact 卡片", () => {
     const now = new Date();
     const turnId = "turn-file-change-dedup";
     const messages: Message[] = [
@@ -114,8 +112,8 @@ describe("MessageList artifact filtering", () => {
       container.querySelector('[data-testid="message-artifact-card"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="timeline-file-artifact-card"]'),
-    ).toBeNull();
+      container.querySelectorAll('[data-testid="timeline-file-artifact-card"]'),
+    ).toHaveLength(2);
     expect(
       container
         .querySelector('[data-testid="streaming-renderer"]')
@@ -420,11 +418,11 @@ describe("MessageList artifact filtering", () => {
       ],
     });
 
-    expect(findStreamingRendererCallByContent("站点结果已沉淀。")).toMatchObject(
-      {
-        onOpenSavedSiteContent,
-      },
-    );
+    expect(
+      findStreamingRendererCallByContent("站点结果已沉淀。"),
+    ).toMatchObject({
+      onOpenSavedSiteContent,
+    });
   });
 
   it("当前 turn 已映射到较早助手消息时，不应被最新助手消息抢占", () => {
@@ -498,8 +496,7 @@ describe("MessageList artifact filtering", () => {
 
     expect(streamingNodes).toHaveLength(1);
     expect(
-      findStreamingRendererCallByContent("先给出一段中间反馈。")
-        ?.contentParts,
+      findStreamingRendererCallByContent("先给出一段中间反馈。")?.contentParts,
     ).toEqual([
       expect.objectContaining({
         type: "text",
@@ -681,5 +678,4 @@ describe("MessageList artifact filtering", () => {
         ?.contentParts,
     ).toBeUndefined();
   });
-
 });

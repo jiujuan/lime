@@ -147,13 +147,13 @@ function buildMessageFromThreadItem(
       role === "assistant" && itemContentParts.length > 0
         ? itemContentParts
         : role === "assistant" && messageContent
-        ? [
-            {
-              type: "text",
-              text: messageContent,
-            },
-          ]
-        : undefined,
+          ? [
+              {
+                type: "text",
+                text: messageContent,
+              },
+            ]
+          : undefined,
     timestamp: Number.isNaN(timestamp.getTime()) ? new Date(0) : timestamp,
     runtimeTurnId: item.turn_id,
   };
@@ -206,7 +206,10 @@ export function hydrateSessionDetailMessagesFromThreadItems(
     if (!assistantDraft) {
       return;
     }
-    if (!assistantDraft.content.trim() && assistantDraft.imageWorkbenchPreview) {
+    if (
+      !assistantDraft.content.trim() &&
+      assistantDraft.imageWorkbenchPreview
+    ) {
       assistantDraft.content = resolveImageWorkbenchHistoryAssistantIntro(
         assistantDraft.imageWorkbenchPreview,
       );
@@ -323,12 +326,6 @@ export function hydrateSessionDetailMessagesFromThreadItems(
   ): boolean => {
     const itemContentParts = messageContentPartsFromAgentThreadItem(item);
     if (itemContentParts.length > 0) {
-      const textContent = contentPartsText(itemContentParts);
-      if (textContent && shouldUseAgentMessageAsFinalText(item.phase)) {
-        draft.content = [draft.content.trim(), textContent]
-          .filter(Boolean)
-          .join("\n\n");
-      }
       draft.contentParts = [...(draft.contentParts || []), ...itemContentParts];
       return true;
     }
@@ -341,7 +338,7 @@ export function hydrateSessionDetailMessagesFromThreadItems(
     if (!sanitizedText) {
       return false;
     }
-    if (isAgentMessageCommentaryPhase(item.phase)) {
+    if (isAgentMessageCommentaryPhase(item.phase) || !item.phase?.trim()) {
       draft.contentParts = appendTextToParts(
         draft.contentParts || [],
         sanitizedText,
@@ -368,7 +365,16 @@ export function hydrateSessionDetailMessagesFromThreadItems(
         finalAgentMessageItemIds,
       );
       if (!message) {
-        if (item.type === "agent_message" && item.phase) {
+        if (item.type === "agent_message") {
+          const hasContentParts =
+            messageContentPartsFromAgentThreadItem(item).length > 0;
+          const processText = sanitizeMessageTextForDisplay(
+            readThreadItemText(item, ["text", "content", "message"]),
+            { role: "assistant", hasImages: false },
+          );
+          if (!hasContentParts && !processText) {
+            continue;
+          }
           const draft = ensureAssistantDraft(item);
           const appended = appendAssistantProcessText(draft, item);
           if (appended) {

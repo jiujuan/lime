@@ -57,11 +57,9 @@ const {
   systemUtilityHostGetChromeBridgeStatusMock,
   systemUtilityHostGetChromeProfileSessionsMock,
   systemUtilityHostGetEnvironmentPreviewMock,
-  systemUtilityHostGetSkillPackageFileAssociationStatusMock,
   systemUtilityHostGetVoiceShortcutRuntimeStatusMock,
   systemUtilityHostOpenExternalUrlMock,
   systemUtilityHostOpenSystemSettingsUrlMock,
-  systemUtilityHostSetSkillPackageFileAssociationDefaultMock,
   systemUtilityHostValidateShortcutMock,
   voiceModelHostDeleteMock,
   voiceModelHostDownloadMock,
@@ -163,11 +161,9 @@ const {
     systemUtilityHostGetChromeBridgeStatusMock: vi.fn(),
     systemUtilityHostGetChromeProfileSessionsMock: vi.fn(),
     systemUtilityHostGetEnvironmentPreviewMock: vi.fn(),
-    systemUtilityHostGetSkillPackageFileAssociationStatusMock: vi.fn(),
     systemUtilityHostGetVoiceShortcutRuntimeStatusMock: vi.fn(),
     systemUtilityHostOpenExternalUrlMock: vi.fn(),
     systemUtilityHostOpenSystemSettingsUrlMock: vi.fn(),
-    systemUtilityHostSetSkillPackageFileAssociationDefaultMock: vi.fn(),
     systemUtilityHostValidateShortcutMock: vi.fn(),
     voiceModelHostDeleteMock: vi.fn(),
     voiceModelHostDownloadMock: vi.fn(),
@@ -277,14 +273,10 @@ vi.mock("./systemUtilityHost", () => ({
     getChromeBridgeStatus: systemUtilityHostGetChromeBridgeStatusMock,
     getChromeProfileSessions: systemUtilityHostGetChromeProfileSessionsMock,
     getEnvironmentPreview: systemUtilityHostGetEnvironmentPreviewMock,
-    getSkillPackageFileAssociationStatus:
-      systemUtilityHostGetSkillPackageFileAssociationStatusMock,
     getVoiceShortcutRuntimeStatus:
       systemUtilityHostGetVoiceShortcutRuntimeStatusMock,
     openExternalUrl: systemUtilityHostOpenExternalUrlMock,
     openSystemSettingsUrl: systemUtilityHostOpenSystemSettingsUrlMock,
-    setSkillPackageFileAssociationDefault:
-      systemUtilityHostSetSkillPackageFileAssociationDefaultMock,
     validateShortcut: systemUtilityHostValidateShortcutMock,
   })),
 }));
@@ -1465,7 +1457,9 @@ describe("ElectronHostCommands model provider current source", () => {
     });
     const host = createHost(userDataDir, () => undefined, request);
 
-    await expect(host.invoke("get_runtime_provider_selection")).resolves.toEqual({
+    await expect(
+      host.invoke("get_runtime_provider_selection"),
+    ).resolves.toEqual({
       provider_configured: true,
       provider_name: "Lime Hub",
       provider_selector: "lime-hub",
@@ -1531,12 +1525,6 @@ describe("ElectronHostCommands system utilities", () => {
     systemUtilityHostGetEnvironmentPreviewMock.mockResolvedValueOnce({
       entries: [],
     });
-    systemUtilityHostGetSkillPackageFileAssociationStatusMock.mockReturnValueOnce(
-      { extension: "skill" },
-    );
-    systemUtilityHostSetSkillPackageFileAssociationDefaultMock.mockReturnValueOnce(
-      { changed: false },
-    );
     systemUtilityHostGetBrowserConnectorSettingsMock.mockReturnValueOnce({
       enabled: true,
     });
@@ -1582,12 +1570,6 @@ describe("ElectronHostCommands system utilities", () => {
       entries: [],
     });
     await expect(
-      host.invoke("get_skill_package_file_association_status"),
-    ).resolves.toEqual({ extension: "skill" });
-    await expect(
-      host.invoke("set_skill_package_file_association_default"),
-    ).resolves.toEqual({ changed: false });
-    await expect(
       host.invoke("get_browser_connector_settings_cmd"),
     ).resolves.toEqual({ enabled: true });
     await expect(
@@ -1622,12 +1604,6 @@ describe("ElectronHostCommands system utilities", () => {
       shortcutArgs,
     );
     expect(systemUtilityHostGetEnvironmentPreviewMock).toHaveBeenCalledOnce();
-    expect(
-      systemUtilityHostGetSkillPackageFileAssociationStatusMock,
-    ).toHaveBeenCalledOnce();
-    expect(
-      systemUtilityHostSetSkillPackageFileAssociationDefaultMock,
-    ).toHaveBeenCalledOnce();
     expect(
       systemUtilityHostGetBrowserConnectorSettingsMock,
     ).toHaveBeenCalledOnce();

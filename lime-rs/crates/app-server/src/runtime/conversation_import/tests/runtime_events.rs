@@ -213,6 +213,7 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
             && item["call_id"] == "call_search"
             && item["action"] == "search_query"
             && item["query"] == "imported query"
+            && tool_argument_value(item, "query") == Some("imported query")
             && item["output"]
                 .as_str()
                 .is_some_and(|output| output.contains("Imported Search Source"))
@@ -555,6 +556,14 @@ async fn commit_delays_imported_turn_terminal_until_after_late_runtime_events() 
     )
     .expect("read imported session");
     let detail = read.detail.expect("detail");
+    assert_eq!(
+        detail["turns"][0]["startedAt"], "2026-06-16T00:00:01.000Z",
+        "imported turn must preserve the source start timestamp"
+    );
+    assert_eq!(
+        detail["turns"][0]["completedAt"], "2026-06-16T00:00:01.375Z",
+        "imported turn must not mix the source start timestamp with the import commit time"
+    );
     let items = detail["items"].as_array().expect("timeline items");
     assert!(items.iter().any(|item| {
         item["type"] == "command_execution"
@@ -583,13 +592,11 @@ async fn commit_delays_imported_turn_terminal_until_after_late_runtime_events() 
         .iter()
         .rposition(|(event_type, _)| event_type == "turn.completed")
         .expect("turn completed event");
-    let command_item_id =
-        agent_protocol::ItemId::new("codex-command-call_late_exec").to_string();
+    let command_item_id = agent_protocol::ItemId::new("codex-command-call_late_exec").to_string();
     let command_index = stored_events
         .iter()
         .position(|(event_type, payload)| {
-            event_type == "item.started"
-                && payload["item"]["itemId"] == command_item_id.as_str()
+            event_type == "item.started" && payload["item"]["itemId"] == command_item_id.as_str()
         })
         .expect("canonical command item started event");
     let message_index = stored_events
@@ -599,6 +606,51 @@ async fn commit_delays_imported_turn_terminal_until_after_late_runtime_events() 
     assert!(command_index < terminal_index);
     assert!(message_index < terminal_index);
     assert_eq!(terminal_index, stored_events.len() - 1);
+}
+
+#[test]
+fn commit_synthetic_terminal_uses_last_source_event_timestamp() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp.path().join("rollout-synthetic-terminal-time.jsonl");
+    fs::write(
+        &rollout_path,
+        [
+            session_meta("thread-synthetic-terminal-time"),
+            event_user_message("preserve source timing"),
+            event_agent_message("done"),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout");
+    let core = current_import_core(temp.path());
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
+            session_id: response.session.session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        },
+    )
+    .expect("read imported session");
+    let detail = read.detail.expect("detail");
+
+    assert_eq!(detail["turns"][0]["startedAt"], "2026-06-16T00:00:01.000Z");
+    assert_eq!(
+        detail["turns"][0]["completedAt"],
+        "2026-06-16T00:00:02.000Z"
+    );
 }
 
 #[test]
@@ -772,6 +824,132 @@ async fn commit_imports_user_and_agent_items_with_canonical_lifecycle() {
     let agent_ordinal = agent["ordinal"].as_u64().expect("agent ordinal");
     assert!(user_ordinal < reasoning_ordinal);
     assert!(reasoning_ordinal < agent_ordinal);
+}
+
+#[tokio::test]
+async fn commit_pairs_adjacent_codex_message_sources_without_losing_phase_or_item_id() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp.path().join("rollout-message-source-pairs.jsonl");
+    fs::write(
+        &rollout_path,
+        [
+            session_meta("thread-message-source-pairs"),
+            event_user_message("inspect the paired messages"),
+            response_user_message("inspect the paired messages"),
+            event_agent_message_with_phase("I will inspect the project first.", "commentary"),
+            response_agent_message_with_phase(
+                "msg_commentary_pair",
+                "I will inspect the project first.",
+                "commentary",
+            ),
+            event_agent_message_with_phase("The inspection is complete.", "final_answer"),
+            response_agent_message_with_phase(
+                "msg_final_pair",
+                "The inspection is complete.",
+                "final_answer",
+            ),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout");
+    let core = current_import_core(temp.path());
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+    let current = core
+        .read_session_current(AgentSessionReadParams {
+            session_id: response.session.session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read canonical imported session");
+    let detail = current.detail.expect("canonical detail");
+    let agents = detail["items"]
+        .as_array()
+        .expect("canonical items")
+        .iter()
+        .filter(|item| item["type"] == "agent_message")
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        agents.len(),
+        2,
+        "paired Codex sources must not duplicate text"
+    );
+    assert_eq!(agents[0]["text"], "I will inspect the project first.");
+    assert_eq!(agents[0]["phase"], "commentary");
+    assert_eq!(
+        agents[0]["id"],
+        agent_protocol::ItemId::new("msg_commentary_pair").to_string()
+    );
+    assert_eq!(agents[1]["text"], "The inspection is complete.");
+    assert_eq!(agents[1]["phase"], "final_answer");
+    assert_eq!(
+        agents[1]["id"],
+        agent_protocol::ItemId::new("msg_final_pair").to_string()
+    );
+}
+
+#[test]
+fn commit_preserves_intentionally_repeated_same_source_assistant_messages() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp.path().join("rollout-repeated-assistant-message.jsonl");
+    fs::write(
+        &rollout_path,
+        [
+            session_meta("thread-repeated-assistant-message"),
+            event_user_message("repeat the status exactly"),
+            event_agent_message_with_phase("Still working.", "commentary"),
+            event_agent_message_with_phase("Still working.", "commentary"),
+            event_agent_message_with_phase("Done.", "final_answer"),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout");
+    let core = current_import_core(temp.path());
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+    let read = read_current_session(
+        &core,
+        AgentSessionReadParams {
+            session_id: response.session.session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        },
+    )
+    .expect("read imported session");
+    let detail = read.detail.expect("detail");
+    let repeated_count = detail["items"]
+        .as_array()
+        .expect("canonical items")
+        .iter()
+        .filter(|item| item["type"] == "agent_message" && item["text"] == "Still working.")
+        .count();
+
+    assert_eq!(
+        repeated_count, 2,
+        "same-source repetition is user-visible content"
+    );
 }
 
 #[tokio::test]
@@ -1440,6 +1618,19 @@ fn event_agent_message(message: &str) -> String {
     .to_string()
 }
 
+fn event_agent_message_with_phase(message: &str, phase: &str) -> String {
+    serde_json::json!({
+        "timestamp": "2026-06-16T00:00:02.000Z",
+        "type": "event_msg",
+        "payload": {
+            "type": "agent_message",
+            "message": message,
+            "phase": phase
+        }
+    })
+    .to_string()
+}
+
 fn response_user_message(message: &str) -> String {
     serde_json::json!({
         "timestamp": "2026-06-16T00:00:01.100Z",
@@ -1462,6 +1653,21 @@ fn response_agent_message(item_id: &str, message: &str) -> String {
             "id": item_id,
             "role": "assistant",
             "content": [{"type": "output_text", "text": message}]
+        }
+    })
+    .to_string()
+}
+
+fn response_agent_message_with_phase(item_id: &str, message: &str, phase: &str) -> String {
+    serde_json::json!({
+        "timestamp": "2026-06-16T00:00:02.000Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "id": item_id,
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": message}],
+            "phase": phase
         }
     })
     .to_string()
@@ -1540,17 +1746,15 @@ fn event_web_search_end(call_id: &str, action: &str, title: Option<&str>) -> Str
         "payload": {
             "type": "web_search_end",
             "call_id": call_id,
+            "query": "imported query",
             "action": {
-                "type": action,
-                "query": "imported query"
+                "type": action
             },
-            "output": serde_json::json!({
-                "results": [{
-                    "title": title.unwrap_or("Imported Search Result"),
-                    "url": "https://example.com/imported-search",
-                    "snippet": "Imported Codex search source"
-                }]
-            }).to_string()
+            "results": [{
+                "title": title.unwrap_or("Imported Search Result"),
+                "url": "https://example.com/imported-search",
+                "snippet": "Imported Codex search source"
+            }]
         }
     })
     .to_string()

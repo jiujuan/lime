@@ -20,6 +20,8 @@ export type FileChangeDiffLineKind = "context" | "add" | "remove";
 export interface FileChangeDiffLine {
   kind: FileChangeDiffLineKind;
   value: string;
+  oldLine?: number;
+  newLine?: number;
 }
 
 export interface FileChangeSummary {
@@ -126,7 +128,14 @@ function normalizeBackendDiffLine(value: unknown): FileChangeDiffLine | null {
   const kind = record.kind;
   const text = coerceString(record.value) ?? "";
   if (kind === "context" || kind === "add" || kind === "remove") {
-    return { kind, value: text };
+    const oldLine = coerceNumber(record.old_line ?? record.oldLine);
+    const newLine = coerceNumber(record.new_line ?? record.newLine);
+    return {
+      kind,
+      value: text,
+      ...(oldLine !== undefined ? { oldLine } : {}),
+      ...(newLine !== undefined ? { newLine } : {}),
+    };
   }
   return null;
 }
@@ -163,7 +172,9 @@ function parseBackendFileChange(
   };
 }
 
-function resolveArgPath(args: Record<string, unknown> | null): string | undefined {
+function resolveArgPath(
+  args: Record<string, unknown> | null,
+): string | undefined {
   if (!args) return undefined;
   for (const key of ["path", "file_path", "filePath", "filename", "file"]) {
     const value = coerceString(args[key]);
@@ -289,17 +300,24 @@ function mergeSummary(
 export function aggregateFileChanges(
   toolCalls: AgentToolCallState[],
 ): FileChangesAggregate {
+  return aggregateFileChangeSummaries(
+    toolCalls.flatMap((toolCall) => {
+      if (!isFileMutationToolName(toolCall.name)) {
+        return [];
+      }
+      const summary = parseFileChangeFromToolCall(toolCall);
+      return summary ? [summary] : [];
+    }),
+  );
+}
+
+export function aggregateFileChangeSummaries(
+  summaries: FileChangeSummary[],
+): FileChangesAggregate {
   const order: string[] = [];
   const byPath = new Map<string, FileChangeSummary>();
 
-  for (const toolCall of toolCalls) {
-    if (!isFileMutationToolName(toolCall.name)) {
-      continue;
-    }
-    const summary = parseFileChangeFromToolCall(toolCall);
-    if (!summary) {
-      continue;
-    }
+  for (const summary of summaries) {
     const existing = byPath.get(summary.path);
     if (existing) {
       byPath.set(summary.path, mergeSummary(existing, summary));

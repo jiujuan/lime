@@ -11,27 +11,40 @@ use crate::provider_stream::{
 };
 use crate::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
 use crate::ModelProviderProtocol;
+use async_stream::stream;
 use futures::future::BoxFuture;
 use futures::Stream;
 use reqwest::{Client, Response, StatusCode};
-pub use runtime_core::{CanonicalLlmEvent, FinishReason, Usage};
+pub use runtime_core::{
+    CanonicalLlmEvent, FailureClassification, FinishReason, GenerationOptions, ProviderMetadata,
+    Usage,
+};
 use runtime_core::{
     CanonicalRequest, CanonicalRole, CanonicalToolDefinition, ContentPart, ToolResultValue,
 };
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue};
+use tokio_tungstenite::tungstenite::Error as WebSocketError;
 
 mod lowering;
 mod stream;
 mod transport;
+mod websocket;
 
 use lowering::{anthropic_request, chat_completions_request, responses_request};
 use stream::{anthropic_sse, openai_chat_sse, responses_sse};
 use transport::{
     request_failure, retry_delay, should_retry_stream_request_status, MAX_STREAM_REQUEST_ATTEMPTS,
 };
+use websocket::{responses_websocket, ResponsesSocket};
 
 pub type CurrentProviderStream =
     Pin<Box<dyn Stream<Item = Result<CanonicalLlmEvent, CurrentProviderError>> + Send>>;
@@ -52,6 +65,8 @@ pub struct CurrentProviderRequest {
     pub system_prompt: Option<String>,
     pub messages: Vec<CurrentProviderMessage>,
     pub tools: Vec<CurrentProviderTool>,
+    pub generation: GenerationOptions,
+    pub provider_options: ProviderMetadata,
     pub model_request_policy: Option<RuntimeReplyModelRequestPolicy>,
 }
 
@@ -61,6 +76,8 @@ impl CurrentProviderRequest {
             system_prompt: None,
             messages,
             tools: Vec::new(),
+            generation: GenerationOptions::default(),
+            provider_options: ProviderMetadata::new(),
             model_request_policy: None,
         }
     }
@@ -72,6 +89,16 @@ impl CurrentProviderRequest {
 
     pub fn with_tools(mut self, tools: Vec<CurrentProviderTool>) -> Self {
         self.tools = tools;
+        self
+    }
+
+    pub fn with_generation(mut self, generation: GenerationOptions) -> Self {
+        self.generation = generation;
+        self
+    }
+
+    pub fn with_provider_options(mut self, provider_options: ProviderMetadata) -> Self {
+        self.provider_options = provider_options;
         self
     }
 
@@ -115,7 +142,37 @@ impl CurrentProviderRequest {
                 metadata: Default::default(),
             })
             .collect();
+        canonical.generation = self.generation.clone();
+        canonical.provider_options = self.provider_options.clone();
         Ok(canonical)
+    }
+
+    fn media_payloads(&self) -> Result<BTreeMap<String, String>, CurrentProviderError> {
+        let mut payloads = BTreeMap::new();
+        for content in self.messages.iter().flat_map(|message| &message.content) {
+            let CurrentProviderContent::Image {
+                uri, provider_data, ..
+            } = content
+            else {
+                continue;
+            };
+            if let Some(provider_data) = provider_data {
+                if let Some(previous) = payloads.insert(uri.clone(), provider_data.clone()) {
+                    if previous != *provider_data {
+                        return Err(CurrentProviderError::invalid_request(format!(
+                            "canonical media reference {uri} maps to conflicting provider payloads"
+                        )));
+                    }
+                }
+                continue;
+            }
+            if is_local_media_reference(uri) {
+                return Err(CurrentProviderError::invalid_request(format!(
+                    "canonical media reference {uri} has no provider-readable payload"
+                )));
+            }
+        }
+        Ok(payloads)
     }
 }
 
@@ -150,11 +207,11 @@ fn canonical_content(
             encrypted: None,
             metadata: Default::default(),
         }),
-        CurrentProviderContent::Image { data, media_type } => {
-            ContentPart::media(data.clone(), media_type.clone()).map_err(|error| {
-                CurrentProviderError::new(format!("canonical media input rejected: {error}"))
-            })
-        }
+        CurrentProviderContent::Image {
+            uri, media_type, ..
+        } => ContentPart::media(uri.clone(), media_type.clone()).map_err(|error| {
+            CurrentProviderError::new(format!("canonical media input rejected: {error}"))
+        }),
         CurrentProviderContent::ToolCall(call) => Ok(ContentPart::ToolCall {
             id: call.id.clone(),
             name: call.name.clone(),
@@ -222,7 +279,11 @@ pub enum CurrentProviderRole {
 pub enum CurrentProviderContent {
     Text(String),
     Reasoning(String),
-    Image { data: String, media_type: String },
+    Image {
+        uri: String,
+        media_type: String,
+        provider_data: Option<String>,
+    },
     ToolCall(CurrentProviderToolCall),
     ToolResult(CurrentProviderToolResult),
 }
@@ -299,6 +360,8 @@ pub struct CurrentProviderUsage {
 pub struct CurrentProviderError {
     pub message: String,
     pub status: Option<u16>,
+    pub classification: Option<FailureClassification>,
+    pub retryable: bool,
 }
 
 impl CurrentProviderError {
@@ -306,6 +369,17 @@ impl CurrentProviderError {
         Self {
             message: message.into(),
             status: None,
+            classification: None,
+            retryable: false,
+        }
+    }
+
+    pub fn invalid_request(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            status: None,
+            classification: Some(FailureClassification::InvalidRequest),
+            retryable: false,
         }
     }
 
@@ -313,6 +387,17 @@ impl CurrentProviderError {
         Self {
             message: message.into(),
             status: Some(status.as_u16()),
+            classification: Some(classification_from_status(status)),
+            retryable: status_failure_is_retryable(status),
+        }
+    }
+
+    pub(super) fn transport(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            status: None,
+            classification: Some(FailureClassification::Transport),
+            retryable: true,
         }
     }
 }
@@ -329,6 +414,8 @@ impl std::error::Error for CurrentProviderError {}
 pub struct CurrentProviderClient {
     config: RuntimeProviderConfig,
     client: Client,
+    http_fallback: Arc<AtomicBool>,
+    websocket: Arc<Mutex<Option<ResponsesSocket>>>,
 }
 
 impl CurrentProviderClient {
@@ -349,11 +436,21 @@ impl CurrentProviderClient {
         let client = client_builder.build().map_err(|error| {
             CurrentProviderError::new(format!("创建 provider HTTP client 失败: {error}"))
         })?;
-        Ok(Self { config, client })
+        Ok(Self {
+            config,
+            client,
+            http_fallback: Arc::new(AtomicBool::new(false)),
+            websocket: Arc::new(Mutex::new(None)),
+        })
     }
 
     pub fn with_client(config: RuntimeProviderConfig, client: Client) -> Self {
-        Self { config, client }
+        Self {
+            config,
+            client,
+            http_fallback: Arc::new(AtomicBool::new(false)),
+            websocket: Arc::new(Mutex::new(None)),
+        }
     }
 
     pub fn config(&self) -> &RuntimeProviderConfig {
@@ -385,21 +482,49 @@ impl CurrentProviderClient {
         request: CurrentProviderRequest,
     ) -> Result<CurrentProviderStream, CurrentProviderError> {
         let protocol = self.protocol();
+        let media_payloads = request.media_payloads()?;
         let canonical_request = request.into_canonical(&self.config.model_name)?;
         let wire_shape = RuntimeReplyProviderRequestWireShape::from_model_request_policy(
             request.model_request_policy.as_ref(),
         );
         let payload = match protocol {
-            ModelProviderProtocol::Responses => {
-                responses_request(&self.config, &canonical_request, &wire_shape)
-            }
+            ModelProviderProtocol::Responses => responses_request(
+                &self.config,
+                &canonical_request,
+                &wire_shape,
+                &media_payloads,
+            ),
             ModelProviderProtocol::AnthropicMessages => {
-                anthropic_request(&self.config, &canonical_request)
+                anthropic_request(&self.config, &canonical_request, &media_payloads)
             }
             ModelProviderProtocol::ChatCompletions | ModelProviderProtocol::Custom(_) => {
-                chat_completions_request(&self.config, &canonical_request, &wire_shape)
+                chat_completions_request(
+                    &self.config,
+                    &canonical_request,
+                    &wire_shape,
+                    &media_payloads,
+                )
             }
         };
+        if matches!(protocol, ModelProviderProtocol::Responses)
+            && self.responses_websocket_enabled()
+        {
+            match self
+                .send_responses_websocket(payload.clone(), &wire_shape)
+                .await
+            {
+                Ok(stream) => {
+                    return Ok(self.websocket_with_http_fallback(stream, payload, wire_shape));
+                }
+                Err(error) => {
+                    self.http_fallback.store(true, Ordering::Release);
+                    tracing::warn!(
+                        error = %error,
+                        "Responses WebSocket unavailable; falling back to HTTP for this session"
+                    );
+                }
+            }
+        }
         let response = self
             .send_stream_request(&protocol, payload, &wire_shape)
             .await?;
@@ -411,6 +536,133 @@ impl CurrentProviderClient {
             }
         };
         Ok(stream)
+    }
+
+    pub fn responses_websocket_enabled(&self) -> bool {
+        self.config.supports_websockets && !self.http_fallback.load(Ordering::Acquire)
+    }
+
+    fn websocket_with_http_fallback(
+        &self,
+        mut websocket: CurrentProviderStream,
+        payload: Value,
+        wire_shape: RuntimeReplyProviderRequestWireShape,
+    ) -> CurrentProviderStream {
+        let client = self.clone();
+        Box::pin(stream! {
+            let mut emitted_any = false;
+            while let Some(event) = futures::StreamExt::next(&mut websocket).await {
+                match event {
+                    Ok(event) => {
+                        emitted_any = true;
+                        yield Ok(event);
+                    }
+                    Err(error) if !emitted_any => {
+                        client.http_fallback.store(true, Ordering::Release);
+                        tracing::warn!(
+                            error = %error,
+                            "Responses WebSocket ended before visible output; replaying over HTTP"
+                        );
+                        match client
+                            .send_stream_request(
+                                &ModelProviderProtocol::Responses,
+                                payload,
+                                &wire_shape,
+                            )
+                            .await
+                        {
+                            Ok(response) => {
+                                let mut http = Box::pin(responses_sse(response));
+                                while let Some(event) = futures::StreamExt::next(&mut http).await {
+                                    yield event;
+                                }
+                            }
+                            Err(http_error) => yield Err(http_error),
+                        }
+                        return;
+                    }
+                    Err(error) => {
+                        yield Err(error);
+                        return;
+                    }
+                }
+            }
+        })
+    }
+
+    async fn send_responses_websocket(
+        &self,
+        payload: Value,
+        wire_shape: &RuntimeReplyProviderRequestWireShape,
+    ) -> Result<CurrentProviderStream, CurrentProviderError> {
+        let api_key = self
+            .config
+            .api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| CurrentProviderError::new("Provider API key 未配置"))?;
+        let url = responses_websocket_url(self.config.base_url.as_deref())?;
+        let mut attempts = 0;
+        let mut websocket = self.websocket.lock().await;
+
+        while websocket.is_none() {
+            attempts += 1;
+            let mut request = url.as_str().into_client_request().map_err(|error| {
+                CurrentProviderError::invalid_request(format!(
+                    "创建 Responses WebSocket request 失败: {error}"
+                ))
+            })?;
+            request.headers_mut().insert(
+                "Authorization",
+                HeaderValue::from_str(&format!("Bearer {api_key}")).map_err(|error| {
+                    CurrentProviderError::invalid_request(format!(
+                        "Responses WebSocket authorization header 无效: {error}"
+                    ))
+                })?,
+            );
+            request.headers_mut().insert(
+                "OpenAI-Beta",
+                HeaderValue::from_static("responses_websockets=2026-02-06"),
+            );
+            for header in &wire_shape.headers {
+                let name = header.name.parse::<HeaderName>().map_err(|error| {
+                    CurrentProviderError::invalid_request(format!(
+                        "Responses WebSocket header name 无效 ({}): {error}",
+                        header.name
+                    ))
+                })?;
+                let value = HeaderValue::from_str(&header.value).map_err(|error| {
+                    CurrentProviderError::invalid_request(format!(
+                        "Responses WebSocket header value 无效 ({}): {error}",
+                        header.name
+                    ))
+                })?;
+                request.headers_mut().insert(name, value);
+            }
+
+            match tokio_tungstenite::connect_async(request).await {
+                Ok((socket, _response)) => {
+                    *websocket = Some(socket);
+                }
+                Err(error)
+                    if websocket_error_status(&error) == Some(StatusCode::UPGRADE_REQUIRED) =>
+                {
+                    return Err(websocket_connect_error(&url, error));
+                }
+                Err(_error) if attempts < MAX_STREAM_REQUEST_ATTEMPTS => {
+                    tokio::time::sleep(retry_delay(&reqwest::header::HeaderMap::new(), attempts))
+                        .await;
+                }
+                Err(error) => return Err(websocket_connect_error(&url, error)),
+            }
+        }
+        drop(websocket);
+        Ok(responses_websocket(
+            Arc::clone(&self.websocket),
+            payload,
+            Arc::clone(&self.http_fallback),
+        ))
     }
 
     async fn send_stream_request(
@@ -497,16 +749,69 @@ async fn ensure_success_response(response: Response) -> Result<Response, Current
     }
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
-    let body = body.trim();
-    let detail = if body.is_empty() {
+    let detail = provider_error_detail(&body);
+    let detail = if detail.is_empty() {
         String::new()
     } else {
-        format!(": {body}")
+        format!(": {detail}")
     };
     Err(CurrentProviderError::with_status(
         status,
         format!("Provider 请求失败 ({status}){detail}"),
     ))
+}
+
+fn classification_from_status(status: StatusCode) -> FailureClassification {
+    match status {
+        StatusCode::UNAUTHORIZED => FailureClassification::Authentication,
+        StatusCode::FORBIDDEN => FailureClassification::Permission,
+        StatusCode::PAYMENT_REQUIRED => FailureClassification::Quota,
+        StatusCode::TOO_MANY_REQUESTS => FailureClassification::RateLimit,
+        StatusCode::PAYLOAD_TOO_LARGE => FailureClassification::ContextOverflow,
+        status if status.is_server_error() => FailureClassification::ProviderInternal,
+        status if status.is_client_error() => FailureClassification::InvalidRequest,
+        _ => FailureClassification::Unknown,
+    }
+}
+
+fn status_failure_is_retryable(status: StatusCode) -> bool {
+    status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+}
+
+fn provider_error_detail(body: &str) -> String {
+    const MAX_ERROR_DETAIL_CHARS: usize = 4_096;
+    let body = body.trim();
+    if body.is_empty() {
+        return String::new();
+    }
+    let detail = serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| {
+            value
+                .pointer("/error/message")
+                .or_else(|| value.get("message"))
+                .or_else(|| value.get("error"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| {
+            if body
+                .get(..body.len().min(32))
+                .is_some_and(|prefix| prefix.to_ascii_lowercase().contains("<html"))
+            {
+                "provider returned an HTML error response".to_string()
+            } else {
+                body.to_string()
+            }
+        });
+    detail.chars().take(MAX_ERROR_DETAIL_CHARS).collect()
+}
+
+fn is_local_media_reference(uri: &str) -> bool {
+    let uri = uri.trim().to_ascii_lowercase();
+    uri.starts_with("sidecar://") || uri.starts_with("asset://") || uri.starts_with("file://")
 }
 
 fn provider_uses_anthropic_messages(config: &RuntimeProviderConfig) -> bool {
@@ -519,6 +824,50 @@ fn provider_uses_anthropic_messages(config: &RuntimeProviderConfig) -> bool {
         let value = value.to_ascii_lowercase();
         value == "anthropic" || value == "claude" || value.contains("anthropic")
     })
+}
+
+fn responses_websocket_url(base_url: Option<&str>) -> Result<url::Url, CurrentProviderError> {
+    let http_url = provider_urls(&ModelProviderProtocol::Responses, base_url)
+        .into_iter()
+        .next()
+        .ok_or_else(|| CurrentProviderError::invalid_request("Provider 未生成 Responses 地址"))?;
+    let mut url = url::Url::parse(&http_url).map_err(|error| {
+        CurrentProviderError::invalid_request(format!(
+            "Responses WebSocket URL 无效 ({http_url}): {error}"
+        ))
+    })?;
+    let scheme = match url.scheme() {
+        "http" => "ws",
+        "https" => "wss",
+        "ws" => "ws",
+        "wss" => "wss",
+        other => {
+            return Err(CurrentProviderError::invalid_request(format!(
+                "Responses WebSocket 不支持 URL scheme: {other}"
+            )))
+        }
+    };
+    url.set_scheme(scheme).map_err(|_| {
+        CurrentProviderError::invalid_request("Responses WebSocket URL scheme 转换失败")
+    })?;
+    Ok(url)
+}
+
+fn websocket_error_status(error: &WebSocketError) -> Option<StatusCode> {
+    let WebSocketError::Http(response) = error else {
+        return None;
+    };
+    StatusCode::from_u16(response.status().as_u16()).ok()
+}
+
+fn websocket_connect_error(url: &url::Url, error: WebSocketError) -> CurrentProviderError {
+    if let Some(status) = websocket_error_status(&error) {
+        return CurrentProviderError::with_status(
+            status,
+            format!("Responses WebSocket upgrade 失败 ({url}, {status})"),
+        );
+    }
+    CurrentProviderError::transport(format!("Responses WebSocket 连接失败 ({url}): {error}"))
 }
 
 fn provider_urls(protocol: &ModelProviderProtocol, base_url: Option<&str>) -> Vec<String> {
@@ -573,14 +922,14 @@ fn endpoint_urls(base_url: &str, endpoint: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::lowering::chat_completions_request;
+    use super::lowering::{anthropic_request, chat_completions_request, responses_request};
     use super::stream::{
         drain_sse_frames, openai_chat_sse, parse_sse_frame, response_item_tool_call, responses_sse,
         sse_frames_with_idle_timeout,
     };
     use super::*;
     use crate::runtime_provider::RuntimeProviderConfig;
-    use futures::StreamExt;
+    use futures::{SinkExt, StreamExt};
     use serde_json::json;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
@@ -589,8 +938,10 @@ mod tests {
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
+        sync::oneshot,
         task::JoinHandle,
     };
+    use tokio_tungstenite::tungstenite::Message;
 
     fn config(protocol: Option<RuntimeProviderProtocol>) -> RuntimeProviderConfig {
         RuntimeProviderConfig {
@@ -602,8 +953,22 @@ mod tests {
             credential_uuid: "credential-1".to_string(),
             reasoning_effort: Some("medium".to_string()),
             protocol,
+            supports_websockets: false,
             toolshim: false,
             toolshim_model: None,
+        }
+    }
+
+    fn text_request() -> CurrentProviderRequest {
+        CurrentProviderRequest::new(vec![CurrentProviderMessage::user(vec![
+            CurrentProviderContent::Text("hello".to_string()),
+        ])])
+    }
+
+    async fn stream_error(client: &CurrentProviderClient, scenario: &str) -> CurrentProviderError {
+        match client.stream(text_request()).await {
+            Ok(_) => panic!("{scenario}: expected provider request to fail"),
+            Err(error) => error,
         }
     }
 
@@ -644,8 +1009,9 @@ mod tests {
             CurrentProviderMessage::user(vec![
                 CurrentProviderContent::Text("look".to_string()),
                 CurrentProviderContent::Image {
-                    data: "sidecar://image-1".to_string(),
+                    uri: "sidecar://image-1".to_string(),
                     media_type: "image/png".to_string(),
+                    provider_data: Some("data:image/png;base64,abc".to_string()),
                 },
             ]),
             CurrentProviderMessage::assistant(vec![CurrentProviderContent::ToolCall(
@@ -665,13 +1031,19 @@ mod tests {
         let canonical = request
             .into_canonical("gpt-5-codex")
             .expect("canonical request");
+        let media_payloads = request.media_payloads().expect("media payloads");
         let value = chat_completions_request(
             &config(Some(RuntimeProviderProtocol::ChatCompletions)),
             &canonical,
             &RuntimeReplyProviderRequestWireShape::default(),
+            &media_payloads,
         );
 
         assert_eq!(value["messages"][0]["content"][1]["type"], "image_url");
+        assert_eq!(
+            value["messages"][0]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,abc"
+        );
         assert_eq!(
             value["messages"][1]["tool_calls"][0]["function"]["name"],
             "Read"
@@ -680,19 +1052,118 @@ mod tests {
     }
 
     #[test]
-    fn canonical_request_rejects_inline_media_payloads() {
+    fn chat_lowering_preserves_generation_and_thinking_controls() {
+        let request = text_request()
+            .with_generation(GenerationOptions {
+                max_tokens: Some(128),
+                temperature: Some(0.2),
+                top_p: Some(0.8),
+                top_k: None,
+            })
+            .with_provider_options(ProviderMetadata::from([(
+                "enable_thinking".to_string(),
+                json!(false),
+            )]));
+        let canonical = request
+            .into_canonical("agnes-2.0-flash")
+            .expect("canonical request");
+        let value = chat_completions_request(
+            &config(Some(RuntimeProviderProtocol::ChatCompletions)),
+            &canonical,
+            &RuntimeReplyProviderRequestWireShape::default(),
+            &Default::default(),
+        );
+
+        assert_eq!(value["max_tokens"], 128);
+        assert_eq!(value["temperature"], 0.2);
+        assert_eq!(value["top_p"], 0.8);
+        assert_eq!(value["chat_template_kwargs"]["enable_thinking"], false);
+    }
+
+    #[test]
+    fn responses_and_anthropic_lowering_resolve_provider_media_payload() {
+        let request = CurrentProviderRequest::new(vec![CurrentProviderMessage::user(vec![
+            CurrentProviderContent::Text("look".to_string()),
+            CurrentProviderContent::Image {
+                uri: "sidecar://image-1".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: Some("data:image/png;base64,abc".to_string()),
+            },
+        ])]);
+        let canonical = request
+            .into_canonical("vision-model")
+            .expect("canonical request");
+        let media_payloads = request.media_payloads().expect("media payloads");
+
+        let responses = responses_request(
+            &config(Some(RuntimeProviderProtocol::Responses)),
+            &canonical,
+            &RuntimeReplyProviderRequestWireShape::default(),
+            &media_payloads,
+        );
+        let anthropic = anthropic_request(
+            &config(Some(RuntimeProviderProtocol::AnthropicMessages)),
+            &canonical,
+            &media_payloads,
+        );
+
+        assert_eq!(
+            responses["input"][0]["content"][1]["image_url"],
+            "data:image/png;base64,abc"
+        );
+        assert_eq!(
+            anthropic["messages"][0]["content"][1]["source"],
+            json!({
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "abc"
+            })
+        );
+    }
+
+    #[test]
+    fn canonical_request_keeps_provider_media_payload_out_of_reference() {
         let request = CurrentProviderRequest::new(vec![CurrentProviderMessage::user(vec![
             CurrentProviderContent::Image {
-                data: "data:image/png;base64,abc".to_string(),
+                uri: "sidecar://image-1".to_string(),
                 media_type: "image/png".to_string(),
+                provider_data: Some("data:image/png;base64,abc".to_string()),
+            },
+        ])]);
+
+        let canonical = request
+            .into_canonical("gpt-5-codex")
+            .expect("reference-only canonical request");
+
+        assert!(matches!(
+            &canonical.messages[0].content[0],
+            ContentPart::Media { uri, .. } if uri == "sidecar://image-1"
+        ));
+        assert!(!serde_json::to_string(&canonical)
+            .expect("serialize canonical request")
+            .contains("base64,abc"));
+    }
+
+    #[test]
+    fn local_media_reference_without_provider_payload_fails_before_network() {
+        let request = CurrentProviderRequest::new(vec![CurrentProviderMessage::user(vec![
+            CurrentProviderContent::Image {
+                uri: "sidecar://image-1".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: None,
             },
         ])]);
 
         let error = request
-            .into_canonical("gpt-5-codex")
-            .expect_err("inline media must fail closed");
+            .media_payloads()
+            .expect_err("local reference must resolve before provider request");
 
-        assert!(error.message.contains("canonical media input rejected"));
+        assert_eq!(
+            error.classification,
+            Some(FailureClassification::InvalidRequest)
+        );
+        assert!(!error.retryable);
+        assert!(error.message.contains("no provider-readable payload"));
     }
 
     #[test]
@@ -1030,18 +1501,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stream_request_retries_transient_statuses_until_success() {
+    async fn stream_request_retries_server_statuses_until_success() {
         let (base_url, requests, server) = spawn_http_fixture(vec![
-            fixture_response(
-                "503 Service Unavailable",
-                "Retry-After: 0\r\n",
-                "unavailable",
-            ),
-            fixture_response(
-                "503 Service Unavailable",
-                "Retry-After: 0\r\n",
-                "unavailable",
-            ),
+            fixture_response("501 Not Implemented", "Retry-After: 0\r\n", "first"),
+            fixture_response("505 HTTP Version Not Supported", "", "second"),
             fixture_response("200 OK", "", ""),
         ])
         .await;
@@ -1052,18 +1515,198 @@ mod tests {
             Client::builder().no_proxy().build().expect("HTTP client"),
         );
 
-        let response = client
-            .send_stream_request(
-                &ModelProviderProtocol::ChatCompletions,
-                json!({ "stream": true }),
-                &RuntimeReplyProviderRequestWireShape::default(),
-            )
+        let _stream = client
+            .stream(text_request())
             .await
             .expect("third attempt succeeds");
 
-        assert_eq!(response.status(), StatusCode::OK);
         server.await.expect("fixture server");
         assert_eq!(requests.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn responses_websocket_capability_uses_upgrade_transport() {
+        let (base_url, capture, server) = spawn_websocket_fixture().await;
+        let mut runtime_config = config(Some(RuntimeProviderProtocol::Responses));
+        runtime_config.base_url = Some(base_url);
+        runtime_config.supports_websockets = true;
+        let client = CurrentProviderClient::with_client(
+            runtime_config,
+            Client::builder().no_proxy().build().expect("HTTP client"),
+        );
+
+        let events = client
+            .stream(text_request())
+            .await
+            .expect("fixture accepts provider request")
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("websocket events");
+        let capture = capture.await.expect("captured websocket request");
+
+        server.await.expect("fixture server");
+        assert_eq!(capture.method, "GET");
+        assert_eq!(capture.path, "/v1/responses");
+        assert_eq!(
+            capture.beta.as_deref(),
+            Some("responses_websockets=2026-02-06")
+        );
+        assert_eq!(capture.payload["type"], "response.create");
+        assert!(capture.payload.get("stream").is_none());
+        assert!(events.iter().any(|event| matches!(
+            event,
+            CanonicalLlmEvent::Finish {
+                response_id: Some(response_id),
+                ..
+            } if response_id == "resp-ws-1"
+        )));
+    }
+
+    #[tokio::test]
+    async fn responses_websocket_426_fallback_is_sticky_for_client_session() {
+        let body = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-http\",\"output\":[]}}\n\n";
+        let responses = vec![
+            fixture_response("426 Upgrade Required", "", "upgrade unsupported"),
+            fixture_response("200 OK", "Content-Type: text/event-stream\r\n", body),
+            fixture_response("200 OK", "Content-Type: text/event-stream\r\n", body),
+        ];
+        let (base_url, methods, server) = spawn_http_method_fixture(responses).await;
+        let mut runtime_config = config(Some(RuntimeProviderProtocol::Responses));
+        runtime_config.base_url = Some(base_url);
+        runtime_config.supports_websockets = true;
+        let client = CurrentProviderClient::with_client(
+            runtime_config,
+            Client::builder().no_proxy().build().expect("HTTP client"),
+        );
+
+        for _ in 0..2 {
+            client
+                .stream(text_request())
+                .await
+                .expect("HTTP fallback stream")
+                .collect::<Vec<_>>()
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()
+                .expect("HTTP fallback events");
+        }
+
+        server.await.expect("fixture server");
+        assert_eq!(
+            methods.lock().expect("method capture").as_slice(),
+            ["GET", "POST", "POST"]
+        );
+        assert!(!client.responses_websocket_enabled());
+    }
+
+    #[tokio::test]
+    async fn responses_without_websocket_capability_stays_on_http() {
+        let body = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-http\",\"output\":[]}}\n\n";
+        let (base_url, methods, server) = spawn_http_method_fixture(vec![fixture_response(
+            "200 OK",
+            "Content-Type: text/event-stream\r\n",
+            body,
+        )])
+        .await;
+        let mut runtime_config = config(Some(RuntimeProviderProtocol::Responses));
+        runtime_config.base_url = Some(base_url);
+        let client = CurrentProviderClient::with_client(
+            runtime_config,
+            Client::builder().no_proxy().build().expect("HTTP client"),
+        );
+
+        client
+            .stream(text_request())
+            .await
+            .expect("HTTP stream")
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("HTTP events");
+
+        server.await.expect("fixture server");
+        assert_eq!(methods.lock().expect("method capture").as_slice(), ["POST"]);
+    }
+
+    #[tokio::test]
+    async fn responses_websocket_retry_exhaustion_replays_over_http() {
+        let body = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-http\",\"output\":[]}}\n\n";
+        let mut responses = (0..MAX_STREAM_REQUEST_ATTEMPTS)
+            .map(|_| fixture_response("500 Internal Server Error", "", "upgrade failed"))
+            .collect::<Vec<_>>();
+        responses.push(fixture_response(
+            "200 OK",
+            "Content-Type: text/event-stream\r\n",
+            body,
+        ));
+        let (base_url, methods, server) = spawn_http_method_fixture(responses).await;
+        let mut runtime_config = config(Some(RuntimeProviderProtocol::Responses));
+        runtime_config.base_url = Some(base_url);
+        runtime_config.supports_websockets = true;
+        let client = CurrentProviderClient::with_client(
+            runtime_config,
+            Client::builder().no_proxy().build().expect("HTTP client"),
+        );
+
+        client
+            .stream(text_request())
+            .await
+            .expect("HTTP replay stream")
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("HTTP replay events");
+
+        server.await.expect("fixture server");
+        let methods = methods.lock().expect("method capture");
+        assert_eq!(
+            methods
+                .iter()
+                .filter(|method| method.as_str() == "GET")
+                .count(),
+            usize::from(MAX_STREAM_REQUEST_ATTEMPTS)
+        );
+        assert_eq!(methods.last().map(String::as_str), Some("POST"));
+    }
+
+    #[tokio::test]
+    async fn responses_websocket_close_before_output_replays_over_http() {
+        let (base_url, methods, server) = spawn_websocket_drop_then_http_fixture().await;
+        let mut runtime_config = config(Some(RuntimeProviderProtocol::Responses));
+        runtime_config.base_url = Some(base_url);
+        runtime_config.supports_websockets = true;
+        let client = CurrentProviderClient::with_client(
+            runtime_config,
+            Client::builder().no_proxy().build().expect("HTTP client"),
+        );
+
+        let events = client
+            .stream(text_request())
+            .await
+            .expect("websocket stream")
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("HTTP replay events");
+
+        server.await.expect("fixture server");
+        assert_eq!(
+            methods.lock().expect("method capture").as_slice(),
+            ["GET", "POST"]
+        );
+        assert!(events.iter().any(|event| matches!(
+            event,
+            CanonicalLlmEvent::Finish {
+                response_id: Some(response_id),
+                ..
+            } if response_id == "resp-http-replay"
+        )));
+        assert!(!client.responses_websocket_enabled());
     }
 
     #[tokio::test]
@@ -1081,17 +1724,72 @@ mod tests {
             Client::builder().no_proxy().build().expect("HTTP client"),
         );
 
-        let error = client
-            .send_stream_request(
-                &ModelProviderProtocol::ChatCompletions,
-                json!({ "stream": true }),
-                &RuntimeReplyProviderRequestWireShape::default(),
-            )
-            .await
-            .expect_err("bad request must fail immediately");
+        let error = stream_error(&client, "bad request must fail immediately").await;
 
         assert_eq!(error.status, Some(StatusCode::BAD_REQUEST.as_u16()));
+        assert_eq!(
+            error.classification,
+            Some(FailureClassification::InvalidRequest)
+        );
+        assert!(!error.retryable);
         assert!(error.message.contains("invalid model"));
+        server.await.expect("fixture server");
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn stream_request_classifies_authentication_without_retrying() {
+        let (base_url, requests, server) = spawn_http_fixture(vec![fixture_response(
+            "401 Unauthorized",
+            "",
+            r#"{"error":{"message":"invalid token"}}"#,
+        )])
+        .await;
+        let mut runtime_config = config(Some(RuntimeProviderProtocol::ChatCompletions));
+        runtime_config.base_url = Some(base_url);
+        let client = CurrentProviderClient::with_client(
+            runtime_config,
+            Client::builder().no_proxy().build().expect("HTTP client"),
+        );
+
+        let error = stream_error(&client, "authentication failure must remain visible").await;
+
+        assert_eq!(error.status, Some(StatusCode::UNAUTHORIZED.as_u16()));
+        assert_eq!(
+            error.classification,
+            Some(FailureClassification::Authentication)
+        );
+        assert!(!error.retryable);
+        assert!(error.message.contains("invalid token"));
+        server.await.expect("fixture server");
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn stream_request_classifies_rate_limit_without_request_retry() {
+        let (base_url, requests, server) = spawn_http_fixture(vec![fixture_response(
+            "429 Too Many Requests",
+            "Retry-After: 0\r\n",
+            r#"{"error":{"message":"rate limited"}}"#,
+        )])
+        .await;
+        let mut runtime_config = config(Some(RuntimeProviderProtocol::ChatCompletions));
+        runtime_config.base_url = Some(base_url);
+        let client = CurrentProviderClient::with_client(
+            runtime_config,
+            Client::builder().no_proxy().build().expect("HTTP client"),
+        );
+
+        let error = stream_error(
+            &client,
+            "rate limit must remain visible without request retry",
+        )
+        .await;
+
+        assert_eq!(error.status, Some(StatusCode::TOO_MANY_REQUESTS.as_u16()));
+        assert_eq!(error.classification, Some(FailureClassification::RateLimit));
+        assert!(error.retryable);
+        assert!(error.message.contains("rate limited"));
         server.await.expect("fixture server");
         assert_eq!(requests.load(Ordering::SeqCst), 1);
     }
@@ -1113,16 +1811,14 @@ mod tests {
             Client::builder().no_proxy().build().expect("HTTP client"),
         );
 
-        let error = client
-            .send_stream_request(
-                &ModelProviderProtocol::ChatCompletions,
-                json!({ "stream": true }),
-                &RuntimeReplyProviderRequestWireShape::default(),
-            )
-            .await
-            .expect_err("all transient failures must remain visible");
+        let error = stream_error(&client, "all transient failures must remain visible").await;
 
         assert_eq!(error.status, Some(StatusCode::SERVICE_UNAVAILABLE.as_u16()));
+        assert_eq!(
+            error.classification,
+            Some(FailureClassification::ProviderInternal)
+        );
+        assert!(error.retryable);
         assert!(error.message.contains("final"));
         server.await.expect("fixture server");
         assert_eq!(
@@ -1190,7 +1886,148 @@ mod tests {
         (format!("http://{address}"), requests, server)
     }
 
+    #[derive(Debug)]
+    struct WebSocketCapture {
+        method: String,
+        path: String,
+        beta: Option<String>,
+        payload: Value,
+    }
+
+    async fn spawn_websocket_fixture(
+    ) -> (String, oneshot::Receiver<WebSocketCapture>, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind websocket fixture");
+        let address = listener.local_addr().expect("websocket fixture address");
+        let (capture_tx, capture_rx) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept websocket request");
+            let handshake = Arc::new(std::sync::Mutex::new(None));
+            let handshake_capture = Arc::clone(&handshake);
+            let mut socket = tokio_tungstenite::accept_hdr_async(stream, move |request: &tokio_tungstenite::tungstenite::handshake::server::Request, response: tokio_tungstenite::tungstenite::handshake::server::Response| {
+                *handshake_capture.lock().expect("handshake capture") = Some((
+                    request.method().to_string(),
+                    request.uri().path().to_string(),
+                    request.headers().get("OpenAI-Beta").and_then(|value| value.to_str().ok()).map(str::to_string),
+                ));
+                Ok(response)
+            })
+            .await
+            .expect("websocket handshake");
+            let request = socket
+                .next()
+                .await
+                .expect("websocket request frame")
+                .expect("valid websocket request frame");
+            let Message::Text(request) = request else {
+                panic!("expected text websocket request");
+            };
+            let payload = serde_json::from_str(&request).expect("websocket request json");
+            let (method, path, beta) = handshake
+                .lock()
+                .expect("handshake capture")
+                .take()
+                .expect("captured websocket handshake");
+            let _ = capture_tx.send(WebSocketCapture {
+                method,
+                path,
+                beta,
+                payload,
+            });
+            socket
+                .send(Message::Text(
+                    json!({
+                        "type": "response.completed",
+                        "response": { "id": "resp-ws-1", "output": [] }
+                    })
+                    .to_string(),
+                ))
+                .await
+                .expect("send websocket response");
+        });
+        (format!("http://{address}"), capture_rx, server)
+    }
+
+    async fn spawn_http_method_fixture(
+        responses: Vec<String>,
+    ) -> (String, Arc<std::sync::Mutex<Vec<String>>>, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind method fixture");
+        let address = listener.local_addr().expect("method fixture address");
+        let methods = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let method_capture = Arc::clone(&methods);
+        let server = tokio::spawn(async move {
+            for response in responses {
+                let (mut stream, _) = listener.accept().await.expect("accept fixture request");
+                let headers = read_http_headers_text(&mut stream).await;
+                let method = headers
+                    .lines()
+                    .next()
+                    .and_then(|line| line.split_whitespace().next())
+                    .unwrap_or_default()
+                    .to_string();
+                method_capture.lock().expect("method capture").push(method);
+                stream
+                    .write_all(response.as_bytes())
+                    .await
+                    .expect("write fixture response");
+                stream.shutdown().await.expect("close fixture response");
+            }
+        });
+        (format!("http://{address}"), methods, server)
+    }
+
+    async fn spawn_websocket_drop_then_http_fixture(
+    ) -> (String, Arc<std::sync::Mutex<Vec<String>>>, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind websocket replay fixture");
+        let address = listener
+            .local_addr()
+            .expect("websocket replay fixture address");
+        let methods = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let method_capture = Arc::clone(&methods);
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept websocket request");
+            let first_capture = Arc::clone(&method_capture);
+            let socket = tokio_tungstenite::accept_hdr_async(stream, move |request: &tokio_tungstenite::tungstenite::handshake::server::Request, response: tokio_tungstenite::tungstenite::handshake::server::Response| {
+                first_capture
+                    .lock()
+                    .expect("method capture")
+                    .push(request.method().to_string());
+                Ok(response)
+            })
+            .await
+            .expect("websocket handshake");
+            drop(socket);
+
+            let (mut stream, _) = listener.accept().await.expect("accept HTTP replay");
+            let headers = read_http_headers_text(&mut stream).await;
+            let method = headers
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().next())
+                .unwrap_or_default()
+                .to_string();
+            method_capture.lock().expect("method capture").push(method);
+            let body = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-http-replay\",\"output\":[]}}\n\n";
+            let response = fixture_response("200 OK", "Content-Type: text/event-stream\r\n", body);
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("write HTTP replay response");
+            stream.shutdown().await.expect("close HTTP replay response");
+        });
+        (format!("http://{address}"), methods, server)
+    }
+
     async fn read_http_headers(stream: &mut tokio::net::TcpStream) {
+        let _ = read_http_headers_text(stream).await;
+    }
+
+    async fn read_http_headers_text(stream: &mut tokio::net::TcpStream) -> String {
         let mut received = Vec::new();
         let mut buffer = [0_u8; 1024];
         while !received.windows(4).any(|window| window == b"\r\n\r\n") {
@@ -1199,10 +2036,11 @@ mod tests {
                 .await
                 .expect("read fixture request");
             if read == 0 {
-                return;
+                break;
             }
             received.extend_from_slice(&buffer[..read]);
         }
+        String::from_utf8_lossy(&received).into_owned()
     }
 
     fn fixture_response(status: &str, extra_headers: &str, body: &str) -> String {

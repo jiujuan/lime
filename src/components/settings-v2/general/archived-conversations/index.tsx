@@ -193,7 +193,13 @@ export function ArchivedConversationsSettings() {
         </div>
 
         {loading ? (
-          <div className="flex min-h-[220px] items-center justify-center gap-2 px-5 py-10 text-sm text-slate-500">
+          <div
+            className="flex min-h-[220px] items-center justify-center gap-2 px-5 py-10 text-sm text-slate-500"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            data-testid="settings-archived-conversations-loading"
+          >
             <RefreshCw className="h-4 w-4 animate-spin" />
             {t(
               "settings.archivedConversations.status.loading",
@@ -201,19 +207,29 @@ export function ArchivedConversationsSettings() {
             )}
           </div>
         ) : error ? (
-          <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 px-5 py-10 text-center">
+          <div
+            className="flex min-h-[220px] flex-col items-center justify-center gap-3 px-5 py-10 text-center"
+            role="alert"
+            data-testid="settings-archived-conversations-error"
+          >
             <p className="text-sm text-rose-600">{error}</p>
             <button
               type="button"
               className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               onClick={() => void loadArchivedSessions()}
+              data-testid="settings-archived-conversations-retry"
             >
               <RefreshCw className="h-4 w-4" />
               {t("settings.archivedConversations.action.retry", "重试")}
             </button>
           </div>
         ) : sortedSessions.length === 0 ? (
-          <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 px-5 py-10 text-center">
+          <div
+            className="flex min-h-[220px] flex-col items-center justify-center gap-3 px-5 py-10 text-center"
+            role="status"
+            aria-live="polite"
+            data-testid="settings-archived-conversations-empty"
+          >
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500">
               <Archive className="h-5 w-5" />
             </span>

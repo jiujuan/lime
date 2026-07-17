@@ -413,3 +413,5 @@ fn backend_error(error: impl std::fmt::Display) -> RuntimeCoreError {
 mod initialization_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod websocket_fallback_tests;

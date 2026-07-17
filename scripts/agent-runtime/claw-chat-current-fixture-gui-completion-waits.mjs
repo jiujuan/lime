@@ -48,6 +48,41 @@ export function isGuiCanceledSnapshotReady(
   return snapshot.hasStoppedCopy === true;
 }
 
+export function shouldExpandCompactApprovalTimeline(
+  snapshot,
+  { requireApprovalRecord = false } = {},
+) {
+  return (
+    requireApprovalRecord &&
+    Number(snapshot?.approvalRecordShape?.recordCount || 0) === 0 &&
+    Number(snapshot?.compactTimelinePreviewCount || 0) > 0
+  );
+}
+
+async function expandCompactApprovalTimeline(page, prompt) {
+  return await evaluatePageSnapshot(
+    page,
+    (expectedPrompt) => {
+      const turnGroups = Array.from(
+        document.querySelectorAll('[data-testid="message-turn-group"]'),
+      );
+      const promptTurnGroup = [...turnGroups]
+        .reverse()
+        .find((group) => (group.innerText || "").includes(expectedPrompt));
+      const scope = promptTurnGroup ?? document;
+      const preview = scope.querySelector(
+        '[data-testid="message-list-historical-timeline-preview:leading"]',
+      );
+      if (!(preview instanceof HTMLElement)) {
+        return false;
+      }
+      preview.click();
+      return true;
+    },
+    prompt,
+  );
+}
+
 export async function waitForGuiChatCompleted(
   page,
   options,
@@ -163,6 +198,9 @@ export async function waitForGuiChatCompleted(
           );
         });
         const approvalRecordRoot = scopedTurnGroup ?? messageListScope;
+        const compactTimelinePreviewCount = approvalRecordRoot.querySelectorAll(
+          '[data-testid="message-list-historical-timeline-preview:leading"]',
+        ).length;
         const approvalRecords = Array.from(
           approvalRecordRoot.querySelectorAll(
             '[data-testid="timeline-approval-record"]',
@@ -335,6 +373,7 @@ export async function waitForGuiChatCompleted(
             ),
             texts: approvalRecords.map((record) => record.text),
           },
+          compactTimelinePreviewCount,
           planUiAbsentWithoutProposedPlan:
             planOwners.length === 0 &&
             planDecisionVisible === false &&
@@ -378,16 +417,30 @@ export async function waitForGuiChatCompleted(
       requiredAssistantVisibleTexts.length > 0
         ? snapshot.hasAssistantSummary && hasRequiredAssistantVisibleTexts
         : snapshot.hasAssistantSummary || snapshot.hasDoneText;
-    if (
+    const completionReadyWithoutApprovalRecord =
       snapshot.hasPrompt &&
       hasExpectedAssistantContent &&
       snapshot.textareaVisible &&
       snapshot.textareaDisabled === false &&
       snapshot.stopButtonVisible === false &&
-      (!requireApprovalRecord ||
-        Number(snapshot.approvalRecordShape?.recordCount || 0) > 0) &&
       scopedDedupeGuardHits.every((hit) => hit.occurrences <= 1) &&
-      scopedDisallowedVisibleTextHits.every((hit) => hit.occurrences === 0)
+      scopedDisallowedVisibleTextHits.every((hit) => hit.occurrences === 0);
+    if (
+      completionReadyWithoutApprovalRecord &&
+      shouldExpandCompactApprovalTimeline(snapshot, {
+        requireApprovalRecord,
+      })
+    ) {
+      const expanded = await expandCompactApprovalTimeline(page, prompt);
+      if (expanded) {
+        await sleep(options.intervalMs);
+        continue;
+      }
+    }
+    if (
+      completionReadyWithoutApprovalRecord &&
+      (!requireApprovalRecord ||
+        Number(snapshot.approvalRecordShape?.recordCount || 0) > 0)
     ) {
       return snapshot;
     }
@@ -954,7 +1007,11 @@ export async function waitForStopButtonVisibleAndClick(
 export async function waitForGuiChatCanceled(
   page,
   options,
-  { prompt = NEWS_PROMPT, partialText = "", requireApprovalRecord = false } = {},
+  {
+    prompt = NEWS_PROMPT,
+    partialText = "",
+    requireApprovalRecord = false,
+  } = {},
 ) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -1058,6 +1115,9 @@ export async function waitForGuiChatCanceled(
             ),
             texts: approvalRecords.map((record) => record.text),
           },
+          compactTimelinePreviewCount: document.querySelectorAll(
+            '[data-testid="message-list-historical-timeline-preview:leading"]',
+          ).length,
           bodyText: text,
         };
       },
@@ -1068,6 +1128,18 @@ export async function waitForGuiChatCanceled(
       continue;
     }
     lastSnapshot = snapshot;
+    if (
+      isGuiCanceledSnapshotReady(snapshot, { partialText }) &&
+      shouldExpandCompactApprovalTimeline(snapshot, {
+        requireApprovalRecord,
+      })
+    ) {
+      const expanded = await expandCompactApprovalTimeline(page, prompt);
+      if (expanded) {
+        await sleep(options.intervalMs);
+        continue;
+      }
+    }
     if (
       isGuiCanceledSnapshotReady(snapshot, {
         partialText,

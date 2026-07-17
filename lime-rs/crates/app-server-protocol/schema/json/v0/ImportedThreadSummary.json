@@ -10,6 +10,7 @@
       "enum": [
         "conflict",
         "imported",
+        "importing",
         "not_imported"
       ],
       "type": "string"
@@ -28,6 +29,12 @@
       ]
     },
     "cwd": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "importJobId": {
       "type": [
         "null",
         "string"

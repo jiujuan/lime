@@ -10,7 +10,9 @@ import type {
   SiteSavedContentTarget,
 } from "../types";
 
-type MessageTimelineProjection = NonNullable<MessageListRenderGroup["timeline"]>;
+type MessageTimelineProjection = NonNullable<
+  MessageListRenderGroup["timeline"]
+>;
 
 interface MessageTimelineSectionProps {
   actionRequests: Message["actionRequests"] | undefined;
@@ -68,6 +70,8 @@ export function MessageTimelineSection({
         items={timeline.items}
         placement={placement}
         detailsDeferred={detailsDeferred}
+        startedAt={timeline.turn.started_at}
+        completedAt={timeline.turn.completed_at}
         onExpand={() => onExpandPreview?.()}
       />
     );

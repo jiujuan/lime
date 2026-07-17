@@ -248,6 +248,10 @@
     },
     {
       "kind": "request",
+      "method": "conversationImport/job/read"
+    },
+    {
+      "kind": "request",
       "method": "conversationImport/source/scan"
     },
     {
@@ -1493,6 +1497,12 @@
       "ConnectRelayApiKeySaveParams",
       "ConnectRelayApiKeySaveResponse",
       "ConversationImportFidelitySummary",
+      "ConversationImportJob",
+      "ConversationImportJobPhase",
+      "ConversationImportJobProgress",
+      "ConversationImportJobReadParams",
+      "ConversationImportJobReadResponse",
+      "ConversationImportJobStatus",
       "ConversationImportPreviewDryRun",
       "ConversationImportPreviewEvent",
       "ConversationImportPreviewMessage",
@@ -1505,6 +1515,7 @@
       "ConversationImportSourceSummary",
       "ConversationImportThreadCommitParams",
       "ConversationImportThreadCommitResponse",
+      "ConversationImportThreadCommitStartResponse",
       "ConversationImportThreadPreviewParams",
       "ConversationImportThreadPreviewResponse",
       "ConversationImportThreadStatus",

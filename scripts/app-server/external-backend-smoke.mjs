@@ -66,7 +66,7 @@ async function main() {
 
     connected = await connectAppServerSidecar(
       {
-        ...stdioSidecar(binaryPath, policyPath),
+        ...stdioSidecar(binaryPath, policyPath, path.join(tempDir, "data")),
         backendMode: "external",
         backendCommand: process.execPath,
         backendArgs: [backendPath],

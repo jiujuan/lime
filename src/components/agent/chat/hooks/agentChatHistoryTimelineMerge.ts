@@ -2,7 +2,11 @@ import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import type { Message } from "../types";
 import { mergeAdjacentAssistantMessages } from "./agentChatHistoryAdjacentMerge";
 import { contentPartContainsProcess } from "./agentChatHistoryProcess";
-import { dedupeAdjacentHistoryMessages, messageImageSignature, resolveMessageTimestampMs } from "./agentChatHistorySignatures";
+import {
+  dedupeAdjacentHistoryMessages,
+  messageImageSignature,
+  resolveMessageTimestampMs,
+} from "./agentChatHistorySignatures";
 import { normalizeSignatureText } from "./agentChatHistoryPrimitives";
 import { hydrateSessionDetailMessagesFromThreadItems } from "./agentChatHistoryThreadItems";
 import { hydrateSessionDetailMessagesFromTurns } from "./agentChatHistoryTimelineBasics";
@@ -33,11 +37,31 @@ export function mergeMissingUserMessagesFromTimeline(
   detail: AgentSessionDetail,
   topicId: string,
 ): Message[] {
-  const buildFallbackUserSignature = (message: Message): string =>
-    [
-      normalizeSignatureText(message.content || ""),
-      messageImageSignature(message.images),
-    ].join("::");
+  const buildFallbackUserSignatures = (message: Message): string[] => {
+    const signatures: string[] = [];
+    const runtimeTurnId = message.runtimeTurnId?.trim();
+    if (runtimeTurnId) {
+      signatures.push(`turn:${runtimeTurnId}`);
+    }
+    const normalizedContent = normalizeSignatureText(message.content || "");
+    signatures.push(
+      `content-images:${normalizedContent}::${messageImageSignature(message.images)}`,
+    );
+    const timestampMs = resolveMessageTimestampMs(message);
+    if (timestampMs !== null) {
+      signatures.push(`content-time:${normalizedContent}::${timestampMs}`);
+    }
+    return signatures;
+  };
+  const hasKnownSignature = (
+    signatures: readonly string[],
+    known: ReadonlySet<string>,
+  ): boolean => signatures.some((signature) => known.has(signature));
+  const addSignatures = (signatures: readonly string[], known: Set<string>) => {
+    for (const signature of signatures) {
+      known.add(signature);
+    }
+  };
   const fallbackUserMessages: Message[] = [];
   const seenFallbackUserSignatures = new Set<string>();
   for (const candidate of [
@@ -47,11 +71,11 @@ export function mergeMissingUserMessagesFromTimeline(
     if (candidate.role !== "user") {
       continue;
     }
-    const signature = buildFallbackUserSignature(candidate);
-    if (seenFallbackUserSignatures.has(signature)) {
+    const signatures = buildFallbackUserSignatures(candidate);
+    if (hasKnownSignature(signatures, seenFallbackUserSignatures)) {
       continue;
     }
-    seenFallbackUserSignatures.add(signature);
+    addSignatures(signatures, seenFallbackUserSignatures);
     fallbackUserMessages.push(candidate);
   }
   if (fallbackUserMessages.length === 0) {
@@ -61,15 +85,15 @@ export function mergeMissingUserMessagesFromTimeline(
   const knownUserSignatures = new Set(
     messages
       .filter((message) => message.role === "user")
-      .map(buildFallbackUserSignature),
+      .flatMap(buildFallbackUserSignatures),
   );
   const uniqueFallbackUserMessages = fallbackUserMessages.filter(
     (fallbackMessage) => {
-      const signature = buildFallbackUserSignature(fallbackMessage);
-      if (knownUserSignatures.has(signature)) {
+      const signatures = buildFallbackUserSignatures(fallbackMessage);
+      if (hasKnownSignature(signatures, knownUserSignatures)) {
         return false;
       }
-      knownUserSignatures.add(signature);
+      addSignatures(signatures, knownUserSignatures);
       return true;
     },
   );

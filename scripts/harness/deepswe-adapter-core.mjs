@@ -344,8 +344,41 @@ function turnStatus(turn) {
   return normalizeString(turn?.status).toLowerCase();
 }
 
+function isAppServerMessageTimeout(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /timed out waiting for app-server message after \d+ms/i.test(message);
+}
+
 function eventType(event) {
   return normalizeString(event?.type || event?.eventType);
+}
+
+function normalizedStringArray(value) {
+  return Array.isArray(value)
+    ? [...new Set(value.map(normalizeString).filter(Boolean))].sort()
+    : [];
+}
+
+function providerRequestToolSnapshots(events) {
+  return events
+    .filter((event) => eventType(event) === "provider.request.started")
+    .map((event) => {
+      const payload = isRecord(event?.payload) ? event.payload : {};
+      const runtimeEvent = isRecord(payload.runtimeEvent)
+        ? payload.runtimeEvent
+        : payload;
+      return {
+        sequence: nonNegativeInteger(event?.sequence),
+        timestamp: normalizeString(event?.timestamp) || null,
+        attempt: positiveInteger(runtimeEvent?.attempt),
+        toolNames: normalizedStringArray(
+          runtimeEvent?.tool_names ??
+            runtimeEvent?.toolNames ??
+            payload?.tool_names ??
+            payload?.toolNames,
+        ),
+      };
+    });
 }
 
 function providerStepUsage(payload) {
@@ -407,6 +440,12 @@ export function providerStepsFromEvidence(
   const events = Array.isArray(evidenceExport?.events)
     ? evidenceExport.events
     : [];
+  const toolSnapshots = providerRequestToolSnapshots(events);
+  const toolNamesByAttempt = new Map(
+    toolSnapshots
+      .filter((snapshot) => snapshot.attempt != null)
+      .map((snapshot) => [snapshot.attempt, snapshot.toolNames]),
+  );
   const steps = events
     .filter((event) => eventType(event) === "provider.step")
     .map((event) => {
@@ -438,6 +477,8 @@ export function providerStepsFromEvidence(
               runtimeEvent?.tool_call_count ?? runtimeEvent?.toolCallCount,
             ) ?? 0,
         },
+        toolNames:
+          toolNamesByAttempt.get(positiveInteger(runtimeEvent?.attempt)) ?? [],
         usage: providerStepUsage(payload),
       };
     });
@@ -470,6 +511,12 @@ export function providerStepsFromEvidence(
   if (tokenLimit != null && usage.budgetTokens >= tokenLimit) {
     reasons.push("token_budget");
   }
+  const snapshotsWithTools = toolSnapshots.filter(
+    (snapshot) => snapshot.toolNames.length > 0,
+  );
+  const uniqueToolNames = [
+    ...new Set(snapshotsWithTools.flatMap((snapshot) => snapshot.toolNames)),
+  ].sort();
   return {
     schemaVersion: "deepswe-provider-steps-v1",
     generatedAt: new Date().toISOString(),
@@ -493,6 +540,25 @@ export function providerStepsFromEvidence(
           ? "complete"
           : "partial",
     usage,
+    toolCatalog: {
+      status:
+        toolSnapshots.length === 0
+          ? "missing"
+          : snapshotsWithTools.length === toolSnapshots.length
+            ? "complete"
+            : "partial",
+      requestCount: toolSnapshots.length,
+      requestsWithTools: snapshotsWithTools.length,
+      uniqueToolNames,
+      applyPatchAvailableOnEveryRequest:
+        snapshotsWithTools.length === 0
+          ? null
+          : snapshotsWithTools.length === toolSnapshots.length &&
+            snapshotsWithTools.every((snapshot) =>
+              snapshot.toolNames.includes("apply_patch"),
+            ),
+      requests: toolSnapshots,
+    },
     steps,
   };
 }
@@ -776,6 +842,13 @@ export async function runCurrentChainTask({
             source: "harness:deepswe:run",
             scenarioId: "DSW-01",
             taskId: task.id,
+            provider_budget:
+              budgets.maxProviderSteps == null && budgets.tokenBudget == null
+                ? undefined
+                : {
+                    max_provider_steps: budgets.maxProviderSteps,
+                    token_budget: budgets.tokenBudget,
+                  },
           },
         },
       },
@@ -814,7 +887,7 @@ export async function runCurrentChainTask({
     }
     if (
       !budgetCancellation &&
-      (budgets.maxProviderSteps != null || budgets.tokenBudget != null) &&
+      budgets.tokenBudget != null &&
       Date.now() >= nextBudgetEvidenceAt
     ) {
       nextBudgetEvidenceAt = Date.now() + evidenceIntervalMs;
@@ -827,12 +900,12 @@ export async function runCurrentChainTask({
           includeEvidencePack: false,
         });
         const providerSteps = providerStepsFromEvidence(evidence, budgets);
-        if (providerSteps.budgets.exhausted) {
+        if (providerSteps.budgets.reasons.includes("token_budget")) {
           const requestedAt = new Date().toISOString();
           await rpc.cancelTurn(options, { sessionId, turnId });
           budgetCancellation = {
             requestedAt,
-            reasons: providerSteps.budgets.reasons,
+            reasons: ["token_budget"],
             stepCount: providerSteps.stepCount,
             usage: providerSteps.usage,
           };
@@ -845,8 +918,49 @@ export async function runCurrentChainTask({
     await rpc.sleep(options.intervalMs);
   }
 
-  const status = turnStatus(turn);
-  const terminal = Boolean(turn && TERMINAL_TURN_STATUSES.has(status));
+  let status = turnStatus(turn);
+  let terminal = Boolean(turn && TERMINAL_TURN_STATUSES.has(status));
+  const timeoutReason =
+    !terminal && !budgetCancellation
+      ? Date.now() - pollStartedAt >= options.timeoutMs
+        ? "wall_timeout"
+        : isAppServerMessageTimeout(startTurnError)
+          ? "turn_start_timeout"
+          : null
+      : null;
+  let timeoutCancellation = null;
+  if (timeoutReason) {
+    const requestedAt = new Date().toISOString();
+    let cancellationError = null;
+    try {
+      await rpc.cancelTurn(options, { sessionId, turnId });
+      const cancelDeadline = Date.now() + 10_000;
+      while (Date.now() < cancelDeadline) {
+        [sessionRead, threadRead] = await Promise.all([
+          rpc.invoke(options, "agentSession/read", {
+            sessionId,
+            historyLimit: 500,
+          }),
+          rpc.readThread(options, sessionId, { historyLimit: 500 }),
+        ]);
+        turn = turnFromSessionRead(sessionRead, turnId);
+        status = turnStatus(turn);
+        terminal = Boolean(turn && TERMINAL_TURN_STATUSES.has(status));
+        if (terminal) break;
+        await rpc.sleep(options.intervalMs);
+      }
+    } catch (error) {
+      cancellationError =
+        error instanceof Error ? error.message : String(error || "unknown");
+    }
+    timeoutCancellation = {
+      requestedAt,
+      reason: timeoutReason,
+      terminalStatus: terminal ? status : null,
+      settledAt: terminal ? new Date().toISOString() : null,
+      error: cancellationError,
+    };
+  }
   const evidenceCapture = await writeCurrentChainEvidence({
     rpc,
     options,
@@ -859,19 +973,26 @@ export async function runCurrentChainTask({
     startTurnError,
     budgets,
   });
+  if (
+    !budgetCancellation &&
+    evidenceCapture.providerSteps?.budgets?.reasons?.includes("token_budget")
+  ) {
+    budgetCancellation = {
+      requestedAt: null,
+      reasons: ["token_budget"],
+      stepCount: evidenceCapture.providerSteps.stepCount,
+      usage: evidenceCapture.providerSteps.usage,
+    };
+  }
   const finishedAt = new Date().toISOString();
-  if (!terminal) {
+  if (timeoutReason || !terminal) {
     let message;
-    if (budgetCancellation) {
+    if (timeoutReason) {
+      message = `DeepSWE turn timeout: session=${sessionId} turn=${turnId} status=${status || "missing"} cancelStatus=${timeoutCancellation?.terminalStatus || (timeoutCancellation?.error ? "failed" : "pending")}`;
+    } else if (budgetCancellation) {
       message = `DeepSWE provider budget exhausted: reasons=${budgetCancellation.reasons.join(",")} steps=${budgetCancellation.stepCount} tokens=${budgetCancellation.usage.budgetTokens}`;
     } else if (startTurnError) {
-      if (
-        /timed out waiting for app-server message after \d+ms/i.test(
-          startTurnError instanceof Error
-            ? startTurnError.message
-            : String(startTurnError),
-        )
-      ) {
+      if (isAppServerMessageTimeout(startTurnError)) {
         message = `DeepSWE turn timeout: session=${sessionId} turn=${turnId} status=${status || "in_progress"}`;
       } else {
         message =
@@ -884,7 +1005,12 @@ export async function runCurrentChainTask({
     }
     const error = new Error(message);
     error.currentChain = {
-      status: startTurnError ? status || "failed" : "timeout",
+      status: timeoutReason
+        ? "timeout"
+        : startTurnError
+          ? status || "failed"
+          : "timeout",
+      terminalStatus: terminal ? status : null,
       sessionId,
       turnId,
       workspace,
@@ -897,9 +1023,10 @@ export async function runCurrentChainTask({
       startedAt,
       finishedAt,
       terminalMessage: message,
-      evidenceCapture: "partial",
+      evidenceCapture: terminal ? "terminal" : "partial",
       providerSteps: evidenceCapture.providerSteps,
       budgetCancellation,
+      timeoutCancellation,
       budgetEvidenceError: budgetEvidenceError || null,
     };
     throw error;
@@ -1107,6 +1234,8 @@ export function classifyFailure(stage, error) {
     /provider|model|api key|authentication|rate.limit/i.test(message)
   ) {
     owner = "model";
+  } else if (/empty patch|produced no candidate|\bno[- ]op\b/i.test(message)) {
+    owner = "model";
   } else if (/tool|sandbox|approval/i.test(message)) {
     owner = "tool-runtime";
   } else if (
@@ -1117,11 +1246,7 @@ export function classifyFailure(stage, error) {
     owner = "verifier";
   } else if (stage === "transport") {
     owner = "transport";
-  } else if (
-    stage.startsWith("agent") ||
-    stage === "patch" ||
-    /empty patch|terminal status/i.test(message)
-  ) {
+  } else if (stage.startsWith("agent") || /terminal status/i.test(message)) {
     owner = "agent-runtime";
   }
   return {

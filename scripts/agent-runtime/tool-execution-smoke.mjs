@@ -1234,7 +1234,8 @@ function buildBatchScenario(batchId, fixtureFiles) {
       targetTools: AGENT_CONTROL_TOOLS,
       scriptedResponses: buildAgentControlFixtureResponses(),
       requiresTargetToolsInInitialInventory: false,
-      buildAssertions({ evidencePackText, toolOutputText }) {
+      buildAssertions({ evidencePackText, toolOutputText, matrix }) {
+        const waitAgent = matrix.find((entry) => entry.tool === "wait_agent");
         return {
           spawnAgentCreatedDurableChild:
             toolOutputText.includes("spawn_agent:") &&
@@ -1252,6 +1253,8 @@ function buildBatchScenario(batchId, fixtureFiles) {
             toolOutputText.includes("interrupt_agent:") &&
             toolOutputText.includes('"previous_status"'),
           waitAgentReturnedTerminalResult:
+            waitAgent?.status === "completed" &&
+            waitAgent.success !== false &&
             toolOutputText.includes("wait_agent:") &&
             toolOutputText.includes('"timed_out"'),
           evidencePackMentionsCurrentAgentControl:
@@ -2240,8 +2243,13 @@ async function runSmoke(options) {
       evidenceToolPresenceRequired:
         scenario.requiresEvidenceToolPresence !== false,
     });
-    const toolOutputText = matrix
-      .map((entry) => `${entry.tool}:${entry.outputPreview}`)
+    const toolOutputText = targetTools
+      .map((tool) => {
+        const call = getToolCalls(finalState.threadRead).find(
+          (entry) => toolName(entry) === tool,
+        );
+        return `${tool}:${call ? toolOutput(call) : ""}`;
+      })
       .join("\n");
     const scenarioAssertions = scenario.buildAssertions({
       evidencePackText,
@@ -2249,6 +2257,7 @@ async function runSmoke(options) {
       providerRequests,
       runtimeContext,
       toolOutputText,
+      matrix,
       newTurnProviderRequests,
     });
     const assertions = {

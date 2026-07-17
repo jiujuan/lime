@@ -24,7 +24,7 @@ impl RuntimeProviderProtocol {
 }
 
 /// Runtime provider 配置。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeProviderConfig {
     /// Provider 名称 (openai, anthropic, google 等)
     pub provider_name: String,
@@ -42,6 +42,8 @@ pub struct RuntimeProviderConfig {
     pub reasoning_effort: Option<String>,
     /// App Server RouteResolver 派生出的 provider 执行协议
     pub protocol: Option<RuntimeProviderProtocol>,
+    /// Provider 是否显式支持 Responses WebSocket transport
+    pub supports_websockets: bool,
     /// 当前回合是否启用 toolshim
     pub toolshim: bool,
     /// toolshim 解释器模型

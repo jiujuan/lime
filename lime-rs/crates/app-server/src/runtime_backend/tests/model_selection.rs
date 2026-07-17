@@ -214,6 +214,7 @@ fn direct_host_provider_config_allows_localhost_fixture_without_database_provide
                 api_key: Some("fixture-key".to_string()),
                 base_url: Some("http://127.0.0.1:56599".to_string()),
                 tool_call_strategy: Some(app_server_protocol::RuntimeToolCallStrategy::Native),
+                supports_websockets: Some(true),
                 ..app_server_protocol::RuntimeProviderConfig::default()
             }),
             provider_preference: Some("fixture-openai".to_string()),
@@ -246,6 +247,7 @@ fn direct_host_provider_config_allows_localhost_fixture_without_database_provide
     );
     assert_eq!(direct_config.reasoning_effort.as_deref(), Some("high"));
     assert!(!direct_config.toolshim);
+    assert!(direct_config.supports_websockets);
 }
 
 #[test]

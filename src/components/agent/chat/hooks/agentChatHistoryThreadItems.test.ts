@@ -8,6 +8,231 @@ import { collectDetailThreadItems } from "./agentChatHistoryThreadItems";
 import { orderStreamingContentPartsForDisplay } from "../components/streamingContentPartOrder";
 
 describe("agentChatHistoryThreadItems", () => {
+  it("canonical items 应覆盖 legacy messages 缺失的同 Turn 多段 final 与助手消息", () => {
+    const detail = {
+      id: "canonical-message-owner-session",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "user",
+          runtime_turn_id: "turn-1",
+          timestamp: 1784188800,
+          content: [{ type: "text", text: "第一轮" }],
+        },
+        {
+          role: "assistant",
+          runtime_turn_id: "turn-1",
+          timestamp: 1784188801,
+          content: [{ type: "output_text", text: "第一段最终答复" }],
+        },
+        {
+          role: "user",
+          runtime_turn_id: "turn-2",
+          timestamp: 1784188802,
+          content: [{ type: "text", text: "第二轮" }],
+        },
+      ],
+      turns: [
+        {
+          id: "turn-1",
+          thread_id: "thread-1",
+          prompt_text: "第一轮",
+          status: "completed",
+          started_at: "2026-07-16T08:00:00.000Z",
+          created_at: "2026-07-16T08:00:00.000Z",
+          updated_at: "2026-07-16T08:00:01.000Z",
+        },
+        {
+          id: "turn-2",
+          thread_id: "thread-1",
+          prompt_text: "第二轮",
+          status: "canceled",
+          started_at: "2026-07-16T08:00:02.000Z",
+          created_at: "2026-07-16T08:00:02.000Z",
+          updated_at: "2026-07-16T08:00:03.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "user-1",
+          type: "user_message",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 1,
+          status: "completed",
+          content: "第一轮",
+          started_at: "2026-07-16T08:00:00.000Z",
+          updated_at: "2026-07-16T08:00:00.000Z",
+        },
+        {
+          id: "final-1a",
+          type: "agent_message",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 2,
+          phase: "final_answer",
+          status: "completed",
+          text: "第一段最终答复",
+          started_at: "2026-07-16T08:00:01.000Z",
+          updated_at: "2026-07-16T08:00:01.000Z",
+        },
+        {
+          id: "final-1b",
+          type: "agent_message",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 3,
+          phase: "final_answer",
+          status: "completed",
+          text: "第二段最终答复",
+          started_at: "2026-07-16T08:00:01.500Z",
+          updated_at: "2026-07-16T08:00:01.500Z",
+        },
+        {
+          id: "user-2",
+          type: "user_message",
+          thread_id: "thread-1",
+          turn_id: "turn-2",
+          sequence: 4,
+          status: "completed",
+          content: "第二轮",
+          started_at: "2026-07-16T08:00:02.000Z",
+          updated_at: "2026-07-16T08:00:02.000Z",
+        },
+        {
+          id: "final-2",
+          type: "agent_message",
+          thread_id: "thread-1",
+          turn_id: "turn-2",
+          sequence: 5,
+          phase: "final_answer",
+          status: "completed",
+          text: "取消前已经生成的最终答复",
+          started_at: "2026-07-16T08:00:03.000Z",
+          updated_at: "2026-07-16T08:00:03.000Z",
+        },
+      ],
+    } as unknown as AgentSessionDetail;
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "canonical-message-owner-session",
+    );
+    const assistantMessages = messages.filter(
+      (message) => message.role === "assistant",
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(
+      assistantMessages[0]?.contentParts
+        ?.filter((part) => part.type === "text")
+        .map((part) => ({
+          text: part.text,
+          threadItemId: part.metadata?.threadItemId,
+          phase: part.metadata?.phase,
+        })),
+    ).toEqual([
+      {
+        text: "第一段最终答复",
+        threadItemId: "final-1a",
+        phase: "final_answer",
+      },
+      {
+        text: "第二段最终答复",
+        threadItemId: "final-1b",
+        phase: "final_answer",
+      },
+    ]);
+    expect(assistantMessages[1]).toMatchObject({
+      runtimeTurnId: "turn-2",
+      content: "取消前已经生成的最终答复",
+      contentParts: [
+        expect.objectContaining({
+          type: "text",
+          text: "取消前已经生成的最终答复",
+          metadata: expect.objectContaining({
+            threadItemId: "final-2",
+            phase: "final_answer",
+          }),
+        }),
+      ],
+    });
+  });
+
+  it("同一 Turn 的前序无 phase AgentMessage 应保留为过程文本", () => {
+    const detail = {
+      id: "legacy-unphased-agent-messages",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-1",
+          thread_id: "thread-1",
+          prompt_text: "继续",
+          status: "completed",
+          started_at: "2026-07-16T08:00:00.000Z",
+          created_at: "2026-07-16T08:00:00.000Z",
+          updated_at: "2026-07-16T08:00:03.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "user-1",
+          type: "user_message",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 1,
+          status: "completed",
+          content: "继续",
+          started_at: "2026-07-16T08:00:00.000Z",
+          updated_at: "2026-07-16T08:00:00.000Z",
+        },
+        {
+          id: "agent-progress",
+          type: "agent_message",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 2,
+          status: "completed",
+          text: "我先核对当前实现。",
+          started_at: "2026-07-16T08:00:01.000Z",
+          updated_at: "2026-07-16T08:00:01.000Z",
+        },
+        {
+          id: "agent-final",
+          type: "agent_message",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 3,
+          status: "completed",
+          text: "最终答复。",
+          started_at: "2026-07-16T08:00:02.000Z",
+          updated_at: "2026-07-16T08:00:03.000Z",
+        },
+      ],
+    } as unknown as AgentSessionDetail;
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "legacy-unphased-agent-messages",
+    );
+    const assistant = messages.find((message) => message.role === "assistant");
+
+    expect(assistant?.content).toBe("最终答复。");
+    expect(
+      assistant?.contentParts
+        ?.filter((part) => part.type === "text")
+        .map((part) => part.text),
+    ).toEqual(["我先核对当前实现。", "最终答复。"]);
+  });
+
   it("reasoning 的完成 sequence 晚于回答时仍按 canonical ordinal 展示在回答前", () => {
     const detail = {
       id: "canonical-history-order-session",

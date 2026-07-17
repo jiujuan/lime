@@ -41,6 +41,7 @@ mod file_system;
 mod gateway;
 mod gateway_runner;
 mod imported_session_runtime;
+mod input_media;
 mod knowledge;
 mod load_context;
 mod mcp;
@@ -491,6 +492,7 @@ pub struct RuntimeCoreEventAppender {
 #[derive(Debug, Default)]
 pub(in crate::runtime) struct RuntimeCoreState {
     pub(in crate::runtime) sessions: HashMap<String, StoredSession>,
+    pub(in crate::runtime) import_jobs: HashMap<String, conversation_import::ImportJobRecord>,
     pub(in crate::runtime) session_approval_cache: approval_cache::SessionApprovalCache,
     pub(in crate::runtime) right_surface_pending:
         Vec<app_server_protocol::WorkspaceRightSurfacePendingRequest>,

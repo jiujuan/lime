@@ -9,6 +9,7 @@ import electronPath from "electron";
 import { _electron as electron } from "playwright";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
+import { withElectronFixtureSystemPath } from "../lib/electron-fixture-runtime-env.mjs";
 import {
   HISTORY_REPLAY_VISUAL,
   seedHistoryReplayVisualProjectionSession,
@@ -235,13 +236,13 @@ function createTempRuntimeEnv() {
     tempRoot,
     electronUserDataDir,
     persistedWorkspaceRoot,
-    env: {
+    env: withElectronFixtureSystemPath({
       ...process.env,
       HOME: home,
       XDG_DATA_HOME: xdgDataHome,
       APPDATA: roamingAppData,
       LOCALAPPDATA: localAppData,
-    },
+    }),
   };
 }
 
@@ -2276,7 +2277,10 @@ async function run() {
       );
     await clearInvokeBuffers(page);
     if (THREAD_READ_PAGE_ISOMORPHIC.workspaceId) {
-      await primeSidebarWorkspace(page, THREAD_READ_PAGE_ISOMORPHIC.workspaceId);
+      await primeSidebarWorkspace(
+        page,
+        THREAD_READ_PAGE_ISOMORPHIC.workspaceId,
+      );
     } else {
       await clearSidebarWorkspace(page);
     }

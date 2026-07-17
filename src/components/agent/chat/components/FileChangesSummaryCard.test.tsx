@@ -46,6 +46,21 @@ function createAggregate(): FileChangesAggregate {
   };
 }
 
+function createLargeAggregate(): FileChangesAggregate {
+  const files = Array.from({ length: 11 }, (_, index) => ({
+    ...createAggregate().files[0]!,
+    path: `scripts/harness/file-${index + 1}.mjs`,
+    linesAdded: index + 1,
+    linesRemoved: index,
+  }));
+  return {
+    fileCount: files.length,
+    totalAdded: files.reduce((total, file) => total + file.linesAdded, 0),
+    totalRemoved: files.reduce((total, file) => total + file.linesRemoved, 0),
+    files,
+  };
+}
+
 function renderCard(props?: {
   aggregate?: FileChangesAggregate;
   onFileClick?: (path: string, content: string) => void;
@@ -97,6 +112,32 @@ afterEach(async () => {
 });
 
 describe("FileChangesSummaryCard", () => {
+  it("多文件变更应按 Codex App 默认只显示前三项，并可展开和收起", () => {
+    const { container } = renderCard({ aggregate: createLargeAggregate() });
+
+    expect(container.textContent).toContain("已编辑 11 个文件");
+    expect(container.textContent).toContain("展开其余 8 个文件");
+    expect(
+      container.querySelectorAll(
+        '[data-testid="file-changes-summary-file-row"]',
+      ),
+    ).toHaveLength(3);
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="file-changes-summary-toggle"]',
+    );
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(container.textContent).toContain("收起文件");
+    expect(
+      container.querySelectorAll(
+        '[data-testid="file-changes-summary-file-row"]',
+      ),
+    ).toHaveLength(11);
+  });
+
   it("应使用真实 i18n 生成工作台变更审阅内容，且左卡隐藏绝对路径前缀", () => {
     const calls: Array<[string, string]> = [];
     const { container } = renderCard({
@@ -109,9 +150,7 @@ describe("FileChangesSummaryCard", () => {
     expect(container.textContent).toContain(
       ".lime/qc/code-runtime-fixture/src/greeting.ts",
     );
-    expect(container.textContent).not.toContain(
-      "/workspace/projects/Demo",
-    );
+    expect(container.textContent).not.toContain("/workspace/projects/Demo");
 
     const reviewButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("审核"),

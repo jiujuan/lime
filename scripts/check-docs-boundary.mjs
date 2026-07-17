@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+import { withNativeSystemPath } from "./lib/native-executable-env.mjs";
+
 const repoRoot = process.cwd();
 const docsRoot = path.join(repoRoot, "docs");
 
@@ -93,7 +95,11 @@ function listRepoFiles() {
     const output = execFileSync(
       "git",
       ["ls-files", "-co", "--exclude-standard", "-z"],
-      { cwd: repoRoot, encoding: "utf8" },
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: withNativeSystemPath(process.env),
+      },
     );
     return output.split("\0").filter(isCurrentFile);
   } catch {
@@ -106,7 +112,11 @@ function listTrackedIgnoredInternalFiles() {
     const output = execFileSync(
       "git",
       ["ls-files", "-ci", "--exclude-standard", "-z", "internal"],
-      { cwd: repoRoot, encoding: "utf8" },
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: withNativeSystemPath(process.env),
+      },
     );
     // `git ls-files -ci` 会包含已从工作树删除但尚未提交的路径。文档边界
     // 只约束当前磁盘上的文件，不能要求恢复已删除的内部文档才能通过检查。
@@ -146,7 +156,10 @@ function shouldScanFile(relativePath) {
     return false;
   }
 
-  if (relativePath === "node_modules" || relativePath.startsWith("node_modules/")) {
+  if (
+    relativePath === "node_modules" ||
+    relativePath.startsWith("node_modules/")
+  ) {
     return false;
   }
 

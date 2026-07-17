@@ -58,6 +58,7 @@
     "connectDeepLink/resolve",
     "connectOpenDeepLink/resolve",
     "connectRelayApiKey/save",
+    "conversationImport/job/read",
     "conversationImport/source/scan",
     "conversationImport/thread/commit",
     "conversationImport/thread/preview",

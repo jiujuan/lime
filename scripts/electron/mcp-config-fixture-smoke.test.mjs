@@ -8,6 +8,13 @@ function readSmokeScript() {
   );
 }
 
+function readEvidenceCore() {
+  return fs.readFileSync(
+    "scripts/electron/lib/mcp-config-fixture-evidence.mjs",
+    "utf8",
+  );
+}
+
 describe("MCP config Electron fixture smoke guard", () => {
   it("keeps the smoke on real Electron Desktop Host IPC and App Server JSON-RPC", () => {
     const content = readSmokeScript();
@@ -28,19 +35,35 @@ describe("MCP config Electron fixture smoke guard", () => {
 
   it("creates Context7 through the GUI and verifies current MCP methods", () => {
     const content = readSmokeScript();
+    const evidenceCore = readEvidenceCore();
 
     expect(content).toContain('backendMode = "unavailable"');
     expect(content).toContain("APP_SERVER_BACKEND_MODE: backendMode");
-    expect(content).toContain('"mcpServer/create"');
-    expect(content).toContain('"mcpServer/list"');
+    expect(evidenceCore).toContain('"mcpServer/create"');
+    expect(evidenceCore).toContain('"mcpServer/list"');
+    expect(content).toContain("MCP_CREATE_LIST_REQUIRED_METHODS");
+    expect(content).not.toContain("[...REQUIRED_METHODS]");
     expect(content).toContain("mcp-config-preset-context7");
     expect(content).toContain("mcp-config-connection-url");
     expect(content).toContain("mcp-config-env-header-env-var");
     expect(content).toContain("mcp-config-save");
-    expect(content).toContain("LEGACY_MCP_COMMANDS");
+    expect(evidenceCore).toContain("LEGACY_MCP_COMMANDS");
     expect(content).not.toContain("mockPriorityCommands");
     expect(content).not.toContain("defaultMocks");
     expect(content).not.toContain("invokeMockOnly");
+  });
+
+  it("writes same-run SETTINGS scenario evidence without relabeling", () => {
+    const content = readSmokeScript();
+    const evidenceCore = readEvidenceCore();
+
+    expect(content).toContain("parseMcpConfigFixtureArgs");
+    expect(evidenceCore).toContain(
+      'MCP_CREATE_LIST_SCENARIO_ID = "mcp-create-list"',
+    );
+    expect(evidenceCore).toContain('proofLevel: "Gate B-F"');
+    expect(evidenceCore).toContain('request.transport === "electron-ipc"');
+    expect(evidenceCore).toContain("mockFallbackHitCount");
   });
 
   it("does not make legacy MCP facade calls as positive evidence", () => {

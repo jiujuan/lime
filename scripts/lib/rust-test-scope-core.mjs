@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+import { withNativeSystemPath } from "./native-executable-env.mjs";
+
 import { parseWorkspaceMemberRoots } from "../rust-test-layer-classifier.mjs";
 
 export const DEFAULT_CHANGED_REF = "HEAD";
@@ -260,6 +262,7 @@ function collectChangedPaths(ref, repoRoot) {
     {
       cwd: repoRoot,
       encoding: "utf8",
+      env: withNativeSystemPath(process.env),
     },
   );
   if (diffResult.error) {
@@ -278,6 +281,7 @@ function collectChangedPaths(ref, repoRoot) {
     {
       cwd: repoRoot,
       encoding: "utf8",
+      env: withNativeSystemPath(process.env),
     },
   );
   if (untrackedResult.error) {

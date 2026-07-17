@@ -11,27 +11,29 @@ pub(super) fn notification_events_with_canonical_entities(
     stored: &StoredSession,
     events: &[AgentEvent],
 ) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
-    let mut history = Vec::with_capacity(stored.events.len() + events.len());
-    history.extend(stored.events.iter().cloned());
+    let mut materializer = thread_item_projection::IncrementalMaterializer::from_events(
+        &stored.events,
+        &stored.session.session_id,
+        &stored.session.thread_id,
+    )
+    .map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "cannot initialize canonical notification materializer: {error}"
+        ))
+    })?;
     let mut notifications = Vec::with_capacity(events.len());
 
     for event in events {
-        history.push(event.clone());
-        let Some(target) = canonical_notification_target(event) else {
-            notifications.push(event.clone());
-            continue;
-        };
-        let changes = thread_item_projection::materialize_events(
-            &history,
-            &stored.session.session_id,
-            &stored.session.thread_id,
-        )
-        .map_err(|error| {
+        let entities = materializer.apply(event).map_err(|error| {
             RuntimeCoreError::Backend(format!(
                 "cannot materialize canonical notification for event {} ({}): {error}",
                 event.event_id, event.event_type
             ))
         })?;
+        let Some(target) = canonical_notification_target(event) else {
+            notifications.push(event.clone());
+            continue;
+        };
         let mut notification = event.clone();
         let payload = notification.payload.as_object_mut().ok_or_else(|| {
             RuntimeCoreError::Backend(format!(
@@ -48,10 +50,9 @@ pub(super) fn notification_events_with_canonical_entities(
                         event.event_id, event.event_type
                     ))
                 })?;
-                let turn = changes
-                    .changed_turns
-                    .into_iter()
-                    .find(|turn| turn.turn_id.as_str() == turn_id)
+                let turn = entities
+                    .turn
+                    .filter(|turn| turn.turn_id.as_str() == turn_id)
                     .ok_or_else(|| {
                         RuntimeCoreError::Backend(format!(
                             "canonical materializer produced no turn for event {} ({})",
@@ -69,10 +70,9 @@ pub(super) fn notification_events_with_canonical_entities(
                 );
             }
             CanonicalNotificationTarget::Item => {
-                let item = changes
-                    .changed_items
-                    .into_iter()
-                    .find(|item| item.sequence == event.sequence)
+                let item = entities
+                    .item
+                    .filter(|item| item.sequence == event.sequence)
                     .ok_or_else(|| {
                         RuntimeCoreError::Backend(format!(
                             "canonical materializer produced no item for event {} ({})",

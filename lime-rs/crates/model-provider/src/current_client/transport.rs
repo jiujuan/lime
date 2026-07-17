@@ -10,17 +10,8 @@ const INITIAL_RETRY_DELAY: Duration = Duration::from_millis(200);
 const MAX_RETRY_AFTER: Duration = Duration::from_secs(10);
 
 pub(super) fn should_retry_stream_request_status(status: StatusCode) -> bool {
-    matches!(
-        status,
-        StatusCode::REQUEST_TIMEOUT
-            | StatusCode::CONFLICT
-            | StatusCode::TOO_EARLY
-            | StatusCode::TOO_MANY_REQUESTS
-            | StatusCode::INTERNAL_SERVER_ERROR
-            | StatusCode::BAD_GATEWAY
-            | StatusCode::SERVICE_UNAVAILABLE
-            | StatusCode::GATEWAY_TIMEOUT
-    )
+    // Codex defaults to retry_5xx=true and retry_429=false at the request layer.
+    status.is_server_error()
 }
 
 pub(super) fn retry_delay(headers: &HeaderMap, completed_attempts: u8) -> Duration {
@@ -28,7 +19,7 @@ pub(super) fn retry_delay(headers: &HeaderMap, completed_attempts: u8) -> Durati
 }
 
 pub(super) fn request_failure(url: &str, error: reqwest::Error) -> CurrentProviderError {
-    CurrentProviderError::new(format!(
+    CurrentProviderError::transport(format!(
         "Provider 请求失败 ({url}): {}",
         error_chain(&error)
     ))
@@ -107,17 +98,9 @@ mod tests {
     }
 
     #[test]
-    fn retries_only_transient_statuses() {
-        for status in [
-            StatusCode::REQUEST_TIMEOUT,
-            StatusCode::CONFLICT,
-            StatusCode::TOO_EARLY,
-            StatusCode::TOO_MANY_REQUESTS,
-            StatusCode::INTERNAL_SERVER_ERROR,
-            StatusCode::BAD_GATEWAY,
-            StatusCode::SERVICE_UNAVAILABLE,
-            StatusCode::GATEWAY_TIMEOUT,
-        ] {
+    fn retries_codex_default_request_statuses() {
+        for code in 500..=599 {
+            let status = StatusCode::from_u16(code).expect("server status");
             assert!(should_retry_stream_request_status(status), "{status}");
         }
         for status in [
@@ -125,6 +108,10 @@ mod tests {
             StatusCode::UNAUTHORIZED,
             StatusCode::FORBIDDEN,
             StatusCode::NOT_FOUND,
+            StatusCode::REQUEST_TIMEOUT,
+            StatusCode::CONFLICT,
+            StatusCode::TOO_EARLY,
+            StatusCode::TOO_MANY_REQUESTS,
         ] {
             assert!(!should_retry_stream_request_status(status), "{status}");
         }

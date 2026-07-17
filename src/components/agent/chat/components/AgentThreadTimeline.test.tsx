@@ -188,9 +188,48 @@ describe("AgentThreadTimeline", () => {
         '[data-testid="timeline-file-attachment-card"]',
       ),
     ).toHaveLength(2);
+    expect(
+      container.querySelector('[data-testid="timeline-file-attachment-list"]'),
+    ).not.toBeNull();
     expect(container.textContent).not.toContain("已编辑 2 个文件");
     expect(container.textContent).toContain("imagegen.md");
     expect(container.textContent).toContain("browser.md");
+  });
+  it("普通文件附件列表应默认显示前三项，并可展开剩余文件", () => {
+    const items = Array.from({ length: 5 }, (_, index) =>
+      createFileArtifactItem({
+        ...createBaseItem(`attachment-${index + 1}`, index + 1),
+        path: `internal/roadmap/file-${index + 1}.md`,
+        source: "file_read",
+        content: `# File ${index + 1}`,
+        metadata: { eventClass: "file.read" },
+      }),
+    );
+    const container = renderTimeline(items);
+
+    expect(
+      container.querySelectorAll(
+        '[data-testid="timeline-file-attachment-card"]',
+      ),
+    ).toHaveLength(3);
+    expect(container.textContent).toContain("显示另外 2 个");
+    expect(container.textContent).not.toContain("file-5.md");
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="timeline-file-attachment-list-toggle"]',
+    );
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      container.querySelectorAll(
+        '[data-testid="timeline-file-attachment-card"]',
+      ),
+    ).toHaveLength(5);
+    expect(container.textContent).toContain("file-5.md");
+    expect(container.textContent).toContain("收起文件");
   });
   it("多个带 file_change 的 file_artifact 应聚合成一个文件变更框", async () => {
     const onOpenArtifactFromTimeline = vi.fn();

@@ -109,7 +109,7 @@ describe("messageListItemProjection artifacts and failures", () => {
     ]);
   });
 
-  it("文件变更汇总已覆盖同一路径时不应再渲染尾部 file_artifact 时间线卡片", () => {
+  it("文件变更汇总与 canonical file_artifact 应分别保留过程和结果语义", () => {
     const message: Message = {
       id: "assistant-file-change-timeline-dedup",
       role: "assistant",
@@ -170,14 +170,17 @@ describe("messageListItemProjection artifacts and failures", () => {
       },
     ] as never);
 
-    expect(projection.trailingTimeline).toBeNull();
+    expect(projection.trailingTimeline?.items.map((item) => item.id)).toEqual([
+      "artifact-document-card",
+      "artifact-absolute-card",
+    ]);
     expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
       "text",
       "file_changes_batch",
     ]);
   });
 
-  it("apply_patch timeline item 应以结构化 FileChange 投影驱动 diff 和 artifact 去重", () => {
+  it("apply_patch timeline item 应保留结构化 diff 与 canonical artifact", () => {
     const message: Message = {
       id: "assistant-apply-patch-file-change",
       role: "assistant",
@@ -295,7 +298,9 @@ describe("messageListItemProjection artifacts and failures", () => {
       "file_changes_batch",
       "text",
     ]);
-    expect(projection.trailingTimeline).toBeNull();
+    expect(projection.trailingTimeline?.items.map((item) => item.id)).toEqual([
+      "artifact-src-app-after",
+    ]);
     expect(projection.visibleAssistantArtifacts).toHaveLength(0);
   });
 });

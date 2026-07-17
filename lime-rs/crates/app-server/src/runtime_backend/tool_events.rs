@@ -286,6 +286,7 @@ mod tests {
                 runtime_provider_selector: Some("codex".to_string()),
                 runtime_provider_protocol: Some("responses".to_string()),
                 runtime_provider_active_model: Some("gpt-4.1".to_string()),
+                tool_names: vec!["Read".to_string(), "apply_patch".to_string()],
             },
         })
         .expect("provider trace should emit");
@@ -303,6 +304,10 @@ mod tests {
         assert_eq!(events[0].payload["runtime_provider_backend"], "current");
         assert_eq!(events[0].payload["runtime_provider_selector"], "codex");
         assert_eq!(events[0].payload["runtime_provider_protocol"], "responses");
+        assert_eq!(
+            events[0].payload["tool_names"],
+            json!(["Read", "apply_patch"])
+        );
         assert_eq!(
             events[0].payload["runtime_provider_active_model"],
             "gpt-4.1"

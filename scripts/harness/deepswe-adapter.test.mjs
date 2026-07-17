@@ -193,6 +193,7 @@ describe("DeepSWE current-chain adapter", () => {
     const workspaceDir = path.join(root, "workspace");
     fs.mkdirSync(workspaceDir);
     const calls = [];
+    let turnStartParams = null;
     const sessionRead = {
       detail: {
         turns: [{ id: "deepswe-turn-run-1", status: "completed" }],
@@ -232,7 +233,9 @@ describe("DeepSWE current-chain adapter", () => {
         source: "test",
       }),
       updateSession: async () => {},
-      startTurn: async () => {},
+      startTurn: async (_options, params) => {
+        turnStartParams = params;
+      },
       readThread: async () => ({
         status: "completed",
         active_turn_id: null,
@@ -246,6 +249,8 @@ describe("DeepSWE current-chain adapter", () => {
         invokeUrl: "http://unused",
         intervalMs: 1,
         timeoutMs: 30_000,
+        maxProviderSteps: 2,
+        tokenBudget: 1_000,
       },
       task: { id: "task-1", instruction: "Fix the task" },
       workspaceDir,
@@ -264,6 +269,18 @@ describe("DeepSWE current-chain adapter", () => {
     expect(
       calls.find((call) => call.method === "agentSession/start")?.params,
     ).toMatchObject({ workingDir: workspaceDir, workspaceId: "workspace-1" });
+    expect(turnStartParams).toMatchObject({
+      runtimeRequest: {
+        metadata: {
+          harness: {
+            provider_budget: {
+              max_provider_steps: 2,
+              token_budget: 1_000,
+            },
+          },
+        },
+      },
+    });
     expect(fs.existsSync(path.join(root, "thread-turn-item.json"))).toBe(true);
     expect(fs.existsSync(path.join(root, "trajectory.json"))).toBe(true);
     expect(fs.existsSync(path.join(root, "provider-steps.json"))).toBe(true);
@@ -275,6 +292,17 @@ describe("DeepSWE current-chain adapter", () => {
     const summary = providerStepsFromEvidence(
       {
         events: [
+          {
+            type: "provider.request.started",
+            sequence: 5,
+            timestamp: "2026-07-16T00:00:00Z",
+            payload: {
+              runtimeEvent: {
+                attempt: 1,
+                tool_names: ["Read", "apply_patch", "Read"],
+              },
+            },
+          },
           {
             type: "provider.step",
             sequence: 10,
@@ -291,6 +319,14 @@ describe("DeepSWE current-chain adapter", () => {
                 output_tokens: 20,
                 cached_input_tokens: 40,
               },
+            },
+          },
+          {
+            type: "provider.request.started",
+            sequence: 15,
+            payload: {
+              attempt: 2,
+              toolNames: ["exec_command", "apply_patch"],
             },
           },
           {
@@ -327,6 +363,13 @@ describe("DeepSWE current-chain adapter", () => {
         cachedInputTokens: 90,
         budgetTokens: 260,
       },
+      toolCatalog: {
+        status: "complete",
+        requestCount: 2,
+        requestsWithTools: 2,
+        uniqueToolNames: ["Read", "apply_patch", "exec_command"],
+        applyPatchAvailableOnEveryRequest: true,
+      },
       budgets: {
         exhausted: true,
         reasons: ["provider_steps", "token_budget"],
@@ -339,6 +382,8 @@ describe("DeepSWE current-chain adapter", () => {
       reasoningChars: 40,
       toolCalls: 1,
     });
+    expect(summary.steps[0].toolNames).toEqual(["Read", "apply_patch"]);
+    expect(summary.steps[1].toolNames).toEqual(["apply_patch", "exec_command"]);
   });
 
   it("keeps the App Server terminal failure message for owner classification", () => {
@@ -534,6 +579,273 @@ describe("DeepSWE current-chain adapter", () => {
     });
   });
 
+  it("leaves provider step exhaustion to the runtime reply loop", async () => {
+    const root = temporaryRoot();
+    const workspaceDir = path.join(root, "workspace");
+    fs.mkdirSync(workspaceDir);
+    let readCount = 0;
+    let canceled = false;
+    const providerEvents = {
+      events: [1, 2].map((attempt) => ({
+        type: "provider.step",
+        sequence: attempt,
+        payload: {
+          attempt,
+          completed: true,
+          finish_reason: "tool_call",
+          text_output_chars: 0,
+          reasoning_output_chars: 10,
+          tool_call_count: 1,
+          usage: { input_tokens: 100, output_tokens: 10 },
+        },
+      })),
+    };
+    const rpc = {
+      waitForHealth: async () => ({ status: "ok" }),
+      invoke: async (_options, method) => {
+        if (method === "workspace/ensure") {
+          return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
+        }
+        if (method === "agentSession/start") {
+          return { session: { sessionId: "deepswe-run-step-cap" } };
+        }
+        if (method === "agentSession/read") {
+          readCount += 1;
+          return {
+            detail: {
+              turns: [
+                {
+                  turnId: "deepswe-turn-run-step-cap",
+                  status: readCount >= 2 ? "completed" : "accepted",
+                },
+              ],
+              items: [],
+            },
+          };
+        }
+        if (method === "evidence/export") {
+          return providerEvents;
+        }
+        throw new Error(`unexpected method ${method}`);
+      },
+      resolveProvider: async () => ({
+        providerPreference: "provider-1",
+        providerName: "openai",
+        modelPreference: "model-1",
+        source: "test",
+      }),
+      updateSession: async () => {},
+      startTurn: async () => {},
+      cancelTurn: async () => {
+        canceled = true;
+      },
+      readThread: async () => ({
+        status: readCount >= 2 ? "completed" : "running",
+        turns: [],
+      }),
+      sleep: async () => {},
+    };
+
+    const result = await runCurrentChainTask({
+      options: {
+        intervalMs: 1,
+        evidenceIntervalMs: 1,
+        timeoutMs: 30_000,
+        maxProviderSteps: 2,
+        tokenBudget: 1_000,
+      },
+      task: { id: "task-1", instruction: "Fix the task" },
+      workspaceDir,
+      runDir: root,
+      runId: "run-step-cap",
+      rpc,
+    });
+
+    expect(canceled).toBe(false);
+    expect(result).toMatchObject({
+      status: "completed",
+      budgetCancellation: null,
+      providerSteps: {
+        stepCount: 2,
+        budgets: {
+          exhausted: true,
+          reasons: ["provider_steps"],
+        },
+      },
+    });
+  });
+
+  it("records runtime token exhaustion after the turn is already terminal", async () => {
+    const root = temporaryRoot();
+    const workspaceDir = path.join(root, "workspace");
+    fs.mkdirSync(workspaceDir);
+    let canceled = false;
+    const providerEvents = {
+      events: [
+        {
+          type: "provider.step",
+          sequence: 1,
+          payload: {
+            attempt: 1,
+            completed: true,
+            finish_reason: "tool_call",
+            text_output_chars: 0,
+            reasoning_output_chars: 10,
+            tool_call_count: 1,
+            usage: { input_tokens: 100, output_tokens: 10 },
+          },
+        },
+      ],
+    };
+    const rpc = {
+      waitForHealth: async () => ({ status: "ok" }),
+      invoke: async (_options, method) => {
+        if (method === "workspace/ensure") {
+          return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
+        }
+        if (method === "agentSession/start") {
+          return { session: { sessionId: "deepswe-run-runtime-budget" } };
+        }
+        if (method === "agentSession/read") {
+          return {
+            detail: {
+              turns: [
+                {
+                  turnId: "deepswe-turn-run-runtime-budget",
+                  status: "interrupted",
+                },
+              ],
+              items: [],
+            },
+          };
+        }
+        if (method === "evidence/export") {
+          return providerEvents;
+        }
+        throw new Error(`unexpected method ${method}`);
+      },
+      resolveProvider: async () => ({
+        providerPreference: "provider-1",
+        providerName: "openai",
+        modelPreference: "model-1",
+        source: "test",
+      }),
+      updateSession: async () => {},
+      startTurn: async () => {},
+      cancelTurn: async () => {
+        canceled = true;
+      },
+      readThread: async () => ({
+        status: "interrupted",
+        turns: [],
+      }),
+      sleep: async () => {},
+    };
+
+    const result = await runCurrentChainTask({
+      options: {
+        intervalMs: 1,
+        timeoutMs: 30_000,
+        maxProviderSteps: 5,
+        tokenBudget: 100,
+      },
+      task: { id: "task-1", instruction: "Fix the task" },
+      workspaceDir,
+      runDir: root,
+      runId: "run-runtime-budget",
+      rpc,
+    });
+
+    expect(canceled).toBe(false);
+    expect(result).toMatchObject({
+      status: "interrupted",
+      terminalMessage: expect.stringContaining("provider budget exhausted"),
+      budgetCancellation: {
+        requestedAt: null,
+        reasons: ["token_budget"],
+        stepCount: 1,
+        usage: { budgetTokens: 110 },
+      },
+    });
+  });
+
+  it("cancels a wall-timeout turn and captures its real terminal state", async () => {
+    const root = temporaryRoot();
+    const workspaceDir = path.join(root, "workspace");
+    fs.mkdirSync(workspaceDir);
+    let canceled = false;
+    const rpc = {
+      waitForHealth: async () => ({ status: "ok" }),
+      invoke: async (_options, method) => {
+        if (method === "workspace/ensure") {
+          return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
+        }
+        if (method === "agentSession/start") {
+          return { session: { sessionId: "deepswe-run-wall-timeout" } };
+        }
+        if (method === "agentSession/read") {
+          return {
+            detail: {
+              turns: [
+                {
+                  turnId: "deepswe-turn-run-wall-timeout",
+                  status: canceled ? "canceled" : "accepted",
+                },
+              ],
+              items: [],
+            },
+          };
+        }
+        if (method === "evidence/export") {
+          return { events: [] };
+        }
+        throw new Error(`unexpected method ${method}`);
+      },
+      resolveProvider: async () => ({
+        providerPreference: "provider-1",
+        providerName: "openai",
+        modelPreference: "model-1",
+        source: "test",
+      }),
+      updateSession: async () => {},
+      startTurn: async () => {},
+      cancelTurn: async () => {
+        canceled = true;
+      },
+      readThread: async () => ({
+        status: canceled ? "canceled" : "running",
+        turns: [],
+      }),
+      sleep: async () => {},
+    };
+
+    const error = await runCurrentChainTask({
+      options: { intervalMs: 1, timeoutMs: 1 },
+      task: { id: "task-1", instruction: "Fix the task" },
+      workspaceDir,
+      runDir: root,
+      runId: "run-wall-timeout",
+      rpc,
+    }).catch((caught) => caught);
+
+    expect(canceled).toBe(true);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain("cancelStatus=canceled");
+    expect(currentChainFromError(error)).toMatchObject({
+      status: "timeout",
+      terminalStatus: "canceled",
+      evidenceCapture: "terminal",
+      timeoutCancellation: {
+        reason: "wall_timeout",
+        terminalStatus: "canceled",
+        error: null,
+      },
+    });
+    expect(readJson(path.join(root, "thread-turn-item.json"))).toMatchObject({
+      capture: { status: "terminal" },
+    });
+  });
+
   it("builds a Pier replay task without copying the reference solution", () => {
     const root = temporaryRoot();
     const taskDir = path.join(root, "task");
@@ -621,6 +933,12 @@ describe("DeepSWE current-chain adapter", () => {
     expect(
       classifyFailure("patch", new Error("spawnSync git ENOBUFS")).owner,
     ).toBe("harness");
+    expect(
+      classifyFailure(
+        "patch",
+        new Error("Lime agent produced an empty patch after a completed turn"),
+      ).owner,
+    ).toBe("model");
     expect(
       classifyFailure(
         "patch",

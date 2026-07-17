@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import {
   invokeAppServerMethod,
   sanitizeJson,
@@ -221,6 +223,154 @@ export async function runReadChecks(options, entries) {
   assertArrayField("mcpResource/list", resourceList, "resourceTemplates");
 }
 
+async function runFailureIsolationChecks({
+  options,
+  entries,
+  fixture,
+  healthyServerName,
+  healthyToolName,
+}) {
+  const failedServerId = `mcp-current-failed-${Date.now()}`;
+  const failedServerName = failedServerId.replace(/[^a-zA-Z0-9_-]/g, "-");
+  let startError = null;
+
+  try {
+    assertArrayField(
+      "mcpServer/create",
+      await invokeAppServerMethod(
+        options,
+        "mcpServer/create",
+        {
+          server: {
+            id: failedServerId,
+            name: failedServerName,
+            description: "MCP failure isolation fixture",
+            server_config: {
+              command: process.execPath,
+              args: [path.join(fixture.root, "missing-mcp-server.mjs")],
+              cwd: fixture.root,
+              timeout: 3,
+            },
+            enabled_lime: true,
+            enabled_claude: false,
+            enabled_codex: false,
+            enabled_gemini: false,
+            created_at: Date.now(),
+          },
+        },
+        entries,
+      ),
+      "servers",
+    );
+
+    try {
+      await invokeAppServerMethod(
+        options,
+        "mcpServer/start",
+        { name: failedServerName },
+        entries,
+      );
+    } catch (error) {
+      startError = error;
+    }
+    assert(
+      startError instanceof Error,
+      "broken MCP server unexpectedly started",
+    );
+    assert(
+      startError.message.startsWith("mcpServer/start error:"),
+      "broken MCP server failure did not cross App Server JSON-RPC",
+    );
+
+    const statusServers = assertArrayField(
+      "mcpServerStatus/list",
+      await invokeAppServerMethod(options, "mcpServerStatus/list", {}, entries),
+      "servers",
+    );
+    const healthyStatus = statusServers.find(
+      (server) => server?.name === healthyServerName,
+    );
+    const failedStatus = statusServers.find(
+      (server) => server?.name === failedServerName,
+    );
+    assert(
+      healthyStatus?.is_running === true,
+      "healthy MCP server stopped after another server failed",
+    );
+    assert(
+      failedStatus?.is_running === false,
+      "failed MCP server was reported as running",
+    );
+
+    const tools = assertArrayField(
+      "mcpTool/list",
+      await invokeAppServerMethod(options, "mcpTool/list", {}, entries),
+      "tools",
+    );
+    assert(
+      tools.some((tool) => tool?.name === healthyToolName),
+      "healthy MCP tool disappeared after another server failed",
+    );
+    const structuredContent = assertToolResult(
+      "mcpTool/call",
+      await invokeAppServerMethod(
+        options,
+        "mcpTool/call",
+        {
+          toolName: healthyToolName,
+          arguments: { message: "after failed MCP server" },
+        },
+        entries,
+      ),
+      "echo: after failed MCP server",
+      {
+        echoedMessage: "after failed MCP server",
+        messageLength: "after failed MCP server".length,
+      },
+    );
+    assertResourceResult(
+      "mcpResource/read",
+      await invokeAppServerMethod(
+        options,
+        "mcpResource/read",
+        { server: healthyServerName, uri: "fixture://status" },
+        entries,
+      ),
+      "fixture resource ok",
+    );
+
+    return {
+      failedServerId,
+      failedServerName,
+      failedStartObserved: true,
+      failedServerReportedStopped: true,
+      healthyServerStillRunning: true,
+      healthyToolStillListed: true,
+      healthyToolCallAfterFailure: sanitizeJson(structuredContent),
+      healthyResourceReadAfterFailure: true,
+    };
+  } finally {
+    await invokeAppServerMethod(
+      options,
+      "mcpServer/stop",
+      { name: failedServerName },
+      entries,
+    ).catch(() => {});
+    await invokeAppServerMethod(
+      options,
+      "mcpServer/delete",
+      { id: failedServerId },
+      entries,
+    ).catch((error) => {
+      console.warn(
+        `[smoke:mcp-current] failed fixture delete failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }
+}
+
 export async function runFixtureChecks(options, entries, fixture) {
   const serverId = `mcp-current-${Date.now()}`;
   const serverName = serverId.replace(/[^a-zA-Z0-9_-]/g, "-");
@@ -382,6 +532,13 @@ export async function runFixtureChecks(options, entries, fixture) {
       ),
       "fixture resource ok",
     );
+    const failureIsolation = await runFailureIsolationChecks({
+      options,
+      entries,
+      fixture,
+      healthyServerName: serverName,
+      healthyToolName: fixtureToolName,
+    });
 
     return {
       serverId,
@@ -394,6 +551,7 @@ export async function runFixtureChecks(options, entries, fixture) {
         fixtureResourceTemplate.uri_template ??
         fixtureResourceTemplate.uriTemplate,
       resourceTemplatesSeen: true,
+      failureIsolation,
     };
   } finally {
     await invokeAppServerMethod(

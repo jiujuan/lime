@@ -64,19 +64,51 @@ struct ToolLifecycleViolation {
     tool_call_id: Option<String>,
 }
 
+#[cfg(test)]
 pub(super) fn validate_tool_lifecycle_event(
     existing_events: &[AgentEvent],
     candidate: &AgentEvent,
 ) -> Result<(), String> {
-    let mut state = ToolLifecycleState::default();
-    for event in existing_events
-        .iter()
-        .filter(|event| same_tool_lifecycle_scope(event, candidate))
-    {
-        state.push_existing(event);
+    let mut validator = ToolLifecycleValidator::from_events(
+        existing_events,
+        &candidate.session_id,
+        candidate.turn_id.as_deref(),
+    );
+    validator.validate_and_observe(candidate)
+}
+
+pub(super) struct ToolLifecycleValidator {
+    state: ToolLifecycleState,
+}
+
+impl ToolLifecycleValidator {
+    pub(super) fn from_events(
+        existing_events: &[AgentEvent],
+        session_id: &str,
+        turn_id: Option<&str>,
+    ) -> Self {
+        let mut state = ToolLifecycleState::default();
+        for event in existing_events
+            .iter()
+            .filter(|event| event.session_id == session_id && event.turn_id.as_deref() == turn_id)
+        {
+            state.push_existing(event);
+        }
+        Self { state }
     }
 
-    let violations = state.validate_candidate(candidate);
+    pub(super) fn validate_and_observe(&mut self, candidate: &AgentEvent) -> Result<(), String> {
+        let violations = self.state.validate_candidate(candidate);
+        if violations.is_empty() {
+            self.state.push_existing(candidate);
+            return Ok(());
+        }
+
+        tool_lifecycle_validation_result(&violations)
+    }
+}
+
+fn tool_lifecycle_validation_result(violations: &[ToolLifecycleViolation]) -> Result<(), String> {
     if violations.is_empty() {
         return Ok(());
     }
@@ -503,10 +535,6 @@ fn validate_tool_owner(
             tool_call_id: Some(snapshot.tool_call_id.clone()),
         });
     }
-}
-
-fn same_tool_lifecycle_scope(event: &AgentEvent, candidate: &AgentEvent) -> bool {
-    event.session_id == candidate.session_id && event.turn_id == candidate.turn_id
 }
 
 fn normalize_event_class(event_type: &str) -> &str {

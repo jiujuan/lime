@@ -31,7 +31,8 @@ export function buildWorkspaceArticleWorkspacePreviewArtifact({
   object,
   preview,
 }: WorkspaceArticleWorkspacePreviewArtifactInput): Artifact | null {
-  const sourceRef = artifactIds[0] ?? buildWorkspaceArticleObjectKey(object);
+  const artifactRef = artifactIds[0];
+  const sourceRef = artifactRef ?? buildWorkspaceArticleObjectKey(object);
   const artifactDocument = buildWorkspaceArticleWorkspaceArtifactDocument({
     artifactIds,
     layout,
@@ -51,6 +52,7 @@ export function buildWorkspaceArticleWorkspacePreviewArtifact({
     artifactDocumentId: artifactDocument.artifactId,
     artifactVersionId: artifactDocument.metadata.currentVersionId,
     artifactVersionNo: artifactDocument.metadata.currentVersionNo,
+    ...(artifactRef ? { artifactRef, appServerArtifactRef: artifactRef } : {}),
     articleWorkspaceCardPreview: buildArticleWorkspaceCardPreviewFacts({
       artifactIds,
       layout,

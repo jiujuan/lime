@@ -1,15 +1,18 @@
 use super::{RuntimeCore, RuntimeCoreError};
 use app_server_protocol::{
+    ConversationImportJobReadParams, ConversationImportJobReadResponse,
     ConversationImportSourceScanParams, ConversationImportSourceScanResponse,
-    ConversationImportThreadCommitParams,
-    ConversationImportThreadCommitResponse, ConversationImportThreadPreviewParams,
-    ConversationImportThreadPreviewResponse,
+    ConversationImportThreadCommitParams, ConversationImportThreadCommitStartResponse,
+    ConversationImportThreadPreviewParams, ConversationImportThreadPreviewResponse,
 };
 
 mod codex;
 mod commit;
 mod import_status;
+mod job;
 mod provenance;
+
+pub(in crate::runtime) use job::ImportJobRecord;
 
 impl RuntimeCore {
     pub async fn scan_conversation_import_source(
@@ -33,8 +36,15 @@ impl RuntimeCore {
     pub async fn commit_conversation_import_thread(
         &self,
         params: ConversationImportThreadCommitParams,
-    ) -> Result<ConversationImportThreadCommitResponse, RuntimeCoreError> {
-        commit::commit_conversation_import_thread(self, params)
+    ) -> Result<ConversationImportThreadCommitStartResponse, RuntimeCoreError> {
+        job::start_import_job(self, params)
+    }
+
+    pub async fn read_conversation_import_job(
+        &self,
+        params: ConversationImportJobReadParams,
+    ) -> Result<ConversationImportJobReadResponse, RuntimeCoreError> {
+        job::read_import_job(self, params)
     }
 }
 

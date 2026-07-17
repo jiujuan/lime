@@ -1,6 +1,6 @@
 use super::*;
 use crate::runtime::agent_control::AgentControlSpawnRequest;
-use crate::runtime::agent_mailbox_delivery::{canonical_mailbox_item_exists, mailbox_item_id};
+use crate::runtime::agent_mailbox_delivery::{canonical_mailbox_item_is_terminal, mailbox_item_id};
 use crate::runtime::agent_terminal_activity::terminal_result_payload;
 use agent_protocol::{
     ItemId, ItemKind, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload,
@@ -402,7 +402,7 @@ async fn completed_child_result_is_durable_consumed_once_and_visible_to_wait() {
         .await
         .expect("activity consumed")
         .is_empty());
-    assert!(canonical_mailbox_item_exists(
+    assert!(canonical_mailbox_item_is_terminal(
         &store,
         &ThreadId::new("root-thread"),
         &mailbox_item_id(&result.message_id),

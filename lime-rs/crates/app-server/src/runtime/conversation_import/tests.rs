@@ -17,6 +17,7 @@ mod evidence;
 mod health;
 mod idempotency;
 mod path_resolution;
+mod performance;
 mod runtime_events;
 mod security;
 

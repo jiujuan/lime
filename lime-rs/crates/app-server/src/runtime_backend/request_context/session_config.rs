@@ -2,6 +2,7 @@ use crate::runtime::memory_prompt::{
     append_memory_context_to_system_prompt, append_soul_context_to_system_prompt,
 };
 use crate::ExecutionRequest;
+use agent_runtime::reply_loop::DEFAULT_MAX_REPLY_TURNS;
 use lime_agent::{
     build_agent_session_config, merge_system_prompt_with_request_tool_policy,
     merge_system_prompt_with_runtime_agents_for_project, AgentSessionConfig,
@@ -15,6 +16,8 @@ use super::{
 };
 
 const DEFAULT_SESSION_SYSTEM_PROMPT: &str = "你是 Lime 桌面端中的 AI 助手。交互口吻、问候、自我介绍、工具进展和失败恢复由当前会话的 `memory.soul` 上下文控制；如果没有 `memory.soul` 上下文，保持清晰、准确、可执行。";
+const HARNESS_MAX_PROVIDER_STEPS_POINTER: &str = "/harness/provider_budget/max_provider_steps";
+const HARNESS_PROVIDER_TOKEN_BUDGET_POINTER: &str = "/harness/provider_budget/token_budget";
 
 pub(in crate::runtime_backend) fn session_config_from_request(
     request: &ExecutionRequest,
@@ -66,16 +69,55 @@ pub(in crate::runtime_backend) fn session_config_from_request(
         );
         merge_system_prompt_with_request_tool_policy(system_prompt, request_tool_policy)
     };
-    let turn_context =
+    let mut turn_context =
         turn_context_from_request(request, host_request, scope, selection, config_metadata);
+    if turn_tool_surface.is_harness_direct_answer() {
+        let turn_context = turn_context.get_or_insert_with(Default::default);
+        let runtime = turn_context
+            .metadata
+            .entry("lime_runtime".to_string())
+            .or_insert_with(|| Value::Object(Default::default()));
+        if !runtime.is_object() {
+            *runtime = Value::Object(Default::default());
+        }
+        let runtime = runtime.as_object_mut().expect("lime_runtime object");
+        runtime.insert("auto_compact".to_string(), Value::Bool(false));
+        runtime.insert(
+            "tool_surface".to_string(),
+            Value::String(
+                tool_runtime::turn_tool_surface::TURN_TOOL_SURFACE_DIRECT_ANSWER.to_string(),
+            ),
+        );
+        runtime.insert(
+            "source".to_string(),
+            Value::String(super::HARNESS_TURN_POLICY_SOURCE.to_string()),
+        );
+    }
     build_agent_session_config(AgentSessionConfigurationRequest {
         session_id: scope.session_id.clone(),
         thread_id: scope.thread_id.clone(),
         turn_id: scope.turn_id.clone(),
+        max_turns: harness_max_provider_steps(runtime_metadata),
+        provider_token_budget: harness_provider_token_budget(runtime_metadata),
         system_prompt,
         turn_context,
         include_context_trace: !turn_tool_surface.uses_light_session_prompt(),
     })
+}
+
+fn harness_max_provider_steps(runtime_metadata: Option<&Value>) -> Option<u32> {
+    runtime_metadata
+        .and_then(|metadata| metadata.pointer(HARNESS_MAX_PROVIDER_STEPS_POINTER))
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| (1..=DEFAULT_MAX_REPLY_TURNS).contains(value))
+}
+
+fn harness_provider_token_budget(runtime_metadata: Option<&Value>) -> Option<u64> {
+    runtime_metadata
+        .and_then(|metadata| metadata.pointer(HARNESS_PROVIDER_TOKEN_BUDGET_POINTER))
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0)
 }
 
 fn request_system_prompt(request: &ExecutionRequest) -> String {

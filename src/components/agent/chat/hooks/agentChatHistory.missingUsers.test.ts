@@ -8,6 +8,7 @@ import {
   mergeHydratedMessagesWithLocalState,
   shouldCompactCompletedSessionHistory,
 } from "./agentChatHistory";
+import { mergeMissingUserMessagesFromTimeline } from "./agentChatHistoryTimelineMerge";
 
 describe("agentChatHistory missing user recovery", () => {
   const internalRuntimeErrorMessage =
@@ -15,6 +16,114 @@ describe("agentChatHistory missing user recovery", () => {
 
   beforeEach(async () => {
     await changeLimeLocale("zh-CN");
+  });
+
+  it("带附件的 canonical 用户消息不应再从同一 runtime turn 补一份无附件副本", () => {
+    const messages = [
+      {
+        id: "loaded-user-1",
+        role: "user" as const,
+        content: "第一轮",
+        images: [
+          {
+            data: "",
+            mediaType: "image/png",
+            sourcePath: "/tmp/first.png",
+          } as never,
+        ],
+        timestamp: new Date("2026-07-16T08:00:00.000Z"),
+        runtimeTurnId: "turn-1",
+      },
+      {
+        id: "loaded-assistant-1",
+        role: "assistant" as const,
+        content: "",
+        contentParts: [
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "tool-1",
+              name: "exec_command",
+              status: "completed" as const,
+            },
+          },
+        ],
+        timestamp: new Date("2026-07-16T08:00:01.000Z"),
+        runtimeTurnId: "turn-1",
+      },
+      {
+        id: "loaded-user-2",
+        role: "user" as const,
+        content: "第二轮",
+        images: [
+          {
+            data: "",
+            mediaType: "image/png",
+            sourcePath: "/tmp/second.png",
+          } as never,
+        ],
+        timestamp: new Date("2026-07-16T08:00:02.000Z"),
+        runtimeTurnId: "turn-2",
+      },
+      {
+        id: "loaded-assistant-2",
+        role: "assistant" as const,
+        content: "",
+        contentParts: [
+          {
+            type: "tool_use" as const,
+            toolCall: {
+              id: "tool-2",
+              name: "exec_command",
+              status: "completed" as const,
+            },
+          },
+        ],
+        timestamp: new Date("2026-07-16T08:00:03.000Z"),
+        runtimeTurnId: "turn-2",
+      },
+    ];
+    const detail = {
+      id: "session-attachment-users",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-1",
+          thread_id: "thread-1",
+          prompt_text: "第一轮",
+          status: "completed",
+          started_at: "2026-07-16T08:00:00.000Z",
+          created_at: "2026-07-16T08:00:00.000Z",
+          updated_at: "2026-07-16T08:00:01.000Z",
+        },
+        {
+          id: "turn-2",
+          thread_id: "thread-1",
+          prompt_text: "第二轮",
+          status: "completed",
+          started_at: "2026-07-16T08:00:02.000Z",
+          created_at: "2026-07-16T08:00:02.000Z",
+          updated_at: "2026-07-16T08:00:03.000Z",
+        },
+      ],
+      items: [],
+    } as unknown as AgentSessionDetail;
+
+    const merged = mergeMissingUserMessagesFromTimeline(
+      messages,
+      detail,
+      detail.id,
+    );
+
+    expect(merged.filter((message) => message.role === "user")).toHaveLength(2);
+    expect(merged.map((message) => message.id)).toEqual([
+      "loaded-user-1",
+      "loaded-assistant-1",
+      "loaded-user-2",
+      "loaded-assistant-2",
+    ]);
   });
 
   it("App Server failed read model 应恢复用户请求并追加失败助手消息", () => {

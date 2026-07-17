@@ -3,15 +3,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockListAgentRuntimeSessions, mockUpdateAgentRuntimeSession, mockToast } =
-  vi.hoisted(() => ({
-    mockListAgentRuntimeSessions: vi.fn(),
-    mockUpdateAgentRuntimeSession: vi.fn(),
-    mockToast: {
-      success: vi.fn(),
-      error: vi.fn(),
-    },
-  }));
+const {
+  mockListAgentRuntimeSessions,
+  mockUpdateAgentRuntimeSession,
+  mockToast,
+} = vi.hoisted(() => ({
+  mockListAgentRuntimeSessions: vi.fn(),
+  mockUpdateAgentRuntimeSession: vi.fn(),
+  mockToast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 vi.mock("@/lib/api/agentRuntime/sessionClient", () => ({
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
@@ -96,10 +99,63 @@ afterEach(async () => {
   }
 
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   await changeLimeLocale("zh-CN");
 });
 
 describe("ArchivedConversationsSettings", () => {
+  it("加载归档列表时应暴露稳定的 busy 状态", () => {
+    mockListAgentRuntimeSessions.mockReturnValue(new Promise(() => {}));
+
+    const container = renderPage();
+    const loading = container.querySelector(
+      '[data-testid="settings-archived-conversations-loading"]',
+    );
+
+    expect(loading).toBeInstanceOf(HTMLElement);
+    expect(loading?.getAttribute("role")).toBe("status");
+    expect(loading?.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("没有归档会话时应展示稳定空态", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([]);
+
+    const container = renderPage();
+    await flushEffects();
+
+    const empty = container.querySelector(
+      '[data-testid="settings-archived-conversations-empty"]',
+    );
+    expect(empty).toBeInstanceOf(HTMLElement);
+    expect(empty?.getAttribute("role")).toBe("status");
+    expect(empty?.textContent).toContain("暂无已归档对话");
+  });
+
+  it("归档列表读取失败时应展示可重试错误态", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    mockListAgentRuntimeSessions.mockRejectedValue(
+      new Error("fixture archived list unavailable"),
+    );
+
+    const container = renderPage();
+    await flushEffects();
+
+    const error = container.querySelector(
+      '[data-testid="settings-archived-conversations-error"]',
+    );
+    expect(error).toBeInstanceOf(HTMLElement);
+    expect(error?.getAttribute("role")).toBe("alert");
+    expect(error?.textContent).toContain("加载已归档对话失败");
+    expect(
+      container.querySelector(
+        '[data-testid="settings-archived-conversations-retry"]',
+      ),
+    ).toBeInstanceOf(HTMLButtonElement);
+    expect(consoleError).toHaveBeenCalled();
+  });
+
   it("应从 App Server current 会话列表读取归档对话", async () => {
     const container = renderPage();
     await flushEffects();

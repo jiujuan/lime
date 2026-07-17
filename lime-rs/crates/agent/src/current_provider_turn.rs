@@ -39,6 +39,9 @@ mod tool_lifecycle_emitter;
 
 use tool_lifecycle_emitter::CurrentTurnToolLifecycleEmitter;
 
+const UNSUPPORTED_HISTORY_IMAGE_PLACEHOLDER: &str =
+    "image content omitted because you do not support image input";
+
 #[cfg(test)]
 use tool_executor::{action_scope, mcp_call_scope, project_call_result};
 
@@ -57,16 +60,10 @@ pub(crate) async fn stream_current_provider_turn<F>(
 where
     F: FnMut(&AgentEvent) + Send,
 {
-    if !input.images.is_empty()
-        && !input_modality_policy_allows_image_input(
-            input_modality_policy_from_turn_context(session_config.turn_context.as_ref()).as_ref(),
-        )
-    {
-        return Err(ReplyAttemptError {
-            message: "当前选中模型的 input_modality_policy 不支持图片输入，已拒绝把 image 内容发送到 provider；请切换支持 image 的模型或移除图片。".to_string(),
-            emitted_any: false,
-        });
-    }
+    let supports_image_input = input_modality_policy_allows_image_input(
+        input_modality_policy_from_turn_context(session_config.turn_context.as_ref()).as_ref(),
+    );
+    prepare_image_inputs_for_model(&input, &mut initial_messages, supports_image_input)?;
     session_config.system_prompt =
         merge_system_prompt_with_request_tool_policy(session_config.system_prompt.take(), policy);
     let session_id = session_config.id.clone();
@@ -385,11 +382,41 @@ fn user_message(
             .images
             .into_iter()
             .map(|image| CurrentProviderContent::Image {
-                data: image.data,
+                uri: image.uri,
                 media_type: image.media_type,
+                provider_data: image.provider_data,
             }),
     );
     CurrentProviderMessage::user(content)
+}
+
+fn prepare_image_inputs_for_model(
+    input: &RuntimeReplyInput,
+    initial_messages: &mut [model_provider::current_client::CurrentProviderMessage],
+    supports_image_input: bool,
+) -> Result<(), ReplyAttemptError> {
+    use model_provider::current_client::CurrentProviderContent;
+
+    if supports_image_input {
+        return Ok(());
+    }
+    if !input.images.is_empty() {
+        return Err(ReplyAttemptError {
+            message: "当前选中模型的 input_modality_policy 不支持图片输入，已拒绝把 image 内容发送到 provider；请切换支持 image 的模型或移除图片。".to_string(),
+            emitted_any: false,
+        });
+    }
+
+    for content in initial_messages
+        .iter_mut()
+        .flat_map(|message| &mut message.content)
+    {
+        if matches!(content, CurrentProviderContent::Image { .. }) {
+            *content =
+                CurrentProviderContent::Text(UNSUPPORTED_HISTORY_IMAGE_PLACEHOLDER.to_string());
+        }
+    }
+    Ok(())
 }
 
 fn project_usage(usage: model_provider::current_client::CurrentProviderUsage) -> AgentTokenUsage {
@@ -448,6 +475,55 @@ mod tests {
     use tool_runtime::tool_result_projection::NormalizedToolOutput;
 
     struct HangingMcpConnection;
+
+    #[test]
+    fn text_only_model_rejects_current_image_before_provider_execution() {
+        let input = RuntimeReplyInput {
+            text: "describe it".to_string(),
+            images: vec![agent_runtime::reply_input::RuntimeReplyInputImage {
+                uri: "sidecar://image-1".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: Some("data:image/png;base64,abc".to_string()),
+            }],
+            agent_only: false,
+        };
+        let mut history = Vec::new();
+
+        let error = prepare_image_inputs_for_model(&input, &mut history, false)
+            .expect_err("current image must fail before provider execution");
+
+        assert!(!error.emitted_any);
+        assert!(error.message.contains("不支持图片输入"));
+        assert!(history.is_empty());
+    }
+
+    #[test]
+    fn text_only_model_replaces_history_image_without_leaking_provider_payload() {
+        use model_provider::current_client::{CurrentProviderContent, CurrentProviderMessage};
+
+        let input = RuntimeReplyInput::text("continue");
+        let mut history = vec![CurrentProviderMessage::user(vec![
+            CurrentProviderContent::Text("before".to_string()),
+            CurrentProviderContent::Image {
+                uri: "sidecar://image-1".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: Some("data:image/png;base64,abc".to_string()),
+            },
+            CurrentProviderContent::Text("after".to_string()),
+        ])];
+
+        prepare_image_inputs_for_model(&input, &mut history, false)
+            .expect("historical images should not block a text-only continuation");
+
+        assert_eq!(
+            history[0].content,
+            vec![
+                CurrentProviderContent::Text("before".to_string()),
+                CurrentProviderContent::Text(UNSUPPORTED_HISTORY_IMAGE_PLACEHOLDER.to_string()),
+                CurrentProviderContent::Text("after".to_string()),
+            ]
+        );
+    }
 
     #[async_trait]
     impl McpConnection for HangingMcpConnection {

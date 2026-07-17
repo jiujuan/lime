@@ -5,17 +5,27 @@ use crate::runtime::{new_id, timestamp};
 use crate::{RuntimeCore, RuntimeCoreError};
 use app_server_protocol::{
     AgentAttachment, AgentInput, AgentSessionStartParams, AgentSessionStatus, AgentTurn,
-    AgentTurnStatus, BusinessObjectRef, ConversationImportSourceClient,
-    ConversationImportSourceProvenance, ConversationImportThreadCommitParams,
-    ConversationImportThreadCommitResponse, ConversationImportThreadStatus,
+    AgentTurnStatus, BusinessObjectRef, ConversationImportJobPhase, ConversationImportJobProgress,
+    ConversationImportSourceClient, ConversationImportSourceProvenance,
+    ConversationImportThreadCommitParams, ConversationImportThreadCommitResponse,
+    ConversationImportThreadStatus,
 };
 use serde_json::json;
 
 const DEFAULT_IMPORT_APP_ID: &str = "content-studio";
 
+#[cfg(test)]
 pub(super) fn commit_conversation_import_thread(
     core: &RuntimeCore,
     params: ConversationImportThreadCommitParams,
+) -> Result<ConversationImportThreadCommitResponse, RuntimeCoreError> {
+    commit_conversation_import_thread_with_progress(core, params, &mut |_| Ok(()))
+}
+
+pub(super) fn commit_conversation_import_thread_with_progress(
+    core: &RuntimeCore,
+    params: ConversationImportThreadCommitParams,
+    report_progress: &mut dyn FnMut(ConversationImportJobProgress) -> Result<(), RuntimeCoreError>,
 ) -> Result<ConversationImportThreadCommitResponse, RuntimeCoreError> {
     if !params.confirmed {
         return Err(RuntimeCoreError::Backend(
@@ -23,13 +33,21 @@ pub(super) fn commit_conversation_import_thread(
         ));
     }
 
-    commit_codex_thread(core, params)
+    commit_codex_thread(core, params, report_progress)
 }
 
 fn commit_codex_thread(
     core: &RuntimeCore,
     params: ConversationImportThreadCommitParams,
+    report_progress: &mut dyn FnMut(ConversationImportJobProgress) -> Result<(), RuntimeCoreError>,
 ) -> Result<ConversationImportThreadCommitResponse, RuntimeCoreError> {
+    report_progress(import_progress(
+        ConversationImportJobPhase::ReadingSource,
+        0,
+        0,
+        0,
+        0,
+    ))?;
     let source_root = codex::resolve_home(params.source_root.as_deref()).ok_or_else(|| {
         RuntimeCoreError::Backend("unable to resolve source home directory".to_string())
     })?;
@@ -53,6 +71,18 @@ fn commit_codex_thread(
             "source rollout does not contain importable user messages".to_string(),
         ));
     }
+    let total_turns = turns.len();
+    let total_items = turns
+        .iter()
+        .map(|turn| turn.events.len().saturating_add(1))
+        .sum();
+    report_progress(import_progress(
+        ConversationImportJobPhase::BuildingHistory,
+        0,
+        total_items,
+        0,
+        total_turns,
+    ))?;
     if let Some(session) = import_status::imported_session_for_thread(
         core,
         ConversationImportSourceClient::Codex,
@@ -85,6 +115,13 @@ fn commit_codex_thread(
         &preview.summary.fidelity,
     );
     let prepared_turns = prepare_history_turns(turns)?;
+    report_progress(import_progress(
+        ConversationImportJobPhase::PersistingHistory,
+        0,
+        total_items,
+        0,
+        total_turns,
+    ))?;
 
     let created_session = core
         .start_session(AgentSessionStartParams {
@@ -113,6 +150,7 @@ fn commit_codex_thread(
             &created_session.session_id,
             prepared_turns,
             &provenance,
+            report_progress,
         )?;
         let imported_messages = preview.summary.dry_run.will_import_messages;
         let warnings = provenance::commit_warnings(
@@ -121,6 +159,13 @@ fn commit_codex_thread(
             preview.summary.rollout_event_items,
         );
 
+        report_progress(import_progress(
+            ConversationImportJobPhase::Finalizing,
+            total_items,
+            total_items,
+            imported_turns,
+            total_turns,
+        ))?;
         let (mut session, _) = core.session_snapshot(&created_session.session_id)?;
         session.status = AgentSessionStatus::Completed;
 
@@ -238,6 +283,7 @@ struct HistoryTurn {
     user_text: String,
     user_attachments: Vec<AgentAttachment>,
     user_timestamp: Option<String>,
+    completed_timestamp: Option<String>,
     user_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
     events: Vec<HistoryTurnEvent>,
 }
@@ -246,6 +292,7 @@ struct PreparedHistoryTurn {
     user_text: String,
     user_attachments: Vec<AgentAttachment>,
     user_timestamp: Option<String>,
+    completed_timestamp: Option<String>,
     user_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
     user_message: CodexRolloutEvent,
     events: Vec<CodexRolloutEvent>,
@@ -253,12 +300,18 @@ struct PreparedHistoryTurn {
 
 enum HistoryTurnEvent {
     AssistantMessage(HistoricalAssistantMessage),
-    Runtime(CodexRolloutEvent),
+    Runtime {
+        event: CodexRolloutEvent,
+        timestamp: Option<String>,
+    },
 }
 
 struct HistoricalAssistantMessage {
     text: String,
+    phase: Option<String>,
+    source_item_id: Option<String>,
     provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
+    timestamp: Option<String>,
 }
 
 fn history_turns(timeline: &[CodexTimelineItem]) -> Vec<HistoryTurn> {
@@ -275,19 +328,19 @@ fn history_turns(timeline: &[CodexTimelineItem]) -> Vec<HistoryTurn> {
 
     for item in timeline {
         match item {
-            CodexTimelineItem::Message(message) => match message.role.as_str() {
+            CodexTimelineItem::Message(message) => match message.preview.role.as_str() {
                 "user" => {
                     if pending_user.as_mut().is_some_and(
                         |(text, attachments, source_type, timestamp, provenance)| {
-                            if text.trim() != message.text.trim()
+                            if text.trim() != message.preview.text.trim()
                                 || !is_duplicate_source_user_message(
                                     source_type.as_deref(),
-                                    message.source_type.as_deref(),
+                                    message.preview.source_type.as_deref(),
                                 )
                             {
                                 return false;
                             }
-                            for attachment in &message.attachments {
+                            for attachment in &message.preview.attachments {
                                 let already_present = attachments.iter().any(|existing| {
                                     existing.kind == attachment.kind
                                         && existing.uri == attachment.uri
@@ -297,10 +350,10 @@ fn history_turns(timeline: &[CodexTimelineItem]) -> Vec<HistoryTurn> {
                                 }
                             }
                             if timestamp.is_none() {
-                                *timestamp = message.timestamp.clone();
+                                *timestamp = message.preview.timestamp.clone();
                             }
                             if provenance.is_none() {
-                                *provenance = message.provenance.clone();
+                                *provenance = message.preview.provenance.clone();
                             }
                             true
                         },
@@ -309,26 +362,25 @@ fn history_turns(timeline: &[CodexTimelineItem]) -> Vec<HistoryTurn> {
                     }
                     flush_history_turn(&mut turns, &mut pending_user, &mut pending_events);
                     pending_user = Some((
-                        message.text.clone(),
-                        message.attachments.clone(),
-                        message.source_type.clone(),
-                        message.timestamp.clone(),
-                        message.provenance.clone(),
+                        message.preview.text.clone(),
+                        message.preview.attachments.clone(),
+                        message.preview.source_type.clone(),
+                        message.preview.timestamp.clone(),
+                        message.preview.provenance.clone(),
                     ));
-                    pending_events.extend(
-                        leading_runtime_events
-                            .drain(..)
-                            .map(HistoryTurnEvent::Runtime),
-                    );
+                    pending_events.append(&mut leading_runtime_events);
                 }
                 "assistant" => {
                     if pending_user.is_some() {
-                        let text = message.text.trim();
+                        let text = message.preview.text.trim();
                         if !text.is_empty() {
                             pending_events.push(HistoryTurnEvent::AssistantMessage(
                                 HistoricalAssistantMessage {
                                     text: text.to_string(),
-                                    provenance: message.provenance.clone(),
+                                    phase: message.phase.clone(),
+                                    source_item_id: message.source_item_id.clone(),
+                                    provenance: message.preview.provenance.clone(),
+                                    timestamp: message.preview.timestamp.clone(),
                                 },
                             ));
                         }
@@ -336,11 +388,17 @@ fn history_turns(timeline: &[CodexTimelineItem]) -> Vec<HistoryTurn> {
                 }
                 _ => {}
             },
-            CodexTimelineItem::RolloutEvent(event) => {
+            CodexTimelineItem::RolloutEvent { event, timestamp } => {
                 if pending_user.is_some() {
-                    pending_events.push(HistoryTurnEvent::Runtime(event.clone()));
+                    pending_events.push(HistoryTurnEvent::Runtime {
+                        event: event.clone(),
+                        timestamp: timestamp.clone(),
+                    });
                 } else {
-                    leading_runtime_events.push(event.clone());
+                    leading_runtime_events.push(HistoryTurnEvent::Runtime {
+                        event: event.clone(),
+                        timestamp: timestamp.clone(),
+                    });
                 }
             }
         }
@@ -366,13 +424,26 @@ fn flush_history_turn(
         pending_events.clear();
         return;
     };
+    let completed_timestamp = pending_events
+        .iter()
+        .rev()
+        .find_map(history_turn_event_timestamp)
+        .or_else(|| user_timestamp.clone());
     turns.push(HistoryTurn {
         user_text,
         user_attachments,
         user_timestamp,
+        completed_timestamp,
         user_provenance,
         events: std::mem::take(pending_events),
     });
+}
+
+fn history_turn_event_timestamp(event: &HistoryTurnEvent) -> Option<String> {
+    match event {
+        HistoryTurnEvent::AssistantMessage(message) => message.timestamp.clone(),
+        HistoryTurnEvent::Runtime { timestamp, .. } => timestamp.clone(),
+    }
 }
 
 fn is_duplicate_source_user_message(existing: Option<&str>, candidate: Option<&str>) -> bool {
@@ -387,10 +458,17 @@ fn append_history_turns(
     session_id: &str,
     turns: Vec<PreparedHistoryTurn>,
     provenance: &ImportProvenance,
+    report_progress: &mut dyn FnMut(ConversationImportJobProgress) -> Result<(), RuntimeCoreError>,
 ) -> Result<usize, RuntimeCoreError> {
     let (session, _) = core.session_snapshot(session_id)?;
     let thread_id = session.thread_id.clone();
     let mut imported = 0;
+    let total_turns = turns.len();
+    let total_items = turns
+        .iter()
+        .map(|turn| turn.events.len().saturating_add(1))
+        .sum();
+    let mut completed_items: usize = 0;
 
     for history_turn in turns {
         let turn_id = new_id("turn");
@@ -431,16 +509,46 @@ fn append_history_turns(
             stored.turns.push(turn);
         }
 
-        let mut source_events = Vec::with_capacity(history_turn.events.len() + 1);
+        let persisted_items = history_turn.events.len().saturating_add(1);
+        let mut source_events = Vec::with_capacity(persisted_items);
         source_events.push(history_turn.user_message);
         source_events.extend(history_turn.events);
-        let events =
-            codex::build_canonical_history_events(source_events, session_id, &thread_id, &turn_id);
+        let events = codex::build_canonical_history_events(
+            source_events,
+            session_id,
+            &thread_id,
+            &turn_id,
+            history_turn.completed_timestamp.as_deref(),
+        );
         core.append_runtime_events(session_id, &thread_id, Some(&turn_id), events)?;
         imported += 1;
+        completed_items = completed_items.saturating_add(persisted_items);
+        report_progress(import_progress(
+            ConversationImportJobPhase::PersistingHistory,
+            completed_items,
+            total_items,
+            imported,
+            total_turns,
+        ))?;
     }
 
     Ok(imported)
+}
+
+fn import_progress(
+    phase: ConversationImportJobPhase,
+    completed_items: usize,
+    total_items: usize,
+    completed_turns: usize,
+    total_turns: usize,
+) -> ConversationImportJobProgress {
+    ConversationImportJobProgress {
+        phase,
+        completed_items,
+        total_items,
+        completed_turns,
+        total_turns,
+    }
 }
 
 fn prepare_history_turns(
@@ -454,6 +562,8 @@ fn prepare_history_turns(
                 &turn.user_text,
                 &turn.user_attachments,
                 turn.user_provenance.as_ref(),
+                None,
+                None,
             )?;
             let mut events = Vec::with_capacity(turn.events.len());
             for event in turn.events {
@@ -464,15 +574,18 @@ fn prepare_history_turns(
                             &message.text,
                             &[],
                             message.provenance.as_ref(),
+                            message.source_item_id.as_deref(),
+                            message.phase.as_deref(),
                         )?);
                     }
-                    HistoryTurnEvent::Runtime(runtime_event) => events.push(runtime_event),
+                    HistoryTurnEvent::Runtime { event, .. } => events.push(event),
                 }
             }
             Ok(PreparedHistoryTurn {
                 user_text: turn.user_text,
                 user_attachments: turn.user_attachments,
                 user_timestamp: turn.user_timestamp,
+                completed_timestamp: turn.completed_timestamp,
                 user_provenance: turn.user_provenance,
                 user_message,
                 events,
@@ -486,6 +599,8 @@ fn message_rollout_event(
     text: &str,
     attachments: &[AgentAttachment],
     provenance: Option<&ConversationImportSourceProvenance>,
+    source_item_id: Option<&str>,
+    phase: Option<&str>,
 ) -> Result<CodexRolloutEvent, RuntimeCoreError> {
     let provenance = provenance.ok_or_else(|| {
         RuntimeCoreError::Backend(format!(
@@ -503,9 +618,8 @@ fn message_rollout_event(
         ))
     })?;
     let item_role = if role == "user" { "user" } else { "agent" };
-    let item_id = provenance
-        .source_call_id
-        .as_deref()
+    let item_id = source_item_id
+        .or(provenance.source_call_id.as_deref())
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
         .unwrap_or_else(|| format!("imported-{item_role}_{source_event_seq}"));
@@ -531,6 +645,7 @@ fn message_rollout_event(
             "ordinal": ordinal,
             "role": role,
             "text": text,
+            "phase": phase,
             "attachments": attachments,
             "imported": true,
             "sourceClient": "codex",

@@ -112,6 +112,7 @@ ORDER BY {updated_at_expr} DESC
             cwd: row.get(6)?,
             archived: sqlite_bool(row.get(7)?),
             source_path,
+            import_job_id: None,
             import_status: ConversationImportThreadStatus::NotImported,
             metadata,
         })

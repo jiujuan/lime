@@ -56,7 +56,48 @@ pub(super) fn runtime_provider_config_from_credential(
         credential_uuid: credential.uuid.clone(),
         reasoning_effort: None,
         protocol: None,
+        supports_websockets: resolved_api_type
+            .is_some_and(|provider_type| provider_type.runtime_spec().supports_websockets),
         toolshim: false,
         toolshim_model: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runtime_provider_config_from_credential;
+    use lime_core::database::dao::api_key_provider::ApiProviderType;
+    use lime_core::models::{
+        RuntimeCredentialData, RuntimeProviderCredential, RuntimeProviderType,
+    };
+
+    fn openai_credential() -> RuntimeProviderCredential {
+        RuntimeProviderCredential::new(
+            RuntimeProviderType::OpenAI,
+            RuntimeCredentialData::OpenAIKey {
+                api_key: "test-key".to_string(),
+                base_url: Some("https://api.openai.com/v1".to_string()),
+            },
+        )
+    }
+
+    #[test]
+    fn provider_runtime_spec_controls_websocket_capability() {
+        let credential = openai_credential();
+        let openai = runtime_provider_config_from_credential(
+            &credential,
+            "gpt-5.4",
+            "openai",
+            Some(ApiProviderType::Openai),
+        );
+        let gateway = runtime_provider_config_from_credential(
+            &credential,
+            "gpt-5.4",
+            "gateway",
+            Some(ApiProviderType::Gateway),
+        );
+
+        assert!(openai.supports_websockets);
+        assert!(!gateway.supports_websockets);
     }
 }

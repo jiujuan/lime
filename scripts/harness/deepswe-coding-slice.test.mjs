@@ -34,7 +34,7 @@ describe("DeepSWE coding slice v2", () => {
       "outside the Lime repository",
     );
     expect(manifest.executionContract).toMatchObject({
-      adapterVersion: "deepswe-current-chain-adapter-v3",
+      adapterVersion: "deepswe-current-chain-adapter-v4",
       primaryModel:
         "custom-637ea2d5-e430-43de-86de-39c5f1735438 / agnes-2.0-flash",
       comparisonModel: "custom-1ae93b42-e57f-4a83-ac6e-3f5275a7b376 / gpt-5.5",
@@ -43,6 +43,9 @@ describe("DeepSWE coding slice v2", () => {
         tokenBudget: 500_000,
         tokenFormula: "max(0,input_tokens-cached_input_tokens)+output_tokens",
         evidenceIntervalMs: 30_000,
+        enforcementOwner:
+          "agent-runtime reply loop before tool execution and next sampling",
+        adapterFallback: "token evidence polling for timeout races only",
       },
       requiredEvidence: {
         agent: [
@@ -68,7 +71,7 @@ describe("DeepSWE coding slice v2", () => {
       "task git repository exposes refs or commits after the pinned base",
     );
     expect(manifest.executionContract.currentBlockers).toEqual([
-      "Agnes exhausted the 16-provider-step diagnostic budget with complete usage evidence and no candidate patch",
+      "Agnes produced no candidate in TS/Go/Rust diagnostics, including runtime-capped runs with a complete provider tool catalog",
       "Pier is installed but no local container runtime is available",
     ]);
   });

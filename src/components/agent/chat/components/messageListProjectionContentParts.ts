@@ -1,5 +1,8 @@
 import { sanitizeMessageTextForDisplay } from "../utils/messageDisplaySanitizer";
-import { isAgentMessageCommentaryPhase } from "../utils/agentMessagePhase";
+import {
+  isAgentMessageCommentaryPhase,
+  isAgentMessageFinalAnswerPhase,
+} from "../utils/agentMessagePhase";
 import {
   areComparableContentTextsEqual,
   areComparableContentTextsRelated,
@@ -81,6 +84,29 @@ function isFinalTextContentPart(
   return part.type === "text" && !isCommentaryTextContentPart(part);
 }
 
+export function selectFinalTextContentParts(
+  parts?: Message["contentParts"],
+): Array<Extract<MessageContentPart, { type: "text" }>> {
+  const candidates = collectVisibleTextContentParts(parts);
+  const explicitFinalParts = candidates.filter((part) =>
+    isAgentMessageFinalAnswerPhase(readTextContentPartPhase(part)),
+  );
+  if (explicitFinalParts.length > 0) {
+    return explicitFinalParts;
+  }
+  const fallbackFinalPart = candidates.at(-1);
+  return fallbackFinalPart ? [fallbackFinalPart] : [];
+}
+
+function collectVisibleTextContentParts(
+  parts?: Message["contentParts"],
+): Array<Extract<MessageContentPart, { type: "text" }>> {
+  return (parts || []).filter(
+    (part): part is Extract<MessageContentPart, { type: "text" }> =>
+      isFinalTextContentPart(part) && part.text.trim().length > 0,
+  );
+}
+
 export function collectFileChangeBatchPaths(
   parts?: Message["contentParts"],
 ): string[] {
@@ -94,11 +120,7 @@ export function collectFileChangeBatchPaths(
 function resolveFinalTextFromContentParts(
   parts?: Message["contentParts"],
 ): string {
-  const textParts =
-    parts?.filter(
-      (part): part is Extract<MessageContentPart, { type: "text" }> =>
-        isFinalTextContentPart(part) && part.text.trim().length > 0,
-    ) || [];
+  const textParts = collectVisibleTextContentParts(parts);
 
   return textParts[textParts.length - 1]?.text.trim() || "";
 }
@@ -107,11 +129,7 @@ function resolveVisibleTextFromContentParts(
   parts?: Message["contentParts"],
 ): string {
   return (
-    parts
-      ?.filter(
-        (part): part is Extract<MessageContentPart, { type: "text" }> =>
-          isFinalTextContentPart(part) && part.text.trim().length > 0,
-      )
+    collectVisibleTextContentParts(parts)
       .map((part) => part.text.trim())
       .join("\n\n")
       .trim() || ""
@@ -131,12 +149,14 @@ export function resolveDeferredTextContentParts(
   parts?: Message["contentParts"],
   options?: Parameters<typeof sanitizeMessageTextForDisplay>[1],
 ): Message["contentParts"] | undefined {
-  const finalText = resolveFinalTextFromContentParts(parts);
-  const sanitizedText = options
-    ? sanitizeMessageTextForDisplay(finalText, options)
-    : finalText;
-  if (sanitizedText) {
-    return [{ type: "text", text: sanitizedText }];
+  const finalTextParts = selectFinalTextContentParts(parts).flatMap((part) => {
+    const sanitizedText = options
+      ? sanitizeMessageTextForDisplay(part.text, options)
+      : part.text.trim();
+    return sanitizedText ? [{ ...part, text: sanitizedText }] : [];
+  });
+  if (finalTextParts.length > 0) {
+    return finalTextParts;
   }
 
   const mediaReferenceParts = (parts || []).filter(
@@ -215,33 +235,41 @@ export function resolveProcessSeparatedContentParts(
     lastFinalTextPart?.type === "text" ? lastFinalTextPart.text.trim() : "";
   const normalizedLastFinalText = normalizeComparableText(lastFinalText);
 
-  const filtered = structuredParts.flatMap<MessageContentPart>((part, index) => {
-    if (part.type !== "text") {
+  const filtered = structuredParts.flatMap<MessageContentPart>(
+    (part, index) => {
+      if (part.type !== "text") {
+        return [part];
+      }
+      if (isCommentaryTextContentPart(part)) {
+        return [part];
+      }
+
+      if (
+        isAgentMessageFinalAnswerPhase(readTextContentPartPhase(part))
+      ) {
+        return [part];
+      }
+
+      if (index < firstProcessIndex) {
+        const trimmedPart = trimFinalTextOverlapFromLeadingPart({
+          leadingPart: part,
+          finalText: lastFinalText,
+          normalizedFinalText: normalizedLastFinalText,
+        });
+        return trimmedPart ? [trimmedPart] : [];
+      }
+
+      if (index !== lastFinalTextIndex) {
+        return [];
+      }
+
+      if (isTextCoveredByThinkingPart(structuredParts, index, part.text)) {
+        return [];
+      }
+
       return [part];
-    }
-    if (isCommentaryTextContentPart(part)) {
-      return [part];
-    }
-
-    if (index < firstProcessIndex) {
-      const trimmedPart = trimFinalTextOverlapFromLeadingPart({
-        leadingPart: part,
-        finalText: lastFinalText,
-        normalizedFinalText: normalizedLastFinalText,
-      });
-      return trimmedPart ? [trimmedPart] : [];
-    }
-
-    if (index !== lastFinalTextIndex) {
-      return [];
-    }
-
-    if (isTextCoveredByThinkingPart(structuredParts, index, part.text)) {
-      return [];
-    }
-
-    return [part];
-  });
+    },
+  );
 
   return filtered.length > 0 ? filtered : undefined;
 }
@@ -299,8 +327,7 @@ function isTextCoveredByThinkingPart(
     .slice(textIndex + 1)
     .some(
       (part) =>
-        part.type === "thinking" &&
-        part.text.trim().startsWith(normalizedText),
+        part.type === "thinking" && part.text.trim().startsWith(normalizedText),
     );
 }
 
@@ -347,8 +374,7 @@ export function ensureInlineThinkingContentPart(params: {
           .slice(thinkingPartIndex + 1)
           .some(
             (part) =>
-              part.type === "thinking" &&
-              part.text.trim() === trailingThinking,
+              part.type === "thinking" && part.text.trim() === trailingThinking,
           );
         if (hasTrailingThinking) {
           return params.parts;
@@ -394,13 +420,12 @@ export function normalizeInlineThinkingContentParts(
       part.type === "thinking" ? readThinkingContentPartIdentities(part) : [];
 
     if (part.type === "thinking") {
-      const existingIndex =
-        findExistingThinkingContentPartIndex({
-          identities: thinkingIdentities,
-          normalized,
-          part,
-          thinkingIndexByIdentity,
-        });
+      const existingIndex = findExistingThinkingContentPartIndex({
+        identities: thinkingIdentities,
+        normalized,
+        part,
+        thinkingIndexByIdentity,
+      });
       if (existingIndex !== undefined) {
         const existingPart = normalized[existingIndex];
         if (existingPart?.type === "thinking") {
@@ -559,9 +584,7 @@ function shouldPreferReadableThinkingText(params: {
     return true;
   }
 
-  if (
-    !areComparableContentTextsRelated(params.previousText, params.nextText)
-  ) {
+  if (!areComparableContentTextsRelated(params.previousText, params.nextText)) {
     return false;
   }
 

@@ -25,6 +25,8 @@ import {
   AgentThreadTimelineFileChangesCard,
   hasTimelineFileChangeEvidence,
 } from "./AgentThreadTimelineFileChangesCard";
+import { AgentThreadTimelineAttachmentList } from "./AgentThreadTimelineAttachmentList";
+import { isPlainTimelineFileAttachment } from "./AgentThreadTimelineArtifactCard";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import {
   buildTimelineBlockRenderPlan,
@@ -130,9 +132,7 @@ function TimelineBlockCard({
     focusedItemId,
     hasStructuredThinkingInlinePreview,
   });
-  const [open, setOpen] = useState(
-    isExpanded || initialPlan.hasFocusedItem,
-  );
+  const [open, setOpen] = useState(isExpanded || initialPlan.hasFocusedItem);
   const renderPlan = buildTimelineBlockRenderPlan({
     block,
     isExpanded: open,
@@ -207,16 +207,23 @@ function TimelineBlockCard({
         {block.items.length > 1 &&
         block.items.every(hasTimelineFileChangeEvidence) ? (
           <AgentThreadTimelineFileChangesCard
-            items={
-              block.items.filter(
-                (item): item is Extract<
-                  AgentThreadItem,
-                  { type: "file_artifact" }
-                > => item.type === "file_artifact",
-              )
-            }
+            items={block.items.filter(
+              (
+                item,
+              ): item is Extract<AgentThreadItem, { type: "file_artifact" }> =>
+                item.type === "file_artifact",
+            )}
             onFileClick={onFileClick}
             onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+          />
+        ) : block.items.length > 1 &&
+          block.items.every(isPlainTimelineFileAttachment) ? (
+          <AgentThreadTimelineAttachmentList
+            items={block.items}
+            onFileClick={onFileClick}
+            onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+            sourceMessageId={sourceMessageId}
+            onSaveFileArtifactAsKnowledge={onSaveFileArtifactAsKnowledge}
           />
         ) : (
           detailEntries.map((entry) => (
@@ -237,22 +244,20 @@ function TimelineBlockCard({
     );
   }
 
-  const singleItemContent = renderPlan.shouldRenderSingleItemInline
-    ? (
-        <TimelineItemDetails
-          item={block.items[0]!}
-          onFileClick={onFileClick}
-          onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
-          onOpenSavedSiteContent={onOpenSavedSiteContent}
-          onOpenSubagentSession={onOpenSubagentSession}
-          onPermissionResponse={onPermissionResponse}
-          defaultExpandCompletedToolResult={expandCompletedProcessDetails}
-          openSubagentLabel={openSubagentLabel}
-          sourceMessageId={sourceMessageId}
-          onSaveFileArtifactAsKnowledge={onSaveFileArtifactAsKnowledge}
-        />
-      )
-    : null;
+  const singleItemContent = renderPlan.shouldRenderSingleItemInline ? (
+    <TimelineItemDetails
+      item={block.items[0]!}
+      onFileClick={onFileClick}
+      onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+      onOpenSavedSiteContent={onOpenSavedSiteContent}
+      onOpenSubagentSession={onOpenSubagentSession}
+      onPermissionResponse={onPermissionResponse}
+      defaultExpandCompletedToolResult={expandCompletedProcessDetails}
+      openSubagentLabel={openSubagentLabel}
+      sourceMessageId={sourceMessageId}
+      onSaveFileArtifactAsKnowledge={onSaveFileArtifactAsKnowledge}
+    />
+  ) : null;
 
   if (singleItemContent) {
     return (
@@ -305,7 +310,7 @@ function TimelineBlockCard({
       data-testid={`${dataTestId}:shell`}
       data-emphasis={emphasis}
     >
-        <details
+      <details
         data-testid={dataTestId}
         data-emphasis={emphasis}
         open={renderPlan.hasDetailEntries ? open : true}
@@ -492,14 +497,12 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
             key={block.id}
             block={block}
             index={index}
-            emphasis={
-              resolveTimelineBlockEmphasis({
-                block,
-                index,
-                activeBlockIndex,
-                focusedItemId,
-              })
-            }
+            emphasis={resolveTimelineBlockEmphasis({
+              block,
+              index,
+              activeBlockIndex,
+              focusedItemId,
+            })}
             isExpanded={expandedBlockIndexes.has(index)}
             preferInlineDetails={isCurrentTurn}
             deferCompletedSingleDetails={deferCompletedSingleDetails}

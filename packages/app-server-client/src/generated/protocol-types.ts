@@ -85,6 +85,8 @@ export const METHOD_CONNECT_DEEP_LINK_RESOLVE = "connectDeepLink/resolve";
 export const METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE =
   "connectOpenDeepLink/resolve";
 export const METHOD_CONNECT_RELAY_API_KEY_SAVE = "connectRelayApiKey/save";
+export const METHOD_CONVERSATION_IMPORT_JOB_READ =
+  "conversationImport/job/read";
 export const METHOD_CONVERSATION_IMPORT_SOURCE_SCAN =
   "conversationImport/source/scan";
 export const METHOD_CONVERSATION_IMPORT_THREAD_COMMIT =
@@ -620,6 +622,10 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "connectRelayApiKey/save",
+  },
+  {
+    kind: "request",
+    method: "conversationImport/job/read",
   },
   {
     kind: "request",
@@ -3840,6 +3846,11 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
+      method: "conversationImport/job/read";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
       method: "agentSession/start";
       params?: unknown;
     }
@@ -3978,6 +3989,7 @@ export type AppServerRequestMethod =
   | "connectDeepLink/resolve"
   | "connectOpenDeepLink/resolve"
   | "connectRelayApiKey/save"
+  | "conversationImport/job/read"
   | "conversationImport/source/scan"
   | "conversationImport/thread/commit"
   | "conversationImport/thread/preview"
@@ -4621,6 +4633,49 @@ export interface ConversationImportFidelitySummary {
   webSearch: number;
 }
 
+export interface ConversationImportJob {
+  createdAt: string;
+  error?: null | string;
+  jobId: string;
+  progress: ConversationImportJobProgress;
+  result?: ConversationImportThreadCommitResponse | null;
+  sourceClient: ConversationImportSourceClient;
+  sourceThreadId?: null | string;
+  status: ConversationImportJobStatus;
+  updatedAt: string;
+}
+
+export type ConversationImportJobPhase =
+  | "building_history"
+  | "completed"
+  | "failed"
+  | "finalizing"
+  | "persisting_history"
+  | "queued"
+  | "reading_source";
+
+export interface ConversationImportJobProgress {
+  completedItems?: number;
+  completedTurns?: number;
+  phase: ConversationImportJobPhase;
+  totalItems?: number;
+  totalTurns?: number;
+}
+
+export interface ConversationImportJobReadParams {
+  jobId: string;
+}
+
+export interface ConversationImportJobReadResponse {
+  job: ConversationImportJob;
+}
+
+export type ConversationImportJobStatus =
+  | "completed"
+  | "failed"
+  | "queued"
+  | "running";
+
 export interface ConversationImportPreviewDryRun {
   unsupportedItems: number;
   willAppendToExistingSession: boolean;
@@ -4727,6 +4782,10 @@ export interface ConversationImportThreadCommitResponse {
   warnings?: string[];
 }
 
+export interface ConversationImportThreadCommitStartResponse {
+  job: ConversationImportJob;
+}
+
 export interface ConversationImportThreadPreviewParams {
   limit?: number | null;
   sourceClient?: ConversationImportSourceClient | null;
@@ -4746,6 +4805,7 @@ export interface ConversationImportThreadPreviewResponse {
 export type ConversationImportThreadStatus =
   | "conflict"
   | "imported"
+  | "importing"
   | "not_imported";
 
 export interface DiagnosticsCapabilityRoutingMetricsSnapshot {
@@ -5282,6 +5342,7 @@ export interface ImportedThreadSummary {
   archived?: boolean;
   createdAt?: null | string;
   cwd?: null | string;
+  importJobId?: null | string;
   importStatus: ConversationImportThreadStatus;
   metadata?: unknown;
   modelProvider?: null | string;
@@ -7049,6 +7110,7 @@ export interface RuntimeProviderConfig {
   modelName?: null | string;
   providerId?: null | string;
   providerName?: null | string;
+  supportsWebsockets?: boolean | null;
   toolCallStrategy?: RuntimeToolCallStrategy | null;
   toolshimModel?: null | string;
 }

@@ -7317,6 +7317,12 @@
                 "string"
               ]
             },
+            "supportsWebsockets": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "toolCallStrategy": {
               "anyOf": [
                 {
@@ -13365,6 +13371,25 @@
               "$ref": "#/$defs/RequestId"
             },
             "method": {
+              "const": "conversationImport/job/read",
+              "type": "string"
+            },
+            "params": {
+              "default": null
+            }
+          },
+          "required": [
+            "id",
+            "method"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "method": {
               "const": "agentSession/start",
               "type": "string"
             },
@@ -13734,6 +13759,7 @@
         "connectDeepLink/resolve",
         "connectOpenDeepLink/resolve",
         "connectRelayApiKey/save",
+        "conversationImport/job/read",
         "conversationImport/source/scan",
         "conversationImport/thread/commit",
         "conversationImport/thread/preview",
@@ -17513,6 +17539,1136 @@
       "title": "ConversationImportFidelitySummary",
       "type": "object"
     },
+    "ConversationImportJob": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        },
+        "ConversationImportFidelitySummary": {
+          "properties": {
+            "approvals": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "attachments": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "budgetDropped": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "commands": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "mcp": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "messages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "patches": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "provenanceOnly": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "reasoning": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "tools": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "unsupported": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "webSearch": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "approvals",
+            "attachments",
+            "budgetDropped",
+            "commands",
+            "mcp",
+            "messages",
+            "patches",
+            "provenanceOnly",
+            "reasoning",
+            "tools",
+            "unsupported",
+            "webSearch"
+          ],
+          "type": "object"
+        },
+        "ConversationImportJobPhase": {
+          "enum": [
+            "building_history",
+            "completed",
+            "failed",
+            "finalizing",
+            "persisting_history",
+            "queued",
+            "reading_source"
+          ],
+          "type": "string"
+        },
+        "ConversationImportJobProgress": {
+          "properties": {
+            "completedItems": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "completedTurns": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "phase": {
+              "$ref": "#/$defs/ConversationImportJobPhase"
+            },
+            "totalItems": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalTurns": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "phase"
+          ],
+          "type": "object"
+        },
+        "ConversationImportJobStatus": {
+          "enum": [
+            "completed",
+            "failed",
+            "queued",
+            "running"
+          ],
+          "type": "string"
+        },
+        "ConversationImportPreviewDryRun": {
+          "properties": {
+            "unsupportedItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willAppendToExistingSession": {
+              "type": "boolean"
+            },
+            "willCreateSession": {
+              "type": "boolean"
+            },
+            "willImportAttachments": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportMessages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportTimelineItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportTurns": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "unsupportedItems",
+            "willAppendToExistingSession",
+            "willCreateSession",
+            "willImportAttachments",
+            "willImportMessages",
+            "willImportTimelineItems",
+            "willImportTurns"
+          ],
+          "type": "object"
+        },
+        "ConversationImportPreviewSummary": {
+          "properties": {
+            "dryRun": {
+              "$ref": "#/$defs/ConversationImportPreviewDryRun"
+            },
+            "fidelity": {
+              "$ref": "#/$defs/ConversationImportFidelitySummary",
+              "default": {
+                "approvals": 0,
+                "attachments": 0,
+                "budgetDropped": 0,
+                "commands": 0,
+                "mcp": 0,
+                "messages": 0,
+                "patches": 0,
+                "provenanceOnly": 0,
+                "reasoning": 0,
+                "tools": 0,
+                "unsupported": 0,
+                "webSearch": 0
+              }
+            },
+            "lineCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "messageCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rolloutEventItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "unsupportedCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "warnings": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "dryRun",
+            "lineCount",
+            "messageCount",
+            "rolloutEventItems",
+            "truncated",
+            "unsupportedCount"
+          ],
+          "type": "object"
+        },
+        "ConversationImportSourceClient": {
+          "enum": [
+            "codex"
+          ],
+          "type": "string"
+        },
+        "ConversationImportThreadCommitResponse": {
+          "properties": {
+            "canContinue": {
+              "type": "boolean"
+            },
+            "importedMessages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "importedTurns": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "session": {
+              "$ref": "#/$defs/AgentSession"
+            },
+            "summary": {
+              "$ref": "#/$defs/ConversationImportPreviewSummary"
+            },
+            "thread": {
+              "$ref": "#/$defs/ImportedThreadSummary"
+            },
+            "warnings": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "canContinue",
+            "importedMessages",
+            "importedTurns",
+            "session",
+            "summary",
+            "thread"
+          ],
+          "type": "object"
+        },
+        "ConversationImportThreadStatus": {
+          "enum": [
+            "conflict",
+            "imported",
+            "importing",
+            "not_imported"
+          ],
+          "type": "string"
+        },
+        "ImportedThreadSummary": {
+          "properties": {
+            "archived": {
+              "default": false,
+              "type": "boolean"
+            },
+            "createdAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "cwd": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importJobId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importStatus": {
+              "$ref": "#/$defs/ConversationImportThreadStatus"
+            },
+            "metadata": true,
+            "modelProvider": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceClient": {
+              "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourcePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceThreadId": {
+              "type": "string"
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "importStatus",
+            "sourceClient",
+            "sourceThreadId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "error": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "jobId": {
+          "type": "string"
+        },
+        "progress": {
+          "$ref": "#/$defs/ConversationImportJobProgress"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConversationImportThreadCommitResponse"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceClient": {
+          "$ref": "#/$defs/ConversationImportSourceClient"
+        },
+        "sourceThreadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/ConversationImportJobStatus"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "createdAt",
+        "jobId",
+        "progress",
+        "sourceClient",
+        "status",
+        "updatedAt"
+      ],
+      "title": "ConversationImportJob",
+      "type": "object"
+    },
+    "ConversationImportJobPhase": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "building_history",
+        "completed",
+        "failed",
+        "finalizing",
+        "persisting_history",
+        "queued",
+        "reading_source"
+      ],
+      "title": "ConversationImportJobPhase",
+      "type": "string"
+    },
+    "ConversationImportJobProgress": {
+      "$defs": {
+        "ConversationImportJobPhase": {
+          "enum": [
+            "building_history",
+            "completed",
+            "failed",
+            "finalizing",
+            "persisting_history",
+            "queued",
+            "reading_source"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "completedItems": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "completedTurns": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "phase": {
+          "$ref": "#/$defs/ConversationImportJobPhase"
+        },
+        "totalItems": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalTurns": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "phase"
+      ],
+      "title": "ConversationImportJobProgress",
+      "type": "object"
+    },
+    "ConversationImportJobReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "jobId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId"
+      ],
+      "title": "ConversationImportJobReadParams",
+      "type": "object"
+    },
+    "ConversationImportJobReadResponse": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        },
+        "ConversationImportFidelitySummary": {
+          "properties": {
+            "approvals": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "attachments": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "budgetDropped": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "commands": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "mcp": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "messages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "patches": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "provenanceOnly": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "reasoning": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "tools": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "unsupported": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "webSearch": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "approvals",
+            "attachments",
+            "budgetDropped",
+            "commands",
+            "mcp",
+            "messages",
+            "patches",
+            "provenanceOnly",
+            "reasoning",
+            "tools",
+            "unsupported",
+            "webSearch"
+          ],
+          "type": "object"
+        },
+        "ConversationImportJob": {
+          "properties": {
+            "createdAt": {
+              "type": "string"
+            },
+            "error": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "jobId": {
+              "type": "string"
+            },
+            "progress": {
+              "$ref": "#/$defs/ConversationImportJobProgress"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConversationImportThreadCommitResponse"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sourceClient": {
+              "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourceThreadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/ConversationImportJobStatus"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "createdAt",
+            "jobId",
+            "progress",
+            "sourceClient",
+            "status",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "ConversationImportJobPhase": {
+          "enum": [
+            "building_history",
+            "completed",
+            "failed",
+            "finalizing",
+            "persisting_history",
+            "queued",
+            "reading_source"
+          ],
+          "type": "string"
+        },
+        "ConversationImportJobProgress": {
+          "properties": {
+            "completedItems": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "completedTurns": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "phase": {
+              "$ref": "#/$defs/ConversationImportJobPhase"
+            },
+            "totalItems": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalTurns": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "phase"
+          ],
+          "type": "object"
+        },
+        "ConversationImportJobStatus": {
+          "enum": [
+            "completed",
+            "failed",
+            "queued",
+            "running"
+          ],
+          "type": "string"
+        },
+        "ConversationImportPreviewDryRun": {
+          "properties": {
+            "unsupportedItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willAppendToExistingSession": {
+              "type": "boolean"
+            },
+            "willCreateSession": {
+              "type": "boolean"
+            },
+            "willImportAttachments": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportMessages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportTimelineItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportTurns": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "unsupportedItems",
+            "willAppendToExistingSession",
+            "willCreateSession",
+            "willImportAttachments",
+            "willImportMessages",
+            "willImportTimelineItems",
+            "willImportTurns"
+          ],
+          "type": "object"
+        },
+        "ConversationImportPreviewSummary": {
+          "properties": {
+            "dryRun": {
+              "$ref": "#/$defs/ConversationImportPreviewDryRun"
+            },
+            "fidelity": {
+              "$ref": "#/$defs/ConversationImportFidelitySummary",
+              "default": {
+                "approvals": 0,
+                "attachments": 0,
+                "budgetDropped": 0,
+                "commands": 0,
+                "mcp": 0,
+                "messages": 0,
+                "patches": 0,
+                "provenanceOnly": 0,
+                "reasoning": 0,
+                "tools": 0,
+                "unsupported": 0,
+                "webSearch": 0
+              }
+            },
+            "lineCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "messageCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rolloutEventItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "unsupportedCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "warnings": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "dryRun",
+            "lineCount",
+            "messageCount",
+            "rolloutEventItems",
+            "truncated",
+            "unsupportedCount"
+          ],
+          "type": "object"
+        },
+        "ConversationImportSourceClient": {
+          "enum": [
+            "codex"
+          ],
+          "type": "string"
+        },
+        "ConversationImportThreadCommitResponse": {
+          "properties": {
+            "canContinue": {
+              "type": "boolean"
+            },
+            "importedMessages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "importedTurns": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "session": {
+              "$ref": "#/$defs/AgentSession"
+            },
+            "summary": {
+              "$ref": "#/$defs/ConversationImportPreviewSummary"
+            },
+            "thread": {
+              "$ref": "#/$defs/ImportedThreadSummary"
+            },
+            "warnings": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "canContinue",
+            "importedMessages",
+            "importedTurns",
+            "session",
+            "summary",
+            "thread"
+          ],
+          "type": "object"
+        },
+        "ConversationImportThreadStatus": {
+          "enum": [
+            "conflict",
+            "imported",
+            "importing",
+            "not_imported"
+          ],
+          "type": "string"
+        },
+        "ImportedThreadSummary": {
+          "properties": {
+            "archived": {
+              "default": false,
+              "type": "boolean"
+            },
+            "createdAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "cwd": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importJobId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importStatus": {
+              "$ref": "#/$defs/ConversationImportThreadStatus"
+            },
+            "metadata": true,
+            "modelProvider": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceClient": {
+              "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourcePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceThreadId": {
+              "type": "string"
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "importStatus",
+            "sourceClient",
+            "sourceThreadId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/ConversationImportJob"
+        }
+      },
+      "required": [
+        "job"
+      ],
+      "title": "ConversationImportJobReadResponse",
+      "type": "object"
+    },
+    "ConversationImportJobStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "completed",
+        "failed",
+        "queued",
+        "running"
+      ],
+      "title": "ConversationImportJobStatus",
+      "type": "string"
+    },
     "ConversationImportPreviewDryRun": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -18222,6 +19378,7 @@
           "enum": [
             "conflict",
             "imported",
+            "importing",
             "not_imported"
           ],
           "type": "string"
@@ -18239,6 +19396,12 @@
               ]
             },
             "cwd": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importJobId": {
               "type": [
                 "null",
                 "string"
@@ -18757,6 +19920,7 @@
           "enum": [
             "conflict",
             "imported",
+            "importing",
             "not_imported"
           ],
           "type": "string"
@@ -18774,6 +19938,12 @@
               ]
             },
             "cwd": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importJobId": {
               "type": [
                 "null",
                 "string"
@@ -18869,6 +20039,532 @@
         "thread"
       ],
       "title": "ConversationImportThreadCommitResponse",
+      "type": "object"
+    },
+    "ConversationImportThreadCommitStartResponse": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        },
+        "ConversationImportFidelitySummary": {
+          "properties": {
+            "approvals": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "attachments": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "budgetDropped": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "commands": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "mcp": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "messages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "patches": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "provenanceOnly": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "reasoning": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "tools": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "unsupported": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "webSearch": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "approvals",
+            "attachments",
+            "budgetDropped",
+            "commands",
+            "mcp",
+            "messages",
+            "patches",
+            "provenanceOnly",
+            "reasoning",
+            "tools",
+            "unsupported",
+            "webSearch"
+          ],
+          "type": "object"
+        },
+        "ConversationImportJob": {
+          "properties": {
+            "createdAt": {
+              "type": "string"
+            },
+            "error": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "jobId": {
+              "type": "string"
+            },
+            "progress": {
+              "$ref": "#/$defs/ConversationImportJobProgress"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConversationImportThreadCommitResponse"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sourceClient": {
+              "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourceThreadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/ConversationImportJobStatus"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "createdAt",
+            "jobId",
+            "progress",
+            "sourceClient",
+            "status",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "ConversationImportJobPhase": {
+          "enum": [
+            "building_history",
+            "completed",
+            "failed",
+            "finalizing",
+            "persisting_history",
+            "queued",
+            "reading_source"
+          ],
+          "type": "string"
+        },
+        "ConversationImportJobProgress": {
+          "properties": {
+            "completedItems": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "completedTurns": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "phase": {
+              "$ref": "#/$defs/ConversationImportJobPhase"
+            },
+            "totalItems": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalTurns": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "phase"
+          ],
+          "type": "object"
+        },
+        "ConversationImportJobStatus": {
+          "enum": [
+            "completed",
+            "failed",
+            "queued",
+            "running"
+          ],
+          "type": "string"
+        },
+        "ConversationImportPreviewDryRun": {
+          "properties": {
+            "unsupportedItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willAppendToExistingSession": {
+              "type": "boolean"
+            },
+            "willCreateSession": {
+              "type": "boolean"
+            },
+            "willImportAttachments": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportMessages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportTimelineItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "willImportTurns": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "unsupportedItems",
+            "willAppendToExistingSession",
+            "willCreateSession",
+            "willImportAttachments",
+            "willImportMessages",
+            "willImportTimelineItems",
+            "willImportTurns"
+          ],
+          "type": "object"
+        },
+        "ConversationImportPreviewSummary": {
+          "properties": {
+            "dryRun": {
+              "$ref": "#/$defs/ConversationImportPreviewDryRun"
+            },
+            "fidelity": {
+              "$ref": "#/$defs/ConversationImportFidelitySummary",
+              "default": {
+                "approvals": 0,
+                "attachments": 0,
+                "budgetDropped": 0,
+                "commands": 0,
+                "mcp": 0,
+                "messages": 0,
+                "patches": 0,
+                "provenanceOnly": 0,
+                "reasoning": 0,
+                "tools": 0,
+                "unsupported": 0,
+                "webSearch": 0
+              }
+            },
+            "lineCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "messageCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rolloutEventItems": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "unsupportedCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "warnings": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "dryRun",
+            "lineCount",
+            "messageCount",
+            "rolloutEventItems",
+            "truncated",
+            "unsupportedCount"
+          ],
+          "type": "object"
+        },
+        "ConversationImportSourceClient": {
+          "enum": [
+            "codex"
+          ],
+          "type": "string"
+        },
+        "ConversationImportThreadCommitResponse": {
+          "properties": {
+            "canContinue": {
+              "type": "boolean"
+            },
+            "importedMessages": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "importedTurns": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "session": {
+              "$ref": "#/$defs/AgentSession"
+            },
+            "summary": {
+              "$ref": "#/$defs/ConversationImportPreviewSummary"
+            },
+            "thread": {
+              "$ref": "#/$defs/ImportedThreadSummary"
+            },
+            "warnings": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "canContinue",
+            "importedMessages",
+            "importedTurns",
+            "session",
+            "summary",
+            "thread"
+          ],
+          "type": "object"
+        },
+        "ConversationImportThreadStatus": {
+          "enum": [
+            "conflict",
+            "imported",
+            "importing",
+            "not_imported"
+          ],
+          "type": "string"
+        },
+        "ImportedThreadSummary": {
+          "properties": {
+            "archived": {
+              "default": false,
+              "type": "boolean"
+            },
+            "createdAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "cwd": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importJobId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importStatus": {
+              "$ref": "#/$defs/ConversationImportThreadStatus"
+            },
+            "metadata": true,
+            "modelProvider": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceClient": {
+              "$ref": "#/$defs/ConversationImportSourceClient"
+            },
+            "sourcePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceThreadId": {
+              "type": "string"
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "importStatus",
+            "sourceClient",
+            "sourceThreadId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/ConversationImportJob"
+        }
+      },
+      "required": [
+        "job"
+      ],
+      "title": "ConversationImportThreadCommitStartResponse",
       "type": "object"
     },
     "ConversationImportThreadPreviewParams": {
@@ -19357,6 +21053,7 @@
           "enum": [
             "conflict",
             "imported",
+            "importing",
             "not_imported"
           ],
           "type": "string"
@@ -19374,6 +21071,12 @@
               ]
             },
             "cwd": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importJobId": {
               "type": [
                 "null",
                 "string"
@@ -19467,6 +21170,7 @@
       "enum": [
         "conflict",
         "imported",
+        "importing",
         "not_imported"
       ],
       "title": "ConversationImportThreadStatus",
@@ -23809,6 +25513,7 @@
           "enum": [
             "conflict",
             "imported",
+            "importing",
             "not_imported"
           ],
           "type": "string"
@@ -23827,6 +25532,12 @@
           ]
         },
         "cwd": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "importJobId": {
           "type": [
             "null",
             "string"
@@ -36094,6 +37805,12 @@
                 "string"
               ]
             },
+            "supportsWebsockets": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "toolCallStrategy": {
               "anyOf": [
                 {
@@ -36367,6 +38084,12 @@
             "string"
           ]
         },
+        "supportsWebsockets": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "toolCallStrategy": {
           "anyOf": [
             {
@@ -36420,6 +38143,12 @@
               "type": [
                 "null",
                 "string"
+              ]
+            },
+            "supportsWebsockets": {
+              "type": [
+                "boolean",
+                "null"
               ]
             },
             "toolCallStrategy": {
@@ -50288,6 +52017,7 @@
               "connectDeepLink/resolve",
               "connectOpenDeepLink/resolve",
               "connectRelayApiKey/save",
+              "conversationImport/job/read",
               "conversationImport/source/scan",
               "conversationImport/thread/commit",
               "conversationImport/thread/preview",

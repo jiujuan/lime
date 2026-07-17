@@ -5,9 +5,7 @@ import {
   isUpdatePlanToolName,
   isUnifiedWebFetchToolName,
 } from "../utils/toolNameFamily";
-import {
-  shouldHideTurnSummaryFromConversation,
-} from "../utils/turnSummaryPresentation";
+import { shouldHideTurnSummaryFromConversation } from "../utils/turnSummaryPresentation";
 import {
   buildAgentTextDeltaContentPartMetadata,
   canMergeCoalescibleContentParts,
@@ -18,54 +16,17 @@ export function isDeferredTimelineItem(item: AgentThreadItem): boolean {
   return item.type === "file_artifact" || item.type === "turn_summary";
 }
 
-function normalizeDeferredArtifactPath(path?: string | null): string {
-  return (path || "").trim().replace(/\\/g, "/").toLowerCase();
-}
-
-function scoreDeferredArtifactItem(
-  item: Extract<AgentThreadItem, { type: "file_artifact" }>,
-): number {
-  const contentScore = (item.content || "").trim().length;
-  const completedAt = Date.parse(item.completed_at || item.updated_at || "");
-  const timestampScore = Number.isFinite(completedAt) ? completedAt : 0;
-  return contentScore * 1_000_000_000 + timestampScore;
-}
-
 export function dedupeDeferredTimelineItems(
   items: AgentThreadItem[],
 ): AgentThreadItem[] {
-  const deduped: AgentThreadItem[] = [];
-  const artifactIndexByPath = new Map<string, number>();
-
-  for (const item of items) {
-    if (item.type !== "file_artifact") {
-      deduped.push(item);
-      continue;
+  const seenItemIds = new Set<string>();
+  return items.filter((item) => {
+    if (seenItemIds.has(item.id)) {
+      return false;
     }
-
-    const normalizedPath = normalizeDeferredArtifactPath(item.path);
-    if (!normalizedPath) {
-      deduped.push(item);
-      continue;
-    }
-
-    const existingIndex = artifactIndexByPath.get(normalizedPath);
-    if (existingIndex === undefined) {
-      artifactIndexByPath.set(normalizedPath, deduped.length);
-      deduped.push(item);
-      continue;
-    }
-
-    const existingItem = deduped[existingIndex];
-    if (
-      existingItem?.type !== "file_artifact" ||
-      scoreDeferredArtifactItem(item) >= scoreDeferredArtifactItem(existingItem)
-    ) {
-      deduped[existingIndex] = item;
-    }
-  }
-
-  return deduped;
+    seenItemIds.add(item.id);
+    return true;
+  });
 }
 
 export function shouldRenderConversationTimelineItem(
@@ -248,8 +209,10 @@ export function shouldKeepInlineProcessForActiveAssistant(
         part.type === "action_required" &&
         part.actionRequired.status !== "submitted",
     );
-  const hasActiveWebRetrievalProcess =
-    hasCompletedOrRunningWebRetrievalProcess(message, displayContent);
+  const hasActiveWebRetrievalProcess = hasCompletedOrRunningWebRetrievalProcess(
+    message,
+    displayContent,
+  );
   const hasActiveRuntimeStatus =
     Boolean(message.runtimeStatus) &&
     (message.isThinking || isSending || hasActiveWebRetrievalProcess) &&
@@ -414,8 +377,7 @@ export function resolveInlineProcessCoverage(params: {
 
   if (contentParts.length > 0) {
     plan = contentParts.some(
-      (part) =>
-        part.type === "text" && part.text.includes("<proposed_plan>"),
+      (part) => part.type === "text" && part.text.includes("<proposed_plan>"),
     );
     thinking = contentParts.some(
       (part) => part.type === "thinking" && part.text.trim().length > 0,
@@ -560,10 +522,10 @@ function hasStructuredTextProvenance(part: TextContentPart): boolean {
   const metadata = part.metadata;
   return Boolean(
     metadata?.itemId ||
-      metadata?.threadItemId ||
-      metadata?.turnId ||
-      metadata?.phase ||
-      typeof metadata?.sequence === "number",
+    metadata?.threadItemId ||
+    metadata?.turnId ||
+    metadata?.phase ||
+    typeof metadata?.sequence === "number",
   );
 }
 
@@ -645,10 +607,7 @@ export function mergeStreamingOverlayContentParts(
         normalizedOverlay.metadata,
       );
       if (canMergeCoalescibleContentParts(lastPart, pendingPart)) {
-        nextParts[nextParts.length - 1] = mergeTextPart(
-          lastPart,
-          pendingPart,
-        );
+        nextParts[nextParts.length - 1] = mergeTextPart(lastPart, pendingPart);
       } else {
         nextParts.push(pendingPart);
       }

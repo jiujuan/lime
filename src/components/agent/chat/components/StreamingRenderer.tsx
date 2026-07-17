@@ -433,38 +433,62 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         const lastStreamingPartIndex = isLastPart
           ? partParsed.parts.length - 1
           : undefined;
+        const phase =
+          typeof part.metadata?.phase === "string"
+            ? part.metadata.phase
+            : undefined;
+        const threadItemId = [
+          part.metadata?.threadItemId,
+          part.metadata?.itemId,
+        ].find(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        );
 
         if (partParsed.parts.length > 0) {
           return (
-            <React.Fragment key={`text-${index}`}>
+            <div
+              key={`text-${index}`}
+              className="contents"
+              data-testid="agent-message-text-part"
+              data-message-phase={phase}
+              data-thread-item-id={threadItemId?.trim()}
+            >
               {renderParsedResultParts({
                 parsed: partParsed,
                 keyPrefix: `interleaved-${index}`,
                 lastStreamingPartIndex,
               })}
-            </React.Fragment>
+            </div>
           );
         }
 
         return (
-          <StreamingText
+          <div
             key={`text-${index}`}
-            text={partText}
-            isStreaming={isStreaming && isLastPart}
-            showCursor={shouldShowCursor && isLastPart}
-            onA2UISubmit={onA2UISubmit}
-            a2uiFormId={a2uiFormId}
-            a2uiInitialFormData={a2uiInitialFormData}
-            onA2UIFormChange={onA2UIFormChange}
-            renderProposedPlanBlocks={renderProposedPlanBlocks}
-            collapseCodeBlocks={collapseCodeBlocks}
-            shouldCollapseCodeBlock={shouldCollapseCodeBlock}
-            onCodeBlockClick={onCodeBlockClick}
-            showBlockActions={showContentBlockActions}
-            onQuoteContent={onQuoteContent}
-            markdownRenderMode={markdownRenderMode}
-            readOnlyA2UI={readOnlyA2UI}
-          />
+            className="contents"
+            data-testid="agent-message-text-part"
+            data-message-phase={phase}
+            data-thread-item-id={threadItemId?.trim()}
+          >
+            <StreamingText
+              text={partText}
+              isStreaming={isStreaming && isLastPart}
+              showCursor={shouldShowCursor && isLastPart}
+              onA2UISubmit={onA2UISubmit}
+              a2uiFormId={a2uiFormId}
+              a2uiInitialFormData={a2uiInitialFormData}
+              onA2UIFormChange={onA2UIFormChange}
+              renderProposedPlanBlocks={renderProposedPlanBlocks}
+              collapseCodeBlocks={collapseCodeBlocks}
+              shouldCollapseCodeBlock={shouldCollapseCodeBlock}
+              onCodeBlockClick={onCodeBlockClick}
+              showBlockActions={showContentBlockActions}
+              onQuoteContent={onQuoteContent}
+              markdownRenderMode={markdownRenderMode}
+              readOnlyA2UI={readOnlyA2UI}
+            />
+          </div>
         );
       },
       [

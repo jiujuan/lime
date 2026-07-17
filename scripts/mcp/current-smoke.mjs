@@ -350,6 +350,17 @@ async function run() {
         summary.fixture?.resourceTemplateUriTemplate === "fixture://item/{id}",
         "未记录 fixture MCP resource template",
       );
+      assert(
+        summary.fixture?.failureIsolation?.failedStartObserved === true &&
+          summary.fixture?.failureIsolation?.failedServerReportedStopped ===
+            true &&
+          summary.fixture?.failureIsolation?.healthyServerStillRunning ===
+            true &&
+          summary.fixture?.failureIsolation?.healthyToolStillListed === true &&
+          summary.fixture?.failureIsolation?.healthyResourceReadAfterFailure ===
+            true,
+        "MCP 单 server 故障隔离证据不完整",
+      );
     }
     if (options.allowOAuthFixture) {
       assert(

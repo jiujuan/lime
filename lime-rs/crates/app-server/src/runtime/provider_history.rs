@@ -4,8 +4,7 @@
 //! RuntimeCore 已持久化的 user/message/tool 事件恢复 provider 所需的最小 item 顺序，
 //! 避免任何旧 session 或 provider adapter 参与多轮采样。
 
-use super::output_refs;
-use super::{OutputSnapshotStore, StoredSession};
+use super::StoredSession;
 use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument};
 use app_server_protocol::{AgentAttachment, AgentEvent, AgentInput};
 use model_provider::current_client::{
@@ -13,31 +12,53 @@ use model_provider::current_client::{
     CurrentProviderToolResult,
 };
 use serde_json::Value;
+use std::collections::HashMap;
+
+const PROVIDER_TOOL_OUTPUT_MAX_BYTES: usize = 10_000;
 
 /// Current turn input is supplied separately to the provider. It remains durable and visible in
 /// the canonical Item log, but must not be submitted twice in the same provider request.
 pub(in crate::runtime) fn provider_history_excluding_current_turn_input(
     stored: &StoredSession,
-    output_snapshot_store: &dyn OutputSnapshotStore,
+    sidecar_store: Option<&super::SidecarStore>,
     turn_id: &str,
-) -> Vec<CurrentProviderMessage> {
-    let events = stored
-        .events
-        .iter()
+) -> Result<Vec<CurrentProviderMessage>, super::RuntimeCoreError> {
+    let events = provider_history_events(stored)
+        .into_iter()
         .filter(|event| {
             event.turn_id.as_deref() != Some(turn_id)
                 || !super::turn_input_events::is_turn_input_event(event)
         })
-        .cloned()
         .collect::<Vec<_>>();
-    messages_from_events(&events, |output_ref| {
-        output_refs::output_content(
-            &stored.output_blobs,
-            output_snapshot_store,
-            stored.session.session_id.as_str(),
-            output_ref,
-        )
+    messages_from_events_with_provider_input(&events, |input| {
+        super::input_media::provider_input_from_references(input, sidecar_store)
     })
+    .map_err(super::RuntimeCoreError::Backend)
+}
+
+fn provider_history_events(stored: &StoredSession) -> Vec<AgentEvent> {
+    let Some(tail_start_turn_id) = stored
+        .events
+        .iter()
+        .rev()
+        .find(|event| event.event_type == "context.compaction.completed")
+        .and_then(|event| event.payload.get("tailStartTurnId"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return stored.events.clone();
+    };
+
+    let Some(start_index) = stored
+        .events
+        .iter()
+        .position(|event| event.turn_id.as_deref() == Some(tail_start_turn_id))
+    else {
+        // A malformed or imported compaction marker must never discard history.
+        return stored.events.clone();
+    };
+    stored.events[start_index..].to_vec()
 }
 
 pub(crate) fn reply_input_from_agent_input(
@@ -55,30 +76,56 @@ pub(crate) fn reply_input_from_agent_input(
     }
 }
 
-fn messages_from_events<F>(
+#[cfg(test)]
+fn messages_from_events(events: &[AgentEvent]) -> Vec<CurrentProviderMessage> {
+    messages_from_events_with_provider_input(events, |input| Ok(input.clone()))
+        .expect("identity provider input projection cannot fail")
+}
+
+fn messages_from_events_with_provider_input<G>(
     events: &[AgentEvent],
-    mut output_content: F,
-) -> Vec<CurrentProviderMessage>
+    mut provider_input: G,
+) -> Result<Vec<CurrentProviderMessage>, String>
 where
-    F: FnMut(&str) -> Option<String>,
+    G: FnMut(&AgentInput) -> Result<AgentInput, String>,
 {
     let mut messages = Vec::new();
     let mut assistant_content = Vec::new();
+    let mut assistant_text_by_item = HashMap::new();
     let mut tool_results = Vec::new();
 
     for event in events {
         match event.event_type.as_str() {
             "message.created" => {
-                flush_assistant(&mut messages, &mut assistant_content);
+                flush_assistant(
+                    &mut messages,
+                    &mut assistant_content,
+                    &mut assistant_text_by_item,
+                );
                 flush_tool_results(&mut messages, &mut tool_results);
-                if let Some(message) = user_message_from_event(event) {
+                if let Some(message) = user_message_from_event(event, &mut provider_input)? {
                     messages.push(message);
                 }
             }
             "message.delta" | "message.delta_batch" | "message.batch" => {
                 flush_tool_results(&mut messages, &mut tool_results);
                 if let Some(text) = text_from_payload(&event.payload) {
+                    assistant_text_by_item
+                        .entry(message_item_key(event))
+                        .or_insert_with(String::new)
+                        .push_str(&text);
                     assistant_content.push(CurrentProviderContent::Text(text));
+                }
+            }
+            "message.completed" => {
+                flush_tool_results(&mut messages, &mut tool_results);
+                if let Some(snapshot) = text_from_payload(&event.payload) {
+                    append_completed_message_snapshot(
+                        &mut assistant_content,
+                        &mut assistant_text_by_item,
+                        message_item_key(event),
+                        snapshot,
+                    );
                 }
             }
             "reasoning.delta" => {
@@ -94,8 +141,12 @@ where
                 }
             }
             "item.completed" => {
-                if let Some(result) = canonical_tool_result_from_event(event, &mut output_content) {
-                    flush_assistant(&mut messages, &mut assistant_content);
+                if let Some(result) = canonical_tool_result_from_event(event) {
+                    flush_assistant(
+                        &mut messages,
+                        &mut assistant_content,
+                        &mut assistant_text_by_item,
+                    );
                     tool_results.push(CurrentProviderContent::ToolResult(result));
                 }
             }
@@ -103,21 +154,82 @@ where
         }
     }
 
-    flush_assistant(&mut messages, &mut assistant_content);
+    flush_assistant(
+        &mut messages,
+        &mut assistant_content,
+        &mut assistant_text_by_item,
+    );
     flush_tool_results(&mut messages, &mut tool_results);
-    messages
+    Ok(messages)
 }
 
 fn flush_assistant(
     messages: &mut Vec<CurrentProviderMessage>,
     assistant_content: &mut Vec<CurrentProviderContent>,
+    assistant_text_by_item: &mut HashMap<String, String>,
 ) {
     if assistant_content.is_empty() {
+        assistant_text_by_item.clear();
         return;
     }
     messages.push(CurrentProviderMessage::assistant(std::mem::take(
         assistant_content,
     )));
+    assistant_text_by_item.clear();
+}
+
+fn append_completed_message_snapshot(
+    assistant_content: &mut Vec<CurrentProviderContent>,
+    assistant_text_by_item: &mut HashMap<String, String>,
+    item_key: String,
+    snapshot: String,
+) {
+    let aggregate = assistant_content
+        .iter()
+        .filter_map(|content| match content {
+            CurrentProviderContent::Text(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<String>();
+    if snapshot == aggregate || aggregate.starts_with(&snapshot) {
+        return;
+    }
+    if !aggregate.is_empty() && snapshot.starts_with(&aggregate) {
+        assistant_content.push(CurrentProviderContent::Text(
+            snapshot[aggregate.len()..].to_string(),
+        ));
+        assistant_text_by_item.insert(item_key, snapshot);
+        return;
+    }
+
+    let accumulated = assistant_text_by_item.entry(item_key).or_default();
+    let suffix = if accumulated.is_empty() {
+        snapshot.as_str()
+    } else if snapshot == *accumulated || accumulated.starts_with(&snapshot) {
+        ""
+    } else if snapshot.starts_with(accumulated.as_str()) {
+        &snapshot[accumulated.len()..]
+    } else {
+        snapshot.as_str()
+    };
+    if !suffix.is_empty() {
+        assistant_content.push(CurrentProviderContent::Text(suffix.to_string()));
+    }
+    if accumulated.is_empty() || snapshot.starts_with(accumulated.as_str()) {
+        *accumulated = snapshot;
+    } else if !accumulated.starts_with(&snapshot) {
+        accumulated.push_str(&snapshot);
+    }
+}
+
+fn message_item_key(event: &AgentEvent) -> String {
+    let payload = provider_event_payload(&event.payload);
+    ["itemId", "item_id", "messageId", "message_id", "id"]
+        .iter()
+        .find_map(|key| payload.get(*key).and_then(Value::as_str))
+        .or_else(|| event.turn_id.as_deref())
+        .unwrap_or(event.event_id.as_str())
+        .to_string()
 }
 
 fn flush_tool_results(
@@ -150,13 +262,7 @@ fn canonical_tool_call_from_event(event: &AgentEvent) -> Option<CurrentProviderT
     })
 }
 
-fn canonical_tool_result_from_event<F>(
-    event: &AgentEvent,
-    output_content: &mut F,
-) -> Option<CurrentProviderToolResult>
-where
-    F: FnMut(&str) -> Option<String>,
-{
+fn canonical_tool_result_from_event(event: &AgentEvent) -> Option<CurrentProviderToolResult> {
     let item = canonical_tool_item(event)?;
     let status = item.status;
     let ThreadItemPayload::Tool {
@@ -170,11 +276,25 @@ where
     };
     let output = output?;
     let output_ref = output.output_ref;
-    let output_text = output_ref
-        .as_deref()
-        .and_then(output_content)
-        .or(output.text)
+    let output_text = output
+        .text
+        .filter(|text| !text.trim().is_empty())
         .or_else(|| output.structured_content.map(|content| content.to_string()))
+        .map(|text| {
+            tool_runtime::tool_io::format_tool_output_for_model(
+                &text,
+                tool_runtime::tool_io::ToolOutputTruncationPolicy::Bytes(
+                    PROVIDER_TOOL_OUTPUT_MAX_BYTES,
+                ),
+            )
+        })
+        .or_else(|| {
+            output_ref.as_deref().map(|reference| {
+                format!(
+                    "Tool output was omitted from context; retained artifact reference: {reference}"
+                )
+            })
+        })
         .unwrap_or_default();
     Some(CurrentProviderToolResult {
         call_id,
@@ -220,7 +340,13 @@ fn canonical_tool_argument_object(arguments: &[ToolArgument]) -> Value {
     )
 }
 
-fn user_message_from_event(event: &AgentEvent) -> Option<CurrentProviderMessage> {
+fn user_message_from_event<G>(
+    event: &AgentEvent,
+    provider_input: &mut G,
+) -> Result<Option<CurrentProviderMessage>, String>
+where
+    G: FnMut(&AgentInput) -> Result<AgentInput, String>,
+{
     let input = event
         .payload
         .get("input")
@@ -241,8 +367,12 @@ fn user_message_from_event(event: &AgentEvent) -> Option<CurrentProviderMessage>
                 .and_then(|value| serde_json::from_value(value).ok())
                 .unwrap_or_default();
             Some(AgentInput { text, attachments })
-        })?;
-    user_message_from_input(&input)
+        });
+    let Some(input) = input else {
+        return Ok(None);
+    };
+    let input = provider_input(&input)?;
+    Ok(user_message_from_input(&input))
 }
 
 fn user_message_from_input(input: &AgentInput) -> Option<CurrentProviderMessage> {
@@ -252,8 +382,9 @@ fn user_message_from_input(input: &AgentInput) -> Option<CurrentProviderMessage>
     }
     content.extend(input.attachments.iter().filter_map(|attachment| {
         image_from_attachment(attachment).map(|image| CurrentProviderContent::Image {
-            data: image.data,
+            uri: image.uri,
             media_type: image.media_type,
+            provider_data: image.provider_data,
         })
     }));
     (!content.is_empty()).then(|| CurrentProviderMessage::user(content))
@@ -262,36 +393,25 @@ fn user_message_from_input(input: &AgentInput) -> Option<CurrentProviderMessage>
 fn image_from_attachment(
     attachment: &AgentAttachment,
 ) -> Option<agent_runtime::reply_input::RuntimeReplyInputImage> {
-    let data = attachment
-        .uri
-        .as_deref()
-        .map(str::trim)
-        .filter(|uri| uri.starts_with("data:image/"))?
-        .to_string();
-    let media_type = attachment_media_type(attachment)
+    let attachment_uri = attachment.uri.as_deref().map(str::trim)?;
+    let provider_data = attachment_uri
+        .starts_with("data:image/")
+        .then(|| attachment_uri.to_string());
+    let uri = super::input_media::attachment_reference_uri(attachment)?;
+    let media_type = super::input_media::attachment_media_type(attachment)
         .or_else(|| {
-            data.split(';')
+            provider_data
+                .as_deref()?
+                .split(';')
                 .next()
                 .map(|prefix| prefix.trim_start_matches("data:").to_string())
         })
         .filter(|media_type| media_type.starts_with("image/"))?;
-    Some(agent_runtime::reply_input::RuntimeReplyInputImage { data, media_type })
-}
-
-fn attachment_media_type(attachment: &AgentAttachment) -> Option<String> {
-    attachment
-        .metadata
-        .as_ref()
-        .and_then(Value::as_object)
-        .and_then(|metadata| {
-            ["mediaType", "media_type", "mimeType", "mime_type"]
-                .iter()
-                .filter_map(|key| metadata.get(*key))
-                .find_map(Value::as_str)
-        })
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
+    Some(agent_runtime::reply_input::RuntimeReplyInputImage {
+        uri,
+        media_type,
+        provider_data,
+    })
 }
 
 fn provider_event_payload(payload: &Value) -> &Value {
@@ -299,13 +419,46 @@ fn provider_event_payload(payload: &Value) -> &Value {
 }
 
 fn text_from_payload(payload: &Value) -> Option<String> {
-    provider_event_payload(payload)
-        .get("text")
-        .or_else(|| provider_event_payload(payload).get("delta"))
-        .or_else(|| provider_event_payload(payload).get("content"))
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
-        .filter(|value| !value.is_empty())
+    text_from_message_value(provider_event_payload(payload))
+}
+
+fn text_from_message_value(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str().filter(|text| !text.is_empty()) {
+        return Some(text.to_string());
+    }
+    if let Some(text) = [
+        "text",
+        "delta",
+        "content",
+        "message",
+        "outputText",
+        "output_text",
+    ]
+    .iter()
+    .find_map(|key| value.get(*key).and_then(Value::as_str))
+    .filter(|text| !text.is_empty())
+    {
+        return Some(text.to_string());
+    }
+    if let Some(text) = value
+        .get("content")
+        .and_then(|content| text_from_message_value(content))
+    {
+        return Some(text);
+    }
+    for key in ["deltas", "messages", "items", "parts", "content"] {
+        let Some(values) = value.get(key).and_then(Value::as_array) else {
+            continue;
+        };
+        let text = values
+            .iter()
+            .filter_map(text_from_message_value)
+            .collect::<String>();
+        if !text.is_empty() {
+            return Some(text);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -374,38 +527,35 @@ mod tests {
     #[test]
     fn canonical_history_preserves_tool_call_result_and_order() {
         let arguments = json!({ "path": "README.md" });
-        let messages = messages_from_events(
-            &[
-                event(
-                    1,
-                    "message.created",
-                    json!({ "input": { "text": "read it", "attachments": [] } }),
-                ),
-                canonical_tool_event(
-                    2,
-                    "item.started",
-                    ItemStatus::InProgress,
-                    "call-read",
-                    "Read",
-                    arguments.clone(),
-                    None,
-                ),
-                canonical_tool_event(
-                    3,
-                    "item.completed",
-                    ItemStatus::Completed,
-                    "call-read",
-                    "Read",
-                    arguments,
-                    Some(ToolOutput {
-                        text: Some("contents".to_string()),
-                        ..ToolOutput::default()
-                    }),
-                ),
-                event(4, "message.delta", json!({ "text": "Done." })),
-            ],
-            |_| None,
-        );
+        let messages = messages_from_events(&[
+            event(
+                1,
+                "message.created",
+                json!({ "input": { "text": "read it", "attachments": [] } }),
+            ),
+            canonical_tool_event(
+                2,
+                "item.started",
+                ItemStatus::InProgress,
+                "call-read",
+                "Read",
+                arguments.clone(),
+                None,
+            ),
+            canonical_tool_event(
+                3,
+                "item.completed",
+                ItemStatus::Completed,
+                "call-read",
+                "Read",
+                arguments,
+                Some(ToolOutput {
+                    text: Some("contents".to_string()),
+                    ..ToolOutput::default()
+                }),
+            ),
+            event(4, "message.delta", json!({ "text": "Done." })),
+        ]);
 
         assert_eq!(messages.len(), 4);
         assert!(matches!(
@@ -428,22 +578,19 @@ mod tests {
 
     #[test]
     fn canonical_history_preserves_failed_tool_result() {
-        let messages = messages_from_events(
-            &[canonical_tool_event(
-                1,
-                "item.completed",
-                ItemStatus::Failed,
-                "call-failed",
-                "Read",
-                json!({ "path": "missing.md" }),
-                Some(ToolOutput {
-                    text: Some("read failed".to_string()),
-                    error: Some("not found".to_string()),
-                    ..ToolOutput::default()
-                }),
-            )],
-            |_| None,
-        );
+        let messages = messages_from_events(&[canonical_tool_event(
+            1,
+            "item.completed",
+            ItemStatus::Failed,
+            "call-failed",
+            "Read",
+            json!({ "path": "missing.md" }),
+            Some(ToolOutput {
+                text: Some("read failed".to_string()),
+                error: Some("not found".to_string()),
+                ..ToolOutput::default()
+            }),
+        )]);
 
         assert!(matches!(
             &messages[0].content[..],
@@ -456,30 +603,127 @@ mod tests {
     }
 
     #[test]
-    fn canonical_history_reads_persisted_output_ref() {
-        let messages = messages_from_events(
-            &[canonical_tool_event(
+    fn canonical_history_merges_completed_full_text_without_duplicate_delta() {
+        let messages = messages_from_events(&[
+            event(
                 1,
-                "item.completed",
-                ItemStatus::Completed,
-                "call-large",
-                "Read",
-                json!({ "path": "large.txt" }),
-                Some(ToolOutput {
-                    text: Some("preview".to_string()),
-                    truncated: true,
-                    output_ref: Some("output://large".to_string()),
-                    ..ToolOutput::default()
-                }),
-            )],
-            |output_ref| (output_ref == "output://large").then(|| "full output".to_string()),
-        );
+                "message.delta",
+                json!({"itemId": "agent-1", "text": "Hello "}),
+            ),
+            event(
+                2,
+                "message.completed",
+                json!({"itemId": "agent-1", "text": "Hello world", "status": "completed"}),
+            ),
+        ]);
+
+        assert_eq!(messages.len(), 1);
+        let text = messages[0]
+            .content
+            .iter()
+            .filter_map(|content| match content {
+                CurrentProviderContent::Text(text) => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<String>();
+        assert_eq!(text, "Hello world");
+    }
+
+    #[test]
+    fn canonical_history_reads_message_delta_batch_parts() {
+        let messages = messages_from_events(&[event(
+            1,
+            "message.delta_batch",
+            json!({
+                "itemId": "agent-1",
+                "deltas": [
+                    {"text": "batched "},
+                    {"delta": "answer"}
+                ]
+            }),
+        )]);
+
+        assert!(matches!(
+            &messages[0].content[..],
+            [CurrentProviderContent::Text(text)] if text == "batched answer"
+        ));
+    }
+
+    #[test]
+    fn canonical_history_deduplicates_turn_wide_completed_snapshot() {
+        let messages = messages_from_events(&[
+            event(
+                1,
+                "message.delta",
+                json!({"itemId": "commentary-1", "text": "inspect "}),
+            ),
+            event(
+                2,
+                "message.delta",
+                json!({"itemId": "final-1", "text": "done"}),
+            ),
+            event(
+                3,
+                "message.completed",
+                json!({"itemId": "final-1", "text": "inspect done", "status": "completed"}),
+            ),
+        ]);
+
+        let text = messages[0]
+            .content
+            .iter()
+            .filter_map(|content| match content {
+                CurrentProviderContent::Text(text) => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<String>();
+        assert_eq!(text, "inspect done");
+    }
+
+    #[test]
+    fn canonical_history_prefers_bounded_preview_over_persisted_output_ref() {
+        let messages = messages_from_events(&[canonical_tool_event(
+            1,
+            "item.completed",
+            ItemStatus::Completed,
+            "call-large",
+            "Read",
+            json!({ "path": "large.txt" }),
+            Some(ToolOutput {
+                text: Some("preview".to_string()),
+                truncated: true,
+                output_ref: Some("output://large".to_string()),
+                ..ToolOutput::default()
+            }),
+        )]);
 
         assert!(matches!(
             &messages[0].content[..],
             [CurrentProviderContent::ToolResult(result)]
-                if result.call_id == "call-large" && result.output == "full output"
+                if result.call_id == "call-large" && result.output == "preview"
         ));
+    }
+
+    #[test]
+    fn canonical_history_bounds_unoffloaded_inline_tool_output() {
+        let messages = messages_from_events(&[canonical_tool_event(
+            1,
+            "item.completed",
+            ItemStatus::Completed,
+            "call-inline",
+            "Read",
+            json!({ "path": "large.txt" }),
+            Some(ToolOutput {
+                text: Some("x".repeat(PROVIDER_TOOL_OUTPUT_MAX_BYTES * 2)),
+                ..ToolOutput::default()
+            }),
+        )]);
+
+        let CurrentProviderContent::ToolResult(result) = &messages[0].content[0] else {
+            panic!("expected tool result");
+        };
+        assert!(result.output.len() < PROVIDER_TOOL_OUTPUT_MAX_BYTES * 2);
+        assert!(result.output.contains("Warning: truncated output"));
     }
 
     #[test]
@@ -498,9 +742,7 @@ mod tests {
         );
         event.payload["outputRef"] = json!("output://outer");
 
-        let messages = messages_from_events(&[event], |output_ref| {
-            (output_ref == "output://outer").then(|| "outer output".to_string())
-        });
+        let messages = messages_from_events(&[event]);
 
         assert!(matches!(
             &messages[0].content[..],
@@ -510,51 +752,48 @@ mod tests {
 
     #[test]
     fn raw_tool_events_do_not_enter_provider_history() {
-        let messages = messages_from_events(
-            &[
-                event(
-                    1,
-                    "message.created",
-                    json!({ "input": { "text": "read it", "attachments": [] } }),
-                ),
-                event(
-                    2,
-                    "reasoning.delta",
-                    json!({ "runtimeEvent": { "text": "inspect" } }),
-                ),
-                event(
-                    3,
-                    "message.delta",
-                    json!({ "runtimeEvent": { "text": "I will read it." } }),
-                ),
-                event(
-                    4,
-                    "tool.started",
-                    json!({ "runtimeEvent": { "tool_id": "call-read", "tool_name": "Read", "arguments": "{\"path\":\"README.md\"}" } }),
-                ),
-                event(
-                    5,
-                    "tool.result",
-                    json!({ "runtimeEvent": { "tool_id": "call-read", "tool_name": "Read", "result": { "success": true, "output": "contents" } } }),
-                ),
-                event(
-                    6,
-                    "tool.failed",
-                    json!({ "toolId": "call-failed", "toolName": "Read", "error": "failed" }),
-                ),
-                event(
-                    7,
-                    "tool.completed",
-                    json!({ "toolId": "call-completed", "toolName": "Read", "output": "done" }),
-                ),
-                event(
-                    8,
-                    "message.delta",
-                    json!({ "runtimeEvent": { "text": "Done." } }),
-                ),
-            ],
-            |_| None,
-        );
+        let messages = messages_from_events(&[
+            event(
+                1,
+                "message.created",
+                json!({ "input": { "text": "read it", "attachments": [] } }),
+            ),
+            event(
+                2,
+                "reasoning.delta",
+                json!({ "runtimeEvent": { "text": "inspect" } }),
+            ),
+            event(
+                3,
+                "message.delta",
+                json!({ "runtimeEvent": { "text": "I will read it." } }),
+            ),
+            event(
+                4,
+                "tool.started",
+                json!({ "runtimeEvent": { "tool_id": "call-read", "tool_name": "Read", "arguments": "{\"path\":\"README.md\"}" } }),
+            ),
+            event(
+                5,
+                "tool.result",
+                json!({ "runtimeEvent": { "tool_id": "call-read", "tool_name": "Read", "result": { "success": true, "output": "contents" } } }),
+            ),
+            event(
+                6,
+                "tool.failed",
+                json!({ "toolId": "call-failed", "toolName": "Read", "error": "failed" }),
+            ),
+            event(
+                7,
+                "tool.completed",
+                json!({ "toolId": "call-completed", "toolName": "Read", "output": "done" }),
+            ),
+            event(
+                8,
+                "message.delta",
+                json!({ "runtimeEvent": { "text": "Done." } }),
+            ),
+        ]);
 
         assert_eq!(messages.len(), 2);
         assert!(matches!(
@@ -581,6 +820,51 @@ mod tests {
 
         let reply = reply_input_from_agent_input(&input);
         assert_eq!(reply.images.len(), 1);
+        assert_eq!(reply.images[0].uri, "data:image/png;base64,abc");
         assert_eq!(reply.images[0].media_type, "image/png");
+        assert_eq!(
+            reply.images[0].provider_data.as_deref(),
+            Some("data:image/png;base64,abc")
+        );
+    }
+
+    #[test]
+    fn persisted_image_history_is_hydrated_without_rewriting_canonical_reference() {
+        const PNG_DATA_URL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+        let root = tempfile::tempdir().expect("sidecar root");
+        let store =
+            super::super::sidecar_store::SidecarStore::new(root.path()).expect("sidecar store");
+        let mut input = AgentInput {
+            text: "describe it".to_string(),
+            attachments: vec![AgentAttachment {
+                kind: "image".to_string(),
+                uri: Some(PNG_DATA_URL.to_string()),
+                metadata: Some(json!({ "mediaType": "image/png" })),
+            }],
+        };
+        super::super::input_media::persist_inline_input_media(
+            &mut input,
+            Some(&store),
+            "session-1",
+        )
+        .expect("persist input media");
+        let reference_uri = input.attachments[0].uri.clone().expect("reference uri");
+        let messages = messages_from_events_with_provider_input(
+            &[event(1, "message.created", json!({ "input": input }))],
+            |input| super::super::input_media::provider_input_from_references(input, Some(&store)),
+        )
+        .expect("provider history");
+
+        assert!(matches!(
+            &messages[0].content[..],
+            [CurrentProviderContent::Text(text), CurrentProviderContent::Image {
+                uri,
+                media_type,
+                provider_data: Some(provider_data),
+            }] if text == "describe it"
+                && uri == &reference_uri
+                && media_type == "image/png"
+                && provider_data == PNG_DATA_URL
+        ));
     }
 }

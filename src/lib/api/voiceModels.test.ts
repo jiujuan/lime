@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
-import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
 import {
   DEFAULT_SENSEVOICE_MODEL_ID,
   deleteVoiceModel,
@@ -39,10 +38,6 @@ vi.mock("./appServer", () => ({
   createAppServerClient: () => appServerMocks,
 }));
 
-vi.mock("./oemCloudRuntime", () => ({
-  resolveOemCloudRuntimeContext: vi.fn(),
-}));
-
 describe("voiceModels API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,7 +46,6 @@ describe("voiceModels API", () => {
     Object.values(appServerMocks).forEach((mock) => {
       mock.mockReset();
     });
-    vi.mocked(resolveOemCloudRuntimeContext).mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -402,141 +396,55 @@ describe("voiceModels API", () => {
     expect(safeInvoke).not.toHaveBeenCalledWith("get_asr_credentials");
   });
 
-  it("应优先使用 limecore 下发的语音模型目录并传给下载命令", async () => {
-    vi.mocked(resolveOemCloudRuntimeContext).mockReturnValue({
-      baseUrl: "https://cloud.example.com",
-      controlPlaneBaseUrl: "https://cloud.example.com/api",
-      sceneBaseUrl: "https://cloud.example.com/scene-api",
-      gatewayBaseUrl: "https://cloud.example.com/gateway-api",
-      tenantId: "tenant-0001",
-      sessionToken: null,
-      hubProviderName: null,
-      loginPath: "/login",
-      desktopClientId: "desktop-client",
-      desktopOauthRedirectUrl: "lime://oauth/callback",
-      desktopOauthNextPath: "/welcome",
-      pluginSignatureTrustRoots: [],
-    });
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        code: 200,
-        message: "success",
-        data: {
-          items: [
-            {
-              id: "sensevoice-small-int8-2024-07-17",
-              name: "SenseVoice Small INT8",
-              provider: "FunAudioLLM / sherpa-onnx",
-              description: "后端下发的离线语音模型",
-              version: "2024-07-17",
-              languages: ["zh", "en"],
-              runtime: "sherpa-onnx",
-              bundled: false,
-              sizeBytes: 262144000,
-              download: {
-                archive: {
-                  downloadUrl:
-                    "https://models.example.com/voice/sensevoice.tar.bz2",
-                  sha256: "abc123",
-                },
-                vad: {
-                  modelId: "silero-vad-onnx",
-                  downloadUrl:
-                    "https://models.example.com/voice/silero_vad.onnx",
-                },
-              },
-            },
-          ],
-        },
-      }),
-    });
+  it("语音模型目录与下载不应从 Renderer 直连网络", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("renderer network"));
     vi.stubGlobal("fetch", fetchMock);
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      state: {
-        model_id: "sensevoice-small-int8-2024-07-17",
-        installed: true,
-        installing: false,
-        install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
-        installed_bytes: 1024,
-        missing_files: [],
-      },
-    });
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce([
+        {
+          id: "sensevoice-small-int8-2024-07-17",
+          name: "SenseVoice Small INT8",
+          provider: "FunAudioLLM / sherpa-onnx",
+          description: "本地离线 ASR 模型",
+          version: "2024-07-17",
+          languages: ["zh", "en"],
+          size_bytes: 262144000,
+          download_url:
+            "https://models.example.com/voice/sensevoice-small-int8.tar.bz2",
+          vad_model_id: "silero-vad-onnx",
+          vad_download_url: "https://models.example.com/voice/silero_vad.onnx",
+          runtime: "sherpa-onnx",
+          bundled: false,
+          checksum_sha256: "abc123",
+        },
+      ])
+      .mockResolvedValueOnce({
+        state: {
+          model_id: "sensevoice-small-int8-2024-07-17",
+          installed: true,
+          installing: false,
+          install_dir:
+            "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+          installed_bytes: 1024,
+          missing_files: [],
+        },
+      });
 
+    await expect(listVoiceModelCatalog()).resolves.toHaveLength(1);
     await expect(
       downloadVoiceModel("sensevoice-small-int8-2024-07-17"),
     ).resolves.toEqual({
       state: expect.objectContaining({ installed: true }),
     });
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://cloud.example.com/api/v1/public/tenants/tenant-0001/client/voice-model-catalog",
-      {
-        headers: {
-          Accept: "application/json",
-        },
-      },
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "voice_models_list_catalog",
     );
-    expect(safeInvoke).toHaveBeenCalledWith("voice_models_download", {
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "voice_models_download", {
       modelId: "sensevoice-small-int8-2024-07-17",
-      catalogEntry: expect.objectContaining({
-        id: "sensevoice-small-int8-2024-07-17",
-        download_url: "https://models.example.com/voice/sensevoice.tar.bz2",
-        vad_model_id: "silero-vad-onnx",
-        vad_download_url: "https://models.example.com/voice/silero_vad.onnx",
-        checksum_sha256: "abc123",
-      }),
     });
-  });
-
-  it("列出语音模型目录时应优先使用 limecore 下发目录", async () => {
-    vi.mocked(resolveOemCloudRuntimeContext).mockReturnValue({
-      baseUrl: "https://cloud.example.com",
-      controlPlaneBaseUrl: "https://cloud.example.com/api",
-      sceneBaseUrl: "https://cloud.example.com/scene-api",
-      gatewayBaseUrl: "https://cloud.example.com/gateway-api",
-      tenantId: "tenant-0001",
-      sessionToken: null,
-      hubProviderName: null,
-      loginPath: "/login",
-      desktopClientId: "desktop-client",
-      desktopOauthRedirectUrl: "lime://oauth/callback",
-      desktopOauthNextPath: "/welcome",
-      pluginSignatureTrustRoots: [],
-    });
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: {
-          items: [
-            {
-              id: "sensevoice-cloud",
-              name: "SenseVoice Cloud",
-              provider: "FunAudioLLM / sherpa-onnx",
-              languages: ["zh"],
-              sizeBytes: 42,
-              download: {
-                archive: {
-                  downloadUrl:
-                    "https://models.example.com/voice/sensevoice-cloud.tar.bz2",
-                },
-              },
-            },
-          ],
-        },
-      }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(listVoiceModelCatalog()).resolves.toEqual([
-      expect.objectContaining({
-        id: "sensevoice-cloud",
-        download_url:
-          "https://models.example.com/voice/sensevoice-cloud.tar.bz2",
-      }),
-    ]);
-
-    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("应通过 API 网关监听语音模型下载进度事件", async () => {

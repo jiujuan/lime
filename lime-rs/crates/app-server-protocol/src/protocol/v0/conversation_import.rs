@@ -29,8 +29,32 @@ impl Default for ConversationImportSourceStatus {
 pub enum ConversationImportThreadStatus {
     #[default]
     NotImported,
+    Importing,
     Imported,
     Conflict,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationImportJobStatus {
+    #[default]
+    Queued,
+    Running,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationImportJobPhase {
+    #[default]
+    Queued,
+    ReadingSource,
+    BuildingHistory,
+    PersistingHistory,
+    Finalizing,
+    Completed,
+    Failed,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -90,6 +114,12 @@ pub struct ConversationImportThreadCommitParams {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct ConversationImportJobReadParams {
+    pub job_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ConversationImportSourceSummary {
     pub source_client: ConversationImportSourceClient,
     pub status: ConversationImportSourceStatus,
@@ -133,6 +163,8 @@ pub struct ImportedThreadSummary {
     pub archived: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub import_job_id: Option<String>,
     pub import_status: ConversationImportThreadStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
@@ -268,4 +300,47 @@ pub struct ConversationImportThreadCommitResponse {
     pub can_continue: bool,
     #[serde(default)]
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportJobProgress {
+    pub phase: ConversationImportJobPhase,
+    #[serde(default)]
+    pub completed_items: usize,
+    #[serde(default)]
+    pub total_items: usize,
+    #[serde(default)]
+    pub completed_turns: usize,
+    #[serde(default)]
+    pub total_turns: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportJob {
+    pub job_id: String,
+    pub source_client: ConversationImportSourceClient,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_thread_id: Option<String>,
+    pub status: ConversationImportJobStatus,
+    pub progress: ConversationImportJobProgress,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<ConversationImportThreadCommitResponse>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportThreadCommitStartResponse {
+    pub job: ConversationImportJob,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationImportJobReadResponse {
+    pub job: ConversationImportJob,
 }

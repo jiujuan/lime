@@ -159,10 +159,10 @@ describe("WorkspaceMainArea", () => {
       mountedRoots,
     );
 
-    const root = container.querySelector<HTMLElement>(
-      '[data-testid="layout-transition-root"]',
+    const panelViewport = container.querySelector<HTMLElement>(
+      '[data-testid="layout-panel-viewport"]',
     );
-    const orderedPanels = Array.from(root?.children ?? [])
+    const orderedPanels = Array.from(panelViewport?.children ?? [])
       .map((node) => node.getAttribute("data-testid"))
       .filter(Boolean);
 
@@ -341,6 +341,11 @@ describe("WorkspaceMainArea", () => {
     expect(homeTopHost?.dataset.widthPolicy).toBe("content-adaptive");
     expect(homeTopHost?.style.maxWidth).toBe("100%");
     expect(
+      container.querySelector<HTMLElement>(
+        '[data-testid="layout-chat-panel-plain"]',
+      )?.dataset.topInset,
+    ).toBe("42px");
+    expect(
       homeTopHost?.querySelector('[data-testid="task-center-toolbar"]'),
     ).not.toBeNull();
     expect(workbenchTopHost).toBeNull();
@@ -384,6 +389,11 @@ describe("WorkspaceMainArea", () => {
     expect(inlineHost).toBeNull();
     expect(homeTopHost).not.toBeNull();
     expect(tabs).toBeNull();
+    expect(
+      container.querySelector<HTMLElement>(
+        '[data-testid="layout-chat-panel-plain"]',
+      )?.dataset.topInset,
+    ).toBe("42px");
   });
 
   it("展开工作台时仍只保留右上工具区，不恢复左侧任务导航", () => {
@@ -447,8 +457,8 @@ describe("WorkspaceMainArea", () => {
     expect(
       homeTopHost?.querySelector('[data-testid="task-center-toolbar"]'),
     ).not.toBeNull();
-    expect(chatPanelPlain?.dataset.topInset).toBe("0px");
-    expect(canvasPanel?.dataset.topInset).toBe("0px");
+    expect(chatPanelPlain?.dataset.topInset).toBe("42px");
+    expect(canvasPanel?.dataset.topInset).toBe("42px");
   });
 
   it("任务中心自动隐藏顶栏时应通过小图标展开完整顶部工具", () => {

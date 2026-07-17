@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { isGuiCanceledSnapshotReady } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
+import {
+  isGuiCanceledSnapshotReady,
+  shouldExpandCompactApprovalTimeline,
+} from "./claw-chat-current-fixture-gui-completion-waits.mjs";
 
 const BASE_CANCELED_SNAPSHOT = {
   hasPrompt: true,
@@ -12,6 +15,7 @@ const BASE_CANCELED_SNAPSHOT = {
   approvalRecordShape: {
     recordCount: 0,
   },
+  compactTimelinePreviewCount: 0,
 };
 
 describe("claw chat GUI canceled waits", () => {
@@ -63,5 +67,31 @@ describe("claw chat GUI canceled waits", () => {
         },
       ),
     ).toBe(true);
+  });
+
+  it("terminal approval 折叠后应先展开 current timeline 再等待只读记录", () => {
+    expect(
+      shouldExpandCompactApprovalTimeline(BASE_CANCELED_SNAPSHOT, {
+        requireApprovalRecord: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldExpandCompactApprovalTimeline(
+        {
+          ...BASE_CANCELED_SNAPSHOT,
+          compactTimelinePreviewCount: 1,
+        },
+        { requireApprovalRecord: true },
+      ),
+    ).toBe(true);
+    expect(
+      shouldExpandCompactApprovalTimeline(
+        {
+          ...BASE_CANCELED_SNAPSHOT,
+          compactTimelinePreviewCount: 1,
+        },
+        { requireApprovalRecord: false },
+      ),
+    ).toBe(false);
   });
 });

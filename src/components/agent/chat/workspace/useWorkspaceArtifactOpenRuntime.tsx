@@ -256,6 +256,13 @@ export function useWorkspaceArtifactOpenRuntime({
           : normalizedFileName;
         startTransition(() => {
           if (activeTheme === "general") {
+            setSelectedArtifactId(null);
+            requestCanvasWorkbenchPreviewOpen({
+              filePath: preview.path || absolutePath,
+              selectionKey: `default-preview:${
+                nextFilePath || "current-canvas"
+              }`,
+            });
             setGeneralCanvasState(
               buildGeneralCanvasStateFromWorkspaceFile(
                 nextFilePath,
@@ -266,7 +273,6 @@ export function useWorkspaceArtifactOpenRuntime({
             openCanvasForReason("user_open_file", setLayoutMode);
             return;
           }
-
           handleFileClick(nextFilePath, nextContent);
         });
       })();
@@ -277,8 +283,10 @@ export function useWorkspaceArtifactOpenRuntime({
       handleFileClick,
       handleHarnessLoadFilePreview,
       projectRootPath,
+      requestCanvasWorkbenchPreviewOpen,
       setGeneralCanvasState,
       setLayoutMode,
+      setSelectedArtifactId,
       t,
     ],
   );
@@ -310,6 +318,11 @@ export function useWorkspaceArtifactOpenRuntime({
       const nextFilePath = relativePath?.trim() || preview.path || absolutePath;
       startTransition(() => {
         if (activeTheme === "general") {
+          setSelectedArtifactId(null);
+          requestCanvasWorkbenchPreviewOpen({
+            filePath: preview.path || absolutePath,
+            selectionKey: `default-preview:${nextFilePath || "current-canvas"}`,
+          });
           setGeneralCanvasState(
             buildGeneralCanvasStateFromWorkspaceFile(
               nextFilePath,
@@ -320,7 +333,6 @@ export function useWorkspaceArtifactOpenRuntime({
           openCanvasForReason("user_open_file", setLayoutMode);
           return;
         }
-
         handleWorkspaceFileClick(nextFilePath, nextContent);
       });
       return true;
@@ -329,8 +341,10 @@ export function useWorkspaceArtifactOpenRuntime({
       activeTheme,
       handleHarnessLoadFilePreview,
       handleWorkspaceFileClick,
+      requestCanvasWorkbenchPreviewOpen,
       setGeneralCanvasState,
       setLayoutMode,
+      setSelectedArtifactId,
     ],
   );
 
@@ -627,12 +641,6 @@ export function useWorkspaceArtifactOpenRuntime({
 
         handleWorkspaceFileClick(target.filePath, content);
 
-        if (target.openMode === "file_preview") {
-          requestCanvasWorkbenchPreviewOpen({
-            filePath: target.filePath,
-          });
-        }
-
         const normalizedBlockId = target.blockId?.trim();
         if (!normalizedBlockId) {
           return;
@@ -646,7 +654,6 @@ export function useWorkspaceArtifactOpenRuntime({
       handleHarnessLoadFilePreview,
       handleWorkspaceFileClick,
       projectRootPath,
-      requestCanvasWorkbenchPreviewOpen,
     ],
   );
 

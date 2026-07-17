@@ -1,7 +1,4 @@
-use crate::{
-    credential_bridge::{create_configured_reply_provider, ConfiguredReplyProvider},
-    AgentRuntimeState,
-};
+use crate::{credential_bridge::ConfiguredReplyProvider, AgentRuntimeState};
 use agent_runtime::turn_executor::TurnProviderConfiguration;
 use app_server_protocol::ProtocolKind;
 use lime_core::database::DbConnection;
@@ -21,6 +18,7 @@ pub struct SessionProviderConfig {
     pub toolshim: bool,
     pub toolshim_model: Option<String>,
     pub model_capabilities: Option<Value>,
+    pub supports_websockets: bool,
 }
 
 struct ProviderConfigurationRequest<'a> {
@@ -82,8 +80,8 @@ async fn configure_provider_for_session(
         config.route_protocol = request.route_protocol.or(config.route_protocol);
         let runtime_config =
             session_provider_config_to_runtime_provider_config(&config, request.session_id);
-        let provider = install_provider_for_session(&runtime_config).await?;
-        agent_state.set_provider(provider.clone()).await;
+        let provider =
+            install_provider_for_session(agent_state, request.session_id, &runtime_config).await?;
         return Ok(ConfiguredSessionProvider { config, provider });
     }
 
@@ -95,8 +93,8 @@ async fn configure_provider_for_session(
     runtime_config.reasoning_effort = request.reasoning_effort;
     runtime_config.protocol = runtime_provider_protocol_from_route_protocol(request.route_protocol);
 
-    let provider = install_provider_for_session(&runtime_config).await?;
-    agent_state.set_provider(provider.clone()).await;
+    let provider =
+        install_provider_for_session(agent_state, request.session_id, &runtime_config).await?;
     if let Err(error) = agent_state
         .credential_bridge()
         .record_usage(request.db, &runtime_config.credential_uuid)
@@ -116,14 +114,18 @@ async fn configure_provider_for_session(
         toolshim: runtime_config.toolshim,
         toolshim_model: runtime_config.toolshim_model,
         model_capabilities: None,
+        supports_websockets: runtime_config.supports_websockets,
     };
     Ok(ConfiguredSessionProvider { config, provider })
 }
 
 async fn install_provider_for_session(
+    agent_state: &AgentRuntimeState,
+    session_id: &str,
     runtime_config: &RuntimeProviderConfig,
 ) -> Result<ConfiguredReplyProvider, String> {
-    create_configured_reply_provider(runtime_config)
+    agent_state
+        .install_provider_for_session(session_id, runtime_config)
         .await
         .map_err(|error| format!("创建 Provider 失败: {error}"))
 }
@@ -235,6 +237,7 @@ fn session_provider_config_to_runtime_provider_config(
             .unwrap_or_else(|| format!("manual:{session_id}")),
         reasoning_effort: config.reasoning_effort.clone(),
         protocol: runtime_provider_protocol_from_route_protocol(config.route_protocol.clone()),
+        supports_websockets: config.supports_websockets,
         toolshim: config.toolshim,
         toolshim_model: config.toolshim_model.clone(),
     }
@@ -334,6 +337,7 @@ mod tests {
             toolshim: false,
             toolshim_model: None,
             model_capabilities: None,
+            supports_websockets: false,
         };
 
         let runtime_config =
@@ -365,10 +369,16 @@ mod tests {
             toolshim: false,
             toolshim_model: None,
             model_capabilities: None,
+            supports_websockets: true,
         };
         assert_eq!(
             route_protocol_from_session_provider_config(&config),
             Some(ProtocolKind::OpenaiResponses)
+        );
+        assert!(config.supports_websockets);
+        assert!(
+            session_provider_config_to_runtime_provider_config(&config, "session-a")
+                .supports_websockets
         );
 
         config.route_protocol = Some(ProtocolKind::OpenaiChat);

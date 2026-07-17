@@ -715,6 +715,7 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ConversationImportThreadCommitParams>(
             "ConversationImportThreadCommitParams",
         ),
+        typed_schema::<ConversationImportJobReadParams>("ConversationImportJobReadParams"),
         typed_schema::<ConversationImportSourceSummary>("ConversationImportSourceSummary"),
         typed_schema::<ImportedThreadSummary>("ImportedThreadSummary"),
         typed_schema::<ConversationImportSourceScanResponse>(
@@ -732,6 +733,14 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ConversationImportThreadCommitResponse>(
             "ConversationImportThreadCommitResponse",
         ),
+        typed_schema::<ConversationImportJobStatus>("ConversationImportJobStatus"),
+        typed_schema::<ConversationImportJobPhase>("ConversationImportJobPhase"),
+        typed_schema::<ConversationImportJobProgress>("ConversationImportJobProgress"),
+        typed_schema::<ConversationImportJob>("ConversationImportJob"),
+        typed_schema::<ConversationImportThreadCommitStartResponse>(
+            "ConversationImportThreadCommitStartResponse",
+        ),
+        typed_schema::<ConversationImportJobReadResponse>("ConversationImportJobReadResponse"),
         typed_schema::<AgentSessionStartParams>("AgentSessionStartParams"),
         typed_schema::<AgentSessionStartResponse>("AgentSessionStartResponse"),
         typed_schema::<AgentSessionReadParams>("AgentSessionReadParams"),

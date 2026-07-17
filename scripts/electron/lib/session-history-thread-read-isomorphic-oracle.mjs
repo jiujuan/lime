@@ -84,6 +84,32 @@ function expectedCanonicalItemIds() {
   ]);
 }
 
+function assertReasoningItems(items, label) {
+  const reasoningItems = (Array.isArray(items) ? items : []).filter(
+    (item) => item?.type === "reasoning",
+  );
+  assert(
+    reasoningItems.length === THREAD_READ_PAGE_ISOMORPHIC.turns.length,
+    `${label} reasoning 数量不正确: ${reasoningItems.length}`,
+  );
+  for (const turn of THREAD_READ_PAGE_ISOMORPHIC.turns) {
+    const expectedId = canonicalItemId(turn.reasoningItemId);
+    const item = reasoningItems.find(
+      (candidate) => itemId(candidate) === expectedId,
+    );
+    assert(item, `${label} 缺少 reasoning item: ${expectedId}`);
+    assert(
+      item?.text === turn.reasoningText,
+      `${label} reasoning text 不正确: ${expectedId}`,
+    );
+    assert(
+      JSON.stringify(item?.summary ?? []) ===
+        JSON.stringify([turn.reasoningText]),
+      `${label} reasoning summary 不正确: ${expectedId}`,
+    );
+  }
+}
+
 function assertEqualArray(actual, expected, label) {
   assert(
     JSON.stringify(actual) === JSON.stringify(expected),
@@ -312,6 +338,8 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
     expectedItemIds,
     "thread_read.thread_items item order",
   );
+  assertReasoningItems(detail?.items, "detail.items");
+  assertReasoningItems(threadRead?.thread_items, "thread_read.thread_items");
   assert(
     (detail?.items ?? []).every((item) => item?.status === "completed"),
     `detail.items 必须完成 canonical lifecycle: ${JSON.stringify(

@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 
-const DEFAULT_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+pub(super) const DEFAULT_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Default)]
 struct ToolCallAccumulator {
@@ -248,106 +248,220 @@ struct ResponsesStreamState {
     reasoning_ids: HashSet<String>,
 }
 
+pub(super) struct ResponsesEventBatch {
+    pub events: Vec<LlmEvent>,
+    pub terminal: bool,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct ResponsesEventReducer {
+    state: ResponsesStreamState,
+}
+
+impl ResponsesEventReducer {
+    pub fn push(&mut self, payload: &Value) -> Result<ResponsesEventBatch, CurrentProviderError> {
+        let mut events = Vec::new();
+        let mut terminal = false;
+        let event_type = payload
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        match event_type {
+            "response.output_text.delta" => {
+                let id = response_block_id(payload, "text");
+                if let Some(delta) = payload
+                    .get("delta")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                {
+                    if self.state.text_ids.insert(id.clone()) {
+                        events.push(LlmEvent::TextStart { id: id.clone() });
+                    }
+                    events.push(LlmEvent::TextDelta {
+                        id,
+                        text: delta.to_string(),
+                    });
+                }
+            }
+            "response.reasoning_text.delta" | "response.reasoning_summary_text.delta" => {
+                let id = response_block_id(payload, "reasoning");
+                if let Some(delta) = payload
+                    .get("delta")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                {
+                    if self.state.reasoning_ids.insert(id.clone()) {
+                        events.push(LlmEvent::ReasoningStart { id: id.clone() });
+                    }
+                    events.push(LlmEvent::ReasoningDelta {
+                        id,
+                        text: delta.to_string(),
+                    });
+                }
+            }
+            "response.output_item.added" => {
+                if let Some(item) = payload.get("item") {
+                    absorb_responses_call(item, &mut self.state);
+                }
+            }
+            "response.function_call_arguments.delta" => {
+                let key = response_call_key(payload);
+                let call = self.state.calls.entry(key.clone()).or_default();
+                if let Some(call_id) = payload.get("call_id").and_then(Value::as_str) {
+                    call.id = Some(call_id.to_string());
+                }
+                if let Some(name) = payload.get("name").and_then(Value::as_str) {
+                    call.name = Some(name.to_string());
+                }
+                if let Some(delta) = payload.get("delta").and_then(Value::as_str) {
+                    call.arguments.push_str(delta);
+                    if let Some((id, name, arguments)) = call.begin_input_if_ready(&key) {
+                        events.push(LlmEvent::ToolInputStart {
+                            id: id.clone(),
+                            name: name.clone(),
+                        });
+                        events.push(LlmEvent::ToolInputDelta {
+                            id,
+                            name,
+                            text: arguments,
+                        });
+                    } else if call.started {
+                        if let Some(name) = call.name.clone() {
+                            events.push(LlmEvent::ToolInputDelta {
+                                id: call.call_id(&key),
+                                name,
+                                text: delta.to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            "response.function_call_arguments.done" => {
+                let key = response_call_key(payload);
+                let call = self.state.calls.entry(key.clone()).or_default();
+                if let Some(call_id) = payload.get("call_id").and_then(Value::as_str) {
+                    call.id = Some(call_id.to_string());
+                }
+                if let Some(name) = payload.get("name").and_then(Value::as_str) {
+                    call.name = Some(name.to_string());
+                }
+                if let Some(arguments) = payload.get("arguments").and_then(Value::as_str) {
+                    call.arguments = arguments.to_string();
+                }
+                events.extend(take_responses_call(&mut self.state, &key)?);
+            }
+            "response.output_item.done" => {
+                if let Some(item) = payload.get("item") {
+                    absorb_responses_call(item, &mut self.state);
+                    if item.get("type").and_then(Value::as_str) == Some("function_call") {
+                        let key = response_call_key(item);
+                        events.extend(take_responses_call(&mut self.state, &key)?);
+                    }
+                }
+            }
+            "response.completed" => {
+                let response = payload.get("response").unwrap_or(payload);
+                self.state.response_id = response
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned);
+                if let Some(usage) = response.get("usage") {
+                    let usage = responses_usage(usage);
+                    events.push(LlmEvent::Usage {
+                        usage: usage.clone(),
+                    });
+                    self.state.usage = Some(usage);
+                }
+                for item in response
+                    .get("output")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    absorb_responses_call(item, &mut self.state);
+                }
+                events.extend(take_responses_calls(&mut self.state)?);
+                events.extend(
+                    self.state
+                        .text_ids
+                        .drain()
+                        .map(|id| LlmEvent::TextEnd { id }),
+                );
+                events.extend(
+                    self.state
+                        .reasoning_ids
+                        .drain()
+                        .map(|id| LlmEvent::ReasoningEnd { id }),
+                );
+                events.push(LlmEvent::Finish {
+                    reason: if self.state.emitted_tool_call {
+                        FinishReason::ToolCall
+                    } else {
+                        FinishReason::Stop
+                    },
+                    usage: self.state.usage.take(),
+                    response_id: self.state.response_id.clone(),
+                });
+                terminal = true;
+            }
+            "error" | "response.failed" => {
+                let message = payload
+                    .pointer("/error/message")
+                    .or_else(|| payload.get("message"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("Responses provider stream failed");
+                events.push(LlmEvent::ProviderError {
+                    message: message.to_string(),
+                    classification: Some(FailureClassification::ProviderInternal),
+                    retryable: Some(false),
+                });
+                terminal = true;
+            }
+            _ => {}
+        }
+        Ok(ResponsesEventBatch { events, terminal })
+    }
+
+    pub fn finish_incomplete(mut self) -> Vec<LlmEvent> {
+        let mut events = Vec::new();
+        events.extend(
+            self.state
+                .text_ids
+                .drain()
+                .map(|id| LlmEvent::TextEnd { id }),
+        );
+        events.extend(
+            self.state
+                .reasoning_ids
+                .drain()
+                .map(|id| LlmEvent::ReasoningEnd { id }),
+        );
+        events.push(truncated_stream_error("OpenAI Responses"));
+        events
+    }
+}
+
 pub(super) fn responses_sse(
     response: Response,
 ) -> impl Stream<Item = Result<LlmEvent, CurrentProviderError>> + Send {
     try_stream! {
-        let mut state = ResponsesStreamState::default();
+        let mut reducer = ResponsesEventReducer::default();
         let mut frames = Box::pin(sse_frames(response));
         while let Some(frame) = frames.next().await {
             let frame = frame?;
             let payload: Value = serde_json::from_str(&frame.data)
                 .map_err(|error| CurrentProviderError::new(format!("解析 Responses SSE event 失败: {error}")))?;
-            let event_type = payload.get("type").and_then(Value::as_str).unwrap_or_default();
-            match event_type {
-                "response.output_text.delta" => {
-                    let id = response_block_id(&payload, "text");
-                    if let Some(delta) = payload.get("delta").and_then(Value::as_str).filter(|value| !value.is_empty()) {
-                        if state.text_ids.insert(id.clone()) { yield LlmEvent::TextStart { id: id.clone() }; }
-                        yield LlmEvent::TextDelta { id, text: delta.to_string() };
-                    }
-                }
-                "response.reasoning_text.delta" | "response.reasoning_summary_text.delta" => {
-                    let id = response_block_id(&payload, "reasoning");
-                    if let Some(delta) = payload.get("delta").and_then(Value::as_str).filter(|value| !value.is_empty()) {
-                        if state.reasoning_ids.insert(id.clone()) { yield LlmEvent::ReasoningStart { id: id.clone() }; }
-                        yield LlmEvent::ReasoningDelta { id, text: delta.to_string() };
-                    }
-                }
-                "response.output_item.added" => {
-                    if let Some(item) = payload.get("item") { absorb_responses_call(item, &mut state); }
-                }
-                "response.function_call_arguments.delta" => {
-                    let key = response_call_key(&payload);
-                    let call = state.calls.entry(key.clone()).or_default();
-                    if let Some(call_id) = payload.get("call_id").and_then(Value::as_str) { call.id = Some(call_id.to_string()); }
-                    if let Some(name) = payload.get("name").and_then(Value::as_str) { call.name = Some(name.to_string()); }
-                    let Some(delta) = payload.get("delta").and_then(Value::as_str) else { continue; };
-                    call.arguments.push_str(delta);
-                    if let Some((id, name, arguments)) = call.begin_input_if_ready(&key) {
-                        yield LlmEvent::ToolInputStart { id: id.clone(), name: name.clone() };
-                        yield LlmEvent::ToolInputDelta { id, name, text: arguments };
-                    } else if call.started {
-                        if let Some(name) = call.name.clone() {
-                            yield LlmEvent::ToolInputDelta {
-                                id: call.call_id(&key),
-                                name,
-                                text: delta.to_string(),
-                            };
-                        }
-                    }
-                }
-                "response.function_call_arguments.done" => {
-                    let key = response_call_key(&payload);
-                    let call = state.calls.entry(key.clone()).or_default();
-                    if let Some(call_id) = payload.get("call_id").and_then(Value::as_str) { call.id = Some(call_id.to_string()); }
-                    if let Some(name) = payload.get("name").and_then(Value::as_str) { call.name = Some(name.to_string()); }
-                    if let Some(arguments) = payload.get("arguments").and_then(Value::as_str) { call.arguments = arguments.to_string(); }
-                    for event in take_responses_call(&mut state, &key)? {
-                        yield event;
-                    }
-                }
-                "response.output_item.done" => {
-                    if let Some(item) = payload.get("item") {
-                        absorb_responses_call(item, &mut state);
-                        if item.get("type").and_then(Value::as_str) == Some("function_call") {
-                            let key = response_call_key(item);
-                            for event in take_responses_call(&mut state, &key)? {
-                                yield event;
-                            }
-                        }
-                    }
-                }
-                "response.completed" => {
-                    let response = payload.get("response").unwrap_or(&payload);
-                    state.response_id = response.get("id").and_then(Value::as_str).map(ToOwned::to_owned);
-                    if let Some(usage) = response.get("usage") {
-                        let usage = responses_usage(usage);
-                        yield LlmEvent::Usage { usage: usage.clone() };
-                        state.usage = Some(usage);
-                    }
-                    for item in response.get("output").and_then(Value::as_array).into_iter().flatten() {
-                        absorb_responses_call(item, &mut state);
-                    }
-                    for event in take_responses_calls(&mut state)? {
-                        yield event;
-                    }
-                    for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
-                    for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
-                    yield LlmEvent::Finish { reason: if state.emitted_tool_call { FinishReason::ToolCall } else { FinishReason::Stop }, usage: state.usage.take(), response_id: state.response_id.clone() };
-                    return;
-                }
-                "error" | "response.failed" => {
-                    let message = payload.pointer("/error/message").or_else(|| payload.get("message")).and_then(Value::as_str).unwrap_or("Responses provider stream failed");
-                    yield LlmEvent::ProviderError { message: message.to_string(), classification: Some(FailureClassification::ProviderInternal), retryable: Some(false) };
-                    return;
-                }
-                _ => {}
+            let batch = reducer.push(&payload)?;
+            for event in batch.events {
+                yield event;
+            }
+            if batch.terminal {
+                return;
             }
         }
-        for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
-        for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
-        yield truncated_stream_error("OpenAI Responses");
+        for event in reducer.finish_incomplete() {
+            yield event;
+        }
     }
 }
 

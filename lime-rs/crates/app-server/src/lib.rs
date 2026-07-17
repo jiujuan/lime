@@ -760,8 +760,7 @@ fn should_spawn_transport_request(message: &JsonRpcMessage) -> bool {
     matches!(
         message,
         JsonRpcMessage::Request(request)
-            if request.method == METHOD_AGENT_SESSION_TURN_START
-                || request.method == METHOD_AGENT_SESSION_MEDIA_READ
+            if request.method != METHOD_INITIALIZE
     )
 }
 
@@ -1848,53 +1847,75 @@ mod tests {
             )),
         )
         .await;
-        let list_message = tokio::time::timeout(
-            std::time::Duration::from_millis(500),
-            output_lines.next_line(),
-        )
-        .await
-        .expect("agentSession/list should respond while turn waits")
-        .expect("stdio output should stay open")
-        .expect("agentSession/list response line should exist");
-        match decode_message(&list_message).expect("decode list response") {
-            JsonRpcMessage::Response(response) => {
-                assert_eq!(response.id, RequestId::Integer(4));
-                let sessions = response.result["sessions"]
-                    .as_array()
-                    .expect("sessions array");
-                assert!(
-                    sessions
-                        .iter()
-                        .any(|session| session["sessionId"] == "sess_external_wait_stdio"),
-                    "running session should be listed while backend waits"
-                );
+        let mut interleaved_messages = Vec::new();
+        let list_response = loop {
+            let message = next_json_message_with_timeout(
+                &mut output_lines,
+                std::time::Duration::from_millis(500),
+            )
+            .await;
+            match message {
+                JsonRpcMessage::Response(response) if response.id == RequestId::Integer(4) => {
+                    break response;
+                }
+                message => interleaved_messages.push(message),
             }
-            other => panic!("expected list response while turn waits, got {other:?}"),
-        }
+        };
+        let sessions = list_response.result["sessions"]
+            .as_array()
+            .expect("sessions array");
+        assert!(
+            sessions
+                .iter()
+                .any(|session| session["sessionId"] == "sess_external_wait_stdio"),
+            "running session should be listed while backend waits"
+        );
 
         std::fs::write(&trigger_path, b"continue").expect("release backend output");
 
-        assert_next_scoped_agent_event_notification(
-            &mut output_lines,
-            "sess_external_wait_stdio",
-            "thread_external_wait_stdio",
-            "message.created",
-            "turn_external_wait_stdio",
-            json!({
+        let expected_user_payload = json!({
+            "attachments": [],
+            "content": {
+                "kind": "inline_text",
+                "text": "draft",
+            },
+            "input": {
                 "attachments": [],
-                "content": {
-                    "kind": "inline_text",
-                    "text": "draft",
-                },
-                "input": {
-                    "attachments": [],
-                    "text": "draft",
-                },
-                "role": "user",
-                "visibility": "user_visible",
-            }),
-        )
-        .await;
+                "text": "draft",
+            },
+            "role": "user",
+            "visibility": "user_visible",
+        });
+        if let Some(message) = interleaved_messages.iter().find(|message| {
+            let JsonRpcMessage::Notification(notification) = message else {
+                return false;
+            };
+            notification
+                .params
+                .as_ref()
+                .and_then(|params| params.pointer("/event/type"))
+                .and_then(serde_json::Value::as_str)
+                == Some("message.created")
+        }) {
+            assert_scoped_agent_event_notification(
+                message,
+                "sess_external_wait_stdio",
+                "thread_external_wait_stdio",
+                "message.created",
+                "turn_external_wait_stdio",
+                expected_user_payload,
+            );
+        } else {
+            assert_next_scoped_agent_event_notification(
+                &mut output_lines,
+                "sess_external_wait_stdio",
+                "thread_external_wait_stdio",
+                "message.created",
+                "turn_external_wait_stdio",
+                expected_user_payload,
+            )
+            .await;
+        }
         assert_next_scoped_agent_event_notification(
             &mut output_lines,
             "sess_external_wait_stdio",
@@ -2351,7 +2372,7 @@ mod tests {
     }
 
     #[test]
-    fn media_read_requests_spawn_transport_task_for_cancellation() {
+    fn initialized_requests_spawn_transport_tasks_without_racing_initialize() {
         assert!(should_spawn_transport_request(&JsonRpcMessage::Request(
             JsonRpcRequest::new(
                 RequestId::Integer(1),
@@ -2366,13 +2387,22 @@ mod tests {
                 Some(json!({})),
             ),
         )));
-        assert!(!should_spawn_transport_request(&JsonRpcMessage::Request(
+        assert!(should_spawn_transport_request(&JsonRpcMessage::Request(
             JsonRpcRequest::new(
                 RequestId::Integer(3),
                 METHOD_AGENT_SESSION_START,
                 Some(json!({}))
             ),
         )));
+        assert!(!should_spawn_transport_request(&JsonRpcMessage::Request(
+            JsonRpcRequest::new(RequestId::Integer(4), METHOD_INITIALIZE, Some(json!({}))),
+        )));
+        assert!(!should_spawn_transport_request(
+            &JsonRpcMessage::Notification(JsonRpcNotification::new(
+                METHOD_INITIALIZED,
+                Some(json!({})),
+            )),
+        ));
     }
 
     #[test]

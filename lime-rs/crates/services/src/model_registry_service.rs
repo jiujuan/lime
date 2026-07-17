@@ -34,6 +34,7 @@ const LIME_TENANT_HEADER: &str = "X-Lime-Tenant-ID";
 const LIME_TENANT_PARAM: &str = "lime_tenant_id";
 const PROVIDER_MODELS_CACHE_KEY_PREFIX: &str = "provider_models_fetch_cache:";
 const PROVIDER_MODELS_CACHE_TTL_SECONDS: i64 = 10 * 24 * 60 * 60;
+const PROVIDER_MODELS_CACHE_TAXONOMY_VERSION: u32 = 1;
 const XIAOMI_MODEL_FETCH_HOST_KEYWORDS: &[&str] = &["xiaomimimo.com"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +56,8 @@ struct PreparedModelFetchRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProviderModelsCachePayload {
+    #[serde(default)]
+    taxonomy_version: u32,
     provider_id: String,
     api_host: String,
     provider_type: Option<String>,
@@ -704,6 +707,12 @@ fn model_id_has_openai_vision_capability(model_id: &str, text: &str) -> bool {
         || model_tail.starts_with("o4-mini")
 }
 
+fn model_id_has_agnes_vision_capability(model_id: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    model_tail == "agnes-2.0-flash"
+}
+
 fn model_id_has_qwen_vision_capability(model_id: &str, text: &str) -> bool {
     let model = normalize_identifier(model_id);
     let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
@@ -821,6 +830,7 @@ fn infer_vision_capability(
     }
 
     openai_like
+        || model_id_has_agnes_vision_capability(model_id)
         || text.contains("gemini")
         || text.contains("claude")
         || model_id_has_qwen_vision_capability(model_id, &text)
@@ -1833,6 +1843,18 @@ impl ModelRegistryService {
             }
         };
 
+        if payload.taxonomy_version != PROVIDER_MODELS_CACHE_TAXONOMY_VERSION {
+            tracing::info!(
+                "[ModelRegistry] Provider 模型缓存能力分类版本已过期: provider={}, host={}, cached={}, current={}",
+                provider_id,
+                api_host,
+                payload.taxonomy_version,
+                PROVIDER_MODELS_CACHE_TAXONOMY_VERSION
+            );
+            let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+            return Ok(None);
+        }
+
         if payload.expires_at <= now {
             tracing::info!(
                 "[ModelRegistry] Provider 模型缓存已过期: provider={}, host={}",
@@ -1897,6 +1919,7 @@ impl ModelRegistryService {
 
         let cache_key = Self::provider_models_cache_key(provider_id, api_host, provider_type);
         let payload = ProviderModelsCachePayload {
+            taxonomy_version: PROVIDER_MODELS_CACHE_TAXONOMY_VERSION,
             provider_id: provider_id.trim().to_string(),
             api_host: api_host.trim().to_string(),
             provider_type: provider_type.map(|provider_type| provider_type.to_string()),
@@ -3889,6 +3912,7 @@ mod tests {
         for (provider, model) in [
             ("openai", "o3"),
             ("openai", "o4-mini"),
+            ("custom-provider", "agnes-2.0-flash"),
             ("xai", "grok-4.3"),
             ("mistral", "mistral-small-latest"),
             ("alibaba", "qwen3.5-27b"),
@@ -3907,6 +3931,8 @@ mod tests {
             ("openai", "o1-mini"),
             ("openai", "o1-preview"),
             ("openai", "o3-mini"),
+            ("custom-provider", "agnes-image-2.0-flash"),
+            ("custom-provider", "agnes-image-2.1-flash"),
             ("xai", "grok-3-mini"),
             ("google", "gemma-3n-e4b-it"),
         ] {
@@ -3915,6 +3941,28 @@ mod tests {
                 "{provider}:{model} should not be inferred as image input"
             );
         }
+    }
+
+    #[test]
+    fn test_declared_agnes_models_keep_input_and_output_capabilities_distinct() {
+        let (service, _db) = setup_cache_service();
+        let chat = service.build_declared_model_metadata("custom-provider", "agnes-2.0-flash");
+        let image =
+            service.build_declared_model_metadata("custom-provider", "agnes-image-2.1-flash");
+
+        assert!(chat.capabilities.vision);
+        assert!(chat
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(chat.input_modalities.contains(&ModelModality::Image));
+        assert!(chat.output_modalities.contains(&ModelModality::Text));
+
+        assert!(!image.capabilities.vision);
+        assert!(image
+            .task_families
+            .contains(&ModelTaskFamily::ImageGeneration));
+        assert_eq!(image.input_modalities, vec![ModelModality::Text]);
+        assert_eq!(image.output_modalities, vec![ModelModality::Image]);
     }
 
     #[test]
@@ -4080,6 +4128,51 @@ mod tests {
         assert_eq!(cached.request_url.as_deref(), Some(request_url.as_str()));
         assert_eq!(cached.models.len(), 1);
         assert_eq!(cached.models[0].id, "gpt-5.1");
+    }
+
+    #[test]
+    fn test_provider_models_cache_rejects_previous_taxonomy_version() {
+        let (service, db) = setup_cache_service();
+        let now = chrono::Utc::now().timestamp();
+        let provider_id = "custom-provider";
+        let api_host = "https://gateway.example.com/v1";
+        let cache_key = ModelRegistryService::provider_models_cache_key(
+            provider_id,
+            api_host,
+            Some(ApiProviderType::Openai),
+        );
+        let legacy_payload = serde_json::json!({
+            "provider_id": provider_id,
+            "api_host": api_host,
+            "provider_type": "openai",
+            "request_url": "https://gateway.example.com/v1/models",
+            "fetched_at": now,
+            "expires_at": now + PROVIDER_MODELS_CACHE_TTL_SECONDS,
+            "models": [create_cached_model("agnes-2.0-flash")]
+        });
+        db.lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+                params![cache_key, legacy_payload.to_string()],
+            )
+            .expect("insert legacy cache");
+
+        let cached = service
+            .get_cached_provider_models(provider_id, api_host, Some(ApiProviderType::Openai))
+            .expect("cache read should not fail");
+
+        assert!(cached.is_none());
+        let remaining: i64 = db
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key = ?1",
+                params![cache_key],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0);
     }
 
     #[test]

@@ -21,19 +21,50 @@ struct SequenceViolation {
     scope_id: Option<String>,
 }
 
+#[cfg(test)]
 pub(crate) fn validate_agent_event_sequence(
     existing_events: &[AgentEvent],
     candidate: &AgentEvent,
 ) -> Result<(), String> {
-    let mut verifier = SequenceVerifier::default();
-    for event in existing_events
-        .iter()
-        .filter(|event| same_sequence_scope(event, candidate))
-    {
-        verifier.push(event);
+    let mut validator = AgentEventSequenceValidator::from_events(
+        existing_events,
+        &candidate.session_id,
+        candidate.turn_id.as_deref(),
+    );
+    validator.validate_and_observe(candidate)
+}
+
+pub(crate) struct AgentEventSequenceValidator {
+    verifier: SequenceVerifier,
+}
+
+impl AgentEventSequenceValidator {
+    pub(crate) fn from_events(
+        existing_events: &[AgentEvent],
+        session_id: &str,
+        turn_id: Option<&str>,
+    ) -> Self {
+        let mut verifier = SequenceVerifier::default();
+        for event in existing_events
+            .iter()
+            .filter(|event| event.session_id == session_id && event.turn_id.as_deref() == turn_id)
+        {
+            verifier.push(event);
+        }
+        Self { verifier }
     }
 
-    let violations = verifier.push(candidate);
+    pub(crate) fn observe_existing(&mut self, event: &AgentEvent) {
+        self.verifier.push(event);
+    }
+
+    pub(crate) fn validate_and_observe(&mut self, candidate: &AgentEvent) -> Result<(), String> {
+        let violations = self.verifier.push(candidate);
+        sequence_validation_result(&violations)
+    }
+}
+
+fn sequence_validation_result(violations: &[SequenceViolation]) -> Result<(), String> {
     if violations.is_empty() {
         return Ok(());
     }
@@ -277,10 +308,6 @@ impl SequenceVerifier {
 
         violations
     }
-}
-
-fn same_sequence_scope(event: &AgentEvent, candidate: &AgentEvent) -> bool {
-    event.session_id == candidate.session_id && event.turn_id == candidate.turn_id
 }
 
 fn normalize_event_class(event: &AgentEvent) -> &str {

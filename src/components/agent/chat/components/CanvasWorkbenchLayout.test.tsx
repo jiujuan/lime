@@ -541,6 +541,174 @@ describe("CanvasWorkbenchLayout", () => {
     ).not.toContain("attachment-1.png");
   });
 
+  it("当前停在图片附件时，previewOpenRequest 应切到更新后的工作区文件默认预览", async () => {
+    const imageArtifact = createArtifact(
+      "preview-session-file-image-before-default-preview",
+      "/tmp/attachment-before-default-preview.png",
+      "asset://attachment-before-default-preview.png",
+      70,
+    );
+    imageArtifact.meta = {
+      ...imageArtifact.meta,
+      previewArtifact: true,
+      isSourceBacked: true,
+      source: "session_file",
+      sourceRef: "/tmp/attachment-before-default-preview.png",
+      sourcePath: "/tmp/attachment-before-default-preview.png",
+      contentKind: "image",
+      renderMode: "media",
+      previewUrl: "asset://attachment-before-default-preview.png",
+      openedFrom: "message-attachment",
+    };
+
+    const onPreviewOpenRequestHandled = vi.fn();
+    const baseProps: CanvasWorkbenchLayoutProps = {
+      artifacts: [imageArtifact],
+      canvasState: null,
+      taskFiles: [],
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: null,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: null,
+        isBinary: true,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      previewOpenRequest: {
+        requestKey: 12,
+        filePath: "/tmp/attachment-before-default-preview.png",
+        selectionKey:
+          "artifact:preview-session-file-image-before-default-preview",
+      },
+      onPreviewOpenRequestHandled,
+    };
+
+    const harness = mountHarness(baseProps);
+    await flushEffects();
+
+    expect(onPreviewOpenRequestHandled).toHaveBeenCalledWith(12);
+    expect(
+      harness.container.querySelector('[data-testid="preview-artifact-image"]'),
+    ).not.toBeNull();
+
+    onPreviewOpenRequestHandled.mockClear();
+    const markdownSelectionKey = "default-preview:/tmp/imported-preview.md";
+    harness.rerender({
+      ...baseProps,
+      defaultPreview: {
+        selectionKey: markdownSelectionKey,
+        title: "imported-preview.md",
+        content: "# 导入会话 Markdown 预览内容\n\n来自工作区文件预览。",
+        filePath: "/tmp/imported-preview.md",
+        absolutePath: "/tmp/imported-preview.md",
+        previousContent: null,
+      },
+      previewOpenRequest: {
+        requestKey: 13,
+        filePath: "/tmp/imported-preview.md",
+        selectionKey: markdownSelectionKey,
+      },
+      onPreviewOpenRequestHandled,
+    });
+    await flushEffects();
+
+    expect(onPreviewOpenRequestHandled).toHaveBeenCalledWith(13);
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-markdown-preview"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-preview-mode-panel"]',
+      )?.textContent,
+    ).toContain("来自工作区文件预览");
+    expect(
+      harness.container.querySelector('[data-testid="preview-artifact-image"]'),
+    ).toBeNull();
+    const shell = harness.container.querySelector(
+      '[data-testid="canvas-workbench-shell"]',
+    ) as HTMLElement | null;
+    expect(shell?.dataset.documentSelectionKey).toBe(markdownSelectionKey);
+    expect(shell?.dataset.documentContextKey).toBe(markdownSelectionKey);
+    expect(shell?.dataset.previewRequestSelectionKey).toBe(
+      markdownSelectionKey,
+    );
+  });
+
+  it("工作区默认预览连续切换时应先更新内部 selection 再确认请求", async () => {
+    const markdownPreview = {
+      selectionKey: "default-preview:/tmp/imported-preview.md",
+      title: "imported-preview.md",
+      content: "# Markdown 预览",
+      filePath: "/tmp/imported-preview.md",
+      absolutePath: "/tmp/imported-preview.md",
+      previousContent: null,
+    } satisfies CanvasWorkbenchDefaultPreview;
+    const onPreviewOpenRequestHandled = vi.fn();
+    const baseProps: CanvasWorkbenchLayoutProps = {
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [],
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: markdownPreview,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: null,
+        isBinary: true,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+    };
+    const harness = mountHarness(baseProps);
+    await flushEffects();
+
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-markdown-preview"]',
+      ),
+    ).not.toBeNull();
+
+    const htmlSelectionKey = "default-preview:/tmp/imported-preview.html";
+    harness.rerender({
+      ...baseProps,
+      defaultPreview: {
+        selectionKey: htmlSelectionKey,
+        title: "imported-preview.html",
+        content: "<!doctype html><html><body>HTML 预览</body></html>",
+        filePath: "/tmp/imported-preview.html",
+        absolutePath: "/tmp/imported-preview.html",
+        previousContent: null,
+      },
+      previewOpenRequest: {
+        requestKey: 14,
+        filePath: "/tmp/imported-preview.html",
+        selectionKey: htmlSelectionKey,
+      },
+      onPreviewOpenRequestHandled,
+    });
+    await flushEffects();
+
+    expect(onPreviewOpenRequestHandled).toHaveBeenCalledWith(14);
+    expect(
+      harness.container.querySelector(
+        '[data-testid="canvas-workbench-html-preview"]',
+      ),
+    ).not.toBeNull();
+    const shell = harness.container.querySelector(
+      '[data-testid="canvas-workbench-shell"]',
+    ) as HTMLElement | null;
+    expect(shell?.dataset.documentSelectionKey).toBe(htmlSelectionKey);
+    expect(shell?.dataset.documentContextKey).toBe(htmlSelectionKey);
+  });
+
   it("previewOpenRequest 早于 artifact 入库时应等待选择上下文命中再确认并切到 HTML 预览", async () => {
     const imageArtifact = createArtifact(
       "preview-session-file-image-before-html",

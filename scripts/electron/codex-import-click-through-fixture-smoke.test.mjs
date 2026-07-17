@@ -84,7 +84,9 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("IMPORTED_WEB_SEARCH_SOURCE_LABEL");
     expect(content).toContain("IMPORTED_WEB_SEARCH_URL");
     expect(content).toContain("Lime Codex Import Rendering Source");
-    expect(content).toContain("https://example.com/lime-codex-import-rendering");
+    expect(content).toContain(
+      "https://example.com/lime-codex-import-rendering",
+    );
     expect(content).toContain("Yahoo Scout");
     expect(content).toContain("hasApprovalText");
     expect(content).toContain('bodyText.includes("权限记录")');
@@ -110,8 +112,11 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("call_read_docx");
     expect(content).toContain("call_read_xlsx");
     expect(content).toContain("call_read_pptx");
-    expect(content).toContain("inline-tool-open-file");
-    expect(content).toContain('button[title="展开过程详情"]');
+    expect(content).toContain("waitForTimelineToolFileButton");
+    expect(content).toContain("tool-call-row");
+    expect(content).toContain("timeline-tool");
+    expect(content).not.toContain("inline-tool-open-file");
+    expect(content).not.toContain("inline-tool-process-step");
     expect(content).toContain("timeline-file-artifact-card");
     expect(content).toContain("inspectImportedFilePreviewArtifacts");
     expect(content).toContain("canvas-workbench-html-preview");
@@ -123,31 +128,32 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("summarizeImportedFilePreviewArtifacts");
   });
 
-  it("asserts imported Markdown and WebSearch render like the live Claw path", () => {
+  it("asserts imported Markdown and WebSearch render through the current canonical timeline", () => {
     const content = readSmokeSurface();
 
     expect(content).toContain("inspectImportedMarkdownAndSearchRendering");
     expect(content).toContain("importedMarkdownAndSearchRenderingSummary");
-    expect(content).toContain("expandImportedSearchProcessGroup");
+    expect(content).toContain("expandImportedSearchToolResult");
     expect(content).toContain("markdownHeadingVisible");
     expect(content).toContain("markdownStrongVisible");
     expect(content).toContain("markdownTableVisible");
     expect(content).toContain("rawMarkdownVisible");
     expect(content).toContain("hasImportedSearchResult");
-    expect(content).toContain("searchProcessGroupVisible");
+    expect(content).toContain("searchTimelineVisible");
+    expect(content).toContain("searchQueryVisible");
     expect(content).toContain("searchNoiseVisible");
     expect(content).toContain("hasFullSearchUrlVisible");
     expect(content).toContain("markdown-table-scroll");
-    expect(content).toContain("streaming-process-group");
-    expect(content).toContain("inline-tool-process-step");
-    expect(content).toContain("已搜索网页");
-    expect(content).toContain("正在搜索网页");
+    expect(content).toContain("agent-thread-block:");
+    expect(content).toContain("tool-call-row");
+    expect(content).not.toContain("streaming-process-group");
     expect(content).toContain("导入 Markdown 标题未渲染为 heading");
     expect(content).toContain("导入 Markdown 加粗未渲染为 strong");
     expect(content).toContain("导入 Markdown 表格未渲染为 table");
     expect(content).toContain("导入正文暴露了原始 Markdown 语法");
     expect(content).toContain("导入搜索结果未展示有效来源");
-    expect(content).toContain("导入搜索过程未按过程组展示");
+    expect(content).toContain("导入搜索过程未进入 canonical timeline");
+    expect(content).toContain("导入搜索过程未展示真实 query");
     expect(content).toContain("导入搜索结果暴露了搜索导航噪音");
     expect(content).toContain("导入搜索结果暴露了完整 URL");
   });
@@ -158,6 +164,7 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain('"conversationImport/source/scan"');
     expect(content).toContain('"conversationImport/thread/preview"');
     expect(content).toContain('"conversationImport/thread/commit"');
+    expect(content).toContain('"conversationImport/job/read"');
     expect(content).toContain('"agentSession/read"');
     expect(content).toContain('"agentSession/turn/start"');
     expect(content).toContain("extractInvokeTraceMethods");
@@ -182,6 +189,9 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain("VISUAL_AUDIT_VIEWPORTS");
     expect(content).toContain("collectImportedSessionVisualAudit");
     expect(content).toContain("visual-audit");
+    expect(content).toContain(
+      "importedMarkdownHeadingText,\n      importedWebSearchQuery,\n      importedWebSearchSourceLabel,",
+    );
     expect(content).toContain("inputbarOccludesMainContent");
     expect(content).toContain("importedBannerVisible");
     expect(content).toContain("hidesImportedRunControlCard");

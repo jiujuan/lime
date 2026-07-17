@@ -1,4 +1,6 @@
-use crate::credential_bridge::{ConfiguredReplyProvider, CredentialBridge};
+use crate::credential_bridge::{
+    create_configured_reply_provider, ConfiguredReplyProvider, CredentialBridge,
+};
 use crate::protocol::AgentActionRequiredScope;
 mod mcp_runtime;
 #[cfg(test)]
@@ -9,6 +11,8 @@ use agent_runtime::action_required::{
 use lime_core::database::DbConnection;
 use lime_mcp::{ElicitationRequestRouter, McpRuntimeServerSpec};
 pub(crate) use mcp_runtime::McpThreadRuntime;
+use model_provider::current_client::CurrentProviderError;
+use model_provider::runtime_provider::RuntimeProviderConfig;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -21,7 +25,7 @@ pub struct AgentRuntimeState {
     initialized: Arc<AtomicBool>,
     cancel_tokens: Arc<RwLock<HashMap<String, CancellationToken>>>,
     credential_bridge: CredentialBridge,
-    provider: Arc<RwLock<Option<ConfiguredReplyProvider>>>,
+    providers: Arc<RwLock<HashMap<String, ConfiguredReplyProvider>>>,
     native_tool_definitions: Arc<RwLock<HashMap<String, RuntimeToolDefinition>>>,
     gateway_tools: RuntimeGatewayToolExecutionRegistry,
     mcp_runtimes: Arc<RwLock<HashMap<String, Arc<McpThreadRuntime>>>>,
@@ -37,7 +41,7 @@ impl Clone for AgentRuntimeState {
             initialized: Arc::clone(&self.initialized),
             cancel_tokens: Arc::clone(&self.cancel_tokens),
             credential_bridge: CredentialBridge::new(),
-            provider: Arc::clone(&self.provider),
+            providers: Arc::clone(&self.providers),
             native_tool_definitions: Arc::clone(&self.native_tool_definitions),
             gateway_tools: self.gateway_tools.clone(),
             mcp_runtimes: Arc::clone(&self.mcp_runtimes),
@@ -60,7 +64,7 @@ impl AgentRuntimeState {
             initialized: Arc::new(AtomicBool::new(false)),
             cancel_tokens: Arc::new(RwLock::new(HashMap::new())),
             credential_bridge: CredentialBridge::new(),
-            provider: Arc::new(RwLock::new(None)),
+            providers: Arc::new(RwLock::new(HashMap::new())),
             native_tool_definitions: Arc::new(RwLock::new(HashMap::new())),
             gateway_tools: RuntimeGatewayToolExecutionRegistry::default(),
             mcp_runtimes: Arc::new(RwLock::new(HashMap::new())),
@@ -85,12 +89,31 @@ impl AgentRuntimeState {
         &self.credential_bridge
     }
 
-    pub(crate) async fn set_provider(&self, provider: ConfiguredReplyProvider) {
-        *self.provider.write().await = Some(provider);
+    pub(crate) async fn install_provider_for_session(
+        &self,
+        session_id: &str,
+        config: &RuntimeProviderConfig,
+    ) -> Result<ConfiguredReplyProvider, CurrentProviderError> {
+        let mut providers = self.providers.write().await;
+        if let Some(provider) = providers.get(session_id) {
+            if provider.client().config() == config {
+                return Ok(provider.clone());
+            }
+        }
+        let provider = create_configured_reply_provider(config)?;
+        providers.insert(session_id.to_string(), provider.clone());
+        Ok(provider)
     }
 
-    pub(crate) async fn provider(&self) -> Option<ConfiguredReplyProvider> {
-        self.provider.read().await.clone()
+    pub(crate) async fn provider_for_session(
+        &self,
+        session_id: &str,
+    ) -> Option<ConfiguredReplyProvider> {
+        self.providers.read().await.get(session_id).cloned()
+    }
+
+    pub async fn close_provider_session(&self, session_id: &str) {
+        self.providers.write().await.remove(session_id);
     }
 
     pub(crate) fn gateway_tools(&self) -> &RuntimeGatewayToolExecutionRegistry {
@@ -431,4 +454,69 @@ fn require_action_scope(
         return Err(ActionRequiredError::ScopeMismatch(request_id.to_string()));
     }
     Ok(scope)
+}
+
+#[cfg(test)]
+mod provider_session_tests {
+    use super::AgentRuntimeState;
+    use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
+    use std::sync::Arc;
+
+    fn provider_config(model_name: &str) -> RuntimeProviderConfig {
+        RuntimeProviderConfig {
+            provider_name: "openai".to_string(),
+            provider_selector: Some("openai".to_string()),
+            model_name: model_name.to_string(),
+            api_key: Some("test-key".to_string()),
+            base_url: Some("https://api.openai.com/v1".to_string()),
+            credential_uuid: "credential-1".to_string(),
+            reasoning_effort: None,
+            protocol: Some(RuntimeProviderProtocol::Responses),
+            supports_websockets: true,
+            toolshim: false,
+            toolshim_model: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_clients_are_reused_only_within_matching_session_route() {
+        let state = AgentRuntimeState::new();
+        let config = provider_config("gpt-5.4");
+
+        let first = state
+            .install_provider_for_session("session-a", &config)
+            .await
+            .expect("first provider");
+        let second = state
+            .install_provider_for_session("session-a", &config)
+            .await
+            .expect("reused provider");
+        let other_session = state
+            .install_provider_for_session("session-b", &config)
+            .await
+            .expect("other session provider");
+
+        assert!(Arc::ptr_eq(&first.client(), &second.client()));
+        assert!(!Arc::ptr_eq(&first.client(), &other_session.client()));
+
+        state.close_provider_session("session-a").await;
+        assert!(state.provider_for_session("session-a").await.is_none());
+        assert!(state.provider_for_session("session-b").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn provider_route_change_replaces_only_that_session_client() {
+        let state = AgentRuntimeState::new();
+        let first = state
+            .install_provider_for_session("session-a", &provider_config("gpt-5.4"))
+            .await
+            .expect("first provider");
+        let replacement = state
+            .install_provider_for_session("session-a", &provider_config("gpt-5.5"))
+            .await
+            .expect("replacement provider");
+
+        assert!(!Arc::ptr_eq(&first.client(), &replacement.client()));
+        assert_eq!(replacement.client().config().model_name, "gpt-5.5");
+    }
 }

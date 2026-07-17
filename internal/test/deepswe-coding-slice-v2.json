@@ -12,7 +12,7 @@
     "licensePolicy": "private-evaluation-only-until-source-and-task-repository-license-review"
   },
   "executionContract": {
-    "adapterVersion": "deepswe-current-chain-adapter-v3",
+    "adapterVersion": "deepswe-current-chain-adapter-v4",
     "adapterCommand": "npm run harness:deepswe:run",
     "agentPath": "Lime App Server JSON-RPC current chain",
     "workspace": "system temporary directory outside the Lime repository at the task base commit",
@@ -27,7 +27,9 @@
       "maxProviderSteps": 32,
       "tokenBudget": 500000,
       "tokenFormula": "max(0,input_tokens-cached_input_tokens)+output_tokens",
-      "evidenceIntervalMs": 30000
+      "evidenceIntervalMs": 30000,
+      "enforcementOwner": "agent-runtime reply loop before tool execution and next sampling",
+      "adapterFallback": "token evidence polling for timeout races only"
     },
     "requiredEvidence": {
       "agent": [
@@ -53,7 +55,7 @@
       "verifier prerequisites or required verifier evidence are missing"
     ],
     "currentBlockers": [
-      "Agnes exhausted the 16-provider-step diagnostic budget with complete usage evidence and no candidate patch",
+      "Agnes produced no candidate in TS/Go/Rust diagnostics, including runtime-capped runs with a complete provider tool catalog",
       "Pier is installed but no local container runtime is available"
     ]
   },

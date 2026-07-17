@@ -148,6 +148,44 @@ fn explicit_message_identity_materializes_as_one_item() {
 }
 
 #[test]
+fn explicit_user_message_identity_preserves_content_at_terminal() {
+    let events = with_canonical_message_reasoning_lifecycle(
+        &[],
+        Some("turn-1"),
+        vec![runtime_event(
+            "message.created",
+            json!({
+                "role": "user",
+                "itemId": "user-1",
+                "input": {"text": "delegated task"}
+            }),
+        )],
+        None,
+    )
+    .expect("managed user lifecycle");
+    let stored = events
+        .into_iter()
+        .enumerate()
+        .map(|(index, event)| stored_event(&event.event_type, index as u64 + 1, event.payload))
+        .collect::<Vec<_>>();
+
+    let changes = thread_item_projection::materialize_events(&stored, "session-1", "thread-1")
+        .expect("materialize canonical user item");
+    let item = changes
+        .changed_items
+        .iter()
+        .find(|item| item.item_id == agent_protocol::ItemId::new("user-1"))
+        .expect("canonical user item");
+
+    assert_eq!(item.status, agent_protocol::ItemStatus::Completed);
+    assert!(matches!(
+        &item.payload,
+        agent_protocol::ThreadItemPayload::UserMessage { content, .. }
+            if content == "delegated task"
+    ));
+}
+
+#[test]
 fn rejects_external_presentation_without_matching_item_identity() {
     let explicit_item = json!({
         "item": {

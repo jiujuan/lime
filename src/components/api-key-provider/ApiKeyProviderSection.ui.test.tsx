@@ -308,6 +308,28 @@ afterEach(() => {
 });
 
 describe("ApiKeyProviderSection 模型管理布局", () => {
+  it("Provider 加载失败时应显示安全错误态并提供重试", async () => {
+    const hookState = createHookState({
+      providers: [],
+      selectedProviderId: null,
+      selectedProvider: null,
+      loading: false,
+      error:
+        "数据库迁移失败: /Users/private/app-server/lime.db permission denied",
+    });
+    const container = renderSection();
+    await flushEffects();
+
+    expect(maybeByTestId(container, "provider-load-error")).not.toBeNull();
+    expect(container.textContent ?? "").toContain("本地模型设置暂时不可用");
+    expect(container.textContent ?? "").toContain("检查应用数据目录权限");
+    expect(container.textContent ?? "").not.toContain("/Users/private");
+    expect(maybeByTestId(container, "enabled-model-list")).toBeNull();
+
+    await clickByTestId("provider-load-retry");
+    expect(hookState.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("常态左侧只展示启用模型，不再展示旧 Provider 分组列表", async () => {
     createHookState();
     const container = renderSection();

@@ -1,4 +1,4 @@
-use super::events::{CodexRolloutEvent, CodexToolCall, CodexToolPhase};
+use super::events::{visible_tool_output_text, CodexRolloutEvent, CodexToolCall, CodexToolPhase};
 use super::history_builder::tool_output_text;
 use agent_protocol::{
     CollabAgentOperation, ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload,
@@ -605,15 +605,9 @@ fn value_to_argument_string(value: &Value) -> String {
 fn tool_output(tool: &CodexToolCall, failed: bool) -> Value {
     let raw_output = tool.output.clone();
     let output_object = raw_output.as_ref().and_then(Value::as_object);
-    let text = output_object
-        .and_then(|object| object.get("text").and_then(Value::as_str))
-        .map(str::to_string)
-        .or_else(|| {
-            raw_output
-                .as_ref()
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
+    let text = raw_output
+        .as_ref()
+        .and_then(visible_tool_output_text)
         .or_else(|| tool.source.output_preview.clone());
     let structured_content = tool.source.structured_content.clone().or_else(|| {
         output_object

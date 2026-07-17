@@ -150,9 +150,24 @@ export async function runContentFactoryArticleWorkspaceScenario({
       },
     );
 
+    const articleObjectRef = await readContentFactoryArticleDraftObjectRef(
+      page,
+      options,
+      appServerRequests,
+    );
+    const workerArticleArtifactRef = Array.isArray(articleObjectRef.artifactIds)
+      ? articleObjectRef.artifactIds.find(
+          (value) => typeof value === "string" && value.trim(),
+        )
+      : null;
+    assert(
+      workerArticleArtifactRef,
+      "内容工厂 Article Editor 缺少 worker articleDraft artifact ref",
+    );
     const articleArtifactFrame = await clickContentFactoryArticleArtifactFrame(
       page,
       options,
+      workerArticleArtifactRef,
     );
     const rightSurface = await waitForContentFactoryArticleEditorOpened(
       page,
@@ -186,7 +201,11 @@ export async function runContentFactoryArticleWorkspaceScenario({
       },
     );
     const articleEditedDraftArtifactFrame =
-      await clickContentFactoryArticleArtifactFrame(page, options);
+      await clickContentFactoryArticleArtifactFrame(
+        page,
+        options,
+        workerArticleArtifactRef,
+      );
     const articleEditedDraftRestored =
       await waitForContentFactoryArticleWorkspaceEditedDraftRestored(
         page,
@@ -208,16 +227,20 @@ export async function runContentFactoryArticleWorkspaceScenario({
     const readModelSummary = summarizeContentFactoryArticleWorkspaceReadModel(
       readModel.result,
     );
-    const articleArtifactRef =
+    const readModelArticleArtifactRef =
       readModelSummary.workerArticleObject?.previewArtifactId ||
       CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID;
+    assert(
+      readModelArticleArtifactRef === workerArticleArtifactRef,
+      `内容工厂 Article Editor artifact ref 漂移: expected=${workerArticleArtifactRef} actual=${readModelArticleArtifactRef}`,
+    );
 
     const artifactRead = await invokeAppServerFromPage(
       page,
       APP_SERVER_METHOD_ARTIFACT_READ,
       {
         sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        artifactRef: articleArtifactRef,
+        artifactRef: workerArticleArtifactRef,
         includeContent: true,
         limit: 1,
       },
@@ -288,6 +311,11 @@ export async function runContentFactoryArticleWorkspaceScenario({
         summarizeRightSurfaceRequest(rightSurfaceRequest.result),
       guiContentFactoryArticleWorkspaceSessionVisible: guiSessionVisible,
       guiContentFactoryArticleWorkspaceSessionOpened: guiSessionOpened,
+      contentFactoryArticleWorkspaceArticleArtifactIdentity: {
+        artifactRef: workerArticleArtifactRef,
+        objectRef: articleObjectRef,
+        readModelArtifactRef: readModelArticleArtifactRef,
+      },
       contentFactoryArticleWorkspaceArtifactFrame: articleArtifactFrame,
       contentFactoryArticleWorkspaceRightSurface: rightSurface,
       contentFactoryArticleWorkspaceArticleObjectSelection:
@@ -486,17 +514,25 @@ async function waitForContentFactoryArticleWorkspaceEditedDraftRestored(
   );
 }
 
-async function clickContentFactoryArticleArtifactFrame(page, options) {
+async function clickContentFactoryArticleArtifactFrame(
+  page,
+  options,
+  articleArtifactRef,
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await page.evaluate(() => {
+    const snapshot = await page.evaluate((artifactRef) => {
       const frames = Array.from(
         document.querySelectorAll(
           '[data-testid="article-artifact-frame"], [data-frame-kind="articleArtifacts"]',
         ),
       );
-      const frame = frames.find(isVisible) ?? frames[0] ?? null;
+      const targetFrames = frames.filter(
+        (candidate) =>
+          candidate.getAttribute("data-artifact-ref") === artifactRef,
+      );
+      const frame = targetFrames.find(isVisible) ?? targetFrames[0] ?? null;
       const buttons = Array.from(frame?.querySelectorAll("button") ?? []);
       const button =
         buttons.find((candidate) => {
@@ -533,6 +569,16 @@ async function clickContentFactoryArticleArtifactFrame(page, options) {
         visible,
         frameCount: frames.length,
         visibleFrameCount: frames.filter(isVisible).length,
+        candidateArtifactIds: frames.map((candidate) =>
+          candidate.getAttribute("data-artifact-id"),
+        ),
+        candidateArtifactRefs: frames.map((candidate) =>
+          candidate.getAttribute("data-artifact-ref"),
+        ),
+        targetArtifactRef: artifactRef,
+        targetFrameCount: targetFrames.length,
+        selectedArtifactId: frame?.getAttribute("data-artifact-id") ?? null,
+        selectedArtifactRef: frame?.getAttribute("data-artifact-ref") ?? null,
         buttonPresent: Boolean(button),
         buttonText: button?.textContent?.replace(/\s+/g, " ").trim() ?? "",
         buttonDisabled,
@@ -584,7 +630,7 @@ async function clickContentFactoryArticleArtifactFrame(page, options) {
           style?.visibility !== "hidden",
         );
       }
-    });
+    }, articleArtifactRef);
     lastSnapshot = snapshot;
     if (
       snapshot?.visible &&

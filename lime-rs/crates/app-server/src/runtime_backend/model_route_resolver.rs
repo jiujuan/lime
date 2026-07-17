@@ -137,6 +137,7 @@ mod tests {
             toolshim: false,
             toolshim_model: None,
             model_capabilities: None,
+            supports_websockets: false,
         };
 
         let route = resolve_chat_model_route(
@@ -199,6 +200,7 @@ mod tests {
                 "outputModalities": ["text"],
                 "runtimeFeatures": ["streaming", "tool_calling"]
             })),
+            supports_websockets: false,
         };
 
         let route = resolve_chat_model_route(
@@ -377,6 +379,73 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("task_family:vision_understanding")
         );
+    }
+
+    #[tokio::test]
+    async fn declared_agnes_vision_model_accepts_image_chat_route() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Agnes".to_string(),
+                ApiProviderType::Openai,
+                "https://apihub.agnes-ai.com/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("custom provider");
+        service
+            .add_api_key(&db, &provider.id, "sk-agnes", None, true)
+            .expect("api key");
+        service
+            .update_provider(
+                &db,
+                &provider.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(vec!["agnes-2.0-flash".to_string()]),
+            )
+            .expect("declared model");
+        let mut request = request_for_test("看图", None, None);
+        request
+            .input
+            .attachments
+            .push(app_server_protocol::AgentAttachment {
+                kind: "image".to_string(),
+                uri: Some("file:///tmp/poster.png".to_string()),
+                metadata: None,
+            });
+
+        let route = resolve_chat_model_route(
+            &db,
+            &service,
+            &request,
+            &selection(&provider.id, "agnes-2.0-flash"),
+            None,
+        )
+        .await
+        .expect("route");
+
+        assert!(route.resolved_route.failure.is_none());
+        assert!(route.resolved_route.capability_snapshot.capabilities.vision);
+        assert!(route
+            .resolved_route
+            .capability_snapshot
+            .input_modalities
+            .contains(&"image".to_string()));
+        assert!(route.not_possible_payload.is_none());
     }
 
     #[tokio::test]

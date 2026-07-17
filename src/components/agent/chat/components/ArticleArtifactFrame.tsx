@@ -21,6 +21,13 @@ export function ArticleArtifactFrame({
   }
 
   const isStreaming = artifact.status === "streaming";
+  const artifactRef = [
+    artifact.meta.appServerArtifactRef,
+    artifact.meta.artifactRef,
+  ].find(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
   const documentTitlePrefix = dynamicT(
     isStreaming
       ? "agentChat.messageList.articleArtifact.documentCreatingPrefix"
@@ -30,6 +37,7 @@ export function ArticleArtifactFrame({
   return (
     <section
       data-artifact-id={artifact.id}
+      data-artifact-ref={artifactRef?.trim()}
       data-frame-kind={model.renderer}
       data-testid="article-artifact-frame"
       className="w-full overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm shadow-slate-950/5"

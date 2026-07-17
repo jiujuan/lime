@@ -3,6 +3,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { withElectronFixtureSystemPath } from "../lib/electron-fixture-runtime-env.mjs";
 import {
   ASSISTANT_DONE_TEXT,
   FIXTURE_MODEL,
@@ -128,7 +129,7 @@ export function createTempRuntimeEnv() {
       writeFixtureConfig(homeConfigPath, overrides);
       writeFixtureConfig(macConfigPath, overrides);
     },
-    env: {
+    env: withElectronFixtureSystemPath({
       ...process.env,
       HOME: home,
       XDG_CONFIG_HOME: xdgConfigHome,
@@ -136,7 +137,7 @@ export function createTempRuntimeEnv() {
       APPDATA: roamingAppData,
       LOCALAPPDATA: localAppData,
       LIME_AGENT_RUNTIME_ROOT: agentRoot,
-    },
+    }),
   };
 }
 

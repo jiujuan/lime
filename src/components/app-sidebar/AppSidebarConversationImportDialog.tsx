@@ -12,6 +12,8 @@ import {
   commitConversationImportThread,
   previewConversationImportThread,
   scanConversationImportSource,
+  waitForConversationImportJob,
+  type ConversationImportJob,
   type ConversationImportThreadCommitResponse,
   type ConversationImportThreadPreviewResponse,
   type ImportedThreadSummary,
@@ -28,6 +30,7 @@ import {
   firstImportableThread,
   initialImportSelection,
   isSelectableImportThread,
+  isImportingThread,
   isImportedThread,
   normalizeOptional,
   resolveImportSourceClientLabel,
@@ -39,6 +42,7 @@ import {
   type ImportThreadGroupMode,
 } from "./conversationImportDialogViewModel";
 import { AppSidebarConversationImportThreadList } from "./AppSidebarConversationImportThreadList";
+import { AppSidebarConversationImportProgress } from "./AppSidebarConversationImportProgress";
 
 const SCAN_LIMIT = 40;
 const PREVIEW_LIMIT = 12;
@@ -78,6 +82,9 @@ export function AppSidebarConversationImportDialog({
     useState<ConversationImportThreadPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sourceMessage, setSourceMessage] = useState<string | null>(null);
+  const [activeImportJob, setActiveImportJob] =
+    useState<ConversationImportJob | null>(null);
+  const [activeImportIndex, setActiveImportIndex] = useState(0);
 
   const sourceRoot = normalizeOptional(sourceRootInput);
   const sourceRootRef = useRef<string | undefined>(sourceRoot);
@@ -208,6 +215,8 @@ export function AppSidebarConversationImportDialog({
       setError(null);
       setSourceMessage(null);
       setPreview(null);
+      setActiveImportJob(null);
+      setActiveImportIndex(0);
       return;
     }
     void loadThreads(sourceRootRef.current);
@@ -350,8 +359,9 @@ export function AppSidebarConversationImportDialog({
     try {
       const resolvedSourceRoot = preview?.source.sourceRoot ?? sourceRoot;
       const results: ConversationImportThreadCommitResponse[] = [];
-      for (const thread of commitThreads) {
-        const result = await commitConversationImportThread({
+      for (const [index, thread] of commitThreads.entries()) {
+        setActiveImportIndex(index + 1);
+        const started = await commitConversationImportThread({
           sourceClient: DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT,
           sourceRoot: resolvedSourceRoot,
           sourceThreadId: thread.sourceThreadId,
@@ -359,6 +369,10 @@ export function AppSidebarConversationImportDialog({
           workspaceId: normalizeOptional(workspaceId),
           confirmed: true,
           ...(isImportedThread(thread) ? { replaceExisting: true } : {}),
+        });
+        setActiveImportJob(started.job);
+        const result = await waitForConversationImportJob(started.job, {
+          onProgress: setActiveImportJob,
         });
         results.push(result);
       }
@@ -533,6 +547,15 @@ export function AppSidebarConversationImportDialog({
                           )}
                         </span>
                       ) : null}
+                      {isImportingThread(preview.thread) ? (
+                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          {t(
+                            "navigation.sidebar.importDialog.status.importing",
+                            "Importing",
+                          )}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="mt-4 grid grid-cols-4 gap-2">
@@ -702,52 +725,66 @@ export function AppSidebarConversationImportDialog({
               )}
             </div>
 
-            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-              <p className="max-w-xl text-xs leading-5 text-slate-500">
-                {checkedImportedCount > 0
-                  ? t(
-                      "navigation.sidebar.importDialog.confirmNotice.replace",
-                      "Already imported conversations will be cleared and imported again.",
-                    )
-                  : t(
-                      "navigation.sidebar.importDialog.confirmNotice",
-                      "Only checked conversations will be imported.",
-                    )}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={committing}
-                  onClick={onClose}
-                >
-                  {t("navigation.sidebar.importDialog.action.cancel", "Cancel")}
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={commitThreads.length === 0 || loading || committing}
-                  onClick={() => void handleCommit()}
-                  data-testid="app-sidebar-conversation-import-confirm"
-                >
-                  {committing ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
-                  {committing
+            <footer className="border-t border-slate-200 bg-slate-50">
+              {committing && activeImportJob ? (
+                <AppSidebarConversationImportProgress
+                  job={activeImportJob}
+                  currentThread={activeImportIndex}
+                  totalThreads={commitThreads.length}
+                />
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <p className="max-w-xl text-xs leading-5 text-slate-500">
+                  {checkedImportedCount > 0
                     ? t(
-                        "navigation.sidebar.importDialog.action.importing",
-                        "Importing",
+                        "navigation.sidebar.importDialog.confirmNotice.replace",
+                        "Already imported conversations will be cleared and imported again.",
                       )
-                    : checkedImportedCount > 0
+                    : t(
+                        "navigation.sidebar.importDialog.confirmNotice",
+                        "Only checked conversations will be imported.",
+                      )}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={committing}
+                    onClick={onClose}
+                  >
+                    {t(
+                      "navigation.sidebar.importDialog.action.cancel",
+                      "Cancel",
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={
+                      commitThreads.length === 0 || loading || committing
+                    }
+                    onClick={() => void handleCommit()}
+                    data-testid="app-sidebar-conversation-import-confirm"
+                  >
+                    {committing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : null}
+                    {committing
                       ? t(
-                          "navigation.sidebar.importDialog.action.replace",
-                          "Re-import",
+                          "navigation.sidebar.importDialog.action.importing",
+                          "Importing",
                         )
-                      : t(
-                          "navigation.sidebar.importDialog.action.confirm",
-                          "Import Conversation",
-                        )}
-                </button>
+                      : checkedImportedCount > 0
+                        ? t(
+                            "navigation.sidebar.importDialog.action.replace",
+                            "Re-import",
+                          )
+                        : t(
+                            "navigation.sidebar.importDialog.action.confirm",
+                            "Import Conversation",
+                          )}
+                  </button>
+                </div>
               </div>
             </footer>
           </main>

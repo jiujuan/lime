@@ -349,6 +349,12 @@ impl RuntimeCore {
                     params.runtime_options.take(),
                 ));
         }
+        super::input_media::persist_inline_input_media(
+            &mut params.input,
+            self.sidecar_store.as_deref(),
+            &params.session_id,
+        )
+        .map_err(RuntimeCoreError::Backend)?;
         let mut pre_turn_events = self
             .maybe_auto_compact_before_turn(&params.session_id, params.runtime_options.as_ref())
             .await?;
@@ -484,6 +490,12 @@ impl RuntimeCore {
             });
         }
 
+        let provider_input = super::input_media::provider_input_from_references(
+            &params.input,
+            self.sidecar_store.as_deref(),
+        )
+        .map_err(RuntimeCoreError::Backend)?;
+
         let (session, previous_session, turn) = {
             let mut state = self
                 .state
@@ -551,10 +563,10 @@ impl RuntimeCore {
                 .ok_or_else(|| RuntimeCoreError::SessionNotFound(session.session_id.clone()))?;
             super::provider_history::provider_history_excluding_current_turn_input(
                 stored,
-                self.output_snapshot_store.as_ref(),
+                self.sidecar_store.as_deref(),
                 &turn.turn_id,
             )
-        };
+        }?;
 
         let runtime_options = params.runtime_options.clone();
         let request_host = host.clone();
@@ -563,7 +575,7 @@ impl RuntimeCore {
             host,
             session: session.clone(),
             turn: turn.clone(),
-            input: params.input,
+            input: provider_input,
             event_name: params
                 .runtime_options
                 .as_ref()

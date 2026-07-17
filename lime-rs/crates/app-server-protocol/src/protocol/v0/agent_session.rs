@@ -1129,6 +1129,8 @@ pub struct RuntimeProviderConfig {
     pub toolshim_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_capabilities: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supports_websockets: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "ConversationImportJobPhase": {
+      "enum": [
+        "building_history",
+        "completed",
+        "failed",
+        "finalizing",
+        "persisting_history",
+        "queued",
+        "reading_source"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "completedItems": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "completedTurns": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "phase": {
+      "$ref": "#/$defs/ConversationImportJobPhase"
+    },
+    "totalItems": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "totalTurns": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "phase"
+  ],
+  "title": "ConversationImportJobProgress",
+  "type": "object"
+}

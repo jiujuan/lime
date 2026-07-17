@@ -13,6 +13,7 @@ import {
   IMPORTED_CWD,
   IMPORTED_REASONING_TEXT,
   IMPORTED_USER_TEXT,
+  IMPORTED_WEB_SEARCH_QUERY,
   LEGACY_CONTINUATION_SENTINEL,
   REQUIRED_BACKEND_METHODS,
   SOURCE_THREAD_ID,
@@ -24,6 +25,7 @@ import {
   clickSidebarImport,
   collectImportedSessionVisualAudit,
   confirmImport,
+  expandImportedHistoricalTimeline,
   inspectEnvironmentPopoverImportBoundary,
   inspectImportedAttachmentPreview,
   inspectImportedFilePreviewArtifacts,
@@ -185,6 +187,10 @@ function summarizeReadModel(readResult) {
     sessionId: readResult?.session?.sessionId ?? null,
     messagesLength: messages.length,
     itemsLength: items.length,
+    itemTypes: [...new Set(items.map((item) => item?.type).filter(Boolean))],
+    itemToolNames: [
+      ...new Set(items.map((item) => item?.tool_name).filter(Boolean)),
+    ],
     hasImportedUserMessage: messages.some(
       (message) =>
         message?.role === "user" &&
@@ -215,26 +221,41 @@ function summarizeReadModel(readResult) {
         String(item?.command || "").includes("npm test"),
     ),
     hasPatchItem: items.some((item) => {
-      if (item?.type !== "patch" || !Array.isArray(item?.paths)) {
-        return false;
-      }
       const expectedPath = normalizeComparablePath(
         path.join(IMPORTED_CWD, "src", "lib.rs"),
       );
-      return item.paths.some(
-        (itemPath) => normalizeComparablePath(itemPath) === expectedPath,
+      if (item?.type === "patch" && Array.isArray(item?.paths)) {
+        return item.paths.some(
+          (itemPath) => normalizeComparablePath(itemPath) === expectedPath,
+        );
+      }
+      return (
+        item?.type === "file_artifact" &&
+        normalizeComparablePath(item?.path) === expectedPath
       );
     }),
-    hasWebSearchItem: items.some(
-      (item) =>
-        item?.type === "web_search" &&
-        item?.id === "call_search" &&
+    hasWebSearchItem: items.some((item) => {
+      if (item?.type !== "web_search") {
+        return false;
+      }
+      const sourceCallId =
+        item?.call_id ??
+        item?.id ??
+        item?.metadata?.source_call_id ??
+        item?.metadata?.sourceCallId ??
+        item?.metadata?.source_provenance?.source_call_id ??
+        item?.metadata?.sourceProvenance?.sourceCallId;
+      return (
+        sourceCallId === "call_search" &&
+        item?.query === IMPORTED_WEB_SEARCH_QUERY &&
         (String(item?.action || "").includes("search_query") ||
+          String(item?.action || "").includes("search") ||
           String(item?.tool_name || "").includes("web_search") ||
           String(item?.output || item?.output_preview || "").includes(
             "search_query",
-          )),
-    ),
+          ))
+      );
+    }),
     hasApprovalItem: items.some(
       (item) =>
         item?.type === "approval_request" && item?.request_id === "call_exec",
@@ -422,7 +443,8 @@ async function extractClickThroughSummary(
         hasReasoningItem: readModelSummary?.hasReasoningItem === true,
         hasCommandExecutionVisible: bodyText.includes("npm test"),
         hasCommandText:
-          bodyText.includes("npm test") || readModelSummary?.hasCommandItem === true,
+          bodyText.includes("npm test") ||
+          readModelSummary?.hasCommandItem === true,
         hasCommandOutput: bodyText.includes("ok"),
         hidesRawImportedCommand:
           !bodyText.includes("Approve imported command") &&
@@ -548,6 +570,7 @@ async function run() {
   let previewSnapshot = null;
   let previewSummary = null;
   let importedPageSnapshot = null;
+  let importedHistoricalTimelineExpansion = null;
   let importedDetailsSnapshot = null;
   let importedDetailsSummary = null;
   let importedMarkdownAndSearchRenderingSummary = null;
@@ -632,6 +655,14 @@ async function run() {
 
     logStage("confirm-import");
     importedPageSnapshot = await confirmImport(page, options);
+
+    logStage("expand-imported-historical-timeline");
+    importedHistoricalTimelineExpansion =
+      await expandImportedHistoricalTimeline(page, options);
+    assert(
+      importedHistoricalTimelineExpansion.previewText.includes("9s"),
+      `导入历史过程耗时未使用源事件时间: ${importedHistoricalTimelineExpansion.previewText}`,
+    );
 
     logStage("wait-imported-details");
     importedDetailsSnapshot = await waitForImportedSessionDetails(
@@ -847,6 +878,7 @@ async function run() {
         previewSnapshot,
         previewSummary,
         importedPageSnapshot,
+        importedHistoricalTimelineExpansion,
         importedDetailsSnapshot,
         importedDetailsSummary,
         importedMarkdownAndSearchRenderingSummary,
@@ -901,6 +933,7 @@ async function run() {
         previewSnapshot,
         previewSummary,
         importedPageSnapshot,
+        importedHistoricalTimelineExpansion,
         importedDetailsSnapshot,
         importedDetailsSummary,
         importedMarkdownAndSearchRenderingSummary,

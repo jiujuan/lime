@@ -1,6 +1,7 @@
 use super::*;
 use crate::runtime::agent_mailbox_delivery::{
-    canonical_mailbox_item_exists, mailbox_item_id, mailbox_message_runtime_event, mailbox_turn_id,
+    canonical_mailbox_item_is_terminal, mailbox_item_id, mailbox_message_runtime_events,
+    mailbox_turn_id,
 };
 use agent_protocol::{ThreadId, ThreadTurnsView, TurnStatus};
 use app_server_protocol::AgentSessionStartParams;
@@ -140,6 +141,23 @@ fn message(id: &str, mode: AgentMailboxDeliveryMode) -> AgentMailboxMessage {
     }
 }
 
+fn result(id: &str) -> AgentMailboxMessage {
+    AgentMailboxMessage {
+        message_id: id.to_string(),
+        root_thread_id: ThreadId::new("root-thread"),
+        sender_thread_id: ThreadId::new("child-thread"),
+        recipient_thread_id: ThreadId::new("child-thread"),
+        content: format!("result-{id}"),
+        kind: AgentMailboxMessageKind::Result,
+        source_turn_id: Some(agent_protocol::TurnId::new(format!("source-{id}"))),
+        result_status: Some(thread_store::AgentMailboxResultStatus::Completed),
+        delivery_mode: AgentMailboxDeliveryMode::QueueOnly,
+        delivery_status: AgentMailboxDeliveryStatus::Pending,
+        created_at_ms: 1,
+        delivered_at_ms: None,
+    }
+}
+
 fn append(store: &ProjectionStore, message: AgentMailboxMessage) {
     futures::executor::block_on(
         store.append_agent_mailbox_message(AppendAgentMailboxMessageParams { message }),
@@ -158,7 +176,7 @@ async fn pending(store: &ProjectionStore) -> Vec<AgentMailboxMessage> {
 }
 
 async fn has_item(store: &ProjectionStore, message_id: &str) -> bool {
-    canonical_mailbox_item_exists(
+    canonical_mailbox_item_is_terminal(
         store,
         &ThreadId::new("child-thread"),
         &mailbox_item_id(message_id),
@@ -182,6 +200,28 @@ async fn canonical_turn_status(store: &ProjectionStore, turn_id: &str) -> Option
                 .into_iter()
                 .find(|turn| turn.turn_id.as_str() == turn_id)
                 .map(|turn| turn.status)
+        })
+}
+
+async fn canonical_item_status(
+    store: &ProjectionStore,
+    item_id: &str,
+) -> Option<agent_protocol::ItemStatus> {
+    store
+        .read_thread(ReadThreadParams {
+            thread_id: ThreadId::new("child-thread"),
+            include_archived: true,
+            turns_view: ThreadTurnsView::Full,
+        })
+        .await
+        .expect("read canonical thread")
+        .and_then(|thread| {
+            thread
+                .turns
+                .into_iter()
+                .flat_map(|turn| turn.items)
+                .find(|item| item.item_id.as_str() == item_id)
+                .map(|item| item.status)
         })
 }
 
@@ -305,6 +345,191 @@ async fn queue_only_stays_pending_until_a_real_turn_without_starting_one() {
 }
 
 #[tokio::test]
+async fn multiple_results_complete_distinct_canonical_items_before_ack() {
+    let (_temp, core, store, _backend) = setup();
+    append(&store, result("result-1"));
+    append(&store, result("result-2"));
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "child-session".to_string(),
+            turn_id: Some("result-turn".to_string()),
+            input: AgentInput {
+                text: "continue".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("deliver distinct result items");
+
+    assert!(pending(&store).await.is_empty());
+    let thread = store
+        .read_thread(ReadThreadParams {
+            thread_id: ThreadId::new("child-thread"),
+            include_archived: true,
+            turns_view: ThreadTurnsView::Full,
+        })
+        .await
+        .expect("read canonical thread")
+        .expect("canonical thread");
+    let result_item_ids = [mailbox_item_id("result-1"), mailbox_item_id("result-2")];
+    let result_items = thread
+        .turns
+        .iter()
+        .flat_map(|turn| turn.items.iter())
+        .filter(|item| {
+            result_item_ids
+                .iter()
+                .any(|item_id| item.item_id.as_str() == item_id)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(result_items.len(), 2);
+    assert!(result_items
+        .iter()
+        .all(|item| item.status == agent_protocol::ItemStatus::Completed));
+    let events = core.events_for_session("child-session").expect("events");
+    for message_id in ["result-1", "result-2"] {
+        let item_id = mailbox_item_id(message_id);
+        let item_events = events
+            .iter()
+            .filter(|event| {
+                event.payload.get("itemId") == Some(&json!(item_id))
+                    || event.payload.pointer("/item/itemId") == Some(&json!(item_id))
+            })
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            item_events,
+            vec!["item.started", "message.delta", "item.completed"],
+            "scenario=multiple-results messageId={message_id} itemId={item_id}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn failed_result_projects_failed_terminal_item() {
+    let (_temp, core, store, _backend) = setup();
+    let mut failed = result("failed-result");
+    failed.result_status = Some(thread_store::AgentMailboxResultStatus::Failed);
+    append(&store, failed);
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "child-session".to_string(),
+            turn_id: Some("failed-result-turn".to_string()),
+            input: AgentInput {
+                text: "continue".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("deliver failed result item");
+
+    assert_eq!(
+        canonical_item_status(&store, &mailbox_item_id("failed-result")).await,
+        Some(agent_protocol::ItemStatus::Failed)
+    );
+    assert!(pending(&store).await.is_empty());
+}
+
+#[tokio::test]
+async fn in_progress_result_is_completed_before_retry_ack() {
+    let (_temp, core, store, _backend) = setup();
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "child-session".to_string(),
+            turn_id: Some("partial-result-turn".to_string()),
+            input: AgentInput {
+                text: "continue".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("start recipient turn");
+    let result = result("partial-result");
+    append(&store, result.clone());
+    let (session, turns) = core.session_snapshot("child-session").expect("session");
+    let turn = turns
+        .into_iter()
+        .find(|turn| turn.turn_id == "partial-result-turn")
+        .expect("recipient turn");
+    let item_id = mailbox_item_id(&result.message_id);
+    let connection = Connection::open(store.path()).expect("open projection database");
+    connection
+        .execute(
+            "UPDATE canonical_threads SET last_sequence = 9999 WHERE thread_id = ?1",
+            ["child-thread"],
+        )
+        .expect("force canonical sequence conflict");
+    let error = core
+        .append_external_runtime_events(
+            &session.session_id,
+            Some(&turn.turn_id),
+            vec![mailbox_message_runtime_events(&result, &item_id, false)
+                .into_iter()
+                .next()
+                .expect("result delta")],
+        )
+        .expect_err("canonical projection must fail after EventLog append");
+    assert!(error
+        .to_string()
+        .contains("canonical mailbox Item must persist before delivery acknowledgement"));
+    assert_eq!(canonical_item_status(&store, &item_id).await, None);
+    connection
+        .execute(
+            "UPDATE canonical_threads SET last_sequence = NULL WHERE thread_id = ?1",
+            ["child-thread"],
+        )
+        .expect("repair canonical sequence");
+    core.deliver_pending_agent_mailbox_for_turn(
+        &session,
+        &turn,
+        &AgentInput {
+            text: "continue".to_string(),
+            attachments: Vec::new(),
+        },
+    )
+    .await
+    .expect("retry result delivery");
+
+    assert!(pending(&store).await.is_empty());
+    assert_eq!(
+        canonical_item_status(&store, &item_id).await,
+        Some(agent_protocol::ItemStatus::Completed)
+    );
+    let events = core.events_for_session("child-session").expect("events");
+    let item_events = events
+        .iter()
+        .filter(|event| {
+            event.payload.get("itemId") == Some(&json!(item_id))
+                || event.payload.pointer("/item/itemId") == Some(&json!(item_id))
+        })
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        item_events,
+        vec!["item.started", "message.delta", "item.completed"],
+        "scenario=partial-result-retry messageId={} itemId={item_id}",
+        result.message_id
+    );
+}
+
+#[tokio::test]
 async fn existing_canonical_item_is_acknowledged_without_a_duplicate_visible_item() {
     let (_temp, core, store, _backend) = setup();
     let message = message("retry-1", AgentMailboxDeliveryMode::TriggerTurn);
@@ -334,11 +559,7 @@ async fn existing_canonical_item_is_acknowledged_without_a_duplicate_visible_ite
     core.append_external_runtime_events(
         &session.session_id,
         Some(&turn.turn_id),
-        vec![mailbox_message_runtime_event(
-            &message,
-            &mailbox_item_id(&message.message_id),
-            true,
-        )],
+        mailbox_message_runtime_events(&message, &mailbox_item_id(&message.message_id), true),
     )
     .expect("persist mailbox item before simulated crash");
 

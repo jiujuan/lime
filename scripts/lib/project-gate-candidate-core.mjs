@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
+import { withNativeSystemPath } from "./native-executable-env.mjs";
+
 export const DEFAULT_PROJECT_GATE_EXCLUDES = [
   ".lime/qc/project-gates",
   "internal/exec-plans/project-gate-a-b-acceptance-plan.md",
@@ -656,7 +658,7 @@ function runGitBuffer(root, args) {
   return execFileSync("git", args, {
     cwd: root,
     encoding: "buffer",
-    env: { ...process.env, LC_ALL: "C" },
+    env: { ...withNativeSystemPath(process.env), LC_ALL: "C" },
     maxBuffer: MAX_GIT_OUTPUT,
   });
 }

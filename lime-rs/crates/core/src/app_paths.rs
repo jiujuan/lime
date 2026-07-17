@@ -432,7 +432,7 @@ fn resolve_database_path_from_explicit_data_dir_parent(
     }
 
     let marker_path = data_dir.join(MIGRATION_MARKER_FILE);
-    let result = migrate_or_fallback_to_legacy(&legacy_path, &preferred_path)?;
+    let result = migrate_database_to_preferred(&legacy_path, &preferred_path)?;
     if result.database_path == preferred_path {
         write_migration_marker(&marker_path);
     }
@@ -562,7 +562,7 @@ fn resolve_database_path_from_source_roots(
         };
 
         if should_migrate {
-            let result = migrate_or_fallback_to_legacy(legacy_path, &preferred_path);
+            let result = migrate_database_to_preferred(legacy_path, &preferred_path);
             if result
                 .as_ref()
                 .map(|resolution| resolution.database_path == preferred_path)
@@ -604,33 +604,24 @@ fn write_migration_marker(marker_path: &Path) {
     }
 }
 
-fn migrate_or_fallback_to_legacy(
+fn migrate_database_to_preferred(
     legacy_path: &Path,
     preferred_path: &Path,
 ) -> Result<DatabasePathResolution, String> {
-    match migrate_legacy_database(legacy_path, preferred_path) {
-        Ok(()) => {
-            tracing::info!(
-                "[路径迁移] 数据库已从旧路径迁移到 {}",
-                preferred_path.display()
-            );
-            Ok(DatabasePathResolution {
-                database_path: preferred_path.to_path_buf(),
-                migrated_from: Some(legacy_path.to_path_buf()),
-            })
-        }
-        Err(error) => {
-            tracing::warn!(
-                "[路径迁移] 数据库迁移失败，回退旧路径 {}: {}",
-                legacy_path.display(),
-                error
-            );
-            Ok(DatabasePathResolution {
-                database_path: legacy_path.to_path_buf(),
-                migrated_from: None,
-            })
-        }
-    }
+    migrate_legacy_database(legacy_path, preferred_path).map_err(|error| {
+        format!(
+            "数据库迁移失败，拒绝回退旧路径 {}: {error}",
+            legacy_path.display()
+        )
+    })?;
+    tracing::info!(
+        "[路径迁移] 数据库已从旧路径迁移到 {}",
+        preferred_path.display()
+    );
+    Ok(DatabasePathResolution {
+        database_path: preferred_path.to_path_buf(),
+        migrated_from: Some(legacy_path.to_path_buf()),
+    })
 }
 
 fn resolve_subdir_with_legacy_copy_from_source_roots(
@@ -1475,6 +1466,50 @@ mod tests {
             )
             .unwrap();
         assert_eq!(value, "parent");
+    }
+
+    #[test]
+    fn resolve_database_path_fails_closed_when_target_database_cannot_be_replaced() {
+        let temp = tempdir().unwrap();
+        let electron_user_data_root = temp.path().join("user-data");
+        let app_server_root = electron_user_data_root.join(APP_SERVER_DATA_DIR_NAME);
+        fs::create_dir_all(&app_server_root).unwrap();
+
+        let source_db = electron_user_data_root.join(DATABASE_FILE_NAME);
+        let source_conn = Connection::open(&source_db).unwrap();
+        source_conn
+            .execute(
+                "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                [],
+            )
+            .unwrap();
+        source_conn
+            .execute(
+                "INSERT INTO settings (key, value) VALUES ('providers.active_tab', 'source')",
+                [],
+            )
+            .unwrap();
+        drop(source_conn);
+
+        let target_db = app_server_root.join(DATABASE_FILE_NAME);
+        fs::create_dir_all(&target_db).unwrap();
+
+        let error = resolve_database_path_from_explicit_data_dir_parent(&app_server_root)
+            .expect_err("目标数据库不可替换时必须阻止旧路径回退");
+
+        assert!(error.contains("数据库迁移失败，拒绝回退旧路径"));
+        assert!(error.contains(source_db.to_string_lossy().as_ref()));
+        assert!(target_db.is_dir());
+        assert!(!app_server_root.join(MIGRATION_MARKER_FILE).exists());
+        let source_conn = Connection::open(&source_db).unwrap();
+        let value: String = source_conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'providers.active_tab'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, "source");
     }
 
     #[test]

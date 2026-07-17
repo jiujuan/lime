@@ -119,4 +119,5 @@ fn missing_tool_call_ids_are_unique_and_structured_output_is_preserved() {
         completed["item"]["payload"]["output"]["structuredContent"],
         json!([{ "type": "input_text", "text": "first" }])
     );
+    assert_eq!(completed["item"]["payload"]["output"]["text"], "first");
 }

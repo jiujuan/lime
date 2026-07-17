@@ -75,6 +75,9 @@ export function runtimeProviderConfigFromUnknown(
     toolshimModel: stringFrom(config, "toolshimModel", "toolshim_model"),
     modelCapabilities:
       config.modelCapabilities ?? config.model_capabilities ?? undefined,
+    supportsWebsockets: booleanValue(
+      config.supportsWebsockets ?? config.supports_websockets,
+    ),
   });
 
   return Object.keys(normalized).length > 0 ? normalized : undefined;

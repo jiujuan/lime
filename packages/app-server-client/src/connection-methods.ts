@@ -1164,7 +1164,13 @@ declare module "./connection.js" {
       params: protocol.ConversationImportThreadCommitParams,
       options?: AppServerRequestOptions,
     ): Promise<
-      AppServerRequestResult<protocol.ConversationImportThreadCommitResponse>
+      AppServerRequestResult<protocol.ConversationImportThreadCommitStartResponse>
+    >;
+    readConversationImportJob(
+      params: protocol.ConversationImportJobReadParams,
+      options?: AppServerRequestOptions,
+    ): Promise<
+      AppServerRequestResult<protocol.ConversationImportJobReadResponse>
     >;
     startTurn(
       params: protocol.AgentSessionTurnStartParams,

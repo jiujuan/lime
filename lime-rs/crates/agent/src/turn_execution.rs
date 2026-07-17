@@ -68,7 +68,7 @@ where
     let provider = match configured_provider.as_ref() {
         Some(configured_provider) => configured_provider.provider(),
         None => agent_state
-            .provider()
+            .provider_for_session(request.session_id)
             .await
             .ok_or_else(|| ReplyAttemptError {
                 message: "Provider is not configured".to_string(),

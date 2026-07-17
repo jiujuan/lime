@@ -1,5 +1,7 @@
 import type {
   ConversationImportSourceClient,
+  ConversationImportJob,
+  ConversationImportJobPhase,
   ConversationImportSourceProvenance,
   ImportedThreadSummary,
 } from "@/lib/api/conversationImport";
@@ -62,6 +64,7 @@ export function isSelectableImportThread(
 ): boolean {
   return (
     thread?.importStatus === "not_imported" ||
+    thread?.importStatus === "importing" ||
     thread?.importStatus === "imported"
   );
 }
@@ -162,6 +165,73 @@ export function isImportedThread(
   return thread?.importStatus === "imported";
 }
 
+export function isImportingThread(
+  thread?: ImportedThreadSummary | null,
+): boolean {
+  return thread?.importStatus === "importing";
+}
+
+export function resolveImportJobPercent(job: ConversationImportJob): number {
+  if (job.status === "completed") {
+    return 100;
+  }
+  const { completedItems, totalItems, phase } = job.progress;
+  if (totalItems > 0) {
+    return Math.min(
+      99,
+      Math.max(0, Math.round((completedItems / totalItems) * 100)),
+    );
+  }
+  const fallback: Record<ConversationImportJobPhase, number> = {
+    queued: 4,
+    reading_source: 12,
+    building_history: 24,
+    persisting_history: 32,
+    finalizing: 96,
+    completed: 100,
+    failed: 100,
+  };
+  return fallback[phase];
+}
+
+export function resolveImportJobPhaseLabel(
+  phase: ConversationImportJobPhase,
+  t: ConversationImportDialogTranslate,
+): string {
+  const labels: Record<ConversationImportJobPhase, [string, string]> = {
+    queued: [
+      "navigation.sidebar.importDialog.progress.queued",
+      "Waiting to import",
+    ],
+    reading_source: [
+      "navigation.sidebar.importDialog.progress.readingSource",
+      "Reading local history",
+    ],
+    building_history: [
+      "navigation.sidebar.importDialog.progress.buildingHistory",
+      "Organizing conversation history",
+    ],
+    persisting_history: [
+      "navigation.sidebar.importDialog.progress.persistingHistory",
+      "Saving conversation history",
+    ],
+    finalizing: [
+      "navigation.sidebar.importDialog.progress.finalizing",
+      "Finishing import",
+    ],
+    completed: [
+      "navigation.sidebar.importDialog.progress.completed",
+      "Import complete",
+    ],
+    failed: [
+      "navigation.sidebar.importDialog.progress.failed",
+      "Import failed",
+    ],
+  };
+  const [key, defaultValue] = labels[phase];
+  return t(key, defaultValue);
+}
+
 export function resolveImportConfirmNoticeKey(
   thread?: ImportedThreadSummary | null,
 ): string {
@@ -186,7 +256,10 @@ export function resolveImportThreadSecondaryText(
   return (
     updatedAt ||
     normalizeOptional(thread.cwd) ||
-    t("navigation.sidebar.importDialog.threadList.localHistory", "Local history")
+    t(
+      "navigation.sidebar.importDialog.threadList.localHistory",
+      "Local history",
+    )
   );
 }
 
@@ -210,7 +283,10 @@ export function formatImportOptionalDate(
 export function resolveImportSourceClientLabel(
   t: ConversationImportDialogTranslate,
 ): string {
-  return t(IMPORT_SOURCE_CLIENT_LABEL.key, IMPORT_SOURCE_CLIENT_LABEL.defaultValue);
+  return t(
+    IMPORT_SOURCE_CLIENT_LABEL.key,
+    IMPORT_SOURCE_CLIENT_LABEL.defaultValue,
+  );
 }
 
 export function buildImportPreviewMetaText(
@@ -269,7 +345,10 @@ export function sourceEventLabel(
       "Confirmation record",
     );
   }
-  return t("navigation.sidebar.importDialog.provenance.event.item", "Source record");
+  return t(
+    "navigation.sidebar.importDialog.provenance.event.item",
+    "Source record",
+  );
 }
 
 export function sourcePayloadLabel(
@@ -328,9 +407,13 @@ export function buildSourceProvenanceLabels(
   const labels: string[] = [];
   if (provenance.sourceEventSeq) {
     labels.push(
-      t("navigation.sidebar.importDialog.provenance.line", "Source line #{{line}}", {
-        line: provenance.sourceEventSeq,
-      }),
+      t(
+        "navigation.sidebar.importDialog.provenance.line",
+        "Source line #{{line}}",
+        {
+          line: provenance.sourceEventSeq,
+        },
+      ),
     );
   }
 

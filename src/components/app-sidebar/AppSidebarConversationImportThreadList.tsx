@@ -1,6 +1,7 @@
 import {
   CheckSquare2,
   FolderOpen,
+  Loader2,
   MessageSquare,
   RefreshCw,
   Square,
@@ -9,6 +10,7 @@ import type { ImportedThreadSummary } from "@/lib/api/conversationImport";
 import {
   formatImportOptionalDate,
   isImportedThread,
+  isImportingThread,
   isSelectableImportThread,
   resolveImportThreadSecondaryText,
   resolveImportThreadTitle,
@@ -293,6 +295,15 @@ export function AppSidebarConversationImportThreadList({
                               {t(
                                 "navigation.sidebar.importDialog.status.imported",
                                 "Imported",
+                              )}
+                            </span>
+                          ) : null}
+                          {isImportingThread(thread) ? (
+                            <span className="mt-0.5 inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              {t(
+                                "navigation.sidebar.importDialog.status.importing",
+                                "Importing",
                               )}
                             </span>
                           ) : null}

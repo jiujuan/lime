@@ -1,7 +1,7 @@
 use super::{
     call_id, command_started_from_response_item, compact_json, parsed_arguments,
     plan_final_from_response_item, string_field, tool_name, truncate_output_preview,
-    web_search_action_label, web_search_action_query,
+    web_search_action_label, web_search_arguments, web_search_query,
 };
 use serde_json::{json, Map, Value};
 
@@ -390,7 +390,7 @@ pub(super) fn tool_started_from_response_item(payload: &Value) -> CodexRolloutEv
 
 pub(super) fn tool_finished_from_response_item(payload: &Value, failed: bool) -> CodexRolloutEvent {
     let output = response_item_output_value(payload);
-    let output_preview = output.as_ref().map(tool_output_preview);
+    let output_preview = output.as_ref().and_then(tool_output_preview);
     tool_terminal(
         call_id(payload),
         tool_name(payload),
@@ -410,19 +410,15 @@ pub(super) fn tool_finished_from_response_item(payload: &Value, failed: bool) ->
 pub(super) fn response_item_web_search_event(payload: &Value) -> Option<CodexRolloutEvent> {
     let call_id = call_id(payload)?;
     let action = payload.get("action").cloned();
+    let query = web_search_query(payload, action.as_ref());
     Some(tool_started(
         Some(call_id),
         Some("web_search".to_string()),
-        action.as_ref().map(|action| {
-            json!({
-                "action": action,
-                "query": web_search_action_query(action),
-            })
-        }),
+        web_search_arguments(action.as_ref(), query.as_deref()),
         json!({
             "status": "in_progress",
             "action": action.as_ref().and_then(web_search_action_label),
-            "query": action.as_ref().and_then(web_search_action_query),
+            "query": query,
             "sourceClient": "codex",
             "sourceEventType": "web_search_call",
         }),
@@ -632,11 +628,33 @@ fn response_item_output_value(payload: &Value) -> Option<Value> {
         .cloned()
 }
 
-fn tool_output_preview(output: &Value) -> String {
-    output
-        .as_str()
-        .map(truncate_output_preview)
-        .unwrap_or_else(|| truncate_output_preview(&output.to_string()))
+pub(in crate::runtime::conversation_import) fn visible_tool_output_text(
+    output: &Value,
+) -> Option<String> {
+    match output {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(parts) => {
+            let text = parts
+                .iter()
+                .filter_map(|part| {
+                    let part_type = part.get("type").and_then(Value::as_str)?;
+                    matches!(part_type, "input_text" | "output_text" | "text")
+                        .then(|| part.get("text").and_then(Value::as_str))
+                        .flatten()
+                })
+                .collect::<String>();
+            (!text.is_empty()).then_some(text)
+        }
+        Value::Object(object) => object
+            .get("text")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        _ => None,
+    }
+}
+
+fn tool_output_preview(output: &Value) -> Option<String> {
+    visible_tool_output_text(output).map(|text| truncate_output_preview(&text))
 }
 
 #[cfg(test)]
@@ -662,6 +680,24 @@ mod tests {
         assert_eq!(draft.phase, CodexToolPhase::Completed);
         assert_eq!(draft.output.as_ref(), Some(&output));
         assert_eq!(draft.call_id.as_deref(), Some("call-structured"));
+        assert_eq!(draft.source.output_preview.as_deref(), Some("result"));
+    }
+
+    #[test]
+    fn response_item_tool_output_joins_visible_text_without_serializing_parts() {
+        let output = json!([
+            { "type": "input_text", "text": "Script completed\n" },
+            { "type": "input_text", "text": "Output:\nready\n" },
+            { "type": "input_image", "image_url": "data:image/png;base64,AA==" }
+        ]);
+
+        assert_eq!(
+            visible_tool_output_text(&output).as_deref(),
+            Some("Script completed\nOutput:\nready\n")
+        );
+        assert!(!tool_output_preview(&output)
+            .expect("text preview")
+            .contains("input_text"));
     }
 
     #[test]

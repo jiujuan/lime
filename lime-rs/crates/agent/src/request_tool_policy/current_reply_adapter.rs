@@ -133,12 +133,16 @@ async fn stream_current<F>(
 where
     F: FnMut(&AgentEvent) + Send,
 {
+    let session_id = session_config.id.clone();
     let provider = match provider {
         Some(provider) => provider,
-        None => state.provider().await.ok_or_else(|| ReplyAttemptError {
-            message: "Provider is not configured".to_string(),
-            emitted_any: false,
-        })?,
+        None => state
+            .provider_for_session(&session_id)
+            .await
+            .ok_or_else(|| ReplyAttemptError {
+                message: "Provider is not configured".to_string(),
+                emitted_any: false,
+            })?,
     };
     stream_current_provider_turn(
         state,

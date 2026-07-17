@@ -1,5 +1,6 @@
 process.env.LIME_ELECTRON_RENDERER = "1";
-process.env.LIME_VITE_EMPTY_OUT_DIR = "1";
+// Gate B fixtures share dist while other fixture processes may rebuild it.
+process.env.LIME_VITE_EMPTY_OUT_DIR = "0";
 
 const { spawn } = await import("node:child_process");
 const { rendererBuildEnv, startRendererBuildHeartbeat } =

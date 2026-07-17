@@ -1,18 +1,19 @@
 mod canonical_message_lifecycle;
 mod canonical_notifications;
+mod validation;
 
 pub(in crate::runtime) use self::canonical_message_lifecycle::CanonicalMessageLifecycleState;
 use self::canonical_message_lifecycle::{
     attach_canonical_item_entity, with_canonical_message_reasoning_lifecycle,
 };
 use self::canonical_notifications::notification_events_with_canonical_entities;
+use self::validation::EventValidationContext;
 use super::status::{agent_turn_is_terminal, session_status_from_turn_status};
 use super::trace;
 use super::trace_store::TraceEventWriter;
 use super::turn_input_events;
 use super::*;
 use crate::agent_ui_event_schema;
-use crate::agent_ui_sequence_verifier;
 use crate::runtime_backend::tool_process_metadata::SoulStyleMetadata;
 use crate::runtime_backend::{
     current_agent_runtime_config_metadata, tool_process_external_metadata,
@@ -158,6 +159,7 @@ impl RuntimeCore {
                 stored,
                 event.turn_id.as_deref(),
                 event.event_type.as_str(),
+                &event.timestamp,
             );
             stored.events.push(event);
         }
@@ -396,6 +398,7 @@ fn append_runtime_events_to_stored_session(
     }
     let trace_context = trace::trace_context_for_turn(stored, turn_id);
     let mut events = Vec::with_capacity(runtime_events.len());
+    let mut validation = EventValidationContext::from_events(&stored.events, session_id, turn_id);
     let mut output_records = Vec::new();
     let mut pending_terminal_for_turn = false;
     for runtime_event in runtime_events {
@@ -406,16 +409,9 @@ fn append_runtime_events_to_stored_session(
         let needs_policy_normalization = should_normalize_policy_event_payload_class(event_class);
         let needs_tool_lifecycle_validation =
             should_validate_tool_lifecycle_event_class(event_class);
-        let validation_events = (needs_sequence_context
-            || needs_policy_normalization
-            || needs_tool_lifecycle_validation)
-            .then(|| validation_context_for_event(stored, &events, turn_id));
         let payload = if needs_policy_normalization {
-            let context = validation_events
-                .as_ref()
-                .expect("policy event validation context should be built");
             tool_lifecycle::normalize_policy_event_payload(
-                context,
+                validation.events(),
                 turn_id,
                 &event_type,
                 runtime_event.payload,
@@ -426,11 +422,8 @@ fn append_runtime_events_to_stored_session(
         let payload = if should_enrich_tool_process_event_payload_class(event_class) {
             let mut payload = payload;
             if let Value::Object(payload_object) = &mut payload {
-                let context = validation_events
-                    .as_ref()
-                    .expect("tool process event validation context should be built");
                 tool_process_external_metadata::enrich_external_tool_process_payload(
-                    context,
+                    validation.events(),
                     &event_type,
                     payload_object,
                     fallback_soul_style.as_ref(),
@@ -443,11 +436,8 @@ fn append_runtime_events_to_stored_session(
         let payload = if should_enrich_tool_policy_event_payload_class(event_class) {
             let mut payload = payload;
             if let Value::Object(payload_object) = &mut payload {
-                let context = validation_events
-                    .as_ref()
-                    .expect("tool policy event validation context should be built");
                 tool_process_external_metadata::enrich_external_tool_policy_payload(
-                    context,
+                    validation.events(),
                     &event_type,
                     payload_object,
                     fallback_soul_style.as_ref(),
@@ -467,6 +457,7 @@ fn append_runtime_events_to_stored_session(
         } else {
             output_refs::normalize_large_output_payload(&event_type, payload)
         };
+        let event_timestamp = runtime_event_timestamp(event_class, &normalized.payload);
         let mut event = AgentEvent {
             event_id: new_id("evt"),
             sequence: stored.events.len() as u64 + events.len() as u64 + 1,
@@ -474,7 +465,7 @@ fn append_runtime_events_to_stored_session(
             thread_id: Some(thread_id.to_string()),
             turn_id: turn_id.map(str::to_string),
             event_type,
-            timestamp: timestamp(),
+            timestamp: event_timestamp,
             payload: normalized.payload,
         };
         if let Some(trace_context) = trace_context.as_ref() {
@@ -499,20 +490,13 @@ fn append_runtime_events_to_stored_session(
         attach_canonical_item_entity(stored, &events, &mut event)
             .map_err(RuntimeCoreError::Backend)?;
         agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?;
-        if needs_sequence_context && !is_approval_session_cache_auto_resolved(&event) {
-            let validation_events = validation_events
-                .as_ref()
-                .expect("sequence event validation context should be built");
-            agent_ui_sequence_verifier::validate_agent_event_sequence(validation_events, &event)
-                .map_err(RuntimeCoreError::Backend)?;
-        }
-        if needs_tool_lifecycle_validation {
-            let context = validation_events
-                .as_ref()
-                .expect("tool lifecycle event validation context should be built");
-            tool_lifecycle::validate_tool_lifecycle_event(&context, &event)
-                .map_err(RuntimeCoreError::Backend)?;
-        }
+        validation
+            .validate_and_observe(
+                &event,
+                needs_sequence_context,
+                needs_tool_lifecycle_validation,
+            )
+            .map_err(RuntimeCoreError::Backend)?;
         if let Some(output_blob) = normalized.output_blob {
             let output = output_refs::record_output_blob(&event, output_blob);
             let output =
@@ -604,7 +588,12 @@ fn append_runtime_events_to_stored_session(
         }
     }
     for event in appended_events.iter().cloned() {
-        apply_runtime_event_state_transition(stored, turn_id, event.event_type.as_str());
+        apply_runtime_event_state_transition(
+            stored,
+            turn_id,
+            event.event_type.as_str(),
+            &event.timestamp,
+        );
         stored.events.push(event);
     }
     for output in output_records {
@@ -789,23 +778,6 @@ fn session_business_object_metadata(stored: &StoredSession, keys: &[&str]) -> Op
         .map(str::to_string)
 }
 
-fn validation_context_for_event(
-    stored: &StoredSession,
-    pending_events: &[AgentEvent],
-    turn_id: Option<&str>,
-) -> Vec<AgentEvent> {
-    stored
-        .events
-        .iter()
-        .chain(pending_events.iter())
-        .filter(|event| {
-            event.turn_id.as_deref() == turn_id
-                && should_include_in_validation_context(event.event_type.as_str())
-        })
-        .cloned()
-        .collect()
-}
-
 fn should_build_validation_context(event_class: &str, pending_terminal_for_turn: bool) -> bool {
     requires_sequence_validation_context_class(event_class) || pending_terminal_for_turn
 }
@@ -945,6 +917,27 @@ fn is_turn_terminal_event_class(event_class: &str) -> bool {
     )
 }
 
+fn runtime_event_timestamp(event_class: &str, payload: &Value) -> String {
+    if is_turn_terminal_event_class(event_class)
+        && payload.get("imported").and_then(Value::as_bool) == Some(true)
+        && payload
+            .get("sourceClient")
+            .or_else(|| payload.get("source_client"))
+            .and_then(Value::as_str)
+            == Some("codex")
+    {
+        if let Some(completed_at) = payload
+            .get("completedAt")
+            .or_else(|| payload.get("completed_at"))
+            .and_then(Value::as_str)
+            .filter(|value| chrono::DateTime::parse_from_rfc3339(value).is_ok())
+        {
+            return completed_at.to_string();
+        }
+    }
+    timestamp()
+}
+
 fn is_terminal_turn(stored: &StoredSession, turn_id: Option<&str>) -> bool {
     let Some(turn_id) = turn_id else {
         return false;
@@ -960,6 +953,7 @@ fn apply_runtime_event_state_transition(
     stored: &mut StoredSession,
     turn_id: Option<&str>,
     event_type: &str,
+    event_timestamp: &str,
 ) {
     let Some(turn_id) = turn_id else {
         return;
@@ -971,7 +965,7 @@ fn apply_runtime_event_state_transition(
         next_status,
         AgentTurnStatus::Completed | AgentTurnStatus::Failed | AgentTurnStatus::Canceled
     )
-    .then(timestamp);
+    .then(|| event_timestamp.to_string());
 
     if let Some(turn) = stored.turns.iter_mut().find(|turn| turn.turn_id == turn_id) {
         turn.status = next_status;
@@ -981,7 +975,7 @@ fn apply_runtime_event_state_transition(
     }
 
     stored.session.status = session_status_from_turn_status(next_status);
-    stored.session.updated_at = completed_at.unwrap_or_else(timestamp);
+    stored.session.updated_at = completed_at.unwrap_or_else(|| event_timestamp.to_string());
 }
 
 fn turn_status_from_runtime_event(event_type: &str) -> Option<AgentTurnStatus> {

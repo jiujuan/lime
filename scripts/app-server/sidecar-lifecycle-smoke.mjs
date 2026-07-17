@@ -87,6 +87,7 @@ async function main() {
       },
       {
         resourcesPath,
+        dataDir: path.join(tempDir, "data"),
         backendMode: "unavailable",
         initializeTimeoutMs: 5_000,
         expectedProtocolVersion: PROTOCOL_VERSION,

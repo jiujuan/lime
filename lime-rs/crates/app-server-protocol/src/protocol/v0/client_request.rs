@@ -355,6 +355,7 @@ app_server_client_request_definitions! {
     ConversationImportSourceScan => "conversationImport/source/scan",
     ConversationImportThreadPreview => "conversationImport/thread/preview",
     ConversationImportThreadCommit => "conversationImport/thread/commit",
+    ConversationImportJobRead => "conversationImport/job/read",
     AgentSessionStart => "agentSession/start",
     AgentSessionRead => "agentSession/read",
     AgentSessionMediaRead => "agentSession/media/read",

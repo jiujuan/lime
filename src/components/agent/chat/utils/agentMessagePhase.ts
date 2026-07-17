@@ -6,19 +6,14 @@ function normalizeAgentMessagePhase(phase?: string | null): string | null {
   return normalized ? normalized : null;
 }
 
-export function isAgentMessageCommentaryPhase(
-  phase?: string | null,
-): boolean {
+export function isAgentMessageCommentaryPhase(phase?: string | null): boolean {
   return normalizeAgentMessagePhase(phase) === AGENT_MESSAGE_PHASE_COMMENTARY;
 }
 
-export function isAgentMessageFinalAnswerPhase(
-  phase?: string | null,
-): boolean {
+export function isAgentMessageFinalAnswerPhase(phase?: string | null): boolean {
   const normalized = normalizeAgentMessagePhase(phase);
   return (
-    normalized === AGENT_MESSAGE_PHASE_FINAL_ANSWER ||
-    normalized === "final"
+    normalized === AGENT_MESSAGE_PHASE_FINAL_ANSWER || normalized === "final"
   );
 }
 
@@ -42,6 +37,8 @@ export interface AgentMessagePhaseSelectionCandidate {
   text?: string | null;
   content?: string | null;
   message?: string | null;
+  contentParts?: unknown[] | null;
+  content_parts?: unknown[] | null;
 }
 
 function resolveSelectionTurnId(
@@ -75,7 +72,9 @@ export function resolveFinalAgentMessageItemIds<
       continue;
     }
     const text = item.text ?? item.content ?? item.message;
-    if (text !== undefined && text !== null && !text.trim()) {
+    const hasText = typeof text === "string" && Boolean(text.trim());
+    const contentParts = item.contentParts ?? item.content_parts;
+    if (!hasText && !(Array.isArray(contentParts) && contentParts.length > 0)) {
       continue;
     }
     const turnId = resolveSelectionTurnId(item);

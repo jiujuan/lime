@@ -96,7 +96,7 @@ impl RuntimeCore {
             };
             let turn_id = mailbox_turn_id(&message.message_id);
             let item_id = mailbox_item_id(&message.message_id);
-            if canonical_mailbox_item_exists(&store, &identity.thread_id, &item_id).await? {
+            if canonical_mailbox_item_is_terminal(&store, &identity.thread_id, &item_id).await? {
                 acknowledge_mailbox_message(&store, &message).await?;
                 continue;
             }
@@ -358,7 +358,9 @@ impl RuntimeCore {
 
         for message in messages {
             let item_id = mailbox_item_id(&message.message_id);
-            if canonical_mailbox_item_exists(store, &message.recipient_thread_id, &item_id).await? {
+            if canonical_mailbox_item_is_terminal(store, &message.recipient_thread_id, &item_id)
+                .await?
+            {
                 if acknowledge_mailbox_message(store, &message).await? {
                     consumed_messages.push(message);
                 }
@@ -366,7 +368,7 @@ impl RuntimeCore {
             }
             let is_turn_input = message.delivery_mode == AgentMailboxDeliveryMode::TriggerTurn;
             contains_turn_input |= is_turn_input;
-            runtime_events.push(mailbox_message_runtime_event(
+            runtime_events.extend(mailbox_message_runtime_events(
                 &message,
                 &item_id,
                 is_turn_input,
@@ -393,10 +395,11 @@ impl RuntimeCore {
         delivered_events.extend(events);
         for message in &pending {
             let item_id = mailbox_item_id(&message.message_id);
-            if !canonical_mailbox_item_exists(store, &message.recipient_thread_id, &item_id).await?
+            if !canonical_mailbox_item_is_terminal(store, &message.recipient_thread_id, &item_id)
+                .await?
             {
                 return Err(RuntimeCoreError::Backend(format!(
-                    "canonical mailbox Item {} was not durable before delivery acknowledgement",
+                    "canonical mailbox Item {} was not terminal before delivery acknowledgement",
                     message.message_id
                 )));
             }
@@ -497,11 +500,11 @@ impl RuntimeCore {
     }
 }
 
-pub(super) fn mailbox_message_runtime_event(
+pub(super) fn mailbox_message_runtime_events(
     message: &AgentMailboxMessage,
     item_id: &str,
     is_turn_input: bool,
-) -> RuntimeEvent {
+) -> Vec<RuntimeEvent> {
     let mailbox = json!({
         "messageId": message.message_id,
         "rootThreadId": message.root_thread_id.as_str(),
@@ -517,7 +520,7 @@ pub(super) fn mailbox_message_runtime_event(
         },
     });
     match message.kind {
-        thread_store::AgentMailboxMessageKind::Message => RuntimeEvent::new(
+        thread_store::AgentMailboxMessageKind::Message => vec![RuntimeEvent::new(
             "message.created",
             json!({
                 "role": "user",
@@ -536,24 +539,43 @@ pub(super) fn mailbox_message_runtime_event(
                 "mailbox": mailbox.clone(),
                 "metadata": { "mailbox": mailbox },
             }),
-        ),
-        thread_store::AgentMailboxMessageKind::Result => RuntimeEvent::new(
-            "message.delta",
-            json!({
-                "role": "assistant",
-                "visibility": "user_visible",
-                "status": "completed",
-                "itemId": item_id,
-                "messageId": message.message_id,
-                "text": message.content,
-                "content": {
-                    "kind": "inline_text",
-                    "text": message.content,
-                },
-                "mailbox": mailbox.clone(),
-                "metadata": { "mailbox": mailbox },
-            }),
-        ),
+        )],
+        thread_store::AgentMailboxMessageKind::Result => {
+            let terminal_status = message
+                .result_status
+                .map(mailbox_result_status_str)
+                .unwrap_or("completed");
+            vec![
+                RuntimeEvent::new(
+                    "message.delta",
+                    json!({
+                        "role": "assistant",
+                        "visibility": "user_visible",
+                        "status": "in_progress",
+                        "itemId": item_id,
+                        "messageId": message.message_id,
+                        "text": message.content,
+                        "content": {
+                            "kind": "inline_text",
+                            "text": message.content,
+                        },
+                        "mailbox": mailbox.clone(),
+                        "metadata": { "mailbox": mailbox.clone() },
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "message.completed",
+                    json!({
+                        "role": "assistant",
+                        "visibility": "user_visible",
+                        "status": terminal_status,
+                        "itemId": item_id,
+                        "messageId": message.message_id,
+                        "metadata": { "mailbox": mailbox },
+                    }),
+                ),
+            ]
+        }
     }
 }
 
@@ -604,6 +626,7 @@ fn mailbox_event_matches_message(
             thread_store::AgentMailboxMessageKind::Result => {
                 event.payload.get("text") == Some(&json!(message.content))
                     && event.payload.get("role") == Some(&json!("assistant"))
+                    && event.payload.get("status") == Some(&json!("in_progress"))
                     && event.payload.pointer("/metadata/mailbox") == mailbox
             }
         }
@@ -653,7 +676,7 @@ fn stable_mailbox_digest(message_id: &str) -> String {
     hex::encode(Sha256::digest(message_id.as_bytes()))
 }
 
-pub(super) async fn canonical_mailbox_item_exists(
+pub(super) async fn canonical_mailbox_item_is_terminal(
     store: &ProjectionStore,
     thread_id: &ThreadId,
     item_id: &str,
@@ -671,7 +694,7 @@ pub(super) async fn canonical_mailbox_item_exists(
             .turns
             .iter()
             .flat_map(|turn| turn.items.iter())
-            .any(|item| item.item_id.as_str() == item_id)
+            .any(|item| item.item_id.as_str() == item_id && item.status.is_terminal())
     }))
 }
 

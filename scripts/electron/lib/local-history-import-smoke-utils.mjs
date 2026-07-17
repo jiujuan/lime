@@ -1,20 +1,20 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
+import { marked } from "marked";
+import { inspectConversationChromeLayout } from "./local-history-import-layout-audit.mjs";
+import { openImportedSessionFromSidebar } from "./local-history-import-session-open.mjs";
+import { assessExpectedMessageVisibility } from "./local-history-import-visual-expectations.mjs";
 export const APP_SERVER_HANDLE_JSON_LINES_COMMAND =
   "app_server_handle_json_lines";
-
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
 export function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
 }
-
 export function sanitizeText(value) {
   const sanitized = String(value ?? "")
     .replace(
@@ -29,7 +29,6 @@ export function sanitizeText(value) {
       } chars]`
     : sanitized;
 }
-
 export function sanitizeJson(value, depth = 0) {
   if (depth > 8) {
     return "[truncated-depth]";
@@ -57,12 +56,15 @@ export function sanitizeJson(value, depth = 0) {
   }
   return sanitizeText(String(value));
 }
-
 export function writeJsonFile(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
-
+export function renderExpectedVisibleExcerptHtml(markdownValues) {
+  return markdownValues.map((value) =>
+    marked.parse(String(value ?? ""), { async: false }),
+  );
+}
 export function createTempRuntimeEnv(sourceRoot, prefix) {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const home = path.join(tempRoot, "home");
@@ -70,7 +72,6 @@ export function createTempRuntimeEnv(sourceRoot, prefix) {
   const localAppData = path.join(tempRoot, "local-app-data");
   const roamingAppData = path.join(tempRoot, "roaming-app-data");
   const electronUserDataDir = path.join(tempRoot, "electron-user-data");
-
   for (const dir of [
     home,
     xdgDataHome,
@@ -80,7 +81,6 @@ export function createTempRuntimeEnv(sourceRoot, prefix) {
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
-
   return {
     tempRoot,
     electronUserDataDir,
@@ -94,7 +94,6 @@ export function createTempRuntimeEnv(sourceRoot, prefix) {
     },
   };
 }
-
 function isTransientPageEvaluationError(error) {
   const message = error instanceof Error ? error.message : String(error ?? "");
   return (
@@ -103,12 +102,10 @@ function isTransientPageEvaluationError(error) {
     message.includes("Cannot find context with specified id")
   );
 }
-
 async function withOptionalTimeout(label, timeoutMs, operation) {
   if (typeof timeoutMs !== "number") {
     return await operation();
   }
-
   let timeoutHandle = null;
   try {
     return await Promise.race([
@@ -125,7 +122,6 @@ async function withOptionalTimeout(label, timeoutMs, operation) {
     }
   }
 }
-
 export async function evaluatePageSnapshot(page, pageFunction, arg) {
   try {
     return await page.evaluate(pageFunction, arg);
@@ -136,7 +132,6 @@ export async function evaluatePageSnapshot(page, pageFunction, arg) {
     throw error;
   }
 }
-
 export async function waitForRendererReady(page, options, onSnapshot) {
   const startedAt = Date.now();
   const intervalMs =
@@ -176,7 +171,6 @@ export async function waitForRendererReady(page, options, onSnapshot) {
   }
   throw new Error("Electron renderer / App Server bridge 未就绪");
 }
-
 export async function invokeAppServerFromPage(
   page,
   method,
@@ -188,7 +182,6 @@ export async function invokeAppServerFromPage(
   const intervalMs =
     typeof options.intervalMs === "number" ? options.intervalMs : 250;
   let lastTransientError = null;
-
   while (typeof timeoutMs !== "number" || Date.now() - startedAt < timeoutMs) {
     try {
       return await withOptionalTimeout(method, timeoutMs, () =>
@@ -261,7 +254,6 @@ export async function invokeAppServerFromPage(
       await sleep(intervalMs);
     }
   }
-
   throw new Error(
     `${method} failed after transient page navigation: ${
       lastTransientError instanceof Error
@@ -270,7 +262,48 @@ export async function invokeAppServerFromPage(
     }`,
   );
 }
-
+export async function waitForConversationImportJob(
+  page,
+  initialJob,
+  options = {},
+) {
+  assert(initialJob?.jobId, "导入启动结果缺少 jobId");
+  const timeoutMs =
+    typeof options.timeoutMs === "number" ? options.timeoutMs : 30 * 60_000;
+  const intervalMs =
+    typeof options.intervalMs === "number" ? options.intervalMs : 250;
+  const startedAt = Date.now();
+  let job = initialJob;
+  while (Date.now() - startedAt < timeoutMs) {
+    options.onProgress?.(job);
+    if (job.status === "completed") {
+      assert(
+        job.result?.session?.sessionId,
+        "导入完成但缺少 canonical session result",
+      );
+      return job.result;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error || "后台导入失败");
+    }
+    await sleep(intervalMs);
+    const response = await invokeAppServerFromPage(
+      page,
+      "conversationImport/job/read",
+      { jobId: job.jobId },
+      {
+        idPrefix: options.idPrefix || "conversation-import-job",
+        timeoutMs: Math.min(30_000, timeoutMs),
+      },
+    );
+    job = response.result?.job;
+    assert(
+      job?.jobId === initialJob.jobId,
+      "导入 job/read 返回了错误的 job identity",
+    );
+  }
+  throw new Error(`后台导入超时: ${initialJob.jobId}`);
+}
 export async function initializeAppServer(page, clientInfo, capabilities) {
   const initialized = await invokeAppServerFromPage(
     page,
@@ -294,7 +327,6 @@ export async function initializeAppServer(page, clientInfo, capabilities) {
   );
   return initialized.result;
 }
-
 export async function waitForUiSnapshot(
   page,
   options,
@@ -309,6 +341,13 @@ export async function waitForUiSnapshot(
       const textarea = document.querySelector(
         'textarea[name="agent-chat-message"]',
       );
+      const messageContent =
+        document.querySelector('[data-testid="message-list-column"]') ||
+        document.querySelector('[data-testid="message-list"]');
+      const messageListFrame = document.querySelector(
+        '[data-testid="message-list-frame"]',
+      );
+      const messageContentText = messageContent?.innerText || "";
       return {
         url: window.location.href,
         title: document.title || "",
@@ -321,6 +360,23 @@ export async function waitForUiSnapshot(
           textarea instanceof HTMLTextAreaElement
             ? textarea.getAttribute("data-session-id")
             : null,
+        messageListSessionId:
+          messageListFrame?.getAttribute("data-session-id") || null,
+        planDecisionVisible: Boolean(
+          document.querySelector(
+            '[data-testid="plan-decision-inputbar-replacement"]',
+          ),
+        ),
+        approvalReplacementVisible: Boolean(
+          document.querySelector(
+            '[data-testid="inputbar-approval-replacement"]',
+          ),
+        ),
+        messageContentTextLength: messageContentText.trim().length,
+        messageContentChildCount:
+          messageContent instanceof HTMLElement
+            ? messageContent.childElementCount
+            : 0,
         sidebarVisible: Boolean(
           document.querySelector('[data-testid="app-sidebar"]'),
         ),
@@ -348,85 +404,14 @@ export async function waitForUiSnapshot(
     `${failureLabel}: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
   );
 }
-
-function normalizeVisibleText(value) {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export async function openSessionFromSidebar(page, options, target) {
-  const normalizedTitle = normalizeVisibleText(target.title);
-  await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) =>
-      snapshot.conversationRows.some((row) => {
-        const candidate = normalizeVisibleText(`${row.title} ${row.text}`);
-        return (
-          candidate.includes(normalizedTitle) ||
-          normalizedTitle.includes(candidate.slice(0, 24))
-        );
-      }),
-    "侧边栏未出现目标会话",
-  );
-
-  const clicked = await evaluatePageSnapshot(
-    page,
-    ({ title }) => {
-      const normalizedTitle = String(title || "")
-        .replace(/\s+/g, " ")
-        .trim();
-      const buttons = Array.from(
-        document.querySelectorAll(
-          '[data-testid="app-sidebar-conversation-open"]',
-        ),
-      );
-      const matched = buttons.find((button) => {
-        const candidate = `${
-          button.getAttribute("title") || ""
-        } ${button.textContent || ""}`
-          .replace(/\s+/g, " ")
-          .trim();
-        return (
-          candidate.includes(normalizedTitle) ||
-          normalizedTitle.includes(candidate.slice(0, 24))
-        );
-      });
-      if (matched instanceof HTMLElement) {
-        matched.click();
-        return {
-          clicked: true,
-          title: matched.getAttribute("title") || "",
-          text: matched.textContent || "",
-        };
-      }
-      return {
-        clicked: false,
-        rows: buttons.map((button) => ({
-          title: button.getAttribute("title") || "",
-          text: button.textContent || "",
-        })),
-      };
-    },
-    target,
-  );
-  assert(
-    clicked?.clicked,
-    `未能点击目标会话: ${JSON.stringify(sanitizeJson(clicked))}`,
-  );
-
-  return await waitForUiSnapshot(
-    page,
-    options,
-    (snapshot) =>
-      snapshot.textareaVisible &&
-      snapshot.textareaDisabled === false &&
-      snapshot.textareaSessionId === target.sessionId,
-    "会话页未进入目标 session",
-  );
+  return await openImportedSessionFromSidebar(page, options, target, {
+    assert,
+    evaluatePageSnapshot,
+    sanitizeJson,
+    waitForUiSnapshot,
+  });
 }
-
 async function scrollMessageSurface(page, position) {
   return await evaluatePageSnapshot(
     page,
@@ -473,20 +458,228 @@ async function scrollMessageSurface(page, position) {
     position,
   );
 }
+async function expandCanonicalTimelineDetails(page) {
+  const messageContent = page.locator('[data-testid="message-list-column"]');
+  const selectors = [
+    '[data-testid^="message-list-historical-timeline-preview:"]',
+    '[data-testid="message-list-long-history-preview"] button',
+    '[data-testid="message-list-historical-assistant-preview"] button',
+    '[data-testid="timeline-file-attachment-list-toggle"][aria-expanded="false"]',
+    '[data-testid="file-changes-summary-toggle"][aria-expanded="false"]',
+    'details[data-testid^="agent-thread-block:"]:not([open]) > summary',
+  ];
+  let clickedCount = 0;
+  for (let pass = 0; pass < 200; pass += 1) {
+    let clickedInPass = false;
+    for (const selector of selectors) {
+      const controls = messageContent.locator(selector);
+      const controlCount = await controls.count();
+      for (let index = 0; index < controlCount; index += 1) {
+        const control = controls.nth(index);
+        if (!(await control.isVisible().catch(() => false))) {
+          continue;
+        }
+        await control.click();
+        clickedCount += 1;
+        clickedInPass = true;
+        await sleep(25);
+        break;
+      }
+      if (clickedInPass) {
+        break;
+      }
+    }
+    if (!clickedInPass) {
+      return clickedCount;
+    }
+  }
+  throw new Error("canonical timeline 展开次数超过安全上限");
+}
+export async function captureImportedConversationCompactVisualState(
+  page,
+  params,
+) {
+  const {
+    viewport,
+    position,
+    sessionId,
+    expectedExcerptHtml,
+    expectedMessages,
+    screenshotPath,
+  } = params;
+  await page.setViewportSize({
+    width: viewport.width,
+    height: viewport.height,
+  });
+  await waitForUiSnapshot(
+    page,
+    params.options,
+    (snapshot) =>
+      snapshot.textareaSessionId === sessionId &&
+      snapshot.messageContentTextLength > 0 &&
+      snapshot.messageContentChildCount > 0,
+    `${viewport.label}/${position} 紧凑视口目标 session 未稳定`,
+  );
+  const scroll = await scrollMessageSurface(page, position);
+  assert(scroll, `${viewport.label}/${position} 紧凑视口无法滚动消息区域`);
+  const auditTimeoutMs =
+    typeof params.options.previewTimeoutMs === "number"
+      ? params.options.previewTimeoutMs
+      : params.options.timeoutMs;
+  const auditStartedAt = Date.now();
+  let audit = null;
+  let latestAudit = null;
+  while (!audit && Date.now() - auditStartedAt < auditTimeoutMs) {
+    const candidateSnapshot = await evaluatePageSnapshot(
+      page,
+      ({ expectedExcerptHtml, expectedMessages, sessionId }) => {
+        const messageContent = document.querySelector(
+          '[data-testid="message-list-column"]',
+        );
+        const textarea = document.querySelector(
+          'textarea[name="agent-chat-message"]',
+        );
+        const messageText = (messageContent?.innerText || "")
+          .replace(/\s+/g, " ")
+          .trim();
+        const expectedVisibleMessages = expectedExcerptHtml
+          .map((html, index) => {
+            const parsed = new DOMParser().parseFromString(
+              String(html),
+              "text/html",
+            );
+            const excerpt = (parsed.body?.textContent || "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 80);
+            return {
+              ...(expectedMessages[index] || {}),
+              excerpt,
+            };
+          })
+          .filter((message) => message.excerpt.length > 0);
+        const textareaRect =
+          textarea instanceof HTMLElement
+            ? textarea.getBoundingClientRect()
+            : null;
+        const messageRect =
+          messageContent instanceof HTMLElement
+            ? messageContent.getBoundingClientRect()
+            : null;
+        const turnGroups = Array.from(
+          messageContent?.querySelectorAll(
+            '[data-testid="message-turn-group"]',
+          ) || [],
+        );
+        const visibleAgentMessageTextById = Object.fromEntries(
+          Array.from(
+            messageContent?.querySelectorAll(
+              '[data-testid="agent-message-text-part"][data-thread-item-id]',
+            ) || [],
+          ).map((element) => [
+            element.getAttribute("data-thread-item-id"),
+            {
+              text: (element.textContent || "")
+                .replace(/\s+/g, " ")
+                .trim()
+                .slice(0, 160),
+              visible: Boolean(
+                element.querySelector("*")?.getClientRects().length,
+              ),
+              collapsed: Boolean(element.closest("details:not([open])")),
+            },
+          ]),
+        );
+        return {
+          textareaSessionId:
+            textarea instanceof HTMLTextAreaElement
+              ? textarea.getAttribute("data-session-id")
+              : null,
+          inputbarVisible: Boolean(
+            textareaRect &&
+            textareaRect.width > 120 &&
+            textareaRect.height >= 24 &&
+            textareaRect.bottom > 0 &&
+            textareaRect.top < window.innerHeight,
+          ),
+          inputbarOccludesMainContent:
+            Boolean(textareaRect && messageRect) &&
+            textareaRect.top < messageRect.top + 80,
+          messageContentTextLength: messageText.length,
+          historicalTimelinePreviewCount:
+            messageContent?.querySelectorAll(
+              '[data-testid^="message-list-historical-timeline-preview:"]',
+            ).length || 0,
+          toolCallRowCount:
+            messageContent?.querySelectorAll('[data-testid="tool-call-row"]')
+              .length || 0,
+          turnGroups: turnGroups.map((group) => ({
+            runtimeTurnId: group.getAttribute("data-runtime-turn-id") || null,
+            runtimeTurnStatus:
+              group.getAttribute("data-runtime-turn-status") || null,
+            assistantMessageCount: group.querySelectorAll(
+              '[data-message-role="assistant"]',
+            ).length,
+            toolCallRowCount: group.querySelectorAll(
+              '[data-testid="tool-call-row"]',
+            ).length,
+            historicalTimelinePreviewCount: group.querySelectorAll(
+              '[data-testid^="message-list-historical-timeline-preview:"]',
+            ).length,
+          })),
+          expectedVisibleMessages,
+          messageComparableText: messageText,
+          visibleAgentMessageTextById,
+          hasRawContentPartJson:
+            messageText.includes('"type":"input_text"') ||
+            messageText.includes('"type": "input_text"'),
+          targetSessionVisible:
+            textarea instanceof HTMLTextAreaElement &&
+            textarea.getAttribute("data-session-id") === sessionId,
+        };
+      },
+      { expectedExcerptHtml, expectedMessages, sessionId },
+    );
+    const candidate = assessExpectedMessageVisibility(candidateSnapshot);
+    latestAudit = candidate || latestAudit;
+    if (
+      candidate?.targetSessionVisible &&
+      candidate.missingExpectedExcerpts.length === 0
+    ) {
+      audit = candidate;
+      break;
+    }
+    await sleep(250);
+  }
+  audit = audit || latestAudit;
+  assert(audit, `${viewport.label}/${position} 紧凑视口无法读取 DOM`);
+  await page.screenshot({
+    path: screenshotPath,
+    fullPage: false,
+    timeout: 30_000,
+  });
+
+  return {
+    label: `${viewport.label}:${position}`,
+    viewport,
+    position,
+    scroll,
+    layout: await inspectConversationChromeLayout(page),
+    screenshot: screenshotPath,
+    ...audit,
+  };
+}
 
 export async function inspectImportedConversationVisualState(page, params) {
   const {
     viewport,
     position,
     sessionId,
-    sessionTitle,
-    forbiddenTokens,
+    expectedExcerptHtml,
+    expectedMessages,
+    expectedCounts,
     screenshotPath,
   } = params;
-  const normalizedSessionTitle = normalizeVisibleText(sessionTitle).slice(
-    0,
-    24,
-  );
   await page.setViewportSize({
     width: viewport.width,
     height: viewport.height,
@@ -495,14 +688,16 @@ export async function inspectImportedConversationVisualState(page, params) {
     page,
     params.options,
     (snapshot) => {
-      const bodyText = normalizeVisibleText(snapshot.bodyText);
-      const hasTargetTitle =
-        !normalizedSessionTitle || bodyText.includes(normalizedSessionTitle);
-      const hasMessageSurface = bodyText.length > 0;
-      return hasTargetTitle && hasMessageSurface;
+      return (
+        snapshot.textareaSessionId === sessionId &&
+        snapshot.messageContentTextLength > 0 &&
+        snapshot.messageContentChildCount > 0
+      );
     },
     `${viewport.label}/${position} 视口目标 session 未稳定`,
   );
+  const expandedTimelineDetailsCount =
+    (await expandCanonicalTimelineDetails(page)) ?? 0;
   let scroll = null;
   const scrollStartedAt = Date.now();
   while (!scroll && Date.now() - scrollStartedAt < params.options.timeoutMs) {
@@ -512,13 +707,17 @@ export async function inspectImportedConversationVisualState(page, params) {
     }
   }
   assert(scroll, `${viewport.label}/${position} 视口无法滚动消息区域`);
-  await sleep(350);
   let audit = null;
+  let latestAudit = null;
   const auditStartedAt = Date.now();
-  while (!audit && Date.now() - auditStartedAt < params.options.timeoutMs) {
-    audit = await evaluatePageSnapshot(
+  const auditTimeoutMs =
+    typeof params.options.previewTimeoutMs === "number"
+      ? params.options.previewTimeoutMs
+      : params.options.timeoutMs;
+  while (!audit && Date.now() - auditStartedAt < auditTimeoutMs) {
+    const auditSnapshot = await evaluatePageSnapshot(
       page,
-      ({ forbiddenTokens, normalizedSessionTitle }) => {
+      ({ expectedExcerptHtml, expectedMessages, sessionId }) => {
         const bodyText = document.body?.innerText || "";
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
@@ -532,11 +731,29 @@ export async function inspectImportedConversationVisualState(page, params) {
           ) ||
           document.querySelector('[data-testid="message-list-column"]') ||
           document.querySelector('[data-testid="message-list-frame"]');
+        const messageContent =
+          document.querySelector('[data-testid="message-list-column"]') ||
+          messageList;
+        const messageContentText = messageContent?.innerText || "";
+        const messageContentTextLength = messageContentText.trim().length;
+        const messageContentChildCount =
+          messageContent instanceof HTMLElement
+            ? messageContent.childElementCount
+            : 0;
         const importedBanner = document.querySelector(
           '[data-testid="imported-source-banner"]',
         );
         const importedRunControl = document.querySelector(
           '[data-testid="task-center-run-control-imported"]',
+        );
+        const sourceMetadataUi = document.querySelector(
+          [
+            '[data-testid="imported-source-metadata"]',
+            '[data-testid="source-provenance"]',
+            '[data-testid="source-thread-id"]',
+            '[data-testid="source-path"]',
+            "[data-source-provenance]",
+          ].join(","),
         );
         const textareaRect =
           textarea instanceof HTMLElement
@@ -547,8 +764,72 @@ export async function inspectImportedConversationVisualState(page, params) {
             ? messageList.getBoundingClientRect()
             : null;
         const viewportHeight = window.innerHeight;
-        const leakedTokens = forbiddenTokens.filter((token) =>
-          token ? bodyText.includes(token) : false,
+        const normalizedMessageContentText = messageContentText
+          .replace(/\s+/g, " ")
+          .trim();
+        const expectedVisibleMessages = expectedExcerptHtml
+          .map((html, index) => {
+            const parsed = new DOMParser().parseFromString(
+              String(html),
+              "text/html",
+            );
+            const excerpt = (parsed.body?.textContent || "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 80);
+            return {
+              ...(expectedMessages[index] || {}),
+              excerpt,
+            };
+          })
+          .filter((message) => message.excerpt.length > 0);
+        const imageAttachmentCount = Array.from(
+          messageContent?.querySelectorAll(
+            '[data-testid^="message-image-attachment-"]',
+          ) || [],
+        ).filter((element) =>
+          /^message-image-attachment-(?:unavailable-)?\d+$/.test(
+            element.getAttribute("data-testid") || "",
+          ),
+        ).length;
+        const canonicalTimelineDetails = Array.from(
+          messageContent?.querySelectorAll(
+            'details[data-testid^="agent-thread-block:"]',
+          ) || [],
+        ).filter((element) => element instanceof HTMLDetailsElement);
+        const timelineFileAttachmentCardCount =
+          messageContent?.querySelectorAll(
+            '[data-testid="timeline-file-attachment-card"]',
+          ).length || 0;
+        const timelineFileArtifactCardCount =
+          messageContent?.querySelectorAll(
+            '[data-testid="timeline-file-artifact-card"]',
+          ).length || 0;
+        const groupedFileArtifactRowCount =
+          messageContent?.querySelectorAll(
+            '[data-testid="file-changes-summary-file-row"]',
+          ).length || 0;
+        const agentMessageTextParts = Array.from(
+          messageContent?.querySelectorAll(
+            '[data-testid="agent-message-text-part"][data-thread-item-id]',
+          ) || [],
+        );
+        const agentMessageTextPartIds = agentMessageTextParts
+          .map((element) => element.getAttribute("data-thread-item-id") || "")
+          .filter(Boolean);
+        const visibleAgentMessageTextById = Object.fromEntries(
+          agentMessageTextParts.map((element) => [
+            element.getAttribute("data-thread-item-id"),
+            {
+              text: (element.textContent || "")
+                .replace(/\s+/g, " ")
+                .trim()
+                .slice(0, 160),
+              visible: Boolean(
+                element.querySelector("*")?.getClientRects().length,
+              ),
+            },
+          ]),
         );
         return {
           bodyText,
@@ -575,51 +856,116 @@ export async function inspectImportedConversationVisualState(page, params) {
             messageRect.height > 120 &&
             messageRect.bottom > 0 &&
             messageRect.top < viewportHeight,
+          messageContentVisible:
+            messageContentTextLength > 0 && messageContentChildCount > 0,
+          messageContentTextLength,
+          messageContentChildCount,
           importedBannerVisible: Boolean(importedBanner),
           importedRunControlVisible: Boolean(importedRunControl),
+          sourceMetadataUiVisible: Boolean(sourceMetadataUi),
+          turnGroupCount:
+            messageContent?.querySelectorAll(
+              '[data-testid="message-turn-group"]',
+            ).length || 0,
+          userMessageBubbleCount:
+            messageContent?.querySelectorAll('[data-message-role="user"]')
+              .length || 0,
+          assistantMessageBubbleCount:
+            messageContent?.querySelectorAll('[data-message-role="assistant"]')
+              .length || 0,
+          agentMessageTextPartCount: agentMessageTextPartIds.length,
+          uniqueAgentMessageTextPartCount: new Set(agentMessageTextPartIds)
+            .size,
+          toolCallRowCount:
+            messageContent?.querySelectorAll('[data-testid="tool-call-row"]')
+              .length || 0,
+          fileArtifactCardCount:
+            timelineFileAttachmentCardCount +
+            timelineFileArtifactCardCount +
+            groupedFileArtifactRowCount,
+          timelineFileAttachmentCardCount,
+          timelineFileArtifactCardCount,
+          groupedFileArtifactRowCount,
+          imageAttachmentCount,
+          historicalPreviewCount:
+            messageContent?.querySelectorAll(
+              '[data-testid^="message-list-historical-"]',
+            ).length || 0,
+          expectedVisibleMessages,
+          messageComparableText: normalizedMessageContentText,
+          visibleAgentMessageTextById,
+          canonicalTimelineDetailsCount: canonicalTimelineDetails.length,
+          collapsedCanonicalTimelineDetailsCount:
+            canonicalTimelineDetails.filter((detail) => !detail.open).length,
           hasCommandExecutionVisible: Boolean(
-            document.querySelector('[data-testid="tool-call-row"]'),
+            messageContent?.querySelector('[data-testid="tool-call-row"]'),
           ),
           hasPatchText:
-            bodyText.includes("补丁") ||
-            bodyText.includes("Patch") ||
-            bodyText.includes("已编辑") ||
-            (bodyText.includes("lib.rs") && bodyText.includes("打开文件")) ||
-            bodyText.includes("文件变更"),
+            messageContentText.includes("补丁") ||
+            messageContentText.includes("Patch") ||
+            messageContentText.includes("已编辑") ||
+            (messageContentText.includes("lib.rs") &&
+              messageContentText.includes("打开文件")) ||
+            messageContentText.includes("文件变更"),
           hasSearchEvidence:
-            bodyText.includes("搜索") ||
-            bodyText.includes("Search") ||
-            bodyText.includes("web search"),
+            messageContentText.includes("搜索") ||
+            messageContentText.includes("Search") ||
+            messageContentText.includes("web search"),
           hasApprovalText:
-            bodyText.includes("导入的权限记录") ||
-            bodyText.includes("权限记录") ||
-            bodyText.includes("审批") ||
-            bodyText.includes("Approval"),
-          leakedTokens,
+            messageContentText.includes("导入的权限记录") ||
+            messageContentText.includes("权限记录") ||
+            messageContentText.includes("审批") ||
+            messageContentText.includes("Approval"),
           targetSessionVisible:
-            (!normalizedSessionTitle ||
-              bodyText
-                .replace(/\s+/g, " ")
-                .trim()
-                .includes(normalizedSessionTitle)) && Boolean(messageList),
+            textarea instanceof HTMLTextAreaElement &&
+            textarea.getAttribute("data-session-id") === sessionId &&
+            messageContentTextLength > 0,
         };
       },
-      { forbiddenTokens, normalizedSessionTitle },
+      { expectedExcerptHtml, expectedMessages, sessionId },
     );
-    if (!audit) {
+    audit = assessExpectedMessageVisibility(auditSnapshot);
+    latestAudit = audit || latestAudit;
+    const matchesCanonicalReadModel = Boolean(
+      audit?.messageContentVisible &&
+      audit.targetSessionVisible &&
+      audit.missingExpectedExcerpts.length === 0 &&
+      audit.turnGroupCount === expectedCounts.turns &&
+      audit.userMessageBubbleCount === expectedCounts.userMessages &&
+      audit.assistantMessageBubbleCount === expectedCounts.assistantMessages &&
+      audit.agentMessageTextPartCount === expectedCounts.agentMessages &&
+      audit.uniqueAgentMessageTextPartCount === expectedCounts.agentMessages &&
+      audit.toolCallRowCount === expectedCounts.toolCalls &&
+      audit.fileArtifactCardCount === expectedCounts.fileArtifacts &&
+      audit.imageAttachmentCount === expectedCounts.attachments,
+    );
+    if (!matchesCanonicalReadModel) {
+      audit = null;
       await sleep(250);
     }
   }
-  assert(audit, `${viewport.label}/${position} 视口无法采集视觉审计快照`);
-  await page.screenshot({ path: screenshotPath, fullPage: true });
+  audit = audit || latestAudit;
+  if (!audit) {
+    await page
+      .screenshot({ path: screenshotPath, fullPage: false, timeout: 30_000 })
+      .catch(() => undefined);
+    throw new Error(`${viewport.label}/${position} 视口无法读取视觉审计 DOM`);
+  }
+  await page.screenshot({
+    path: screenshotPath,
+    fullPage: false,
+    timeout: 30_000,
+  });
   return {
     label: `${viewport.label}:${position}`,
     viewport,
     position,
     scroll,
+    layout: await inspectConversationChromeLayout(page),
+    expandedTimelineDetailsCount,
     screenshot: screenshotPath,
     ...audit,
-    visibleTextCaptured: audit.bodyTextLength > 0,
+    visibleTextCaptured: audit.messageContentTextLength > 0,
     bodyText: undefined,
   };
 }

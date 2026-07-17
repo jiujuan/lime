@@ -56,6 +56,10 @@ describe("mcp current smoke guard", () => {
     expect(content).toContain("structuredContentEcho");
     expect(content).toContain("structuredContent: {");
     expect(content).toContain("outputSchema: {");
+    expect(content).toContain("runFailureIsolationChecks");
+    expect(content).toContain("missing-mcp-server.mjs");
+    expect(content).toContain("healthyToolCallAfterFailure");
+    expect(content).toContain("healthyResourceReadAfterFailure");
     expect(content).toContain("LEGACY_MCP_COMMANDS");
     expect(content).toContain("summary.legacyMcpCommandsSeen.length === 0");
   });

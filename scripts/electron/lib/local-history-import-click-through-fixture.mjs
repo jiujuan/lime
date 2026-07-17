@@ -20,6 +20,7 @@ export const IMPORTED_ASSISTANT_MARKDOWN_TEXT = [
 ].join("\n");
 export const IMPORTED_ASSISTANT_TEXT = `${IMPORTED_ASSISTANT_SUMMARY_TEXT}\n${IMPORTED_ASSISTANT_MARKDOWN_TEXT}`;
 export const IMPORTED_WEB_SEARCH_TITLE = "Lime Codex Import Rendering Source";
+export const IMPORTED_WEB_SEARCH_QUERY = "Lime history import rendering";
 export const IMPORTED_WEB_SEARCH_URL =
   "https://example.com/lime-codex-import-rendering";
 export const IMPORTED_WEB_SEARCH_SOURCE_LABEL =
@@ -54,6 +55,7 @@ export const REQUIRED_BACKEND_METHODS = [
   "conversationImport/source/scan",
   "conversationImport/thread/preview",
   "conversationImport/thread/commit",
+  "conversationImport/job/read",
   "agentSession/read",
   "agentSession/turn/start",
 ];
@@ -636,8 +638,11 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
         type: "web_search_call",
         id: "call_search",
         call_id: "call_search",
-        action: "search_query",
-        query: "Lime history import rendering",
+        action: {
+          type: "search",
+          query: IMPORTED_WEB_SEARCH_QUERY,
+          queries: [IMPORTED_WEB_SEARCH_QUERY],
+        },
       },
     },
     {
@@ -646,33 +651,35 @@ function writeSourceRolloutFixture(rolloutPath, importedCwd) {
       payload: {
         type: "web_search_end",
         call_id: "call_search",
-        action: "search_query",
-        query: "Lime history import rendering",
-        output: JSON.stringify({
-          results: [
-            {
-              title: "Help",
-              url: "https://help.yahoo.com/kb/search-for-desktop",
-              snippet: "Yahoo search help navigation",
-            },
-            {
-              title: "Sign In",
-              url: "https://login.yahoo.com/?src=search",
-              snippet: "Yahoo sign in navigation",
-            },
-            {
-              title: "Yahoo Scout",
-              url: "https://scout.yahoo.com/search?q=lime",
-              snippet: "Yahoo assistant navigation",
-            },
-            {
-              title: IMPORTED_WEB_SEARCH_TITLE,
-              url: IMPORTED_WEB_SEARCH_URL,
-              snippet:
-                "Imported Codex history source used to verify unified rendering",
-            },
-          ],
-        }),
+        query: IMPORTED_WEB_SEARCH_QUERY,
+        action: {
+          type: "search",
+          query: IMPORTED_WEB_SEARCH_QUERY,
+          queries: [IMPORTED_WEB_SEARCH_QUERY],
+        },
+        results: [
+          {
+            title: "Help",
+            url: "https://help.yahoo.com/kb/search-for-desktop",
+            snippet: "Yahoo search help navigation",
+          },
+          {
+            title: "Sign In",
+            url: "https://login.yahoo.com/?src=search",
+            snippet: "Yahoo sign in navigation",
+          },
+          {
+            title: "Yahoo Scout",
+            url: "https://scout.yahoo.com/search?q=lime",
+            snippet: "Yahoo assistant navigation",
+          },
+          {
+            title: IMPORTED_WEB_SEARCH_TITLE,
+            url: IMPORTED_WEB_SEARCH_URL,
+            snippet:
+              "Imported Codex history source used to verify unified rendering",
+          },
+        ],
       },
     },
     {

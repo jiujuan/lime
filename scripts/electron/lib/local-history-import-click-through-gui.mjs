@@ -25,6 +25,7 @@ import {
   IMPORTED_PREVIEW_XLSX_TEXT,
   IMPORTED_REASONING_TEXT,
   IMPORTED_USER_TEXT,
+  IMPORTED_WEB_SEARCH_QUERY,
   IMPORTED_WEB_SEARCH_SOURCE_LABEL,
   IMPORTED_WEB_SEARCH_TITLE,
   IMPORTED_WEB_SEARCH_URL,
@@ -235,6 +236,53 @@ export async function confirmImport(page, options) {
   );
 }
 
+export async function expandImportedHistoricalTimeline(page, options) {
+  const selector =
+    '[data-testid="message-list-historical-timeline-preview:leading"]';
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    lastSnapshot = await page.evaluate((timelineSelector) => {
+      const preview = document.querySelector(timelineSelector);
+      return {
+        previewVisible: preview instanceof HTMLButtonElement,
+        previewText: preview?.textContent || "",
+      };
+    }, selector);
+    if (!lastSnapshot?.previewVisible) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    await page.locator(selector).click();
+    const detailSelector =
+      'details[data-testid^="agent-thread-block:"]:not([open]) > summary';
+    const detailStartedAt = Date.now();
+    let expandedDetailCount = 0;
+    while (Date.now() - detailStartedAt < Math.min(options.timeoutMs, 15_000)) {
+      const details = page.locator(detailSelector);
+      const count = await details.count();
+      if (count === 0) {
+        if (expandedDetailCount > 0) {
+          break;
+        }
+        await sleep(options.intervalMs);
+        continue;
+      }
+      await details.first().click();
+      expandedDetailCount += 1;
+      await sleep(options.intervalMs);
+    }
+    return {
+      expanded: true,
+      expandedDetailCount,
+      previewText: lastSnapshot.previewText,
+    };
+  }
+  throw new Error(
+    `导入历史过程折叠入口未出现: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+  );
+}
+
 function hasAnyText(snapshot, values) {
   return values.some((value) => snapshot.bodyText.includes(value));
 }
@@ -268,7 +316,8 @@ export function summarizeImportedDetailsSnapshot(
     hasReasoningItem: readModelSummary?.hasReasoningItem === true,
     hasCommandExecutionVisible: bodyText.includes("npm test"),
     hasCommandText:
-      bodyText.includes("npm test") || readModelSummary?.hasCommandItem === true,
+      bodyText.includes("npm test") ||
+      readModelSummary?.hasCommandItem === true,
     hasCommandOutput: bodyText.includes("ok"),
     hasCommandItem: readModelSummary?.hasCommandItem === true,
     hasPatchText: hasPatchEvidenceText(bodyText),
@@ -570,56 +619,54 @@ export async function inspectImportedAttachmentPreview(page, options) {
   };
 }
 
-async function waitForInlineToolFileButton(page, options, fileName) {
-  const selector = `[data-testid="inline-tool-open-file"][data-file-path$="${fileName}"]`;
+async function waitForTimelineToolFileButton(page, options, fileName) {
+  const toolRowSelector = '[data-testid="tool-call-row"]';
   const artifactCardSelector =
     '[data-testid="timeline-file-attachment-card"], [data-testid="timeline-file-artifact-card"]';
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < Math.min(options.timeoutMs, 20_000)) {
     lastSnapshot = await page.evaluate(
-      ({ artifactCardSelector, fileName, selector }) => {
-        const buttons = Array.from(document.querySelectorAll(selector));
-        const artifactCards = Array.from(
-          document.querySelectorAll(artifactCardSelector),
-        ).filter((card) => (card.textContent || "").includes(fileName));
-        const collapsedProcessButtons = Array.from(
-          document.querySelectorAll(
-            '[data-testid="inline-tool-process-step"] button[title="展开过程详情"]',
-          ),
-        );
-        for (const button of collapsedProcessButtons) {
-          button.click();
-        }
-        const inlineSteps = Array.from(
-          document.querySelectorAll('[data-testid="inline-tool-process-step"]'),
-        ).map((step) => ({
-          text: step.textContent || "",
-          buttons: Array.from(step.querySelectorAll("button")).map(
-            (button) => ({
-              testId: button.getAttribute("data-testid") || "",
-              filePath: button.getAttribute("data-file-path") || "",
+      ({ artifactCardSelector, fileName, toolRowSelector }) => {
+        const toolRows = Array.from(
+          document.querySelectorAll(toolRowSelector),
+        ).map((row, index) => ({
+          index,
+          text: row.textContent || "",
+          buttons: Array.from(row.querySelectorAll("button")).map(
+            (button, buttonIndex) => ({
+              index: buttonIndex,
               title: button.getAttribute("title") || "",
               ariaLabel: button.getAttribute("aria-label") || "",
-              text: button.textContent || "",
             }),
           ),
         }));
+        const matchingToolRow = toolRows.find((row) =>
+          row.text.includes(fileName),
+        );
+        const openButton = matchingToolRow?.buttons.find((button) =>
+          /(?:画布|canvas)/i.test(`${button.title}\n${button.ariaLabel}`),
+        );
+        const artifactCards = Array.from(
+          document.querySelectorAll(artifactCardSelector),
+        ).filter((card) => (card.textContent || "").includes(fileName));
         return {
-          count: buttons.length,
+          matchingToolRow,
+          openButton,
           artifactCardCount: artifactCards.length,
-          expandedProcessCount: collapsedProcessButtons.length,
-          paths: buttons
-            .map((button) => button.getAttribute("data-file-path") || "")
-            .filter(Boolean),
-          inlineSteps,
+          toolRows,
           bodyText: document.body?.innerText || "",
         };
       },
-      { artifactCardSelector, fileName, selector },
+      { artifactCardSelector, fileName, toolRowSelector },
     );
-    if (lastSnapshot.count > 0) {
-      return { kind: "inline", selector };
+    if (lastSnapshot.matchingToolRow && lastSnapshot.openButton) {
+      return {
+        kind: "timeline-tool",
+        selector: toolRowSelector,
+        rowIndex: lastSnapshot.matchingToolRow.index,
+        buttonIndex: lastSnapshot.openButton.index,
+      };
     }
     if (lastSnapshot.artifactCardCount > 0) {
       return { kind: "artifact-card", selector: artifactCardSelector };
@@ -636,6 +683,8 @@ async function waitForInlineToolFileButton(page, options, fileName) {
 async function waitForWorkbenchFilePreview(page, options, expected) {
   const startedAt = Date.now();
   let result = null;
+  const selectionHistory = [];
+  let lastSelectionSignature = "";
   while (Date.now() - startedAt < Math.min(options.timeoutMs, 20_000)) {
     result = await page.evaluate((expectedFileName) => {
       const artifactWorkbench = document.querySelector(
@@ -673,19 +722,48 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
         canvasWorkbenchLayout?.textContent ||
         previewPanelText ||
         "";
-      const inlineFileButtons = Array.from(
-        document.querySelectorAll('[data-testid="inline-tool-open-file"]'),
-      ).map((button) => ({
-        filePath: button.getAttribute("data-file-path") || "",
-        title: button.getAttribute("title") || "",
-        ariaLabel: button.getAttribute("aria-label") || "",
-        text: button.textContent || "",
+      const canvasWorkbenchDataset =
+        canvasWorkbench instanceof HTMLElement
+          ? { ...canvasWorkbench.dataset }
+          : {};
+      const timelineToolRows = Array.from(
+        document.querySelectorAll('[data-testid="tool-call-row"]'),
+      ).map((row) => ({
+        text: row.textContent || "",
+        buttons: Array.from(row.querySelectorAll("button")).map((button) => ({
+          title: button.getAttribute("title") || "",
+          ariaLabel: button.getAttribute("aria-label") || "",
+        })),
       }));
-      const matchingInlineFileButtons = inlineFileButtons.filter((button) =>
-        button.filePath.endsWith(expectedFileName),
+      const matchingTimelineToolRows = timelineToolRows.filter((row) =>
+        row.text.includes(expectedFileName),
       );
       const traceRaw =
         window.localStorage.getItem("lime_invoke_trace_buffer_v1") || "";
+      const errorRaw =
+        window.localStorage.getItem("lime_invoke_error_buffer_v1") || "";
+      const readJsonArray = (raw) => {
+        try {
+          const value = JSON.parse(raw || "[]");
+          return Array.isArray(value) ? value : [];
+        } catch {
+          return [];
+        }
+      };
+      const filePreviewTraceEntries = readJsonArray(traceRaw)
+        .filter(
+          (entry) =>
+            JSON.stringify(entry).includes("fileSystem/readFilePreview") &&
+            JSON.stringify(entry).includes(expectedFileName),
+        )
+        .slice(-4);
+      const filePreviewInvokeErrors = readJsonArray(errorRaw)
+        .filter(
+          (entry) =>
+            JSON.stringify(entry).includes("fileSystem/readFilePreview") &&
+            JSON.stringify(entry).includes(expectedFileName),
+        )
+        .slice(-4);
       return {
         bodyText,
         workbenchVisible: Boolean(
@@ -696,6 +774,7 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
         ),
         workbenchText,
         previewPanelText,
+        canvasWorkbenchDataset,
         artifactWorkbenchVisible: Boolean(artifactWorkbench),
         canvasWorkbenchVisible: Boolean(canvasWorkbench),
         canvasWorkbenchLayoutVisible: Boolean(canvasWorkbenchLayout),
@@ -712,14 +791,32 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
           htmlPreview instanceof HTMLIFrameElement ? htmlPreview.src : "",
         htmlPreviewSrcDoc:
           htmlPreview instanceof HTMLIFrameElement ? htmlPreview.srcdoc : "",
-        inlineFileButtons,
-        matchingInlineFileButtons,
+        timelineToolRows,
+        matchingTimelineToolRows,
         traceHasFileSystemReadFilePreview: traceRaw.includes(
           "fileSystem/readFilePreview",
         ),
         traceHasExpectedFile: traceRaw.includes(expectedFileName),
+        filePreviewTraceEntries,
+        filePreviewInvokeErrors,
       };
     }, expected.fileName);
+    const selectionState = {
+      canvasWorkbenchDataset: result.canvasWorkbenchDataset,
+      previewPanelText: result.previewPanelText,
+      markdownPreviewVisible: result.markdownPreviewVisible,
+      htmlPreviewVisible: result.htmlPreviewVisible,
+      fallbackSurfaceVisible: result.fallbackSurfaceVisible,
+    };
+    const selectionSignature = JSON.stringify(selectionState);
+    if (selectionSignature !== lastSelectionSignature) {
+      selectionHistory.push({
+        elapsedMs: Date.now() - startedAt,
+        ...selectionState,
+      });
+      lastSelectionSignature = selectionSignature;
+    }
+    result.selectionHistory = selectionHistory;
     if (
       result.workbenchVisible &&
       result.previewPanelVisible &&
@@ -765,13 +862,18 @@ async function waitForWorkbenchFilePreview(page, options, expected) {
 }
 
 async function clickImportedToolFilePreview(page, options, expected) {
-  const selector = await waitForInlineToolFileButton(
+  const selector = await waitForTimelineToolFileButton(
     page,
     options,
     expected.fileName,
   );
-  if (selector.kind === "inline") {
-    await page.locator(selector.selector).first().click();
+  if (selector.kind === "timeline-tool") {
+    await page
+      .locator(selector.selector)
+      .nth(selector.rowIndex)
+      .locator("button")
+      .nth(selector.buttonIndex)
+      .click();
   } else {
     await page
       .locator(selector.selector)
@@ -945,6 +1047,7 @@ async function inspectImportedSessionVisualViewport(
       importedUserText,
       importedAssistantText,
       importedMarkdownHeadingText,
+      importedWebSearchQuery,
       importedWebSearchSourceLabel,
       importedWebSearchTitle,
       importedWebSearchUrl,
@@ -981,6 +1084,37 @@ async function inspectImportedSessionVisualViewport(
         messageList instanceof HTMLElement
           ? messageList.getBoundingClientRect()
           : null;
+      const compactModeControl = document.querySelector(
+        '[data-testid="layout-compact-mode-bar"] [role="tablist"]',
+      );
+      const compactModeControlRect =
+        compactModeControl instanceof HTMLElement
+          ? compactModeControl.getBoundingClientRect()
+          : null;
+      const compactModeControlOverlapsOtherButton = Boolean(
+        compactModeControlRect &&
+        compactModeControlRect.width > 0 &&
+        compactModeControlRect.height > 0 &&
+        Array.from(document.querySelectorAll("button")).some((button) => {
+          if (
+            compactModeControl.contains(button) ||
+            !button.isConnected ||
+            button.hidden
+          ) {
+            return false;
+          }
+          const rect = button.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) {
+            return false;
+          }
+          return (
+            rect.left < compactModeControlRect.right &&
+            rect.right > compactModeControlRect.left &&
+            rect.top < compactModeControlRect.bottom &&
+            rect.bottom > compactModeControlRect.top
+          );
+        }),
+      );
       const forbiddenMainTexts = [
         "imported_read_only",
         "thread-codex",
@@ -1007,23 +1141,33 @@ async function inspectImportedSessionVisualViewport(
       ];
       const headingVisible = Array.from(
         document.querySelectorAll("h1,h2,h3,h4,h5,h6"),
-      ).some((node) => (node.textContent || "").includes(importedMarkdownHeadingText));
+      ).some((node) =>
+        (node.textContent || "").includes(importedMarkdownHeadingText),
+      );
       const strongTexts = Array.from(document.querySelectorAll("strong")).map(
         (node) => node.textContent || "",
       );
-      const processGroupTexts = Array.from(
-        document.querySelectorAll('[data-testid="streaming-process-group"]'),
-      ).map((node) => node.textContent || "");
-      const processGroupText = processGroupTexts.join("\n");
-      const searchProcessGroupText =
-        processGroupTexts.find(
-          (text) =>
-            text.includes("已搜索网页") ||
-            text.includes("正在搜索网页") ||
-            text.includes("Search") ||
-            text.includes("web search"),
-        ) || "";
-      const searchRegionText = searchProcessGroupText || bodyText;
+      const timelineProcessBlocks = Array.from(
+        document.querySelectorAll(
+          'details[data-testid^="agent-thread-block:"][data-testid$=":process"]',
+        ),
+      );
+      const searchToolContainer = Array.from(
+        document.querySelectorAll('[data-testid="tool-call-row"]'),
+      )
+        .map((row) => row.parentElement)
+        .find((container) =>
+          (container?.textContent || "").includes(importedWebSearchQuery),
+        );
+      const searchRegionText = searchToolContainer?.textContent || "";
+      const importedContextTexts = [
+        importedWebSearchTitle,
+        importedWebSearchSourceLabel,
+      ].filter(Boolean);
+      const bodyTextWithoutImportedContext = importedContextTexts.reduce(
+        (text, allowedText) => text.split(allowedText).join(""),
+        bodyText,
+      );
       return {
         viewportWidth,
         viewportHeight,
@@ -1043,10 +1187,8 @@ async function inspectImportedSessionVisualViewport(
         hasImportedSearchResult:
           searchRegionText.includes(importedWebSearchTitle) ||
           searchRegionText.includes(importedWebSearchSourceLabel),
-        searchProcessGroupVisible:
-          processGroupText.includes("搜索") ||
-          processGroupText.includes("Search") ||
-          processGroupText.includes("web search"),
+        searchTimelineVisible:
+          timelineProcessBlocks.length > 0 && Boolean(searchToolContainer),
         searchNoiseVisible:
           Boolean(searchRegionText) &&
           searchNoiseTexts.some((text) => searchRegionText.includes(text)),
@@ -1067,10 +1209,7 @@ async function inspectImportedSessionVisualViewport(
           (bodyText.includes("src/lib.rs") ||
             bodyText.includes("lib.rs") ||
             bodyText.includes("文件")),
-        hasSearchEvidence:
-          bodyText.includes("搜索") ||
-          bodyText.includes("Search") ||
-          bodyText.includes("web search"),
+        hasSearchEvidence: searchRegionText.includes(importedWebSearchQuery),
         hasApprovalText:
           bodyText.includes("导入的权限记录") ||
           bodyText.includes("已导入，只读记录") ||
@@ -1097,10 +1236,18 @@ async function inspectImportedSessionVisualViewport(
           messageRect.height > 120 &&
           messageRect.bottom > 0 &&
           messageRect.top < viewportHeight,
+        compactModeControlVisible: Boolean(
+          compactModeControlRect &&
+          compactModeControlRect.width > 0 &&
+          compactModeControlRect.height > 0,
+        ),
+        compactModeControlOverlapsOtherButton,
         hidesRawImportedCommand: !forbiddenMainTexts.some((text) =>
           bodyText.includes(text),
         ),
-        hidesSourceBrandText: !/\bcodex\b/i.test(bodyText),
+        hidesSourceBrandText: !/\bcodex\b/i.test(
+          bodyTextWithoutImportedContext,
+        ),
         missingRequiredTexts: requiredTexts.filter(
           (text) => !bodyText.includes(text),
         ),
@@ -1113,6 +1260,7 @@ async function inspectImportedSessionVisualViewport(
       importedWebSearchSourceLabel: IMPORTED_WEB_SEARCH_SOURCE_LABEL,
       importedWebSearchTitle: IMPORTED_WEB_SEARCH_TITLE,
       importedWebSearchUrl: IMPORTED_WEB_SEARCH_URL,
+      importedWebSearchQuery: IMPORTED_WEB_SEARCH_QUERY,
       importedReasoningText: IMPORTED_REASONING_TEXT,
       continueUserText: CONTINUE_USER_TEXT,
       continueAssistantText: CONTINUE_ASSISTANT_TEXT,
@@ -1171,8 +1319,12 @@ export async function collectImportedSessionVisualAudit(
       `${viewport.label} 视口暴露了导入原始 Markdown 语法`,
     );
     assert(
-      audit.searchProcessGroupVisible || audit.hasSearchEvidence,
-      `${viewport.label} 视口缺少导入搜索过程组`,
+      audit.searchTimelineVisible,
+      `${viewport.label} 视口缺少 canonical timeline 搜索工具行`,
+    );
+    assert(
+      audit.hasImportedSearchResult,
+      `${viewport.label} 视口缺少导入搜索结果来源`,
     );
     assert(
       !audit.searchNoiseVisible,
@@ -1215,6 +1367,10 @@ export async function collectImportedSessionVisualAudit(
     );
     assert(audit.messageListVisible, `${viewport.label} 视口消息列表不可见`);
     assert(
+      !audit.compactModeControlOverlapsOtherButton,
+      `${viewport.label} 视口聊天/工作台模式控件与其他按钮重叠`,
+    );
+    assert(
       audit.hidesRawImportedCommand,
       `${viewport.label} 视口暴露了原始导入命令或内部字段`,
     );
@@ -1227,75 +1383,85 @@ export async function collectImportedSessionVisualAudit(
   return audits;
 }
 
-async function expandImportedSearchProcessGroup(page, options) {
+async function expandImportedSearchToolResult(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < Math.min(options.timeoutMs, 15_000)) {
-    lastSnapshot = await page.evaluate(() => {
-      const groups = Array.from(
-        document.querySelectorAll('[data-testid="streaming-process-group"]'),
-      ).map((group, index) => {
-        const buttons = Array.from(group.querySelectorAll("button")).map(
+    lastSnapshot = await page.evaluate((importedWebSearchQuery) => {
+      const rows = Array.from(
+        document.querySelectorAll('[data-testid="tool-call-row"]'),
+      ).map((row, index) => {
+        const container = row.parentElement;
+        const buttons = Array.from(row.querySelectorAll("button")).map(
           (button, buttonIndex) => ({
             index: buttonIndex,
-            text: button.textContent || "",
-            ariaExpanded: button.getAttribute("aria-expanded"),
+            title: button.getAttribute("title") || "",
+            ariaLabel: button.getAttribute("aria-label") || "",
           }),
         );
         return {
           index,
-          text: group.textContent || "",
+          rowText: row.textContent || "",
+          containerText: container?.textContent || "",
           buttons,
         };
       });
-      return { groups };
-    });
-    const searchGroup = lastSnapshot.groups.find((group) =>
-      group.text.includes("已搜索网页") ||
-      group.text.includes("正在搜索网页") ||
-      group.text.includes("Search") ||
-      group.text.includes("web search"),
+      return {
+        processBlockCount: document.querySelectorAll(
+          'details[data-testid^="agent-thread-block:"][data-testid$=":process"]',
+        ).length,
+        rows,
+        importedWebSearchQuery,
+      };
+    }, IMPORTED_WEB_SEARCH_QUERY);
+    const searchRow = lastSnapshot.rows.find((row) =>
+      row.containerText.includes(IMPORTED_WEB_SEARCH_QUERY),
     );
-    if (!searchGroup) {
+    if (!searchRow) {
       await sleep(options.intervalMs);
       continue;
     }
-    const toggleButton = searchGroup.buttons.find(
-      (button) => button.ariaExpanded !== null,
+    if (
+      searchRow.containerText.includes(IMPORTED_WEB_SEARCH_TITLE) ||
+      searchRow.containerText.includes(IMPORTED_WEB_SEARCH_SOURCE_LABEL)
+    ) {
+      return {
+        expanded: true,
+        reason: "already-expanded",
+        rowIndex: searchRow.index,
+        rowText: searchRow.rowText,
+      };
+    }
+    const toggleButton = searchRow.buttons.find((button) =>
+      /(?:结果|result)/i.test(`${button.title}\n${button.ariaLabel}`),
     );
     if (!toggleButton) {
       return {
         expanded: false,
-        reason: "search-group-has-no-toggle",
-        groupIndex: searchGroup.index,
-        groupText: searchGroup.text,
-      };
-    }
-    if (toggleButton.ariaExpanded === "true") {
-      return {
-        expanded: true,
-        reason: "already-expanded",
-        groupIndex: searchGroup.index,
-        buttonIndex: toggleButton.index,
-        groupText: searchGroup.text,
+        reason: "search-tool-row-has-no-result-toggle",
+        rowIndex: searchRow.index,
+        rowText: searchRow.rowText,
+        buttons: searchRow.buttons,
       };
     }
     await page
-      .locator('[data-testid="streaming-process-group"]')
-      .nth(searchGroup.index)
+      .locator('[data-testid="tool-call-row"]')
+      .nth(searchRow.index)
       .locator("button")
       .nth(toggleButton.index)
       .click();
     return {
       expanded: true,
       reason: "clicked",
-      groupIndex: searchGroup.index,
+      rowIndex: searchRow.index,
       buttonIndex: toggleButton.index,
-      groupText: searchGroup.text,
+      rowText: searchRow.rowText,
     };
   }
   throw new Error(
-    `未找到导入搜索过程组: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+    `未找到 canonical timeline 导入搜索工具行: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
   );
 }
 
@@ -1309,7 +1475,7 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
       current.bodyText.includes(IMPORTED_ASSISTANT_SUMMARY_TEXT),
     "导入会话页未稳定，无法检查 Markdown 与搜索渲染",
   );
-  const searchGroupExpansion = await expandImportedSearchProcessGroup(
+  const searchToolExpansion = await expandImportedSearchToolResult(
     page,
     options,
   );
@@ -1318,6 +1484,7 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
     ({
       importedMarkdownHeadingText,
       importedWebSearchTitle,
+      importedWebSearchQuery,
       importedWebSearchSourceLabel,
       importedWebSearchUrl,
     }) => {
@@ -1328,21 +1495,24 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
       const strongTexts = Array.from(document.querySelectorAll("strong")).map(
         (node) => node.textContent || "",
       );
-      const processGroupTexts = Array.from(
-        document.querySelectorAll('[data-testid="streaming-process-group"]'),
-      ).map((node) => node.textContent || "");
-      const processGroupText = processGroupTexts.join("\n");
-      const searchProcessGroupText =
-        processGroupTexts.find(
-          (text) =>
-            text.includes("已搜索网页") ||
-            text.includes("正在搜索网页") ||
-            text.includes("Search") ||
-            text.includes("web search"),
-        ) || "";
-      const inlineToolText = Array.from(
-        document.querySelectorAll('[data-testid="inline-tool-process-step"]'),
-      )
+      const timelineProcessBlocks = Array.from(
+        document.querySelectorAll(
+          'details[data-testid^="agent-thread-block:"][data-testid$=":process"]',
+        ),
+      );
+      const timelineProcessText = timelineProcessBlocks
+        .map((node) => node.textContent || "")
+        .join("\n");
+      const toolRows = Array.from(
+        document.querySelectorAll('[data-testid="tool-call-row"]'),
+      );
+      const searchToolContainer = toolRows
+        .map((row) => row.parentElement)
+        .find((container) =>
+          (container?.textContent || "").includes(importedWebSearchQuery),
+        );
+      const searchTimelineText = searchToolContainer?.textContent || "";
+      const toolRowText = toolRows
         .map((node) => node.textContent || "")
         .join("\n");
       const rawMarkdownTexts = [
@@ -1362,8 +1532,8 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
         snapshotTextLength: bodyText.length,
         headings,
         strongTexts,
-        processGroupText,
-        inlineToolText,
+        timelineProcessText,
+        toolRowText,
         markdownHeadingVisible: headings.some((text) =>
           text.includes(importedMarkdownHeadingText),
         ),
@@ -1377,22 +1547,22 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
           bodyText.includes(text),
         ),
         hasImportedSearchResult:
-          searchProcessGroupText.includes(importedWebSearchTitle) ||
-          searchProcessGroupText.includes(importedWebSearchSourceLabel),
-        searchProcessGroupVisible:
-          processGroupText.includes("搜索") ||
-          processGroupText.includes("Search") ||
-          processGroupText.includes("web search"),
+          searchTimelineText.includes(importedWebSearchTitle) ||
+          searchTimelineText.includes(importedWebSearchSourceLabel),
+        searchTimelineVisible:
+          timelineProcessBlocks.length > 0 && Boolean(searchToolContainer),
+        searchQueryVisible: searchTimelineText.includes(importedWebSearchQuery),
         searchNoiseVisible: searchNoiseTexts.some((text) =>
-          searchProcessGroupText.includes(text),
+          searchTimelineText.includes(text),
         ),
         hasFullSearchUrlVisible:
-          searchProcessGroupText.includes(importedWebSearchUrl),
+          searchTimelineText.includes(importedWebSearchUrl),
       };
     },
     {
       importedMarkdownHeadingText: IMPORTED_MARKDOWN_HEADING_TEXT,
       importedWebSearchTitle: IMPORTED_WEB_SEARCH_TITLE,
+      importedWebSearchQuery: IMPORTED_WEB_SEARCH_QUERY,
       importedWebSearchSourceLabel: IMPORTED_WEB_SEARCH_SOURCE_LABEL,
       importedWebSearchUrl: IMPORTED_WEB_SEARCH_URL,
     },
@@ -1427,8 +1597,14 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
     `导入搜索结果未展示有效来源: ${JSON.stringify(sanitizeJson(rendering))}`,
   );
   assert(
-    rendering.searchProcessGroupVisible,
-    `导入搜索过程未按过程组展示: ${JSON.stringify(sanitizeJson(rendering))}`,
+    rendering.searchTimelineVisible,
+    `导入搜索过程未进入 canonical timeline: ${JSON.stringify(
+      sanitizeJson(rendering),
+    )}`,
+  );
+  assert(
+    rendering.searchQueryVisible,
+    `导入搜索过程未展示真实 query: ${JSON.stringify(sanitizeJson(rendering))}`,
   );
   assert(
     !rendering.searchNoiseVisible,
@@ -1443,7 +1619,7 @@ export async function inspectImportedMarkdownAndSearchRendering(page, options) {
 
   return {
     ...rendering,
-    searchGroupExpansion,
+    searchToolExpansion,
     snapshotUrl: snapshot.url,
   };
 }

@@ -11,19 +11,37 @@ import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-a
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 import {
   APP_SERVER_HANDLE_JSON_LINES_COMMAND,
-  LEGACY_MCP_COMMANDS,
   sanitizeJson,
   writeJsonFile,
 } from "../mcp/lib/current-smoke-transport.mjs";
+import {
+  CONTEXT7_CONFIG_URL,
+  CONTEXT7_ENV_VAR_NAME,
+  CONTEXT7_HEADER_NAME,
+  CONTEXT7_PRESET_NAME,
+  MCP_CREATE_LIST_REQUIRED_METHODS,
+  applyFailedMcpSettingsScenarioEvidence,
+  applyPassingMcpSettingsScenarioEvidence,
+  assertContext7Server,
+  assertMcpElectronEvidence,
+  createMcpSettingsScenarioEvidence,
+  parseMcpConfigFixtureArgs,
+  parseInvokeTraceRaw,
+  summarizeContext7Server,
+  summarizeMcpElectronEvidence,
+} from "./lib/mcp-config-fixture-evidence.mjs";
+
+export {
+  assertContext7Server,
+  getServerConfig,
+  parseInvokeTraceRaw,
+  parseJsonRpcRequestsFromInvokeTrace,
+  summarizeContext7Server,
+} from "./lib/mcp-config-fixture-evidence.mjs";
 
 const DEFAULTS = {
-  evidenceDir: path.join(
-    process.cwd(),
-    ".lime",
-    "qc",
-    "gui-evidence",
-    "mcp-config-fixture",
-  ),
+  runId: process.env.LIME_GATE_RUN_ID?.trim() || null,
+  evidenceDir: null,
   prefix: "mcp-config-fixture",
   timeoutMs: 120_000,
   intervalMs: 250,
@@ -31,11 +49,6 @@ const DEFAULTS = {
 };
 
 const LOG_PREFIX = "[smoke:mcp-config-fixture]";
-const CONTEXT7_PRESET_NAME = "Context7";
-const CONTEXT7_CONFIG_URL = "https://mcp.context7.com/v1/mcp";
-const CONTEXT7_HEADER_NAME = "CONTEXT7_API_KEY";
-const CONTEXT7_ENV_VAR_NAME = "CONTEXT7_API_KEY_LIVE";
-const REQUIRED_METHODS = ["mcpServer/create", "mcpServer/list"];
 
 function printHelp() {
   console.log(`
@@ -50,61 +63,12 @@ MCP Config Electron Fixture Smoke
   不读取或写入真实 key，不使用 mock backend / renderer fallback / 旧 MCP facade。
 
 用法:
-  node scripts/electron/mcp-config-fixture-smoke.mjs
+  node scripts/electron/mcp-config-fixture-smoke.mjs --run-id <project-gate-run-id>
 
 选项:
-  --evidence-dir <path> --prefix <name> --timeout-ms <ms>
+  --run-id <id> --evidence-dir <path> --prefix <name> --timeout-ms <ms>
   --interval-ms <ms> --keep-temp -h|--help
 `);
-}
-
-function parseArgs(argv) {
-  const options = { ...DEFAULTS };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = argv[index + 1];
-    if (arg === "-h" || arg === "--help") {
-      printHelp();
-      process.exit(0);
-    }
-    if (arg === "--evidence-dir" && next) {
-      options.evidenceDir = path.resolve(next.trim());
-      index += 1;
-      continue;
-    }
-    if (arg === "--prefix" && next) {
-      options.prefix = next.trim();
-      index += 1;
-      continue;
-    }
-    if (arg === "--timeout-ms" && next) {
-      options.timeoutMs = Number(next);
-      index += 1;
-      continue;
-    }
-    if (arg === "--interval-ms" && next) {
-      options.intervalMs = Number(next);
-      index += 1;
-      continue;
-    }
-    if (arg === "--keep-temp") {
-      options.keepTemp = true;
-      continue;
-    }
-    throw new Error(`未知参数: ${arg}`);
-  }
-
-  if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 30_000) {
-    throw new Error("--timeout-ms 必须是 >= 30000 的数字");
-  }
-  if (!Number.isFinite(options.intervalMs) || options.intervalMs < 100) {
-    throw new Error("--interval-ms 必须是 >= 100 的数字");
-  }
-  if (!options.evidenceDir || !options.prefix) {
-    throw new Error("--evidence-dir / --prefix 均不能为空");
-  }
-  return options;
 }
 
 export function sleep(ms) {
@@ -169,19 +133,6 @@ export function createTempRuntimeEnv() {
       LOCALAPPDATA: localAppData,
     },
   };
-}
-
-function parseJsonRpcLine(line) {
-  const trimmed = String(line || "").trim();
-  if (!trimmed) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(trimmed);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
 }
 
 function isTransientPageEvaluationError(error) {
@@ -252,6 +203,7 @@ export async function launchElectronFixture({
   runtimeEnv,
   appServerEnv,
   consoleErrors,
+  pageErrors = [],
   backendMode = "unavailable",
 }) {
   const app = await electron.launch({
@@ -278,6 +230,9 @@ export async function launchElectronFixture({
   });
 
   const page = await app.firstWindow({ timeout: options.timeoutMs });
+  page.on("pageerror", (error) => {
+    pageErrors.push(sanitizeText(error.message));
+  });
   page.setDefaultTimeout(options.timeoutMs);
   await page.setViewportSize({ width: 1440, height: 1000 });
   const rendererSnapshot = await waitForRendererReady(page, options);
@@ -312,6 +267,20 @@ export async function waitForPageCondition(
 }
 
 export async function openMcpConfigSettings(page, options) {
+  await openSettings(page, options);
+  await page.locator('[data-testid="settings-sidebar-tab-mcp-server"]').click();
+  await page.locator('[data-testid="mcp-panel-tab-config"]').waitFor({
+    state: "visible",
+    timeout: Math.min(45_000, options.timeoutMs),
+  });
+  await page.locator('[data-testid="mcp-panel-tab-config"]').click();
+  await page.locator('[data-testid="mcp-config-page"]').waitFor({
+    state: "visible",
+    timeout: Math.min(45_000, options.timeoutMs),
+  });
+}
+
+export async function openSettings(page, options) {
   await page.locator('[data-testid="app-sidebar-account-button"]').click();
   await page.locator('[data-testid="app-sidebar-account-menu"]').waitFor({
     state: "visible",
@@ -339,16 +308,6 @@ export async function openMcpConfigSettings(page, options) {
   assert(clicked, "未找到账号菜单里的模型设置入口");
 
   await page.locator('[data-testid="settings-top-header"]').waitFor({
-    state: "visible",
-    timeout: Math.min(45_000, options.timeoutMs),
-  });
-  await page.locator('[data-testid="settings-sidebar-tab-mcp-server"]').click();
-  await page.locator('[data-testid="mcp-panel-tab-config"]').waitFor({
-    state: "visible",
-    timeout: Math.min(45_000, options.timeoutMs),
-  });
-  await page.locator('[data-testid="mcp-panel-tab-config"]').click();
-  await page.locator('[data-testid="mcp-config-page"]').waitFor({
     state: "visible",
     timeout: Math.min(45_000, options.timeoutMs),
   });
@@ -464,47 +423,6 @@ export async function appServerCallFromPage(page, method, params = {}) {
   );
 }
 
-export function parseInvokeTraceRaw(raw) {
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export function parseJsonRpcRequestsFromInvokeTrace(raw) {
-  const entries = parseInvokeTraceRaw(raw);
-  const requests = [];
-  for (const entry of entries) {
-    if (entry?.command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
-      continue;
-    }
-    const lines = entry?.args_preview?.request?.lines;
-    if (!Array.isArray(lines)) {
-      continue;
-    }
-    for (const line of lines) {
-      const parsed = parseJsonRpcLine(line);
-      if (parsed?.method) {
-        requests.push({
-          command: entry.command,
-          transport: entry.transport ?? null,
-          status: entry.status ?? null,
-          durationMs: entry.duration_ms ?? null,
-          id: parsed.id ?? null,
-          method: parsed.method,
-          params: parsed.params ?? {},
-        });
-      }
-    }
-  }
-  return requests;
-}
-
 export async function waitForContext7Server(page, options) {
   const startedAt = Date.now();
   let lastResult = null;
@@ -521,100 +439,14 @@ export async function waitForContext7Server(page, options) {
   throw new Error("mcpServer/list 未读回 GUI 保存的 Context7 配置");
 }
 
-export function getServerConfig(server) {
-  return server?.server_config ?? server?.serverConfig ?? null;
-}
-
-export function summarizeElectronEvidence({ listResult, traceRaw }) {
-  const requests = parseJsonRpcRequestsFromInvokeTrace(traceRaw);
-  const methods = Array.from(
-    new Set(
-      [listResult?.method, ...requests.map((request) => request.method)].filter(
-        Boolean,
-      ),
-    ),
-  );
-  const commands = Array.from(
-    new Set(
-      parseInvokeTraceRaw(traceRaw)
-        .map((entry) => entry?.command)
-        .filter(Boolean),
-    ),
-  );
-  return {
-    appServerHandleJsonLinesSeen: commands.includes(
-      APP_SERVER_HANDLE_JSON_LINES_COMMAND,
-    ),
-    requestMethods: methods,
-    missingRequiredMethods: REQUIRED_METHODS.filter(
-      (method) => !methods.includes(method),
-    ),
-    legacyMcpCommandsSeen: LEGACY_MCP_COMMANDS.filter((command) =>
-      commands.includes(command),
-    ),
-    requests,
-  };
-}
-
-export function assertContext7Server(
-  server,
-  { configUrl = CONTEXT7_CONFIG_URL, envVarName = CONTEXT7_ENV_VAR_NAME } = {},
-) {
-  const config = getServerConfig(server);
-  assert(config && typeof config === "object", "Context7 未返回 server_config");
-  assert(
-    config.transport === "streamable_http",
-    `Context7 transport 不正确: ${config.transport}`,
-  );
-  assert(config.url === configUrl, `Context7 URL 未落库: ${config.url}`);
-  assert(
-    config.env_http_headers?.[CONTEXT7_HEADER_NAME] === envVarName,
-    "Context7 env_http_headers 未保存 header -> env var 引用",
-  );
-  assert(
-    Number(config.tool_timeout) === 60,
-    `Context7 tool_timeout 不正确: ${config.tool_timeout}`,
-  );
-}
-
-export function assertElectronEvidence(evidence) {
-  assert(
-    evidence.appServerHandleJsonLinesSeen,
-    "未观察到 app_server_handle_json_lines",
-  );
-  assert(
-    evidence.missingRequiredMethods.length === 0,
-    `缺少 App Server current method: ${evidence.missingRequiredMethods.join(", ")}`,
-  );
-  assert(
-    evidence.legacyMcpCommandsSeen.length === 0,
-    `观察到 legacy MCP 命令: ${evidence.legacyMcpCommandsSeen.join(", ")}`,
-  );
-}
-
-export function summarizeContext7Server(server) {
-  const config = getServerConfig(server);
-  return {
-    id: server?.id ?? null,
-    name: server?.name ?? null,
-    description: server?.description ?? null,
-    enabled_lime: server?.enabled_lime ?? server?.enabledLime ?? null,
-    transport: config?.transport ?? null,
-    urlHost: (() => {
-      try {
-        return new URL(String(config?.url || "")).host;
-      } catch {
-        return null;
-      }
-    })(),
-    envHttpHeaderNames: Object.keys(config?.env_http_headers ?? {}),
-    envHttpHeaderEnvVars: Object.values(config?.env_http_headers ?? {}),
-    tool_timeout: config?.tool_timeout ?? null,
-  };
-}
-
 export async function run() {
-  const options = parseArgs(process.argv.slice(2));
+  const options = parseMcpConfigFixtureArgs(process.argv.slice(2), {
+    defaults: DEFAULTS,
+  });
+  if (options.help) {
+    printHelp();
+    return;
+  }
   fs.mkdirSync(options.evidenceDir, { recursive: true });
 
   const summaryPath = path.join(
@@ -648,6 +480,11 @@ export async function run() {
   });
 
   const summary = {
+    ...createMcpSettingsScenarioEvidence({
+      candidateRunId: options.runId,
+      startedAt: new Date().toISOString(),
+      prefix: options.prefix,
+    }),
     ok: false,
     checkedAt: new Date().toISOString(),
     backendMode: "unavailable",
@@ -672,17 +509,18 @@ export async function run() {
     context7Server: null,
     appServerHandleJsonLinesSeen: false,
     electronRequestMethods: [],
-    missingRequiredMethods: [...REQUIRED_METHODS],
+    missingRequiredMethods: [...MCP_CREATE_LIST_REQUIRED_METHODS],
     legacyMcpCommandsSeen: [],
     consoleErrors: [],
     screenshot: null,
-    rawEvidence: rawEvidencePath,
-    summary: summaryPath,
+    rawEvidence: `${options.prefix}-raw.json`,
+    summary: `${options.prefix}-summary.json`,
   };
 
   let app = null;
   let page = null;
   const consoleErrors = [];
+  const pageErrors = [];
   const rawEvidence = {};
 
   try {
@@ -692,6 +530,7 @@ export async function run() {
       runtimeEnv,
       appServerEnv,
       consoleErrors,
+      pageErrors,
     });
     app = handle.app;
     page = handle.page;
@@ -712,16 +551,20 @@ export async function run() {
     summary.context7Server = summarizeContext7Server(server);
     rawEvidence.mcpServerList = sanitizeJson(listResult);
 
-    const evidence = summarizeElectronEvidence({
+    const evidence = summarizeMcpElectronEvidence({
       listResult,
       traceRaw: listResult.traceRaw,
     });
-    assertElectronEvidence(evidence);
+    assertMcpElectronEvidence(evidence);
     summary.appServerHandleJsonLinesSeen =
       evidence.appServerHandleJsonLinesSeen;
+    summary.electronIpcSeen = evidence.electronIpcSeen;
+    summary.electronIpcHitCount = evidence.electronIpcHitCount;
     summary.electronRequestMethods = evidence.requestMethods;
+    summary.electronIpcRequestMethods = evidence.electronIpcRequestMethods;
     summary.missingRequiredMethods = evidence.missingRequiredMethods;
     summary.legacyMcpCommandsSeen = evidence.legacyMcpCommandsSeen;
+    summary.mockFallbackHitCount = evidence.mockFallbackHitCount;
     rawEvidence.electronRequests = sanitizeJson(evidence.requests);
 
     await page.screenshot({ path: screenshotPath, fullPage: true });
@@ -735,16 +578,29 @@ export async function run() {
     );
 
     summary.consoleErrors = consoleErrors;
-    summary.screenshot = screenshotPath;
+    summary.pageErrors = pageErrors;
+    summary.screenshot = `${options.prefix}.png`;
+    applyPassingMcpSettingsScenarioEvidence(summary, {
+      completedAt: new Date().toISOString(),
+      electronRenderer: handle.rendererSnapshot.electron,
+      preloadInvoke: summary.electronPreloadBridge,
+      electronEvidence: evidence,
+      guiCreatedContext7: summary.guiCreatedContext7,
+      context7Server: summary.context7Server,
+      consoleErrors,
+      pageErrors,
+      invokeErrorCount: parseInvokeTraceRaw(listResult.errorRaw).length,
+      screenshotWritten: fs.existsSync(screenshotPath),
+    });
     summary.ok = true;
-    summary.completedAt = new Date().toISOString();
     writeJsonFile(rawEvidencePath, rawEvidence);
     writeJsonFile(summaryPath, summary);
     console.log(`${LOG_PREFIX} summary=${summaryPath}`);
     console.log(`${LOG_PREFIX} context7=${summary.context7Server?.id ?? ""}`);
   } catch (error) {
-    summary.error = error instanceof Error ? error.message : String(error);
+    applyFailedMcpSettingsScenarioEvidence(summary, error);
     summary.consoleErrors = consoleErrors;
+    summary.pageErrors = pageErrors;
     if (Object.keys(rawEvidence).length > 0) {
       writeJsonFile(rawEvidencePath, rawEvidence);
     }

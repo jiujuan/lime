@@ -519,12 +519,12 @@ fn parse_rollout(
             Some("response_item") => {
                 if let Some(message) = messages::response_item_preview_message(
                     value.get("payload"),
-                    timestamp,
+                    timestamp.clone(),
                     &mode,
                     Some(provenance.clone()),
                 ) {
                     let timeline_message = message.clone();
-                    if messages::push_preview_message(&mut messages, message, limit) {
+                    if messages::push_preview_message(&mut messages, message.preview, limit) {
                         summary.truncated = true;
                     }
                     messages::push_timeline_message(&mut timeline, timeline_message);
@@ -543,11 +543,12 @@ fn parse_rollout(
                         summary.fidelity.unsupported += 1;
                         summary.fidelity.provenance_only += 1;
                     } else {
-                        timeline.extend(
-                            rollout_events
-                                .into_iter()
-                                .map(CodexTimelineItem::RolloutEvent),
-                        );
+                        timeline.extend(rollout_events.into_iter().map(|event| {
+                            CodexTimelineItem::RolloutEvent {
+                                event,
+                                timestamp: timestamp.clone(),
+                            }
+                        }));
                     }
                 }
             }
@@ -559,12 +560,12 @@ fn parse_rollout(
                     &mode,
                     Some(provenance.clone()),
                 ) {
-                    if thread.title.is_none() && message.role == "user" {
+                    if thread.title.is_none() && message.preview.role == "user" {
                         thread.title =
-                            Some(messages::truncate_preview_text(&message.text, 80).text);
+                            Some(messages::truncate_preview_text(&message.preview.text, 80).text);
                     }
                     let timeline_message = message.clone();
-                    if messages::push_preview_message(&mut messages, message, limit) {
+                    if messages::push_preview_message(&mut messages, message.preview, limit) {
                         summary.truncated = true;
                     }
                     messages::push_timeline_message(&mut timeline, timeline_message);
@@ -587,11 +588,12 @@ fn parse_rollout(
                         summary.fidelity.unsupported += 1;
                         summary.fidelity.provenance_only += 1;
                     }
-                    timeline.extend(
-                        rollout_events
-                            .into_iter()
-                            .map(CodexTimelineItem::RolloutEvent),
-                    );
+                    timeline.extend(rollout_events.into_iter().map(|event| {
+                        CodexTimelineItem::RolloutEvent {
+                            event,
+                            timestamp: timestamp.clone(),
+                        }
+                    }));
                 }
                 if events.len() >= limit {
                     summary.truncated = true;
@@ -638,8 +640,11 @@ fn parse_rollout(
 
 #[derive(Debug, Clone)]
 pub(super) enum CodexTimelineItem {
-    Message(ConversationImportPreviewMessage),
-    RolloutEvent(events::CodexRolloutEvent),
+    Message(messages::CodexTimelineMessage),
+    RolloutEvent {
+        event: events::CodexRolloutEvent,
+        timestamp: Option<String>,
+    },
 }
 
 pub(super) fn find_thread(source_root: &Path, thread_id: &str) -> Option<ImportedThreadSummary> {
@@ -811,15 +816,15 @@ fn enrich_preview_provenance(
     for item in timeline {
         match item {
             CodexTimelineItem::Message(message) => {
-                if let Some(provenance) = message.provenance.take() {
-                    message.provenance = Some(events::enrich_source_provenance(
+                if let Some(provenance) = message.preview.provenance.take() {
+                    message.preview.provenance = Some(events::enrich_source_provenance(
                         provenance,
                         Some(source_thread_id),
                         source_path.as_deref(),
                     ));
                 }
             }
-            CodexTimelineItem::RolloutEvent(event) => {
+            CodexTimelineItem::RolloutEvent { event, .. } => {
                 enrich_runtime_event_provenance(event, source_thread_id, source_path.as_deref());
             }
         }

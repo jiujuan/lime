@@ -1,6 +1,8 @@
 export interface DiffReviewLine {
   kind: "add" | "remove" | "context" | "hunk";
   text: string;
+  oldLine?: number;
+  newLine?: number;
 }
 
 export interface DiffReviewFile {
@@ -112,19 +114,13 @@ function createDiffReviewFile(
   };
 }
 
-function pushDiffPreviewLine(
-  file: DiffReviewFile,
-  line: DiffReviewLine,
-): void {
+function pushDiffPreviewLine(file: DiffReviewFile, line: DiffReviewLine): void {
   const maxPreviewLines = 8;
   if (file.previewLines.length >= maxPreviewLines) return;
   file.previewLines.push(line);
 }
 
-function pushDiffReviewLine(
-  file: DiffReviewFile,
-  line: DiffReviewLine,
-): void {
+function pushDiffReviewLine(file: DiffReviewFile, line: DiffReviewLine): void {
   file.lines.push(line);
   pushDiffPreviewLine(file, line);
 }
@@ -180,9 +176,7 @@ export function buildDiffReviewScopeItems(
 
   return Array.from(scopes.values()).sort((left, right) => {
     const changeDelta =
-      right.additions +
-      right.deletions -
-      (left.additions + left.deletions);
+      right.additions + right.deletions - (left.additions + left.deletions);
     if (changeDelta !== 0) return changeDelta;
     return left.id.localeCompare(right.id);
   });
@@ -339,7 +333,10 @@ export function parseApplyPatchReview(
       continue;
     }
     if (rawLine.startsWith("*** Delete File: ")) {
-      ensureCurrent(rawLine.slice("*** Delete File: ".length).trim(), "deleted");
+      ensureCurrent(
+        rawLine.slice("*** Delete File: ".length).trim(),
+        "deleted",
+      );
       continue;
     }
     if (rawLine.startsWith("*** Move to: ")) {
@@ -382,7 +379,11 @@ export function parseUnifiedDiffReview(
   }
 
   const files: DiffReviewFile[] = [];
-  const state: { current: DiffReviewFile | null } = { current: null };
+  const state: {
+    current: DiffReviewFile | null;
+    oldLine: number | null;
+    newLine: number | null;
+  } = { current: null, oldLine: null, newLine: null };
 
   const ensureCurrent = (path: string) => {
     const current = state.current;
@@ -390,6 +391,8 @@ export function parseUnifiedDiffReview(
     const file = createDiffReviewFile(path, "modified", files.length);
     files.push(file);
     state.current = file;
+    state.oldLine = null;
+    state.newLine = null;
     return file;
   };
 
@@ -431,6 +434,11 @@ export function parseUnifiedDiffReview(
     if (!current) continue;
 
     if (rawLine.startsWith("@@")) {
+      const hunk = rawLine.match(
+        /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/,
+      );
+      state.oldLine = hunk?.[1] ? Number(hunk[1]) : null;
+      state.newLine = hunk?.[2] ? Number(hunk[2]) : null;
       addDiffLine(current, { kind: "hunk", text: rawLine });
       continue;
     }
@@ -438,18 +446,32 @@ export function parseUnifiedDiffReview(
       if (current.deletions === 0 && current.status === "unknown") {
         current.status = "added";
       }
-      addDiffLine(current, { kind: "add", text: rawLine.slice(1) });
+      addDiffLine(current, {
+        kind: "add",
+        text: rawLine.slice(1),
+        ...(state.newLine !== null ? { newLine: state.newLine } : {}),
+      });
+      if (state.newLine !== null) state.newLine += 1;
       continue;
     }
     if (rawLine.startsWith("-") && !rawLine.startsWith("---")) {
-      addDiffLine(current, { kind: "remove", text: rawLine.slice(1) });
+      addDiffLine(current, {
+        kind: "remove",
+        text: rawLine.slice(1),
+        ...(state.oldLine !== null ? { oldLine: state.oldLine } : {}),
+      });
+      if (state.oldLine !== null) state.oldLine += 1;
       continue;
     }
     if (rawLine.startsWith(" ")) {
       pushDiffReviewLine(current, {
         kind: "context",
         text: rawLine.slice(1),
+        ...(state.oldLine !== null ? { oldLine: state.oldLine } : {}),
+        ...(state.newLine !== null ? { newLine: state.newLine } : {}),
       });
+      if (state.oldLine !== null) state.oldLine += 1;
+      if (state.newLine !== null) state.newLine += 1;
     }
   }
 
@@ -475,8 +497,14 @@ export function buildDiffFileCanvasContent(params: {
   deletionsLabel: string;
   hunksLabel: string;
 }): string {
-  const { file, title, statusLabel, additionsLabel, deletionsLabel, hunksLabel } =
-    params;
+  const {
+    file,
+    title,
+    statusLabel,
+    additionsLabel,
+    deletionsLabel,
+    hunksLabel,
+  } = params;
   const diffLines = file.lines.map(renderDiffReviewLineForCanvas);
 
   return [
@@ -532,10 +560,8 @@ function resolveChangedBlocksDiffReviewSummary(
     }
   }
 
-  file.additions =
-    readRecordNumber(record, ["addedCount"]) ?? file.additions;
-  file.deletions =
-    readRecordNumber(record, ["removedCount"]) ?? file.deletions;
+  file.additions = readRecordNumber(record, ["addedCount"]) ?? file.additions;
+  file.deletions = readRecordNumber(record, ["removedCount"]) ?? file.deletions;
   file.hunks = Math.max(
     file.hunks,
     readRecordNumber(record, ["updatedCount"]) ?? 0,

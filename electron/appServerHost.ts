@@ -1,4 +1,5 @@
 import {
+  AppServerRequestError,
   AppServerSidecarLifecycle,
   cancelRequest,
   decodeMessage,
@@ -141,35 +142,57 @@ export class ElectronAppServerHost {
       if (isJsonRpcRequestLike(message)) {
         const proxiedMessage = this.#proxyRequestMessage(message);
         if (proxiedMessage.message.method === APP_SERVER_TURN_START_METHOD) {
-          responses.push(
-            ...(await this.#requestStreamingTurnStart(
-              connected,
-              message,
-              proxiedMessage.message,
-            )),
-          );
+          try {
+            responses.push(
+              ...(await this.#requestStreamingTurnStart(
+                connected,
+                message,
+                proxiedMessage.message,
+              )),
+            );
+          } catch (error) {
+            const errorMessages = restoreAppServerRequestError(
+              error,
+              proxiedMessage.originalId,
+            );
+            if (!errorMessages) {
+              throw error;
+            }
+            responses.push(...errorMessages);
+          }
           continue;
         }
         const timeoutMs = resolveAppServerRequestTimeoutMs(
           proxiedMessage.message.method,
           request.timeoutMs,
         );
-        const result = await this.#withActiveProxyRequest(
-          proxiedMessage.originalId,
-          proxiedMessage.message.id,
-          () =>
-            this.#requestAppServer<unknown>(
-              connected,
-              proxiedMessage.message,
-              proxiedMessage.message.method,
-              { timeoutMs },
+        try {
+          const result = await this.#withActiveProxyRequest(
+            proxiedMessage.originalId,
+            proxiedMessage.message.id,
+            () =>
+              this.#requestAppServer<unknown>(
+                connected,
+                proxiedMessage.message,
+                proxiedMessage.message.method,
+                { timeoutMs },
+              ),
+          );
+          responses.push(
+            ...result.messages.map((response) =>
+              restoreProxyResponseId(response, proxiedMessage.originalId),
             ),
-        );
-        responses.push(
-          ...result.messages.map((response) =>
-            restoreProxyResponseId(response, proxiedMessage.originalId),
-          ),
-        );
+          );
+        } catch (error) {
+          const errorMessages = restoreAppServerRequestError(
+            error,
+            proxiedMessage.originalId,
+          );
+          if (!errorMessages) {
+            throw error;
+          }
+          responses.push(...errorMessages);
+        }
         continue;
       }
       (await this.#connect()).connection.transport.send(message);
@@ -782,6 +805,18 @@ function restoreProxyResponseId(
     };
   }
   return message;
+}
+
+function restoreAppServerRequestError(
+  error: unknown,
+  originalId: RequestId,
+): JsonRpcMessage[] | null {
+  if (!(error instanceof AppServerRequestError)) {
+    return null;
+  }
+  const messages =
+    error.messages.length > 0 ? error.messages : [error.response];
+  return messages.map((message) => restoreProxyResponseId(message, originalId));
 }
 
 async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {

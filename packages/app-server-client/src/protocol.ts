@@ -10,6 +10,8 @@ import {
 import type {
   AgentSessionMediaReadResponse as GeneratedAgentSessionMediaReadResponse,
   CanonicalThreadEventNotification as GeneratedCanonicalThreadEventNotification,
+  ConversationImportJobPhase as GeneratedConversationImportJobPhase,
+  ConversationImportJobStatus as GeneratedConversationImportJobStatus,
   ConversationImportSourceClient as GeneratedConversationImportSourceClient,
   ConversationImportSourceStatus as GeneratedConversationImportSourceStatus,
   ConversationImportThreadStatus as GeneratedConversationImportThreadStatus,
@@ -44,9 +46,25 @@ export const CONVERSATION_IMPORT_SOURCE_STATUSES = [
 ] as const satisfies readonly GeneratedConversationImportSourceStatus[];
 export const CONVERSATION_IMPORT_THREAD_STATUSES = [
   "not_imported",
+  "importing",
   "imported",
   "conflict",
 ] as const satisfies readonly GeneratedConversationImportThreadStatus[];
+export const CONVERSATION_IMPORT_JOB_STATUSES = [
+  "queued",
+  "running",
+  "completed",
+  "failed",
+] as const satisfies readonly GeneratedConversationImportJobStatus[];
+export const CONVERSATION_IMPORT_JOB_PHASES = [
+  "queued",
+  "reading_source",
+  "building_history",
+  "persisting_history",
+  "finalizing",
+  "completed",
+  "failed",
+] as const satisfies readonly GeneratedConversationImportJobPhase[];
 
 export type AppServerMethodKind = "request" | "notification" | "serverRequest";
 
@@ -628,6 +646,7 @@ export type RuntimeProviderConfig = {
   toolCallStrategy?: RuntimeToolCallStrategy;
   toolshimModel?: string;
   modelCapabilities?: unknown;
+  supportsWebsockets?: boolean;
 };
 
 export type RuntimeRequest = {
@@ -3086,8 +3105,24 @@ export type ConversationImportSourceStatus = "ready" | "missing";
 
 export type ConversationImportThreadStatus =
   | "not_imported"
+  | "importing"
   | "imported"
   | "conflict";
+
+export type ConversationImportJobStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type ConversationImportJobPhase =
+  | "queued"
+  | "reading_source"
+  | "building_history"
+  | "persisting_history"
+  | "finalizing"
+  | "completed"
+  | "failed";
 
 export type ConversationImportSourceScanParams = {
   sourceClient?: ConversationImportSourceClient;
@@ -3118,6 +3153,10 @@ export type ConversationImportThreadCommitParams = {
   replaceExisting?: boolean;
 };
 
+export type ConversationImportJobReadParams = {
+  jobId: string;
+};
+
 export type ConversationImportSourceSummary = {
   sourceClient: ConversationImportSourceClient;
   status: ConversationImportSourceStatus;
@@ -3143,6 +3182,7 @@ export type ImportedThreadSummary = {
   modelProvider?: string;
   archived: boolean;
   sourcePath?: string;
+  importJobId?: string;
   importStatus: ConversationImportThreadStatus;
   metadata?: unknown;
 };
@@ -3235,6 +3275,34 @@ export type ConversationImportThreadCommitResponse = {
   importedTurns: number;
   canContinue: boolean;
   warnings: string[];
+};
+
+export type ConversationImportJobProgress = {
+  phase: ConversationImportJobPhase;
+  completedItems: number;
+  totalItems: number;
+  completedTurns: number;
+  totalTurns: number;
+};
+
+export type ConversationImportJob = {
+  jobId: string;
+  sourceClient: ConversationImportSourceClient;
+  sourceThreadId?: string;
+  status: ConversationImportJobStatus;
+  progress: ConversationImportJobProgress;
+  result?: ConversationImportThreadCommitResponse;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ConversationImportThreadCommitStartResponse = {
+  job: ConversationImportJob;
+};
+
+export type ConversationImportJobReadResponse = {
+  job: ConversationImportJob;
 };
 
 export type ProtocolSchemaGroup = "jsonrpc" | "v0";

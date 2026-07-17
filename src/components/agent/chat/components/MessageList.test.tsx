@@ -14,6 +14,16 @@ import {
 import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList layout and scrolling", () => {
+  it("消息列表应暴露当前 canonical session identity", () => {
+    const container = render([], { sessionId: "session-canonical-1" });
+
+    expect(
+      container
+        .querySelector('[data-testid="message-list-frame"]')
+        ?.getAttribute("data-session-id"),
+    ).toBe("session-canonical-1");
+  });
+
   it("应在同一滚动区域顶部渲染 leadingContent", () => {
     const container = render(
       [

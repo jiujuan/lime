@@ -4,7 +4,11 @@ import { CONVERSATION_IMPORT_SOURCE_CLIENTS } from "../../../packages/app-server
 import {
   commitConversationImportThread,
   previewConversationImportThread,
+  readConversationImportJob,
   scanConversationImportSource,
+  waitForConversationImportJob,
+  type ConversationImportJob,
+  type ConversationImportThreadCommitStartResponse,
   type ConversationImportSourceScanResponse,
   type ConversationImportThreadCommitResponse,
   type ConversationImportThreadPreviewResponse,
@@ -195,6 +199,37 @@ function appServerCommitResponse(): ConversationImportThreadCommitResponse {
   };
 }
 
+function appServerImportJob(
+  status: ConversationImportJob["status"] = "queued",
+): ConversationImportJob {
+  const completed = status === "completed";
+  return {
+    jobId: "import-job-1",
+    sourceClient: "codex",
+    sourceThreadId: "thread-1",
+    status,
+    progress: {
+      phase: completed
+        ? "completed"
+        : status === "failed"
+          ? "failed"
+          : "queued",
+      completedItems: completed ? 3 : 0,
+      totalItems: completed ? 3 : 0,
+      completedTurns: completed ? 1 : 0,
+      totalTurns: completed ? 1 : 0,
+    },
+    ...(completed ? { result: appServerCommitResponse() } : {}),
+    ...(status === "failed" ? { error: "source history is invalid" } : {}),
+    createdAt: "2026-06-16T00:00:00.000Z",
+    updatedAt: "2026-06-16T00:00:01.000Z",
+  };
+}
+
+function appServerCommitStartResponse(): ConversationImportThreadCommitStartResponse {
+  return { job: appServerImportJob() };
+}
+
 describe("conversationImport API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -312,8 +347,8 @@ describe("conversationImport API", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("应通过 App Server current 主链在用户确认后提交导入", async () => {
-    const result = appServerCommitResponse();
+  it("应通过 App Server current 主链在用户确认后启动后台导入", async () => {
+    const result = appServerCommitStartResponse();
     appServerRequestMock.mockResolvedValueOnce({ result });
 
     await expect(
@@ -340,7 +375,7 @@ describe("conversationImport API", () => {
   });
 
   it("重新导入时应透传 replaceExisting 到 App Server current 主链", async () => {
-    const result = appServerCommitResponse();
+    const result = appServerCommitStartResponse();
     appServerRequestMock.mockResolvedValueOnce({ result });
 
     await expect(
@@ -368,16 +403,10 @@ describe("conversationImport API", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("线程导入响应形状异常时应 fail closed", async () => {
+  it("线程导入未返回后台 job 时应 fail closed", async () => {
     appServerRequestMock.mockResolvedValueOnce({
       result: {
-        session: {},
-        thread: appServerScanResponse().threads[0],
-        summary: appServerPreviewResponse().summary,
-        importedMessages: 2,
-        importedTurns: 1,
-        canContinue: true,
-        warnings: [],
+        job: { jobId: "invalid" },
       },
     });
 
@@ -387,9 +416,35 @@ describe("conversationImport API", () => {
         confirmed: true,
       }),
     ).rejects.toThrow(
-      "conversationImport/thread/commit returned an invalid thread commit shape",
+      "conversationImport/thread/commit did not return an import job",
     );
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
+  it("应通过 job/read 读取后台导入终态", async () => {
+    const result = { job: appServerImportJob("completed") };
+    appServerRequestMock.mockResolvedValueOnce({ result });
+
+    await expect(
+      readConversationImportJob({ jobId: "import-job-1" }),
+    ).resolves.toEqual(result);
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "conversationImport/job/read",
+      { jobId: "import-job-1" },
+    );
+  });
+
+  it("后台导入完成后应返回 canonical commit result", async () => {
+    await expect(
+      waitForConversationImportJob(appServerImportJob("completed")),
+    ).resolves.toEqual(appServerCommitResponse());
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("后台导入失败时应保留 App Server 错误", async () => {
+    await expect(
+      waitForConversationImportJob(appServerImportJob("failed")),
+    ).rejects.toThrow("source history is invalid");
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { access } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -35,27 +36,29 @@ async function main() {
   }
   await assertBinaryExists(binaryPath);
 
-  const connected = await connectAppServerSidecar(
-    {
-      ...stdioSidecar(binaryPath),
-      backendMode: "unavailable",
-    },
-    {
-      clientInfo: {
-        name: "lime_stdio_smoke",
-        version: "1.60.0",
-      },
-      capabilities: {
-        eventMethods: [METHOD_AGENT_SESSION_EVENT],
-      },
-    },
-    {
-      initializeTimeoutMs: 5_000,
-      expectedProtocolVersion: PROTOCOL_VERSION,
-    },
-  );
-
+  const tempDir = await mkdtemp(path.join(tmpdir(), "app-server-stdio-"));
+  let connected;
   try {
+    connected = await connectAppServerSidecar(
+      {
+        ...stdioSidecar(binaryPath, undefined, path.join(tempDir, "data")),
+        backendMode: "unavailable",
+      },
+      {
+        clientInfo: {
+          name: "lime_stdio_smoke",
+          version: "1.60.0",
+        },
+        capabilities: {
+          eventMethods: [METHOD_AGENT_SESSION_EVENT],
+        },
+      },
+      {
+        initializeTimeoutMs: 5_000,
+        expectedProtocolVersion: PROTOCOL_VERSION,
+      },
+    );
+
     const sessionId = "appserver_stdio_smoke_session";
     const threadId = "appserver_stdio_smoke_thread";
     const sessionRequest = connected.client.startSession({
@@ -65,7 +68,11 @@ async function main() {
       workspaceId: "smoke",
     });
     connected.sidecar.send(sessionRequest);
-    const sessionResponse = await connected.sidecar.nextMessage(5_000);
+    const sessionResponse = await nextResponseForRequest(
+      connected.sidecar,
+      sessionRequest.id,
+      "agentSession/start",
+    );
     const sessionResult = expectResponseResult(
       sessionResponse,
       sessionRequest.id,
@@ -84,7 +91,11 @@ async function main() {
       },
     });
     connected.sidecar.send(turnRequest);
-    const turnResponse = await connected.sidecar.nextMessage(5_000);
+    const turnResponse = await nextResponseForRequest(
+      connected.sidecar,
+      turnRequest.id,
+      "agentSession/turn/start",
+    );
     expectResponseError(
       turnResponse,
       turnRequest.id,
@@ -96,8 +107,20 @@ async function main() {
       `[smoke:app-server-stdio] ok binary=${binaryPath} source=${binaryResolution.source} protocol=${connected.initializeResponse.serverInfo.protocolVersion} session=${sessionId} backend=unavailable turn=fail-closed`,
     );
   } finally {
-    await connected.sidecar.close();
+    await connected?.sidecar.close();
+    await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+async function nextResponseForRequest(sidecar, id, label) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const message = await sidecar.nextMessage(deadline - Date.now());
+    if (message?.id === id) {
+      return message;
+    }
+  }
+  throw new Error(`timed out waiting for ${label} response ${String(id)}`);
 }
 
 async function assertBinaryExists(targetPath) {

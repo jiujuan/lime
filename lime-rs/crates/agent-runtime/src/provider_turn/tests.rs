@@ -18,6 +18,61 @@ use tool_runtime::tool_lifecycle::{
     ToolLifecycleEmissionFuture, ToolLifecycleEvent, ToolLifecyclePhase,
 };
 
+#[test]
+fn harness_generation_projects_provider_request_controls() {
+    let mut turn_context = agent_protocol::turn_context::TurnContextOverride::default();
+    turn_context.metadata.insert(
+        "runtime_request".to_string(),
+        serde_json::json!({
+            "harness": {
+                "generation": {
+                    "max_output_tokens": 128,
+                    "enable_thinking": false
+                }
+            }
+        }),
+    );
+    let config = crate::session_config::SessionConfigBuilder::new("session-1")
+        .turn_context(turn_context)
+        .build();
+
+    let (generation, provider_options) = provider_request_controls(&config);
+
+    assert_eq!(generation.max_tokens, Some(128));
+    assert_eq!(provider_options.get("enable_thinking"), Some(&false.into()));
+}
+
+#[test]
+fn provider_failure_trace_preserves_auth_rate_limit_and_server_categories() {
+    let cases = [
+        (
+            Some(FailureClassification::Authentication),
+            false,
+            "auth",
+            true,
+        ),
+        (
+            Some(FailureClassification::RateLimit),
+            true,
+            "rate_limit",
+            false,
+        ),
+        (
+            Some(FailureClassification::ProviderInternal),
+            true,
+            "server",
+            false,
+        ),
+    ];
+
+    for (classification, retryable, category, non_retryable_rejection) in cases {
+        assert_eq!(
+            provider_trace_failure(classification, retryable),
+            ProviderTraceFailure::new(category, retryable, non_retryable_rejection)
+        );
+    }
+}
+
 #[derive(Clone)]
 struct ScriptedProvider {
     streams: Arc<Mutex<VecDeque<Vec<Result<CanonicalLlmEvent, CurrentProviderError>>>>>,
@@ -443,6 +498,14 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
             && event.runtime_provider_protocol.as_deref() == Some("responses")
             && event.runtime_provider_active_model.as_deref() == Some("gpt-5")
     }));
+    assert!(traces
+        .iter()
+        .filter(|event| event.stage == ProviderTraceStage::RequestStarted)
+        .all(|event| event.tool_names == ["Read"]));
+    assert!(traces
+        .iter()
+        .filter(|event| event.stage != ProviderTraceStage::RequestStarted)
+        .all(|event| event.tool_names.is_empty()));
     let steps = events
         .iter()
         .filter_map(|event| match event {
@@ -498,6 +561,193 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
                 }),
             ),
         ]
+    );
+}
+
+#[tokio::test]
+async fn max_turns_stops_before_starting_an_extra_provider_request() {
+    let tool_call_stream = |call_id: &str, response_id: &str| {
+        vec![
+            Ok(CanonicalLlmEvent::ToolCall {
+                id: call_id.to_string(),
+                name: "Read".to_string(),
+                input: serde_json::json!({ "path": "README.md" }),
+                provider_executed: None,
+            }),
+            Ok(CanonicalLlmEvent::Finish {
+                reason: FinishReason::ToolCall,
+                usage: None,
+                response_id: Some(response_id.to_string()),
+            }),
+        ]
+    };
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        tool_call_stream("call-1", "response-1"),
+        tool_call_stream("call-2", "response-2"),
+    ]));
+    let requests = Arc::clone(&provider.requests);
+    let tool = Arc::new(CountingTool::default());
+    let mut events = Vec::new();
+
+    let execution = run_current_provider_turn(
+        CurrentProviderTurnInput {
+            provider,
+            provider_trace_metadata: Some(RuntimeReplyProviderTraceMetadata {
+                provider_name: "openai".to_string(),
+                model_name: "gpt-5".to_string(),
+                runtime_provider_backend: "current".to_string(),
+                runtime_provider_selector: Some("primary".to_string()),
+                runtime_provider_protocol: Some("responses".to_string()),
+                runtime_provider_active_model: Some("gpt-5".to_string()),
+            }),
+            session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                .turn_id("turn-1")
+                .max_turns(2)
+                .build(),
+            initial_messages: vec![CurrentProviderMessage::user(vec![
+                CurrentProviderContent::Text("read twice".to_string()),
+            ])],
+            tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                RuntimeToolStepSnapshot::new(
+                    vec![RuntimeToolDefinition::new(
+                        "Read",
+                        "read files",
+                        serde_json::json!({ "type": "object" }),
+                    )],
+                    RuntimeToolExecutorHandle::new(tool.clone()),
+                ),
+            ),
+            model_request_policy: None,
+            tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+            working_directory: PathBuf::from("."),
+            cancel_token: None,
+        },
+        |event| events.push(event),
+    )
+    .await
+    .expect("turn execution");
+
+    assert_eq!(requests.lock().expect("provider requests").len(), 2);
+    assert_eq!(tool.calls.load(Ordering::SeqCst), 2);
+    assert_eq!(execution.text_output, MAX_REPLY_TURNS_REACHED_MESSAGE);
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| match event {
+                CurrentProviderTurnEvent::ProviderTrace { event }
+                    if event.stage == ProviderTraceStage::RequestStarted =>
+                {
+                    Some(event.attempt)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| match event {
+                CurrentProviderTurnEvent::ProviderStep { attempt, .. } => Some(*attempt),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+}
+
+#[tokio::test]
+async fn provider_token_budget_stops_before_tool_execution_and_next_sampling() {
+    let provider = Arc::new(ScriptedProvider::new(vec![vec![
+        Ok(CanonicalLlmEvent::ToolCall {
+            id: "call-1".to_string(),
+            name: "Read".to_string(),
+            input: serde_json::json!({ "path": "README.md" }),
+            provider_executed: None,
+        }),
+        Ok(CanonicalLlmEvent::Finish {
+            reason: FinishReason::ToolCall,
+            usage: Some(Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(25),
+                cache_read_input_tokens: Some(25),
+                ..Usage::default()
+            }),
+            response_id: Some("response-1".to_string()),
+        }),
+    ]]));
+    let requests = Arc::clone(&provider.requests);
+    let tool = Arc::new(CountingTool::default());
+    let mut events = Vec::new();
+
+    let execution = run_current_provider_turn(
+        CurrentProviderTurnInput {
+            provider,
+            provider_trace_metadata: Some(RuntimeReplyProviderTraceMetadata {
+                provider_name: "openai".to_string(),
+                model_name: "gpt-5".to_string(),
+                runtime_provider_backend: "current".to_string(),
+                runtime_provider_selector: Some("primary".to_string()),
+                runtime_provider_protocol: Some("responses".to_string()),
+                runtime_provider_active_model: Some("gpt-5".to_string()),
+            }),
+            session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                .turn_id("turn-1")
+                .max_turns(3)
+                .provider_token_budget(100)
+                .build(),
+            initial_messages: vec![CurrentProviderMessage::user(vec![
+                CurrentProviderContent::Text("read it".to_string()),
+            ])],
+            tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                RuntimeToolStepSnapshot::new(
+                    vec![RuntimeToolDefinition::new(
+                        "Read",
+                        "read files",
+                        serde_json::json!({ "type": "object" }),
+                    )],
+                    RuntimeToolExecutorHandle::new(tool.clone()),
+                ),
+            ),
+            model_request_policy: None,
+            tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+            working_directory: PathBuf::from("."),
+            cancel_token: None,
+        },
+        |event| events.push(event),
+    )
+    .await
+    .expect("budget exhaustion is a canceled execution");
+
+    assert!(execution.cancelled);
+    assert_eq!(requests.lock().expect("provider requests").len(), 1);
+    assert_eq!(tool.calls.load(Ordering::SeqCst), 0);
+    assert!(execution.event_errors.iter().any(|error| {
+        error == "Provider token budget exhausted after attempt 1: used=100 limit=100"
+    }));
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| match event {
+                CurrentProviderTurnEvent::ProviderTrace { event }
+                    if event.stage == ProviderTraceStage::RequestStarted =>
+                {
+                    Some(event.attempt)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![1]
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| match event {
+                CurrentProviderTurnEvent::ProviderStep { attempt, .. } => Some(*attempt),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![1]
     );
 }
 

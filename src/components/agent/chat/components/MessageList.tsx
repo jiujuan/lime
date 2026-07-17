@@ -355,7 +355,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
   );
 
   return (
-    <MessageListFrame data-testid="message-list-frame">
+    <MessageListFrame
+      data-testid="message-list-frame"
+      data-session-id={sessionId || ""}
+    >
       <MessageListContainer
         ref={scrollController.containerRef}
         $taskCenterSurface={isTaskCenterEmptyState}

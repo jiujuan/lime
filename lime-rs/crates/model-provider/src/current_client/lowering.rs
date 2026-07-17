@@ -2,18 +2,25 @@ use crate::provider_stream::RuntimeReplyProviderRequestWireShape;
 use crate::runtime_provider::RuntimeProviderConfig;
 use runtime_core::{CanonicalRequest, CanonicalRole, ContentPart, ToolResultValue};
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 
 pub(super) fn chat_completions_request(
     config: &RuntimeProviderConfig,
     request: &CanonicalRequest,
     wire_shape: &RuntimeReplyProviderRequestWireShape,
+    media_payloads: &BTreeMap<String, String>,
 ) -> Value {
     let mut messages = Vec::new();
     let system = text_from_parts(&request.system);
     if !system.is_empty() {
         messages.push(json!({ "role": "system", "content": system }));
     }
-    messages.extend(request.messages.iter().flat_map(chat_message));
+    messages.extend(
+        request
+            .messages
+            .iter()
+            .flat_map(|message| chat_message(message, media_payloads)),
+    );
     let mut object = Map::from_iter([
         ("model".to_string(), json!(config.model_name)),
         ("messages".to_string(), Value::Array(messages)),
@@ -33,6 +40,17 @@ pub(super) fn chat_completions_request(
             json!(wire_shape.parallel_tool_calls.unwrap_or(true)),
         );
     }
+    apply_generation_options(&mut object, request, "max_tokens", false);
+    if let Some(enable_thinking) = request
+        .provider_options
+        .get("enable_thinking")
+        .and_then(Value::as_bool)
+    {
+        object.insert(
+            "chat_template_kwargs".to_string(),
+            json!({ "enable_thinking": enable_thinking }),
+        );
+    }
     Value::Object(object)
 }
 
@@ -40,10 +58,11 @@ pub(super) fn responses_request(
     config: &RuntimeProviderConfig,
     request: &CanonicalRequest,
     wire_shape: &RuntimeReplyProviderRequestWireShape,
+    media_payloads: &BTreeMap<String, String>,
 ) -> Value {
     let mut input = Vec::new();
     for message in &request.messages {
-        input.extend(responses_message(message));
+        input.extend(responses_message(message, media_payloads));
     }
     let mut object = Map::from_iter([
         ("model".to_string(), json!(config.model_name)),
@@ -79,17 +98,19 @@ pub(super) fn responses_request(
             json!(wire_shape.parallel_tool_calls.unwrap_or(true)),
         );
     }
+    apply_generation_options(&mut object, request, "max_output_tokens", false);
     Value::Object(object)
 }
 
 pub(super) fn anthropic_request(
     config: &RuntimeProviderConfig,
     request: &CanonicalRequest,
+    media_payloads: &BTreeMap<String, String>,
 ) -> Value {
     let messages = request
         .messages
         .iter()
-        .flat_map(anthropic_message)
+        .flat_map(|message| anthropic_message(message, media_payloads))
         .collect::<Vec<_>>();
     let mut object = Map::from_iter([
         ("model".to_string(), json!(config.model_name)),
@@ -119,10 +140,36 @@ pub(super) fn anthropic_request(
             ),
         );
     }
+    apply_generation_options(&mut object, request, "max_tokens", true);
     Value::Object(object)
 }
 
-fn chat_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
+fn apply_generation_options(
+    object: &mut Map<String, Value>,
+    request: &CanonicalRequest,
+    max_tokens_key: &str,
+    supports_top_k: bool,
+) {
+    if let Some(max_tokens) = request.generation.max_tokens {
+        object.insert(max_tokens_key.to_string(), json!(max_tokens));
+    }
+    if let Some(temperature) = request.generation.temperature {
+        object.insert("temperature".to_string(), json!(temperature));
+    }
+    if let Some(top_p) = request.generation.top_p {
+        object.insert("top_p".to_string(), json!(top_p));
+    }
+    if supports_top_k {
+        if let Some(top_k) = request.generation.top_k {
+            object.insert("top_k".to_string(), json!(top_k));
+        }
+    }
+}
+
+fn chat_message(
+    message: &runtime_core::CanonicalMessage,
+    media_payloads: &BTreeMap<String, String>,
+) -> Vec<Value> {
     match message.role {
         CanonicalRole::Tool => message
             .content
@@ -162,7 +209,7 @@ fn chat_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
         }
         CanonicalRole::User | CanonicalRole::System | CanonicalRole::Developer => vec![json!({
             "role": wire_role(message.role),
-            "content": chat_content(&message.content),
+            "content": chat_content(&message.content, media_payloads),
         })],
     }
 }
@@ -177,7 +224,7 @@ fn wire_role(role: CanonicalRole) -> &'static str {
     }
 }
 
-fn chat_content(content: &[ContentPart]) -> Value {
+fn chat_content(content: &[ContentPart], media_payloads: &BTreeMap<String, String>) -> Value {
     let has_media = content
         .iter()
         .any(|part| matches!(part, ContentPart::Media { .. }));
@@ -193,7 +240,10 @@ fn chat_content(content: &[ContentPart]) -> Value {
                     uri, media_type, ..
                 } => Some(json!({
                     "type": "image_url",
-                    "image_url": { "url": uri, "media_type": media_type },
+                    "image_url": {
+                        "url": provider_media_uri(uri, media_payloads),
+                        "media_type": media_type
+                    },
                 })),
                 _ => None,
             })
@@ -213,7 +263,10 @@ fn chat_tool(tool: &runtime_core::CanonicalToolDefinition) -> Value {
     })
 }
 
-fn responses_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
+fn responses_message(
+    message: &runtime_core::CanonicalMessage,
+    media_payloads: &BTreeMap<String, String>,
+) -> Vec<Value> {
     match message.role {
         CanonicalRole::Tool => message
             .content
@@ -257,12 +310,15 @@ fn responses_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
         CanonicalRole::User | CanonicalRole::System | CanonicalRole::Developer => vec![json!({
             "type": "message",
             "role": wire_role(message.role),
-            "content": responses_input_content(&message.content),
+            "content": responses_input_content(&message.content, media_payloads),
         })],
     }
 }
 
-fn responses_input_content(content: &[ContentPart]) -> Vec<Value> {
+fn responses_input_content(
+    content: &[ContentPart],
+    media_payloads: &BTreeMap<String, String>,
+) -> Vec<Value> {
     content
         .iter()
         .filter_map(|part| match part {
@@ -271,7 +327,7 @@ fn responses_input_content(content: &[ContentPart]) -> Vec<Value> {
                 uri, media_type, ..
             } => Some(json!({
                 "type": "input_image",
-                "image_url": uri,
+                "image_url": provider_media_uri(uri, media_payloads),
                 "media_type": media_type,
             })),
             _ => None,
@@ -279,7 +335,10 @@ fn responses_input_content(content: &[ContentPart]) -> Vec<Value> {
         .collect()
 }
 
-fn anthropic_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
+fn anthropic_message(
+    message: &runtime_core::CanonicalMessage,
+    media_payloads: &BTreeMap<String, String>,
+) -> Vec<Value> {
     let role = match message.role {
         CanonicalRole::Assistant => "assistant",
         _ => "user",
@@ -296,7 +355,10 @@ fn anthropic_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
                 uri, media_type, ..
             } => Some(json!({
                 "type": "image",
-                "source": { "type": "url", "url": uri, "media_type": media_type },
+                "source": anthropic_media_source(
+                    provider_media_uri(uri, media_payloads),
+                    media_type,
+                ),
             })),
             ContentPart::ToolCall {
                 id, name, input, ..
@@ -316,6 +378,30 @@ fn anthropic_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
         })
         .collect::<Vec<_>>();
     vec![json!({ "role": role, "content": content })]
+}
+
+fn provider_media_uri<'a>(uri: &'a str, media_payloads: &'a BTreeMap<String, String>) -> &'a str {
+    media_payloads.get(uri).map(String::as_str).unwrap_or(uri)
+}
+
+fn anthropic_media_source(uri: &str, media_type: &str) -> Value {
+    if let Some(encoded) = uri
+        .strip_prefix("data:")
+        .and_then(|value| value.split_once(','))
+        .filter(|(metadata, _)| {
+            metadata
+                .split(';')
+                .any(|part| part.eq_ignore_ascii_case("base64"))
+        })
+        .map(|(_, encoded)| encoded)
+    {
+        return json!({
+            "type": "base64",
+            "media_type": media_type,
+            "data": encoded,
+        });
+    }
+    json!({ "type": "url", "url": uri })
 }
 
 fn text_from_parts(parts: &[ContentPart]) -> String {

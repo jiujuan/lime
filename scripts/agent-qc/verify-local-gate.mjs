@@ -9,6 +9,7 @@ import {
   buildAgentQcLocalVerifyGateReport,
   renderAgentQcLocalVerifyGateMarkdown,
 } from "../lib/agent-qc-local-verify-gate-core.mjs";
+import { withNativeSystemPath } from "../lib/native-executable-env.mjs";
 
 function parseArgs(argv) {
   const result = {
@@ -90,7 +91,7 @@ function runCommand(command, args) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: process.cwd(),
-      env: process.env,
+      env: withNativeSystemPath(process.env),
       stdio: "inherit",
     });
     child.on("error", (error) => {
@@ -136,7 +137,10 @@ async function main() {
   }
 
   writeText(options.outputPath, `${JSON.stringify(report, null, 2)}\n`);
-  writeText(options.markdownOutputPath, renderAgentQcLocalVerifyGateMarkdown(report));
+  writeText(
+    options.markdownOutputPath,
+    renderAgentQcLocalVerifyGateMarkdown(report),
+  );
 
   if (options.check && report.status !== "pass") {
     process.exitCode = 1;

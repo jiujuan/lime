@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 async fn start_media_context_turn(attachments: Vec<AgentAttachment>) -> Arc<RecordingBackend> {
     let backend = Arc::new(RecordingBackend::default());
-    let core = RuntimeCore::with_backend(backend.clone());
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let core = RuntimeCore::with_backend(backend.clone()).with_sidecar_store(Arc::new(
+        SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+    ));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("sess_media_context".to_string()),
@@ -100,7 +103,7 @@ async fn start_turn_projects_media_attachment_reference_into_context_telemetry()
 }
 
 #[tokio::test]
-async fn start_turn_does_not_project_inline_data_uri_media_context() {
+async fn start_turn_persists_inline_data_uri_before_projecting_media_context() {
     let backend = start_media_context_turn(vec![AgentAttachment {
         kind: "image".to_string(),
         uri: Some("data:image/png;base64,abcd".to_string()),
@@ -117,16 +120,17 @@ async fn start_turn_does_not_project_inline_data_uri_media_context() {
     let metadata = requests[0]
         .runtime_options
         .as_ref()
-        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata);
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
+        .expect("runtime metadata");
 
-    assert!(metadata
-        .and_then(|metadata| metadata.get(MEDIA_PROMPT_CONTEXT_KEY))
-        .is_none());
-    assert!(metadata
-        .and_then(|metadata| metadata.get(CONTEXT_PACKET_TELEMETRY_KEY))
-        .is_none());
-    assert_eq!(
-        requests[0].input.attachments[0].uri.as_deref(),
-        Some("data:image/png;base64,abcd")
-    );
+    let context = metadata
+        .get(MEDIA_PROMPT_CONTEXT_KEY)
+        .expect("media prompt context");
+    assert!(context["attachments"][0]["referenceUri"]
+        .as_str()
+        .is_some_and(|uri| uri.starts_with("sidecar://media/")));
+    assert!(metadata.get(CONTEXT_PACKET_TELEMETRY_KEY).is_some());
+    assert!(!serde_json::to_string(context)
+        .expect("serialize media context")
+        .contains("base64,"));
 }

@@ -1736,6 +1736,12 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
       params: "required",
     },
     {
+      name: "readConversationImportJob",
+      method: protocol.METHOD_CONVERSATION_IMPORT_JOB_READ,
+      kind: "request",
+      params: "required",
+    },
+    {
       name: "startTurn",
       method: protocol.METHOD_AGENT_SESSION_TURN_START,
       kind: "request",

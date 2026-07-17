@@ -118,6 +118,12 @@
             "string"
           ]
         },
+        "supportsWebsockets": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "toolCallStrategy": {
           "anyOf": [
             {

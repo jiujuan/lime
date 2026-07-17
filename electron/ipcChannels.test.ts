@@ -175,10 +175,10 @@ describe("electron/ipcChannels", () => {
     );
     expect(
       isElectronHostCommand("get_skill_package_file_association_status"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isElectronHostCommand("set_skill_package_file_association_default"),
-    ).toBe(true);
+    ).toBe(false);
     expect(isElectronHostCommand("report_frontend_crash")).toBe(true);
     expect(isElectronHostCommand("sync_tray_model_shortcuts")).toBe(true);
     expect(

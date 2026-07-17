@@ -242,6 +242,26 @@ describe("agent runtime current fixture regression smoke guard", () => {
     );
   });
 
+  it("selects the Content Factory article frame by artifact identity", () => {
+    const content = readContentFactoryFixture();
+
+    expect(content).toContain(
+      'candidate.getAttribute("data-artifact-ref") === artifactRef',
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceArticleArtifactIdentity",
+    );
+    expect(content).toContain("articleObjectRef.artifactIds.find");
+    expect(content).toContain("artifactRef: workerArticleArtifactRef");
+    expect(content).toContain(
+      "readModelArticleArtifactRef === workerArticleArtifactRef",
+    );
+    expect(content).toContain("targetFrameCount: targetFrames.length");
+    expect(content).not.toContain(
+      "const frame = frames.find(isVisible) ?? frames[0] ?? null",
+    );
+  });
+
   it("does not synthesize Content Factory workflow response or contract probe", () => {
     const content = readContentFactoryFixture();
     const assertions = readContentFactoryAssertions();

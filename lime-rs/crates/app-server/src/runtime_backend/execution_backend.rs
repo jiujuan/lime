@@ -74,6 +74,7 @@ impl ExecutionBackend for RuntimeBackend {
         thread_id: &str,
     ) -> Result<(), RuntimeCoreError> {
         self.agent_state.cancel_session(session_id).await;
+        self.agent_state.close_provider_session(session_id).await;
         self.agent_state
             .close_mcp_runtime(session_id, thread_id)
             .await;

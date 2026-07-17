@@ -77,7 +77,9 @@ function resolveFileChangeRecord(
 export function hasTimelineFileChangeEvidence(
   item: AgentThreadItem,
 ): item is FileArtifactItem {
-  return item.type === "file_artifact" && Boolean(resolveFileChangeRecord(item));
+  return (
+    item.type === "file_artifact" && Boolean(resolveFileChangeRecord(item))
+  );
 }
 
 function normalizeFileChangeKind(value: unknown): FileChangeKind {
@@ -108,7 +110,14 @@ function normalizeDiffLine(value: unknown): FileChangeDiffLine | null {
       : typeof record.text === "string"
         ? record.text
         : "";
-  return { kind, value: text };
+  const oldLine = readNumber(record, ["old_line", "oldLine"]);
+  const newLine = readNumber(record, ["new_line", "newLine"]);
+  return {
+    kind,
+    value: text,
+    ...(oldLine !== null ? { oldLine } : {}),
+    ...(newLine !== null ? { newLine } : {}),
+  };
 }
 
 function resolveDiffLines(

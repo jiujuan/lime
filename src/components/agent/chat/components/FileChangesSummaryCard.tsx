@@ -31,7 +31,7 @@ interface FileChangesSummaryCardProps {
     | Promise<void | { restoredCount?: number }>;
 }
 
-const COLLAPSED_FILE_COUNT = 6;
+const COLLAPSED_FILE_COUNT = 3;
 type UndoState = "idle" | "confirming" | "loading" | "success" | "error";
 const UNDO_ERROR_CODES = new Set([
   "emptyAggregate",
@@ -68,6 +68,8 @@ function buildDiffReviewFile(file: FileChangeSummary): DiffReviewFile {
   const lines: DiffReviewLine[] = file.diff.map((line) => ({
     kind: line.kind,
     text: line.value,
+    ...(line.oldLine !== undefined ? { oldLine: line.oldLine } : {}),
+    ...(line.newLine !== undefined ? { newLine: line.newLine } : {}),
   }));
 
   return {
@@ -112,7 +114,7 @@ export function FileChangesSummaryCard({
 }: FileChangesSummaryCardProps) {
   const { t } = useTranslation("agent");
   const { files, totalAdded, totalRemoved, fileCount } = aggregate;
-  const [isFileListExpanded, setIsFileListExpanded] = useState(true);
+  const [isFileListExpanded, setIsFileListExpanded] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [undoState, setUndoState] = useState<UndoState>("idle");
   const [undoError, setUndoError] = useState<string | null>(null);
@@ -196,7 +198,7 @@ export function FileChangesSummaryCard({
     >
       <div
         data-testid="file-changes-summary-card-header"
-        className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-3"
+        className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2.5"
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600">
@@ -236,6 +238,7 @@ export function FileChangesSummaryCard({
             )}
             onClick={requestUndo}
           >
+            {t("agentChat.fileChangesSummary.undo")}
             {undoState === "loading" ? (
               <Loader2
                 className="h-3.5 w-3.5 animate-spin"
@@ -244,7 +247,6 @@ export function FileChangesSummaryCard({
             ) : (
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
             )}
-            {t("agentChat.fileChangesSummary.undo")}
           </button>
           {!isStreaming && firstFilePath ? (
             <button
@@ -348,10 +350,10 @@ export function FileChangesSummaryCard({
                 onClick={() => openFileReview(file)}
                 title={file.path}
               >
-                <span className="min-w-0 truncate font-mono text-[13px] leading-5 text-slate-900">
+                <span className="min-w-0 truncate text-[13px] leading-5 text-slate-800">
                   {resolveDisplayPath(file.path)}
                 </span>
-                <span className="shrink-0 font-mono text-[12px] leading-5">
+                <span className="shrink-0 text-[12px] leading-5">
                   <span className="text-emerald-600">+{file.linesAdded}</span>
                   <span className="ml-2 text-red-500">
                     -{file.linesRemoved}
@@ -367,19 +369,20 @@ export function FileChangesSummaryCard({
         <button
           type="button"
           data-testid="file-changes-summary-toggle"
-          className="flex w-full items-center justify-start gap-1 border-t border-slate-100 px-3 py-2 text-[13px] font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+          aria-expanded={isFileListExpanded}
+          className="flex w-full items-center justify-start gap-1 border-t border-slate-100 px-3 py-2 text-[13px] font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
           onClick={() => setIsFileListExpanded((current) => !current)}
         >
-          {isFileListExpanded ? (
-            <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
           {isFileListExpanded
             ? t("agentChat.fileChangesSummary.collapseFiles")
             : t("agentChat.fileChangesSummary.expandFiles", {
                 count: files.length - COLLAPSED_FILE_COUNT,
               })}
+          {isFileListExpanded ? (
+            <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
         </button>
       ) : null}
     </div>

@@ -8,17 +8,13 @@ const {
   mockCheckForUpdates,
   mockGetRuntimeAppVersion,
   mockGetUpdateInstallSession,
-  mockGetSkillPackageFileAssociationStatus,
   mockListenUpdateInstallSession,
-  mockSetSkillPackageFileAssociationDefault,
   mockStartUpdateInstallSession,
 } = vi.hoisted(() => ({
   mockCheckForUpdates: vi.fn(),
   mockGetRuntimeAppVersion: vi.fn(),
   mockGetUpdateInstallSession: vi.fn(),
-  mockGetSkillPackageFileAssociationStatus: vi.fn(),
   mockListenUpdateInstallSession: vi.fn(),
-  mockSetSkillPackageFileAssociationDefault: vi.fn(),
   mockStartUpdateInstallSession: vi.fn(),
 }));
 const { mockOpenExternalUrlWithSystemBrowser } = vi.hoisted(() => ({
@@ -41,14 +37,6 @@ vi.mock("@/lib/api/appUpdate", () => ({
   startUpdateInstallSession: mockStartUpdateInstallSession,
 }));
 
-vi.mock("@/lib/api/skills", () => ({
-  skillsApi: {
-    getSkillPackageFileAssociationStatus:
-      mockGetSkillPackageFileAssociationStatus,
-    setSkillPackageFileAssociationDefault:
-      mockSetSkillPackageFileAssociationDefault,
-  },
-}));
 vi.mock("@/lib/api/externalUrl", () => ({
   openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
 }));
@@ -167,36 +155,6 @@ beforeEach(async () => {
   );
   mockListenUpdateInstallSession.mockResolvedValue(vi.fn());
   mockStartUpdateInstallSession.mockResolvedValue(createInstallSession());
-  mockGetSkillPackageFileAssociationStatus.mockResolvedValue({
-    platform: "macos",
-    extension: "skill",
-    extensions: ["skill", "skills"],
-    mimeType: "application/vnd.lime.skill+zip",
-    appIdentifier: "com.limecloud.lime",
-    isDefault: false,
-    canSetDefault: true,
-    requiresUserConfirmation: false,
-    currentHandler: "com.anthropic.claude",
-    settingsUrl: null,
-    detail: null,
-  });
-  mockSetSkillPackageFileAssociationDefault.mockResolvedValue({
-    changed: true,
-    message: "updated",
-    status: {
-      platform: "macos",
-      extension: "skill",
-      extensions: ["skill", "skills"],
-      mimeType: "application/vnd.lime.skill+zip",
-      appIdentifier: "com.limecloud.lime",
-      isDefault: true,
-      canSetDefault: true,
-      requiresUserConfirmation: false,
-      currentHandler: "com.limecloud.lime",
-      settingsUrl: null,
-      detail: null,
-    },
-  });
   mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
 });
 
@@ -239,8 +197,7 @@ describe("AboutSection", () => {
     expect(text).toContain("Update available: 1.10.1");
     expect(text).toContain("Check for Updates");
     expect(text).toContain("Download Update");
-    expect(text).toContain("Skill package opening");
-    expect(text).toContain("Currently opened by com.anthropic.claude");
+    expect(text).not.toContain("Skill package opening");
     expect(text).not.toContain("可更新到 1.10.1");
     expect(text).not.toContain("settings.about");
   });
@@ -381,22 +338,6 @@ describe("AboutSection", () => {
     );
     expect(container.textContent).not.toContain("在线安装包");
     expect(container.textContent).not.toContain("offline 安装包");
-  });
-
-  it("应允许从关于页将 .skill 默认打开方式切回 Lime", async () => {
-    const container = renderComponent();
-    await waitForLoad();
-
-    await act(async () => {
-      findButton(container, "Set Lime as Default").click();
-      await waitForLoad();
-    });
-
-    expect(mockSetSkillPackageFileAssociationDefault).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain(
-      ".skill / .skills files now open with Lime.",
-    );
-    expect(container.textContent).toContain("Lime is the default");
   });
 
   it("更新检查失败时应隐藏技术错误", async () => {

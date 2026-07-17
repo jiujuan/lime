@@ -8,6 +8,7 @@ import electronPath from "electron";
 import { _electron as electron } from "playwright";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
+import { withElectronFixtureSystemPath } from "../lib/electron-fixture-runtime-env.mjs";
 
 const DEFAULTS = {
   appUrl: "",
@@ -338,14 +339,14 @@ function createTempRuntimeEnv() {
     electronUserDataDir,
     backendPath,
     backendLedgerPath,
-    env: {
+    env: withElectronFixtureSystemPath({
       ...process.env,
       HOME: home,
       XDG_DATA_HOME: xdgDataHome,
       APPDATA: roamingAppData,
       LOCALAPPDATA: localAppData,
       LIME_AGENT_RUNTIME_ROOT: agentRoot,
-    },
+    }),
   };
 }
 

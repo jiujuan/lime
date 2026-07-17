@@ -152,6 +152,7 @@ fn no_auth_direct_provider_config_from_route(
         toolshim: false,
         toolshim_model: None,
         model_capabilities: Some(serde_json::to_value(&resolved_route.capability_snapshot).ok()?),
+        supports_websockets: false,
     })
 }
 
@@ -545,6 +546,7 @@ mod tests {
             toolshim: false,
             toolshim_model: None,
             model_capabilities: None,
+            supports_websockets: false,
         };
         let resolved_route = resolved_route_from_runtime(
             &task_request,

@@ -1,6 +1,6 @@
 # 第二期测试实施计划
 
-> status: active / T9 DeepSWE diagnosis complete, scoring blocked
+> status: active / T7 + LIV-03 multimodal and T9 runtime budgets closed; scoring/platform blocked
 > owner: quality-workflow
 > started: 2026-07-15
 > target: Refactor v2 current chain
@@ -132,8 +132,10 @@ Rust CI 在测试量和平台矩阵稳定后可引入 `cargo nextest` archive/sh
 
 DeepSWE 数据集不属于退役 surface。新的选题与执行合同见 [deepswe-coding-slice.md](./deepswe-coding-slice.md)；旧 runner 删除是为了防止 dry-run 结果冒充真实 Lime coding score。
 
-本地 `.lime/benchmark/runs` 中 45 个旧 runner 产物已于 2026-07-15 删除；固定 source cache 保留给 current adapter。随后 9 个已被回归覆盖的 bring-up run 和两条诊断 run 内的仓库内 clone 也已删除，只保留当前有效 JSON/patch evidence。T9 的 source preflight、adapter v3、provider step/token/usage 和诊断 true run 已完成；Pier separate verifier 因本机无容器运行时仍阻塞。
+本地 `.lime/benchmark/runs` 中 45 个旧 runner 产物已于 2026-07-15 删除；固定 source cache 保留给 current adapter。随后 9 个已被回归覆盖的 bring-up run 和两条诊断 run 内的仓库内 clone 也已删除，只保留当前有效 JSON/patch evidence。T9 的 source preflight、adapter v4、provider step/token/usage、真实 request tool catalog、runtime step/token cap、wall-timeout terminal cleanup 和 TS/Go/Rust 诊断 true run 已完成；Pier separate verifier 因 Agnes 无 candidate 且本机无容器运行时仍阻塞。
 
 ## 9. 当前下一刀
 
-T9 当前已证明 provider idle timeout、workspace/base 隔离、App Server evidence、逐步 usage 和 current cancel 有效。adapter v3 Agnes Go run 在 16-provider-step 预算内累计 272,324 budget tokens、16 个 tool call，仍未产生 patch；T0/T1 App Server session/projection 与 Gate B queue/restore blocker 已关闭。下一刀是恢复能在固定 step/token 预算内产出 terminal candidate 的 Agnes coding 路由并提供容器 runtime；在此之前暂停重复跑 Go/Rust，不用更多无效 trial 冒充进展。
+T7 已证明 inline 图片 sidecar 持久化、provider-only hydrate、历史恢复、text-only capability 和 provider failure 语义。PRV-05、CTX-01 与 CTX-02 已分别关闭错误重试集合、provider history batch/completed 丢失和 compaction 后仍发送完整旧前缀。PRV-06 已从公开 capture 证明旧实现 capability=true 仍只发 HTTP POST，并在 current owner 落地显式 capability、session client、真实 Responses WebSocket、串行连接复用和 sticky HTTP fallback。扩大门禁继续发现 TS client capability 丢失、App Server dispatcher 默认栈溢出和 stdio 非 turn request head-of-line blocking；current owner 修复后 App Server 1175/1175、contracts 291 项与完整 Electron fixture 通过，短问候 text-delta-to-paint 为 25ms，预算未放宽。宿主门禁同时移除真实用户 zsh rc 和无界 Git 子进程对测试的污染。LIV-03 已用确定性 capture 证明 Agnes request 的图片、零工具面、128 token 上限与 thinking=false，再由 Agnes live completed turn 识别 apple/red。T9 已证明 provider idle timeout、workspace/base 隔离、App Server evidence、逐步 usage、真实 request tool catalog、runtime step/token budget 与 wall-timeout terminal cleanup 有效；Agnes coding 仍未产生 candidate，Pier 仍缺容器 runtime。下一刀处理 Windows/L8；DeepSWE 暂停重复只读 trial。
+
+测试体系基线为 `100%`；按 T0-T11 退出条件计算，第二期实现整体完成度为 `80%`。

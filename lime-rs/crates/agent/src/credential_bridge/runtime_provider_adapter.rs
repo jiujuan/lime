@@ -19,7 +19,7 @@ impl ConfiguredReplyProvider {
     }
 }
 
-pub(crate) async fn create_configured_reply_provider(
+pub(crate) fn create_configured_reply_provider(
     config: &RuntimeProviderConfig,
 ) -> Result<ConfiguredReplyProvider, CurrentProviderError> {
     let client = CurrentProviderClient::new(config.clone())?;

@@ -1,9 +1,80 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTimelineInlineContentParts } from "./messageListTimelineContentParts";
+import {
+  buildTimelineFileChangesContentPart,
+  buildTimelineInlineContentParts,
+} from "./messageListTimelineContentParts";
 import { buildThreadItems } from "./messageListTimelineContentParts.testHarness";
 
 describe("messageListTimelineContentParts", () => {
+  it("多个 canonical patch 应聚合成一张文件变更汇总卡", () => {
+    const contentPart = buildTimelineFileChangesContentPart(
+      buildThreadItems([
+        {
+          id: "patch-app",
+          type: "patch",
+          turn_id: "turn-multiple-patches",
+          sequence: 1,
+          text: "Updated src/App.tsx",
+          paths: ["src/App.tsx"],
+          success: true,
+          status: "completed",
+          started_at: "2026-07-16T10:00:00.000Z",
+          completed_at: "2026-07-16T10:00:01.000Z",
+          updated_at: "2026-07-16T10:00:01.000Z",
+          metadata: {
+            file_change: {
+              path: "src/App.tsx",
+              kind: "update",
+              lines_added: 2,
+              lines_removed: 1,
+              diff: [],
+            },
+          },
+        },
+        {
+          id: "patch-test",
+          type: "patch",
+          turn_id: "turn-multiple-patches",
+          sequence: 2,
+          text: "Updated src/App.test.tsx",
+          paths: ["src/App.test.tsx"],
+          success: true,
+          status: "completed",
+          started_at: "2026-07-16T10:00:02.000Z",
+          completed_at: "2026-07-16T10:00:03.000Z",
+          updated_at: "2026-07-16T10:00:03.000Z",
+          metadata: {
+            file_change: {
+              path: "src/App.test.tsx",
+              kind: "update",
+              lines_added: 3,
+              lines_removed: 0,
+              diff: [],
+            },
+          },
+        },
+      ]),
+    );
+
+    expect(contentPart).toMatchObject({
+      type: "file_changes_batch",
+      aggregate: {
+        fileCount: 2,
+        totalAdded: 5,
+        totalRemoved: 1,
+        files: [
+          expect.objectContaining({ path: "src/App.tsx" }),
+          expect.objectContaining({ path: "src/App.test.tsx" }),
+        ],
+      },
+      metadata: {
+        source: "thread_item_patch",
+        threadItemIds: ["patch-app", "patch-test"],
+      },
+    });
+  });
+
   it("没有 agent_message 时仍应渲染 timeline 工具过程", () => {
     const contentParts = buildTimelineInlineContentParts({
       displayContent: "",

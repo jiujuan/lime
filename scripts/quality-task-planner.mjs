@@ -3,6 +3,8 @@
 import { execFileSync } from "node:child_process";
 import process from "node:process";
 
+import { withNativeSystemPath } from "./lib/native-executable-env.mjs";
+
 const DEFAULT_GIT_COMMAND = process.platform === "win32" ? "git.exe" : "git";
 
 const IGNORED_PREFIXES = [
@@ -331,6 +333,7 @@ function gitOutput({ cwd, gitCommand, args }) {
     return execFileSync(gitCommand, args, {
       cwd,
       encoding: "utf8",
+      env: withNativeSystemPath(process.env),
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {

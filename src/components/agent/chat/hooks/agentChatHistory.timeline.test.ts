@@ -836,7 +836,7 @@ describe("agentChatHistory timeline fallback", () => {
     ).not.toContain("我会先检索");
   });
 
-  it("历史恢复应把旧无 phase turn 中最后一条 agent_message 作为最终正文", () => {
+  it("历史恢复应保留旧无 phase 过程文本并把最后一条 agent_message 作为最终正文", () => {
     const detail: AgentSessionDetail = {
       id: "session-legacy-unphased-final",
       created_at: 1,
@@ -951,9 +951,20 @@ describe("agentChatHistory timeline fallback", () => {
     expect(messages[1]?.content).not.toContain("我会先做");
     expect(messages[1]?.content).not.toContain("噪声较多");
     expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
-      "tool_use",
+      "text",
       "tool_use",
       "text",
+      "tool_use",
+      "text",
+    ]);
+    expect(
+      messages[1]?.contentParts
+        ?.filter((part) => part.type === "text")
+        .map((part) => part.text),
+    ).toEqual([
+      "我会先做几组中英文检索，覆盖多个新闻源。",
+      "搜索结果里噪声较多，我再打开几个页面交叉核对。",
+      "## 今日国际新闻简报\n\n- 重点一：附来源。",
     ]);
     expect(messages[1]?.toolCalls?.map((tool) => tool.status)).toEqual([
       "completed",

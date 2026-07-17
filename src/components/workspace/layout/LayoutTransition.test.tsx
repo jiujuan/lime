@@ -3,7 +3,6 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LayoutMode } from "@/lib/workspace/workflowTypes";
 import { LayoutTransition } from "./LayoutTransition";
-import { emitCompactRightPanelOpen } from "@/lib/compactRightPanelEvents";
 import {
   cleanupMountedRoots,
   clickElement,
@@ -119,12 +118,18 @@ describe("LayoutTransition", () => {
     );
     expect(root).not.toBeNull();
 
+    const panelViewport = container.querySelector<HTMLElement>(
+      '[data-testid="layout-panel-viewport"]',
+    );
     const styles = Array.from(document.head.querySelectorAll("style"))
       .map((node) => node.textContent || "")
       .join("\n");
 
-    const hasGapRule = Array.from(root?.classList ?? []).some((className) =>
-      new RegExp(`\\.${escapeRegExp(className)}\\{[^}]*gap:12px;`).test(styles),
+    const hasGapRule = Array.from(panelViewport?.classList ?? []).some(
+      (className) =>
+        new RegExp(`\\.${escapeRegExp(className)}\\{[^}]*gap:12px;`).test(
+          styles,
+        ),
     );
 
     expect(hasGapRule).toBe(true);
@@ -138,10 +143,10 @@ describe("LayoutTransition", () => {
       mountedRoots,
     );
 
-    const root = container.querySelector<HTMLElement>(
-      '[data-testid="layout-transition-root"]',
+    const panelViewport = container.querySelector<HTMLElement>(
+      '[data-testid="layout-panel-viewport"]',
     );
-    const orderedPanels = Array.from(root?.children ?? [])
+    const orderedPanels = Array.from(panelViewport?.children ?? [])
       .map((node) => node.getAttribute("data-testid"))
       .filter(Boolean);
 
@@ -157,7 +162,9 @@ describe("LayoutTransition", () => {
       container.querySelector('[data-testid="layout-canvas-content"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="layout-chat-canvas-resize-handle"]'),
+      container.querySelector(
+        '[data-testid="layout-chat-canvas-resize-handle"]',
+      ),
     ).not.toBeNull();
   });
 
@@ -239,7 +246,10 @@ describe("LayoutTransition", () => {
     const root = container.querySelector<HTMLElement>(
       '[data-testid="layout-transition-root"]',
     );
-    const orderedPanels = Array.from(root?.children ?? [])
+    const panelViewport = container.querySelector<HTMLElement>(
+      '[data-testid="layout-panel-viewport"]',
+    );
+    const orderedPanels = Array.from(panelViewport?.children ?? [])
       .map((node) => node.getAttribute("data-testid"))
       .filter(Boolean);
 
@@ -262,14 +272,18 @@ describe("LayoutTransition", () => {
       container.querySelector('[data-testid="layout-canvas-content"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="layout-chat-overlay-trigger"]'),
-    ).toBeNull();
+      container
+        .querySelector<HTMLElement>('[data-testid="layout-compact-mode-bar"]')
+        ?.getAttribute("data-visible"),
+    ).toBe("false");
     expect(
-      container.querySelector('[data-testid="layout-chat-canvas-resize-handle"]'),
+      container.querySelector(
+        '[data-testid="layout-chat-canvas-resize-handle"]',
+      ),
     ).not.toBeNull();
   });
 
-  it("极窄 chat-canvas 模式才应改为右侧聊天抽屉", async () => {
+  it("极窄 chat-canvas 模式应默认用完整聊天主面板并允许切换工作台", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
@@ -291,44 +305,65 @@ describe("LayoutTransition", () => {
       '[data-testid="layout-transition-root"]',
     );
 
-    expect(root?.getAttribute("data-layout-axis")).toBe("horizontal");
+    expect(root?.getAttribute("data-layout-axis")).toBe("single");
     expect(root?.getAttribute("data-chat-panel-placement")).toBe(
-      "overlay-right",
+      "single-panel",
     );
+    expect(root?.getAttribute("data-compact-primary-panel")).toBe("chat");
     expect(
-      container.querySelector('[data-testid="layout-chat-overlay-trigger"]'),
+      container.querySelector('[data-testid="layout-compact-mode-bar"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="layout-chat-canvas-resize-handle"]'),
+      container.querySelector(
+        '[data-testid="layout-chat-canvas-resize-handle"]',
+      ),
     ).toBeNull();
     expect(
       container
         .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
         ?.getAttribute("data-overlay-state"),
-    ).toBe("closed");
+    ).toBe("single-active");
+    expect(
+      container.querySelector('[data-testid="layout-chat-content"]'),
+    ).not.toBeNull();
 
     await act(async () => {
-      clickElement(container.querySelector('[data-testid="layout-chat-overlay-trigger"]'));
+      clickElement(
+        container.querySelector('[data-testid="layout-compact-canvas-tab"]'),
+      );
       await Promise.resolve();
     });
 
+    expect(root?.getAttribute("data-compact-primary-panel")).toBe("canvas");
     expect(
       container
         .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
         ?.getAttribute("data-overlay-state"),
-    ).toBe("open");
+    ).toBe("single-hidden");
+    expect(
+      container.querySelector('[data-testid="layout-canvas-content"]'),
+    ).not.toBeNull();
+
+    await act(async () => {
+      clickElement(
+        container.querySelector('[data-testid="layout-compact-chat-tab"]'),
+      );
+      await Promise.resolve();
+    });
+
+    expect(root?.getAttribute("data-compact-primary-panel")).toBe("chat");
   });
 
-  it("小屏聊天抽屉打开后，收到工作台抽屉打开事件应自动收起", async () => {
+  it("应按实际工作区容器宽度切换单面板，而不是只看窗口宽度", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
-      value: 820,
+      value: 1200,
     });
     Object.defineProperty(window, "innerHeight", {
       configurable: true,
       writable: true,
-      value: 600,
+      value: 720,
     });
 
     const { container } = mountHarness(
@@ -337,31 +372,34 @@ describe("LayoutTransition", () => {
       mountedRoots,
     );
 
-    await act(async () => {
-      clickElement(
-        container.querySelector('[data-testid="layout-chat-overlay-trigger"]'),
-      );
-      await Promise.resolve();
-    });
-    expect(
-      container
-        .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
-        ?.getAttribute("data-overlay-state"),
-    ).toBe("open");
+    const root = container.querySelector<HTMLElement>(
+      '[data-testid="layout-transition-root"]',
+    );
+    expect(root?.getAttribute("data-layout-axis")).toBe("horizontal");
+
+    root!.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 760,
+        bottom: 720,
+        width: 760,
+        height: 720,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
 
     await act(async () => {
-      emitCompactRightPanelOpen({ source: "workbench" });
+      window.dispatchEvent(new Event("resize"));
       await Promise.resolve();
     });
 
-    expect(
-      container
-        .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
-        ?.getAttribute("data-overlay-state"),
-    ).toBe("closed");
+    expect(root?.getAttribute("data-layout-axis")).toBe("single");
+    expect(root?.getAttribute("data-compact-primary-panel")).toBe("chat");
   });
 
-  it("紧凑抽屉态存在待处理 A2UI 时应自动展开聊天区", async () => {
+  it("紧凑单面板态存在待处理 A2UI 时应自动切回聊天区", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
@@ -373,11 +411,25 @@ describe("LayoutTransition", () => {
       value: 600,
     });
 
-    const { container } = mountHarness(
+    const { container, rerender } = mountHarness(
       LayoutHarness,
-      { mode: "chat-canvas", forceOpenChatPanel: true },
+      { mode: "chat-canvas", forceOpenChatPanel: false },
       mountedRoots,
     );
+
+    await act(async () => {
+      clickElement(
+        container.querySelector('[data-testid="layout-compact-canvas-tab"]'),
+      );
+      await Promise.resolve();
+    });
+    expect(
+      container
+        .querySelector<HTMLElement>('[data-testid="layout-transition-root"]')
+        ?.getAttribute("data-compact-primary-panel"),
+    ).toBe("canvas");
+
+    rerender({ mode: "chat-canvas", forceOpenChatPanel: true });
 
     await act(async () => {
       await Promise.resolve();
@@ -387,7 +439,7 @@ describe("LayoutTransition", () => {
       container
         .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
         ?.getAttribute("data-overlay-state"),
-    ).toBe("open");
+    ).toBe("single-active");
     expect(
       container.querySelector('[data-testid="layout-chat-content"]'),
     ).not.toBeNull();

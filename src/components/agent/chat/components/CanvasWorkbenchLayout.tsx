@@ -378,6 +378,30 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     onLayoutModeChange?.(isStackedLayout ? "stacked" : "split");
   }, [isStackedLayout, onLayoutModeChange]);
 
+  useEffect(() => {
+    const node = shellRef.current;
+    if (!node) {
+      return;
+    }
+
+    node.dataset.documentSelectionKey = documentSelectionKey || "";
+    node.dataset.documentContextKey = documentContext?.selectionKey || "";
+    node.dataset.previewRequestKey = String(
+      previewOpenRequest?.requestKey ?? "",
+    );
+    node.dataset.previewRequestSelectionKey =
+      previewOpenRequest?.selectionKey || "";
+    node.dataset.artifactSelectionKeys = artifacts
+      .map((artifact) => `artifact:${artifact.id}`)
+      .join(",");
+  }, [
+    artifacts,
+    documentContext?.selectionKey,
+    documentSelectionKey,
+    previewOpenRequest?.requestKey,
+    previewOpenRequest?.selectionKey,
+  ]);
+
   const activeSelectionPath = activePreviewContext?.selectionPath;
   const activeContent = activePreviewContext?.content || "";
   const closeWorkbenchLabel = translateCanvasWorkbenchText(
@@ -483,9 +507,12 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     }
     const selectionKey = previewOpenRequest.selectionKey?.trim();
     if (selectionKey) {
-      if (documentContext?.selectionKey !== selectionKey) {
+      if (documentSelectionKey !== selectionKey) {
         setPreviewOnlyFilePath(previewOpenRequest.filePath?.trim() || null);
         openDocumentSelection(selectionKey);
+        return;
+      }
+      if (documentContext?.selectionKey !== selectionKey) {
         return;
       }
       setActiveTab(previewModeState.defaultMode);
@@ -502,6 +529,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     onPreviewOpenRequestHandled,
     openDocumentSelection,
     documentContext?.selectionKey,
+    documentSelectionKey,
     previewModeState.defaultMode,
     previewOpenRequest,
     setActiveTab,

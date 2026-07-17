@@ -18,9 +18,9 @@ describe("diffReview", () => {
         "*** Update File: src/components/App.tsx",
         "@@",
         " const stable = true;",
-        "-const title = \"Old\";",
-        "+const title = \"New\";",
-        "+const subtitle = \"Ready\";",
+        '-const title = "Old";',
+        '+const title = "New";',
+        '+const subtitle = "Ready";',
         "*** End Patch",
       ].join("\n"),
     );
@@ -47,7 +47,7 @@ describe("diffReview", () => {
         "-const count = 1;",
         "+const count = 2;",
         "+const enabled = true;",
-        " export const name = \"lime\";",
+        ' export const name = "lime";',
       ].join("\n"),
     );
 
@@ -58,7 +58,26 @@ describe("diffReview", () => {
     expect(summary?.deletions).toBe(1);
     expect(summary?.hunks).toBe(1);
     expect(summary?.files[0]?.lines.map((line) => line.text)).toContain(
-      'const enabled = true;',
+      "const enabled = true;",
+    );
+    expect(summary?.files[0]?.lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "remove",
+          oldLine: 1,
+          text: "const count = 1;",
+        }),
+        expect.objectContaining({
+          kind: "add",
+          newLine: 1,
+          text: "const count = 2;",
+        }),
+        expect.objectContaining({
+          kind: "context",
+          oldLine: 2,
+          newLine: 3,
+        }),
+      ]),
     );
   });
 
@@ -75,9 +94,7 @@ describe("diffReview", () => {
     );
 
     expect(summary).not.toBeNull();
-    expect(summary?.files[0]?.path).toBe(
-      "src/components/agent/chat/Panel.tsx",
-    );
+    expect(summary?.files[0]?.path).toBe("src/components/agent/chat/Panel.tsx");
     expect(summary?.files[0]?.status).toBe("modified");
     expect(summary?.hunks).toBe(3);
     expect(summary?.files[0]?.previewLines.map((line) => line.text)).toContain(
@@ -129,7 +146,7 @@ describe("diffReview", () => {
         "*** Begin Patch",
         "*** Update File: src/components/App.tsx",
         "@@",
-        "+const title = \"New\";",
+        '+const title = "New";',
         "*** Update File: src/components/Panel.tsx",
         "@@",
         "-const ready = false;",
@@ -181,7 +198,7 @@ describe("diffReview", () => {
         "*** Begin Patch",
         "*** Update File: src/components/App.tsx",
         "@@",
-        "+const title = \"New\";",
+        '+const title = "New";',
         "*** Update File: src/components/chat/Panel.tsx",
         "@@",
         "-const oldPanel = true;",
@@ -236,7 +253,7 @@ describe("diffReview", () => {
         "--- a/src/app.ts",
         "+++ b/src/app.ts",
         "@@ -1,3 +1,4 @@",
-        " export const name = \"lime\";",
+        ' export const name = "lime";',
         "-const count = 1;",
         "+const count = 2;",
         "+const enabled = true;",

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "jobId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "jobId"
+  ],
+  "title": "ConversationImportJobReadParams",
+  "type": "object"
+}

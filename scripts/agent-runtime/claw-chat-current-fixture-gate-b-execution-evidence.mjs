@@ -316,11 +316,13 @@ function findTraceTurnStart(entries, identity) {
 }
 
 function findByTurnId(entries, turnId, readTurnId) {
-  return (
-    [...entries].reverse().find((entry) => readTurnId(entry) === turnId) ??
-    entries.at(-1) ??
-    null
-  );
+  if (turnId) {
+    return (
+      [...entries].reverse().find((entry) => readTurnId(entry) === turnId) ??
+      null
+    );
+  }
+  return entries.at(-1) ?? null;
 }
 
 function readResponseContainsTurn(response, turnId) {

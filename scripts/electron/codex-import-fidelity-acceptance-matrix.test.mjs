@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const MATRIX_PATH = "internal/roadmap/codeximport/fidelity-acceptance-matrix.md";
+const MATRIX_PATH =
+  "internal/roadmap/codeximport/fidelity-acceptance-matrix.md";
 const TRACKER_PATH = "internal/roadmap/codeximport/implementation-tracker.md";
 const ARTIFACT_ROADMAP_PATH = "internal/roadmap/artifacts/roadmap.md";
 const RUNTIME_EVENTS_TEST_PATH =
@@ -12,6 +13,8 @@ const SOURCE_HEALTH_TEST_PATH =
   "lime-rs/crates/app-server/src/runtime/conversation_import/tests/health.rs";
 const PATH_RESOLUTION_TEST_PATH =
   "lime-rs/crates/app-server/src/runtime/conversation_import/tests/path_resolution.rs";
+const PERFORMANCE_TEST_PATH =
+  "lime-rs/crates/app-server/src/runtime/conversation_import/tests/performance.rs";
 const SECURITY_TEST_PATH =
   "lime-rs/crates/app-server/src/runtime/conversation_import/tests/security.rs";
 const EVIDENCE_TEST_PATH =
@@ -20,8 +23,12 @@ const CLICK_THROUGH_SMOKE_TEST_PATH =
   "scripts/electron/codex-import-click-through-fixture-smoke.test.mjs";
 const REAL_SAMPLE_SMOKE_TEST_PATH =
   "scripts/electron/local-history-import-real-sample-visual-audit-smoke.test.mjs";
+const REAL_SAMPLE_SMOKE_PATH =
+  "scripts/electron/local-history-import-real-sample-visual-audit-smoke.mjs";
 const VISUAL_AUDIT_SMOKE_TEST_PATH =
   "scripts/electron/local-history-import-visual-audit-smoke.test.mjs";
+const VISUAL_AUDIT_SMOKE_PATH =
+  "scripts/electron/local-history-import-visual-audit-smoke.mjs";
 const CLICK_THROUGH_SMOKE_PATH =
   "scripts/electron/codex-import-click-through-fixture-smoke.mjs";
 const CLICK_THROUGH_GUI_HELPER_PATH =
@@ -38,7 +45,10 @@ const WORKSPACE_PREVIEW_ACTIONS_TEST_PATH =
 const SESSION_CLIENT_PATH = "src/lib/api/agentRuntime/sessionClient.ts";
 const SESSION_CLIENT_BOUNDARY_TEST_PATH =
   "src/lib/api/agentRuntime/sessionClient.current-boundary.test.ts";
-const CONVERSATION_IMPORT_API_TEST_PATH = "src/lib/api/conversationImport.test.ts";
+const CONVERSATION_IMPORT_API_TEST_PATH =
+  "src/lib/api/conversationImport.test.ts";
+const CONVERSATION_IMPORT_PROGRESS_TEST_PATH =
+  "src/components/app-sidebar/AppSidebarConversationImportProgress.test.tsx";
 const CONVERSATION_IMPORT_PROTOCOL_PATH =
   "lime-rs/crates/app-server-protocol/src/protocol/v0/conversation_import.rs";
 
@@ -50,6 +60,16 @@ function readFiles(...filePaths) {
   return filePaths.map(readFile).join("\n");
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function expectMatrixRow(matrix, category) {
+  expect(matrix).toMatch(
+    new RegExp(`^\\|\\s*${escapeRegExp(category)}\\s*\\|`, "m"),
+  );
+}
+
 describe("codex import fidelity acceptance matrix guard", () => {
   it("documents the current fact source and excludes legacy implementation paths", () => {
     const matrix = readFile(MATRIX_PATH);
@@ -57,12 +77,15 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(matrix).toContain("conversationImport/source/scan");
     expect(matrix).toContain("conversationImport/thread/preview");
     expect(matrix).toContain("conversationImport/thread/commit");
+    expect(matrix).toContain("conversationImport/job/read");
     expect(matrix).toContain("RuntimeCore StoredSession + AgentEvent");
     expect(matrix).toContain("agentSession/read + thread/items/list");
     expect(matrix).toContain("Preview Artifact Contract");
     expect(matrix).toContain("evidence/export / replay current 主链");
     expect(matrix).toContain("Renderer 不直接扫描 `.codex`");
-    expect(matrix).toContain("旧 Tauri / `lime-rs/src/**` / 旧 `agent_runtime_*` 不作为新增能力落点");
+    expect(matrix).toContain(
+      "旧 Tauri / `lime-rs/src/**` / 旧 `agent_runtime_*` 不作为新增能力落点",
+    );
     expect(matrix).not.toContain("WebviewWindow");
   });
 
@@ -73,13 +96,17 @@ describe("codex import fidelity acceptance matrix guard", () => {
       SOURCE_SCAN_TEST_PATH,
       SOURCE_HEALTH_TEST_PATH,
       PATH_RESOLUTION_TEST_PATH,
+      PERFORMANCE_TEST_PATH,
     );
     const smokeGuards = readFiles(
       CLICK_THROUGH_SMOKE_TEST_PATH,
       CLICK_THROUGH_SMOKE_PATH,
       CLICK_THROUGH_FIXTURE_HELPER_PATH,
       REAL_SAMPLE_SMOKE_TEST_PATH,
+      REAL_SAMPLE_SMOKE_PATH,
       VISUAL_AUDIT_SMOKE_TEST_PATH,
+      VISUAL_AUDIT_SMOKE_PATH,
+      CONVERSATION_IMPORT_PROGRESS_TEST_PATH,
     );
 
     const requiredRows = [
@@ -102,18 +129,20 @@ describe("codex import fidelity acceptance matrix guard", () => {
       "incomplete lifecycle",
       "high-volume rollout",
       "continue same session",
+      "responsive chat / workbench",
       "evidence / replay",
       "session delete / retention boundary",
       "privacy / source leak boundary",
     ];
 
     for (const row of requiredRows) {
-      expect(matrix).toContain(`| ${row} |`);
+      expectMatrixRow(matrix, row);
     }
 
     const requiredRustEvidence = [
       "commit_preserves_codex_tool_command_and_patch_timeline",
       "commit_preserves_high_volume_codex_tool_events_in_canonical_projection",
+      "starts_multi_turn_codex_history_in_background_and_reports_complete_progress",
       "scans_session_index_fallback_reports_read_only_health",
       "scans_missing_source_reports_read_only_health",
       "scans_codex_state_db_project_path_exact_prefix_and_contains",
@@ -143,6 +172,7 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(apiTests).toContain("sourceHomeExists");
     expect(apiTests).toContain("stateDbReadable");
     expect(apiTests).toContain("rolloutFileCount");
+    expect(apiTests).toContain("waitForConversationImportJob");
 
     const requiredGuiEvidence = [
       "hasReasoningVisible",
@@ -156,8 +186,12 @@ describe("codex import fidelity acceptance matrix guard", () => {
       "HTML",
       "DOCX",
       "sourceThreadId",
-      "sourcePath",
+      "hidesSourceBrandText",
+      "sourceMetadataUiVisible",
       "hidesRawSourceEventNames",
+      "conversationImport/job/read",
+      "waitForConversationImportJob",
+      "app-sidebar-conversation-import-progress",
     ];
 
     for (const token of requiredGuiEvidence) {
@@ -181,10 +215,14 @@ describe("codex import fidelity acceptance matrix guard", () => {
     );
 
     expect(matrix).toContain("Preview Artifact Contract");
-    expect(matrix).toContain("`thread_read.tool_calls.arguments.path` + `inline-tool-open-file` + Preview Artifact Contract");
+    expect(matrix).toContain(
+      "`thread_read.tool_calls.arguments.path` + `inline-tool-open-file` + Preview Artifact Contract",
+    );
     expect(matrix).toContain("URL / record / app shell source preview");
     expect(matrix).toContain("PreviewSourceSummaryRenderer");
-    expect(artifactRoadmap).toContain("打开链路 artifact 化，业务事实源不 artifact 化");
+    expect(artifactRoadmap).toContain(
+      "打开链路 artifact 化，业务事实源不 artifact 化",
+    );
     expect(artifactRoadmap).toContain("openArtifactInWorkbench");
     expect(artifactRoadmap).toContain("selectionKey=artifact:<id>");
     expect(artifactRoadmap).toContain("PreviewSourceSummaryRenderer");
@@ -193,10 +231,14 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(artifactRoadmap).toContain("renderMode=document_text");
     expect(artifactRoadmap).toContain("renderMode=system_open");
     expect(artifactRoadmap).toContain("open_with_default_app");
-    expect(matrix).toContain("DOCX / XLSX / PPTX 与可解析 PDF 文本流走 `document_text`");
+    expect(matrix).toContain(
+      "DOCX / XLSX / PPTX 与可解析 PDF 文本流走 `document_text`",
+    );
     expect(matrix).toContain("PDF OCR / 扫描件 / 复杂字体映射");
     expect(matrix).toContain("`entered_review_mode`、`exited_review_mode`");
-    expect(matrix).toContain("`context_compaction`、`reasoning`、`agent_message`");
+    expect(matrix).toContain(
+      "`context_compaction`、`reasoning`、`agent_message`",
+    );
     expect(previewArtifactTests).toContain("research.pdf");
     expect(previewArtifactTests).toContain("budget.xlsx");
     expect(previewArtifactTests).toContain("deck.pptx");
@@ -210,7 +252,9 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(previewArtifactTests).toContain("openExternalUrlWithSystemBrowser");
     expect(previewArtifactTests).toContain('renderMode: "system_open"');
     expect(clickThroughSurface).toContain("inline-tool-open-file");
-    expect(clickThroughSurface).toContain("inspectImportedFilePreviewArtifacts");
+    expect(clickThroughSurface).toContain(
+      "inspectImportedFilePreviewArtifacts",
+    );
     expect(clickThroughSurface).toContain("openedAllImportedPreviewArtifacts");
     expect(clickThroughSurface).toContain("canvas-workbench-html-preview");
     expect(clickThroughSurface).toContain("word/document.xml");
@@ -227,10 +271,18 @@ describe("codex import fidelity acceptance matrix guard", () => {
     );
 
     expect(matrix).toContain("`agentSession/turn/start` current 主链");
-    expect(matrix).toContain("`evidence/export` / replay 使用 Lime canonical events");
-    expect(tracker).toContain("导入来源 runtime 的 `provider_name/model_name` 只表示来源上下文");
-    expect(tracker).toContain("续聊 submit op 必须继续提交用户当前选择的 provider/model");
-    expect(evidenceTests).toContain("imported_codex_thread_exports_evidence_with_source_provenance");
+    expect(matrix).toContain(
+      "`evidence/export` / replay 使用 Lime canonical events",
+    );
+    expect(tracker).toContain(
+      "导入来源 runtime 的 `provider_name/model_name` 只表示来源上下文",
+    );
+    expect(tracker).toContain(
+      "续聊 submit op 必须继续提交用户当前选择的 provider/model",
+    );
+    expect(evidenceTests).toContain(
+      "imported_codex_thread_exports_evidence_with_source_provenance",
+    );
     expect(clickThroughSurface).toContain('"agentSession/turn/start"');
     expect(clickThroughSurface).toContain("backendMetadataImported");
     expect(clickThroughSurface).toContain("hasContinueUserMessage");
@@ -244,11 +296,17 @@ describe("codex import fidelity acceptance matrix guard", () => {
     const sessionClientBoundary = readFile(SESSION_CLIENT_BOUNDARY_TEST_PATH);
 
     expect(matrix).toContain("session delete / retention boundary");
-    expect(matrix).toContain("`agentSession/delete` 清理 Lime memory / projection / event log / session-scoped sidecar");
+    expect(matrix).toContain(
+      "`agentSession/delete` 清理 Lime memory / projection / event log / session-scoped sidecar",
+    );
     expect(matrix).toContain("不删除外部来源目录");
-    expect(matrix).toContain("导出后删除、删除前导出确认和保留期限策略还需要独立产品规则");
+    expect(matrix).toContain(
+      "导出后删除、删除前导出确认和保留期限策略还需要独立产品规则",
+    );
     expect(sessionClient).toContain("deleteAgentRuntimeSession");
-    expect(sessionClient).toContain("appServerSessionClient.deleteAgentRuntimeSession(sessionId)");
+    expect(sessionClient).toContain(
+      "appServerSessionClient.deleteAgentRuntimeSession(sessionId)",
+    );
     expect(sessionClientBoundary).toContain(
       "session archive / restore use agentSession/update and delete uses agentSession/delete",
     );
@@ -262,10 +320,9 @@ describe("codex import fidelity acceptance matrix guard", () => {
     const matrix = readFile(MATRIX_PATH);
     const protocol = readFile(CONVERSATION_IMPORT_PROTOCOL_PATH);
     const securityTests = readFile(SECURITY_TEST_PATH);
-    const smokeGuards = readFiles(
-      REAL_SAMPLE_SMOKE_TEST_PATH,
-      VISUAL_AUDIT_SMOKE_TEST_PATH,
-    );
+    const realSampleGuard = readFile(REAL_SAMPLE_SMOKE_PATH);
+    const visualAuditGuard = readFile(VISUAL_AUDIT_SMOKE_PATH);
+    const visualAuditGuardTest = readFile(VISUAL_AUDIT_SMOKE_TEST_PATH);
 
     expect(matrix).toContain("敏感文件路径");
     expect(matrix).not.toContain("non-Codex importer");
@@ -273,12 +330,20 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(protocol).toContain("pub enum ConversationImportSourceClient");
     expect(protocol).toContain("Codex,");
     expect(protocol).not.toContain("ClaudeCode");
-    expect(matrix).toContain("未来 Codex 新事件类型默认先进入 unsupported / provenance-only");
-    expect(securityTests).toContain("scan_rejects_sensitive_rollout_path_from_state_db");
+    expect(matrix).toContain(
+      "未来 Codex 新事件类型默认先进入 unsupported / provenance-only",
+    );
+    expect(securityTests).toContain(
+      "scan_rejects_sensitive_rollout_path_from_state_db",
+    );
     expect(securityTests).toContain("preview_rejects_sensitive_source_path");
-    expect(securityTests).toContain("commit_rejects_source_path_outside_source_root");
-    expect(smokeGuards).toContain("leakedTokens");
-    expect(smokeGuards).toContain("SOURCE_BRAND_PATTERN");
-    expect(smokeGuards).toContain("GUI 可见文本仍泄漏来源品牌");
+    expect(securityTests).toContain(
+      "commit_rejects_source_path_outside_source_root",
+    );
+    expect(realSampleGuard).toContain("!audit.sourceMetadataUiVisible");
+    expect(visualAuditGuard).toContain("collectVisibleTextLeaks");
+    expect(visualAuditGuard).toContain("SOURCE_BRAND_PATTERN");
+    expect(visualAuditGuard).toContain("GUI 可见文本仍泄漏来源品牌");
+    expect(visualAuditGuardTest).toContain("collectVisibleTextLeaks");
   });
 });

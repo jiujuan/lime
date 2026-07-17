@@ -48,6 +48,7 @@ pub(super) fn scan(source_root: &Path) -> Vec<ImportedThreadSummary> {
                 model_provider: None,
                 archived: false,
                 source_path: super::normalize_filter(line.path.as_deref()),
+                import_job_id: None,
                 import_status: ConversationImportThreadStatus::NotImported,
                 metadata: None,
             })

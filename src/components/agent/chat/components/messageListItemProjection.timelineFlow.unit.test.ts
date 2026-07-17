@@ -408,4 +408,96 @@ describe("messageListItemProjection timeline flow", () => {
       ),
     ).toHaveLength(3);
   });
+
+  it("紧凑历史应保留同一 Turn 经工具分隔的全部显式 final identity", () => {
+    const turnId = "turn-multiple-explicit-finals";
+    const projection = buildProjection(
+      {
+        id: "assistant-multiple-explicit-finals",
+        role: "assistant",
+        content: "第二段最终答复",
+        timestamp: new Date("2026-07-16T10:00:05.000Z"),
+        runtimeTurnId: turnId,
+      },
+      [
+        {
+          id: "tool-before-first-final",
+          type: "tool_call",
+          turn_id: turnId,
+          sequence: 1,
+          tool_name: "exec_command",
+          arguments: { cmd: "npm test" },
+          output: "ok",
+          success: true,
+          status: "completed",
+          started_at: "2026-07-16T10:00:00.000Z",
+          completed_at: "2026-07-16T10:00:01.000Z",
+          updated_at: "2026-07-16T10:00:01.000Z",
+        },
+        {
+          id: "first-explicit-final",
+          type: "agent_message",
+          turn_id: turnId,
+          sequence: 2,
+          phase: "final_answer",
+          text: "第一段最终答复",
+          status: "completed",
+          started_at: "2026-07-16T10:00:02.000Z",
+          completed_at: "2026-07-16T10:00:02.000Z",
+          updated_at: "2026-07-16T10:00:02.000Z",
+        },
+        {
+          id: "tool-before-second-final",
+          type: "tool_call",
+          turn_id: turnId,
+          sequence: 3,
+          tool_name: "exec_command",
+          arguments: { cmd: "npm run verify" },
+          output: "ok",
+          success: true,
+          status: "completed",
+          started_at: "2026-07-16T10:00:03.000Z",
+          completed_at: "2026-07-16T10:00:04.000Z",
+          updated_at: "2026-07-16T10:00:04.000Z",
+        },
+        {
+          id: "second-explicit-final",
+          type: "agent_message",
+          turn_id: turnId,
+          sequence: 4,
+          phase: "final_answer",
+          text: "第二段最终答复",
+          status: "completed",
+          started_at: "2026-07-16T10:00:05.000Z",
+          completed_at: "2026-07-16T10:00:05.000Z",
+          updated_at: "2026-07-16T10:00:05.000Z",
+        },
+      ] as never,
+      {
+        hasActiveInteractiveRuntime: false,
+        isRestoredHistoryWindow: true,
+        isSending: false,
+        turnId,
+        turnStatus: "completed",
+      },
+    );
+
+    expect(
+      projection.rendererContentParts
+        ?.filter((part) => part.type === "text")
+        .map((part) => ({
+          text: part.text,
+          threadItemId: part.metadata?.threadItemId,
+        })),
+    ).toEqual([
+      {
+        text: "第一段最终答复",
+        threadItemId: "first-explicit-final",
+      },
+      {
+        text: "第二段最终答复",
+        threadItemId: "second-explicit-final",
+      },
+    ]);
+  });
 });

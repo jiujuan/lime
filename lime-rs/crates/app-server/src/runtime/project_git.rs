@@ -11,12 +11,9 @@ impl RuntimeCore {
         params: ProjectGitStatusParams,
     ) -> Result<ProjectGitStatusResponse, RuntimeCoreError> {
         let root_path = params.root_path;
-        let status = tokio::task::spawn_blocking(move || {
-            lime_services::project_git_service::read_status(&root_path)
-        })
-        .await
-        .map_err(|error| RuntimeCoreError::Backend(format!("Git 状态读取任务失败: {error}")))?
-        .map_err(RuntimeCoreError::Backend)?;
+        let status = lime_services::project_git_service::read_status(&root_path)
+            .await
+            .map_err(RuntimeCoreError::Backend)?;
         Ok(project_git_status_from_service(status))
     }
 
@@ -28,16 +25,13 @@ impl RuntimeCore {
         let context_lines = params.context_lines;
         let base = params.base.map(project_git_diff_base_to_service);
         let commit_sha = params.commit_sha;
-        let diff = tokio::task::spawn_blocking(move || {
-            lime_services::project_git_service::read_diff(
-                &root_path,
-                context_lines,
-                base,
-                commit_sha.as_deref(),
-            )
-        })
+        let diff = lime_services::project_git_service::read_diff(
+            &root_path,
+            context_lines,
+            base,
+            commit_sha.as_deref(),
+        )
         .await
-        .map_err(|error| RuntimeCoreError::Backend(format!("Git 差异读取任务失败: {error}")))?
         .map_err(RuntimeCoreError::Backend)?;
         Ok(project_git_diff_from_service(diff))
     }
@@ -48,12 +42,9 @@ impl RuntimeCore {
     ) -> Result<ProjectGitCommitListResponse, RuntimeCoreError> {
         let root_path = params.root_path;
         let limit = params.limit;
-        let list = tokio::task::spawn_blocking(move || {
-            lime_services::project_git_service::list_commits(&root_path, limit)
-        })
-        .await
-        .map_err(|error| RuntimeCoreError::Backend(format!("Git 提交列表读取任务失败: {error}")))?
-        .map_err(RuntimeCoreError::Backend)?;
+        let list = lime_services::project_git_service::list_commits(&root_path, limit)
+            .await
+            .map_err(RuntimeCoreError::Backend)?;
         Ok(project_git_commit_list_from_service(list))
     }
 
@@ -63,12 +54,9 @@ impl RuntimeCore {
     ) -> Result<ProjectGitBranchCheckoutResponse, RuntimeCoreError> {
         let root_path = params.root_path;
         let branch = params.branch;
-        let status = tokio::task::spawn_blocking(move || {
-            lime_services::project_git_service::checkout_branch(&root_path, &branch)
-        })
-        .await
-        .map_err(|error| RuntimeCoreError::Backend(format!("Git 分支切换任务失败: {error}")))?
-        .map_err(RuntimeCoreError::Backend)?;
+        let status = lime_services::project_git_service::checkout_branch(&root_path, &branch)
+            .await
+            .map_err(RuntimeCoreError::Backend)?;
         Ok(project_git_status_from_service(status))
     }
 
@@ -78,12 +66,9 @@ impl RuntimeCore {
     ) -> Result<ProjectGitBranchCreateResponse, RuntimeCoreError> {
         let root_path = params.root_path;
         let branch = params.branch;
-        let status = tokio::task::spawn_blocking(move || {
-            lime_services::project_git_service::create_branch(&root_path, &branch)
-        })
-        .await
-        .map_err(|error| RuntimeCoreError::Backend(format!("Git 分支创建任务失败: {error}")))?
-        .map_err(RuntimeCoreError::Backend)?;
+        let status = lime_services::project_git_service::create_branch(&root_path, &branch)
+            .await
+            .map_err(RuntimeCoreError::Backend)?;
         Ok(project_git_status_from_service(status))
     }
 
@@ -94,15 +79,12 @@ impl RuntimeCore {
         let root_path = params.root_path;
         let name = params.name;
         let base_branch = params.base_branch;
-        let worktree = tokio::task::spawn_blocking(move || {
-            lime_services::project_git_service::create_worktree(
-                &root_path,
-                name.as_deref(),
-                base_branch.as_deref(),
-            )
-        })
+        let worktree = lime_services::project_git_service::create_worktree(
+            &root_path,
+            name.as_deref(),
+            base_branch.as_deref(),
+        )
         .await
-        .map_err(|error| RuntimeCoreError::Backend(format!("Git 工作树创建任务失败: {error}")))?
         .map_err(RuntimeCoreError::Backend)?;
         Ok(project_git_worktree_from_service(worktree))
     }

@@ -2,7 +2,7 @@
 title: Codex 对话兼容与导入路线图
 status: active
 owner: app-server-runtime
-updated: 2026-07-15
+updated: 2026-07-17
 ---
 
 # Codex 对话兼容与导入
@@ -45,17 +45,20 @@ next user turn
 5. Renderer 不解析 rollout，不按 `sourceClient=codex` 创建第二套时间线或卡片。
 6. Electron 只提供目录选择与 App Server JSONL 转发，不承接导入业务逻辑。
 7. 普通对话与导入会话必须同构；导入只增加 provenance，不改变 Item schema、执行器或 UI。
+8. GUI 响应式布局由 shared `LayoutTransition` 按实际内容容器宽度决策；窄态默认展示完整
+   聊天，并通过明确模式控件切换工作台，不允许因窗口缩放重挂载消息树或丢失展开状态。
 
 ## 治理分类
 
-| Surface | 分类 | 处理 |
-| --- | --- | --- |
-| `conversationImport/source/scan`、`thread/preview`、`thread/commit` | current | 保留 typed App Server 边界，内部改为 canonical history builder |
-| source discovery、只读安全校验、provenance | current | 保留并收敛到 source adapter |
-| `ImportedRuntimeEvent` / `ImportedToolDraft` / `commit_events/tool_lowering` | dead | 删除；禁止先造 imported wire 再二次 lowering |
-| `conversationImport/thread/runtimeEvents/read` sidecar 下钻 | deprecated | canonical item 分页承接后删除 |
-| `source_client=codex` 驱动的“导入的命令记录”展示 | dead | 删除；复用普通 command/tool item UI |
-| Claude Code importer 占位与 unsupported 分支 | dead | 当前无需求，不保留扩展壳 |
+| Surface                                                                         | 分类    | 处理                                                                                               |
+| ------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
+| `conversationImport/source/scan`、`thread/preview`、`thread/commit`、`job/read` | current | typed App Server 边界；commit 启动同一 canonical owner 的后台 job，read 返回进度与 terminal result |
+| source discovery、只读安全校验、provenance                                      | current | 保留并收敛到 source adapter                                                                        |
+| `ImportedRuntimeEvent` / `commit_events/tool_lowering`                          | dead    | 已删除；禁止先造 imported product wire 再二次 lowering                                             |
+| `conversationImport/thread/runtimeEvents/read` sidecar 下钻                     | dead    | 已删除；旧 method 只允许负向 guard                                                                 |
+| `source_client=codex` 驱动的“导入的命令记录”展示                                | dead    | 删除；复用普通 command/tool item UI                                                                |
+| `smoke:codex-import-content-studio` 真实数据脚本                                | dead    | 已删除；由 Rust corpus、点击导入 Gate B 与有界真实样本审计承接                                     |
+| Claude Code importer 占位与 unsupported 分支                                    | dead    | 当前无需求，不保留扩展壳                                                                           |
 
 ## 阶段
 
@@ -67,38 +70,49 @@ next user turn
 
 ### S1：Canonical history builder
 
-- [ ] 从 rollout 解析 persisted `RolloutItem`，建立 turn boundary 与稳定 item identity。
-- [ ] 覆盖 message、reasoning、command、file change、MCP、dynamic tool、web search、plan、
+- [x] 从 rollout 解析 persisted `RolloutItem`，建立 turn boundary 与稳定 item identity。
+- [x] 覆盖 message、reasoning、command、file change、MCP、dynamic tool、web search、plan、
       approval、image、context compaction、review 与 collab activity。
-- [ ] 直接写入 canonical Thread / Turn / Item；未知新事件 fail-closed 并计入 preview。
-- [ ] 删除 imported runtime draft、synthetic tool lifecycle 与 materialized window。
+- [x] 直接写入 canonical Thread / Turn / Item；未知新事件 fail-closed 并计入 preview。
+- [x] 删除 imported runtime draft、synthetic tool lifecycle 与 materialized window。
 
 ### S2：续聊与工具执行
 
-- [ ] 导入 session 恢复 cwd、workspace roots 与必要的 model-visible history。
-- [ ] 新 turn 只使用 Lime 当前 provider/model/approval/sandbox 选择。
-- [ ] provider 发出 `exec_command`、`apply_patch`、MCP、`request_user_input` 时，走与普通
+- [x] 导入 session 恢复 cwd、workspace roots 与必要的 model-visible history。
+- [x] 新 turn 只使用 Lime 当前 provider/model/approval/sandbox 选择。
+- [x] provider 发出 `exec_command`、`apply_patch`、MCP、`request_user_input` 时，走与普通
       session 相同的 `CurrentTurnToolExecutor`。
-- [ ] 历史 command/tool 永不再次执行，并有负向测试。
-- [ ] 同一 provider fixture 分别从普通 session 与导入 session 发起相同工具调用，canonical
+- [x] 历史 command/tool 永不再次执行，并有负向测试。
+- [x] 同一 provider fixture 分别从普通 session 与导入 session 发起相同工具调用，canonical
       Item、审批、sandbox、输出和终态除 provenance 外一致。
 
 ### S3：GUI 单轨
 
-- [ ] 删除 imported-only command/tool group、标题和展开策略。
-- [ ] 历史 command 显示命令、cwd、输出、exit code、duration；工具显示 name、arguments、
+- [x] 删除 imported-only command/tool group、标题和展开策略。
+- [x] 历史 command 显示命令、cwd、输出、exit code、duration；工具显示 name、arguments、
       output、status，遵循普通 Item 的折叠规则。
-- [ ] 来源与导入时间只出现在会话详情/诊断，不进入消息主线。
-- [ ] 五语言同步删除过时的 imported command 文案与正向断言。
+- [x] 来源与导入时间只出现在会话详情/诊断，不进入消息主线。
+- [x] 五语言同步删除过时的 imported command 文案与正向断言。
+- [x] desktop 保持聊天/工作台分栏；compact/narrow 使用聊天优先单面板，并保留工作台入口。
+- [x] 断点切换保持消息树稳定，不丢 timeline 展开态、滚动位置和输入草稿。
 
 ### S4：验证与删除证明
 
-- [ ] Rust golden corpus 覆盖当前 Codex rollout 版本与 archived / compressed rollout。
-- [ ] 导入同一 source 幂等；替换导入不残留旧 ThreadStore / ProjectionStore 数据。
-- [ ] Gate B 真实 Electron：scan -> preview -> commit -> read -> 输入 follow-up。
-- [ ] runtime provider fixture：follow-up 触发真实 shell/tool，断言输出、终态和审批。
-- [ ] 大样本、多视口、控制台错误、bridge trace 与 source leak 审计。
-- [ ] `test:contracts`、`governance:legacy-report`、`verify:gui-smoke` 通过。
+- [x] Rust golden corpus 覆盖当前 Codex rollout 版本与 archived / compressed rollout。
+- [x] 导入同一 source 幂等；替换导入不残留旧 ThreadStore / ProjectionStore 数据。
+- [x] Gate B 真实 Electron：scan -> preview -> commit -> job/read -> session read -> 输入 follow-up。
+- [x] runtime provider fixture：follow-up 触发真实 shell/tool，断言输出、终态和审批。
+- [x] 有界真实样本、多视口、控制台错误、bridge trace 与 source leak 审计。
+- [x] 超大历史 commit 统一进入可观测后台 job；GUI 展示阶段/百分比，重复提交复用 active job。
+- [x] `test:contracts`、`governance:legacy-report`、`verify:gui-smoke` 通过。
+
+## 2026-07-17 证据
+
+- 点击导入 Gate B：`codex-import-click-through-v30-summary.json`，15 个 canonical item、4 条消息，覆盖 reasoning、command、approval、tool、web search、file artifact、六类文件预览、附件与同 session 续聊；desktop / compact / narrow 均通过，输入框与消息列表可用，模式控件无按钮重叠，console error 为 0。
+- 真实 Codex 样本 Gate B：`local-history-import-real-sample-visual-audit-v4-summary.json`，来自当前工作区的只读 source，5 个 turn 组、5 条用户消息、5 条 assistant 消息、346 个 tool row、10 个文件产物；三视口乘三滚动位置无 source leak、console error、工具栏遮挡或输入框阻塞。默认预算为 5,000 rollout 行、200 消息、1,200 timeline item。
+- `app-server` Rust 单元测试 1181/1181；contracts 291 项；后台导入 gateway / View Model / DOM 与 Electron guards 46/46；治理扫描零边界违规；`smoke:agent-runtime-current-fixture` 与 `verify:gui-smoke` 通过。
+- 后台导入 Gate B：`codex-import-click-through-background-v1-summary.json` 的 trace 包含 `conversationImport/job/read`，15 items / 4 messages、六类预览、同 session 续聊与三视口审计保持通过；`local-history-import-real-sample-background-v1-summary.json` 覆盖 1,500 source lines、785 个预估导入项、5 turns，最终 434 canonical items、346 tool rows、10 file artifacts 与 9 组视觉审计通过。
+- 多 turn 压力回归把 1,200 commands 分布到 40 turns：commit-start 在 2 秒预算内返回，后台 5.59 秒完成，进度 40/40、`budgetDropped=0`。长导入不再受单次 JSON-RPC commit 超时限制。
 
 ## 完成定义
 
@@ -109,6 +123,8 @@ next user turn
 3. 真实 Electron 导入可见，导入后真实 provider tool loop 可执行 command/tool。
 4. 历史工具零重放，source 目录零写入，生产零 mock fallback。
 5. current / deprecated / dead 守卫、架构确认、定向测试和 Gate B evidence 齐全。
+
+当前实现已满足 1-4 与验证门禁；第 5 项仍等待责任开发者填写架构确认，计划保持 `active`，不进入 release evidence。Windows 真实 Electron 路径证据仍需在 Windows runner 补齐，本机只完成跨平台路径定向测试。
 
 执行进度见 [implementation-tracker.md](implementation-tracker.md)，产品边界见
 [prd.md](prd.md)，验收矩阵见 [fidelity-acceptance-matrix.md](fidelity-acceptance-matrix.md)。

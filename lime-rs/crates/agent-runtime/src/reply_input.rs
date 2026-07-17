@@ -9,8 +9,9 @@ use serde_json::Value;
 
 #[derive(Clone, Debug)]
 pub struct RuntimeReplyInputImage {
-    pub data: String,
+    pub uri: String,
     pub media_type: String,
+    pub provider_data: Option<String>,
 }
 
 #[derive(Clone, Debug)]

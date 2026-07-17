@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
+import { withNativeSystemPath } from "./lib/native-executable-env.mjs";
 import { planQualityTasks, resolveDiffBase } from "./quality-task-planner.mjs";
 
 const options = parseArgs(process.argv.slice(2));
@@ -84,7 +85,7 @@ function runCommand(command, args) {
   const result = spawnSync(command, args, {
     cwd: rootDir,
     stdio: "inherit",
-    env: process.env,
+    env: withNativeSystemPath(process.env),
   });
 
   if (typeof result.status === "number" && result.status !== 0) {

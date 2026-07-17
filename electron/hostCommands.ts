@@ -1,4 +1,4 @@
-/* global Buffer, process */
+/* global process */
 import { app, shell } from "./electronRuntime";
 import {
   METHOD_MODEL_LIST,
@@ -210,10 +210,6 @@ export class ElectronHostCommands {
         return await this.#voiceModelHost.delete(args);
       case "get_environment_preview":
         return await this.#systemUtilityHost.getEnvironmentPreview();
-      case "get_skill_package_file_association_status":
-        return this.#systemUtilityHost.getSkillPackageFileAssociationStatus();
-      case "set_skill_package_file_association_default":
-        return this.#systemUtilityHost.setSkillPackageFileAssociationDefault();
       case "get_browser_connector_settings_cmd":
         return this.#systemUtilityHost.getBrowserConnectorSettings();
       case "get_browser_connector_install_status_cmd":

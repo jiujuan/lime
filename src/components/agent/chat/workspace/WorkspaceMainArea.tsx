@@ -18,6 +18,7 @@ import { TASK_CENTER_CHROME_RAIL_SURFACE } from "./taskCenterChromeTokens";
 
 const TASK_CENTER_SPLIT_CHROME_TOP_INSET = "84px";
 const TASK_CENTER_SPLIT_WORKBENCH_TOP_INSET = "42px";
+const TASK_CENTER_DETACHED_TOOLBAR_TOP_INSET = "42px";
 const TASK_CENTER_SPLIT_CHROME_BREAKPOINT_WIDTH = 900;
 const TASK_CENTER_SPLIT_CHROME_BREAKPOINT_HEIGHT = 620;
 const TASK_CENTER_DETACHED_TOOLBAR_BREAKPOINT_WIDTH = 1024;
@@ -150,6 +151,15 @@ export function WorkspaceMainArea({
     : shouldDetachTaskCenterToolbar
       ? "detached"
       : "stacked";
+  const chatPanelTopInset = shouldSplitTaskCenterChrome
+    ? TASK_CENTER_SPLIT_CHROME_TOP_INSET
+    : shouldDetachTaskCenterToolbar
+      ? TASK_CENTER_DETACHED_TOOLBAR_TOP_INSET
+      : "0px";
+  const canvasPanelTopInset =
+    shouldSplitTaskCenterChrome || shouldDetachTaskCenterToolbar
+      ? TASK_CENTER_SPLIT_WORKBENCH_TOP_INSET
+      : "0px";
   const taskCenterChromeNode = shouldRenderTaskCenterChrome ? (
     <div
       className={
@@ -201,9 +211,7 @@ export function WorkspaceMainArea({
       data-testid="workspace-main-area"
       data-layout-mode={effectiveLayoutMode}
       data-has-right-surface={hasRightSurfaceContent ? "true" : "false"}
-      data-floating-input-overlay={
-        showFloatingInputOverlay ? "true" : "false"
-      }
+      data-floating-input-overlay={showFloatingInputOverlay ? "true" : "false"}
     >
       {shouldAutoHideNavbar ? (
         <AutoHideNavbarBackdrop
@@ -286,16 +294,8 @@ export function WorkspaceMainArea({
           canvasContent={effectiveCanvasContent}
           chatPanelWidth={effectiveChatPanelWidth}
           chatPanelMinWidth={effectiveChatPanelMinWidth}
-          chatPanelTopInset={
-            shouldSplitTaskCenterChrome
-              ? TASK_CENTER_SPLIT_CHROME_TOP_INSET
-              : "0px"
-          }
-          canvasPanelTopInset={
-            shouldSplitTaskCenterChrome
-              ? TASK_CENTER_SPLIT_WORKBENCH_TOP_INSET
-              : "0px"
-          }
+          chatPanelTopInset={chatPanelTopInset}
+          canvasPanelTopInset={canvasPanelTopInset}
           forceOpenChatPanel={hasPendingA2UIForm}
         />
       </GeneralWorkbenchLayoutShell>

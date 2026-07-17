@@ -1,4 +1,3 @@
-import { areArtifactProtocolPathsEquivalent } from "@/lib/artifact-protocol";
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
 import { isPureRuntimePeerMessageText } from "../utils/runtimePeerMessageDisplay";
 import {
@@ -17,7 +16,11 @@ import {
   parseLeadingUserCommandTag,
   resolveInstalledSkillMessageLabel,
 } from "./messageListUserContentState";
-import { buildTimelineInlineContentParts } from "./messageListTimelineContentParts";
+import {
+  buildTimelineFileChangesContentPart,
+  buildTimelineInlineContentParts,
+  buildTimelineVisibleTextContentParts,
+} from "./messageListTimelineContentParts";
 import {
   resolveImageWorkbenchMessageDisplayState,
   resolveImageWorkbenchProcessDisplayState,
@@ -68,6 +71,7 @@ import {
 import {
   canMergeTimelineAsSparseProcessPatch,
   canTimelineOwnInlineProcessFlow,
+  isTerminalThreadTurnStatus,
   isRuntimeFailureDiagnosticAliasText,
   isRuntimeFailureOnlyAssistantText,
   isTrivialAssistantFinalText,
@@ -301,21 +305,22 @@ export function resolveMessageListItemProjection({
   const primaryTimelineKey = timeline ? `leading:${timeline.turn.id}` : null;
   const shouldPreferCompactHistoricalTimeline =
     Boolean(primaryTimelineKey) &&
-    isRestoredHistoryWindow &&
     !focusedTimelineItemId &&
-    timeline?.turn.status === "completed" &&
-    timeline.turn.id !== activeCurrentTurnId &&
+    isTerminalThreadTurnStatus(timeline?.turn.status) &&
+    timeline?.turn.id !== activeCurrentTurnId &&
     !expandedHistoricalTimelineKeys.has(primaryTimelineKey!) &&
     (shouldDeferThreadItemsScan ||
       (timelineItemsForDisplay?.length || 0) >=
         MESSAGE_LIST_HISTORICAL_TIMELINE_COMPACT_ITEM_THRESHOLD);
   const shouldKeepExpandedHistoricalTimelineInTimeline =
     Boolean(primaryTimelineKey) &&
-    isRestoredHistoryWindow &&
     !focusedTimelineItemId &&
-    timeline?.turn.status === "completed" &&
-    timeline.turn.id !== activeCurrentTurnId &&
+    isTerminalThreadTurnStatus(timeline?.turn.status) &&
+    timeline?.turn.id !== activeCurrentTurnId &&
     expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
+  const shouldProjectHistoricalProcessThroughTimeline =
+    shouldPreferCompactHistoricalTimeline ||
+    shouldKeepExpandedHistoricalTimelineInTimeline;
   const hasStreamingOverlayText = Boolean(
     streamingFinalTextOverlayContent?.trim(),
   );
@@ -342,11 +347,14 @@ export function resolveMessageListItemProjection({
       displayContent,
       timelineItems: timelineItemsForDisplay,
     });
+  const rendererContentPartsOwnInlineProcessFlow =
+    messageContentPartsOwnInlineProcessFlow &&
+    !shouldProjectHistoricalProcessThroughTimeline;
   const timelineOwnsInlineProcessFlow =
-    !messageContentPartsOwnInlineProcessFlow &&
+    !rendererContentPartsOwnInlineProcessFlow &&
     canTimelineOwnInlineProcessFlow(timelineItemsForDisplay);
   const shouldMergeTimelineProcessWithInlineThinking =
-    messageContentPartsOwnInlineProcessFlow &&
+    rendererContentPartsOwnInlineProcessFlow &&
     !hasInlineNonThinkingProcessPart &&
     canTimelineOwnInlineProcessFlow(timelineItemsForDisplay);
   const timelineInlineContentParts =
@@ -389,20 +397,52 @@ export function resolveMessageListItemProjection({
       ) ||
       // 消息 contentParts 已经持有过程顺序时，始终保留 inline process flow，
       // 让思考、工具、确认与文件改动按时间序穿插显示。
-      messageContentPartsOwnInlineProcessFlow);
+      rendererContentPartsOwnInlineProcessFlow);
+  const filteredConversationDisplayContentParts =
+    filterConversationDisplayContentParts(filteredDisplayContentParts, {
+      includeProcessFlow: includeInlineProcessFlow,
+      preserveToolUseParts: !hasProcessTimelineItems,
+    });
+  const timelineVisibleTextContentParts =
+    message.role === "assistant" &&
+    shouldProjectHistoricalProcessThroughTimeline
+      ? buildTimelineVisibleTextContentParts({
+          displayContent: shouldHideAssistantTextWhileRunning
+            ? ""
+            : displayContent,
+          existingContentParts: filteredConversationDisplayContentParts,
+          includeCommentary: shouldKeepExpandedHistoricalTimelineInTimeline,
+          items: timelineItemsForDisplay,
+        })
+      : undefined;
+  const timelineFileChangesContentPart =
+    message.role === "assistant" &&
+    shouldProjectHistoricalProcessThroughTimeline
+      ? buildTimelineFileChangesContentPart(timelineItemsForDisplay)
+      : undefined;
+  const timelineOwnedConversationContentParts =
+    timelineVisibleTextContentParts || timelineFileChangesContentPart
+      ? [
+          ...(timelineVisibleTextContentParts || []),
+          ...(filteredConversationDisplayContentParts || []).filter(
+            (part) =>
+              part.type !== "text" &&
+              (!timelineFileChangesContentPart ||
+                part.type !== "file_changes_batch"),
+          ),
+          ...(timelineFileChangesContentPart
+            ? [timelineFileChangesContentPart]
+            : []),
+        ]
+      : undefined;
   const ensuredConversationContentParts =
     message.role === "assistant"
       ? ensureInlineThinkingContentPart({
           parts: hideFinalAnswerContentPartsWhileRunning(
             mergeStreamingOverlayContentParts(
               timelineInlineContentParts ||
-                filterConversationDisplayContentParts(
-                  filteredDisplayContentParts,
-                  {
-                    includeProcessFlow: includeInlineProcessFlow,
-                    preserveToolUseParts: !hasProcessTimelineItems,
-                  },
-                ),
+                timelineOwnedConversationContentParts ||
+                filteredConversationDisplayContentParts,
               shouldHideAssistantTextWhileRunning
                 ? null
                 : streamingFinalTextOverlay,
@@ -514,27 +554,28 @@ export function resolveMessageListItemProjection({
       ).filter(
         (item) =>
           item.type !== "file_artifact" ||
-          (!isHiddenConversationArtifactPath(item.path) &&
-            !fileChangeBatchPaths.some((changedPath) =>
-              areArtifactProtocolPathsEquivalent(item.path, changedPath),
-            )),
+          !isHiddenConversationArtifactPath(item.path),
       )
     : [];
   const hasDeferredHistoricalTimelineDetails =
     Boolean(timeline) &&
     isRestoredHistoryWindow &&
     shouldDeferThreadItemsScan &&
-    timeline?.turn.status === "completed" &&
-    timeline.turn.id !== activeCurrentTurnId;
+    isTerminalThreadTurnStatus(timeline?.turn.status) &&
+    timeline?.turn.id !== activeCurrentTurnId;
+  const compactPrimaryTimelineItems = shouldPreferCompactHistoricalTimeline
+    ? [...visiblePrimaryTimelineItems, ...trailingTimelineItems]
+    : visiblePrimaryTimelineItems;
   const primaryTimeline =
     !shouldSuppressImageProcessFlow &&
     timeline &&
-    (visiblePrimaryTimelineItems.length > 0 ||
+    (compactPrimaryTimelineItems.length > 0 ||
       hasDeferredHistoricalTimelineDetails)
-      ? { ...timeline, items: visiblePrimaryTimelineItems }
+      ? { ...timeline, items: compactPrimaryTimelineItems }
       : null;
   const trailingTimeline =
     !shouldSuppressImageProcessFlow &&
+    !shouldPreferCompactHistoricalTimeline &&
     timeline &&
     trailingTimelineItems.length > 0
       ? { ...timeline, items: trailingTimelineItems }
@@ -576,16 +617,23 @@ export function resolveMessageListItemProjection({
     message,
   });
   const usesProcessSeparatedFinalText =
-    messageContentPartsOwnInlineProcessFlow &&
+    rendererContentPartsOwnInlineProcessFlow &&
     includeInlineProcessFlow &&
     hasFinalTextAfterProcessBoundary(conversationContentParts);
   const rendererConversationContentParts = usesProcessSeparatedFinalText
     ? resolveProcessSeparatedContentParts(conversationContentParts)
     : conversationContentParts;
+  const timelineOwnsVisibleText =
+    shouldProjectHistoricalProcessThroughTimeline ||
+    timelineOwnsInlineProcessFlow;
   const timelineOwnedActionContent =
-    timelineOwnsInlineProcessFlow &&
-    (messageContentPartsOwnInlineProcessFlow || !displayContent.trim())
-      ? resolveTimelineOwnedVisibleText(conversationContentParts)
+    timelineOwnsVisibleText &&
+    (shouldProjectHistoricalProcessThroughTimeline ||
+      messageContentPartsOwnInlineProcessFlow ||
+      !displayContent.trim())
+      ? resolveTimelineOwnedVisibleText(conversationContentParts, {
+          includeCommentary: shouldKeepExpandedHistoricalTimelineInTimeline,
+        })
       : null;
   const rawActionContent =
     timelineOwnedActionContent ??
@@ -642,6 +690,7 @@ export function resolveMessageListItemProjection({
     isRestoredHistoryWindow &&
     message.role === "assistant" &&
     !message.isThinking &&
+    !shouldProjectHistoricalProcessThroughTimeline &&
     actionContent.length > MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_THRESHOLD &&
     !expandedLongHistoricalMessageIds.has(message.id);
   const hasNonTextConversationContentParts = Boolean(
@@ -659,6 +708,7 @@ export function resolveMessageListItemProjection({
     isRestoredHistoryWindow &&
     message.role === "assistant" &&
     !message.isThinking &&
+    !shouldProjectHistoricalProcessThroughTimeline &&
     !focusedTimelineItemId &&
     !includeInlineProcessFlow &&
     !hasNonTextConversationContentParts &&
@@ -842,14 +892,13 @@ export function resolveMessageListItemProjection({
   const arePrimaryTimelineDetailsDeferred =
     Boolean(primaryTimeline) &&
     shouldDeferThreadItemsScan &&
-    primaryTimeline?.turn.status === "completed" &&
-    primaryTimeline.turn.id !== activeCurrentTurnId;
+    isTerminalThreadTurnStatus(primaryTimeline?.turn.status) &&
+    primaryTimeline?.turn.id !== activeCurrentTurnId;
   const shouldRenderCompactPrimaryTimeline =
     Boolean(primaryTimelineKey) &&
-    isRestoredHistoryWindow &&
     !focusedTimelineItemId &&
-    primaryTimeline?.turn.status === "completed" &&
-    primaryTimeline.turn.id !== activeCurrentTurnId &&
+    isTerminalThreadTurnStatus(primaryTimeline?.turn.status) &&
+    primaryTimeline?.turn.id !== activeCurrentTurnId &&
     shouldPreferCompactHistoricalTimeline &&
     !expandedHistoricalTimelineKeys.has(primaryTimelineKey!);
   const shouldRenderPrimaryTimelineOutsideBubble =

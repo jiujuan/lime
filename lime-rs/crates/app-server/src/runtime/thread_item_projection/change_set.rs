@@ -62,41 +62,47 @@ pub(super) struct ChangeSetAccumulator {
 }
 
 impl ChangeSetAccumulator {
-    pub(super) fn push_item(&mut self, item: ThreadItem) {
+    pub(super) fn push_item(&mut self, item: ThreadItem) -> Option<ThreadItem> {
         let key = (
             item.thread_id.to_string(),
             item.turn_id.to_string(),
             item.item_id.clone(),
         );
         if self.removed_item_indexes.contains_key(&item.item_id) {
-            return;
+            return None;
         }
         if let Some(index) = self.item_indexes.get(&key).copied() {
             let previous = self.changed_items[index]
                 .take()
                 .expect("item index always points at a live item");
-            self.changed_items[index] = Some(merge_item_snapshot(previous, item));
+            let snapshot = merge_item_snapshot(previous, item);
+            self.changed_items[index] = Some(snapshot.clone());
+            Some(snapshot)
         } else {
             self.item_indexes.insert(key, self.changed_items.len());
-            self.changed_items.push(Some(item));
+            self.changed_items.push(Some(item.clone()));
+            Some(item)
         }
     }
 
-    pub(super) fn push_turn(&mut self, turn: Turn, sequence: u64) {
+    pub(super) fn push_turn(&mut self, turn: Turn, sequence: u64) -> Option<Turn> {
         let key = turn.turn_id.to_string();
         if self.removed_turn_indexes.contains_key(&key) {
-            return;
+            return None;
         }
         if let Some(index) = self.turn_indexes.get(&key).copied() {
             let previous = self.changed_turns[index]
                 .take()
                 .expect("turn index always points at a live turn");
-            self.changed_turns[index] = Some(merge_turn_snapshot(previous, turn));
+            let snapshot = merge_turn_snapshot(previous, turn);
+            self.changed_turns[index] = Some(snapshot.clone());
             self.changed_turn_sequences[index] = Some(sequence);
+            Some(snapshot)
         } else {
             self.turn_indexes.insert(key, self.changed_turns.len());
-            self.changed_turns.push(Some(turn));
+            self.changed_turns.push(Some(turn.clone()));
             self.changed_turn_sequences.push(Some(sequence));
+            Some(turn)
         }
     }
 
@@ -212,6 +218,20 @@ fn merge_payload(
     use agent_protocol::ThreadItemPayload;
 
     match (previous, next) {
+        (
+            ThreadItemPayload::UserMessage {
+                content: previous_content,
+                client_id: previous_client_id,
+            },
+            ThreadItemPayload::UserMessage { content, client_id },
+        ) => ThreadItemPayload::UserMessage {
+            content: if content.is_empty() {
+                previous_content
+            } else {
+                content
+            },
+            client_id: client_id.or(previous_client_id),
+        },
         (
             ThreadItemPayload::AgentMessage {
                 text: previous,
@@ -429,10 +449,33 @@ fn merge_message_content_parts(
     for part in next {
         match &part {
             agent_protocol::MessageContentPart::Text { text } => {
+                if previous.iter().any(|part| {
+                    matches!(
+                        part,
+                        agent_protocol::MessageContentPart::Text {
+                            text: previous_text,
+                        } if previous_text == text
+                    )
+                }) {
+                    continue;
+                }
                 if let Some(previous_text) = previous.iter_mut().find_map(|part| match part {
-                    agent_protocol::MessageContentPart::Text { text } => Some(text),
+                    agent_protocol::MessageContentPart::Text {
+                        text: previous_text,
+                    } if text.starts_with(previous_text.as_str())
+                        || previous_text.starts_with(text.as_str()) =>
+                    {
+                        Some(previous_text)
+                    }
                     _ => None,
                 }) {
+                    *previous_text = merge_stream_text(previous_text.clone(), text.clone());
+                    continue;
+                }
+                if let Some(agent_protocol::MessageContentPart::Text {
+                    text: previous_text,
+                }) = previous.last_mut()
+                {
                     *previous_text = merge_stream_text(previous_text.clone(), text.clone());
                     continue;
                 }

@@ -1,8 +1,15 @@
-import React from "react";
-import { ChevronDown, ExternalLink, FolderTree } from "lucide-react";
+import React, { useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  FolderTree,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
+import { renderDiffReviewLineForCanvas } from "../utils/diffReview";
 import type {
   DiffReviewFile,
   DiffReviewScopeItem,
@@ -65,6 +72,16 @@ export function ToolCallDisplayResultPanel({
   renderedResultContent,
 }: ToolCallDisplayResultPanelProps) {
   const { t } = useTranslation("agent");
+  const [copiedDiffFileId, setCopiedDiffFileId] = useState<string | null>(null);
+  const copyDiffFile = async (file: DiffReviewFile) => {
+    const content = file.lines.map(renderDiffReviewLineForCanvas).join("\n");
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedDiffFileId(file.id);
+    } catch {
+      setCopiedDiffFileId(null);
+    }
+  };
 
   return (
     <div
@@ -210,34 +227,28 @@ export function ToolCallDisplayResultPanel({
           className="rounded-[12px] border border-slate-200 bg-white"
           data-testid="tool-call-diff-review"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
-            <div className="text-[11px] font-semibold text-slate-700">
-              {t("agentChat.toolCall.diffReview.title")}
+          {diffReviewSummary.files.length > 1 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
+              <div className="text-[11px] font-semibold text-slate-700">
+                {t("agentChat.toolCall.diffReview.title")}
+              </div>
+              <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                <span>
+                  {t("agentChat.toolCall.diffReview.files", {
+                    count: diffReviewSummary.files.length,
+                  })}
+                </span>
+                <span className="text-emerald-700">
+                  +{diffReviewSummary.additions}
+                </span>
+                <span className="text-rose-700">
+                  -{diffReviewSummary.deletions}
+                </span>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500">
-              <span>
-                {t("agentChat.toolCall.diffReview.files", {
-                  count: diffReviewSummary.files.length,
-                })}
-              </span>
-              <span className="text-emerald-700">
-                {t("agentChat.toolCall.diffReview.additions", {
-                  count: diffReviewSummary.additions,
-                })}
-              </span>
-              <span className="text-rose-700">
-                {t("agentChat.toolCall.diffReview.deletions", {
-                  count: diffReviewSummary.deletions,
-                })}
-              </span>
-              <span>
-                {t("agentChat.toolCall.diffReview.hunks", {
-                  count: diffReviewSummary.hunks,
-                })}
-              </span>
-            </div>
-          </div>
-          {diffReviewScopeItems.length > 0 ? (
+          ) : null}
+          {diffReviewSummary.files.length > 1 &&
+          diffReviewScopeItems.length > 0 ? (
             <div
               className="border-b border-slate-100 bg-slate-50/70 px-3 py-2"
               data-testid="tool-call-diff-review-scope"
@@ -284,38 +295,38 @@ export function ToolCallDisplayResultPanel({
               return (
                 <div
                   key={file.id}
-                  className="px-3 py-2"
+                  className="overflow-hidden"
                   data-testid="tool-call-diff-review-file"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={cn(
-                        "rounded border px-1.5 py-0.5 text-[10px] font-medium",
-                        file.status === "added" &&
-                          "border-emerald-200 bg-emerald-50 text-emerald-800",
-                        file.status === "deleted" &&
-                          "border-rose-200 bg-rose-50 text-rose-800",
-                        file.status === "modified" &&
-                          "border-sky-200 bg-sky-50 text-sky-800",
-                        file.status === "unknown" &&
-                          "border-slate-200 bg-slate-50 text-slate-700",
-                      )}
-                    >
-                      {t(`agentChat.toolCall.diffReview.status.${file.status}`)}
-                    </span>
-                    <code className="min-w-0 break-all font-mono text-[11px] text-slate-800">
+                  <div className="flex min-h-9 flex-wrap items-center gap-2 bg-slate-50 px-3 py-2">
+                    <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-700">
                       {file.path}
                     </code>
-                    <span className="text-[11px] text-emerald-700">
+                    <span className="shrink-0 text-[11px] text-emerald-700">
                       +{file.additions}
                     </span>
-                    <span className="text-[11px] text-rose-700">
+                    <span className="shrink-0 text-[11px] text-rose-700">
                       -{file.deletions}
                     </span>
+                    <button
+                      type="button"
+                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-900"
+                      title={t("agentChat.markdown.code.copyBlock")}
+                      aria-label={t("agentChat.markdown.code.copyBlock")}
+                      onClick={() => {
+                        void copyDiffFile(file);
+                      }}
+                    >
+                      {copiedDiffFileId === file.id ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                     {canOpenDiffFileInCanvas ? (
                       <button
                         type="button"
-                        className="ml-auto inline-flex items-center justify-center rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-900"
                         title={t(
                           "agentChat.toolCall.diffReview.openInCanvasWithTarget",
                           { target: file.path },
@@ -334,7 +345,7 @@ export function ToolCallDisplayResultPanel({
                     <div
                       id={diffLinesId}
                       className={cn(
-                        "mt-2 overflow-y-auto rounded-[10px] border border-slate-100 bg-slate-50 font-mono text-[11px] leading-relaxed",
+                        "overflow-auto border-t border-slate-100 bg-white font-mono text-[11px] leading-relaxed",
                         isDiffFileExpanded ? "max-h-80" : "max-h-36",
                       )}
                       data-testid="tool-call-diff-review-file-lines"
@@ -343,7 +354,7 @@ export function ToolCallDisplayResultPanel({
                         <div
                           key={`${file.id}:${index}`}
                           className={cn(
-                            "grid grid-cols-[24px_minmax(0,1fr)] gap-2 px-2 py-0.5",
+                            "grid min-w-max grid-cols-[48px_minmax(640px,1fr)]",
                             line.kind === "add" &&
                               "bg-emerald-50 text-emerald-900",
                             line.kind === "remove" &&
@@ -352,16 +363,23 @@ export function ToolCallDisplayResultPanel({
                             line.kind === "context" && "text-slate-700",
                           )}
                         >
-                          <span className="select-none text-right text-slate-400">
+                          <span
+                            className={cn(
+                              "select-none border-r border-slate-100 px-2 py-0.5 text-right text-slate-400",
+                              line.kind === "add" && "border-emerald-100",
+                              line.kind === "remove" && "border-rose-100",
+                            )}
+                          >
+                            {line.newLine ?? line.oldLine ?? ""}
+                          </span>
+                          <span className="min-w-0 whitespace-pre px-2 py-0.5">
                             {line.kind === "add"
                               ? "+"
                               : line.kind === "remove"
                                 ? "-"
                                 : line.kind === "hunk"
-                                  ? "@@"
-                                  : ""}
-                          </span>
-                          <span className="min-w-0 break-all">
+                                  ? ""
+                                  : " "}
                             {line.text || " "}
                           </span>
                         </div>
@@ -371,7 +389,7 @@ export function ToolCallDisplayResultPanel({
                   {hiddenLineCount > 0 ? (
                     <button
                       type="button"
-                      className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+                      className="inline-flex w-full items-center gap-1 border-t border-slate-100 px-3 py-2 text-left text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
                       aria-expanded={isDiffFileExpanded}
                       aria-controls={diffLinesId}
                       onClick={() => onToggleDiffFileExpanded(file.id)}
@@ -440,7 +458,7 @@ export function ToolCallDisplayResultPanel({
           {resultPath.label}: {resultPath.displayValue}
         </div>
       ) : null}
-      {commandOutputStreams.length === 0 ? (
+      {commandOutputStreams.length === 0 && !diffReviewSummary ? (
         <div
           className={cn(
             "max-h-64 overflow-y-auto rounded-[14px] border border-slate-200 bg-white p-3",

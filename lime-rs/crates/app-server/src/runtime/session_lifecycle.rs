@@ -288,8 +288,9 @@ impl RuntimeCore {
             .sessions
             .values()
             .filter(|stored| {
-                !pending_thread_ids
-                    .contains(&agent_protocol::ThreadId::new(stored.session.thread_id.clone()))
+                !pending_thread_ids.contains(&agent_protocol::ThreadId::new(
+                    stored.session.thread_id.clone(),
+                ))
             })
             .filter(|stored| !stored_session_hidden_from_user_recents(stored))
             .map(stored_session_to_overview)
@@ -699,14 +700,11 @@ impl RuntimeCore {
             .state
             .lock()
             .expect("runtime core state mutex poisoned");
-        state
-            .sessions
-            .get(session_id)
-            .is_some_and(|stored| {
-                !self
-                    .is_pending_agent_control_thread(&stored.session.thread_id)
-                    .unwrap_or(true)
-            })
+        state.sessions.get(session_id).is_some_and(|stored| {
+            !self
+                .is_pending_agent_control_thread(&stored.session.thread_id)
+                .unwrap_or(true)
+        })
     }
 
     fn insert_hydrated_session(&self, stored: StoredSession) {

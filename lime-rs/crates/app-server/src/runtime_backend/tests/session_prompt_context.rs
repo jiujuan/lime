@@ -2,6 +2,114 @@ use super::*;
 use app_server_protocol::{RuntimeRequest, RuntimeSearchMode};
 
 #[test]
+fn session_config_projects_bounded_deepswe_provider_step_budget() {
+    let mut request = request_for_test(
+        "fix it",
+        None,
+        Some(json!({
+            "harness": {
+                "provider_budget": {
+                    "max_provider_steps": 2,
+                    "token_budget": 150000
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    assert_eq!(config.max_turns, Some(2));
+    assert_eq!(config.provider_token_budget, Some(150_000));
+
+    request
+        .runtime_options
+        .as_mut()
+        .expect("runtime options")
+        .runtime_request_mut()
+        .metadata = Some(json!({
+        "harness": {
+            "provider_budget": {
+                "max_provider_steps":
+                    agent_runtime::reply_loop::DEFAULT_MAX_REPLY_TURNS + 1,
+                "token_budget": 0
+            }
+        }
+    }));
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    assert_eq!(config.max_turns, None);
+    assert_eq!(config.provider_token_budget, None);
+}
+
+#[test]
+fn session_config_projects_harness_direct_answer_surface() {
+    let mut request = request_for_test(
+        "inspect the attached image",
+        None,
+        Some(json!({
+            "harness": {
+                "turn_policy": {
+                    "tool_surface": "direct_answer"
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+    apply_app_server_turn_policy(&mut request, false, &policy);
+    let host_request = runtime_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    assert_eq!(config.include_context_trace, Some(false));
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(!prompt.contains("【Lime Runtime AGENTS 指令】"));
+    assert!(!prompt.contains("## 可用 Agent Skills"));
+    let runtime = config
+        .turn_context
+        .expect("turn context")
+        .metadata
+        .remove("lime_runtime")
+        .expect("lime_runtime metadata");
+    assert_eq!(runtime["tool_surface"], "direct_answer");
+    assert_eq!(runtime["source"], "harness_turn_policy");
+    assert_eq!(runtime["auto_compact"], false);
+}
+
+#[test]
 fn session_config_appends_memory_context_to_system_prompt() {
     let mut request = request_for_test(
         "hello",

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { loadNamespaceResource } from "@/i18n/loadNamespace";
 import { SUPPORTED_LOCALES } from "@/i18n/locales";
-import type { ImportedThreadSummary } from "@/lib/api/conversationImport";
+import type {
+  ConversationImportJob,
+  ImportedThreadSummary,
+} from "@/lib/api/conversationImport";
 import {
   buildImportThreadGroups,
   buildImportPreviewMetaText,
@@ -10,9 +13,12 @@ import {
   firstImportableThread,
   initialImportSelection,
   isImportedThread,
+  isImportingThread,
   isSelectableImportThread,
   resolveImportConfirmActionKey,
   resolveImportConfirmNoticeKey,
+  resolveImportJobPercent,
+  resolveImportJobPhaseLabel,
   resolveImportSourceClientLabel,
   resolveImportThreadSecondaryText,
   resolveImportThreadTitle,
@@ -111,7 +117,6 @@ describe("conversationImportDialogViewModel", () => {
       importStatus: "imported",
     });
     const fresh = thread({ sourceThreadId: "fresh-thread" });
-
     expect(firstImportableThread([imported, fresh])?.sourceThreadId).toBe(
       "fresh-thread",
     );
@@ -127,6 +132,11 @@ describe("conversationImportDialogViewModel", () => {
       importStatus: "imported",
     });
     const fresh = thread({ sourceThreadId: "fresh-thread" });
+    const importing = thread({
+      sourceThreadId: "importing-thread",
+      importStatus: "importing",
+      importJobId: "import-job-1",
+    });
     const conflict = thread({
       sourceThreadId: "conflict-thread",
       importStatus: "conflict",
@@ -137,12 +147,48 @@ describe("conversationImportDialogViewModel", () => {
     expect([...selection]).toEqual(["fresh-thread"]);
     expect(isSelectableImportThread(imported)).toBe(true);
     expect(isSelectableImportThread(fresh)).toBe(true);
+    expect(isSelectableImportThread(importing)).toBe(true);
     expect(isSelectableImportThread(conflict)).toBe(false);
     expect(
       selectedImportThreads([imported, fresh, conflict], selection).map(
         (item) => item.sourceThreadId,
       ),
     ).toEqual(["fresh-thread"]);
+  });
+
+  it("后台导入进度按真实 item 比例计算，并为无总量阶段提供稳定占位", () => {
+    const job: ConversationImportJob = {
+      jobId: "import-job-1",
+      sourceClient: "codex",
+      sourceThreadId: "thread-1",
+      status: "running",
+      progress: {
+        phase: "reading_source",
+        completedItems: 0,
+        totalItems: 0,
+        completedTurns: 0,
+        totalTurns: 0,
+      },
+      createdAt: "2026-07-17T00:00:00.000Z",
+      updatedAt: "2026-07-17T00:00:00.000Z",
+    };
+
+    expect(resolveImportJobPercent(job)).toBe(12);
+    expect(
+      resolveImportJobPercent({
+        ...job,
+        progress: {
+          ...job.progress,
+          phase: "persisting_history",
+          completedItems: 75,
+          totalItems: 100,
+        },
+      }),
+    ).toBe(75);
+    expect(resolveImportJobPercent({ ...job, status: "completed" })).toBe(100);
+    expect(resolveImportJobPhaseLabel("persisting_history", t)).toBe(
+      "正在保存对话历史",
+    );
   });
 
   it("可按天和按月对导入列表分组", () => {
@@ -219,6 +265,7 @@ describe("conversationImportDialogViewModel", () => {
 
     expect(isImportedThread(imported)).toBe(true);
     expect(isImportedThread(fresh)).toBe(false);
+    expect(isImportingThread(thread({ importStatus: "importing" }))).toBe(true);
     expect(resolveImportConfirmActionKey(imported)).toBe(
       "navigation.sidebar.importDialog.action.replace",
     );
@@ -274,9 +321,7 @@ describe("conversationImportDialogViewModel", () => {
         "Imported local history messages and supported tool/patch timeline events; unsupported source items remain as provenance only.",
         t,
       ),
-    ).toBe(
-      "消息和已支持的过程会导入，未支持的来源条目只保留为来源记录。",
-    );
+    ).toBe("消息和已支持的过程会导入，未支持的来源条目只保留为来源记录。");
     expect(
       resolveImportWarningText(
         "Skipped high-volume local history runtime events outside default window.",

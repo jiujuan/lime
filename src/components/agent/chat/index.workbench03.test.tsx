@@ -315,6 +315,62 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     );
   });
 
+  it("时间线文件预览不应以无 selection 的旧请求覆盖目标 artifact", async () => {
+    vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
+      path: "/tmp/project-imported-file/docs/imported-preview.html",
+      content:
+        "<!doctype html><html><body>导入会话 HTML 预览内容</body></html>",
+      isBinary: false,
+      size: 72,
+      error: null,
+    });
+
+    renderPage({
+      projectId: "project-imported-file",
+      theme: "general",
+      lockTheme: true,
+    });
+    await flushEffects(10);
+
+    const latestMessageListProps = mockMessageList.mock.calls.at(-1)?.[0] as
+      | {
+          onOpenArtifactFromTimeline?: (target: {
+            filePath: string;
+            content: string;
+            timelineItemId: string;
+            openMode: "file_preview";
+          }) => void;
+        }
+      | undefined;
+
+    act(() => {
+      latestMessageListProps?.onOpenArtifactFromTimeline?.({
+        filePath: "docs/imported-preview.html",
+        content: "",
+        timelineItemId: "tool-read-imported-preview-html",
+        openMode: "file_preview",
+      });
+    });
+    await flushEffects(12);
+
+    expect(fileBrowserModule.readFilePreview).toHaveBeenCalledWith(
+      "/tmp/project-imported-file/docs/imported-preview.html",
+      64 * 1024,
+    );
+    const workbenchProps = mockCanvasWorkbenchLayout.mock.calls.at(-1)?.[0] as
+      | {
+          previewOpenRequest?: {
+            filePath?: string | null;
+            selectionKey?: string | null;
+          } | null;
+        }
+      | undefined;
+    expect(workbenchProps?.previewOpenRequest).toMatchObject({
+      filePath: "docs/imported-preview.html",
+      selectionKey: expect.stringMatching(/^artifact:preview-file-/),
+    });
+  });
+
   it("点击执行卡片里的结果文件按钮时应打开真实导出 Markdown 预览", async () => {
     mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
     vi.spyOn(webviewApiModule, "siteRunAdapter").mockResolvedValue({
@@ -522,5 +578,4 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ).toBeNull();
     expect(mockCanvasWorkbenchLayout).not.toHaveBeenCalled();
   });
-
 });

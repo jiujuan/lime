@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
+import { withNativeSystemPath } from "./native-executable-env.mjs";
+
 export const SCRIPTS_DIR = "scripts";
 export const BASELINE_PATH = path.join(
   SCRIPTS_DIR,
@@ -47,20 +49,17 @@ export function listCurrentDirectories(scriptsDir = SCRIPTS_DIR) {
 }
 
 export function listGitTrackedFiles(scriptsDir = SCRIPTS_DIR) {
-  try {
-    const output = execFileSync("git", ["ls-files", "--", `${scriptsDir}/*`], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return new Set(
-      output
-        .split(/\r?\n/)
-        .map((line) => normalizeRepoPath(line.trim()))
-        .filter(Boolean),
-    );
-  } catch {
-    return new Set();
-  }
+  const output = execFileSync("git", ["ls-files", "--", `${scriptsDir}/*`], {
+    encoding: "utf8",
+    env: withNativeSystemPath(process.env),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return new Set(
+    output
+      .split(/\r?\n/)
+      .map((line) => normalizeRepoPath(line.trim()))
+      .filter(Boolean),
+  );
 }
 
 export function listCurrentScriptFiles(scriptsDir = SCRIPTS_DIR) {

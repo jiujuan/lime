@@ -146,18 +146,10 @@ function threadReadEvents({ workspaceRoot, baseTimestampMs }) {
           item: {
             id: turn.reasoningItemId,
             type: "reasoning",
-            status: "completed",
-            sequence: sequence - 1,
-            started_at: reasoningAt,
-            updated_at: reasoningAt,
-            completed_at: reasoningAt,
-            payload: {
-              type: "reasoning",
-              text: turn.reasoningText,
-              summary: [turn.reasoningText],
-              metadata: {
-                source: "thread_read_page_isomorphic",
-              },
+            summary: [turn.reasoningText],
+            content: [turn.reasoningText],
+            metadata: {
+              source: "thread_read_page_isomorphic",
             },
           },
         },

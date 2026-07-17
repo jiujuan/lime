@@ -13,7 +13,6 @@ use agent_protocol::provider_trace::ProviderTraceEvent;
 use serde::{Deserialize, Serialize};
 
 mod failure;
-mod image_input;
 mod message_output;
 mod model_change;
 mod notification;
@@ -38,16 +37,6 @@ pub use failure::{
     provider_stream_failure_message_should_log_as_warning,
     provider_stream_failure_should_log_as_error, provider_stream_trace_failure,
     RuntimeReplyProviderFailure, RuntimeReplyProviderFailureKind,
-};
-pub use image_input::{
-    provider_stream_image_input_policy_disables_provider_images,
-    provider_stream_input_modality_policy_allows_image_input,
-    provider_stream_input_modality_policy_from_metadata,
-    provider_stream_metadata_allows_image_input, provider_stream_model_supports_image_input,
-    provider_stream_omitted_message_images_notice,
-    provider_stream_omitted_tool_result_images_notice, provider_stream_should_omit_image_input,
-    provider_stream_should_warn_omitted_provider_images, RuntimeReplyProviderImageInputPolicy,
-    PROVIDER_IMAGE_INPUT_POLICY_METADATA_CAMEL_KEY, PROVIDER_IMAGE_INPUT_POLICY_METADATA_KEY,
 };
 pub use message_output::{
     provider_stream_message_outputs, provider_stream_single_message_output,

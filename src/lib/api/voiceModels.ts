@@ -4,7 +4,6 @@
  */
 
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
-import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
 import { getAsrCredentials, type AsrCredentialEntry } from "./asrProvider";
 import { createAppServerClient } from "./appServer";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
@@ -78,33 +77,6 @@ export interface DefaultLocalVoiceModelReadiness {
   message?: string;
 }
 
-interface OemVoiceModelCatalogResponse {
-  items?: OemVoiceModelCatalogItem[];
-}
-
-interface OemVoiceModelCatalogItem {
-  id?: string;
-  name?: string;
-  provider?: string;
-  description?: string;
-  version?: string;
-  languages?: string[];
-  runtime?: string;
-  bundled?: boolean;
-  sizeBytes?: number;
-  checksumSha256?: string | null;
-  download?: {
-    archive?: OemVoiceModelDownloadAsset;
-    vad?: OemVoiceModelDownloadAsset | null;
-  };
-}
-
-interface OemVoiceModelDownloadAsset {
-  modelId?: string;
-  downloadUrl?: string;
-  sha256?: string | null;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -130,14 +102,6 @@ function normalizeText(value: unknown): string | null {
 
   const normalized = value.trim();
   return normalized ? normalized : null;
-}
-
-function unwrapEnvelope<T>(payload: unknown): T {
-  if (isRecord(payload) && "data" in payload) {
-    return payload.data as T;
-  }
-
-  return payload as T;
 }
 
 async function invokeVoiceModelShellCommand<T>(
@@ -250,78 +214,9 @@ function assertTestTranscribeResult(
   return value as unknown as VoiceModelTestTranscribeResult;
 }
 
-function mapOemVoiceModelCatalogItem(
-  item: OemVoiceModelCatalogItem,
-): VoiceModelCatalogEntry | null {
-  const id = normalizeText(item.id);
-  if (!id) {
-    return null;
-  }
-
-  const archive = item.download?.archive;
-  const vad = item.download?.vad ?? null;
-
-  return {
-    id,
-    name: normalizeText(item.name) ?? id,
-    provider: normalizeText(item.provider) ?? "FunAudioLLM / sherpa-onnx",
-    description:
-      normalizeText(item.description) ??
-      "本地离线 ASR，模型按需下载到用户数据目录。",
-    version: normalizeText(item.version) ?? "",
-    languages: Array.isArray(item.languages) ? item.languages : [],
-    size_bytes: typeof item.sizeBytes === "number" ? item.sizeBytes : 0,
-    download_url: normalizeText(archive?.downloadUrl) ?? "",
-    vad_model_id: normalizeText(vad?.modelId),
-    vad_download_url: normalizeText(vad?.downloadUrl),
-    runtime: normalizeText(item.runtime) ?? "sherpa-onnx",
-    bundled: item.bundled === true,
-    checksum_sha256:
-      normalizeText(archive?.sha256) ?? normalizeText(item.checksumSha256),
-  };
-}
-
-async function fetchOemVoiceModelCatalog(): Promise<
-  VoiceModelCatalogEntry[] | null
-> {
-  const runtime = resolveOemCloudRuntimeContext();
-  if (!runtime) {
-    return null;
-  }
-
-  const response = await fetch(
-    `${runtime.controlPlaneBaseUrl}/v1/public/tenants/${encodeURIComponent(
-      runtime.tenantId,
-    )}/client/voice-model-catalog`,
-    {
-      headers: {
-        Accept: "application/json",
-      },
-    },
-  );
-  const payload = (await response.json().catch(() => null)) as unknown;
-  if (!response.ok) {
-    const message =
-      isRecord(payload) && typeof payload.message === "string"
-        ? payload.message
-        : `拉取语音模型目录失败 (${response.status})`;
-    throw new Error(message);
-  }
-
-  const data = unwrapEnvelope<OemVoiceModelCatalogResponse>(payload);
-  return (data.items ?? [])
-    .map(mapOemVoiceModelCatalogItem)
-    .filter((item): item is VoiceModelCatalogEntry => Boolean(item));
-}
-
 export async function listVoiceModelCatalog(): Promise<
   VoiceModelCatalogEntry[]
 > {
-  const oemCatalog = await fetchOemVoiceModelCatalog();
-  if (oemCatalog) {
-    return oemCatalog;
-  }
-
   const result = await invokeVoiceModelShellCommand<VoiceModelCatalogEntry[]>(
     "voice_models_list_catalog",
   );
@@ -373,13 +268,10 @@ export async function getDefaultLocalVoiceModelReadiness(): Promise<DefaultLocal
 export async function downloadVoiceModel(
   modelId: string,
 ): Promise<VoiceModelDownloadResult> {
-  const oemCatalog = await fetchOemVoiceModelCatalog();
-  const catalogEntry = oemCatalog?.find((item) => item.id === modelId);
   const result = await invokeVoiceModelShellCommand<unknown>(
     "voice_models_download",
     {
       modelId,
-      ...(catalogEntry ? { catalogEntry } : {}),
     },
   );
   return assertDownloadResult("voice_models_download", result);

@@ -238,6 +238,7 @@ mod tests {
                 toolshim: false,
                 toolshim_model: None,
                 model_capabilities: None,
+                supports_websockets: false,
             }),
         )
         .await

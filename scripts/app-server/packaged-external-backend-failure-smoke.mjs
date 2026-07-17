@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { copyElectronAppServerRuntimeLibraries } from "../lib/electron-app-server-assets.mjs";
 import { localAppServerBinaryPath } from "../lib/electron-dev-sidecar.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -63,6 +64,11 @@ async function main() {
     await mkdir(packagedDir, { recursive: true });
     await copyFile(sourceBinaryPath, packagedBinaryPath);
     await chmod(packagedBinaryPath, 0o755).catch(() => undefined);
+    const runtimeLibraries = await copyElectronAppServerRuntimeLibraries({
+      repoRoot: rootDir,
+      sourceBinary: sourceBinaryPath,
+      destinationDirectory: packagedDir,
+    });
     await writeFailingExternalBackend(backendPath);
 
     await writeFile(
@@ -96,6 +102,7 @@ async function main() {
       },
       {
         resourcesPath,
+        dataDir: path.join(tempDir, "data"),
         backendMode: "external",
         backendCommand: process.execPath,
         backendArgs: [backendPath],
@@ -225,6 +232,7 @@ async function main() {
         `evidenceEvents=${evidenceEvents.map((event) => event.type).join(",")}`,
         `readTurns=${readTurns.length}`,
         `readTurnStatus=${readTurn.status}`,
+        `runtimeLibraries=${runtimeLibraries.length}`,
         `clientFailure=${JSON.stringify(clientFailure.payload.message)}`,
         `evidenceFailure=${JSON.stringify(evidenceFailure.payload.message)}`,
       ].join(" "),

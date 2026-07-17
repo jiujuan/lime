@@ -33,12 +33,19 @@ const CONTEXTUAL_DEVELOPER_PREFIXES: &[&str] = &[
     "<plugins_instructions>",
 ];
 
+#[derive(Debug, Clone)]
+pub(in crate::runtime::conversation_import) struct CodexTimelineMessage {
+    pub(in crate::runtime::conversation_import) preview: ConversationImportPreviewMessage,
+    pub(in crate::runtime::conversation_import) phase: Option<String>,
+    pub(in crate::runtime::conversation_import) source_item_id: Option<String>,
+}
+
 pub(super) fn response_item_preview_message(
     payload: Option<&Value>,
     timestamp: Option<String>,
     mode: &CodexRolloutParseMode,
     provenance: Option<ConversationImportSourceProvenance>,
-) -> Option<ConversationImportPreviewMessage> {
+) -> Option<CodexTimelineMessage> {
     let payload = payload?;
     if payload.get("type").and_then(Value::as_str) != Some("message") {
         return None;
@@ -59,15 +66,26 @@ pub(super) fn response_item_preview_message(
     let text = collect_message_text(content)
         .or_else(|| (!attachments.is_empty()).then(|| "[Image]".to_string()))?;
     let truncated = truncate_text_for_mode(&text, mode);
-    Some(ConversationImportPreviewMessage {
-        role,
-        text: truncated.text,
-        attachments,
-        truncated: truncated.truncated,
-        omitted_bytes: truncated.omitted_bytes,
-        timestamp,
-        source_type: Some("response_item".to_string()),
-        provenance,
+    Some(CodexTimelineMessage {
+        preview: ConversationImportPreviewMessage {
+            role,
+            text: truncated.text,
+            attachments,
+            truncated: truncated.truncated,
+            omitted_bytes: truncated.omitted_bytes,
+            timestamp,
+            source_type: Some("response_item".to_string()),
+            provenance,
+        },
+        phase: payload
+            .get("phase")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        source_item_id: payload
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string),
     })
 }
 
@@ -76,7 +94,7 @@ pub(super) fn event_msg_preview_message(
     timestamp: Option<String>,
     mode: &CodexRolloutParseMode,
     provenance: Option<ConversationImportSourceProvenance>,
-) -> Option<ConversationImportPreviewMessage> {
+) -> Option<CodexTimelineMessage> {
     let payload = payload?;
     let kind = payload.get("type").and_then(Value::as_str)?;
     let (role, text, attachments) = match kind {
@@ -100,15 +118,22 @@ pub(super) fn event_msg_preview_message(
         return None;
     }
     let truncated = truncate_text_for_mode(&text, mode);
-    Some(ConversationImportPreviewMessage {
-        role: role.to_string(),
-        text: truncated.text,
-        attachments,
-        truncated: truncated.truncated,
-        omitted_bytes: truncated.omitted_bytes,
-        timestamp,
-        source_type: Some("event_msg".to_string()),
-        provenance,
+    Some(CodexTimelineMessage {
+        preview: ConversationImportPreviewMessage {
+            role: role.to_string(),
+            text: truncated.text,
+            attachments,
+            truncated: truncated.truncated,
+            omitted_bytes: truncated.omitted_bytes,
+            timestamp,
+            source_type: Some("event_msg".to_string()),
+            provenance,
+        },
+        phase: payload
+            .get("phase")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        source_item_id: None,
     })
 }
 
@@ -253,15 +278,15 @@ pub(super) fn truncate_preview_text(text: &str, max_bytes: usize) -> TruncatedTe
 
 pub(super) fn push_timeline_message(
     timeline: &mut Vec<super::CodexTimelineItem>,
-    candidate: ConversationImportPreviewMessage,
+    candidate: CodexTimelineMessage,
 ) {
     if let Some(super::CodexTimelineItem::Message(existing)) = timeline
         .iter_mut()
         .rev()
         .find(|item| matches!(item, super::CodexTimelineItem::Message(_)))
     {
-        if same_preview_message(existing, &candidate) {
-            merge_preview_message(existing, candidate);
+        if same_timeline_message(existing, &candidate) {
+            merge_timeline_message(existing, candidate);
             return;
         }
     }
@@ -275,6 +300,7 @@ pub(super) fn push_preview_message(
 ) -> bool {
     if let Some(existing) = messages
         .iter_mut()
+        .rev()
         .find(|message| same_preview_message(message, &candidate))
     {
         merge_preview_message(existing, candidate);
@@ -291,21 +317,57 @@ fn same_preview_message(
     existing: &ConversationImportPreviewMessage,
     candidate: &ConversationImportPreviewMessage,
 ) -> bool {
-    existing.role == candidate.role && existing.text.trim() == candidate.text.trim()
+    existing.role == candidate.role
+        && existing.text.trim() == candidate.text.trim()
+        && complementary_message_sources(
+            existing.source_type.as_deref(),
+            candidate.source_type.as_deref(),
+        )
+        && adjacent_source_events(existing.provenance.as_ref(), candidate.provenance.as_ref())
+}
+
+fn same_timeline_message(
+    existing: &CodexTimelineMessage,
+    candidate: &CodexTimelineMessage,
+) -> bool {
+    same_preview_message(&existing.preview, &candidate.preview)
+}
+
+fn complementary_message_sources(existing: Option<&str>, candidate: Option<&str>) -> bool {
+    matches!(
+        (existing, candidate),
+        (Some("event_msg"), Some("response_item")) | (Some("response_item"), Some("event_msg"))
+    )
+}
+
+fn adjacent_source_events(
+    existing: Option<&ConversationImportSourceProvenance>,
+    candidate: Option<&ConversationImportSourceProvenance>,
+) -> bool {
+    let Some(existing) = existing.and_then(|value| value.source_event_seq) else {
+        return false;
+    };
+    let Some(candidate) = candidate.and_then(|value| value.source_event_seq) else {
+        return false;
+    };
+    existing.abs_diff(candidate) == 1
 }
 
 fn merge_preview_message(
     existing: &mut ConversationImportPreviewMessage,
     candidate: ConversationImportPreviewMessage,
 ) {
-    if existing.timestamp.is_none() {
-        existing.timestamp = candidate.timestamp;
-    }
     if candidate.source_type.as_deref() == Some("event_msg") {
+        existing.timestamp = candidate.timestamp.or(existing.timestamp.take());
         existing.source_type = candidate.source_type;
-    }
-    if existing.provenance.is_none() {
-        existing.provenance = candidate.provenance;
+        existing.provenance = candidate.provenance.or(existing.provenance.take());
+    } else {
+        if existing.timestamp.is_none() {
+            existing.timestamp = candidate.timestamp;
+        }
+        if existing.provenance.is_none() {
+            existing.provenance = candidate.provenance;
+        }
     }
     for attachment in candidate.attachments {
         let already_present = existing
@@ -315,5 +377,20 @@ fn merge_preview_message(
         if !already_present {
             existing.attachments.push(attachment);
         }
+    }
+}
+
+fn merge_timeline_message(existing: &mut CodexTimelineMessage, candidate: CodexTimelineMessage) {
+    let candidate_is_event = candidate.preview.source_type.as_deref() == Some("event_msg");
+    let candidate_phase = candidate.phase.clone();
+    let candidate_item_id = candidate.source_item_id.clone();
+    merge_preview_message(&mut existing.preview, candidate.preview);
+    if candidate_is_event {
+        existing.phase = candidate_phase.or(existing.phase.take());
+    } else if existing.phase.is_none() {
+        existing.phase = candidate_phase;
+    }
+    if candidate_item_id.is_some() {
+        existing.source_item_id = candidate_item_id;
     }
 }

@@ -191,7 +191,7 @@ function runContextBase(options, runId, task) {
       verifier: task.verifier,
     },
     executionContract: {
-      adapterVersion: "deepswe-current-chain-adapter-v3",
+      adapterVersion: "deepswe-current-chain-adapter-v4",
       agentPath: "Lime App Server JSON-RPC current chain",
       appServerMethods: [
         "workspace/ensure",
@@ -212,6 +212,9 @@ function runContextBase(options, runId, task) {
         tokenBudget: options.tokenBudget,
         tokenFormula: "max(0,input_tokens-cached_input_tokens)+output_tokens",
         evidenceIntervalMs: options.evidenceIntervalMs,
+        enforcementOwner:
+          "agent-runtime reply loop before tool execution and next sampling",
+        adapterFallback: "token evidence polling for timeout races only",
       },
     },
   };

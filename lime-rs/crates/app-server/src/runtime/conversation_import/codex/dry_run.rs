@@ -54,6 +54,7 @@ fn import_impact(timeline: &[CodexTimelineItem]) -> ImportImpact {
         let CodexTimelineItem::Message(message) = item else {
             continue;
         };
+        let message = &message.preview;
 
         match message.role.as_str() {
             "user" => {

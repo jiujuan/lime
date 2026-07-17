@@ -8,7 +8,7 @@ pub(in crate::runtime) mod media_result;
 mod plan;
 
 pub(in crate::runtime) use change_set::{merge_item_snapshot, merge_turn_snapshot};
-pub(in crate::runtime) use materializer::materialize_events;
+pub(in crate::runtime) use materializer::{materialize_events, IncrementalMaterializer};
 
 #[cfg(test)]
 mod typed_tests;

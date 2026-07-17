@@ -64,10 +64,17 @@ impl ProjectShellManager {
         &self,
         params: ProjectShellSessionStartParams,
     ) -> Result<ProjectShellSessionStartResponse, ProjectShellError> {
+        self.start_session_with_shell(params, resolve_shell_command())
+    }
+
+    fn start_session_with_shell(
+        &self,
+        params: ProjectShellSessionStartParams,
+        shell: ResolvedShellCommand,
+    ) -> Result<ProjectShellSessionStartResponse, ProjectShellError> {
         let cwd = validate_root_path(&params.root_path)?;
         let cols = normalize_dimension(params.cols, DEFAULT_COLS, MAX_COLS);
         let rows = normalize_dimension(params.rows, DEFAULT_ROWS, MAX_ROWS);
-        let shell = resolve_shell_command();
         let session_id = self.next_session_id();
         let mut command = CommandBuilder::new(&shell.executable);
         for arg in &shell.args {
@@ -385,6 +392,53 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
+    fn start_test_session(
+        manager: &ProjectShellManager,
+        cwd: &Path,
+    ) -> ProjectShellSessionStartResponse {
+        let shell = if cfg!(windows) {
+            resolve_shell_command()
+        } else {
+            ResolvedShellCommand {
+                executable: "/bin/sh".to_string(),
+                args: vec!["-i".to_string()],
+            }
+        };
+        manager
+            .start_session_with_shell(
+                ProjectShellSessionStartParams {
+                    root_path: cwd.to_string_lossy().to_string(),
+                    cols: Some(100),
+                    rows: Some(10),
+                },
+                shell,
+            )
+            .expect("start shell session")
+    }
+
+    fn marker_command() -> &'static str {
+        if cfg!(windows) {
+            "echo __project_shell_marker__\r"
+        } else {
+            "printf '__project_shell_marker__\\n'\r"
+        }
+    }
+
+    fn color_environment_command() -> String {
+        if cfg!(windows) {
+            return concat!(
+                "echo TERM=%TERM% COLORTERM=%COLORTERM% CLICOLOR=%CLICOLOR% ",
+                "FORCE_COLOR=%FORCE_COLOR% LSCOLORS=%LSCOLORS%\r"
+            )
+            .to_string();
+        }
+        concat!(
+            "printf \"TERM=%s COLORTERM=%s CLICOLOR=%s FORCE_COLOR=%s LSCOLORS=%s\\n\" ",
+            "\"$TERM\" \"$COLORTERM\" \"$CLICOLOR\" \"$FORCE_COLOR\" \"$LSCOLORS\"\r"
+        )
+        .to_string()
+    }
+
     #[cfg(windows)]
     #[test]
     fn windows_shell_skips_cmd_autorun() {
@@ -405,18 +459,12 @@ mod tests {
     fn interactive_session_writes_and_drains_output() {
         let manager = ProjectShellManager::default();
         let cwd = env::current_dir().expect("current dir");
-        let session = manager
-            .start_session(ProjectShellSessionStartParams {
-                root_path: cwd.to_string_lossy().to_string(),
-                cols: Some(100),
-                rows: Some(10),
-            })
-            .expect("start shell session");
+        let session = start_test_session(&manager, &cwd);
 
         manager
             .write_session(ProjectShellSessionWriteParams {
                 session_id: session.session_id.clone(),
-                data: "printf '__project_shell_marker__\\n'\r".to_string(),
+                data: marker_command().to_string(),
             })
             .expect("write shell command");
 
@@ -434,7 +482,7 @@ mod tests {
                     output.push_str(&data);
                 }
             }
-            if output.contains("__project_shell_marker__") {
+            if output.matches("__project_shell_marker__").count() >= 2 {
                 break;
             }
             thread::sleep(Duration::from_millis(50));
@@ -445,7 +493,7 @@ mod tests {
         });
 
         assert!(
-            output.contains("__project_shell_marker__"),
+            output.matches("__project_shell_marker__").count() >= 2,
             "expected shell output, got: {output:?}"
         );
     }
@@ -454,13 +502,7 @@ mod tests {
     fn interactive_session_sets_color_terminal_environment() {
         let manager = ProjectShellManager::default();
         let cwd = env::current_dir().expect("current dir");
-        let session = manager
-            .start_session(ProjectShellSessionStartParams {
-                root_path: cwd.to_string_lossy().to_string(),
-                cols: Some(100),
-                rows: Some(10),
-            })
-            .expect("start shell session");
+        let session = start_test_session(&manager, &cwd);
 
         let _ = drain_session_output_until(
             &manager,
@@ -472,11 +514,7 @@ mod tests {
         manager
             .write_session(ProjectShellSessionWriteParams {
                 session_id: session.session_id.clone(),
-                data: concat!(
-                    "printf \"TERM=%s COLORTERM=%s CLICOLOR=%s FORCE_COLOR=%s LSCOLORS=%s\\n\" ",
-                    "\"$TERM\" \"$COLORTERM\" \"$CLICOLOR\" \"$FORCE_COLOR\" \"$LSCOLORS\"\r"
-                )
-                .to_string(),
+                data: color_environment_command(),
             })
             .expect("write shell command");
 

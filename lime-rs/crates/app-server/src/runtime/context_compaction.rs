@@ -7,7 +7,7 @@ use app_server_protocol::{AgentEvent, AgentSession, AgentTurn};
 use chrono::{SecondsFormat, Utc};
 use serde_json::{json, Value};
 
-const COMPACTION_ARTIFACT_SCHEMA: &str = "session_context_compaction.v1";
+const COMPACTION_ARTIFACT_SCHEMA: &str = "session_context_compaction.v2";
 const MAX_SUMMARY_CHARS: usize = 12_000;
 const MAX_TAIL_TURNS: usize = 4;
 
@@ -47,7 +47,9 @@ pub(crate) fn build_session_context_compaction(
         "createdAt": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
         "summary": summary,
         "policy": {
-            "historyRewrite": false,
+            "durableHistoryRewrite": false,
+            "providerHistoryRewrite": true,
+            "providerTailMode": "from_tail_start_turn",
             "longTermMemoryWrite": false,
             "artifactScope": "session"
         }
@@ -120,10 +122,16 @@ fn build_summary(
         lines.push(format!("- Tail starts at turn: {tail_start_turn_id}"));
     }
     lines.push(String::new());
-    lines.push("## Retained Recent Turns".to_string());
+    lines.push("## Compacted Earlier Turns".to_string());
 
-    let tail_turn_ids = tail_turn_ids(turns, tail_start_turn_id);
-    for turn_id in tail_turn_ids {
+    let compacted_turn_ids = compacted_turn_ids(turns, tail_start_turn_id);
+    if compacted_turn_ids.is_empty() {
+        lines.push(
+            "- No earlier turns were removed; the provider retains the bounded recent tail."
+                .to_string(),
+        );
+    }
+    for turn_id in compacted_turn_ids {
         lines.push(format!("### {turn_id}"));
         for event in events
             .iter()
@@ -146,15 +154,15 @@ fn build_summary(
     truncate_chars(&lines.join("\n"), MAX_SUMMARY_CHARS)
 }
 
-fn tail_turn_ids(turns: &[AgentTurn], tail_start_turn_id: Option<&str>) -> Vec<String> {
+fn compacted_turn_ids(turns: &[AgentTurn], tail_start_turn_id: Option<&str>) -> Vec<String> {
     let Some(tail_start_turn_id) = tail_start_turn_id else {
-        return turns.iter().map(|turn| turn.turn_id.clone()).collect();
+        return Vec::new();
     };
     let start = turns
         .iter()
         .position(|turn| turn.turn_id == tail_start_turn_id)
-        .unwrap_or(0);
-    turns[start..]
+        .unwrap_or(turns.len());
+    turns[..start]
         .iter()
         .map(|turn| turn.turn_id.clone())
         .collect()
@@ -164,6 +172,9 @@ fn event_summary_line(event: &AgentEvent) -> Option<String> {
     match event.event_type.as_str() {
         "message.created" => payload_text(&event.payload).map(|text| format!("User: {text}")),
         "message.delta" | "message.delta_batch" | "message.batch" => {
+            payload_text(&event.payload).map(|text| format!("Assistant: {text}"))
+        }
+        "message.completed" => {
             payload_text(&event.payload).map(|text| format!("Assistant: {text}"))
         }
         "item.started" => canonical_tool(event).map(|(name, _)| format!("Tool started: {name}")),
@@ -328,9 +339,10 @@ mod tests {
             build_session_context_compaction(&session, &turns, &events, None).expect("artifact");
 
         assert_eq!(artifact.context_epoch, 1);
-        assert_eq!(artifact.artifact["policy"]["historyRewrite"], false);
+        assert_eq!(artifact.artifact["policy"]["durableHistoryRewrite"], false);
+        assert_eq!(artifact.artifact["policy"]["providerHistoryRewrite"], true);
         assert_eq!(artifact.artifact["policy"]["longTermMemoryWrite"], false);
-        assert!(artifact.summary.contains("User: hello"));
+        assert!(artifact.summary.contains("No earlier turns were removed"));
     }
 
     #[test]

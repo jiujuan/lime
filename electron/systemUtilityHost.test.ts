@@ -210,29 +210,10 @@ describe("SystemUtilityHost", () => {
     );
   });
 
-  it("文件关联与浏览器诊断占位保持 degraded diagnostic 形态", async () => {
+  it("浏览器诊断占位保持 degraded diagnostic 形态", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
 
-    expect(host.getSkillPackageFileAssociationStatus()).toEqual(
-      expect.objectContaining({
-        extension: "skill",
-        appIdentifier: "Lime",
-        diagnostic: expect.objectContaining({
-          command: "get_skill_package_file_association_status",
-          status: "degraded",
-        }),
-      }),
-    );
-    expect(host.setSkillPackageFileAssociationDefault()).toEqual(
-      expect.objectContaining({
-        changed: false,
-        status: expect.objectContaining({ extension: "skill" }),
-        diagnostic: expect.objectContaining({
-          command: "set_skill_package_file_association_default",
-        }),
-      }),
-    );
     expect(host.getBrowserConnectorSettings()).toEqual(
       expect.objectContaining({
         enabled: true,

@@ -1,6 +1,6 @@
 import { resolveMessageListItemProjection } from "./messageListItemProjection";
 import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
-import type { Message, PendingA2UISource } from "../types";
+import type { AgentThreadTurn, Message, PendingA2UISource } from "../types";
 
 export type ProjectionTimelineItems = NonNullable<
   NonNullable<
@@ -16,8 +16,9 @@ export interface BuildProjectionOptions {
   lastAssistantMessageId?: string | null;
   shouldDeferMessageDetails?: boolean;
   streamingTextOverlay?: AgentStreamTextOverlaySnapshot | null;
+  expandHistoricalTimeline?: boolean;
   turnId?: string;
-  turnStatus?: "queued" | "running" | "completed" | "failed" | "aborted";
+  turnStatus?: AgentThreadTurn["status"] | "queued";
 }
 
 export function buildProjection(
@@ -25,19 +26,22 @@ export function buildProjection(
   timelineItems: ProjectionTimelineItems | null = null,
   options: BuildProjectionOptions = {},
 ) {
+  const turnId = options.turnId ?? "turn-legacy-unphased-final";
   return resolveMessageListItemProjection({
     activeCurrentTurnId: null,
     activePendingA2UISource: options.activePendingA2UISource ?? null,
     canOpenSavedSiteContent: false,
     expandedHistoricalAssistantMessageIds: new Set(),
-    expandedHistoricalTimelineKeys: new Set(),
+    expandedHistoricalTimelineKeys: options.expandHistoricalTimeline
+      ? new Set([`leading:${turnId}`])
+      : new Set(),
     expandedLongHistoricalMessageIds: new Set(),
     group: {
       lastAssistantId: message.id,
       timeline: timelineItems
         ? ({
             turn: {
-              id: options.turnId ?? "turn-legacy-unphased-final",
+              id: turnId,
               status: options.turnStatus ?? "completed",
             },
             items: timelineItems,

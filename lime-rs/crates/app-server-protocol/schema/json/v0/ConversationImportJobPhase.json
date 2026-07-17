@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "building_history",
+    "completed",
+    "failed",
+    "finalizing",
+    "persisting_history",
+    "queued",
+    "reading_source"
+  ],
+  "title": "ConversationImportJobPhase",
+  "type": "string"
+}

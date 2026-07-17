@@ -124,9 +124,7 @@ function resolvePlanRevisionStatus(
 }
 
 function fallbackPlanOptions(t: (key: string) => string): QuestionOption[] {
-  return [
-    { label: t("agentChat.planComposerDecision.option.accept") },
-  ];
+  return [{ label: t("agentChat.planComposerDecision.option.accept") }];
 }
 
 function resolvePrimaryQuestion(
@@ -187,16 +185,14 @@ export function PlanComposerDecisionPanel({
     () => resolvePrimaryOptions(request, translatePlanDecision),
     [request, translatePlanDecision],
   );
-  const [selectedLabel, setSelectedLabel] = useState(
-    options[0]?.label ?? "",
-  );
+  const [selectedLabel, setSelectedLabel] = useState(options[0]?.label ?? "");
   const [adjustment, setAdjustment] = useState("");
-  const [submissionState, setSubmissionState] = useState<SubmissionState | null>(
-    null,
-  );
+  const [submissionState, setSubmissionState] =
+    useState<SubmissionState | null>(null);
   const latestUserActivationAtRef = useRef(0);
   const isSubmitting = submissionState !== null;
-  const canSubmit = selectedLabel.trim().length > 0 || adjustment.trim().length > 0;
+  const canSubmit =
+    selectedLabel.trim().length > 0 || adjustment.trim().length > 0;
 
   useEffect(() => {
     setSelectedLabel(options[0]?.label ?? "");
@@ -217,8 +213,7 @@ export function PlanComposerDecisionPanel({
     }
     const activatedAt = latestUserActivationAtRef.current;
     return (
-      activatedAt > 0 &&
-      Date.now() - activatedAt <= USER_ACTIVATION_WINDOW_MS
+      activatedAt > 0 && Date.now() - activatedAt <= USER_ACTIVATION_WINDOW_MS
     );
   };
 
@@ -255,10 +250,9 @@ export function PlanComposerDecisionPanel({
     if (!isExplicitUserActivation(event)) {
       return;
     }
-    submitResponse(
-      buildSubmitPayload({ request, selectedLabel, adjustment }),
-      { kind: "submit" },
-    );
+    submitResponse(buildSubmitPayload({ request, selectedLabel, adjustment }), {
+      kind: "submit",
+    });
   };
 
   const handleIgnore = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -342,11 +336,11 @@ export function PlanComposerDecisionPanel({
                 {index + 1}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{option.label}</span>
+                <span className="block truncate font-medium">
+                  {option.label}
+                </span>
                 {option.description ? (
-                  <span className="sr-only">
-                    {option.description}
-                  </span>
+                  <span className="sr-only">{option.description}</span>
                 ) : null}
               </span>
               <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-slate-300">
@@ -375,6 +369,7 @@ export function PlanComposerDecisionPanel({
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             type="button"
+            data-testid="plan-composer-decision-ignore"
             disabled={isSubmitting}
             className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={handleIgnore}

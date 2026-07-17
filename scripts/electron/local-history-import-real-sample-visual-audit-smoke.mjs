@@ -8,27 +8,38 @@ import electronPath from "electron";
 import { _electron as electron } from "playwright";
 import {
   assert,
+  captureImportedConversationCompactVisualState,
   createTempRuntimeEnv,
   initializeAppServer,
   inspectImportedConversationVisualState,
   invokeAppServerFromPage,
   openSessionFromSidebar,
+  renderExpectedVisibleExcerptHtml,
   sanitizeJson,
   sanitizeText,
   waitForRendererReady,
+  waitForConversationImportJob,
   writeJsonFile,
 } from "./lib/local-history-import-smoke-utils.mjs";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
+import {
+  selectCompactExpectedMessages,
+  selectCompactExpectedMessageTexts,
+  selectExpandedExpectedMessages,
+  selectExpandedExpectedMessageTexts,
+  summarizeCanonicalMessageRoleCounts,
+} from "./lib/local-history-import-read-model-expectations.mjs";
+import {
+  DEFAULT_REAL_SAMPLE_STABILITY_MS,
+  importSourceAgeMs,
+  selectStableImportSourceThreads,
+} from "./lib/local-history-import-source-selection.mjs";
 
-const DEFAULT_PROJECT_PATH = path.join(
-  os.homedir(),
-  "Documents",
-  "dev",
-  "ai",
-  "limecloud",
-  "content-studio",
-);
+const DEFAULT_PROJECT_PATH = process.cwd();
+const DEFAULT_MAX_SOURCE_LINES = 5_000;
+const DEFAULT_MAX_SOURCE_MESSAGES = 200;
+const DEFAULT_MAX_SOURCE_ITEMS = 1_200;
 
 const DEFAULTS = {
   appUrl: "",
@@ -49,6 +60,9 @@ const DEFAULTS = {
   timeoutMs: 240_000,
   previewTimeoutMs: 60_000,
   commitTimeoutMs: 180_000,
+  maxSourceLines: DEFAULT_MAX_SOURCE_LINES,
+  maxSourceMessages: DEFAULT_MAX_SOURCE_MESSAGES,
+  maxSourceItems: DEFAULT_MAX_SOURCE_ITEMS,
   keepTemp: false,
 };
 
@@ -67,8 +81,8 @@ function printHelp() {
 Local History Import Real Sample Visual Audit Smoke
 
 用途:
-  启动真实 Electron Desktop Host，从真实 content-studio 本地历史源只读
-  scan/preview，选择最长/最复杂的一条历史线程导入到隔离 App Server，
+  启动真实 Electron Desktop Host，从真实 Codex 本地历史源只读
+  scan/preview，在可审计预算内选择复杂度最高的一条历史线程导入到隔离 App Server，
   再从侧边栏打开该会话，检查长历史 GUI 在多视口与滚动位置下可读、
   输入框可用、导入细节可见，并确认普通 GUI 不泄漏 source path、
   source thread id 或 raw rollout event 字段。
@@ -82,13 +96,16 @@ Local History Import Real Sample Visual Audit Smoke
 
 选项:
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
-  --project-path <path>  真实项目路径，默认 content-studio
+  --project-path <path>  真实项目路径，默认当前工作区
   --source-root <path>   本地历史源目录，默认 CODEX_HOME 或 ~/.codex
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
   --timeout-ms <ms>      总超时，默认 240000
   --preview-timeout-ms <ms> preview 超时，默认 60000
   --commit-timeout-ms <ms> commit 超时，默认 180000
+  --max-source-lines <n>  单条样本最大 rollout 行数，默认 ${DEFAULT_MAX_SOURCE_LINES}
+  --max-source-messages <n> 单条样本最大消息数，默认 ${DEFAULT_MAX_SOURCE_MESSAGES}
+  --max-source-items <n>  单条样本最大 timeline item 数，默认 ${DEFAULT_MAX_SOURCE_ITEMS}
   --keep-temp            保留临时目录便于调试
   -h, --help             显示帮助
 `);
@@ -143,6 +160,21 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--max-source-lines" && next) {
+      options.maxSourceLines = Number(next);
+      index += 1;
+      continue;
+    }
+    if (arg === "--max-source-messages" && next) {
+      options.maxSourceMessages = Number(next);
+      index += 1;
+      continue;
+    }
+    if (arg === "--max-source-items" && next) {
+      options.maxSourceItems = Number(next);
+      index += 1;
+      continue;
+    }
     if (arg === "--keep-temp") {
       options.keepTemp = true;
       continue;
@@ -154,6 +186,17 @@ function parseArgs(argv) {
     ["timeoutMs", 60_000],
     ["previewTimeoutMs", 10_000],
     ["commitTimeoutMs", 30_000],
+  ]) {
+    if (!Number.isFinite(options[key]) || options[key] < min) {
+      throw new Error(
+        `--${key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)} 必须是 >= ${min} 的数字`,
+      );
+    }
+  }
+  for (const [key, min] of [
+    ["maxSourceLines", 1],
+    ["maxSourceMessages", 1],
+    ["maxSourceItems", 1],
   ]) {
     if (!Number.isFinite(options[key]) || options[key] < min) {
       throw new Error(
@@ -199,6 +242,16 @@ function scorePreview(preview) {
   );
 }
 
+function previewWithinAuditBudget(preview, options) {
+  const summary = preview?.summary || {};
+  const dryRun = summary.dryRun || {};
+  return (
+    Number(summary.lineCount || 0) <= options.maxSourceLines &&
+    Number(summary.messageCount || 0) <= options.maxSourceMessages &&
+    Number(dryRun.willImportTimelineItems || 0) <= options.maxSourceItems
+  );
+}
+
 async function scanAndSelectThread(page, options) {
   const scan = await invokeAppServerFromPage(
     page,
@@ -214,10 +267,18 @@ async function scanAndSelectThread(page, options) {
   );
   const threads = Array.isArray(scan.result.threads) ? scan.result.threads : [];
   assert(scan.result.source?.status === "ready", "真实本地历史源不可读");
-  assert(threads.length > 0, "未扫描到 content-studio 可导入历史线程");
+  assert(threads.length > 0, "未扫描到可导入 Codex 历史线程");
+  const stableThreads = selectStableImportSourceThreads(
+    threads,
+    scan.result.source?.indexedAt,
+  );
+  assert(
+    stableThreads.length > 0,
+    `未扫描到至少 ${DEFAULT_REAL_SAMPLE_STABILITY_MS}ms 未变化的 Codex 历史线程`,
+  );
 
   const previews = [];
-  for (const thread of threads) {
+  for (const thread of stableThreads) {
     const preview = await invokeAppServerFromPage(
       page,
       "conversationImport/thread/preview",
@@ -237,11 +298,20 @@ async function scanAndSelectThread(page, options) {
     });
   }
 
-  previews.sort((left, right) => right.score - left.score);
+  const eligiblePreviews = previews.filter((item) =>
+    previewWithinAuditBudget(item.preview, options),
+  );
+  assert(
+    eligiblePreviews.length > 0,
+    `未找到符合真实样本审计预算的历史线程: maxLines=${options.maxSourceLines}, maxMessages=${options.maxSourceMessages}, maxItems=${options.maxSourceItems}`,
+  );
+  eligiblePreviews.sort((left, right) => right.score - left.score);
   return {
     scan: scan.result,
     previews,
-    selected: previews[0],
+    stableThreadCount: stableThreads.length,
+    eligibleCount: eligiblePreviews.length,
+    selected: eligiblePreviews[0],
   };
 }
 
@@ -259,9 +329,13 @@ async function commitSelectedThread(page, options, selected) {
     },
     { idPrefix: RPC_ID_PREFIX, timeoutMs: options.commitTimeoutMs },
   );
-  assert(commit.result?.session?.sessionId, "导入结果缺少 sessionId");
-  assert(commit.result?.canContinue === true, "导入会话不可继续");
-  return commit.result;
+  const result = await waitForConversationImportJob(page, commit.result?.job, {
+    idPrefix: RPC_ID_PREFIX,
+    timeoutMs: options.commitTimeoutMs,
+  });
+  assert(result?.session?.sessionId, "导入结果缺少 sessionId");
+  assert(result?.canContinue === true, "导入会话不可继续");
+  return result;
 }
 
 function contentTextFromMessage(message) {
@@ -278,6 +352,7 @@ function summarizeReadModel(readResult) {
       ? detail.execution_runtime || detail.executionRuntime || null
       : null;
   const messages = Array.isArray(detail.messages) ? detail.messages : [];
+  const turns = Array.isArray(detail.turns) ? detail.turns : [];
   const items = Array.isArray(detail.items) ? detail.items : [];
   const itemCounts = items.reduce((counts, item) => {
     const type = String(item?.type || "unknown");
@@ -288,7 +363,26 @@ function summarizeReadModel(readResult) {
     (message) =>
       Array.isArray(message.attachments) && message.attachments.length > 0,
   ).length;
-
+  const attachmentCount = messages.reduce(
+    (count, message) =>
+      count +
+      (Array.isArray(message.attachments) ? message.attachments.length : 0),
+    0,
+  );
+  const messageRoleCounts = messages.reduce((counts, message) => {
+    const role = String(message?.role || "unknown");
+    counts[role] = (counts[role] || 0) + 1;
+    return counts;
+  }, {});
+  const agentMessagePhaseCounts = items
+    .filter((item) => item?.type === "agent_message")
+    .reduce((counts, item) => {
+      const phase = String(item?.phase || "unphased")
+        .trim()
+        .toLowerCase();
+      counts[phase] = (counts[phase] || 0) + 1;
+      return counts;
+    }, {});
   return {
     sessionId: readResult?.session?.sessionId || null,
     title: readResult?.session?.title || readResult?.session?.name || null,
@@ -296,6 +390,21 @@ function summarizeReadModel(readResult) {
     itemsLength: items.length,
     itemCounts,
     attachmentMessages,
+    attachmentCount,
+    messageRoleCounts,
+    canonicalMessageRoleCounts: summarizeCanonicalMessageRoleCounts(readResult),
+    agentMessagePhaseCounts,
+    turns: turns.map((turn) => ({
+      id: String(turn?.id || ""),
+      status: String(turn?.status || "unknown"),
+      itemCounts: items
+        .filter((item) => item?.turn_id === turn?.id)
+        .reduce((counts, item) => {
+          const type = String(item?.type || "unknown");
+          counts[type] = (counts[type] || 0) + 1;
+          return counts;
+        }, {}),
+    })),
     hasUserMessage: messages.some((message) => message.role === "user"),
     hasAssistantMessage: messages.some(
       (message) => message.role === "assistant",
@@ -319,7 +428,7 @@ function summarizeReadModel(readResult) {
       : null,
     excerpts: messages
       .map(contentTextFromMessage)
-      .filter((text) => text.length >= 12)
+      .filter((text) => text.length >= 12 && !text.startsWith("<image "))
       .slice(0, 8)
       .map((text) => text.slice(0, 80)),
   };
@@ -349,30 +458,19 @@ async function readImportedSession(page, options, sessionId) {
   return {
     read: read.result,
     summary,
+    compactExpectedMessages: selectCompactExpectedMessages(read.result).map(
+      ({ itemId, turnId, role, phase }) => ({ itemId, turnId, role, phase }),
+    ),
+    compactExpectedExcerptHtml: renderExpectedVisibleExcerptHtml(
+      selectCompactExpectedMessageTexts(read.result),
+    ),
+    expandedExpectedMessages: selectExpandedExpectedMessages(read.result).map(
+      ({ itemId, turnId, role, phase }) => ({ itemId, turnId, role, phase }),
+    ),
+    expandedExpectedExcerptHtml: renderExpectedVisibleExcerptHtml(
+      selectExpandedExpectedMessageTexts(read.result),
+    ),
   };
-}
-
-function buildForbiddenSourceLeakTokens({
-  sourceRoot,
-  sourceThreadId,
-  sourcePath,
-}) {
-  return [
-    sourceRoot,
-    sourcePath,
-    sourceThreadId,
-    "state_5.sqlite",
-    "event_msg",
-    "response_item",
-    "source_client",
-    "sourceThreadId",
-    "sourcePath",
-    "rollout_path",
-    "Approve Codex command",
-    "Codex 导入",
-  ]
-    .filter((value) => typeof value === "string" && value.trim().length > 0)
-    .map((value) => value.trim());
 }
 
 function summarizeCommitResult(commit) {
@@ -396,6 +494,8 @@ function sanitizeOpenSnapshot(snapshot) {
     textareaVisible: snapshot.textareaVisible,
     textareaDisabled: snapshot.textareaDisabled,
     textareaSessionId: snapshot.textareaSessionId,
+    messageListSessionId: snapshot.messageListSessionId,
+    planDecisionHandled: snapshot.planDecisionHandled === true,
     sidebarVisible: snapshot.sidebarVisible,
     conversationRowCount: Array.isArray(snapshot.conversationRows)
       ? snapshot.conversationRows.length
@@ -403,7 +503,146 @@ function sanitizeOpenSnapshot(snapshot) {
   });
 }
 
-function assertVisualAudits(audits, readSummary, openSnapshot) {
+function assertVisualAudit(audit, readSummary, importSummary) {
+  assert(audit.targetSessionVisible, `${audit.label} 未停留在目标 session`);
+  assert(audit.visibleTextCaptured, `${audit.label} GUI 可见文本为空`);
+  assert(audit.messageListVisible, `${audit.label} 消息列表不可见`);
+  assert(audit.messageContentVisible, `${audit.label} 消息正文未渲染`);
+  assert(audit.layout?.toolbarVisible, `${audit.label} 顶部工具栏不可见`);
+  assert(
+    audit.layout?.messageViewportVisible,
+    `${audit.label} 消息滚动视口不可见`,
+  );
+  assert(
+    !audit.layout?.toolbarMessageViewportOverlap,
+    `${audit.label} 顶部工具栏遮挡消息视口: ${JSON.stringify(audit.layout)}`,
+  );
+  assert(
+    audit.messageContentTextLength > 0 && audit.messageContentChildCount > 0,
+    `${audit.label} 消息正文为空`,
+  );
+  assert(
+    !audit.importedBannerVisible,
+    `${audit.label} 不应展示导入主线 banner`,
+  );
+  assert(
+    !audit.importedRunControlVisible,
+    `${audit.label} 不应展示导入运行控制卡`,
+  );
+  assert(
+    !audit.sourceMetadataUiVisible,
+    `${audit.label} 不应展示 source metadata/provenance UI`,
+  );
+  assert(
+    audit.missingExpectedExcerpts.length === 0,
+    `${audit.label} 缺少 canonical message 正文: visible=${audit.missingExpectedExcerpts.length}, dom=${audit.missingExpectedDomExcerpts.length}`,
+  );
+  assert(
+    audit.collapsedCanonicalTimelineDetailsCount === 0,
+    `${audit.label} canonical timeline 仍有未展开过程块: ${audit.collapsedCanonicalTimelineDetailsCount}`,
+  );
+  assert(
+    audit.turnGroupCount === importSummary.willImportTurns,
+    `${audit.label} Turn 数不一致: GUI=${audit.turnGroupCount}, canonical=${importSummary.willImportTurns}`,
+  );
+  assert(
+    audit.userMessageBubbleCount ===
+      (readSummary.canonicalMessageRoleCounts.user || 0),
+    `${audit.label} 用户消息数不一致: GUI=${audit.userMessageBubbleCount}, canonical=${readSummary.canonicalMessageRoleCounts.user || 0}`,
+  );
+  assert(
+    audit.assistantMessageBubbleCount ===
+      (readSummary.canonicalMessageRoleCounts.assistant || 0),
+    `${audit.label} 助手消息数不一致: GUI=${audit.assistantMessageBubbleCount}, canonical=${readSummary.canonicalMessageRoleCounts.assistant || 0}`,
+  );
+  assert(
+    audit.toolCallRowCount === (readSummary.itemCounts.tool_call || 0),
+    `${audit.label} Tool Item 数不一致: GUI=${audit.toolCallRowCount}, canonical=${readSummary.itemCounts.tool_call || 0}`,
+  );
+  assert(
+    audit.agentMessageTextPartCount ===
+      (readSummary.itemCounts.agent_message || 0),
+    `${audit.label} AgentMessage Item 数不一致: GUI=${audit.agentMessageTextPartCount}, canonical=${readSummary.itemCounts.agent_message || 0}`,
+  );
+  assert(
+    audit.uniqueAgentMessageTextPartCount === audit.agentMessageTextPartCount,
+    `${audit.label} AgentMessage identity 重复投影: rows=${audit.agentMessageTextPartCount}, unique=${audit.uniqueAgentMessageTextPartCount}`,
+  );
+  assert(
+    audit.fileArtifactCardCount === (readSummary.itemCounts.file_artifact || 0),
+    `${audit.label} File Artifact 数不一致: GUI=${audit.fileArtifactCardCount}, canonical=${readSummary.itemCounts.file_artifact || 0}`,
+  );
+  assert(
+    audit.imageAttachmentCount === readSummary.attachmentCount,
+    `${audit.label} 附件数不一致: GUI=${audit.imageAttachmentCount}, canonical=${readSummary.attachmentCount}`,
+  );
+  assert(
+    audit.historicalPreviewCount === 0,
+    `${audit.label} 仍有未 hydrate 的历史预览`,
+  );
+}
+
+function assertCompactVisualAudit(audit, readSummary) {
+  const terminalStatuses = new Set([
+    "completed",
+    "failed",
+    "canceled",
+    "cancelled",
+    "aborted",
+    "interrupted",
+  ]);
+  assert(audit.targetSessionVisible, `${audit.label} 未停留在目标 session`);
+  assert(audit.inputbarVisible, `${audit.label} 输入框不可见`);
+  assert(audit.layout?.toolbarVisible, `${audit.label} 顶部工具栏不可见`);
+  assert(
+    audit.layout?.messageViewportVisible,
+    `${audit.label} 消息滚动视口不可见`,
+  );
+  assert(
+    !audit.layout?.toolbarMessageViewportOverlap,
+    `${audit.label} 顶部工具栏遮挡消息视口: ${JSON.stringify(audit.layout)}`,
+  );
+  assert(
+    !audit.inputbarOccludesMainContent,
+    `${audit.label} 输入框遮挡消息主内容`,
+  );
+  assert(audit.messageContentTextLength > 0, `${audit.label} 紧凑消息正文为空`);
+  assert(
+    audit.missingExpectedMessages.length === 0,
+    `${audit.label} 紧凑视图缺少 canonical message: ${JSON.stringify(audit.missingExpectedMessages)}`,
+  );
+  assert(
+    audit.historicalTimelinePreviewCount > 0,
+    `${audit.label} 未展示 Codex App 风格的已处理摘要`,
+  );
+  assert(
+    audit.toolCallRowCount < (readSummary.itemCounts.tool_call || 0),
+    `${audit.label} 默认视图仍铺开全部工具记录`,
+  );
+  const terminalToolCallRowCount = (audit.turnGroups || [])
+    .filter((group) => terminalStatuses.has(group.runtimeTurnStatus))
+    .reduce((count, group) => count + group.toolCallRowCount, 0);
+  assert(
+    terminalToolCallRowCount === 0,
+    `${audit.label} terminal Turn 默认仍铺开 ${terminalToolCallRowCount} 条工具记录`,
+  );
+  assert(
+    !audit.hasRawContentPartJson,
+    `${audit.label} 默认视图泄漏 content-part JSON`,
+  );
+}
+
+function assertCompactVisualAudits(audits, readSummary) {
+  assert(
+    audits.length === VIEWPORTS.length * SCROLL_POSITIONS.length,
+    "紧凑视觉审计截图数量不完整",
+  );
+  for (const audit of audits) {
+    assertCompactVisualAudit(audit, readSummary);
+  }
+}
+
+function assertVisualAudits(audits, readSummary, importSummary, openSnapshot) {
   assert(
     audits.length === VIEWPORTS.length * SCROLL_POSITIONS.length,
     "视觉审计截图数量不完整",
@@ -417,21 +656,17 @@ function assertVisualAudits(audits, readSummary, openSnapshot) {
     openSnapshot?.textareaSessionId === readSummary.sessionId,
     "导入会话打开后输入框 session 未绑定目标会话",
   );
+  assert(
+    openSnapshot?.messageListSessionId === readSummary.sessionId,
+    "导入会话打开后消息列表 session 未绑定目标会话",
+  );
   for (const audit of audits) {
-    assert(audit.targetSessionVisible, `${audit.label} 未停留在目标 session`);
-    assert(audit.visibleTextCaptured, `${audit.label} GUI 可见文本为空`);
-    assert(audit.messageListVisible, `${audit.label} 消息列表不可见`);
+    assertVisualAudit(audit, readSummary, importSummary);
+  }
+  if (readSummary.itemsLength >= 100) {
     assert(
-      !audit.importedBannerVisible,
-      `${audit.label} 不应展示导入主线 banner`,
-    );
-    assert(
-      !audit.importedRunControlVisible,
-      `${audit.label} 不应展示导入运行控制卡`,
-    );
-    assert(
-      audit.leakedTokens.length === 0,
-      `${audit.label} 暴露了 source 内部字段: ${audit.leakedTokens.join(", ")}`,
+      audits.some((audit) => audit.scroll.maxScroll > 0),
+      "长历史 GUI 没有可滚动消息正文",
     );
   }
   if ((readSummary.itemCounts.command_execution || 0) > 0) {
@@ -507,7 +742,14 @@ async function run() {
       : null,
     appServerBinary,
     selectedThread: null,
+    selectionBudget: {
+      maxSourceLines: options.maxSourceLines,
+      maxSourceMessages: options.maxSourceMessages,
+      maxSourceItems: options.maxSourceItems,
+      minSourceStabilityMs: DEFAULT_REAL_SAMPLE_STABILITY_MS,
+    },
     readModelSummary: null,
+    compactVisualAudit: null,
     visualAudit: null,
     consoleErrors: [],
     rawEvidence: rawPath,
@@ -522,6 +764,7 @@ async function run() {
   let commit = null;
   let readModel = null;
   let openSnapshot = null;
+  let compactVisualAudits = [];
   let visualAudits = [];
 
   try {
@@ -581,6 +824,13 @@ async function run() {
       messageCount: selected.preview.summary?.messageCount,
       dryRun: selected.preview.summary?.dryRun,
       fidelity: selected.preview.summary?.fidelity,
+      eligibleCount: scanSelection.eligibleCount,
+      stableThreadCount: scanSelection.stableThreadCount,
+      sourceAgeMs: importSourceAgeMs(
+        selected.thread,
+        scanSelection.scan.source?.indexedAt,
+      ),
+      selectionBudget: summary.selectionBudget,
     });
 
     console.log(`${LOG_PREFIX} stage=commit-selected-thread`);
@@ -607,12 +857,32 @@ async function run() {
       sessionId: commit.session.sessionId,
     });
 
-    console.log(`${LOG_PREFIX} stage=collect-real-sample-visual-audit`);
-    const forbiddenTokens = buildForbiddenSourceLeakTokens({
-      sourceRoot: options.sourceRoot,
-      sourceThreadId: selected.thread.sourceThreadId,
-      sourcePath: selected.thread.sourcePath,
-    });
+    console.log(`${LOG_PREFIX} stage=collect-compact-visual-audit`);
+    for (const viewport of VIEWPORTS) {
+      for (const position of SCROLL_POSITIONS) {
+        const screenshotPath = path.join(
+          screenshotDir,
+          `${options.prefix}-${viewport.label}-${position}-compact.png`,
+        );
+        const audit = await captureImportedConversationCompactVisualState(
+          page,
+          {
+            options,
+            viewport,
+            position,
+            sessionId: commit.session.sessionId,
+            expectedExcerptHtml: readModel.compactExpectedExcerptHtml,
+            expectedMessages: readModel.compactExpectedMessages,
+            screenshotPath,
+          },
+        );
+        compactVisualAudits.push(audit);
+        assertCompactVisualAudit(audit, readModel.summary);
+      }
+    }
+    assertCompactVisualAudits(compactVisualAudits, readModel.summary);
+
+    console.log(`${LOG_PREFIX} stage=collect-expanded-canonical-audit`);
     for (const viewport of VIEWPORTS) {
       for (const position of SCROLL_POSITIONS) {
         const screenshotPath = path.join(
@@ -630,13 +900,35 @@ async function run() {
             readModel.summary.title ||
             readModel.summary.excerpts[0] ||
             commit.session.sessionId,
-          forbiddenTokens,
+          expectedExcerptHtml: readModel.expandedExpectedExcerptHtml,
+          expectedMessages: readModel.expandedExpectedMessages,
+          expectedCounts: {
+            turns: selected.preview.summary.dryRun.willImportTurns,
+            userMessages:
+              readModel.summary.canonicalMessageRoleCounts.user || 0,
+            assistantMessages:
+              readModel.summary.canonicalMessageRoleCounts.assistant || 0,
+            toolCalls: readModel.summary.itemCounts.tool_call || 0,
+            agentMessages: readModel.summary.itemCounts.agent_message || 0,
+            fileArtifacts: readModel.summary.itemCounts.file_artifact || 0,
+            attachments: readModel.summary.attachmentCount,
+          },
           screenshotPath,
         });
         visualAudits.push(audit);
+        assertVisualAudit(
+          audit,
+          readModel.summary,
+          selected.preview.summary.dryRun,
+        );
       }
     }
-    assertVisualAudits(visualAudits, readModel.summary, openSnapshot);
+    assertVisualAudits(
+      visualAudits,
+      readModel.summary,
+      selected.preview.summary.dryRun,
+      openSnapshot,
+    );
     assert(
       consoleErrors.length === 0,
       `观察到 console error: ${consoleErrors.join(" | ")}`,
@@ -656,10 +948,12 @@ async function run() {
         commit: summarizeCommitResult(commit),
         readModelSummary: readModel.summary,
         openSnapshot: sanitizeOpenSnapshot(openSnapshot),
+        compactVisualAudits,
         visualAudits,
       }),
     );
 
+    summary.compactVisualAudit = sanitizeJson(compactVisualAudits);
     summary.visualAudit = sanitizeJson(
       visualAudits.map((audit) => ({
         label: audit.label,
@@ -667,14 +961,36 @@ async function run() {
         inputbarVisible: audit.inputbarVisible,
         inputbarDisabled: audit.inputbarDisabled,
         inputbarOccludesMainContent: audit.inputbarOccludesMainContent,
+        layout: audit.layout,
         messageListVisible: audit.messageListVisible,
+        messageContentVisible: audit.messageContentVisible,
+        messageContentTextLength: audit.messageContentTextLength,
+        messageContentChildCount: audit.messageContentChildCount,
         importedBannerVisible: audit.importedBannerVisible,
         importedRunControlVisible: audit.importedRunControlVisible,
+        sourceMetadataUiVisible: audit.sourceMetadataUiVisible,
+        turnGroupCount: audit.turnGroupCount,
+        userMessageBubbleCount: audit.userMessageBubbleCount,
+        assistantMessageBubbleCount: audit.assistantMessageBubbleCount,
+        agentMessageTextPartCount: audit.agentMessageTextPartCount,
+        uniqueAgentMessageTextPartCount: audit.uniqueAgentMessageTextPartCount,
+        toolCallRowCount: audit.toolCallRowCount,
+        fileArtifactCardCount: audit.fileArtifactCardCount,
+        timelineFileAttachmentCardCount: audit.timelineFileAttachmentCardCount,
+        timelineFileArtifactCardCount: audit.timelineFileArtifactCardCount,
+        groupedFileArtifactRowCount: audit.groupedFileArtifactRowCount,
+        imageAttachmentCount: audit.imageAttachmentCount,
+        historicalPreviewCount: audit.historicalPreviewCount,
+        missingExpectedExcerpts: audit.missingExpectedExcerpts,
+        missingExpectedDomExcerpts: audit.missingExpectedDomExcerpts,
+        canonicalTimelineDetailsCount: audit.canonicalTimelineDetailsCount,
+        collapsedCanonicalTimelineDetailsCount:
+          audit.collapsedCanonicalTimelineDetailsCount,
+        expandedTimelineDetailsCount: audit.expandedTimelineDetailsCount,
         hasCommandExecutionVisible: audit.hasCommandExecutionVisible,
         hasPatchText: audit.hasPatchText,
         hasSearchEvidence: audit.hasSearchEvidence,
         hasApprovalText: audit.hasApprovalText,
-        leakedTokens: audit.leakedTokens,
         scroll: audit.scroll,
       })),
     );
@@ -696,6 +1012,7 @@ async function run() {
         commit: summarizeCommitResult(commit),
         readModelSummary: readModel?.summary || null,
         openSnapshot: sanitizeOpenSnapshot(openSnapshot),
+        compactVisualAudits,
         visualAudits,
         error: summary.error,
       }),

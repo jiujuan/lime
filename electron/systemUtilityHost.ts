@@ -154,35 +154,6 @@ export class SystemUtilityHost {
     };
   }
 
-  getSkillPackageFileAssociationStatus(): Record<string, unknown> {
-    return {
-      platform: process.platform,
-      extension: "skill",
-      extensions: ["skill", "skills"],
-      mimeType: "application/vnd.lime.skill+zip",
-      appIdentifier: app.getName(),
-      isDefault: false,
-      canSetDefault: true,
-      requiresUserConfirmation: true,
-      currentHandler: null,
-      settingsUrl: null,
-      detail:
-        "Electron Desktop Host 当前只能检查 .skill / .skills 文件关联状态；设置默认打开方式需要系统确认。",
-      diagnostic: diagnosticMeta("get_skill_package_file_association_status"),
-    };
-  }
-
-  setSkillPackageFileAssociationDefault(): Record<string, unknown> {
-    const status = this.getSkillPackageFileAssociationStatus();
-    return {
-      changed: false,
-      message:
-        "Electron Desktop Host 当前不能静默修改系统文件关联，请在系统设置中确认 .skill / .skills 默认打开方式。",
-      status,
-      diagnostic: diagnosticMeta("set_skill_package_file_association_default"),
-    };
-  }
-
   getBrowserConnectorSettings(): Record<string, unknown> {
     const installRoot = path.join(this.#userDataDir, "browser-connectors");
     return {

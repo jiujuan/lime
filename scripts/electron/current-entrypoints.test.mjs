@@ -445,10 +445,7 @@ describe("Electron current package entrypoints", () => {
     expect(buildRenderer).toContain("rendererBuildEnv");
     expect(buildRenderer).toContain("startRendererBuildHeartbeat");
     expect(smokeBuildRenderer).toContain("LIME_ELECTRON_RENDERER");
-    expect(smokeBuildRenderer).toContain("LIME_VITE_EMPTY_OUT_DIR");
-    expect(smokeBuildRenderer).not.toContain(
-      'LIME_VITE_EMPTY_OUT_DIR = "0"',
-    );
+    expect(smokeBuildRenderer).toContain('LIME_VITE_EMPTY_OUT_DIR = "0"');
     expect(smokeBuildRenderer).toContain("rendererBuildEnv");
     expect(smokeBuildRenderer).toContain("startRendererBuildHeartbeat");
     expect(rendererBuildEnv).toContain("--max-old-space-size=8192");

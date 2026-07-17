@@ -15,7 +15,7 @@ use rollout_event::{
     tool_terminal,
 };
 pub(in crate::runtime::conversation_import) use rollout_event::{
-    CodexRolloutEvent, CodexToolCall, CodexToolPhase, CodexToolSource,
+    visible_tool_output_text, CodexRolloutEvent, CodexToolCall, CodexToolPhase, CodexToolSource,
 };
 
 pub(super) fn response_item_rollout_events(
@@ -360,17 +360,20 @@ fn image_generation_finished_event(payload: &Value) -> CodexRolloutEvent {
 
 fn web_search_end_event(payload: &Value) -> CodexRolloutEvent {
     let action = payload.get("action").cloned();
-    let output = response_item_output(payload).or_else(|| action.as_ref().map(Value::to_string));
-    let query = action.as_ref().and_then(web_search_action_query);
+    let query = web_search_query(payload, action.as_ref());
+    let arguments = web_search_arguments(action.as_ref(), query.as_deref());
+    let structured_content = payload
+        .get("results")
+        .filter(|results| !results.is_null())
+        .cloned()
+        .map(|results| json!({"results": results}));
+    let output = response_item_output(payload)
+        .or_else(|| structured_content.as_ref().map(Value::to_string))
+        .or_else(|| action.as_ref().map(Value::to_string));
     tool_terminal(
         call_id(payload),
         Some("web_search".to_string()),
-        action.as_ref().map(|action| {
-            json!({
-                "action": action,
-                "query": query.clone(),
-            })
-        }),
+        arguments,
         output.clone().map(Value::String),
         false,
         json!({
@@ -380,6 +383,7 @@ fn web_search_end_event(payload: &Value) -> CodexRolloutEvent {
             "query": query,
             "result": action,
             "outputPreview": output.as_deref().map(truncate_output_preview),
+            "structuredContent": structured_content,
             "sourceClient": "codex",
             "sourceEventType": "web_search_end",
         }),
@@ -879,6 +883,21 @@ fn web_search_action_query(action: &Value) -> Option<String> {
             .map(str::to_string)
             .filter(|value| !value.trim().is_empty())
     })
+}
+
+fn web_search_query(payload: &Value, action: Option<&Value>) -> Option<String> {
+    string_field(payload, &["query"]).or_else(|| action.and_then(web_search_action_query))
+}
+
+fn web_search_arguments(action: Option<&Value>, query: Option<&str>) -> Option<Value> {
+    let arguments = compact_json(json!({
+        "action": action,
+        "query": query,
+    }));
+    arguments
+        .as_object()
+        .is_some_and(|arguments| !arguments.is_empty())
+        .then_some(arguments)
 }
 
 fn web_search_action_label(action: &Value) -> Option<String> {

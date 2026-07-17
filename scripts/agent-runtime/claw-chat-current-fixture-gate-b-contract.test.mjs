@@ -298,6 +298,15 @@ describe("claw chat Gate B contract evidence", () => {
       },
       appServerRequests: [
         {
+          method: "agentSession/turn/start",
+          response: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "event-read-probe",
+            status: "completed",
+          },
+        },
+        {
           method: "agentSession/read",
           response: {
             sessionId: "session-1",
@@ -340,6 +349,7 @@ describe("claw chat Gate B contract evidence", () => {
     });
 
     expect(evidence.identity.sources.trace.turnId).toBe("turn-active");
+    expect(evidence.identity.sources.appServer.turnId).toBeNull();
     expect(evidence.identity.consistent).toBe(true);
     expect(evidence.outcome.explicit).toBe(true);
   });

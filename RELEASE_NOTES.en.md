@@ -1,38 +1,40 @@
-## Lime v1.105.0
+## Lime v1.106.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Added the Codex-aligned `exec_command` and `write_stdin` current tool surface with PTY support, persistent sessions, incremental output, timed yields, output budgets, stdin writes, and terminal cleanup. Command execution now flows through the App Server execution process, approval, sandbox, and canonical Tool/Command lifecycle.
-- Added `spawn_agent.fork_turns` support for `all`, `none`, and the latest N canonical Turns. Children rebuild optional history and provider transcripts under independent stable identities, while the Pending -> Open crash commit exposes a child only after durable setup completes.
-- Added a DeepSWE adapter, project-level Gate candidate/coverage entry points, and an Electron smoke evidence owner to provide auditable snapshots, surface contracts, and proof levels for the next complete Gate A/B candidate freeze.
+- Added Responses WebSocket transport to the current provider chain. The `supportsWebsockets` capability now flows from the TypeScript client through the App Server and Agent Runtime into `model-provider`, with real Upgrade requests, `response.create`, serialized connection reuse, and session-sticky HTTP fallback for 426 responses, exhausted connection retries, or disconnects before visible output.
+- Added multimodal input to the canonical message-part path. Current-turn images are persisted as sidecar references before provider injection, history hydration carries controlled references only, text-only models fail closed before network I/O, and provider capture/read models do not expose base64 payloads.
+- Added a standalone SETTINGS-01 Gate A runner covering five locales, three viewports, sixteen primary settings pages, and archived-conversation loading, empty, and error states with structured surface proof.
 
 ### Fixes
 
-- Changed provider SSE handling to a 300-second idle timeout instead of a total request deadline and preserved nested transport errors. OpenAI chat streams now ignore fully empty tool-call placeholders and fail closed when arguments arrive without a tool name.
-- Preserved final-answer/commentary phase at TextEnd, projected failed commands as canonical Command items instead of generic Tools, and exposed stable runtime Turn status in the streaming DOM.
-- Prevented AgentControl spawn failures during history, lineage, graph, identity, or mailbox writes from leaving partial children. Startup recovery now exposes only Open children that completed the crash commit.
+- Prevented the large App Server async dispatcher from overflowing the default thread stack and enabled concurrent independent JSON-RPC requests after initialization. Long turns, MCP calls, and host I/O no longer block unrelated list/read requests, while responses remain correlated by request ID and resource serialization scope.
+- Fixed provider history loss across batch/completed content parts, commentary/final snapshots, and bounded tails after compaction, preventing missing messages, duplicate content, or reinjection of the full compacted prefix on the next request.
+- Fixed canonical lifecycle handling for Multi-Agent mailbox Results, concurrent child isolation, and cold-restart recovery. Multiple Results now complete under stable item identities, partial deltas are not acknowledged early, and failed children do not contaminate completed siblings.
+- Fixed Plan reloads replacing canonical revision identity with a message copy, and Content Factory multi-document flows selecting artifacts by DOM order. Workspace recovery now reconciles canonical revision and artifact references.
+- Fixed macOS arm64 quality runners and App Server project status being blocked by incompatible user-level Git binaries or shell configuration. Native executable PATH handling, plain-directory Git preflight, async child deadlines, and `kill_on_drop` now share current owners.
 
 ### Improvements and Refactors
 
-- Started rebuilding Codex local-history imports directly as canonical Thread/Turn/Item history. Removed the imported runtime-event sidecar, `conversationImport/thread/runtimeEvents/read`, the dedicated detail panel, and imported-only tool projection so imports no longer maintain a second full-history fact source.
-- Removed legacy Bash, PowerShell, and shell aliases together with the separate `shell_execution` owner. Live processes, PTY, output draining, interruption/termination, and sandbox command preparation now converge in the current Tool Runtime and App Server owners.
-- Removed Renderer synthetic Team projection, Team Memory shadow, selected-team/session metadata, Workspace Agent Team settings, and the old SubAgent tool whitelist. The GUI, read model, and runtime now continue from canonical child Thread/graph facts only.
-- Split Task Center draft-send dispatch, conversation-import history building, execution process handling, sandbox command preparation, and Electron smoke evidence into focused owners to reduce hot-file size and hidden cross-layer wiring.
+- Further converged Codex local-history import on canonical Thread/Turn/Item data, covering reasoning, commands, approvals, MCP, web search, file artifacts, attachments, and multi-format previews. Large imports now run as background jobs with GUI phase, item, and conversation progress, while native and imported conversations share message projection, tool lifecycle, and continuation paths.
+- Switched import commits to incremental materialization. The owner benchmark for 1,200 commands dropped from 106.7 seconds to 3.51 seconds with no fidelity loss, while real-sample visual audits cover desktop, compact, and narrow layouts at multiple scroll positions.
+- Unified Agent GUI projection for historical and live timelines, process groups, attachments, diffs/file artifacts, and tool results. Compact and narrow layouts now use a chat-first single panel with an explicit workspace mode switch and preserve the message tree across resizing.
+- Removed imported runtime events, imported-only Renderer branches, the legacy Codex content-studio smoke, and the `.skill` file-association Host/API/UI path that did not provide a real system-setting capability. Retired names remain only in negative governance guards.
 
 ### Tests and Quality
 
-- Expanded Rust and TypeScript coverage for unified exec/PTY, execution-process JSON-RPC, sandbox/policy decisions, AgentControl fork/crash recovery, provider SSE, canonical conversation-import mapping, and GUI projection.
-- Added a DeepSWE coding slice, project Gate candidate digests, a 34-surface coverage contract, Gate B execution evidence, and an App Server stdio transport fixture. Removed the old benchmark-release parallel pipeline and obsolete manifests.
-- Synchronized App Server protocol schemas, the generated TypeScript client, command catalogs, runtime fixtures, Electron smoke coverage, and current documentation guards.
+- Expanded Rust and TypeScript coverage for Responses WebSocket/HTTP fallback, provider errors and retries, multimodal capture, context compaction, AgentControl concurrency/recovery, Codex import performance, and canonical lifecycle behavior.
+- Strengthened real Electron Gate B coverage across the current Agent fixture, Codex import click-through, real-sample visual audit, provider migration, Settings, MCP, and Content Factory, verifying shared Electron/preload/IPC/App Server/read-model/GUI identities with zero production mock fallback.
+- Unified native executable handling and fail-closed Git checks across quality scripts, and synchronized protocol schemas, generated clients, command catalogs, five-locale resources, script governance, and project Gate evidence contracts.
 
 ### Documentation
 
-- Updated the global architecture, Refactor V2 central plan, Codex import roadmap, Multi-Agent/Agent UI guidance, testing strategy, and project Gate A/B plan with current owners, deletion classifications, candidate-freeze rules, and remaining acceptance conditions.
+- Updated the global architecture, Codex import roadmap, Refactor V2 phase-two test plan, DeepSWE scenario matrix, and project Gate A/B records with the App Server concurrency, provider transport, canonical import, responsive GUI, and remaining Windows/live/eval acceptance boundaries.
 
 ### Other
 
-- Bumped version facts to `1.105.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and release notes.
+- Bumped version facts to `1.106.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and release notes.
 
-**Full changes**: `v1.104.0` -> `v1.105.0`
+**Full changes**: `v1.105.0` -> `v1.106.0`

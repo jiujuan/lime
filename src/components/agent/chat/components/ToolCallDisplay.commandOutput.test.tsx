@@ -139,10 +139,14 @@ describe("ToolCallDisplay command output", () => {
       ),
     ).toBeTruthy();
     expect(
-      container.querySelector('[data-testid="tool-call-command-output-stdout"]'),
+      container.querySelector(
+        '[data-testid="tool-call-command-output-stdout"]',
+      ),
     ).toBeTruthy();
     expect(
-      container.querySelector('[data-testid="tool-call-command-output-stderr"]'),
+      container.querySelector(
+        '[data-testid="tool-call-command-output-stderr"]',
+      ),
     ).toBeTruthy();
     expect(container.textContent).toContain("✓ parser.test.ts");
     expect(container.textContent).toContain("FAIL src/runtime.test.ts");
@@ -227,15 +231,15 @@ describe("ToolCallDisplay command output", () => {
     expect(
       container.querySelector('[data-testid="tool-call-diff-review"]'),
     ).toBeTruthy();
-    expect(container.textContent).toContain("变更审阅");
-    expect(container.textContent).toContain("1 个文件");
-    expect(container.textContent).toContain("+2 行");
-    expect(container.textContent).toContain("-1 行");
-    expect(container.textContent).toContain("1 处变更");
-    expect(container.textContent).toContain("修改");
     expect(container.textContent).toContain("src/components/App.tsx");
+    expect(container.textContent).toContain("+2");
+    expect(container.textContent).toContain("-1");
+    expect(container.textContent).not.toContain("变更范围");
     expect(container.textContent).toContain('const title = "Old";');
     expect(container.textContent).toContain('const subtitle = "Ready";');
+    expect(
+      container.querySelector('[data-testid="tool-call-rendered-result"]'),
+    ).toBeNull();
   });
 
   it("文件级变更审阅应可作为 diff 审阅内容打开到画布", () => {
@@ -353,7 +357,9 @@ describe("ToolCallDisplay command output", () => {
     expect(container.textContent).toContain("收起完整变更");
     expect(container.textContent).toContain('const nextValue10 = "current";');
     expect(
-      container.querySelector('[data-testid="tool-call-diff-review-file-lines"]'),
+      container.querySelector(
+        '[data-testid="tool-call-diff-review-file-lines"]',
+      ),
     ).toBeTruthy();
   });
 
@@ -395,14 +401,16 @@ describe("ToolCallDisplay command output", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="tool-call-command-output-stdout"]'),
+      container.querySelector(
+        '[data-testid="tool-call-command-output-stdout"]',
+      ),
     ).toBeTruthy();
     expect(
       container.querySelector('[data-testid="tool-call-diff-review"]'),
     ).toBeTruthy();
     expect(container.textContent).toContain("src/app.ts");
-    expect(container.textContent).toContain("+2 行");
-    expect(container.textContent).toContain("-1 行");
+    expect(container.textContent).toContain("+2");
+    expect(container.textContent).toContain("-1");
     expect(container.textContent).toContain("const enabled = true;");
     expect(
       container.querySelector('[data-testid="tool-call-rendered-result"]'),

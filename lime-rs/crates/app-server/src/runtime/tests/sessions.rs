@@ -379,8 +379,12 @@ async fn compact_agent_session_writes_session_context_artifact() {
         Some("turn_compact_1")
     );
     assert_eq!(
-        completed.payload["artifact"]["policy"]["historyRewrite"].as_bool(),
+        completed.payload["artifact"]["policy"]["durableHistoryRewrite"].as_bool(),
         Some(false)
+    );
+    assert_eq!(
+        completed.payload["artifact"]["policy"]["providerHistoryRewrite"].as_bool(),
+        Some(true)
     );
     assert_eq!(
         completed.payload["artifact"]["policy"]["longTermMemoryWrite"].as_bool(),
@@ -392,8 +396,9 @@ async fn compact_agent_session_writes_session_context_artifact() {
     let sidecar = sidecar_store
         .read_text(relative_path)
         .expect("sidecar content");
-    assert!(sidecar.contains("\"schema\": \"session_context_compaction.v1\""));
-    assert!(sidecar.contains("请总结上下文"));
+    assert!(sidecar.contains("\"schema\": \"session_context_compaction.v2\""));
+    assert!(sidecar.contains("No earlier turns were removed"));
+    assert!(!sidecar.contains("请总结上下文"));
 
     let read = core
         .read_session(AgentSessionReadParams {
@@ -505,7 +510,7 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
     assert!(compaction_context["summary"]
         .as_str()
         .expect("summary")
-        .contains("Turn completed."));
+        .contains("No earlier turns were removed"));
     assert_eq!(
         compaction_context["sidecarRef"]["kind"].as_str(),
         Some("context_compaction")

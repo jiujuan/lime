@@ -16,6 +16,8 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import { AlertCircle, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useApiKeyProvider } from "@/hooks/useApiKeyProvider";
 import {
@@ -128,12 +130,14 @@ export const ApiKeyProviderSection = forwardRef<
     { className, initialFocus, exposeOemLoginPrompt = false, onOemLogin },
     ref,
   ) => {
+    const { t } = useTranslation("settings");
     // 使用 Hook 管理状态
     const {
       providers,
       selectedProviderId,
       selectedProvider,
       loading,
+      error,
       selectProvider,
       addCustomProvider,
       updateProvider,
@@ -358,51 +362,96 @@ export const ApiKeyProviderSection = forwardRef<
         )}
         data-testid="api-key-provider-section"
       >
-        {/* 左侧：已启用模型列表 */}
-        <ModelProviderList
-          providers={providers}
-          options={{ exposeOemLoginPrompt }}
-          selectedProviderId={selectedProviderId}
-          onProviderSelect={handleSelectEnabledModel}
-          onAddModel={() => setShowAddModelFlow(true)}
-          onImportExport={() => setShowImportExportDialog(true)}
-          className="flex-shrink-0"
-        />
-
-        {/* 右侧：Provider 设置面板 / 添加模型流程 */}
-        <div
-          className="relative min-h-0 flex-1 overflow-hidden bg-white"
-          data-testid="api-key-provider-detail"
-        >
-          {showAddModelFlow ? (
-            <ModelAddPanel
+        {error && providers.length === 0 ? (
+          <div
+            className="flex min-h-0 flex-1 items-center justify-center bg-white px-8 py-10"
+            data-testid="provider-load-error"
+            role="alert"
+            aria-live="polite"
+          >
+            <div className="flex max-w-md flex-col items-center text-center">
+              <div className="mb-4 flex size-11 items-center justify-center rounded-full bg-rose-50 text-rose-700">
+                <AlertCircle aria-hidden="true" className="size-5" />
+              </div>
+              <h3 className="text-base font-semibold text-slate-950">
+                {t("settings.providers.loadError.title", {
+                  defaultValue: "本地模型设置暂时不可用",
+                })}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {t("settings.providers.loadError.description", {
+                  defaultValue:
+                    "无法读取本地配置。请检查应用数据目录权限后重试。",
+                })}
+              </p>
+              <button
+                type="button"
+                className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="provider-load-retry"
+                disabled={loading}
+                onClick={() => {
+                  void refresh();
+                }}
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  className={cn("size-4", loading && "animate-spin")}
+                />
+                {t("settings.providers.loadError.action.retry", {
+                  defaultValue: "重试",
+                })}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* 左侧：已启用模型列表 */}
+            <ModelProviderList
               providers={providers}
-              onAddProvider={addCustomProvider}
-              onUpdateProvider={updateProvider}
-              onAddApiKey={handleAddApiKey}
-              onActivated={handleModelActivated}
-              onCancel={() => setShowAddModelFlow(false)}
-              className="h-full"
+              options={{ exposeOemLoginPrompt }}
+              selectedProviderId={selectedProviderId}
+              onProviderSelect={handleSelectEnabledModel}
+              onAddModel={() => setShowAddModelFlow(true)}
+              onImportExport={() => setShowImportExportDialog(true)}
+              className="flex-shrink-0"
             />
-          ) : (
-            <ProviderSetting
-              provider={selectedProvider}
-              focus={selectedProviderFocus}
-              onUpdate={handleUpdateProvider}
-              onAddApiKey={handleAddApiKey}
-              onTestConnection={handleTestConnection}
-              onDeleteProvider={handleDeleteProviderConfig}
-              authStatus={
-                viewModel.selectedProviderLoginRequired
-                  ? "login_required"
-                  : "ready"
-              }
-              onLogin={onOemLogin}
-              loading={loading}
-              className="h-full"
-            />
-          )}
-        </div>
+
+            {/* 右侧：Provider 设置面板 / 添加模型流程 */}
+            <div
+              className="relative min-h-0 flex-1 overflow-hidden bg-white"
+              data-testid="api-key-provider-detail"
+            >
+              {showAddModelFlow ? (
+                <ModelAddPanel
+                  providers={providers}
+                  onAddProvider={addCustomProvider}
+                  onUpdateProvider={updateProvider}
+                  onAddApiKey={handleAddApiKey}
+                  onActivated={handleModelActivated}
+                  onCancel={() => setShowAddModelFlow(false)}
+                  className="h-full"
+                />
+              ) : (
+                <ProviderSetting
+                  provider={selectedProvider}
+                  focus={selectedProviderFocus}
+                  onUpdate={handleUpdateProvider}
+                  onAddApiKey={handleAddApiKey}
+                  onTestConnection={handleTestConnection}
+                  onDeleteProvider={handleDeleteProviderConfig}
+                  authStatus={
+                    viewModel.selectedProviderLoginRequired
+                      ? "login_required"
+                      : "ready"
+                  }
+                  onLogin={onOemLogin}
+                  loading={loading}
+                  className="h-full"
+                />
+              )}
+            </div>
+          </>
+        )}
 
         {/* 导入导出对话框 */}
         <ImportExportDialog

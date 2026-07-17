@@ -19,6 +19,8 @@ const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
 const LIME_RUNTIME_AUTO_COMPACT_KEY: &str = "auto_compact";
 const LIME_RUNTIME_SOURCE_KEY: &str = "source";
 const APP_SERVER_TURN_POLICY_SOURCE: &str = "app_server_turn_policy";
+const HARNESS_TURN_TOOL_SURFACE_POINTER: &str = "/harness/turn_policy/tool_surface";
+const HARNESS_TURN_POLICY_SOURCE: &str = "harness_turn_policy";
 const RESPONSIVE_CHAT_MODEL_SLOT: &str = "fast";
 
 mod session_config;
@@ -31,13 +33,18 @@ pub(super) use workspace_scope::request_workspace_scope;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TurnToolSurface {
+    DirectAnswer,
     Full,
     CompactTools,
 }
 
 impl TurnToolSurface {
     fn uses_light_session_prompt(self) -> bool {
-        matches!(self, Self::CompactTools)
+        matches!(self, Self::DirectAnswer | Self::CompactTools)
+    }
+
+    fn is_harness_direct_answer(self) -> bool {
+        matches!(self, Self::DirectAnswer)
     }
 }
 
@@ -452,6 +459,7 @@ pub(super) fn direct_provider_config_from_request(
         ),
         toolshim_model: request.toolshim_model.clone(),
         model_capabilities: request.model_capabilities.clone(),
+        supports_websockets: request.supports_websockets.unwrap_or(false),
     })
 }
 
@@ -516,6 +524,15 @@ pub(super) fn should_use_compact_tool_surface(request: &ExecutionRequest) -> boo
 }
 
 fn turn_tool_surface_for_request(request: &ExecutionRequest) -> TurnToolSurface {
+    if request
+        .runtime_metadata()
+        .and_then(|metadata| metadata.pointer(HARNESS_TURN_TOOL_SURFACE_POINTER))
+        .and_then(Value::as_str)
+        == Some(tool_runtime::turn_tool_surface::TURN_TOOL_SURFACE_DIRECT_ANSWER)
+    {
+        return TurnToolSurface::DirectAnswer;
+    }
+
     match app_server_turn_policy_value(request, LIME_RUNTIME_TOOL_SURFACE_KEY) {
         Some(LIME_RUNTIME_COMPACT_TOOLS_TOOL_SURFACE) => TurnToolSurface::CompactTools,
         _ => TurnToolSurface::Full,

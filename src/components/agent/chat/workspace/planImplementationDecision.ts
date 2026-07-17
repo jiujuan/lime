@@ -332,7 +332,7 @@ function selectLatestCandidate(
     return null;
   }
 
-  return [...candidates].sort((left, right) => {
+  const sortedCandidates = [...candidates].sort((left, right) => {
     if (left.completedAt !== right.completedAt) {
       return right.completedAt - left.completedAt;
     }
@@ -340,7 +340,26 @@ function selectLatestCandidate(
       return right.sequence - left.sequence;
     }
     return right.id.localeCompare(left.id);
-  })[0];
+  });
+  const latestCandidate = sortedCandidates[0];
+  if (latestCandidate.source !== "message") {
+    return latestCandidate;
+  }
+
+  const matchingStructuredCandidates = sortedCandidates.filter(
+    (candidate) =>
+      candidate.source !== "message" &&
+      candidate.planText === latestCandidate.planText,
+  );
+  return (
+    matchingStructuredCandidates.find(
+      (candidate) => candidate.source === "thread_item",
+    ) ||
+    matchingStructuredCandidates.find(
+      (candidate) => candidate.source === "plan_state",
+    ) ||
+    latestCandidate
+  );
 }
 
 export function buildPlanImplementationRequestId(
@@ -398,9 +417,7 @@ export function readPlanImplementationConfirmationKeys(
   requestArguments?: unknown,
 ): string[] {
   const args = asRecord(requestArguments);
-  const snakePlanConfirmationKeys = Array.isArray(
-    args?.plan_confirmation_keys,
-  )
+  const snakePlanConfirmationKeys = Array.isArray(args?.plan_confirmation_keys)
     ? args.plan_confirmation_keys
     : [];
   const camelPlanConfirmationKeys = Array.isArray(args?.planConfirmationKeys)

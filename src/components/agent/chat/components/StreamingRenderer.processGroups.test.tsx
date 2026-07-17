@@ -171,7 +171,53 @@ describe("StreamingRenderer process groups", () => {
     expect(
       owner?.querySelector('[data-testid="inline-tool-process-step"]'),
     ).not.toBeNull();
-    expect(owner?.querySelector('[data-testid="tool-call-row"]')).not.toBeNull();
+    expect(
+      owner?.querySelector('[data-testid="tool-call-row"]'),
+    ).not.toBeNull();
+  });
+
+  it("交错 agent message 应保留 canonical identity 与 phase DOM owner", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "text",
+          text: "我会先检查项目。",
+          metadata: {
+            source: "agent_thread_item",
+            threadItemId: "agent-message-commentary-1",
+            turnId: "turn-agent-message-owner",
+            sequence: 1,
+            phase: "commentary",
+          },
+        },
+        {
+          type: "text",
+          text: "检查完成。",
+          metadata: {
+            source: "agent_thread_item",
+            threadItemId: "agent-message-final-1",
+            turnId: "turn-agent-message-owner",
+            sequence: 2,
+            phase: "final_answer",
+          },
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const parts = container.querySelectorAll(
+      '[data-testid="agent-message-text-part"]',
+    );
+    expect(parts).toHaveLength(2);
+    expect(parts[0]?.getAttribute("data-thread-item-id")).toBe(
+      "agent-message-commentary-1",
+    );
+    expect(parts[0]?.getAttribute("data-message-phase")).toBe("commentary");
+    expect(parts[1]?.getAttribute("data-thread-item-id")).toBe(
+      "agent-message-final-1",
+    );
+    expect(parts[1]?.getAttribute("data-message-phase")).toBe("final_answer");
   });
 
   it("交错内容里相邻多次命令应逐条保留过程记录", () => {

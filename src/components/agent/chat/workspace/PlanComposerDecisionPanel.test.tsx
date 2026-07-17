@@ -16,7 +16,9 @@ interface MountedPanel {
 
 const mountedPanels: MountedPanel[] = [];
 
-function createRequest(overrides: Partial<ActionRequired> = {}): ActionRequired {
+function createRequest(
+  overrides: Partial<ActionRequired> = {},
+): ActionRequired {
   return {
     requestId: "plan-request-1",
     actionType: "ask_user",
@@ -47,7 +49,9 @@ function renderPanel(request: ActionRequired = createRequest()): MountedPanel {
   const onSubmit = vi.fn<(response: ConfirmResponse) => void | Promise<void>>();
 
   act(() => {
-    root.render(<PlanComposerDecisionPanel request={request} onSubmit={onSubmit} />);
+    root.render(
+      <PlanComposerDecisionPanel request={request} onSubmit={onSubmit} />,
+    );
   });
 
   const mounted = { container, root, onSubmit };
@@ -172,9 +176,7 @@ describe("PlanComposerDecisionPanel", () => {
   it("填写调整要求后应提交调整文本", () => {
     const { container, onSubmit } = renderPanel();
     const input = getAdjustmentInput(container);
-    expect(input?.getAttribute("placeholder")).toBe(
-      "否，请告诉我如何调整",
-    );
+    expect(input?.getAttribute("placeholder")).toBe("否，请告诉我如何调整");
 
     changeInputValue(input!, "先补一条 E2E 验证");
     clickButton(container, "提交");
@@ -189,7 +191,11 @@ describe("PlanComposerDecisionPanel", () => {
 
   it("忽略时应提交 confirmed=false", () => {
     const { container, onSubmit } = renderPanel();
+    const ignoreButton = container.querySelector(
+      '[data-testid="plan-composer-decision-ignore"]',
+    );
 
+    expect(ignoreButton).toBeTruthy();
     clickButton(container, "忽略");
 
     expect(onSubmit).toHaveBeenCalledWith(

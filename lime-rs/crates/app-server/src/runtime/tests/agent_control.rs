@@ -14,6 +14,8 @@ use tool_runtime::agent_control::{
     SubAgentProjectionActivity,
 };
 
+#[path = "agent_control/concurrent.rs"]
+mod concurrent;
 #[path = "agent_control/effective_route.rs"]
 mod effective_route;
 #[path = "agent_control/restart.rs"]
@@ -476,9 +478,10 @@ async fn spawn_forks_all_last_n_or_no_parent_turns_into_canonical_history() {
             let stored = state.sessions.get(session_id).expect("stored child");
             crate::runtime::provider_history::provider_history_excluding_current_turn_input(
                 stored,
-                core.output_snapshot_store.as_ref(),
+                core.sidecar_store.as_deref(),
                 "future-child-turn",
             )
+            .expect("provider history")
         };
         let provider_text = provider_history
             .iter()

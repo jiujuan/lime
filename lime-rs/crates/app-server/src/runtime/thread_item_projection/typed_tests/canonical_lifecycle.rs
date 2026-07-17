@@ -264,6 +264,94 @@ fn canonical_agent_message_merges_typed_content_parts_across_lifecycle() {
 }
 
 #[test]
+fn canonical_agent_message_preserves_interleaved_text_image_and_file_order() {
+    let content_parts = json!([
+        {"type": "text", "text": "before"},
+        {
+            "type": "media",
+            "kind": "image",
+            "reference": {
+                "uri": "sidecar://media/image-1",
+                "mime_type": "image/png"
+            }
+        },
+        {"type": "text", "text": "between"},
+        {
+            "type": "media",
+            "kind": "file",
+            "reference": {
+                "uri": "sidecar://media/spec-1",
+                "mime_type": "application/pdf"
+            }
+        }
+    ]);
+    let changes = materialize_events(
+        &[
+            event(
+                "mixed-message-started",
+                1,
+                "item.started",
+                "turn-mixed-media",
+                json!({
+                    "item": {
+                        "id": "mixed-media-message",
+                        "type": "agent_message",
+                        "status": "in_progress",
+                        "contentParts": content_parts
+                    }
+                }),
+            ),
+            event(
+                "mixed-message-completed",
+                2,
+                "item.completed",
+                "turn-mixed-media",
+                json!({
+                    "item": {
+                        "id": "mixed-media-message",
+                        "type": "agent_message",
+                        "status": "completed",
+                        "phase": "final_answer",
+                        "contentParts": content_parts
+                    }
+                }),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize interleaved content parts");
+
+    let ThreadItemPayload::AgentMessage { content_parts, .. } = &changes.changed_items[0].payload
+    else {
+        panic!("canonical agent message payload");
+    };
+    assert_eq!(
+        serde_json::to_value(content_parts).expect("serialize content parts"),
+        json!([
+            {"type": "text", "text": "before"},
+            {
+                "type": "media",
+                "kind": "image",
+                "reference": {
+                    "uri": "sidecar://media/image-1",
+                    "mime_type": "image/png"
+                }
+            },
+            {"type": "text", "text": "between"},
+            {
+                "type": "media",
+                "kind": "file",
+                "reference": {
+                    "uri": "sidecar://media/spec-1",
+                    "mime_type": "application/pdf"
+                }
+            }
+        ])
+    );
+}
+
+#[test]
 fn malformed_or_inline_agent_message_content_parts_are_rejected() {
     let changes = materialize_events(
         &[

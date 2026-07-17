@@ -41,6 +41,37 @@ pub(in crate::runtime) fn materialize_events(
     Ok(materializer.finish())
 }
 
+#[derive(Debug, Clone, Default)]
+pub(in crate::runtime) struct MaterializedEventEntities {
+    pub(in crate::runtime) turn: Option<Turn>,
+    pub(in crate::runtime) item: Option<ThreadItem>,
+}
+
+pub(in crate::runtime) struct IncrementalMaterializer<'a> {
+    materializer: Materializer<'a>,
+}
+
+impl<'a> IncrementalMaterializer<'a> {
+    pub(in crate::runtime) fn from_events(
+        events: &[AgentEvent],
+        default_session_id: &'a str,
+        default_thread_id: &'a str,
+    ) -> Result<Self, MaterializationError> {
+        let mut materializer = Materializer::new(default_session_id, default_thread_id);
+        for event in events {
+            materializer.apply(event)?;
+        }
+        Ok(Self { materializer })
+    }
+
+    pub(in crate::runtime) fn apply(
+        &mut self,
+        event: &AgentEvent,
+    ) -> Result<MaterializedEventEntities, MaterializationError> {
+        self.materializer.apply(event)
+    }
+}
+
 struct Materializer<'a> {
     default_session_id: &'a str,
     default_thread_id: &'a str,
@@ -62,10 +93,13 @@ impl<'a> Materializer<'a> {
         }
     }
 
-    fn apply(&mut self, event: &AgentEvent) -> Result<(), MaterializationError> {
+    fn apply(
+        &mut self,
+        event: &AgentEvent,
+    ) -> Result<MaterializedEventEntities, MaterializationError> {
         if let Some(previous_sequence) = self.seen_event_ids.get(&event.event_id).copied() {
             if previous_sequence == event.sequence {
-                return Ok(());
+                return Ok(MaterializedEventEntities::default());
             }
             return Err(MaterializationError::EventIdentityCollision {
                 event_id: event.event_id.clone(),
@@ -87,7 +121,7 @@ impl<'a> Materializer<'a> {
         self.seen_sequences
             .insert(event.sequence, event.event_id.clone());
         if event.sequence < self.latest_sequence {
-            return Ok(());
+            return Ok(MaterializedEventEntities::default());
         }
         self.latest_sequence = event.sequence;
 
@@ -103,16 +137,16 @@ impl<'a> Materializer<'a> {
             {
                 self.accumulator.remove_turn(turn_id);
             }
-            return Ok(());
+            return Ok(MaterializedEventEntities::default());
         }
         if event.event_type == "queue.removed" {
             if let Some(turn_id) = queued_turn_id(event) {
                 self.accumulator.remove_turn(turn_id);
             }
-            return Ok(());
+            return Ok(MaterializedEventEntities::default());
         }
         if event.event_type == "queue.promoted" {
-            return Ok(());
+            return Ok(MaterializedEventEntities::default());
         }
         if matches!(
             event.event_type.as_str(),
@@ -132,7 +166,7 @@ impl<'a> Materializer<'a> {
         } else {
             event.turn_id.as_deref().or(payload_turn_id.as_deref())
         };
-        if let Some(turn_id) = turn_id {
+        let turn = turn_id.and_then(|turn_id| {
             self.accumulator.push_turn(
                 turn_snapshot(
                     event,
@@ -141,14 +175,12 @@ impl<'a> Materializer<'a> {
                     turn_id,
                 ),
                 event.sequence,
-            );
-        }
+            )
+        });
 
-        if let Some(item) = item_from_event(event, self.default_session_id, self.default_thread_id)
-        {
-            self.accumulator.push_item(item);
-        }
-        Ok(())
+        let item = item_from_event(event, self.default_session_id, self.default_thread_id)
+            .and_then(|item| self.accumulator.push_item(item));
+        Ok(MaterializedEventEntities { turn, item })
     }
 
     fn finish(self) -> ThreadHistoryChangeSet {

@@ -46,6 +46,7 @@ interface AgentThreadTimelineArtifactCardProps {
     sourceName?: string;
     description?: string | null;
   }) => void;
+  groupedAttachment?: boolean;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -375,6 +376,54 @@ function resolveDocumentPreview(
   return truncateInlineText(preview);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function isPlainTimelineFileAttachment(
+  item: AgentThreadItem,
+): item is Extract<AgentThreadItem, { type: "file_artifact" }> {
+  if (item.type !== "file_artifact") {
+    return false;
+  }
+  const metadata = asRecord(item.metadata);
+  const document = resolveArtifactProtocolDocumentPayload({
+    content: item.content,
+    metadata,
+  });
+  const metadataVersion = asRecord(metadata?.artifactVersion);
+  const hasArtifactDocumentFacts = Boolean(
+    normalizeText(document?.artifactId) ||
+    readMetadataText(metadata, [
+      "artifactId",
+      "artifact_id",
+      "artifactDocumentId",
+      "artifact_document_id",
+      "artifactKind",
+      "artifact_kind",
+      "artifactStatus",
+      "artifact_status",
+      "artifactVersionNo",
+      "artifact_version_no",
+      "artifactVersionId",
+      "artifact_version_id",
+      "snapshotPath",
+      "snapshot_path",
+    ]) ||
+    readMetadataText(metadataVersion, [
+      "id",
+      "versionId",
+      "version_id",
+      "snapshotPath",
+      "snapshot_path",
+    ]) ||
+    readMetadataNumber(metadata, [
+      "artifactVersionNo",
+      "artifact_version_no",
+      "versionNo",
+      "version_no",
+    ]),
+  );
+  return !document && !hasArtifactDocumentFacts;
+}
+
 export function AgentThreadTimelineArtifactCard({
   item,
   timestamp,
@@ -383,6 +432,7 @@ export function AgentThreadTimelineArtifactCard({
   readTimelineArtifactContent = readAgentRuntimeTimelineArtifactContent,
   sourceMessageId,
   onSaveFileArtifactAsKnowledge,
+  groupedAttachment = false,
 }: AgentThreadTimelineArtifactCardProps) {
   const { t } = useTranslation("agent");
   const translateProjection: AgentUiProjectionTranslation = (key, options) =>
@@ -525,13 +575,13 @@ export function AgentThreadTimelineArtifactCard({
   );
   const hasArtifactDocumentFacts = Boolean(
     artifactProjectionId ||
-      metadataKind ||
-      metadataStatus ||
-      metadataVersionNo ||
-      metadataVersionId ||
-      snapshotPath ||
-      metadataVersionDiff ||
-      validationIssueCount > 0,
+    metadataKind ||
+    metadataStatus ||
+    metadataVersionNo ||
+    metadataVersionId ||
+    snapshotPath ||
+    metadataVersionDiff ||
+    validationIssueCount > 0,
   );
   const resolveOpenTarget = async (
     target: ArtifactTimelineOpenTarget,
@@ -592,19 +642,23 @@ export function AgentThreadTimelineArtifactCard({
     );
 
     return (
-      <div className="py-1.5">
+      <div className={groupedAttachment ? "" : "py-1.5"}>
         <div
           data-testid="timeline-file-attachment-card"
-          className="overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm shadow-slate-950/5"
+          className={
+            groupedAttachment
+              ? "bg-white text-left"
+              : "overflow-hidden rounded-lg border border-slate-200 bg-white text-left"
+          }
         >
-          <div className="flex items-center gap-3 px-3 py-2.5">
+          <div className="flex min-h-16 items-center gap-3 px-3 py-2.5">
             <button
               type="button"
               className="group flex min-w-0 flex-1 items-center gap-3 text-left"
               onClick={openFileAttachment}
               aria-label={openAriaLabel}
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-500">
                 <FileText className="h-[18px] w-[18px]" />
               </span>
               <span className="min-w-0 flex-1">
@@ -637,7 +691,7 @@ export function AgentThreadTimelineArtifactCard({
 
             <button
               type="button"
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
               onClick={openFileAttachment}
               aria-label={openAriaLabel}
             >

@@ -339,7 +339,7 @@ describe("MessageList history window", () => {
       '[data-testid="message-list-historical-timeline-preview:leading"]',
     );
     expect(deferredPreview).not.toBeNull();
-    expect(deferredPreview?.textContent).toContain(
+    expect(deferredPreview?.getAttribute("aria-label")).toContain(
       "Expand to load execution details",
     );
     const idleCommit = getAgentUiPerformanceMetrics()
@@ -906,6 +906,21 @@ describe("MessageList history window", () => {
         output: `输出 ${index + 1}`,
       }),
     );
+    const commentary = "我先核对当前 tracker，再给出结论。";
+    const finalAnswer = "这是旧会话的最终回复";
+    const inlineToolParts = threadItems.map((item, index) => ({
+      type: "tool_use" as const,
+      metadata: { sequence: index + 2, turnId: turn.id },
+      toolCall: {
+        id: item.id,
+        name: "Bash",
+        arguments: JSON.stringify({ command: `echo ${index + 1}` }),
+        status: "completed" as const,
+        result: { success: true, output: `输出 ${index + 1}` },
+        startTime: new Date("2026-04-25T10:00:00.000Z"),
+        endTime: new Date("2026-04-25T10:01:00.000Z"),
+      },
+    }));
     const container = render(
       [
         {
@@ -917,11 +932,26 @@ describe("MessageList history window", () => {
         {
           id: "msg-assistant-heavy-history",
           role: "assistant",
-          content: "这是旧会话的最终回复",
+          content: finalAnswer,
           contentParts: [
             {
               type: "text",
-              text: "这是旧会话的最终回复",
+              text: commentary,
+              metadata: {
+                phase: "commentary",
+                sequence: 1,
+                turnId: turn.id,
+              },
+            },
+            ...inlineToolParts,
+            {
+              type: "text",
+              text: finalAnswer,
+              metadata: {
+                phase: "final_answer",
+                sequence: 12,
+                turnId: turn.id,
+              },
             },
           ],
           timestamp: new Date("2026-04-25T10:01:00.000Z"),
@@ -945,9 +975,11 @@ describe("MessageList history window", () => {
         '[data-testid="message-list-historical-timeline-preview:leading"]',
       ),
     ).not.toBeNull();
+    expect(container.textContent).toContain("Processed for 1m 0s");
     expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
     expect(mockStreamingRenderer).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        content: finalAnswer,
         contentParts: undefined,
         markdownRenderMode: "light",
       }),
@@ -963,8 +995,15 @@ describe("MessageList history window", () => {
 
     expect(mockAgentThreadTimeline).toHaveBeenCalledWith(
       expect.objectContaining({
+        items: threadItems,
         placement: "leading",
         isCurrentTurn: false,
+      }),
+    );
+    expect(mockStreamingRenderer).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        content: `${commentary}\n\n${finalAnswer}`,
+        contentParts: undefined,
       }),
     );
   });

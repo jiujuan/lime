@@ -304,7 +304,16 @@ const LoadingPanel = styled.div`
 `;
 
 function SettingsContentFallback({ label }: { label: string }) {
-  return <LoadingPanel>{label}</LoadingPanel>;
+  return (
+    <LoadingPanel
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      data-testid="settings-page-loading"
+    >
+      {label}
+    </LoadingPanel>
+  );
 }
 
 function withSettingsContentFallback(

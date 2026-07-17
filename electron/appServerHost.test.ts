@@ -43,6 +43,7 @@ const {
     | "hang-mismatched-admission"
     | "hang-non-admission-read-eventual"
     | "hang-request"
+    | "throw-request-error"
     | "throw-stale-once"
     | "throw-exited-before-next-message"
     | "throw-exited-before-next-message-after-release" = "resolve";
@@ -175,6 +176,24 @@ const {
         await waitForDelayedStaleErrorRelease();
         throw new Error(
           "app-server exited before next message: signal=SIGTERM",
+        );
+      }
+      if (turnStartRequestMode === "throw-request-error") {
+        recordedRequests.push(request);
+        const { AppServerRequestError } =
+          await import("@limecloud/app-server-client");
+        const response = {
+          id: request.id,
+          error: {
+            code: -32000,
+            message: "MCP current runtime error: fixture failed",
+          },
+        };
+        throw new AppServerRequestError(
+          request.method,
+          response,
+          [],
+          [response],
         );
       }
       recordedRequests.push(request);
@@ -377,6 +396,7 @@ const {
         | "hang-mismatched-admission"
         | "hang-non-admission-read-eventual"
         | "hang-request"
+        | "throw-request-error"
         | "throw-stale-once"
         | "throw-exited-before-next-message"
         | "throw-exited-before-next-message-after-release",
@@ -667,6 +687,34 @@ describe("ElectronAppServerHost", () => {
         method: "agentSession/turn/start",
       },
     });
+  });
+
+  it("handleJsonLines 应把 App Server 业务错误保留为 JSON-RPC error response", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+    setTurnStartRequestMode("throw-request-error");
+
+    const result = await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: "renderer-request-1",
+          method: "mcpServer/start",
+          params: { name: "broken-server" },
+        }),
+      ],
+    });
+
+    expect(recordedRequests).toHaveLength(1);
+    expect(recordedRequests[0]?.id).toBe("electron-host:1");
+    expect(result.lines.map(decodeMessage)).toEqual([
+      {
+        id: "renderer-request-1",
+        error: {
+          code: -32000,
+          message: "MCP current runtime error: fixture failed",
+        },
+      },
+    ]);
   });
 
   it("取消 JSON-RPC request 时应把 renderer id 映射成 sidecar 内部 id", async () => {

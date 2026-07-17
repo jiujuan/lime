@@ -7,6 +7,7 @@ use app_server_protocol::AgentEvent;
 use serde_json::json;
 
 mod canonical_lifecycle;
+mod incremental;
 
 fn event(
     id: &str,

@@ -3,6 +3,7 @@
   "enum": [
     "conflict",
     "imported",
+    "importing",
     "not_imported"
   ],
   "title": "ConversationImportThreadStatus",

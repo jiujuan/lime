@@ -236,6 +236,7 @@ fn model_effective_event_records_selected_model_and_reasoning_policy() {
         toolshim: false,
         toolshim_model: None,
         model_capabilities: None,
+        supports_websockets: false,
     };
 
     let snapshot = reasoning_capability_snapshot(&["low", "medium", "high", "max", "xhigh"]);
@@ -282,6 +283,7 @@ fn model_effective_event_records_requested_and_effective_reasoning_separately() 
         toolshim: false,
         toolshim_model: None,
         model_capabilities: None,
+        supports_websockets: false,
     };
 
     let snapshot = reasoning_capability_snapshot(&["low", "medium", "high", "max", "xhigh"]);
@@ -323,6 +325,7 @@ fn model_effective_event_uses_route_capability_snapshot_over_model_slug() {
         toolshim: false,
         toolshim_model: None,
         model_capabilities: None,
+        supports_websockets: false,
     };
     let snapshot = no_reasoning_capability_snapshot();
 

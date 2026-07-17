@@ -23,6 +23,9 @@ function normalizeContractSnippet(value) {
     .replace(/\b(?:protocol|appServer|constants)\./gu, "")
     .replace(/(\w+)\s*:\s*([A-Za-z0-9_<>,\[\]\s|&]+)\s*=\s*\{\}/gu, "$1?: $2")
     .replace(/\basync\s+(?=[A-Za-z_$][\w$]*\()/gu, "")
+    .replace(/\.await\b/gu, "")
+    .replace(/\.boxed\(\)/gu, "")
+    .replace(/\bready\(/gu, "")
     .replace(/,\s*\)/gu, ")")
     .replace(/\s+/gu, "");
 }
@@ -200,7 +203,8 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
         "METHOD_MCP_SERVER_CREATE => self.handle_mcp_server_create_impl(params).await",
         "METHOD_MCP_SERVER_UPDATE => self.handle_mcp_server_update_impl(params).await",
         "METHOD_MCP_SERVER_DELETE => self.handle_mcp_server_delete_impl(params).await",
-        "METHOD_MCP_SERVER_ENABLED_SET => self.handle_mcp_server_enabled_set_impl(params).await",
+        "METHOD_MCP_SERVER_ENABLED_SET =>",
+        "self.handle_mcp_server_enabled_set_impl(params).boxed()",
         "METHOD_MCP_SERVER_IMPORT_FROM_APP =>",
         "METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE =>",
         "self.handle_mcp_server_sync_all_to_live_impl().await",

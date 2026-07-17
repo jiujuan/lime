@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
+import { withNativeSystemPath } from "../lib/native-executable-env.mjs";
+
 const args = process.argv.slice(2);
 
 function option(name) {
@@ -43,6 +45,7 @@ function changedFiles(base) {
   }
   return execFileSync("git", ["diff", "--name-only", `${base}...HEAD`], {
     encoding: "utf8",
+    env: withNativeSystemPath(process.env),
   })
     .split(/\r?\n/u)
     .map((file) => file.trim())
@@ -102,7 +105,9 @@ if (
 
     if (major) {
       if (!files.includes("internal/aiprompts/architecture.md")) {
-        errors.push("重大架构变更必须在同一 PR 更新 internal/aiprompts/architecture.md。");
+        errors.push(
+          "重大架构变更必须在同一 PR 更新 internal/aiprompts/architecture.md。",
+        );
       }
       for (const label of [
         "架构影响：",
@@ -113,7 +118,9 @@ if (
           errors.push(`重大架构变更必须填写“${label}”。`);
         }
       }
-      if (!checked(body, "已核对目录归属、数据流、依赖方向、协议边界和验证门禁")) {
+      if (
+        !checked(body, "已核对目录归属、数据流、依赖方向、协议边界和验证门禁")
+      ) {
         errors.push("责任开发者必须勾选架构边界核对确认。");
       }
     }

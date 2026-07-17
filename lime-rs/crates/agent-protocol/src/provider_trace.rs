@@ -94,6 +94,8 @@ pub struct ProviderTraceEvent {
     pub runtime_provider_protocol: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub runtime_provider_active_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_names: Vec<String>,
 }
 
 impl ProviderTraceEvent {
@@ -120,6 +122,7 @@ impl ProviderTraceEvent {
             runtime_provider_selector: None,
             runtime_provider_protocol: None,
             runtime_provider_active_model: None,
+            tool_names: Vec::new(),
         }
     }
 
@@ -147,6 +150,7 @@ impl ProviderTraceEvent {
             runtime_provider_selector: None,
             runtime_provider_protocol: None,
             runtime_provider_active_model: None,
+            tool_names: Vec::new(),
         }
     }
 
@@ -175,6 +179,7 @@ impl ProviderTraceEvent {
             runtime_provider_selector: None,
             runtime_provider_protocol: None,
             runtime_provider_active_model: None,
+            tool_names: Vec::new(),
         }
     }
 
@@ -203,6 +208,7 @@ impl ProviderTraceEvent {
             runtime_provider_selector: None,
             runtime_provider_protocol: None,
             runtime_provider_active_model: None,
+            tool_names: Vec::new(),
         }
     }
 
@@ -231,6 +237,7 @@ impl ProviderTraceEvent {
             runtime_provider_selector: None,
             runtime_provider_protocol: None,
             runtime_provider_active_model: None,
+            tool_names: Vec::new(),
         }
     }
 
@@ -257,6 +264,13 @@ impl ProviderTraceEvent {
         self.runtime_provider_selector = selector;
         self.runtime_provider_protocol = protocol;
         self.runtime_provider_active_model = active_model;
+        self
+    }
+
+    pub fn with_tool_names(mut self, tool_names: impl IntoIterator<Item = String>) -> Self {
+        self.tool_names = tool_names.into_iter().collect();
+        self.tool_names.sort();
+        self.tool_names.dedup();
         self
     }
 }
@@ -319,6 +333,18 @@ mod tests {
         assert_eq!(
             event.runtime_provider_active_model.as_deref(),
             Some("gpt-4.1")
+        );
+    }
+
+    #[test]
+    fn provider_trace_event_attaches_stable_tool_snapshot() {
+        let event = ProviderTraceEvent::request_started("openai", "gpt-4.1", 1)
+            .with_tool_names(["Read", "apply_patch", "Read"].map(str::to_string));
+
+        assert_eq!(event.tool_names, vec!["Read", "apply_patch"]);
+        assert_eq!(
+            serde_json::to_value(event).expect("serialize provider trace")["tool_names"],
+            serde_json::json!(["Read", "apply_patch"])
         );
     }
 

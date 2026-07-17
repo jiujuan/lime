@@ -65,6 +65,7 @@ pub struct ProviderRuntimeSpec {
     pub auth_prefix: Option<&'static str>,
     pub extra_headers: &'static [(&'static str, &'static str)],
     pub runtime_provider_name: &'static str,
+    pub supports_websockets: bool,
 }
 
 const NO_EXTRA_HEADERS: [(&str, &str); 0] = [];
@@ -82,6 +83,7 @@ impl ApiProviderType {
                     auth_prefix: None,
                     extra_headers: &ANTHROPIC_EXTRA_HEADERS,
                     runtime_provider_name: "anthropic",
+                    supports_websockets: false,
                 }
             }
             ApiProviderType::Gemini => ProviderRuntimeSpec {
@@ -91,6 +93,7 @@ impl ApiProviderType {
                 auth_prefix: None,
                 extra_headers: &NO_EXTRA_HEADERS,
                 runtime_provider_name: "google",
+                supports_websockets: false,
             },
             ApiProviderType::AzureOpenai => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::AzureOpenai,
@@ -99,6 +102,7 @@ impl ApiProviderType {
                 auth_prefix: None,
                 extra_headers: &NO_EXTRA_HEADERS,
                 runtime_provider_name: "azure",
+                supports_websockets: false,
             },
             ApiProviderType::Vertexai => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::Vertexai,
@@ -107,6 +111,7 @@ impl ApiProviderType {
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
                 runtime_provider_name: "gcpvertexai",
+                supports_websockets: false,
             },
             ApiProviderType::AwsBedrock => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::AwsBedrock,
@@ -115,6 +120,7 @@ impl ApiProviderType {
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
                 runtime_provider_name: "bedrock",
+                supports_websockets: false,
             },
             ApiProviderType::Ollama => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::Ollama,
@@ -123,6 +129,7 @@ impl ApiProviderType {
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
                 runtime_provider_name: "ollama",
+                supports_websockets: false,
             },
             ApiProviderType::Fal => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::OpenAiCompatible,
@@ -131,6 +138,7 @@ impl ApiProviderType {
                 auth_prefix: Some("Key"),
                 extra_headers: &NO_EXTRA_HEADERS,
                 runtime_provider_name: "fal",
+                supports_websockets: false,
             },
             ApiProviderType::Codex => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::Codex,
@@ -139,17 +147,25 @@ impl ApiProviderType {
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
                 runtime_provider_name: "codex",
+                supports_websockets: true,
             },
-            ApiProviderType::Openai
-            | ApiProviderType::OpenaiResponse
-            | ApiProviderType::NewApi
-            | ApiProviderType::Gateway => ProviderRuntimeSpec {
+            ApiProviderType::Openai | ApiProviderType::OpenaiResponse => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::OpenAiCompatible,
                 default_api_host: "https://api.openai.com",
                 auth_header: "Authorization",
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
                 runtime_provider_name: "openai",
+                supports_websockets: true,
+            },
+            ApiProviderType::NewApi | ApiProviderType::Gateway => ProviderRuntimeSpec {
+                protocol_family: ProviderProtocolFamily::OpenAiCompatible,
+                default_api_host: "https://api.openai.com",
+                auth_header: "Authorization",
+                auth_prefix: Some("Bearer"),
+                extra_headers: &NO_EXTRA_HEADERS,
+                runtime_provider_name: "openai",
+                supports_websockets: false,
             },
         }
     }
@@ -194,6 +210,7 @@ pub fn infer_managed_runtime_spec(
             auth_prefix: Some("Bearer"),
             extra_headers: &ANTHROPIC_EXTRA_HEADERS,
             runtime_provider_name: "anthropic",
+            supports_websockets: false,
         };
     }
 
@@ -550,6 +567,15 @@ mod tests {
             anthropic_spec.extra_headers,
             &[("anthropic-version", "2023-06-01")]
         );
+        assert!(ApiProviderType::Openai.runtime_spec().supports_websockets);
+        assert!(
+            ApiProviderType::OpenaiResponse
+                .runtime_spec()
+                .supports_websockets
+        );
+        assert!(ApiProviderType::Codex.runtime_spec().supports_websockets);
+        assert!(!ApiProviderType::Gateway.runtime_spec().supports_websockets);
+        assert!(!ApiProviderType::NewApi.runtime_spec().supports_websockets);
 
         let anthropic_compatible_spec = ApiProviderType::AnthropicCompatible.runtime_spec();
         assert_eq!(

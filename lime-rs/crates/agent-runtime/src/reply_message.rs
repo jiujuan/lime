@@ -18,8 +18,9 @@ pub enum RuntimeReplyMessageRole {
 pub enum RuntimeReplyMessageContent {
     Text(String),
     Image {
-        data: String,
+        uri: String,
         media_type: String,
+        provider_data: Option<String>,
     },
     ActionRequiredResponse {
         request_id: String,
@@ -52,8 +53,9 @@ impl RuntimeReplyMessage {
                 .images
                 .into_iter()
                 .map(|image| RuntimeReplyMessageContent::Image {
-                    data: image.data,
+                    uri: image.uri,
                     media_type: image.media_type,
+                    provider_data: image.provider_data,
                 }),
         );
 
@@ -117,8 +119,9 @@ mod tests {
         let input = RuntimeReplyInput {
             text: "look".to_string(),
             images: vec![RuntimeReplyInputImage {
-                data: "data:image/png;base64,abc".to_string(),
+                uri: "sidecar://image-1".to_string(),
                 media_type: "image/png".to_string(),
+                provider_data: Some("data:image/png;base64,abc".to_string()),
             }],
             agent_only: true,
         };
@@ -134,8 +137,9 @@ mod tests {
             vec![
                 RuntimeReplyMessageContent::Text("look".to_string()),
                 RuntimeReplyMessageContent::Image {
-                    data: "data:image/png;base64,abc".to_string(),
+                    uri: "sidecar://image-1".to_string(),
                     media_type: "image/png".to_string(),
+                    provider_data: Some("data:image/png;base64,abc".to_string()),
                 },
             ]
         );

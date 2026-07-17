@@ -4,6 +4,8 @@ pub struct AgentSessionConfigurationRequest {
     pub session_id: String,
     pub thread_id: String,
     pub turn_id: String,
+    pub max_turns: Option<u32>,
+    pub provider_token_budget: Option<u64>,
     pub system_prompt: Option<String>,
     pub turn_context: Option<AgentTurnContext>,
     pub include_context_trace: bool,
@@ -16,6 +18,7 @@ pub struct AgentSessionConfig {
     pub turn_id: Option<String>,
     pub schedule_id: Option<String>,
     pub max_turns: Option<u32>,
+    pub provider_token_budget: Option<u64>,
     pub system_prompt: Option<String>,
     pub system_prompt_override: Option<bool>,
     pub include_context_trace: Option<bool>,
@@ -28,7 +31,8 @@ pub fn build_agent_session_config(request: AgentSessionConfigurationRequest) -> 
         thread_id: Some(request.thread_id),
         turn_id: Some(request.turn_id),
         schedule_id: None,
-        max_turns: None,
+        max_turns: request.max_turns,
+        provider_token_budget: request.provider_token_budget,
         system_prompt: request.system_prompt,
         system_prompt_override: Some(true),
         include_context_trace: Some(request.include_context_trace),
@@ -46,6 +50,7 @@ pub struct SessionConfigBuilder {
     turn_id: Option<String>,
     schedule_id: Option<String>,
     max_turns: Option<u32>,
+    provider_token_budget: Option<u64>,
     system_prompt: Option<String>,
     system_prompt_override: Option<bool>,
     include_context_trace: Option<bool>,
@@ -60,6 +65,7 @@ impl SessionConfigBuilder {
             turn_id: None,
             schedule_id: None,
             max_turns: None,
+            provider_token_budget: None,
             system_prompt: None,
             system_prompt_override: None,
             include_context_trace: None,
@@ -84,6 +90,11 @@ impl SessionConfigBuilder {
 
     pub fn max_turns(mut self, turns: u32) -> Self {
         self.max_turns = Some(turns);
+        self
+    }
+
+    pub fn provider_token_budget(mut self, tokens: u64) -> Self {
+        self.provider_token_budget = Some(tokens);
         self
     }
 
@@ -114,6 +125,7 @@ impl SessionConfigBuilder {
             turn_id: self.turn_id,
             schedule_id: self.schedule_id,
             max_turns: self.max_turns,
+            provider_token_budget: self.provider_token_budget,
             system_prompt: self.system_prompt,
             system_prompt_override: self.system_prompt_override,
             include_context_trace: self.include_context_trace,
@@ -132,6 +144,8 @@ mod tests {
             session_id: "session-1".to_string(),
             thread_id: "thread-1".to_string(),
             turn_id: "turn-1".to_string(),
+            max_turns: Some(2),
+            provider_token_budget: Some(1_000),
             system_prompt: Some("system".to_string()),
             turn_context: None,
             include_context_trace: true,
@@ -140,6 +154,8 @@ mod tests {
         assert_eq!(config.id, "session-1");
         assert_eq!(config.thread_id.as_deref(), Some("thread-1"));
         assert_eq!(config.turn_id.as_deref(), Some("turn-1"));
+        assert_eq!(config.max_turns, Some(2));
+        assert_eq!(config.provider_token_budget, Some(1_000));
         assert_eq!(config.system_prompt.as_deref(), Some("system"));
         assert_eq!(config.system_prompt_override, Some(true));
         assert_eq!(config.include_context_trace, Some(true));

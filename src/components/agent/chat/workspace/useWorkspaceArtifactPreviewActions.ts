@@ -65,7 +65,8 @@ function shouldUseProjectedPreviewArtifact(artifact: Artifact): boolean {
     return false;
   }
 
-  const source = typeof artifact.meta.source === "string" ? artifact.meta.source : "";
+  const source =
+    typeof artifact.meta.source === "string" ? artifact.meta.source : "";
   const contentKind =
     typeof artifact.meta.contentKind === "string"
       ? artifact.meta.contentKind
@@ -707,7 +708,9 @@ export function useWorkspaceArtifactPreviewActions({
         const resolvedFile = await hydrateTaskFileContent(file);
         if (!resolvedFile) {
           toast.error(
-            t("agentChat.workspace.artifactPreview.toast.sessionFileReadFailed"),
+            t(
+              "agentChat.workspace.artifactPreview.toast.sessionFileReadFailed",
+            ),
           );
           return;
         }
@@ -715,7 +718,9 @@ export function useWorkspaceArtifactPreviewActions({
         if (activeTheme === "general") {
           if (!resolvedFile.content?.trim()) {
             toast.info(
-              t("agentChat.workspace.artifactPreview.toast.auxiliaryNotRendered"),
+              t(
+                "agentChat.workspace.artifactPreview.toast.auxiliaryNotRendered",
+              ),
             );
             return;
           }
