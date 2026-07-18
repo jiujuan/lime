@@ -12,14 +12,10 @@ export function getAppShellLayoutState(params: {
   agentHasMessages: boolean;
 }): AppShellLayoutState {
   const currentAgentParams = params.pageParams as AgentPageParams;
-  const hasActiveThreadRoute = Boolean(
-    currentAgentParams.initialSessionId?.trim(),
-  );
   const shouldHideSidebarForAgent =
     params.currentPage === "agent" &&
     (Boolean(currentAgentParams.fromResources) ||
       Boolean(currentAgentParams.immersiveHome) ||
-      hasActiveThreadRoute ||
       (params.agentHasMessages && Boolean(currentAgentParams.lockTheme)));
 
   const shouldShowAppSidebar =

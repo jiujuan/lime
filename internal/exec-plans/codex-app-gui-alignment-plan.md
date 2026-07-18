@@ -45,7 +45,7 @@ Codex App 只作为 GUI 信息架构和交互层级参考；后端 Thread/Turn/I
 
 - `AgentChatWorkspace.tsx` 仍有约 2422 行，超过 v2 目标 `< 800` 行；scene composition 仍承接大量编排。
 - `TaskCenterUtilityToolbar.tsx` 约 972 行，同时拥有环境读取、任务轨道、App 打开和多个 panel 控制。
-- 普通 Agent 会话仍默认保留全局 App Sidebar；当前 Thread 缺少稳定、紧凑的页头主对象。
+- 全局 App Sidebar 是 Codex App 风格的稳定一级导航，应继续保留；当前 Thread 缺少稳定、紧凑的页头主对象，工作区内部也需避免再造第二套左侧会话导航。
 - 首页首屏仍是皮肤 Hero、营销文案和技能入口，和 Codex App 的任务工作区心智不一致。
 - 环境、计划、审批、运行状态同时出现在 Toolbar popover、Inputbar、Timeline、Harness、Canvas session view 等多套 surface。
 - 主写链仍有大量 `agentSession/*`；Codex-rs current contract 是 `thread/*`、`turn/*`，并包含 `turn/steer`、`thread/fork`、`thread/rollback`、`environment/info`、`environment/status` 等能力。
@@ -59,7 +59,7 @@ Codex App 只作为 GUI 信息架构和交互层级参考；后端 Thread/Turn/I
 
 | 优先级 | 目标 | 当前差距 | 依赖 |
 | --- | --- | --- | --- |
-| P0 | 当前 Thread 成为唯一主对象 | 左侧全局导航、项目 tabs、任务 tabs 和消息区竞争上下文；活跃任务页头不稳定 | GUI-only，可先做 |
+| P0 | 当前 Thread 成为主画布对象 | 全局 Sidebar 需要保留，但项目 tabs、任务 tabs 和消息区仍竞争上下文；活跃任务页头不稳定 | GUI-only，可先做 |
 | P0 | 单一 canonical 时间线 | commentary、reasoning、tool、状态摘要存在重复渲染与过量纵向展开 | `thread/read` Item projection |
 | P0 | 单一 action-required 入口 | Approval/Plan/request-user-input 可同时出现在输入区、时间线和环境任务轨道 | canonical Approval/Plan Item |
 | P0 | 写链对齐 Codex-rs | `agentSession/turn/start`、cancel、resume 等仍是主写 contract | App Server protocol/runtime |
@@ -79,11 +79,11 @@ Codex App 只作为 GUI 信息架构和交互层级参考；后端 Thread/Turn/I
 动作：
 
 - 从 canonical Topic/Thread metadata 派生标题、状态和工作目录。
-- 普通历史会话进入专注工作区；全局导航改为可恢复的抽屉/返回入口，不长期占用主画布。
+- 普通历史会话继续保留全局 App Sidebar；它只负责一级导航和会话入口，工作区内部不再新增平行左侧会话导航。
 - “打开位置”使用带文字的明确命令；环境入口和右侧 surface 保持单一。
 - 不在本切片新增 Git、Thread 或 Environment method。
 
-退出条件：用户 5 秒内能识别当前任务、当前状态和下一步；桌面宽屏不再出现左侧全局导航与任务 tabs 双导航竞争。
+退出条件：用户 5 秒内能识别当前任务、当前状态和下一步；桌面宽屏保留全局 Sidebar，同时 Thread 页头与工作区内容不再重复表达同一层导航。
 
 ### G2：Canonical timeline
 

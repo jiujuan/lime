@@ -48,24 +48,6 @@ describe("getAppShellLayoutState", () => {
     });
   });
 
-  it("active Thread 路由应进入专注工作区并隐藏全局 sidebar", () => {
-    expect(
-      getAppShellLayoutState({
-        currentPage: "agent",
-        pageParams: {
-          agentEntry: "claw",
-          initialSessionId: "thread-active",
-          initialSessionName: "修复恢复链路",
-        },
-        agentHasMessages: false,
-      }),
-    ).toEqual({
-      shouldHideSidebarForAgent: true,
-      shouldShowAppSidebar: false,
-      shouldAddMainContentGap: false,
-    });
-  });
-
   it("settings 页应隐藏 sidebar", () => {
     expect(
       getAppShellLayoutState({
