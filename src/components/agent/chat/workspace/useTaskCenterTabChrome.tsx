@@ -20,6 +20,7 @@ interface UseTaskCenterTabChromeParams {
   agentEntry: AgentEntry;
   sessionId?: string | null;
   normalizedInitialSessionId?: string | null;
+  initialSessionName?: string | null;
   detachedTopicId?: string | null;
   openTabIds: string[];
   topics: Topic[];
@@ -47,6 +48,7 @@ export function useTaskCenterTabChrome({
   agentEntry,
   sessionId,
   normalizedInitialSessionId,
+  initialSessionName,
   detachedTopicId,
   openTabIds,
   topics,
@@ -97,6 +99,8 @@ export function useTaskCenterTabChrome({
         activeDraftTabId,
         isDraftTabActive,
         sessionId,
+        initialSessionId: normalizedInitialSessionId,
+        initialSessionName,
         previewTopicId,
         visibleTabIds,
         topicById,
@@ -106,6 +110,8 @@ export function useTaskCenterTabChrome({
       activeDraftTabId,
       draftTabs,
       isDraftTabActive,
+      initialSessionName,
+      normalizedInitialSessionId,
       previewTopicId,
       sessionId,
       topicById,

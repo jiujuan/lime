@@ -251,6 +251,7 @@ describe("AppSidebar conversations", () => {
           agentEntry: "claw",
           projectId: "project-1",
           initialSessionId: "session-click",
+          initialSessionName: "立即打开历史会话",
         }),
       );
     } finally {

@@ -163,6 +163,30 @@ describe("taskCenterTabProjection", () => {
     );
   });
 
+  it("初始 Thread 标题尚未进入 Topic 投影时应使用路由元数据兜底", () => {
+    const topic = createTopic("thread-active", { title: "" });
+
+    const items = buildTaskCenterTabItems({
+      draftTabs: [],
+      activeDraftTabId: null,
+      isDraftTabActive: false,
+      sessionId: "thread-active",
+      initialSessionId: "thread-active",
+      initialSessionName: "修复恢复链路",
+      previewTopicId: null,
+      visibleTabIds: ["thread-active"],
+      topicById: new Map([[topic.id, topic]]),
+      untitledTaskLabel: "未命名任务",
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "thread-active",
+      title: "修复恢复链路",
+      isActive: true,
+    });
+  });
+
   it("应在 claw 或 new-task 有标签项时渲染任务标签栏", () => {
     expect(
       shouldRenderTaskCenterTabStrip({

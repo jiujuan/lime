@@ -236,6 +236,7 @@ export function useAppSidebarConversationActions({
       const targetParams = buildClawAgentParams({
         ...(sessionProjectId ? { projectId: sessionProjectId } : {}),
         initialSessionId: session.id,
+        initialSessionName: resolveLocalizedSessionTitle(session),
       });
       navigateIfNeeded({
         target: {
@@ -252,6 +253,7 @@ export function useAppSidebarConversationActions({
       deferConversationNavigation,
       onNavigate,
       requestedNavigationTargetRef,
+      resolveLocalizedSessionTitle,
     ],
   );
 

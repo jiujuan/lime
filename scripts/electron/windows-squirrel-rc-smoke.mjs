@@ -18,6 +18,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   buildNMinusOneLaunchEnv,
+  buildWaitForWindowsProcessExitScript,
   compareVersions,
   exerciseNMinusOneUpdate,
   findReadyElectronUpdaterPage,
@@ -27,10 +28,12 @@ import {
   resolveSquirrelFeed,
   selectNMinusOneVersion,
   stopInstalledApp,
+  waitForWindowsProcessExit,
 } from "./lib/windows-squirrel-n-minus-one.mjs";
 
 export {
   buildNMinusOneLaunchEnv,
+  buildWaitForWindowsProcessExitScript,
   compareVersions,
   findReadyElectronUpdaterPage,
   isFinalElectronRendererUrl,
@@ -38,6 +41,7 @@ export {
   resolveInstalledSquirrelPaths,
   resolveSquirrelFeed,
   selectNMinusOneVersion,
+  waitForWindowsProcessExit,
 };
 
 const SCENARIO_ID = "PLT-02-windows-squirrel-rc";

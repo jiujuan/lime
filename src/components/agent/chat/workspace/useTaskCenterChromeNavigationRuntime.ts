@@ -48,6 +48,7 @@ interface UseTaskCenterChromeNavigationRuntimeParams {
   hasPendingA2UIForm: boolean;
   homeMountedAt: number;
   initialDispatchKey: string | null;
+  initialSessionName?: string | null;
   initialPendingServiceSkillLaunchSignature?: string | null;
   isAutoRestoringSession: boolean;
   isBootstrapDispatchPending: boolean;
@@ -139,6 +140,7 @@ export function useTaskCenterChromeNavigationRuntime({
   harnessPanelVisible,
   homeMountedAt,
   initialDispatchKey,
+  initialSessionName,
   initialPendingServiceSkillLaunchSignature,
   isAutoRestoringSession,
   isBootstrapDispatchPending,
@@ -255,6 +257,7 @@ export function useTaskCenterChromeNavigationRuntime({
     agentEntry,
     sessionId,
     normalizedInitialSessionId,
+    initialSessionName,
     detachedTopicId,
     openTabIds,
     topics,

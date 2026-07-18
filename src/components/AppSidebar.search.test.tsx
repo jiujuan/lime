@@ -206,6 +206,7 @@ describe("AppSidebar search", () => {
         agentEntry: "claw",
         projectId: "project-1",
         initialSessionId: "session-target",
+        initialSessionName: "目标历史会话",
       }),
     );
     expect(mockRecordAgentUiPerformanceMetric).toHaveBeenCalledWith(

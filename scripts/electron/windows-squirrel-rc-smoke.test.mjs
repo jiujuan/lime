@@ -7,6 +7,7 @@ import YAML from "yaml";
 
 import {
   buildNMinusOneLaunchEnv,
+  buildWaitForWindowsProcessExitScript,
   buildWindowsRcSummary,
   compareVersions,
   findReadyElectronUpdaterPage,
@@ -16,6 +17,7 @@ import {
   resolveSquirrelFeed,
   selectNMinusOneVersion,
   selectSquirrelInstaller,
+  waitForWindowsProcessExit,
 } from "./windows-squirrel-rc-smoke.mjs";
 
 describe("Windows Squirrel RC smoke", () => {
@@ -73,6 +75,69 @@ describe("Windows Squirrel RC smoke", () => {
         LIME_ELECTRON_UPDATES_URL: "http://127.0.0.1:49152",
         PATH: "C:\\Windows\\System32",
       }),
+    );
+  });
+
+  it("N-1 启动前应等待安装器遗留的 Squirrel Update.exe 退出", async () => {
+    const runProcessImpl = vi.fn().mockResolvedValue({ exitCode: 0 });
+
+    await expect(
+      waitForWindowsProcessExit("C:\\Users\\runner\\AppData\\Local\\lime\\Update.exe", {
+        runProcessImpl,
+        timeoutMs: 12_000,
+      }),
+    ).resolves.toEqual({
+      executable: "C:\\Users\\runner\\AppData\\Local\\lime\\Update.exe",
+      exitCode: 0,
+      timeoutMs: 12_000,
+    });
+
+    expect(runProcessImpl).toHaveBeenCalledWith(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        buildWaitForWindowsProcessExitScript(),
+      ],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          LIME_PROCESS_WAIT_TIMEOUT_MS: "12000",
+          LIME_TARGET_EXECUTABLE:
+            "C:\\Users\\runner\\AppData\\Local\\lime\\Update.exe",
+        }),
+        timeoutMs: 17_000,
+      }),
+    );
+    expect(buildWaitForWindowsProcessExitScript()).toContain(
+      "Get-CimInstance Win32_Process",
+    );
+    expect(buildWaitForWindowsProcessExitScript()).toContain(
+      "Start-Sleep -Milliseconds 250",
+    );
+
+    const source = fs.readFileSync(
+      "scripts/electron/lib/windows-squirrel-n-minus-one.mjs",
+      "utf8",
+    );
+    expect(source.indexOf("await waitForWindowsProcessExit(")).toBeGreaterThan(
+      -1,
+    );
+    expect(source.indexOf("await waitForWindowsProcessExit(")).toBeLessThan(
+      source.indexOf("const child = spawn("),
+    );
+  });
+
+  it("Squirrel Update.exe 未在截止时间退出时应 fail closed", async () => {
+    const runProcessImpl = vi.fn().mockResolvedValue({ exitCode: 1 });
+
+    await expect(
+      waitForWindowsProcessExit("C:\\runner\\Update.exe", {
+        runProcessImpl,
+        timeoutMs: 1_000,
+      }),
+    ).rejects.toThrow(
+      "timed out waiting for process exit at C:\\runner\\Update.exe: exit 1",
     );
   });
 

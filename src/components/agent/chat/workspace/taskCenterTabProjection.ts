@@ -15,6 +15,8 @@ interface BuildTaskCenterTabItemsParams {
   activeDraftTabId: string | null;
   isDraftTabActive: boolean;
   sessionId?: string | null;
+  initialSessionId?: string | null;
+  initialSessionName?: string | null;
   previewTopicId: string | null;
   visibleTabIds: string[];
   topicById: ReadonlyMap<string, Topic>;
@@ -63,6 +65,8 @@ export function buildTaskCenterTabItems({
   activeDraftTabId,
   isDraftTabActive,
   sessionId,
+  initialSessionId,
+  initialSessionName,
   previewTopicId,
   visibleTabIds,
   topicById,
@@ -82,16 +86,24 @@ export function buildTaskCenterTabItems({
   const topicItems = visibleTabIds
     .map((topicId) => topicById.get(topicId))
     .filter((topic): topic is Topic => Boolean(topic))
-    .map((topic) => ({
-      id: topic.id,
-      title: resolveTaskCenterTopicTitle(topic.title, untitledTaskLabel),
-      status: topic.status ?? "done",
-      updatedAt: resolveTopicUpdatedAt(topic),
-      isActive: !isDraftTabActive && topic.id === (previewTopicId ?? sessionId),
-      hasUnread: Boolean(topic.hasUnread),
-      isPinned: Boolean(topic.isPinned),
-      renamable: true,
-    }));
+    .map((topic) => {
+      const initialTitleFallback =
+        topic.id === initialSessionId ? initialSessionName?.trim() : null;
+      return {
+        id: topic.id,
+        title: resolveTaskCenterTopicTitle(
+          topic.title,
+          initialTitleFallback || untitledTaskLabel,
+        ),
+        status: topic.status ?? "done",
+        updatedAt: resolveTopicUpdatedAt(topic),
+        isActive:
+          !isDraftTabActive && topic.id === (previewTopicId ?? sessionId),
+        hasUnread: Boolean(topic.hasUnread),
+        isPinned: Boolean(topic.isPinned),
+        renamable: true,
+      };
+    });
 
   const orderedItems = [...topicItems, ...draftItems];
   if (orderedItems.length <= maxCount) {

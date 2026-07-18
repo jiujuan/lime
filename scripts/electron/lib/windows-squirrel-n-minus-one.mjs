@@ -215,6 +215,48 @@ export async function stopInstalledApp(executable) {
   return { executable, exitCode: result.exitCode };
 }
 
+export function buildWaitForWindowsProcessExitScript() {
+  const matchingProcesses =
+    "@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and [String]::Equals([System.IO.Path]::GetFullPath($_.ExecutablePath), $target, [StringComparison]::OrdinalIgnoreCase) })";
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    "$target = [System.IO.Path]::GetFullPath($env:LIME_TARGET_EXECUTABLE)",
+    "$deadline = [DateTime]::UtcNow.AddMilliseconds([double]$env:LIME_PROCESS_WAIT_TIMEOUT_MS)",
+    `while ([DateTime]::UtcNow -lt $deadline) { $processes = ${matchingProcesses}; if ($processes.Count -eq 0) { Write-Output "running=0"; exit 0 }; Start-Sleep -Milliseconds 250 }`,
+    'Write-Error "timed out waiting for process exit: $target"',
+    "exit 1",
+  ].join("; ");
+}
+
+export async function waitForWindowsProcessExit(
+  executable,
+  { runProcessImpl = runProcess, timeoutMs = 60_000 } = {},
+) {
+  const result = await runProcessImpl(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      buildWaitForWindowsProcessExitScript(),
+    ],
+    {
+      env: {
+        ...process.env,
+        LIME_PROCESS_WAIT_TIMEOUT_MS: String(timeoutMs),
+        LIME_TARGET_EXECUTABLE: executable,
+      },
+      timeoutMs: timeoutMs + 5_000,
+    },
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `timed out waiting for process exit at ${executable}: exit ${result.exitCode}`,
+    );
+  }
+  return { executable, exitCode: result.exitCode, timeoutMs };
+}
+
 export async function exerciseNMinusOneUpdate({
   candidateFeedDir,
   candidateVersion,
@@ -236,6 +278,9 @@ export async function exerciseNMinusOneUpdate({
     );
   }
 
+  const baselineUpdaterQuiescence = await waitForWindowsProcessExit(
+    installed.updateExecutable,
+  );
   const staticFeed = await startSquirrelFeed(feed);
   const cdpPort = await reserveLocalPort();
   const cdpUrl = `http://127.0.0.1:${cdpPort}`;
@@ -371,6 +416,7 @@ export async function exerciseNMinusOneUpdate({
       );
     }
     return {
+      baselineUpdaterQuiescence,
       candidateFeedServed,
       candidateInstalledByUpdater: existsSync(candidateInstalled.executable),
       candidateVersion,

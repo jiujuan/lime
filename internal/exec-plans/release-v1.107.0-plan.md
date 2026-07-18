@@ -55,6 +55,7 @@
 - 本轮工作树追加差异的定向验证：`npm run verify:app-version`、`npm run typecheck`、`git diff --check` 通过；6 个前端 Vitest 文件 61 项通过；`cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider --lib current_client` 45 项通过。
 - 远端 Quality `29633271523` 的失败证据：Vitest layer budget 36/30（既有仓库基线）、GUI smoke 与 Rust Full 均因 CI sherpa-onnx 预编译库未准备而链接失败；新 SHA `46f445588` 已验证 GUI smoke 预热成功，Rust Full 仍缺该步骤，已追加同样的目标预热并待下一 SHA 复验。
 - Quality `29635195772` 已证明 sherpa 预热修复有效：GUI smoke 通过，Rust workspace 编译并通过 1183 项；剩余 Rust 失败来自 `host_boundary_guard` 检出单元测试 fixture 中的 `electron` 字面量，已改为中性 host fixture 并在本地复测 2 项守卫通过。
+- Release `29635584989` 已越过 Windows 构建、资源校验、staging 和 N-1 下载，真实 N-1 smoke 暴露安装器父进程退出后 `Update.exe` 仍持有 Squirrel 单实例锁；结构化错误为 `AutoUpdater process with arguments --checkForUpdate,... is already running`。RC helper 现按完整 executable path 等待安装器遗留 updater 退出后才启动 N-1 应用，55 项 Electron/Release 定向回归通过。
 - 真实 Windows packaged L8/N-1 验证：待路径修复后的远端 Release workflow 执行；本机为 macOS，无法代替 Windows 证据。
 
 ## 架构确认
@@ -64,4 +65,4 @@
 - 责任人：release owner（v1.107.0）。
 - 日期：2026-07-18。
 
-当前完成度：`97%`。下一刀：提交边界守卫 fixture 修复，待当前 Release 结束后覆盖 `v1.107.0` 到最终 SHA，再监控三平台构建和 Windows N-1 终态。
+当前完成度：`97%`。下一刀：提交 Squirrel updater quiescence 修复，覆盖 `v1.107.0` 到最终 SHA，再监控三平台构建和 Windows N-1 终态。
