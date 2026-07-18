@@ -14,6 +14,7 @@
 - 修复设置页和 Browser Runtime 在加载、错误、断开、关闭与重试状态下的文案和控件不一致问题，并移除已脱离 current 主链的旧 Chrome Relay guide 双轨。
 - 修复 Electron updater、App Server host 和 Windows 启动路径的并发/重入边界，补齐 macOS 未签名开发打包的确定性配置。
 - 修复 Windows Squirrel N-1 smoke 将带 preload 的临时启动页误判为最终 renderer 的导航竞态；打包启动环境同时移除不受支持的 `NODE_OPTIONS` 与开发服务器地址。
+- 修复 Electron Release workflow 在 Rust cache 未恢复 sherpa-onnx 预编译库时的构建失败；构建前会按目标平台显式准备共享运行库。
 
 ### 优化与重构
 

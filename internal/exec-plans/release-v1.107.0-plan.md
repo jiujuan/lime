@@ -1,6 +1,6 @@
 # Lime v1.107.0 发布执行计划
 
-状态：validated-ready-to-cover-release
+状态：validated-ready-to-rerun-release
 日期：2026-07-18
 目标版本：`1.107.0`
 目标 tag：`v1.107.0`
@@ -12,7 +12,7 @@
 ## Release Candidate
 
 - 基线：`v1.106.0`；任务开始时 `main`、`origin/main` 与该 tag 指向同一提交，目标 tag 在本地不存在。
-- 初始候选盘点包含 213 个已跟踪改动和 72 个未跟踪文件，共 285 个候选路径；本轮追加 Windows Squirrel N-1 导航竞态修复、回归测试及首页皮肤资源，仍无排除项。
+- 初始候选盘点包含 213 个已跟踪改动和 72 个未跟踪文件，共 285 个候选路径；本轮追加 Windows Squirrel N-1 导航竞态修复、Release sherpa-onnx 预编译库预热、回归测试及首页皮肤资源，仍无排除项。
 - `release metadata`：`package.json`、`packages/lime-cli-npm/package.json`、`lime-rs/Cargo.toml`、`lime-rs/Cargo.lock`、`RELEASE_NOTES.md`、`RELEASE_NOTES.en.md` 与本计划。
 - `candidate changes`：当前工作树全部产品、测试、脚本、schema、资源、治理和文档改动，无排除项。
 - `excluded changes`：无。
@@ -34,7 +34,8 @@
 
 - Release candidate 已冻结，纳入当前全部候选路径，无排除项；用户已明确要求覆盖 `v1.107.0` 并递交全部当前改动。
 - 版本事实源与双语 release notes 已更新，并补记 Windows startup-page navigation race hotfix。
-- 版本事实源、合同、Rust、Agent fixture、GUI smoke 与 Windows Squirrel 定向回归均已通过；Git staging、commit、tag 与 push 待执行。
+- 首轮覆盖提交 `7fb666415` 已完成并推送；Release workflow `29631194668` 因三平台构建时缺少 sherpa-onnx 预编译库失败，未进入 Windows N-1 smoke。
+- 已加入 Release 构建前按目标显式准备 sherpa-onnx 运行库的 workflow guard；本轮定向回归通过，待重新覆盖提交、tag 和 workflow。
 
 ## 验证记录
 
@@ -46,8 +47,10 @@
 - `npm run verify:gui-smoke`：通过；renderer、Desktop Host、preload、App Server sidecar、Workbench、Memory Settings 与 reload 主路径可用，报告 `appserver.v0 / 1.107.0`。
 - `git diff --check`：通过。
 - `npx vitest run scripts/electron/windows-squirrel-rc-smoke.test.mjs scripts/electron/release-workflow-guard.test.mjs scripts/electron/current-entrypoints.test.mjs`：通过，3 files / 52 tests。
+- 更新 workflow 后 `npx vitest run scripts/electron/release-workflow-guard.test.mjs scripts/electron/windows-squirrel-rc-smoke.test.mjs scripts/electron/current-entrypoints.test.mjs src/components/agent/chat/components/EmptyStateLayout.test.tsx src/components/agent/chat/components/homeSkinPresentation.test.ts`：通过，5 files / 62 tests。
 - 两个 Windows Squirrel 修改脚本 `node --check`：通过。
-- 真实 Windows packaged L8/N-1 验证：待新的远端 Release workflow 执行；本机为 macOS，无法代替 Windows 证据。
+- 首轮远端 Release `29631194668`：失败于三平台 `app-server` 链接；Windows `sherpa-onnx-c-api.lib` 缺失，macOS `sherpa-onnx-c-api` 共享库目录缺失，未执行 N-1。
+- 真实 Windows packaged L8/N-1 验证：待修复后的远端 Release workflow 执行；本机为 macOS，无法代替 Windows 证据。
 
 ## 架构确认
 
@@ -56,4 +59,4 @@
 - 责任人：release owner（v1.107.0）。
 - 日期：2026-07-18。
 
-当前完成度：`97%`。下一刀：`git add -A` 后复核 staged 摘要，创建覆盖提交，移动并强推 `v1.107.0`，再监控远端 Windows Release workflow 与资产。
+当前完成度：`94%`。下一刀：纳入提交后新增的首页皮肤改动与 sherpa workflow 修复，覆盖提交和 `v1.107.0`，再监控 Release workflow 至 Windows N-1 终态。

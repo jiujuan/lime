@@ -24,7 +24,7 @@ describe("homeSkinPresentation", () => {
     expect(presentation.stageHeightWide).toBe("430px");
     expect(presentation.foreground?.top).toBe("-56px");
     expect(presentation.breakoutSpace).toBe("68px");
-    expect(presentation.foreground?.motion?.kind).toBe("float");
+    expect(presentation.foreground?.motion?.kind).toBe("portrait-breathe");
     expect(presentation.foreground?.motion?.duration).toBe("4.8s");
   });
 
@@ -42,6 +42,12 @@ describe("homeSkinPresentation", () => {
       "100% center",
     );
     expect(getHomeSkinPresentation("lime-forest").artFit).toBe("contain");
+    expect(getHomeSkinPresentation("lime-forest").foreground?.width).toBe(
+      "43%",
+    );
+    expect(getHomeSkinPresentation("lime-forest").foreground?.bottom).toBe(
+      "-2px",
+    );
     expect(getHomeSkinPresentation("lime-forest").artBlendWidth).toBe("68%");
     expect(getHomeSkinPresentation("lime-luxury").artBlendWidth).toBe("68%");
     expect(getHomeSkinPresentation("lime-ocean").image).toContain(
@@ -82,6 +88,12 @@ describe("homeSkinPresentation", () => {
     );
     expect(getHomeSkinPresentation("lime-luxury").image).toContain(
       "lime-luxury-hero.png",
+    );
+    expect(getHomeSkinPresentation("lime-luxury").foreground?.width).toBe(
+      "43%",
+    );
+    expect(getHomeSkinPresentation("lime-luxury").foreground?.bottom).toBe(
+      "-1px",
     );
   });
 
@@ -153,7 +165,7 @@ describe("homeSkinPresentation", () => {
     ).toBe(true);
     expect(
       new Set(foregrounds.map((foreground) => foreground?.motion?.kind)).size,
-    ).toBe(4);
+    ).toBe(11);
   });
 
   it("hero 外框和阴影应跟随皮肤色调", () => {

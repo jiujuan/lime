@@ -318,6 +318,14 @@ function assertBuildSteps(buildJob) {
 
   const buildStep = stepByName(steps, "Build Electron app");
   const buildRun = buildStep?.run || "";
+  const sherpaStep = stepByName(steps, "Prepare sherpa-onnx runtime");
+  const sherpaRun = sherpaStep?.run || "";
+  for (const required of [
+    "scripts/prepare-sherpa-onnx-runtime.mjs",
+    '--target "${{ matrix.target }}"',
+  ]) {
+    assertIncludes(sherpaRun, required, "sherpa-onnx runtime preparation");
+  }
   for (const required of [
     "npm run electron:build",
     "npx electron-forge package",

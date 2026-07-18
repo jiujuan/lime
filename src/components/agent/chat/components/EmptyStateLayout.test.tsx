@@ -100,7 +100,7 @@ describe("EmptyStateLayout", () => {
       artworkStage
         ?.querySelector('[data-testid="home-hero-foreground"]')
         ?.getAttribute("data-home-hero-motion"),
-    ).toBe("float");
+    ).toBe("portrait-breathe");
     expect(
       artworkStage?.style.getPropertyValue("--home-hero-motion-duration"),
     ).toBe("4.8s");
@@ -135,7 +135,7 @@ describe("EmptyStateLayout", () => {
       artworkStage
         ?.querySelector('[data-testid="home-hero-foreground"]')
         ?.getAttribute("data-home-hero-motion"),
-    ).toBe("pulse");
+    ).toBe("power-pulse");
     expect(
       artworkStage?.style.getPropertyValue("--home-hero-art-blend-width"),
     ).toBe("68%");

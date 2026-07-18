@@ -15,52 +15,206 @@ const heroReveal = keyframes`
   }
 `;
 
-const foregroundFloat = keyframes`
+const portraitBreathe = keyframes`
   0%,
   100% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
+    transform: translate3d(0, 0, 0) scale(1);
   }
   50% {
-    transform: translate3d(0, calc(var(--home-hero-motion-distance, 12px) * -1), 0)
-      rotate(var(--home-hero-motion-rotate, 0deg));
+    transform: translate3d(
+        0,
+        calc(var(--home-hero-motion-distance, 8px) * -0.35),
+        0
+      )
+      scale(var(--home-hero-motion-scale, 1.02));
   }
 `;
 
-const foregroundSway = keyframes`
+const foliageSway = keyframes`
   0%,
   100% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
+    transform: rotate(calc(var(--home-hero-motion-rotate, 2deg) * -0.35));
   }
   50% {
-    transform: translate3d(calc(var(--home-hero-motion-distance, 12px) * -1), 0, 0)
-      rotate(var(--home-hero-motion-rotate, 0deg));
+    transform: translate3d(
+        calc(var(--home-hero-motion-distance, 8px) * -0.25),
+        0,
+        0
+      )
+      rotate(var(--home-hero-motion-rotate, 2deg));
   }
 `;
 
-const foregroundPulse = keyframes`
+const cheerBob = keyframes`
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  42% {
+    transform: translate3d(
+        0,
+        calc(var(--home-hero-motion-distance, 10px) * -1),
+        0
+      )
+      scale(1.01, 0.985);
+  }
+  54% {
+    transform: translate3d(
+        0,
+        calc(var(--home-hero-motion-distance, 10px) * -0.55),
+        0
+      )
+      scale(0.995, var(--home-hero-motion-scale, 1.02));
+  }
+`;
+
+const powerPulse = keyframes`
   0%,
   100% {
     transform: scale(1);
-    opacity: 1;
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
   }
   50% {
-    transform: scale(var(--home-hero-motion-scale, 1.04));
-    opacity: 0.94;
+    transform: scale(var(--home-hero-motion-scale, 1.035));
+    filter: brightness(1.08)
+      drop-shadow(
+        var(--home-hero-motion-glow, 0 0 16px rgba(73, 222, 255, 0.42))
+      );
   }
 `;
 
-const foregroundDrift = keyframes`
+const silkDrift = keyframes`
   0%,
   100% {
     transform: translate3d(0, 0, 0) rotate(0deg);
   }
   50% {
     transform: translate3d(
-        calc(var(--home-hero-motion-distance, 12px) * -1),
-        calc(var(--home-hero-motion-distance, 12px) * -0.55),
+        calc(var(--home-hero-motion-distance, 10px) * -1),
+        calc(var(--home-hero-motion-distance, 10px) * -0.3),
         0
       )
       rotate(var(--home-hero-motion-rotate, 0deg));
+  }
+`;
+
+const stageBeat = keyframes`
+  0%,
+  58%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  45% {
+    transform: translate3d(
+        0,
+        calc(var(--home-hero-motion-distance, 12px) * -1),
+        0
+      )
+      rotate(calc(var(--home-hero-motion-rotate, 0.8deg) * -1));
+  }
+  52% {
+    transform: translate3d(
+        0,
+        calc(var(--home-hero-motion-distance, 12px) * -0.4),
+        0
+      )
+      rotate(calc(var(--home-hero-motion-rotate, 0.8deg) * 0.35));
+  }
+`;
+
+const creativeTilt = keyframes`
+  0%,
+  100% {
+    transform: rotate(calc(var(--home-hero-motion-rotate, 1.4deg) * -0.3));
+  }
+  50% {
+    transform: translate3d(
+        calc(var(--home-hero-motion-distance, 9px) * -0.5),
+        calc(var(--home-hero-motion-distance, 9px) * -0.6),
+        0
+      )
+      rotate(var(--home-hero-motion-rotate, 1.4deg));
+  }
+`;
+
+const streetBeat = keyframes`
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  32% {
+    transform: translate3d(
+        0,
+        calc(var(--home-hero-motion-distance, 11px) * -1),
+        0
+      )
+      rotate(calc(var(--home-hero-motion-rotate, 1.8deg) * -0.8));
+  }
+  42% {
+    transform: translate3d(
+        0,
+        calc(var(--home-hero-motion-distance, 11px) * -0.3),
+        0
+      )
+      rotate(calc(var(--home-hero-motion-rotate, 1.8deg) * 0.35));
+  }
+  68% {
+    transform: translate3d(
+        calc(var(--home-hero-motion-distance, 11px) * -0.45),
+        calc(var(--home-hero-motion-distance, 11px) * -0.7),
+        0
+      )
+      rotate(var(--home-hero-motion-rotate, 1.8deg));
+  }
+`;
+
+const spotlightBreathe = keyframes`
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    transform: scale(var(--home-hero-motion-scale, 1.018));
+    filter: brightness(1.06)
+      drop-shadow(
+        var(--home-hero-motion-glow, 0 0 14px rgba(255, 220, 176, 0.26))
+      );
+  }
+`;
+
+const portalPulse = keyframes`
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(0.96) drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    transform: scale(var(--home-hero-motion-scale, 1.04));
+    filter: brightness(1.16)
+      drop-shadow(
+        var(--home-hero-motion-glow, 0 0 20px rgba(146, 194, 255, 0.46))
+      );
+  }
+`;
+
+const cityGlide = keyframes`
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    transform: translate3d(
+        calc(var(--home-hero-motion-distance, 14px) * -1),
+        0,
+        0
+      )
+      scale(var(--home-hero-motion-scale, 1.012));
+    filter: brightness(1.06)
+      drop-shadow(
+        var(--home-hero-motion-glow, 0 0 16px rgba(229, 53, 69, 0.3))
+      );
   }
 `;
 
@@ -291,32 +445,69 @@ const ArtworkForeground = styled.div`
   width: var(--home-hero-foreground-width, 0);
   overflow: visible;
   pointer-events: none;
-  transform-origin: 70% 82%;
-  will-change: transform;
+  transform-origin: var(--home-hero-motion-origin, 50% 85%);
+  will-change: transform, filter;
 
-  &[data-home-hero-motion="float"] {
-    animation: ${foregroundFloat} var(--home-hero-motion-duration, 8s)
-      ease-in-out var(--home-hero-motion-delay, 0s) infinite;
+  &:not([data-home-hero-motion="none"]) {
+    animation-duration: var(--home-hero-motion-duration, 8s);
+    animation-timing-function: ease-in-out;
+    animation-delay: var(--home-hero-motion-delay, 0s);
+    animation-iteration-count: infinite;
+    animation-direction: var(--home-hero-motion-direction, normal);
+    animation-fill-mode: both;
   }
 
-  &[data-home-hero-motion="sway"] {
-    animation: ${foregroundSway} var(--home-hero-motion-duration, 8s)
-      ease-in-out var(--home-hero-motion-delay, 0s) infinite;
+  &[data-home-hero-motion="portrait-breathe"] {
+    animation-name: ${portraitBreathe};
   }
 
-  &[data-home-hero-motion="pulse"] {
-    animation: ${foregroundPulse} var(--home-hero-motion-duration, 8s)
-      ease-in-out var(--home-hero-motion-delay, 0s) infinite;
+  &[data-home-hero-motion="foliage-sway"] {
+    animation-name: ${foliageSway};
   }
 
-  &[data-home-hero-motion="drift"] {
-    animation: ${foregroundDrift} var(--home-hero-motion-duration, 8s)
-      ease-in-out var(--home-hero-motion-delay, 0s) infinite;
+  &[data-home-hero-motion="cheer-bob"] {
+    animation-name: ${cheerBob};
+    animation-timing-function: cubic-bezier(0.34, 1.28, 0.64, 1);
+  }
+
+  &[data-home-hero-motion="power-pulse"] {
+    animation-name: ${powerPulse};
+  }
+
+  &[data-home-hero-motion="silk-drift"] {
+    animation-name: ${silkDrift};
+  }
+
+  &[data-home-hero-motion="stage-beat"] {
+    animation-name: ${stageBeat};
+    animation-timing-function: cubic-bezier(0.45, 0, 0.2, 1);
+  }
+
+  &[data-home-hero-motion="creative-tilt"] {
+    animation-name: ${creativeTilt};
+  }
+
+  &[data-home-hero-motion="street-beat"] {
+    animation-name: ${streetBeat};
+    animation-timing-function: cubic-bezier(0.34, 1.12, 0.64, 1);
+  }
+
+  &[data-home-hero-motion="spotlight-breathe"] {
+    animation-name: ${spotlightBreathe};
+  }
+
+  &[data-home-hero-motion="portal-pulse"] {
+    animation-name: ${portalPulse};
+  }
+
+  &[data-home-hero-motion="city-glide"] {
+    animation-name: ${cityGlide};
   }
 
   @media (prefers-reduced-motion: reduce) {
     animation: none !important;
     will-change: auto;
+    filter: none;
   }
 
   img {
@@ -552,6 +743,9 @@ export function EmptyStateHero({
     "--home-hero-motion-distance": foregroundMotion?.distance ?? "12px",
     "--home-hero-motion-rotate": foregroundMotion?.rotate ?? "0deg",
     "--home-hero-motion-scale": foregroundMotion?.scale ?? "1.04",
+    "--home-hero-motion-origin": foregroundMotion?.origin ?? "50% 85%",
+    "--home-hero-motion-direction": foregroundMotion?.direction ?? "normal",
+    "--home-hero-motion-glow": foregroundMotion?.glow ?? "0 0 0 transparent",
     "--home-hero-breakout-space": presentation.breakoutSpace ?? "0",
     "--home-hero-breakout-space-mobile":
       presentation.breakoutSpaceMobile ?? "0",

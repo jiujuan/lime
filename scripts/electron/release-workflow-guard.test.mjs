@@ -132,6 +132,20 @@ describe("Electron release workflow guard", () => {
     );
   });
 
+  it("rejects release workflow without sherpa-onnx runtime preparation", () => {
+    const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
+    const workflowPath = tempWorkflowPath(
+      current.replace(
+        /      - name: Prepare sherpa-onnx runtime[\s\S]*?          --target "\$\{\{ matrix\.target \}\}"\n\n/,
+        "",
+      ),
+    );
+
+    expect(() => validateReleaseWorkflow({ workflowPath })).toThrow(
+      /sherpa-onnx runtime preparation.*scripts\/prepare-sherpa-onnx-runtime\.mjs/,
+    );
+  });
+
   it("rejects missing macOS transient package retry in Forge package step", () => {
     const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
     const workflowPath = tempWorkflowPath(

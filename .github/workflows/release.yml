@@ -271,6 +271,13 @@ jobs:
           echo "LIME_WINDOWS_SIGNING_CERTIFICATE_FILE=$CERTIFICATE_PATH" >> "$GITHUB_ENV"
           echo "LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD=$WINDOWS_SIGNING_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
 
+      - name: Prepare sherpa-onnx runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/prepare-sherpa-onnx-runtime.mjs \
+            --target "${{ matrix.target }}"
+
       - name: Build Electron app
         shell: bash
         env:

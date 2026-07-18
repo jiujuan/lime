@@ -61,7 +61,18 @@ export type HomeKeepsakeVariant =
   | "medallion"
   | "bookmark";
 
-export type HomeHeroMotionKind = "float" | "sway" | "pulse" | "drift";
+export type HomeHeroMotionKind =
+  | "portrait-breathe"
+  | "foliage-sway"
+  | "cheer-bob"
+  | "power-pulse"
+  | "silk-drift"
+  | "stage-beat"
+  | "creative-tilt"
+  | "street-beat"
+  | "spotlight-breathe"
+  | "portal-pulse"
+  | "city-glide";
 
 export interface HomeHeroMotion {
   kind: HomeHeroMotionKind;
@@ -70,6 +81,9 @@ export interface HomeHeroMotion {
   distance?: string;
   rotate?: string;
   scale?: string;
+  origin?: string;
+  direction?: "normal" | "reverse";
+  glow?: string;
 }
 
 export interface HomeHeroForeground {
@@ -177,11 +191,12 @@ const HOME_SKIN_PRESENTATIONS: Record<
       right: "4%",
       rightMobile: "1%",
       motion: {
-        kind: "float",
+        kind: "portrait-breathe",
         duration: "4.8s",
         delay: "-1.2s",
-        distance: "13px",
-        rotate: "1.2deg",
+        distance: "8px",
+        scale: "1.025",
+        origin: "65% 88%",
       },
     },
     heroDecorations: {
@@ -225,10 +240,11 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "translate(2%, 2%) scale(0.94)",
       transformMobile: "translate(2%, 2%) scale(1.02)",
       motion: {
-        kind: "sway",
-        duration: "5.6s",
-        distance: "12px",
-        rotate: "2.2deg",
+        kind: "foliage-sway",
+        duration: "5.8s",
+        distance: "8px",
+        rotate: "2.4deg",
+        origin: "44% 100%",
       },
     },
     heroDecorations: { trailingIcon: "leaf" },
@@ -259,20 +275,23 @@ const HOME_SKIN_PRESENTATIONS: Record<
     image: limeForestHero,
     foreground: {
       image: limeForestForeground,
-      width: "39%",
-      widthMobile: "54%",
-      top: "-28px",
-      topMobile: "-14px",
-      right: "1%",
-      rightMobile: "-4%",
-      transform: "scale(1.08)",
-      transformMobile: "scale(1.16)",
+      width: "43%",
+      widthMobile: "58%",
+      top: "auto",
+      topMobile: "auto",
+      right: "-2%",
+      rightMobile: "-9%",
+      bottom: "-2px",
+      bottomMobile: "-1px",
+      transform: "scale(1.04)",
+      transformMobile: "scale(1.08)",
       motion: {
-        kind: "sway",
-        duration: "4.4s",
+        kind: "cheer-bob",
+        duration: "3.6s",
         delay: "-2.4s",
-        distance: "10px",
-        rotate: "1.3deg",
+        distance: "11px",
+        scale: "1.025",
+        origin: "55% 100%",
       },
     },
     heroDecorations: { trailingIcon: "coins" },
@@ -304,18 +323,22 @@ const HOME_SKIN_PRESENTATIONS: Record<
     image: limeOceanHero,
     foreground: {
       image: limeOceanForeground,
-      width: "34%",
-      widthMobile: "47%",
-      top: "-58px",
-      topMobile: "-32px",
-      right: "-1%",
-      rightMobile: "-6%",
-      transform: "translate(2%, 2%) scale(0.98)",
-      transformMobile: "translate(2%, 2%) scale(1.06)",
+      width: "40%",
+      widthMobile: "56%",
+      top: "auto",
+      topMobile: "auto",
+      right: "-3%",
+      rightMobile: "-10%",
+      bottom: "-2px",
+      bottomMobile: "-1px",
+      transform: "translate(2%, 0) scale(0.98)",
+      transformMobile: "translate(2%, 0) scale(1.02)",
       motion: {
-        kind: "pulse",
-        duration: "4.2s",
-        scale: "1.04",
+        kind: "power-pulse",
+        duration: "4.6s",
+        scale: "1.035",
+        origin: "50% 86%",
+        glow: "0 0 18px rgba(50, 238, 255, 0.48)",
       },
     },
     heroDecorations: { trailingIcon: "shield" },
@@ -356,11 +379,12 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "scale(1.04)",
       transformMobile: "scale(1.1)",
       motion: {
-        kind: "float",
-        duration: "5.6s",
+        kind: "silk-drift",
+        duration: "6.8s",
         delay: "-2.1s",
-        distance: "12px",
-        rotate: "1deg",
+        distance: "10px",
+        rotate: "0.7deg",
+        origin: "60% 92%",
       },
     },
     heroDecorations: { trailingIcon: "sun" },
@@ -401,11 +425,12 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "scale(1.05)",
       transformMobile: "scale(1.14)",
       motion: {
-        kind: "sway",
-        duration: "3.8s",
+        kind: "stage-beat",
+        duration: "3.2s",
         delay: "-0.8s",
-        distance: "15px",
-        rotate: "2deg",
+        distance: "13px",
+        rotate: "0.7deg",
+        origin: "50% 100%",
       },
     },
     heroDecorations: { trailingIcon: "music" },
@@ -446,11 +471,12 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "scale(1.04)",
       transformMobile: "scale(1.12)",
       motion: {
-        kind: "float",
-        duration: "4.2s",
+        kind: "creative-tilt",
+        duration: "4.6s",
         delay: "-1.7s",
-        distance: "14px",
+        distance: "9px",
         rotate: "1.5deg",
+        origin: "55% 95%",
       },
     },
     heroDecorations: { trailingIcon: "lightbulb" },
@@ -491,11 +517,12 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "scale(1.08)",
       transformMobile: "scale(1.14)",
       motion: {
-        kind: "drift",
-        duration: "5.2s",
+        kind: "spotlight-breathe",
+        duration: "6s",
         delay: "-3.1s",
-        distance: "10px",
-        rotate: "1.2deg",
+        scale: "1.018",
+        origin: "50% 90%",
+        glow: "0 0 16px rgba(232, 185, 116, 0.3)",
       },
     },
     heroDecorations: { trailingIcon: "mic" },
@@ -536,10 +563,12 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "translate(3%, 2%) scale(0.94)",
       transformMobile: "translate(3%, 2%) scale(1.04)",
       motion: {
-        kind: "pulse",
-        duration: "5.8s",
+        kind: "portal-pulse",
+        duration: "5.4s",
         delay: "-2.8s",
-        scale: "1.055",
+        scale: "1.04",
+        origin: "50% 58%",
+        glow: "0 0 20px rgba(146, 194, 255, 0.48)",
       },
     },
     heroDecorations: { trailingIcon: "circle" },
@@ -579,11 +608,12 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "scale(1.05)",
       transformMobile: "scale(1.14)",
       motion: {
-        kind: "sway",
-        duration: "4.2s",
+        kind: "street-beat",
+        duration: "3.7s",
         delay: "-1.5s",
-        distance: "14px",
+        distance: "11px",
         rotate: "1.8deg",
+        origin: "50% 100%",
       },
     },
     heroDecorations: { trailingIcon: "palette" },
@@ -624,11 +654,12 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "scale(1.06)",
       transformMobile: "scale(1.12)",
       motion: {
-        kind: "float",
-        duration: "6s",
+        kind: "portrait-breathe",
+        duration: "6.2s",
         delay: "-4s",
-        distance: "10px",
-        rotate: "0.8deg",
+        distance: "5px",
+        scale: "1.012",
+        origin: "55% 100%",
       },
     },
     heroDecorations: { trailingIcon: "book-open" },
@@ -660,20 +691,23 @@ const HOME_SKIN_PRESENTATIONS: Record<
     image: limeLuxuryHero,
     foreground: {
       image: limeLuxuryForeground,
-      width: "31%",
-      widthMobile: "46%",
-      top: "-36px",
-      topMobile: "-22px",
-      right: "2%",
-      rightMobile: "-6%",
-      transform: "translate(2%, 0) scale(1)",
-      transformMobile: "translate(2%, 0) scale(1.04)",
+      width: "43%",
+      widthMobile: "58%",
+      top: "auto",
+      topMobile: "auto",
+      right: "-2%",
+      rightMobile: "-10%",
+      bottom: "-1px",
+      bottomMobile: "-1px",
+      transform: "translate(1%, 0) scale(1)",
+      transformMobile: "translate(1%, 0) scale(1.02)",
       motion: {
-        kind: "drift",
-        duration: "6.2s",
+        kind: "spotlight-breathe",
+        duration: "6.6s",
         delay: "-2.6s",
-        distance: "9px",
-        rotate: "0.8deg",
+        scale: "1.02",
+        origin: "50% 100%",
+        glow: "0 0 18px rgba(131, 117, 255, 0.34)",
       },
     },
     heroDecorations: { trailingIcon: "gem" },
@@ -714,10 +748,13 @@ const HOME_SKIN_PRESENTATIONS: Record<
       transform: "translate(-1%, 3%) scale(0.92)",
       transformMobile: "translate(-1%, 3%) scale(1.02)",
       motion: {
-        kind: "pulse",
-        duration: "4.8s",
+        kind: "city-glide",
+        duration: "8s",
         delay: "-1.9s",
-        scale: "1.04",
+        distance: "14px",
+        scale: "1.012",
+        origin: "50% 80%",
+        glow: "0 0 16px rgba(229, 53, 69, 0.3)",
       },
     },
     heroDecorations: { trailingIcon: "orbit" },

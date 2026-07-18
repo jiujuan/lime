@@ -16,6 +16,7 @@
 - Fixed inconsistent loading, error, disconnect, close, and retry states in Settings and Browser Runtime, and removed the retired Chrome Relay guide path from the current product chain.
 - Fixed re-entry boundaries in Electron updater, App Server host, and Windows startup paths, with deterministic configuration for unsigned macOS development packaging.
 - Fixed a Windows Squirrel N-1 smoke navigation race that treated the preload-enabled startup page as the final renderer; packaged launches now also remove unsupported `NODE_OPTIONS` and the development-server URL.
+- Fixed Electron Release workflow builds when the Rust cache omits sherpa-onnx prebuilt libraries; shared runtime libraries are now prepared explicitly for each target before packaging.
 
 ### Improvements and Refactors
 
