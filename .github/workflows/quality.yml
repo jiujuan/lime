@@ -297,6 +297,14 @@ jobs:
           shared-key: quality-rust-full
           cache-on-failure: true
 
+      - name: Prepare sherpa-onnx runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+          test -n "$TARGET"
+          node scripts/prepare-sherpa-onnx-runtime.mjs --target "$TARGET"
+
       - name: Test Rust workspace
         env:
           TMPDIR: ${{ runner.temp }}/rust-full
