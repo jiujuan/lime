@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useLayoutEffect,
   useRef,
   useState,
   type Dispatch,
@@ -63,6 +64,20 @@ export function useWorkspaceTaskCenterDraftStateRuntime({
   const [activeTaskCenterDraftTabId, setActiveTaskCenterDraftTabId] = useState<
     string | null
   >(null);
+  const previousAgentEntryRef = useRef(agentEntry);
+
+  useLayoutEffect(() => {
+    const previousAgentEntry = previousAgentEntryRef.current;
+    previousAgentEntryRef.current = agentEntry;
+
+    if (previousAgentEntry !== "new-task" || agentEntry !== "claw") {
+      return;
+    }
+
+    taskCenterDraftSurfaceActiveRef.current = false;
+    setActiveTaskCenterDraftTabId(null);
+    setTaskCenterDraftTabs((current) => (current.length > 0 ? [] : current));
+  }, [agentEntry]);
 
   const handleBeforeTopicSwitch = useCallback(
     (topicId: string) => {

@@ -23,8 +23,8 @@ describe("homeSkinPresentation", () => {
     expect(presentation.artPosition).toBe("50% center");
     expect(presentation.stageHeightWide).toBe("430px");
     expect(presentation.foreground?.top).toBe("auto");
-    expect(presentation.foreground?.bottom).toBe("-1px");
-    expect(presentation.breakoutSpace).toBe("30px");
+    expect(presentation.foreground?.bottom).toBe("-18px");
+    expect(presentation.breakoutSpace).toBe("68px");
     expect(presentation.foreground?.motion?.kind).toBe("portrait-breathe");
     expect(presentation.foreground?.motion?.duration).toBe("4.8s");
   });
@@ -44,10 +44,10 @@ describe("homeSkinPresentation", () => {
     );
     expect(getHomeSkinPresentation("lime-forest").artFit).toBe("contain");
     expect(getHomeSkinPresentation("lime-forest").foreground?.width).toBe(
-      "46%",
+      "41%",
     );
     expect(getHomeSkinPresentation("lime-forest").foreground?.bottom).toBe(
-      "-2px",
+      "-24px",
     );
     expect(getHomeSkinPresentation("lime-forest").artBlendWidth).toBe("68%");
     expect(getHomeSkinPresentation("lime-luxury").artBlendWidth).toBe("68%");
@@ -61,9 +61,9 @@ describe("homeSkinPresentation", () => {
       getHomeSkinPresentation("lime-ocean").composerDecorations?.keepsakeImage,
     ).toContain("lime-ocean-foreground.png");
     expect(getHomeSkinPresentation("lime-ocean").artFit).toBe("contain");
-    expect(getHomeSkinPresentation("lime-ocean").foreground?.width).toBe("47%");
+    expect(getHomeSkinPresentation("lime-ocean").foreground?.width).toBe("40%");
     expect(getHomeSkinPresentation("lime-ocean").foreground?.bottom).toBe(
-      "-2px",
+      "-24px",
     );
     expect(getHomeSkinPresentation("lime-sand").image).toContain(
       "lime-sand-hero.png",
@@ -101,10 +101,10 @@ describe("homeSkinPresentation", () => {
       "lime-luxury-hero.png",
     );
     expect(getHomeSkinPresentation("lime-luxury").foreground?.width).toBe(
-      "48%",
+      "43%",
     );
     expect(getHomeSkinPresentation("lime-luxury").foreground?.bottom).toBe(
-      "-1px",
+      "-18px",
     );
   });
 

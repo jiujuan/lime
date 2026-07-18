@@ -6,6 +6,56 @@ import {
 } from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection content parts", () => {
+  it("跨正文边界的 thinking 修订快照只应保留后一版", () => {
+    const firstThinking =
+      "用户想要整理今天的国际新闻。今天是206年7月18日，我需要搜索最新的来提供准确的信息让我使用WebSearch来获取";
+    const revisedThinking =
+      "用户想要整理今天的国际新闻。今天是2026年7月18日，我需要搜索最新的国际新闻来提供准确的信息。让我使用WebSearch来获取最新的国际新闻。";
+    const message: Message = {
+      id: "assistant-revised-thinking-across-boundary",
+      role: "assistant",
+      content: "最终回答。",
+      timestamp: new Date("2026-07-18T10:00:00.000Z"),
+      isThinking: true,
+      runtimeTurnId: "turn-revised-thinking-across-boundary",
+      contentParts: [
+        { type: "thinking", text: firstThinking },
+        { type: "text", text: "最终回答。" },
+      ],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "reasoning-revised-thinking-across-boundary",
+          type: "reasoning",
+          turn_id: "turn-revised-thinking-across-boundary",
+          sequence: 2,
+          text: revisedThinking,
+          status: "completed",
+          started_at: "2026-07-18T10:00:00.000Z",
+          completed_at: "2026-07-18T10:00:01.000Z",
+          updated_at: "2026-07-18T10:00:01.000Z",
+        },
+      ] as never,
+      {
+        turnId: "turn-revised-thinking-across-boundary",
+        turnStatus: "running",
+      },
+    );
+
+    const thinkingParts =
+      projection.rendererContentParts?.filter(
+        (part) => part.type === "thinking",
+      ) || [];
+    expect(thinkingParts).toHaveLength(1);
+    expect(thinkingParts[0]).toMatchObject({
+      type: "thinking",
+      text: revisedThinking,
+    });
+  });
+
   it("工具过程存在时应保留过程前导语和过程后最终正文", () => {
     const message: Message = {
       id: "assistant-live",

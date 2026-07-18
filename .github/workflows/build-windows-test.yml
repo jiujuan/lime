@@ -73,6 +73,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --config.node-linker=hoisted
 
+      - name: Prepare sherpa-onnx runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/prepare-sherpa-onnx-runtime.mjs \
+            --target "x86_64-pc-windows-msvc"
+
       - name: Build Electron Windows test package
         shell: bash
         env:

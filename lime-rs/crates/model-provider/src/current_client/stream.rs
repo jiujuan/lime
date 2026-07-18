@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 
 pub(super) const DEFAULT_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+const OPENAI_FINISH_TRAILER_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Default)]
 struct ToolCallAccumulator {
@@ -164,6 +165,14 @@ pub(super) fn openai_chat_sse(
                 }
             }
             if state.finish_reason.is_some() {
+                if let Ok(Some(Ok(frame))) = tokio::time::timeout(
+                    OPENAI_FINISH_TRAILER_TIMEOUT,
+                    frames.next(),
+                )
+                .await
+                {
+                    absorb_openai_usage_frame(&mut state, &frame.data);
+                }
                 drop(frames);
                 for event in finish_openai_stream(&mut state)? {
                     yield event;
@@ -243,6 +252,19 @@ fn finish_openai_stream(
         response_id: state.response_id.clone(),
     });
     Ok(events)
+}
+
+fn absorb_openai_usage_frame(state: &mut OpenAiStreamState, data: &str) {
+    if data.trim() == "[DONE]" {
+        return;
+    }
+
+    let Ok(chunk) = serde_json::from_str::<openai::ChatCompletionChunk>(data) else {
+        return;
+    };
+    if let Some(usage) = chunk.usage {
+        state.usage = Some(openai_usage(usage));
+    }
 }
 
 fn openai_usage(usage: openai::StreamUsage) -> Usage {

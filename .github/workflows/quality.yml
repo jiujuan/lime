@@ -230,6 +230,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare sherpa-onnx runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+          test -n "$TARGET"
+          node scripts/prepare-sherpa-onnx-runtime.mjs --target "$TARGET"
+
       - name: Run headless GUI smoke
         run: npm run verify:gui-smoke -- --timeout-ms 1800000
 

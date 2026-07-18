@@ -78,6 +78,9 @@ describe("EmptyStateLayout", () => {
     expect(artwork).toBeTruthy();
     expect(firstScreen?.textContent).toContain("青柠一下，灵感即来");
     expect(firstScreen?.contains(prioritySlot)).toBe(true);
+    expect(prioritySlot?.parentElement?.getAttribute("data-home-hero-layer")).toBe(
+      "composer-above-foreground",
+    );
     expect(artwork?.querySelector("img")?.getAttribute("src")).toContain(
       "home-hero-v3.webp",
     );
@@ -112,7 +115,7 @@ describe("EmptyStateLayout", () => {
     ).toBe("auto");
     expect(
       artworkStage?.style.getPropertyValue("--home-hero-stage-z-index"),
-    ).toBe("60");
+    ).toBe("40");
     expect(artworkStage?.getAttribute("data-home-hero-breakout-layer")).toBe(
       "above-chrome",
     );

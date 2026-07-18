@@ -334,10 +334,8 @@ describe("WorkspaceMainArea", () => {
     expect(homeTopHost).not.toBeNull();
     expect(homeTopHost?.className).toContain("right-0");
     expect(homeTopHost?.className).toContain("top-0");
-    expect(homeTopHost?.className).toContain("z-0");
-    expect(homeTopHost?.className).not.toContain("z-10");
+    expect(homeTopHost?.className).toContain("z-10");
     expect(homeTopHost?.className).not.toContain("z-20");
-    expect(homeTopHost?.dataset.homeHeroChromeLayer).toBe("below-breakout");
     expect(homeTopHost?.className).not.toContain(
       "bg-[color:var(--lime-chrome-rail)]",
     );

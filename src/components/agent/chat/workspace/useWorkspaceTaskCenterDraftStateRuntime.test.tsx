@@ -10,14 +10,16 @@ let root: Root;
 let runtime: Runtime | null = null;
 
 function Harness({
+  agentEntry = "claw",
   messagesLength = 0,
   effectiveThreadItemCount = 0,
 }: {
+  agentEntry?: "new-task" | "claw";
   messagesLength?: number;
   effectiveThreadItemCount?: number;
 }) {
   runtime = useWorkspaceTaskCenterDraftStateRuntime({
-    agentEntry: "claw",
+    agentEntry,
     deferSessionRecentMetadataSyncForNavigation: () => undefined,
     effectiveThreadItemCount,
     hasInitialSessionTopic: true,
@@ -73,5 +75,28 @@ describe("useWorkspaceTaskCenterDraftStateRuntime", () => {
       renderHarness({ effectiveThreadItemCount: 1 })
         .shouldHydrateEmptyMatchedInitialSession,
     ).toBe(false);
+  });
+
+  it("从 new-task 进入 Claw 时应在绘制前清理旧草稿激活状态", () => {
+    const newTaskRuntime = renderHarness({ agentEntry: "new-task" });
+    newTaskRuntime.taskCenterDraftSurfaceActiveRef.current = true;
+    act(() => {
+      newTaskRuntime.setActiveTaskCenterDraftTabId("draft-1");
+      newTaskRuntime.setTaskCenterDraftTabs([
+        {
+          id: "draft-1",
+          title: "新任务",
+          createdAt: new Date("2026-06-22T00:00:00.000Z"),
+          updatedAt: new Date("2026-06-22T00:00:00.000Z"),
+          status: "draft",
+        },
+      ]);
+    });
+
+    const clawRuntime = renderHarness({ agentEntry: "claw" });
+
+    expect(clawRuntime.taskCenterDraftSurfaceActiveRef.current).toBe(false);
+    expect(clawRuntime.activeTaskCenterDraftTabId).toBeNull();
+    expect(clawRuntime.taskCenterDraftTabs).toEqual([]);
   });
 });

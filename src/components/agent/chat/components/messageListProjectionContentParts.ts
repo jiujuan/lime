@@ -6,6 +6,7 @@ import {
 import {
   areComparableContentTextsEqual,
   areComparableContentTextsRelated,
+  areLikelyRevisedThinkingParagraph,
   isComparableContentTextPrefix,
   normalizeComparableContentText,
   readableContentTextScore,
@@ -571,7 +572,9 @@ function findExistingThinkingContentPartIndex(params: {
   const index = params.normalized.findIndex(
     (candidate) =>
       candidate.type === "thinking" &&
-      areComparableContentTextsRelated(candidate.text, params.part.text),
+      (areComparableContentTextsRelated(candidate.text, params.part.text) ||
+        areLikelyRevisedThinkingParagraph(candidate.text, params.part.text) ||
+        areLikelyRevisedThinkingParagraph(params.part.text, candidate.text)),
   );
   return index >= 0 ? index : undefined;
 }
@@ -581,6 +584,10 @@ function shouldPreferReadableThinkingText(params: {
   nextText: string;
 }): boolean {
   if (isComparableContentTextPrefix(params.previousText, params.nextText)) {
+    return true;
+  }
+
+  if (areLikelyRevisedThinkingParagraph(params.previousText, params.nextText)) {
     return true;
   }
 

@@ -108,7 +108,10 @@ async fn openai_finish_reason_is_terminal_without_done_sentinel() {
             request.extend_from_slice(&buffer[..read]);
         }
 
-        let body = "data: {\"id\":\"chatcmpl-finish-only\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"fixture\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\n";
+        let body = concat!(
+            "data: {\"id\":\"chatcmpl-finish-only\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"fixture\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: {\"id\":\"chatcmpl-finish-only\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"fixture\",\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}\n\n",
+        );
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n{:X}\r\n{body}\r\n",
             body.len(),
@@ -137,7 +140,10 @@ async fn openai_finish_reason_is_terminal_without_done_sentinel() {
         while let Some(event) = stream.next().await {
             if matches!(
                 event.expect("provider event"),
-                CanonicalLlmEvent::Finish { .. }
+                CanonicalLlmEvent::Finish {
+                    usage: Some(usage),
+                    ..
+                } if usage.input_tokens == Some(7) && usage.output_tokens == Some(3)
             ) {
                 return true;
             }

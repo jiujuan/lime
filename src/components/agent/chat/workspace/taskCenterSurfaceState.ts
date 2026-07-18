@@ -13,6 +13,8 @@ interface ResolveTaskCenterDraftSurfaceStateParams {
   activeDraftTabId: string | null;
   draftTabs: readonly TaskCenterDraftTab[];
   draftSurfaceActive: boolean;
+  initialSessionId?: string | null;
+  sessionId?: string | null;
   draftSendRequest: TaskCenterDraftSendRequest | null;
   hasHomePendingPreview?: boolean;
   displayMessageCount: number;
@@ -38,6 +40,24 @@ export function hasTaskCenterPendingPreviewActivity(
   bootstrapPendingPreviewMessageCount: number,
 ): boolean {
   return isHomePendingPreviewActive || bootstrapPendingPreviewMessageCount > 0;
+}
+
+export function shouldPrioritizeTaskCenterInitialSessionRoute({
+  agentEntry,
+  initialSessionId,
+  sessionId,
+}: {
+  agentEntry: string;
+  initialSessionId?: string | null;
+  sessionId?: string | null;
+}): boolean {
+  const normalizedInitialSessionId = initialSessionId?.trim() || null;
+  const normalizedSessionId = sessionId?.trim() || null;
+  return Boolean(
+    agentEntry === "claw" &&
+      normalizedInitialSessionId &&
+      normalizedInitialSessionId !== normalizedSessionId,
+  );
 }
 
 interface ResolveTaskCenterHomeChromeStateParams {
@@ -80,6 +100,8 @@ export function resolveTaskCenterDraftSurfaceState({
   activeDraftTabId,
   draftTabs,
   draftSurfaceActive,
+  initialSessionId,
+  sessionId,
   draftSendRequest,
   hasHomePendingPreview = false,
   displayMessageCount,
@@ -90,14 +112,24 @@ export function resolveTaskCenterDraftSurfaceState({
   isSending,
   queuedTurnCount,
 }: ResolveTaskCenterDraftSurfaceStateParams): TaskCenterDraftSurfaceState {
+  const shouldPrioritizeInitialSessionRoute =
+    shouldPrioritizeTaskCenterInitialSessionRoute({
+      agentEntry,
+      initialSessionId,
+      sessionId,
+    });
   const activeTaskCenterDraftTab = activeDraftTabId
     ? (draftTabs.find((tab) => tab.id === activeDraftTabId) ?? null)
     : null;
   const isTaskCenterDraftTabActive = Boolean(
-    isTaskCenterEntry && activeTaskCenterDraftTab,
+    isTaskCenterEntry &&
+      activeTaskCenterDraftTab &&
+      !shouldPrioritizeInitialSessionRoute,
   );
   const isTaskCenterDraftSurfaceActive = Boolean(
-    isTaskCenterEntry && (activeTaskCenterDraftTab || draftSurfaceActive),
+    isTaskCenterEntry &&
+      !shouldPrioritizeInitialSessionRoute &&
+      (activeTaskCenterDraftTab || draftSurfaceActive),
   );
   const isTaskCenterDraftSendInFlight = Boolean(
     (agentEntry === "claw" || agentEntry === "new-task") &&

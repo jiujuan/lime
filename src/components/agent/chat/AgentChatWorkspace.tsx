@@ -1287,6 +1287,8 @@ export function AgentChatWorkspace({
       activeDraftTabId: activeTaskCenterDraftTabId,
       draftTabs: taskCenterDraftTabs,
       draftSurfaceActive: taskCenterDraftSurfaceActiveRef.current,
+      initialSessionId: normalizedInitialSessionId,
+      sessionId,
       draftSendRequest: taskCenterDraftSendRequest,
       displayMessageCount: displayMessages.length,
       threadItemCount: effectiveThreadItems.length,

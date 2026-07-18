@@ -263,9 +263,8 @@ export function WorkspaceMainArea({
       taskCenterUtilityToolbarNode &&
       shouldDetachTaskCenterToolbar ? (
         <div
-          className="absolute right-0 top-0 z-0 flex h-[42px] min-w-0 items-end justify-end overflow-visible px-4 pb-1"
+          className="absolute right-0 top-0 z-10 flex h-[42px] min-w-0 items-end justify-end overflow-visible px-4 pb-1"
           data-testid="task-center-home-top-toolbar-host"
-          data-home-hero-chrome-layer="below-breakout"
           data-width-policy="content-adaptive"
           style={{ maxWidth: TASK_CENTER_TOP_TOOLBAR_MAX_WIDTH }}
         >
@@ -274,9 +273,8 @@ export function WorkspaceMainArea({
       ) : null}
       {shouldSplitTaskCenterChrome && taskCenterUtilityToolbarNode ? (
         <div
-          className="absolute right-0 top-0 z-0 flex h-[42px] min-w-0 items-end justify-end overflow-visible px-4 pb-1 [left:var(--task-center-split-left)]"
+          className="absolute right-0 top-0 z-20 flex h-[42px] min-w-0 items-end justify-end overflow-visible px-4 pb-1 [left:var(--task-center-split-left)]"
           data-testid="task-center-workbench-top-toolbar-host"
-          data-home-hero-chrome-layer="below-breakout"
           style={
             {
               "--task-center-split-left": splitTaskCenterChromeWidth,

@@ -448,7 +448,7 @@ const ArtworkForeground = styled.div`
   right: var(--home-hero-foreground-right, auto);
   bottom: var(--home-hero-foreground-bottom, auto);
   left: var(--home-hero-foreground-left, auto);
-  z-index: 6;
+  z-index: 2;
   width: var(--home-hero-foreground-width, 0);
   overflow: visible;
   pointer-events: none;
@@ -636,7 +636,7 @@ const Description = styled.p`
 
 const PriorityShell = styled.div`
   position: relative;
-  z-index: 2;
+  z-index: 50;
   width: min(1180px, 100%);
   margin: 0 auto;
 
@@ -731,7 +731,7 @@ export function EmptyStateHero({
       presentation.stageHeightMobile ?? "270px",
     "--home-hero-stage-height-short": presentation.stageHeight ?? "250px",
     "--home-hero-stage-overflow": foreground ? "visible" : "hidden",
-    "--home-hero-stage-z-index": foreground ? "60" : "auto",
+    "--home-hero-stage-z-index": foreground ? "40" : "auto",
     "--home-hero-foreground-width": foreground?.width ?? "0",
     "--home-hero-foreground-width-mobile": foreground?.widthMobile ?? "0",
     "--home-hero-foreground-top": foreground?.top ?? "auto",
@@ -823,7 +823,11 @@ export function EmptyStateHero({
           </LeadTextGroup>
         </ArtworkStage>
 
-        {prioritySlot ? <PriorityShell>{prioritySlot}</PriorityShell> : null}
+        {prioritySlot ? (
+          <PriorityShell data-home-hero-layer="composer-above-foreground">
+            {prioritySlot}
+          </PriorityShell>
+        ) : null}
         {supportingSlot ? (
           <SupportingShell>{supportingSlot}</SupportingShell>
         ) : null}

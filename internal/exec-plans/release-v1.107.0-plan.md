@@ -1,6 +1,6 @@
 # Lime v1.107.0 发布执行计划
 
-状态：validated-ready-to-rerun-release
+状态：ready-to-rerun-release
 日期：2026-07-18
 目标版本：`1.107.0`
 目标 tag：`v1.107.0`
@@ -35,7 +35,7 @@
 - Release candidate 已冻结，纳入当前全部候选路径，无排除项；用户已明确要求覆盖 `v1.107.0` 并递交全部当前改动。
 - 版本事实源与双语 release notes 已更新，并补记 Windows startup-page navigation race hotfix。
 - 首轮覆盖提交 `7fb666415` 已完成并推送；Release workflow `29631194668` 因三平台构建时缺少 sherpa-onnx 预编译库失败，未进入 Windows N-1 smoke。
-- 已加入 Release 构建前按目标显式准备 sherpa-onnx 运行库的 workflow guard；本轮定向回归通过，待重新覆盖提交、tag 和 workflow。
+- 已加入 Release 与 Quality/Windows smoke 构建前按目标显式准备 sherpa-onnx 运行库的 workflow guard；同时纳入 provider SSE usage trailer、thinking 修订快照去重、首页层级/皮肤布局和 Claw 路由草稿清理修复，待覆盖提交、tag 和 workflow。
 
 ## 验证记录
 
@@ -52,6 +52,8 @@
 - 首轮远端 Release `29631194668`：失败于三平台 `app-server` 链接；Windows `sherpa-onnx-c-api.lib` 缺失，macOS `sherpa-onnx-c-api` 共享库目录缺失，未执行 N-1。
 - 第二轮 `29631571374` 与第三轮 `29631599498` 在新增预热步骤解压阶段暴露 Windows Git Bash 驱动器路径解析错误；已改为 basename + workspace cwd，补充跨平台回归。
 - 本轮同时纳入 provider SSE `finish_reason` 终止修复与 revised thinking snapshot 去重；Rust related 矩阵 1182 项通过、1 项既有 app-server 时序断言失败，需单独复核。
+- 本轮工作树追加差异的定向验证：`npm run verify:app-version`、`npm run typecheck`、`git diff --check` 通过；6 个前端 Vitest 文件 61 项通过；`cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider --lib current_client` 45 项通过。
+- 远端 Quality `29633271523` 的失败证据：Vitest layer budget 36/30（既有仓库基线）、GUI smoke 与 Rust Full 均因 CI sherpa-onnx 预编译库未准备而链接失败；本轮已加入对应 workflow 预热步骤，待新 SHA 复验。
 - 真实 Windows packaged L8/N-1 验证：待路径修复后的远端 Release workflow 执行；本机为 macOS，无法代替 Windows 证据。
 
 ## 架构确认
@@ -61,4 +63,4 @@
 - 责任人：release owner（v1.107.0）。
 - 日期：2026-07-18。
 
-当前完成度：`94%`。下一刀：纳入 thinking、SSE 与 Windows 路径修复及全部当前改动，覆盖提交和 `v1.107.0`，再监控 Release workflow 至 Windows N-1 终态。
+当前完成度：`96%`。下一刀：提交全部当前改动，覆盖 `v1.107.0` 并推送 `main`/tag，监控 Release workflow 至三平台构建和 Windows N-1 终态。

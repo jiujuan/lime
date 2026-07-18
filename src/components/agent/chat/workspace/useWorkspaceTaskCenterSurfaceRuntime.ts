@@ -6,6 +6,7 @@ import { useTaskCenterHomePendingPreviewRuntime } from "./useTaskCenterDraftSend
 import {
   hasTaskCenterPendingPreviewActivity,
   resolveTaskCenterDraftSurfaceState,
+  shouldPrioritizeTaskCenterInitialSessionRoute,
 } from "./taskCenterSurfaceState";
 
 type DraftSurfaceParams = Parameters<
@@ -50,8 +51,20 @@ export function useWorkspaceTaskCenterSurfaceRuntime({
     isHomePendingPreviewActive,
     bootstrapPendingPreviewMessages.length,
   );
+  const shouldPrioritizeInitialSessionRoute =
+    shouldPrioritizeTaskCenterInitialSessionRoute({
+      agentEntry: draftSurface.agentEntry,
+      initialSessionId: draftSurface.initialSessionId,
+      sessionId: draftSurface.sessionId,
+    });
   const draftSurfaceState = resolveTaskCenterDraftSurfaceState({
     ...draftSurface,
+    activeDraftTabId: shouldPrioritizeInitialSessionRoute
+      ? null
+      : draftSurface.activeDraftTabId,
+    draftSurfaceActive: shouldPrioritizeInitialSessionRoute
+      ? false
+      : draftSurface.draftSurfaceActive,
     hasHomePendingPreview: hasPendingPreviewActivity,
   });
   const persistTaskCenterMaterializedSessionNavigation = useCallback(

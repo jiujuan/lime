@@ -227,6 +227,29 @@ describe("resolveTaskCenterDraftSurfaceState", () => {
     expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
   });
 
+  it("Claw 目标会话尚未接管时应忽略旧草稿 surface，避免闪回首页", () => {
+    const state = resolveTaskCenterDraftSurfaceState({
+      agentEntry: "claw",
+      isTaskCenterEntry: true,
+      activeDraftTabId: "draft-1",
+      draftTabs: [createDraftTab("draft-1")],
+      draftSurfaceActive: true,
+      initialSessionId: "target-session",
+      sessionId: "previous-session",
+      draftSendRequest: null,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      queuedTurnCount: 0,
+    });
+
+    expect(state.isTaskCenterDraftTabActive).toBe(false);
+    expect(state.isTaskCenterDraftSurfaceActive).toBe(false);
+    expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
+  });
+
   it("首页发送请求已创建时应展示 pending preview 而不是继续压制内容", () => {
     const state = resolveTaskCenterDraftSurfaceState({
       agentEntry: "new-task",
