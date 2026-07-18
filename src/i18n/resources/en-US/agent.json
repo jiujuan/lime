@@ -1131,7 +1131,7 @@
   "agentChat.messageImageAttachments.unavailable": "Image unavailable",
   "agentChat.navbar.appSwitcher.cursor": "Cursor",
   "agentChat.navbar.appSwitcher.finder": "Finder",
-  "agentChat.navbar.appSwitcher.open": "Open app switcher",
+  "agentChat.navbar.appSwitcher.open": "Open in",
   "agentChat.navbar.appSwitcher.terminal": "Terminal",
   "agentChat.navbar.appSwitcher.toast.noProjectRoot": "This project has no local folder",
   "agentChat.navbar.appSwitcher.toast.openFailed": "Failed to open project: {{message}}",

@@ -707,6 +707,8 @@ describe("TaskCenterUtilityToolbar", () => {
       '[data-testid="task-center-app-switcher-trigger"]',
     ) as HTMLButtonElement | null;
 
+    expect(trigger?.textContent).toContain("打开位置");
+
     await act(async () => {
       trigger?.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1112,10 +1114,14 @@ describe("TaskCenterUtilityToolbar", () => {
     });
 
     expect(
-      document.body.querySelector('[data-testid="imported-runtime-detail-toggle"]'),
+      document.body.querySelector(
+        '[data-testid="imported-runtime-detail-toggle"]',
+      ),
     ).toBeNull();
     expect(
-      document.body.querySelector('[data-testid="imported-runtime-detail-panel"]'),
+      document.body.querySelector(
+        '[data-testid="imported-runtime-detail-panel"]',
+      ),
     ).toBeNull();
     expect(document.body.textContent).not.toContain("查看完整记录");
     expect(document.body.textContent).not.toContain(

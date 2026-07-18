@@ -245,6 +245,7 @@ vi.mock("./WorkspacePendingA2UIPanel", () => ({
 vi.mock("./WorkspaceMainArea", () => ({
   WorkspaceMainArea: ({
     navbarNode,
+    threadHeaderNode,
     taskCenterUtilityToolbarNode,
     taskCenterTabsNode,
     taskCenterShellPanelNode,
@@ -254,6 +255,7 @@ vi.mock("./WorkspaceMainArea", () => ({
     ...rest
   }: {
     navbarNode?: React.ReactNode;
+    threadHeaderNode?: React.ReactNode;
     taskCenterUtilityToolbarNode?: React.ReactNode;
     taskCenterTabsNode?: React.ReactNode;
     taskCenterShellPanelNode?: React.ReactNode;
@@ -267,6 +269,7 @@ vi.mock("./WorkspaceMainArea", () => ({
       ref={() => {
         mockWorkspaceMainArea({
           navbarNode,
+          threadHeaderNode,
           taskCenterUtilityToolbarNode,
           taskCenterTabsNode,
           taskCenterShellPanelNode,
@@ -278,6 +281,7 @@ vi.mock("./WorkspaceMainArea", () => ({
       }}
     >
       {navbarNode}
+      {threadHeaderNode}
       {taskCenterUtilityToolbarNode}
       {taskCenterTabsNode}
       {chatContent}
@@ -665,6 +669,38 @@ describe("WorkspaceConversationScene", () => {
     expect(mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.shellBottomInset).toBe(
       "calc(0px + 236px)",
     );
+  });
+
+  it("active Thread 应使用紧凑页头承接标题、状态、目录和统一工具栏", () => {
+    const container = renderScene({
+      navbarVisible: true,
+      navbarChrome: "workspace-compact",
+      navbarContextVariant: "task-center",
+      taskCenterTabsNode: <div data-testid="task-center-tabs-stub">tabs</div>,
+      threadHeader: {
+        sessionId: "thread-1",
+        title: "对齐 Codex App GUI",
+        status: "running",
+        workingDirectory: "/workspace/lime",
+      },
+    });
+
+    expect(
+      container.querySelector('[data-testid="thread-workspace-header"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="thread-workspace-header-title"]')
+        ?.textContent,
+    ).toBe("对齐 Codex App GUI");
+    expect(
+      container.querySelector(
+        '[data-testid="thread-workspace-header-actions"] [data-testid="task-center-utility-toolbar-stub"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      mockWorkspaceMainArea.mock.calls.at(-1)?.[0]
+        ?.taskCenterUtilityToolbarNode,
+    ).toBeNull();
   });
 
   it("任务中心场景应把专家信息按钮状态透传给统一工具栏", () => {

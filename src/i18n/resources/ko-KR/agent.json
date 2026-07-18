@@ -1131,7 +1131,7 @@
   "agentChat.messageImageAttachments.unavailable": "이미지를 표시할 수 없습니다",
   "agentChat.navbar.appSwitcher.cursor": "Cursor",
   "agentChat.navbar.appSwitcher.finder": "Finder",
-  "agentChat.navbar.appSwitcher.open": "앱 전환 열기",
+  "agentChat.navbar.appSwitcher.open": "다음에서 열기",
   "agentChat.navbar.appSwitcher.terminal": "Terminal",
   "agentChat.navbar.appSwitcher.toast.noProjectRoot": "이 프로젝트에는 로컬 폴더가 없습니다",
   "agentChat.navbar.appSwitcher.toast.openFailed": "프로젝트를 열지 못했습니다: {{message}}",

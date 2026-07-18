@@ -1131,7 +1131,7 @@
   "agentChat.messageImageAttachments.unavailable": "图片暂时无法显示",
   "agentChat.navbar.appSwitcher.cursor": "Cursor",
   "agentChat.navbar.appSwitcher.finder": "Finder",
-  "agentChat.navbar.appSwitcher.open": "打开应用切换",
+  "agentChat.navbar.appSwitcher.open": "打开位置",
   "agentChat.navbar.appSwitcher.terminal": "Terminal",
   "agentChat.navbar.appSwitcher.toast.noProjectRoot": "当前项目缺少本地目录",
   "agentChat.navbar.appSwitcher.toast.openFailed": "打开项目失败：{{message}}",

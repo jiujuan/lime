@@ -243,6 +243,7 @@ const EMPTY_PROJECTED_QUEUED_TURNS: NonNullable<
   ConversationScenePresentationParams["messageList"]["queuedTurns"]
 > = [];
 interface UseWorkspaceConversationSceneRuntimeParams {
+  threadHeader?: WorkspaceConversationSceneProps["threadHeader"];
   navbarContextVariant?: "default" | "task-center";
   navigationActions: NavigationActions;
   inputbarScene: InputbarScene;
@@ -304,6 +305,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
 }
 
 export function useWorkspaceConversationSceneRuntime({
+  threadHeader,
   navbarContextVariant = "default",
   navigationActions,
   inputbarScene,
@@ -564,6 +566,7 @@ export function useWorkspaceConversationSceneRuntime({
 
   return renderWorkspaceConversationScene({
     scene: {
+      threadHeader,
       landingSurface: landingSurfaceWithSessionRuntime,
       showChatLayout: shellChromeRuntime.showChatLayout,
       compactChrome: shellChromeRuntime.isWorkspaceCompactChrome,

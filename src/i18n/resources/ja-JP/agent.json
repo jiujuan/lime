@@ -1131,7 +1131,7 @@
   "agentChat.messageImageAttachments.unavailable": "画像を表示できません",
   "agentChat.navbar.appSwitcher.cursor": "Cursor",
   "agentChat.navbar.appSwitcher.finder": "Finder",
-  "agentChat.navbar.appSwitcher.open": "アプリ切り替えを開く",
+  "agentChat.navbar.appSwitcher.open": "次で開く",
   "agentChat.navbar.appSwitcher.terminal": "Terminal",
   "agentChat.navbar.appSwitcher.toast.noProjectRoot": "このプロジェクトにはローカルフォルダーがありません",
   "agentChat.navbar.appSwitcher.toast.openFailed": "プロジェクトを開けませんでした: {{message}}",

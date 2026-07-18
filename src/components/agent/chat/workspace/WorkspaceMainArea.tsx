@@ -19,6 +19,7 @@ import { TASK_CENTER_CHROME_RAIL_SURFACE } from "./taskCenterChromeTokens";
 const TASK_CENTER_SPLIT_CHROME_TOP_INSET = "84px";
 const TASK_CENTER_SPLIT_WORKBENCH_TOP_INSET = "42px";
 const TASK_CENTER_DETACHED_TOOLBAR_TOP_INSET = "42px";
+const THREAD_WORKSPACE_HEADER_TOP_INSET = "52px";
 const TASK_CENTER_SPLIT_CHROME_BREAKPOINT_WIDTH = 900;
 const TASK_CENTER_SPLIT_CHROME_BREAKPOINT_HEIGHT = 620;
 const TASK_CENTER_DETACHED_TOOLBAR_BREAKPOINT_WIDTH = 1024;
@@ -49,6 +50,7 @@ function shouldDetachTaskCenterHomeToolbar(): boolean {
 interface WorkspaceMainAreaProps {
   compactChrome: boolean;
   navbarNode: ReactNode;
+  threadHeaderNode?: ReactNode;
   autoHideTaskCenterNavbar?: boolean;
   taskCenterUtilityToolbarNode?: ReactNode;
   taskCenterTabsNode?: ReactNode;
@@ -71,6 +73,7 @@ interface WorkspaceMainAreaProps {
 export function WorkspaceMainArea({
   compactChrome,
   navbarNode,
+  threadHeaderNode,
   autoHideTaskCenterNavbar = false,
   taskCenterUtilityToolbarNode,
   taskCenterTabsNode,
@@ -92,6 +95,7 @@ export function WorkspaceMainArea({
   const { t } = useTranslation("agent");
   const [navbarOpen, setNavbarOpen] = useState(false);
   const hasRightSurfaceContent = Children.count(rightSurfaceContent) > 0;
+  const hasThreadHeader = Children.count(threadHeaderNode) > 0;
   const shouldUseRightSurfaceChatWidth =
     hasRightSurfaceContent && !chatPanelWidth;
   const effectiveChatPanelWidth = shouldUseRightSurfaceChatWidth
@@ -120,6 +124,7 @@ export function WorkspaceMainArea({
     shouldAutoHideNavbar && !isAutoHideNavbarVisible;
   const hasCanvasContent = Children.count(effectiveCanvasContent) > 0;
   const shouldRenderTaskCenterChrome =
+    !hasThreadHeader &&
     !taskCenterUtilityToolbarNode &&
     !shouldAutoHideNavbar &&
     Boolean(taskCenterTabsNode);
@@ -128,6 +133,7 @@ export function WorkspaceMainArea({
     hasCanvasContent &&
     shouldUseTaskCenterSplitChrome(effectiveLayoutMode);
   const shouldDetachTaskCenterToolbar =
+    !hasThreadHeader &&
     !shouldSplitTaskCenterChrome &&
     Boolean(taskCenterUtilityToolbarNode) &&
     (!shouldRenderTaskCenterChrome || shouldDetachTaskCenterHomeToolbar());
@@ -151,13 +157,16 @@ export function WorkspaceMainArea({
     : shouldDetachTaskCenterToolbar
       ? "detached"
       : "stacked";
-  const chatPanelTopInset = shouldSplitTaskCenterChrome
-    ? TASK_CENTER_SPLIT_CHROME_TOP_INSET
-    : shouldDetachTaskCenterToolbar
-      ? TASK_CENTER_DETACHED_TOOLBAR_TOP_INSET
-      : "0px";
-  const canvasPanelTopInset =
-    shouldSplitTaskCenterChrome || shouldDetachTaskCenterToolbar
+  const chatPanelTopInset = hasThreadHeader
+    ? THREAD_WORKSPACE_HEADER_TOP_INSET
+    : shouldSplitTaskCenterChrome
+      ? TASK_CENTER_SPLIT_CHROME_TOP_INSET
+      : shouldDetachTaskCenterToolbar
+        ? TASK_CENTER_DETACHED_TOOLBAR_TOP_INSET
+        : "0px";
+  const canvasPanelTopInset = hasThreadHeader
+    ? THREAD_WORKSPACE_HEADER_TOP_INSET
+    : shouldSplitTaskCenterChrome || shouldDetachTaskCenterToolbar
       ? TASK_CENTER_SPLIT_WORKBENCH_TOP_INSET
       : "0px";
   const taskCenterChromeNode = shouldRenderTaskCenterChrome ? (
@@ -207,13 +216,20 @@ export function WorkspaceMainArea({
   return (
     <MainArea
       $compact={compactChrome}
-      $taskCenterSurface={Boolean(taskCenterChromeNode)}
+      $taskCenterSurface={Boolean(taskCenterChromeNode) || hasThreadHeader}
       data-testid="workspace-main-area"
       data-layout-mode={effectiveLayoutMode}
       data-has-right-surface={hasRightSurfaceContent ? "true" : "false"}
       data-floating-input-overlay={showFloatingInputOverlay ? "true" : "false"}
     >
-      {shouldAutoHideNavbar ? (
+      {hasThreadHeader ? (
+        <div
+          className="absolute inset-x-0 top-0 z-20 h-[52px] min-w-0"
+          data-testid="thread-workspace-header-host"
+        >
+          {threadHeaderNode}
+        </div>
+      ) : shouldAutoHideNavbar ? (
         <AutoHideNavbarBackdrop
           type="button"
           $visible={isAutoHideNavbarVisible}
@@ -225,7 +241,7 @@ export function WorkspaceMainArea({
           }}
         />
       ) : null}
-      {shouldAutoHideNavbar ? (
+      {hasThreadHeader ? null : shouldAutoHideNavbar ? (
         <AutoHideNavbarHost
           data-testid="workspace-navbar-auto-hide-shell"
           data-visible={isAutoHideNavbarVisible ? "true" : "false"}
@@ -257,7 +273,7 @@ export function WorkspaceMainArea({
       ) : taskCenterUtilityToolbarNode ? null : (
         navbarNode
       )}
-      {shouldAutoHideNavbar ? taskCenterTabsNode : null}
+      {!hasThreadHeader && shouldAutoHideNavbar ? taskCenterTabsNode : null}
       {contentSyncNoticeNode}
       {!shouldAutoHideNavbar &&
       taskCenterUtilityToolbarNode &&
@@ -286,7 +302,7 @@ export function WorkspaceMainArea({
       ) : null}
       <GeneralWorkbenchLayoutShell
         $bottomInset={shellBottomInset}
-        $taskCenterSurface={Boolean(taskCenterChromeNode)}
+        $taskCenterSurface={Boolean(taskCenterChromeNode) || hasThreadHeader}
       >
         <LayoutTransitionRenderGate
           mode={effectiveLayoutMode}

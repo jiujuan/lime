@@ -113,6 +113,7 @@ import {
   GENERAL_BROWSER_ASSIST_PROFILE_KEY,
   NOOP_SET_CHAT_MESSAGES,
 } from "./workspace/agentChatWorkspaceHelpers";
+import { buildThreadWorkspaceHeaderViewModel } from "./workspace/threadWorkspaceHeaderViewModel";
 
 export type {
   AgentBackgroundSessionRuntimeSnapshot,
@@ -2312,6 +2313,19 @@ export function AgentChatWorkspace({
         shouldCollapseCodeBlock: shouldCollapseCodeBlockInChat,
       },
       scene: {
+        threadHeader: buildThreadWorkspaceHeaderViewModel({
+          sessionId: sceneSessionId,
+          currentSessionTitle,
+          initialSessionId: normalizedInitialSessionId,
+          initialSessionName,
+          topic: sceneSessionId ? topicById.get(sceneSessionId) : null,
+          sessionWorkingDirectory: sessionWorkingDir,
+          projectRootPath: project?.rootPath,
+          isSending: sceneIsSending,
+          pendingActionCount: scenePendingActions.length,
+          queuedTurnCount: sceneQueuedTurns.length,
+          untitledTaskLabel,
+        }),
         navbarContextVariant:
           agentEntry === "claw" || shouldUseBrowserWorkspaceHomeChrome
             ? "task-center"

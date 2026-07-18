@@ -331,23 +331,27 @@ export async function exerciseNMinusOneUpdate({
       { label: "N-1 Electron updater bridge", timeoutMs: 60_000 },
     );
 
-    let initialSession = await page.evaluate(() =>
-      window.electronAPI.invoke("get_update_install_session"),
+    const initialSession = await waitFor(
+      () =>
+        page
+          .evaluate(() =>
+            window.electronAPI.invoke("get_update_install_session"),
+          )
+          .catch(() => null),
+      {
+        accept: (session) => Boolean(session && session.stage !== "idle"),
+        label: "N-1 automatic update check",
+        timeoutMs: 60_000,
+        intervalMs: 250,
+      },
     );
-    let checkResult = null;
     if (
-      !["checking", "downloading", "completed"].includes(initialSession?.stage)
+      !["checking", "downloading", "completed", "failed"].includes(
+        initialSession.stage,
+      )
     ) {
-      checkResult = await page.evaluate(() =>
-        window.electronAPI.invoke("check_for_updates"),
-      );
-      if (checkResult?.current !== nMinusOneVersion) {
-        throw new Error(
-          `updater reported current version ${String(checkResult?.current)}; expected ${nMinusOneVersion}`,
-        );
-      }
-      initialSession = await page.evaluate(() =>
-        window.electronAPI.invoke("get_update_install_session"),
+      throw new Error(
+        `N-1 automatic updater entered unexpected stage: ${String(initialSession.stage)}`,
       );
     }
     if (initialSession?.currentVersion !== nMinusOneVersion) {
@@ -421,7 +425,6 @@ export async function exerciseNMinusOneUpdate({
       candidateInstalledByUpdater: existsSync(candidateInstalled.executable),
       candidateVersion,
       cdpUrl,
-      checkResult,
       downloadedSession,
       feed: {
         entries: feed.entries.map(({ fileName, sha1, size }) => ({

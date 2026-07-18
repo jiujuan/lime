@@ -1131,7 +1131,7 @@
   "agentChat.messageImageAttachments.unavailable": "圖片暫時無法顯示",
   "agentChat.navbar.appSwitcher.cursor": "Cursor",
   "agentChat.navbar.appSwitcher.finder": "Finder",
-  "agentChat.navbar.appSwitcher.open": "打開應用切換",
+  "agentChat.navbar.appSwitcher.open": "打開位置",
   "agentChat.navbar.appSwitcher.terminal": "Terminal",
   "agentChat.navbar.appSwitcher.toast.noProjectRoot": "目前專案缺少本機目錄",
   "agentChat.navbar.appSwitcher.toast.openFailed": "打開專案失敗：{{message}}",

@@ -29,7 +29,7 @@ Codex App 只作为 GUI 信息架构和交互层级参考；后端 Thread/Turn/I
 - 当前阶段：v2 runtime/projection 骨架完成后的 GUI 差距审计。
 - 已完成：源码结构、三张参考截图、浏览器镜像桌面视口和 Codex App Server/TUI 能力对照。
 - 下一刀：`G1 Thread workspace shell`，先收敛 active Thread 的桌面壳，不新增协议，不重写 runtime。
-- 当前写集：`src/hooks/useAppShellLayout.ts`、`src/components/app-sidebar/useAppSidebarConversationActions.ts`、`src/components/agent/chat/AgentChatWorkspace.tsx`、`src/components/agent/chat/workspace/useTaskCenterChromeNavigationRuntime.ts`、`src/components/agent/chat/workspace/useTaskCenterTabChrome.tsx`、`src/components/agent/chat/workspace/taskCenterTabProjection.ts` 及相邻测试。
+- 当前写集：`src/hooks/useAppShellLayout.ts`、`src/components/app-sidebar/useAppSidebarConversationActions.ts`、`src/components/agent/chat/AgentChatWorkspace.tsx`、`src/components/agent/chat/workspace/ThreadWorkspaceHeader.tsx`、`src/components/agent/chat/workspace/threadWorkspaceHeaderViewModel.ts`、`src/components/agent/chat/workspace/WorkspaceConversationScene.tsx`、`src/components/agent/chat/workspace/WorkspaceMainArea.tsx`、Task Center tab projection/接线、五语言 `agent.json` 及相邻测试。
 - 避让：`lime-rs/crates/app-server/src/runtime/read_model/tests.rs` 当前存在未知改动，本计划不触碰。
 
 ## 3. 基线证据

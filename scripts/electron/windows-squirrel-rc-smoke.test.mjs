@@ -141,6 +141,22 @@ describe("Windows Squirrel RC smoke", () => {
     );
   });
 
+  it("N-1 更新应观察应用自动检查且不得主动触发第二次 native check", () => {
+    const source = fs.readFileSync(
+      "scripts/electron/lib/windows-squirrel-n-minus-one.mjs",
+      "utf8",
+    );
+
+    expect(source).toContain('label: "N-1 automatic update check"');
+    expect(source).toContain('session.stage !== "idle"');
+    expect(source).not.toContain(
+      'window.electronAPI.invoke("check_for_updates")',
+    );
+    expect(source.indexOf('label: "N-1 automatic update check"')).toBeLessThan(
+      source.indexOf('label: "candidate update download terminal"'),
+    );
+  });
+
   it("只选择当前候选版本的 Forge Squirrel installer", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "squirrel-rc-assets-"));
     fs.mkdirSync(path.join(root, "make", "squirrel.windows", "x64"), {

@@ -40,6 +40,8 @@ import {
   EntryBannerClose,
   MessageViewport,
 } from "./WorkspaceStyles";
+import { ThreadWorkspaceHeader } from "./ThreadWorkspaceHeader";
+import type { ThreadWorkspaceHeaderViewModel } from "./threadWorkspaceHeaderViewModel";
 
 type WorkspaceMainAreaProps = Omit<
   ComponentProps<typeof WorkspaceMainArea>,
@@ -252,6 +254,7 @@ function renderWorkspaceChatContent({
 }
 
 interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
+  threadHeader?: ThreadWorkspaceHeaderViewModel | null;
   landingSurface: WorkspaceConversationLandingSurfaceRuntime;
   stepProgressProps?: WorkspaceChatContentParams["stepProgressProps"];
   showChatLayout: boolean;
@@ -347,6 +350,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
 }
 
 export function WorkspaceConversationScene({
+  threadHeader,
   landingSurface,
   stepProgressProps,
   showChatLayout,
@@ -526,6 +530,16 @@ export function WorkspaceConversationScene({
       }}
     />
   ) : null;
+  const shouldRenderThreadHeader = Boolean(
+    threadHeader && navbarContextVariant === "task-center" && showChatLayout,
+  );
+  const threadHeaderNode =
+    shouldRenderThreadHeader && threadHeader ? (
+      <ThreadWorkspaceHeader
+        {...threadHeader}
+        actions={taskCenterUtilityToolbarNode}
+      />
+    ) : null;
   const chatNavbarProps = buildWorkspaceNavbarProps({
     visible: navbarVisible,
     isRunning,
@@ -617,7 +631,10 @@ export function WorkspaceConversationScene({
       <WorkspaceMainArea
         compactChrome={compactChrome}
         navbarNode={navbarNode}
-        taskCenterUtilityToolbarNode={taskCenterUtilityToolbarNode}
+        threadHeaderNode={threadHeaderNode}
+        taskCenterUtilityToolbarNode={
+          shouldRenderThreadHeader ? null : taskCenterUtilityToolbarNode
+        }
         taskCenterTabsNode={taskCenterTabsNode}
         taskCenterShellPanelNode={taskCenterShellPanelNode}
         contentSyncNoticeNode={contentSyncNoticeNode}

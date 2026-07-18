@@ -56,6 +56,7 @@
 - 远端 Quality `29633271523` 的失败证据：Vitest layer budget 36/30（既有仓库基线）、GUI smoke 与 Rust Full 均因 CI sherpa-onnx 预编译库未准备而链接失败；新 SHA `46f445588` 已验证 GUI smoke 预热成功，Rust Full 仍缺该步骤，已追加同样的目标预热并待下一 SHA 复验。
 - Quality `29635195772` 已证明 sherpa 预热修复有效：GUI smoke 通过，Rust workspace 编译并通过 1183 项；剩余 Rust 失败来自 `host_boundary_guard` 检出单元测试 fixture 中的 `electron` 字面量，已改为中性 host fixture 并在本地复测 2 项守卫通过。
 - Release `29635584989` 已越过 Windows 构建、资源校验、staging 和 N-1 下载，真实 N-1 smoke 暴露安装器父进程退出后 `Update.exe` 仍持有 Squirrel 单实例锁；结构化错误为 `AutoUpdater process with arguments --checkForUpdate,... is already running`。RC helper 现按完整 executable path 等待安装器遗留 updater 退出后才启动 N-1 应用，55 项 Electron/Release 定向回归通过。
+- Release `29636439016` 证明外部 `Update.exe` 等待仍不足以消除重复检查：`v1.106.0` 没有候选版本已加入的下载中去重保护，RC harness 的手动检查会与 N-1 App Sidebar 自动检查竞争并再次触发 native updater。harness 现只等待并观察 N-1 自动检查 session，禁止主动调用 `check_for_updates`；真实 Windows 终态待下一次 Release 验证。
 - 真实 Windows packaged L8/N-1 验证：待路径修复后的远端 Release workflow 执行；本机为 macOS，无法代替 Windows 证据。
 
 ## 架构确认

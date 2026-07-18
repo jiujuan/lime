@@ -353,6 +353,53 @@ describe("WorkspaceMainArea", () => {
     expect(workbenchTopHost).toBeNull();
   });
 
+  it("active Thread 页头应成为唯一顶部上下文并为双面板保留稳定高度", () => {
+    const { container } = mountHarness(
+      WorkspaceMainAreaHarness,
+      {
+        navbarNode: <div data-testid="workspace-navbar">navbar</div>,
+        threadHeaderNode: (
+          <div data-testid="thread-header">
+            当前任务
+            <button data-testid="thread-header-action">打开位置</button>
+          </div>
+        ),
+        taskCenterTabsNode: <div data-testid="task-center-tabs">tabs</div>,
+      },
+      mountedRoots,
+    );
+
+    const headerHost = container.querySelector<HTMLElement>(
+      '[data-testid="thread-workspace-header-host"]',
+    );
+
+    expect(headerHost).not.toBeNull();
+    expect(
+      headerHost?.querySelector('[data-testid="thread-header-action"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="workspace-navbar"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="task-center-tabs"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="task-center-home-top-toolbar-host"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector<HTMLElement>(
+        '[data-testid="layout-chat-panel-plain"]',
+      )?.dataset.topInset,
+    ).toBe("52px");
+    expect(
+      container.querySelector<HTMLElement>(
+        '[data-testid="layout-canvas-panel"]',
+      )?.dataset.topInset,
+    ).toBe("52px");
+  });
+
   it("窄宽度任务中心也不应恢复内联会话标签条", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,

@@ -520,6 +520,9 @@ export function TaskCenterUtilityToolbar({
               data-testid="task-center-app-switcher-trigger"
             >
               <VisualStudioCodeIcon />
+              <span>
+                {agentText("agentChat.navbar.appSwitcher.open", "打开位置")}
+              </span>
               <ChevronDown className="h-3 w-3" />
             </Button>
           </PopoverTrigger>
