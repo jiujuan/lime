@@ -142,6 +142,56 @@ export function resolveInstalledSquirrelPaths({
   };
 }
 
+export function isFinalElectronRendererUrl(value) {
+  try {
+    const url = new URL(String(value));
+    return url.searchParams.get("nativeStartup") === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function buildNMinusOneLaunchEnv({
+  baseEnv = process.env,
+  feedUrl,
+  userDataDir,
+}) {
+  const env = {
+    ...baseEnv,
+    APP_SERVER_BIN: "",
+    ELECTRON_E2E_USER_DATA_DIR: userDataDir,
+    LIME_ELECTRON_BRAND_DEV_APP: "0",
+    LIME_ELECTRON_E2E: "1",
+    LIME_ELECTRON_ENABLE_DEV_UPDATER: "1",
+    LIME_ELECTRON_UPDATES_URL: feedUrl,
+  };
+  delete env.LIME_ELECTRON_SMOKE;
+  delete env.NODE_OPTIONS;
+  delete env.VITE_DEV_SERVER_URL;
+  return env;
+}
+
+export async function findReadyElectronUpdaterPage(pages) {
+  for (const candidate of pages) {
+    if (!isFinalElectronRendererUrl(candidate.url())) {
+      continue;
+    }
+    const ready = await candidate
+      .evaluate(
+        () =>
+          window.__LIME_ELECTRON__ === true &&
+          typeof window.electronAPI?.invoke === "function" &&
+          window.electronAPI.supportsCommand("check_for_updates") &&
+          window.electronAPI.supportsCommand("start_update_install_session"),
+      )
+      .catch(() => false);
+    if (ready) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export async function stopInstalledApp(executable) {
   const script = [
     "$target = [System.IO.Path]::GetFullPath($env:LIME_TARGET_EXECUTABLE)",
@@ -192,17 +242,10 @@ export async function exerciseNMinusOneUpdate({
   const userDataDir = mkdtempSync(
     path.join(os.tmpdir(), "lime-windows-n-minus-one-updater-"),
   );
-  const launchEnv = {
-    ...process.env,
-    APP_SERVER_BIN: "",
-    ELECTRON_E2E_USER_DATA_DIR: userDataDir,
-    LIME_ELECTRON_BRAND_DEV_APP: "0",
-    LIME_ELECTRON_E2E: "1",
-    LIME_ELECTRON_ENABLE_DEV_UPDATER: "1",
-    LIME_ELECTRON_UPDATES_URL: staticFeed.url,
-  };
-  delete launchEnv.LIME_ELECTRON_SMOKE;
-  delete launchEnv.VITE_DEV_SERVER_URL;
+  const launchEnv = buildNMinusOneLaunchEnv({
+    feedUrl: staticFeed.url,
+    userDataDir,
+  });
 
   const child = spawn(
     installed.executable,
@@ -238,23 +281,7 @@ export async function exerciseNMinusOneUpdate({
     const page = await waitFor(
       async () => {
         const pages = browser.contexts().flatMap((context) => context.pages());
-        for (const candidate of pages) {
-          const ready = await candidate
-            .evaluate(
-              () =>
-                window.__LIME_ELECTRON__ === true &&
-                typeof window.electronAPI?.invoke === "function" &&
-                window.electronAPI.supportsCommand("check_for_updates") &&
-                window.electronAPI.supportsCommand(
-                  "start_update_install_session",
-                ),
-            )
-            .catch(() => false);
-          if (ready) {
-            return candidate;
-          }
-        }
-        return null;
+        return await findReadyElectronUpdaterPage(pages);
       },
       { label: "N-1 Electron updater bridge", timeoutMs: 60_000 },
     );

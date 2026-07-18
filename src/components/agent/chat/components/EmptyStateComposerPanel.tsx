@@ -66,6 +66,11 @@ import {
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 import type { BaseComposerSendMetadata } from "@/components/input-kit";
+import {
+  HomeComposerAccent,
+  HomeComposerDecorationFrame,
+} from "./HomeComposerDecorations";
+import { useHomeSkinPresentation } from "./homeSkinPresentation";
 
 const ConnectedComposerShell = styled.div`
   width: 100%;
@@ -340,6 +345,7 @@ export function EmptyStateComposerPanel({
   guideHelpLabel,
   onClearGuideHelp,
 }: EmptyStateComposerPanelProps) {
+  const { composerDecorations } = useHomeSkinPresentation();
   const [draftInput, setDraftInput] = useState(input);
   const [activePluginSelection, setActivePluginSelection] =
     useState<InputbarPluginSelection | null>(null);
@@ -663,6 +669,7 @@ export function EmptyStateComposerPanel({
         accessMode={accessMode}
         setAccessMode={setAccessMode}
       />
+      <HomeComposerAccent icon={composerDecorations?.accentIcon} />
 
       {taskEnabled ? (
         <InputbarModeStatusChip
@@ -801,51 +808,53 @@ export function EmptyStateComposerPanel({
         onChange={onFileSelect}
       />
 
-      <ConnectedComposerShell data-testid="inputbar-connected-composer">
-        <InputbarCore
-          uiCopy={inputbarCopy}
-          textareaRef={textareaRef}
-          text={draftInput}
-          setText={setDraftInput}
-          onSend={handleSendDraft}
-          onStop={onStop}
-          isLoading={isLoading}
-          disabled={disabled}
-          onToolClick={handleToolAction}
-          activeTools={{
-            objective_mode: objectiveEnabled,
-            task_mode: taskEnabled,
-            subagent_mode: subagentEnabled,
-          }}
-          pendingImages={pendingImages}
-          onRemoveImage={onRemoveImage}
-          onPaste={
-            onPaste
-              ? (event) =>
-                  onPaste(event as React.ClipboardEvent<HTMLTextAreaElement>)
-              : undefined
-          }
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-          placeholder={placeholder}
-          activeTheme={activeTheme}
-          showDragHandle={false}
-          visualVariant="default"
-          connectedContextBar
-          deferSendOnEnter
-          sendOnPointerDown
-          topExtra={topExtra}
-          leftExtra={leftExtra}
-          trailingMeta={trailingMeta}
-          pathReferences={pathReferences}
-          onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
-          onRemovePathReference={onRemovePathReference}
-          showMetaTools={false}
-          showTextareaExpandButton={false}
-          plusMenu={plusMenu}
-        />
-        {projectContextBar}
-      </ConnectedComposerShell>
+      <HomeComposerDecorationFrame>
+        <ConnectedComposerShell data-testid="inputbar-connected-composer">
+          <InputbarCore
+            uiCopy={inputbarCopy}
+            textareaRef={textareaRef}
+            text={draftInput}
+            setText={setDraftInput}
+            onSend={handleSendDraft}
+            onStop={onStop}
+            isLoading={isLoading}
+            disabled={disabled}
+            onToolClick={handleToolAction}
+            activeTools={{
+              objective_mode: objectiveEnabled,
+              task_mode: taskEnabled,
+              subagent_mode: subagentEnabled,
+            }}
+            pendingImages={pendingImages}
+            onRemoveImage={onRemoveImage}
+            onPaste={
+              onPaste
+                ? (event) =>
+                    onPaste(event as React.ClipboardEvent<HTMLTextAreaElement>)
+                : undefined
+            }
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            placeholder={placeholder}
+            activeTheme={activeTheme}
+            showDragHandle={false}
+            visualVariant="default"
+            connectedContextBar
+            deferSendOnEnter
+            sendOnPointerDown
+            topExtra={topExtra}
+            leftExtra={leftExtra}
+            trailingMeta={trailingMeta}
+            pathReferences={pathReferences}
+            onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
+            onRemovePathReference={onRemovePathReference}
+            showMetaTools={false}
+            showTextareaExpandButton={false}
+            plusMenu={plusMenu}
+          />
+          {projectContextBar}
+        </ConnectedComposerShell>
+      </HomeComposerDecorationFrame>
     </>
   );
 }

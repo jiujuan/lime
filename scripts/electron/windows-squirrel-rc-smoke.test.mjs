@@ -2,12 +2,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import YAML from "yaml";
 
 import {
+  buildNMinusOneLaunchEnv,
   buildWindowsRcSummary,
   compareVersions,
+  findReadyElectronUpdaterPage,
+  isFinalElectronRendererUrl,
   normalizeVersion,
   resolveInstalledSquirrelPaths,
   resolveSquirrelFeed,
@@ -16,6 +19,63 @@ import {
 } from "./windows-squirrel-rc-smoke.mjs";
 
 describe("Windows Squirrel RC smoke", () => {
+  it("等待最终 renderer，不能把带 preload 的临时启动页当成 updater 页面", () => {
+    expect(
+      isFinalElectronRendererUrl(
+        "file:///C:/Users/runner/AppData/Roaming/Lime/startup/main-window-startup.html",
+      ),
+    ).toBe(false);
+    expect(
+      isFinalElectronRendererUrl(
+        "file:///C:/Users/runner/AppData/Local/lime/app-1.106.0/resources/app.asar/dist/index.html?nativeStartup=1",
+      ),
+    ).toBe(true);
+    expect(isFinalElectronRendererUrl("about:blank")).toBe(false);
+  });
+
+  it("updater 页面选择跳过 bridge 已就绪但仍会导航的临时启动页", async () => {
+    const startupPage = {
+      evaluate: vi.fn().mockResolvedValue(true),
+      url: () =>
+        "file:///C:/Users/runner/AppData/Roaming/Lime/startup/main-window-startup.html",
+    };
+    const rendererPage = {
+      evaluate: vi.fn().mockResolvedValue(true),
+      url: () =>
+        "file:///C:/Users/runner/AppData/Local/lime/app-1.106.0/resources/app.asar/dist/index.html?nativeStartup=1",
+    };
+
+    await expect(
+      findReadyElectronUpdaterPage([startupPage, rendererPage]),
+    ).resolves.toBe(rendererPage);
+    expect(startupPage.evaluate).not.toHaveBeenCalled();
+    expect(rendererPage.evaluate).toHaveBeenCalledTimes(1);
+  });
+
+  it("packaged N-1 启动环境移除 Electron 不支持的 NODE_OPTIONS", () => {
+    const env = buildNMinusOneLaunchEnv({
+      baseEnv: {
+        NODE_OPTIONS: "--max-old-space-size=8192",
+        PATH: "C:\\Windows\\System32",
+        VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
+      },
+      feedUrl: "http://127.0.0.1:49152",
+      userDataDir: "C:\\Temp\\lime-updater",
+    });
+
+    expect(env).not.toHaveProperty("NODE_OPTIONS");
+    expect(env).not.toHaveProperty("VITE_DEV_SERVER_URL");
+    expect(env).toEqual(
+      expect.objectContaining({
+        APP_SERVER_BIN: "",
+        ELECTRON_E2E_USER_DATA_DIR: "C:\\Temp\\lime-updater",
+        LIME_ELECTRON_ENABLE_DEV_UPDATER: "1",
+        LIME_ELECTRON_UPDATES_URL: "http://127.0.0.1:49152",
+        PATH: "C:\\Windows\\System32",
+      }),
+    );
+  });
+
   it("只选择当前候选版本的 Forge Squirrel installer", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "squirrel-rc-assets-"));
     fs.mkdirSync(path.join(root, "make", "squirrel.windows", "x64"), {

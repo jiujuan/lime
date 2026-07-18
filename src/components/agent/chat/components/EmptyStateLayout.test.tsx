@@ -79,17 +79,37 @@ describe("EmptyStateLayout", () => {
     expect(firstScreen?.textContent).toContain("青柠一下，灵感即来");
     expect(firstScreen?.contains(prioritySlot)).toBe(true);
     expect(artwork?.querySelector("img")?.getAttribute("src")).toContain(
-      "home-hero.webp",
+      "home-hero-v3.webp",
     );
   });
 
   it("切换皮肤时应实时更换首页 hero 图片", () => {
     const container = renderLayout();
-    const artwork = container.querySelector(
-      '[data-testid="dream-blossom-home-artwork"] img',
-    );
+    const artworkStage = container.querySelector(
+      '[data-testid="dream-blossom-home-artwork"]',
+    ) as HTMLElement | null;
+    const artwork = artworkStage?.querySelector("img");
 
-    expect(artwork?.getAttribute("src")).toContain("home-hero.webp");
+    expect(artwork?.getAttribute("src")).toContain("home-hero-v3.webp");
+    expect(
+      artworkStage
+        ?.querySelector('[data-testid="home-hero-foreground"] img')
+        ?.getAttribute("src"),
+    ).toContain("home-character-v3.png");
+    expect(
+      artworkStage
+        ?.querySelector('[data-testid="home-hero-foreground"]')
+        ?.getAttribute("data-home-hero-motion"),
+    ).toBe("float");
+    expect(
+      artworkStage?.style.getPropertyValue("--home-hero-motion-duration"),
+    ).toBe("4.8s");
+    expect(
+      artworkStage?.style.getPropertyValue("--home-hero-stage-height-wide"),
+    ).toBe("430px");
+    expect(
+      artworkStage?.style.getPropertyValue("--home-hero-foreground-top"),
+    ).toBe("-56px");
 
     act(() => {
       window.dispatchEvent(
@@ -99,6 +119,28 @@ describe("EmptyStateLayout", () => {
       );
     });
 
-    expect(artwork?.getAttribute("src")).toContain("midnight-aurora.jpg");
+    expect(artwork?.getAttribute("src")).toContain("lime-ocean-hero.png");
+    expect(
+      artworkStage?.querySelector(
+        '[data-testid="home-hero-foreground"] img[src*="lime-ocean-foreground.png"]',
+      ),
+    ).toBeTruthy();
+    expect(artworkStage?.getAttribute("data-home-skin-tone")).toBe("dark");
+    expect(
+      artworkStage
+        ?.querySelector('[data-testid="home-hero-foreground"]')
+        ?.getAttribute("data-home-hero-foreground-skin"),
+    ).toBe("lime-ocean");
+    expect(
+      artworkStage
+        ?.querySelector('[data-testid="home-hero-foreground"]')
+        ?.getAttribute("data-home-hero-motion"),
+    ).toBe("pulse");
+    expect(
+      artworkStage?.style.getPropertyValue("--home-hero-art-blend-width"),
+    ).toBe("68%");
+    expect(
+      artworkStage?.style.getPropertyValue("--home-hero-art-blend-left"),
+    ).toBe("");
   });
 });

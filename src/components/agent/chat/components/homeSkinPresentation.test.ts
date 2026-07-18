@@ -3,12 +3,29 @@ import { LIME_COLOR_SCHEMES } from "@/lib/appearance/colorSchemes";
 import { getHomeSkinPresentation } from "./homeSkinPresentation";
 
 describe("homeSkinPresentation", () => {
-  it("梦樱保留当前人物 hero", () => {
+  it("梦樱应使用独立背景和破框人物层", () => {
     const presentation = getHomeSkinPresentation("dream-blossom");
 
-    expect(presentation.image).toContain("home-hero.webp");
+    expect(presentation.image).toContain("home-hero-v3.webp");
+    expect(presentation.foreground?.image).toContain("home-character-v3.png");
+    expect(presentation.heroDecorations?.leadingImage).toContain(
+      "composer-rose.png",
+    );
+    expect(presentation.heroDecorations?.trailingIcon).toBe("sparkles");
+    expect(presentation.composerDecorations?.accentIcon).toBe("heart");
+    expect(presentation.composerDecorations?.ornamentImage).toContain(
+      "composer-rose.png",
+    );
+    expect(presentation.composerDecorations?.keepsakeImage).toContain(
+      "home-character-v3.png",
+    );
     expect(presentation.tone).toBe("light");
-    expect(presentation.artPosition).toBe("58% top");
+    expect(presentation.artPosition).toBe("50% center");
+    expect(presentation.stageHeightWide).toBe("430px");
+    expect(presentation.foreground?.top).toBe("-56px");
+    expect(presentation.breakoutSpace).toBe("68px");
+    expect(presentation.foreground?.motion?.kind).toBe("float");
+    expect(presentation.foreground?.motion?.duration).toBe("4.8s");
   });
 
   it("不同皮肤应使用对应的图片族和明暗构图", () => {
@@ -25,11 +42,17 @@ describe("homeSkinPresentation", () => {
       "100% center",
     );
     expect(getHomeSkinPresentation("lime-forest").artFit).toBe("contain");
-    expect(getHomeSkinPresentation("lime-forest").artBlendLeft).toBe("48%");
-    expect(getHomeSkinPresentation("lime-luxury").artBlendWidth).toBe("16%");
+    expect(getHomeSkinPresentation("lime-forest").artBlendWidth).toBe("68%");
+    expect(getHomeSkinPresentation("lime-luxury").artBlendWidth).toBe("68%");
     expect(getHomeSkinPresentation("lime-ocean").image).toContain(
       "lime-ocean-hero.png",
     );
+    expect(
+      getHomeSkinPresentation("lime-ocean").heroDecorations?.trailingIcon,
+    ).toBe("shield");
+    expect(
+      getHomeSkinPresentation("lime-ocean").composerDecorations?.keepsakeImage,
+    ).toContain("lime-ocean-foreground.png");
     expect(getHomeSkinPresentation("lime-ocean").artFit).toBe("contain");
     expect(getHomeSkinPresentation("lime-sand").image).toContain(
       "lime-sand-hero.png",
@@ -70,6 +93,69 @@ describe("homeSkinPresentation", () => {
     expect(new Set(images).size).toBe(LIME_COLOR_SCHEMES.length);
   });
 
+  it("每套皮肤都应声明独立的首页装饰组合", () => {
+    const decorations = LIME_COLOR_SCHEMES.map((scheme) =>
+      getHomeSkinPresentation(scheme.id),
+    );
+
+    expect(
+      decorations.every(
+        (presentation) =>
+          Boolean(presentation.heroDecorations?.trailingIcon) &&
+          Boolean(presentation.composerDecorations?.accentIcon) &&
+          Boolean(presentation.foreground?.image) &&
+          Boolean(presentation.composerDecorations?.keepsakeImage) &&
+          Boolean(presentation.composerDecorations?.keepsakeVariant),
+      ),
+    ).toBe(true);
+    expect(
+      new Set(
+        decorations.map(
+          (presentation) => presentation.composerDecorations?.keepsakeImage,
+        ),
+      ).size,
+    ).toBe(LIME_COLOR_SCHEMES.length);
+    expect(
+      new Set(
+        decorations.map(
+          (presentation) => presentation.heroDecorations?.trailingIcon,
+        ),
+      ).size,
+    ).toBe(LIME_COLOR_SCHEMES.length);
+  });
+
+  it("每套皮肤都应声明可破框的独立前景布局", () => {
+    const foregrounds = LIME_COLOR_SCHEMES.map(
+      (scheme) => getHomeSkinPresentation(scheme.id).foreground,
+    );
+
+    expect(foregrounds.every((foreground) => Boolean(foreground?.image))).toBe(
+      true,
+    );
+    expect(
+      new Set(foregrounds.map((foreground) => foreground?.image)).size,
+    ).toBe(LIME_COLOR_SCHEMES.length);
+    expect(
+      foregrounds.every(
+        (foreground) =>
+          Boolean(foreground?.top) &&
+          Boolean(foreground?.topMobile) &&
+          Boolean(foreground?.width) &&
+          Boolean(foreground?.widthMobile),
+      ),
+    ).toBe(true);
+    expect(
+      foregrounds.every(
+        (foreground) =>
+          Boolean(foreground?.motion?.kind) &&
+          /^\d+(\.\d+)?s$/.test(foreground?.motion?.duration ?? ""),
+      ),
+    ).toBe(true);
+    expect(
+      new Set(foregrounds.map((foreground) => foreground?.motion?.kind)).size,
+    ).toBe(4);
+  });
+
   it("hero 外框和阴影应跟随皮肤色调", () => {
     const dream = getHomeSkinPresentation("dream-blossom");
     const ocean = getHomeSkinPresentation("lime-ocean");
@@ -84,6 +170,7 @@ describe("homeSkinPresentation", () => {
   it("未知皮肤应回退到梦樱构图", () => {
     const presentation = getHomeSkinPresentation("unknown");
     expect(presentation.skinId).toBe("dream-blossom");
-    expect(presentation.image).toContain("home-hero.webp");
+    expect(presentation.image).toContain("home-hero-v3.webp");
+    expect(presentation.foreground?.image).toContain("home-character-v3.png");
   });
 });

@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import styled, { keyframes } from "styled-components";
+import { HomeSkinDecorationIcon } from "./HomeComposerDecorations";
 import { useHomeSkinPresentation } from "./homeSkinPresentation";
 
 const heroReveal = keyframes`
@@ -11,6 +12,55 @@ const heroReveal = keyframes`
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+`;
+
+const foregroundFloat = keyframes`
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, calc(var(--home-hero-motion-distance, 12px) * -1), 0)
+      rotate(var(--home-hero-motion-rotate, 0deg));
+  }
+`;
+
+const foregroundSway = keyframes`
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(calc(var(--home-hero-motion-distance, 12px) * -1), 0, 0)
+      rotate(var(--home-hero-motion-rotate, 0deg));
+  }
+`;
+
+const foregroundPulse = keyframes`
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(var(--home-hero-motion-scale, 1.04));
+    opacity: 0.94;
+  }
+`;
+
+const foregroundDrift = keyframes`
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(
+        calc(var(--home-hero-motion-distance, 12px) * -1),
+        calc(var(--home-hero-motion-distance, 12px) * -0.55),
+        0
+      )
+      rotate(var(--home-hero-motion-rotate, 0deg));
   }
 `;
 
@@ -41,9 +91,9 @@ const ArtworkStage = styled.div`
   position: relative;
   isolation: isolate;
   width: min(1180px, 100%);
-  min-height: 310px;
-  margin: 0 auto;
-  overflow: hidden;
+  margin: var(--home-hero-breakout-space, 0) auto 0;
+  min-height: var(--home-hero-stage-height, 310px);
+  overflow: var(--home-hero-stage-overflow, hidden);
   border: 1px solid
     var(--home-hero-border, var(--lime-home-hero-border, #efc2d2));
   border-radius: 24px;
@@ -58,23 +108,36 @@ const ArtworkStage = styled.div`
   );
 
   @media (min-width: 1280px) and (min-height: 900px) {
-    min-height: 340px;
+    min-height: var(--home-hero-stage-height-wide, 340px);
   }
 
   @media (max-width: 760px) {
-    min-height: 270px;
+    margin-top: var(--home-hero-breakout-space-mobile, 0);
+    min-height: var(--home-hero-stage-height-mobile, 270px);
     border-radius: 18px;
   }
 
   @media (max-height: 780px) {
-    min-height: 250px;
+    min-height: var(--home-hero-stage-height-short, 250px);
   }
+`;
+
+const ArtworkBackdrop = styled.div`
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  border-radius: inherit;
+  background: var(
+    --home-hero-fallback,
+    var(--lime-home-hero-fallback, #fbe8ef)
+  );
 `;
 
 const ArtworkImage = styled.img`
   position: absolute;
   inset: 0;
-  z-index: -2;
+  z-index: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -95,7 +158,7 @@ const ArtworkImage = styled.img`
 const ArtworkTint = styled.div`
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 1;
   pointer-events: none;
   background: var(
     --home-hero-scrim,
@@ -146,8 +209,28 @@ const SkinMetaBar = styled.div`
 const SkinMetaCopy = styled.div`
   display: flex;
   min-width: 0;
+  align-items: center;
+  gap: 0.18rem;
+`;
+
+const SkinMetaArtwork = styled.img`
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  object-fit: contain;
+`;
+
+const SkinMetaStack = styled.div`
+  display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 0.18rem;
+`;
+
+const SkinMetaActions = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 `;
 
 const SkinBrand = styled.span`
@@ -180,28 +263,90 @@ const ArtworkBlend = styled.div`
   position: absolute;
   top: 0;
   bottom: 0;
-  left: var(--home-hero-art-blend-left, 100%);
-  z-index: 0;
+  left: 0;
+  z-index: 2;
   width: var(--home-hero-art-blend-width, 0%);
   background: linear-gradient(
     90deg,
     var(--home-hero-art-blend-color, transparent) 0%,
+    var(--home-hero-art-blend-color, transparent) 55%,
     color-mix(
         in srgb,
-        var(--home-hero-art-blend-color, transparent) 72%,
+        var(--home-hero-art-blend-color, transparent) 78%,
         transparent
       )
-      38%,
+      72%,
     transparent 100%
   );
   pointer-events: none;
+`;
+
+const ArtworkForeground = styled.div`
+  position: absolute;
+  top: var(--home-hero-foreground-top, auto);
+  right: var(--home-hero-foreground-right, auto);
+  bottom: var(--home-hero-foreground-bottom, auto);
+  left: var(--home-hero-foreground-left, auto);
+  z-index: 2;
+  width: var(--home-hero-foreground-width, 0);
+  overflow: visible;
+  pointer-events: none;
+  transform-origin: 70% 82%;
+  will-change: transform;
+
+  &[data-home-hero-motion="float"] {
+    animation: ${foregroundFloat} var(--home-hero-motion-duration, 8s)
+      ease-in-out var(--home-hero-motion-delay, 0s) infinite;
+  }
+
+  &[data-home-hero-motion="sway"] {
+    animation: ${foregroundSway} var(--home-hero-motion-duration, 8s)
+      ease-in-out var(--home-hero-motion-delay, 0s) infinite;
+  }
+
+  &[data-home-hero-motion="pulse"] {
+    animation: ${foregroundPulse} var(--home-hero-motion-duration, 8s)
+      ease-in-out var(--home-hero-motion-delay, 0s) infinite;
+  }
+
+  &[data-home-hero-motion="drift"] {
+    animation: ${foregroundDrift} var(--home-hero-motion-duration, 8s)
+      ease-in-out var(--home-hero-motion-delay, 0s) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none !important;
+    will-change: auto;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    transform: var(--home-hero-foreground-transform, none);
+    user-select: none;
+    filter: var(--home-hero-foreground-filter, none);
+  }
+
+  @media (max-width: 760px) {
+    top: var(--home-hero-foreground-top-mobile, auto);
+    right: var(--home-hero-foreground-right-mobile, auto);
+    bottom: var(--home-hero-foreground-bottom-mobile, auto);
+    left: var(--home-hero-foreground-left-mobile, auto);
+    width: var(--home-hero-foreground-width-mobile, 0);
+
+    img {
+      transform: var(--home-hero-foreground-transform-mobile, none);
+    }
+  }
 `;
 
 const LeadTextGroup = styled.div`
   position: relative;
   display: flex;
   width: min(var(--home-hero-content-width, 48%), 520px);
-  min-height: 310px;
+  min-height: var(--home-hero-stage-height, 310px);
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
@@ -209,21 +354,21 @@ const LeadTextGroup = styled.div`
   padding: 2rem 0 2rem clamp(1.75rem, 4vw, 3.5rem);
   color: var(--home-hero-title-color, var(--lime-text-strong, #402530));
   text-align: left;
-  z-index: 1;
+  z-index: 3;
 
   @media (min-width: 1280px) and (min-height: 900px) {
-    min-height: 340px;
+    min-height: var(--home-hero-stage-height-wide, 340px);
   }
 
   @media (max-width: 760px) {
     width: 58%;
-    min-height: 270px;
+    min-height: var(--home-hero-stage-height-mobile, 270px);
     gap: 0.7rem;
     padding-left: 1.35rem;
   }
 
   @media (max-height: 780px) {
-    min-height: 250px;
+    min-height: var(--home-hero-stage-height-short, 250px);
   }
 `;
 
@@ -331,6 +476,9 @@ export function EmptyStateHero({
 }: EmptyStateHeroProps) {
   const presentation = useHomeSkinPresentation();
   const isDarkArtwork = presentation.tone === "dark";
+  const heroDecorations = presentation.heroDecorations;
+  const foreground = presentation.foreground;
+  const foregroundMotion = foreground?.motion;
   const presentationStyle = {
     "--home-hero-art-position": presentation.artPosition,
     "--home-hero-art-position-mobile": presentation.artPositionMobile,
@@ -378,9 +526,35 @@ export function EmptyStateHero({
     "--home-hero-status-color": isDarkArtwork
       ? "#f1fbf8"
       : "var(--lime-brand-strong, #963958)",
-    "--home-hero-art-blend-left": presentation.artBlendLeft ?? "100%",
     "--home-hero-art-blend-width": presentation.artBlendWidth ?? "0%",
     "--home-hero-art-blend-color": presentation.fallback,
+    "--home-hero-stage-height": presentation.stageHeight ?? "310px",
+    "--home-hero-stage-height-wide": presentation.stageHeightWide ?? "340px",
+    "--home-hero-stage-height-mobile":
+      presentation.stageHeightMobile ?? "270px",
+    "--home-hero-stage-height-short": presentation.stageHeight ?? "250px",
+    "--home-hero-stage-overflow": foreground ? "visible" : "hidden",
+    "--home-hero-foreground-width": foreground?.width ?? "0",
+    "--home-hero-foreground-width-mobile": foreground?.widthMobile ?? "0",
+    "--home-hero-foreground-top": foreground?.top ?? "auto",
+    "--home-hero-foreground-top-mobile": foreground?.topMobile ?? "auto",
+    "--home-hero-foreground-right": foreground?.right ?? "auto",
+    "--home-hero-foreground-right-mobile": foreground?.rightMobile ?? "auto",
+    "--home-hero-foreground-bottom": foreground?.bottom ?? "auto",
+    "--home-hero-foreground-bottom-mobile": foreground?.bottomMobile ?? "auto",
+    "--home-hero-foreground-left": foreground?.left ?? "auto",
+    "--home-hero-foreground-left-mobile": foreground?.leftMobile ?? "auto",
+    "--home-hero-foreground-transform": foreground?.transform ?? "none",
+    "--home-hero-foreground-transform-mobile":
+      foreground?.transformMobile ?? "none",
+    "--home-hero-motion-duration": foregroundMotion?.duration ?? "8s",
+    "--home-hero-motion-delay": foregroundMotion?.delay ?? "0s",
+    "--home-hero-motion-distance": foregroundMotion?.distance ?? "12px",
+    "--home-hero-motion-rotate": foregroundMotion?.rotate ?? "0deg",
+    "--home-hero-motion-scale": foregroundMotion?.scale ?? "1.04",
+    "--home-hero-breakout-space": presentation.breakoutSpace ?? "0",
+    "--home-hero-breakout-space-mobile":
+      presentation.breakoutSpaceMobile ?? "0",
   } as CSSProperties;
 
   return (
@@ -391,24 +565,50 @@ export function EmptyStateHero({
           data-home-skin-tone={presentation.tone}
           style={presentationStyle}
         >
-          <ArtworkImage src={presentation.image} alt="" aria-hidden="true" />
-          <ArtworkTint aria-hidden="true" />
-          <ArtworkBlend aria-hidden="true" />
+          <ArtworkBackdrop>
+            <ArtworkImage src={presentation.image} alt="" aria-hidden="true" />
+            <ArtworkTint aria-hidden="true" />
+            <ArtworkBlend aria-hidden="true" />
+          </ArtworkBackdrop>
+          {foreground ? (
+            <ArtworkForeground
+              data-testid="home-hero-foreground"
+              data-home-hero-foreground-skin={presentation.skinId}
+              data-home-hero-motion={foregroundMotion?.kind ?? "none"}
+              aria-hidden="true"
+            >
+              <img src={foreground.image} alt="" />
+            </ArtworkForeground>
+          ) : null}
           {skinBrandSubtitle || skinTagline || skinStatus ? (
             <SkinMetaBar>
               {skinBrandSubtitle || skinTagline ? (
                 <SkinMetaCopy>
-                  {skinBrandSubtitle ? (
-                    <SkinBrand>{skinBrandSubtitle}</SkinBrand>
+                  {heroDecorations?.leadingImage ? (
+                    <SkinMetaArtwork
+                      src={heroDecorations.leadingImage}
+                      alt=""
+                      aria-hidden="true"
+                    />
                   ) : null}
-                  {skinTagline ? (
-                    <SkinTagline>{skinTagline}</SkinTagline>
-                  ) : null}
+                  <SkinMetaStack>
+                    {skinBrandSubtitle ? (
+                      <SkinBrand>{skinBrandSubtitle}</SkinBrand>
+                    ) : null}
+                    {skinTagline ? (
+                      <SkinTagline>{skinTagline}</SkinTagline>
+                    ) : null}
+                  </SkinMetaStack>
                 </SkinMetaCopy>
               ) : (
                 <span />
               )}
-              {skinStatus ? <SkinStatus>{skinStatus}</SkinStatus> : null}
+              <SkinMetaActions>
+                {heroDecorations?.trailingIcon ? (
+                  <HomeSkinDecorationIcon icon={heroDecorations.trailingIcon} />
+                ) : null}
+                {skinStatus ? <SkinStatus>{skinStatus}</SkinStatus> : null}
+              </SkinMetaActions>
             </SkinMetaBar>
           ) : null}
           <LeadTextGroup>

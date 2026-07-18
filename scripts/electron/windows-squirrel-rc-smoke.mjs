@@ -17,8 +17,11 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
+  buildNMinusOneLaunchEnv,
   compareVersions,
   exerciseNMinusOneUpdate,
+  findReadyElectronUpdaterPage,
+  isFinalElectronRendererUrl,
   normalizeVersion,
   resolveInstalledSquirrelPaths,
   resolveSquirrelFeed,
@@ -27,7 +30,10 @@ import {
 } from "./lib/windows-squirrel-n-minus-one.mjs";
 
 export {
+  buildNMinusOneLaunchEnv,
   compareVersions,
+  findReadyElectronUpdaterPage,
+  isFinalElectronRendererUrl,
   normalizeVersion,
   resolveInstalledSquirrelPaths,
   resolveSquirrelFeed,
