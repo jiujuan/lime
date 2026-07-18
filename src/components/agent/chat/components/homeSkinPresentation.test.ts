@@ -60,6 +60,12 @@ describe("homeSkinPresentation", () => {
       getHomeSkinPresentation("lime-ocean").composerDecorations?.keepsakeImage,
     ).toContain("lime-ocean-foreground.png");
     expect(getHomeSkinPresentation("lime-ocean").artFit).toBe("contain");
+    expect(getHomeSkinPresentation("lime-ocean").foreground?.width).toBe(
+      "40%",
+    );
+    expect(getHomeSkinPresentation("lime-ocean").foreground?.bottom).toBe(
+      "-2px",
+    );
     expect(getHomeSkinPresentation("lime-sand").image).toContain(
       "lime-sand-hero.png",
     );
