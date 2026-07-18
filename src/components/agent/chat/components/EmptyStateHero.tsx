@@ -98,27 +98,33 @@ const silkDrift = keyframes`
   }
 `;
 
-const stageBeat = keyframes`
+const stageSway = keyframes`
   0%,
-  58%,
   100% {
     transform: translate3d(0, 0, 0) rotate(0deg);
   }
-  45% {
+  25% {
     transform: translate3d(
-        0,
-        calc(var(--home-hero-motion-distance, 12px) * -1),
+        calc(var(--home-hero-motion-distance, 8px) * -0.7),
+        calc(var(--home-hero-motion-distance, 8px) * -0.45),
         0
       )
-      rotate(calc(var(--home-hero-motion-rotate, 0.8deg) * -1));
+      rotate(calc(var(--home-hero-motion-rotate, 0.4deg) * -1));
   }
-  52% {
+  50% {
     transform: translate3d(
         0,
-        calc(var(--home-hero-motion-distance, 12px) * -0.4),
+        calc(var(--home-hero-motion-distance, 8px) * -1),
+        0
+      );
+  }
+  75% {
+    transform: translate3d(
+        calc(var(--home-hero-motion-distance, 8px) * 0.7),
+        calc(var(--home-hero-motion-distance, 8px) * -0.45),
         0
       )
-      rotate(calc(var(--home-hero-motion-rotate, 0.8deg) * 0.35));
+      rotate(var(--home-hero-motion-rotate, 0.4deg));
   }
 `;
 
@@ -248,6 +254,7 @@ const ArtworkStage = styled.div`
   margin: var(--home-hero-breakout-space, 0) auto 0;
   min-height: var(--home-hero-stage-height, 310px);
   overflow: var(--home-hero-stage-overflow, hidden);
+  z-index: var(--home-hero-stage-z-index, auto);
   border: 1px solid
     var(--home-hero-border, var(--lime-home-hero-border, #efc2d2));
   border-radius: 24px;
@@ -441,7 +448,7 @@ const ArtworkForeground = styled.div`
   right: var(--home-hero-foreground-right, auto);
   bottom: var(--home-hero-foreground-bottom, auto);
   left: var(--home-hero-foreground-left, auto);
-  z-index: 2;
+  z-index: 6;
   width: var(--home-hero-foreground-width, 0);
   overflow: visible;
   pointer-events: none;
@@ -478,9 +485,8 @@ const ArtworkForeground = styled.div`
     animation-name: ${silkDrift};
   }
 
-  &[data-home-hero-motion="stage-beat"] {
-    animation-name: ${stageBeat};
-    animation-timing-function: cubic-bezier(0.45, 0, 0.2, 1);
+  &[data-home-hero-motion="stage-sway"] {
+    animation-name: ${stageSway};
   }
 
   &[data-home-hero-motion="creative-tilt"] {
@@ -725,6 +731,7 @@ export function EmptyStateHero({
       presentation.stageHeightMobile ?? "270px",
     "--home-hero-stage-height-short": presentation.stageHeight ?? "250px",
     "--home-hero-stage-overflow": foreground ? "visible" : "hidden",
+    "--home-hero-stage-z-index": foreground ? "60" : "auto",
     "--home-hero-foreground-width": foreground?.width ?? "0",
     "--home-hero-foreground-width-mobile": foreground?.widthMobile ?? "0",
     "--home-hero-foreground-top": foreground?.top ?? "auto",
@@ -757,6 +764,7 @@ export function EmptyStateHero({
         <ArtworkStage
           data-testid="dream-blossom-home-artwork"
           data-home-skin-tone={presentation.tone}
+          data-home-hero-breakout-layer={foreground ? "above-chrome" : "stage"}
           style={presentationStyle}
         >
           <ArtworkBackdrop>

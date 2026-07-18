@@ -22,8 +22,9 @@ describe("homeSkinPresentation", () => {
     expect(presentation.tone).toBe("light");
     expect(presentation.artPosition).toBe("50% center");
     expect(presentation.stageHeightWide).toBe("430px");
-    expect(presentation.foreground?.top).toBe("-56px");
-    expect(presentation.breakoutSpace).toBe("68px");
+    expect(presentation.foreground?.top).toBe("auto");
+    expect(presentation.foreground?.bottom).toBe("-1px");
+    expect(presentation.breakoutSpace).toBe("30px");
     expect(presentation.foreground?.motion?.kind).toBe("portrait-breathe");
     expect(presentation.foreground?.motion?.duration).toBe("4.8s");
   });
@@ -43,7 +44,7 @@ describe("homeSkinPresentation", () => {
     );
     expect(getHomeSkinPresentation("lime-forest").artFit).toBe("contain");
     expect(getHomeSkinPresentation("lime-forest").foreground?.width).toBe(
-      "43%",
+      "46%",
     );
     expect(getHomeSkinPresentation("lime-forest").foreground?.bottom).toBe(
       "-2px",
@@ -60,9 +61,7 @@ describe("homeSkinPresentation", () => {
       getHomeSkinPresentation("lime-ocean").composerDecorations?.keepsakeImage,
     ).toContain("lime-ocean-foreground.png");
     expect(getHomeSkinPresentation("lime-ocean").artFit).toBe("contain");
-    expect(getHomeSkinPresentation("lime-ocean").foreground?.width).toBe(
-      "40%",
-    );
+    expect(getHomeSkinPresentation("lime-ocean").foreground?.width).toBe("47%");
     expect(getHomeSkinPresentation("lime-ocean").foreground?.bottom).toBe(
       "-2px",
     );
@@ -72,6 +71,12 @@ describe("homeSkinPresentation", () => {
     expect(getHomeSkinPresentation("lime-neon").image).toContain(
       "lime-neon-hero.png",
     );
+    expect(getHomeSkinPresentation("lime-neon").foreground?.motion?.kind).toBe(
+      "stage-sway",
+    );
+    expect(
+      getHomeSkinPresentation("lime-neon").foreground?.motion?.duration,
+    ).toBe("5.2s");
     expect(getHomeSkinPresentation("lime-citron").image).toContain(
       "lime-citron-hero.png",
     );
@@ -96,7 +101,7 @@ describe("homeSkinPresentation", () => {
       "lime-luxury-hero.png",
     );
     expect(getHomeSkinPresentation("lime-luxury").foreground?.width).toBe(
-      "43%",
+      "48%",
     );
     expect(getHomeSkinPresentation("lime-luxury").foreground?.bottom).toBe(
       "-1px",
@@ -172,6 +177,33 @@ describe("homeSkinPresentation", () => {
     expect(
       new Set(foregrounds.map((foreground) => foreground?.motion?.kind)).size,
     ).toBe(11);
+  });
+
+  it("人物类前景应使用底边锚定避免身体切面悬空", () => {
+    const characterSkins = [
+      "dream-blossom",
+      "lime-forest",
+      "lime-ocean",
+      "lime-sand",
+      "lime-neon",
+      "lime-citron",
+      "lime-dusk",
+      "lime-vivid",
+      "lime-literary",
+      "lime-luxury",
+    ] as const;
+
+    expect(
+      characterSkins.every((skinId) => {
+        const foreground = getHomeSkinPresentation(skinId).foreground;
+        return (
+          foreground?.top === "auto" &&
+          foreground.topMobile === "auto" &&
+          Boolean(foreground.bottom) &&
+          Boolean(foreground.bottomMobile)
+        );
+      }),
+    ).toBe(true);
   });
 
   it("hero 外框和阴影应跟随皮肤色调", () => {

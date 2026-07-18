@@ -1,6 +1,7 @@
 const MARKDOWN_TOKEN_RE = /[*_`~]+/g;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
 const MIN_COMPACT_EQUIVALENCE_LENGTH = 24;
+const MIN_REVISED_THINKING_LENGTH = 36;
 
 export function normalizeComparableContentText(text: string): string {
   return text
@@ -36,8 +37,8 @@ export function areComparableContentTextsEqual(
   const compactRight = normalizeCompactComparableContentText(right);
   return Boolean(
     compactLeft &&
-      compactLeft === compactRight &&
-      hasEnoughCompactSignal(compactLeft, compactRight),
+    compactLeft === compactRight &&
+    hasEnoughCompactSignal(compactLeft, compactRight),
   );
 }
 
@@ -49,16 +50,16 @@ export function isComparableContentTextPrefix(
   const normalizedText = normalizeComparableContentText(text);
   return Boolean(
     normalizedPrefix &&
-      normalizedText &&
-      (normalizedText.startsWith(normalizedPrefix) ||
-        (() => {
-          const compactPrefix = normalizeCompactComparableContentText(prefix);
-          const compactText = normalizeCompactComparableContentText(text);
-          return (
-            compactText.startsWith(compactPrefix) &&
-            hasEnoughCompactSignal(compactPrefix, compactText)
-          );
-        })()),
+    normalizedText &&
+    (normalizedText.startsWith(normalizedPrefix) ||
+      (() => {
+        const compactPrefix = normalizeCompactComparableContentText(prefix);
+        const compactText = normalizeCompactComparableContentText(text);
+        return (
+          compactText.startsWith(compactPrefix) &&
+          hasEnoughCompactSignal(compactPrefix, compactText)
+        );
+      })()),
   );
 }
 
@@ -81,8 +82,8 @@ export function isComparableContentTextContainedIn(
   const compactContainer = normalizeCompactComparableContentText(container);
   return Boolean(
     compactContained &&
-      compactContainer.includes(compactContained) &&
-      hasEnoughCompactSignal(compactContained, compactContainer),
+    compactContainer.includes(compactContained) &&
+    hasEnoughCompactSignal(compactContained, compactContainer),
   );
 }
 
@@ -125,11 +126,49 @@ export function dedupeAdjacentDuplicateParagraphs(text: string): string {
   const deduped: string[] = [];
   for (const paragraph of paragraphs) {
     const previous = deduped[deduped.length - 1];
-    if (previous && areComparableContentTextsEqual(previous, paragraph)) {
+    if (
+      previous &&
+      (areComparableContentTextsEqual(previous, paragraph) ||
+        areLikelyRevisedThinkingParagraph(previous, paragraph))
+    ) {
       continue;
     }
     deduped.push(paragraph);
   }
 
   return deduped.join("\n\n");
+}
+
+export function areLikelyRevisedThinkingParagraph(
+  previous: string,
+  next: string,
+): boolean {
+  const normalizedPrevious = normalizeComparableContentText(previous);
+  const normalizedNext = normalizeComparableContentText(next);
+  if (
+    normalizedPrevious.length < MIN_REVISED_THINKING_LENGTH ||
+    normalizedNext.length < MIN_REVISED_THINKING_LENGTH
+  ) {
+    return false;
+  }
+
+  const previousLead = extractLeadingSentence(normalizedPrevious);
+  const nextLead = extractLeadingSentence(normalizedNext);
+  if (!previousLead || previousLead !== nextLead) {
+    return false;
+  }
+
+  return (
+    !endsWithSentencePunctuation(normalizedPrevious) &&
+    endsWithSentencePunctuation(normalizedNext)
+  );
+}
+
+function extractLeadingSentence(text: string): string | null {
+  const match = text.match(/^(.+?[。！？.!?])/u);
+  return match?.[1] ? normalizeComparableContentText(match[1]) : null;
+}
+
+function endsWithSentencePunctuation(text: string): boolean {
+  return /[。！？.!?]$/u.test(text.trim());
 }

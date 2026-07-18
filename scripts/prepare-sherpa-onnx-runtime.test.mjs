@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ensureMacBinaryRpath,
+  buildSherpaArchiveExtractCommand,
   MACOS_EXECUTABLE_RPATH,
   readMachORpaths,
   resolveSherpaOnnxSysVersion,
@@ -60,6 +61,25 @@ version = "1.13.0"
     expect(plan.libs).toEqual(["onnxruntime.dll", "sherpa-onnx-c-api.dll"]);
   });
 
+  it("解压 sherpa 归档时使用 workspace cwd，兼容 Windows 驱动器路径", () => {
+    expect(
+      buildSherpaArchiveExtractCommand({
+        archivePath:
+          "D:\\a\\lime\\lime\\lime-rs\\target\\sherpa-onnx-prebuilt\\sherpa-onnx-v1.13.0-win-x64-shared-MT-Release-lib.tar.bz2",
+        prebuiltRoot:
+          "D:\\a\\lime\\lime\\lime-rs\\target\\sherpa-onnx-prebuilt",
+      }),
+    ).toEqual({
+      args: [
+        "-xjf",
+        "sherpa-onnx-v1.13.0-win-x64-shared-MT-Release-lib.tar.bz2",
+        "-C",
+        ".",
+      ],
+      cwd: "D:\\a\\lime\\lime\\lime-rs\\target\\sherpa-onnx-prebuilt",
+    });
+  });
+
   it("支持显式 Rust workspace 目录，不再暴露旧目录参数口径", () => {
     const plan = resolveSherpaRuntimePlan({
       repoRoot: "/repo",
@@ -103,21 +123,24 @@ Load command 2
 
   it("缺少 macOS rpath 时为 app-server 二进制补 @executable_path", () => {
     const calls = [];
-    const result = ensureMacBinaryRpath("/repo/lime-rs/target/debug/app-server", {
-      exists: () => true,
-      getStats: () => ({ isFile: () => true, size: 1 }),
-      platform: "darwin",
-      runner(command, args, options) {
-        calls.push([command, args, options]);
-        if (command === "otool") {
-          return { status: 0, stdout: "" };
-        }
-        if (command === "install_name_tool") {
-          return { status: 0 };
-        }
-        throw new Error(`unexpected command: ${command}`);
+    const result = ensureMacBinaryRpath(
+      "/repo/lime-rs/target/debug/app-server",
+      {
+        exists: () => true,
+        getStats: () => ({ isFile: () => true, size: 1 }),
+        platform: "darwin",
+        runner(command, args, options) {
+          calls.push([command, args, options]);
+          if (command === "otool") {
+            return { status: 0, stdout: "" };
+          }
+          if (command === "install_name_tool") {
+            return { status: 0 };
+          }
+          throw new Error(`unexpected command: ${command}`);
+        },
       },
-    });
+    );
 
     expect(result).toMatchObject({
       checked: true,
@@ -141,23 +164,26 @@ Load command 2
 
   it("已有 macOS rpath 时不重复 patch", () => {
     const calls = [];
-    const result = ensureMacBinaryRpath("/repo/lime-rs/target/debug/app-server", {
-      exists: () => true,
-      getStats: () => ({ isFile: () => true, size: 1 }),
-      platform: "darwin",
-      runner(command) {
-        calls.push(command);
-        return {
-          status: 0,
-          stdout: `
+    const result = ensureMacBinaryRpath(
+      "/repo/lime-rs/target/debug/app-server",
+      {
+        exists: () => true,
+        getStats: () => ({ isFile: () => true, size: 1 }),
+        platform: "darwin",
+        runner(command) {
+          calls.push(command);
+          return {
+            status: 0,
+            stdout: `
 Load command 1
       cmd LC_RPATH
   cmdsize 32
      path @executable_path (offset 12)
 `,
-        };
+          };
+        },
       },
-    });
+    );
 
     expect(result).toMatchObject({
       checked: true,
@@ -170,22 +196,25 @@ Load command 1
   it("并发构建替换 app-server 时不把 rpath patch race 当成永久失败", () => {
     const calls = [];
     let exists = true;
-    const result = ensureMacBinaryRpath("/repo/lime-rs/target/debug/app-server", {
-      exists: () => exists,
-      getStats: () => ({ isFile: () => true, size: 1 }),
-      platform: "darwin",
-      runner(command) {
-        calls.push(command);
-        if (command === "otool") {
-          return { status: 0, stdout: "" };
-        }
-        if (command === "install_name_tool") {
-          exists = false;
-          return { status: 1 };
-        }
-        throw new Error(`unexpected command: ${command}`);
+    const result = ensureMacBinaryRpath(
+      "/repo/lime-rs/target/debug/app-server",
+      {
+        exists: () => exists,
+        getStats: () => ({ isFile: () => true, size: 1 }),
+        platform: "darwin",
+        runner(command) {
+          calls.push(command);
+          if (command === "otool") {
+            return { status: 0, stdout: "" };
+          }
+          if (command === "install_name_tool") {
+            exists = false;
+            return { status: 1 };
+          }
+          throw new Error(`unexpected command: ${command}`);
+        },
       },
-    });
+    );
 
     expect(result).toMatchObject({
       checked: false,
@@ -197,32 +226,35 @@ Load command 1
 
   it("并发构建已补 rpath 时不把 duplicate rpath 当成失败", () => {
     const calls = [];
-    const result = ensureMacBinaryRpath("/repo/lime-rs/target/debug/app-server", {
-      exists: () => true,
-      getStats: () => ({ isFile: () => true, size: 1 }),
-      platform: "darwin",
-      runner(command) {
-        calls.push(command);
-        if (command === "otool" && calls.length === 1) {
-          return { status: 0, stdout: "" };
-        }
-        if (command === "install_name_tool") {
-          return { status: 1 };
-        }
-        if (command === "otool") {
-          return {
-            status: 0,
-            stdout: `
+    const result = ensureMacBinaryRpath(
+      "/repo/lime-rs/target/debug/app-server",
+      {
+        exists: () => true,
+        getStats: () => ({ isFile: () => true, size: 1 }),
+        platform: "darwin",
+        runner(command) {
+          calls.push(command);
+          if (command === "otool" && calls.length === 1) {
+            return { status: 0, stdout: "" };
+          }
+          if (command === "install_name_tool") {
+            return { status: 1 };
+          }
+          if (command === "otool") {
+            return {
+              status: 0,
+              stdout: `
 Load command 1
       cmd LC_RPATH
   cmdsize 32
      path @executable_path (offset 12)
 `,
-          };
-        }
-        throw new Error(`unexpected command: ${command}`);
+            };
+          }
+          throw new Error(`unexpected command: ${command}`);
+        },
       },
-    });
+    );
 
     expect(result).toMatchObject({
       checked: true,
@@ -234,14 +266,17 @@ Load command 1
   });
 
   it("空 app-server 二进制不执行 install_name_tool", () => {
-    const result = ensureMacBinaryRpath("/repo/lime-rs/target/debug/app-server", {
-      exists: () => true,
-      getStats: () => ({ isFile: () => true, size: 0 }),
-      platform: "darwin",
-      runner() {
-        throw new Error("should not run");
+    const result = ensureMacBinaryRpath(
+      "/repo/lime-rs/target/debug/app-server",
+      {
+        exists: () => true,
+        getStats: () => ({ isFile: () => true, size: 0 }),
+        platform: "darwin",
+        runner() {
+          throw new Error("should not run");
+        },
       },
-    });
+    );
 
     expect(result).toMatchObject({
       checked: false,

@@ -135,10 +135,14 @@ export function ensureMacBinaryRpath(
     };
   }
 
-  const result = runner("install_name_tool", ["-add_rpath", rpath, binaryPath], {
-    stdio: "inherit",
-    shell: false,
-  });
+  const result = runner(
+    "install_name_tool",
+    ["-add_rpath", rpath, binaryPath],
+    {
+      stdio: "inherit",
+      shell: false,
+    },
+  );
   if (result.error) {
     throw result.error;
   }
@@ -328,6 +332,13 @@ export function resolveRuntimeLibrarySource(plan, lib) {
   return null;
 }
 
+export function buildSherpaArchiveExtractCommand(plan) {
+  return {
+    args: ["-xjf", path.win32.basename(plan.archivePath), "-C", "."],
+    cwd: plan.prebuiltRoot,
+  };
+}
+
 function ensureArchiveExtracted(plan) {
   fs.mkdirSync(plan.prebuiltRoot, { recursive: true });
 
@@ -351,7 +362,8 @@ function ensureArchiveExtracted(plan) {
     }
 
     fs.rmSync(plan.extractedDir, { recursive: true, force: true });
-    runCommand("tar", ["-xjf", plan.archivePath, "-C", plan.prebuiltRoot]);
+    const extraction = buildSherpaArchiveExtractCommand(plan);
+    runCommand("tar", extraction.args, { cwd: extraction.cwd });
   }
 
   if (!fs.existsSync(plan.libDir)) {
@@ -477,7 +489,10 @@ function parseArgs(argv) {
   return options;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   try {
     const options = parseArgs(process.argv.slice(2));
     prepareSherpaOnnxRuntime(options);

@@ -60,6 +60,26 @@ describe("coalesceAdjacentDisplayContentParts", () => {
     ]);
   });
 
+  it("thinking 快照被修订时只保留已完成的后一版，避免重复展示两段近似思考", () => {
+    const parts: ContentPart[] = [
+      {
+        type: "thinking",
+        text: "用户想要整理今天的国际新闻。今天是206年7月18日，我需要搜索最新的来提供准确的信息让我使用WebSearch来获取",
+      },
+      {
+        type: "thinking",
+        text: "用户想要整理今天的国际新闻。今天是2026年7月18日，我需要搜索最新的国际新闻来提供准确的信息。让我使用WebSearch来获取最新的国际新闻。",
+      },
+    ];
+
+    expect(coalesceAdjacentDisplayContentParts(parts)).toEqual([
+      {
+        type: "thinking",
+        text: "用户想要整理今天的国际新闻。今天是2026年7月18日，我需要搜索最新的国际新闻来提供准确的信息。让我使用WebSearch来获取最新的国际新闻。",
+      },
+    ]);
+  });
+
   it("Markdown 强调形态相同的 thinking 不应重复拼接", () => {
     const parts: ContentPart[] = [
       { type: "thinking", text: "**Crafting concise cheeky greeting**" },

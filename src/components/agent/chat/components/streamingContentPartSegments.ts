@@ -5,6 +5,7 @@ import {
 } from "../utils/contentPartTimeline";
 import {
   areComparableContentTextsEqual,
+  areLikelyRevisedThinkingParagraph,
   dedupeAdjacentDuplicateParagraphs,
   isComparableContentTextPrefix,
 } from "./messageListComparableText";
@@ -31,14 +32,19 @@ function mergeCoalescibleContentPart<TPart extends CoalescibleContentPart>(
   base: TPart,
   chunk: TPart,
 ): TPart {
+  const mergedThinkingText =
+    base.type === "thinking" &&
+    areLikelyRevisedThinkingParagraph(base.text, chunk.text)
+      ? chunk.text
+      : dedupeAdjacentDuplicateParagraphs(
+          mergeIncrementalText(base.text, chunk.text),
+        );
   return {
     ...base,
     text:
       base.type === "text"
         ? mergeIncrementalText(base.text, chunk.text)
-        : dedupeAdjacentDuplicateParagraphs(
-            mergeIncrementalText(base.text, chunk.text),
-          ),
+        : mergedThinkingText,
     agentUiEvent: base.agentUiEvent ?? chunk.agentUiEvent,
     metadata: base.metadata ?? chunk.metadata,
   };

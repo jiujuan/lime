@@ -87,22 +87,9 @@ pub(super) fn openai_chat_sse(
             let frame = frame?;
             if frame.data.trim() == "[DONE]" {
                 drop(frames);
-                for id in state.text_ids.drain() {
-                    yield LlmEvent::TextEnd { id };
-                }
-                for id in state.reasoning_ids.drain() {
-                    yield LlmEvent::ReasoningEnd { id };
-                }
-                for event in take_openai_calls(&mut state)? {
+                for event in finish_openai_stream(&mut state)? {
                     yield event;
                 }
-                yield LlmEvent::Finish {
-                    reason: state.finish_reason.unwrap_or_else(|| {
-                        if state.emitted_tool_call { FinishReason::ToolCall } else { FinishReason::Stop }
-                    }),
-                    usage: state.usage.take(),
-                    response_id: state.response_id.clone(),
-                };
                 return;
             }
             let chunk = serde_json::from_str::<openai::ChatCompletionChunk>(&frame.data)
@@ -176,6 +163,13 @@ pub(super) fn openai_chat_sse(
                     state.finish_reason = Some(openai_finish_reason(reason));
                 }
             }
+            if state.finish_reason.is_some() {
+                drop(frames);
+                for event in finish_openai_stream(&mut state)? {
+                    yield event;
+                }
+                return;
+            }
         }
         for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
         for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
@@ -222,6 +216,32 @@ fn take_openai_calls(state: &mut OpenAiStreamState) -> Result<Vec<LlmEvent>, Cur
             provider_executed: None,
         });
     }
+    Ok(events)
+}
+
+fn finish_openai_stream(
+    state: &mut OpenAiStreamState,
+) -> Result<Vec<LlmEvent>, CurrentProviderError> {
+    let mut events = Vec::new();
+    events.extend(state.text_ids.drain().map(|id| LlmEvent::TextEnd { id }));
+    events.extend(
+        state
+            .reasoning_ids
+            .drain()
+            .map(|id| LlmEvent::ReasoningEnd { id }),
+    );
+    events.extend(take_openai_calls(state)?);
+    events.push(LlmEvent::Finish {
+        reason: state.finish_reason.unwrap_or_else(|| {
+            if state.emitted_tool_call {
+                FinishReason::ToolCall
+            } else {
+                FinishReason::Stop
+            }
+        }),
+        usage: state.usage.take(),
+        response_id: state.response_id.clone(),
+    });
     Ok(events)
 }
 

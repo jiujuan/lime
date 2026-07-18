@@ -109,7 +109,13 @@ describe("EmptyStateLayout", () => {
     ).toBe("430px");
     expect(
       artworkStage?.style.getPropertyValue("--home-hero-foreground-top"),
-    ).toBe("-56px");
+    ).toBe("auto");
+    expect(
+      artworkStage?.style.getPropertyValue("--home-hero-stage-z-index"),
+    ).toBe("60");
+    expect(artworkStage?.getAttribute("data-home-hero-breakout-layer")).toBe(
+      "above-chrome",
+    );
 
     act(() => {
       window.dispatchEvent(

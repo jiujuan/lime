@@ -17,6 +17,8 @@
 - Fixed re-entry boundaries in Electron updater, App Server host, and Windows startup paths, with deterministic configuration for unsigned macOS development packaging.
 - Fixed a Windows Squirrel N-1 smoke navigation race that treated the preload-enabled startup page as the final renderer; packaged launches now also remove unsupported `NODE_OPTIONS` and the development-server URL.
 - Fixed Electron Release workflow builds when the Rust cache omits sherpa-onnx prebuilt libraries; shared runtime libraries are now prepared explicitly for each target before packaging.
+- Fixed Windows Git Bash drive-letter parsing while extracting sherpa-onnx archives by using the workspace directory and archive basename, allowing all platforms to reach packaging.
+- Fixed provider SSE termination after `finish_reason` without waiting for `[DONE]`, and stopped revised thinking snapshots from rendering twice in the UI.
 
 ### Improvements and Refactors
 

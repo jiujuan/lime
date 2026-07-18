@@ -50,7 +50,9 @@
 - 更新 workflow 后 `npx vitest run scripts/electron/release-workflow-guard.test.mjs scripts/electron/windows-squirrel-rc-smoke.test.mjs scripts/electron/current-entrypoints.test.mjs src/components/agent/chat/components/EmptyStateLayout.test.tsx src/components/agent/chat/components/homeSkinPresentation.test.ts`：通过，5 files / 62 tests。
 - 两个 Windows Squirrel 修改脚本 `node --check`：通过。
 - 首轮远端 Release `29631194668`：失败于三平台 `app-server` 链接；Windows `sherpa-onnx-c-api.lib` 缺失，macOS `sherpa-onnx-c-api` 共享库目录缺失，未执行 N-1。
-- 真实 Windows packaged L8/N-1 验证：待修复后的远端 Release workflow 执行；本机为 macOS，无法代替 Windows 证据。
+- 第二轮 `29631571374` 与第三轮 `29631599498` 在新增预热步骤解压阶段暴露 Windows Git Bash 驱动器路径解析错误；已改为 basename + workspace cwd，补充跨平台回归。
+- 本轮同时纳入 provider SSE `finish_reason` 终止修复与 revised thinking snapshot 去重；Rust related 矩阵 1182 项通过、1 项既有 app-server 时序断言失败，需单独复核。
+- 真实 Windows packaged L8/N-1 验证：待路径修复后的远端 Release workflow 执行；本机为 macOS，无法代替 Windows 证据。
 
 ## 架构确认
 
@@ -59,4 +61,4 @@
 - 责任人：release owner（v1.107.0）。
 - 日期：2026-07-18。
 
-当前完成度：`94%`。下一刀：纳入提交后新增的首页皮肤改动与 sherpa workflow 修复，覆盖提交和 `v1.107.0`，再监控 Release workflow 至 Windows N-1 终态。
+当前完成度：`94%`。下一刀：纳入 thinking、SSE 与 Windows 路径修复及全部当前改动，覆盖提交和 `v1.107.0`，再监控 Release workflow 至 Windows N-1 终态。

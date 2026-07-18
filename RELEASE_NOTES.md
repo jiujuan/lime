@@ -15,6 +15,8 @@
 - 修复 Electron updater、App Server host 和 Windows 启动路径的并发/重入边界，补齐 macOS 未签名开发打包的确定性配置。
 - 修复 Windows Squirrel N-1 smoke 将带 preload 的临时启动页误判为最终 renderer 的导航竞态；打包启动环境同时移除不受支持的 `NODE_OPTIONS` 与开发服务器地址。
 - 修复 Electron Release workflow 在 Rust cache 未恢复 sherpa-onnx 预编译库时的构建失败；构建前会按目标平台显式准备共享运行库。
+- 修复 Windows Git Bash 解压 sherpa-onnx 归档时的驱动器路径解析错误，预热步骤改用工作目录和归档文件名，确保三平台能进入打包阶段。
+- 修复 provider SSE 在收到 `finish_reason` 后仍等待 `[DONE]` 的终止边界，并避免修订版 thinking 快照在界面中重复展示。
 
 ### 优化与重构
 
