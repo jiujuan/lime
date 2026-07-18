@@ -392,9 +392,9 @@ fn read_detail_projects_thread_items_into_thread_read() {
 #[test]
 fn canonical_overlay_preserves_richer_current_coding_projection() {
     const FILE_PATH: &str =
-        ".lime/qc/code-artifact-workbench-electron-fixture/src/coding-target.ts";
-    const COMMAND_ID: &str = "code-artifact-workbench-electron:command:test";
-    const TEST_RUN_ID: &str = "code-artifact-workbench-electron:test:unit";
+        ".lime/qc/code-artifact-workbench-host-fixture/src/coding-target.ts";
+    const COMMAND_ID: &str = "code-artifact-workbench-host:command:test";
+    const TEST_RUN_ID: &str = "code-artifact-workbench-host:test:unit";
     const FAILURE_PREVIEW: &str =
         "FAIL coding-target.test.ts: expected codingWorkbenchSmoke to be true";
 

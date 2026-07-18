@@ -54,6 +54,7 @@
 - 本轮同时纳入 provider SSE `finish_reason` 终止修复与 revised thinking snapshot 去重；Rust related 矩阵 1182 项通过、1 项既有 app-server 时序断言失败，需单独复核。
 - 本轮工作树追加差异的定向验证：`npm run verify:app-version`、`npm run typecheck`、`git diff --check` 通过；6 个前端 Vitest 文件 61 项通过；`cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider --lib current_client` 45 项通过。
 - 远端 Quality `29633271523` 的失败证据：Vitest layer budget 36/30（既有仓库基线）、GUI smoke 与 Rust Full 均因 CI sherpa-onnx 预编译库未准备而链接失败；新 SHA `46f445588` 已验证 GUI smoke 预热成功，Rust Full 仍缺该步骤，已追加同样的目标预热并待下一 SHA 复验。
+- Quality `29635195772` 已证明 sherpa 预热修复有效：GUI smoke 通过，Rust workspace 编译并通过 1183 项；剩余 Rust 失败来自 `host_boundary_guard` 检出单元测试 fixture 中的 `electron` 字面量，已改为中性 host fixture 并在本地复测 2 项守卫通过。
 - 真实 Windows packaged L8/N-1 验证：待路径修复后的远端 Release workflow 执行；本机为 macOS，无法代替 Windows 证据。
 
 ## 架构确认
@@ -63,4 +64,4 @@
 - 责任人：release owner（v1.107.0）。
 - 日期：2026-07-18。
 
-当前完成度：`96%`。下一刀：提交全部当前改动，覆盖 `v1.107.0` 并推送 `main`/tag，监控 Release workflow 至三平台构建和 Windows N-1 终态。
+当前完成度：`97%`。下一刀：提交边界守卫 fixture 修复，待当前 Release 结束后覆盖 `v1.107.0` 到最终 SHA，再监控三平台构建和 Windows N-1 终态。
