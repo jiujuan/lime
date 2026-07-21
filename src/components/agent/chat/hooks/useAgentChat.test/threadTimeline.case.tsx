@@ -1,10 +1,5 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it,
-  vi
-} from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   captureContextCompactionStream,
   captureTurnStream,
@@ -16,7 +11,7 @@ import {
   mockSubmitAgentRuntimeTurn,
   mockToast,
   mountHook,
-  seedSession
+  seedSession,
 } from "../useAgentChat.testUtils";
 
 describe("useAgentChat thread timeline", () => {
@@ -75,80 +70,6 @@ describe("useAgentChat thread timeline", () => {
           thread_id: "session-thread-optimistic",
         }),
       ]);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  it("运行时意外返回 queue_added 时，应降级为排队态并清掉假 running 占位", async () => {
-    const workspaceId = "ws-thread-queue-added-fallback";
-    const sessionId = "session-thread-queue-added-fallback";
-    seedSession(workspaceId, sessionId);
-    let queuedAdded = false;
-    mockGetAgentRuntimeSession.mockImplementation(async () => ({
-      id: sessionId,
-      messages: [],
-      turns: [],
-      items: [],
-      queued_turns: queuedAdded
-        ? [
-            {
-              queuedTurnId: "queued-fallback-1",
-              messagePreview: "请继续往下分析",
-              messageText: "请继续往下分析",
-              createdAt: 1700000000000,
-              imageCount: 0,
-              position: 1,
-            },
-          ]
-        : [],
-    }));
-    const harness = mountHook(workspaceId);
-    const stream = captureTurnStream();
-
-    try {
-      await flushEffects();
-
-      await act(async () => {
-        await harness
-          .getValue()
-          .sendMessage("请继续往下分析", [], false, false, false, "react");
-      });
-      await flushEffects();
-
-      expect(harness.getValue().isSending).toBe(true);
-      expect(harness.getValue().turns).toHaveLength(1);
-
-      act(() => {
-        queuedAdded = true;
-        stream.emit({
-          type: "queue_added",
-          session_id: sessionId,
-          queued_turn: {
-            queued_turn_id: "queued-fallback-1",
-            message_preview: "请继续往下分析",
-            message_text: "请继续往下分析",
-            created_at: 1700000000000,
-            image_count: 0,
-            position: 1,
-          },
-        });
-      });
-      await flushEffects();
-
-      const assistantMessage = [...harness.getValue().messages]
-        .reverse()
-        .find((msg) => msg.role === "assistant");
-
-      expect(harness.getValue().isSending).toBe(false);
-      expect(harness.getValue().currentTurnId).toBeNull();
-      expect(harness.getValue().turns).toEqual([]);
-      expect(harness.getValue().queuedTurns).toEqual([
-        expect.objectContaining({
-          queued_turn_id: "queued-fallback-1",
-        }),
-      ]);
-      expect(assistantMessage?.runtimeStatus?.title).toBe("已加入排队列表");
     } finally {
       harness.unmount();
     }

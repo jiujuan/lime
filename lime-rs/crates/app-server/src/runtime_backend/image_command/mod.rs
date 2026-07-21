@@ -33,6 +33,13 @@ use tokio::time::{timeout, Duration};
 // media task handoff fast path budget instead of dropping the assistant lead.
 const PRESENTATION_GENERATION_TIMEOUT: Duration = Duration::from_secs(45);
 
+pub(super) fn is_image_command_turn(
+    request: &ExecutionRequest,
+    scope: &RuntimeSessionScope,
+) -> Result<bool, RuntimeCoreError> {
+    Ok(parse_image_command_intent(request, scope)?.is_some())
+}
+
 pub(super) async fn handle_image_command_turn_if_present(
     runtime_backend: Option<&super::RuntimeBackend>,
     request: &ExecutionRequest,

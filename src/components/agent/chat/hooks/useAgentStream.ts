@@ -16,7 +16,6 @@ import type {
   AgentRuntimeThreadReadModel,
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import {
   type AgentThreadItem,
   type AgentThreadTurn,
@@ -49,12 +48,7 @@ import {
   normalizeAgentStreamCompactionError,
   runAgentStreamCompaction,
 } from "./agentStreamCompaction";
-import {
-  promoteQueuedAgentTurn,
-  removeQueuedAgentTurn,
-  resumeAgentStreamThread,
-  stopActiveAgentStream,
-} from "./agentStreamFlowControl";
+import { stopActiveAgentStream } from "./agentStreamFlowControl";
 import { sendAgentStreamMessage } from "./agentStreamSend";
 import { useAgentStreamController } from "./useAgentStreamController";
 
@@ -150,6 +144,7 @@ interface UseAgentStreamOptions {
   currentStreamingEventNameRef: MutableRefObject<string | null>;
   warnedKeysRef: MutableRefObject<Set<string>>;
   getWorkspaceIdForSubmit: () => string | undefined;
+  getThreadIdForSubmit: () => string | undefined;
   setWorkspacePathMissing: Dispatch<
     SetStateAction<WorkspacePathMissingState | null>
   >;
@@ -166,8 +161,6 @@ interface UseAgentStreamOptions {
   currentTurnId?: string | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
   threadTurns: readonly AgentThreadTurn[];
-  queuedTurns: QueuedTurnSnapshot[];
-  setQueuedTurns: Dispatch<SetStateAction<QueuedTurnSnapshot[]>>;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
   onRestoreInterruptedInput?: (request: InterruptedInputRestoreRequest) => void;
@@ -199,6 +192,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     currentStreamingEventNameRef,
     warnedKeysRef,
     getWorkspaceIdForSubmit,
+    getThreadIdForSubmit,
     setWorkspacePathMissing,
     getMessages,
     setMessages,
@@ -211,8 +205,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     currentTurnId,
     threadRead,
     threadTurns,
-    queuedTurns,
-    setQueuedTurns,
     setPendingActions,
     refreshSessionReadModel,
     onRestoreInterruptedInput,
@@ -245,16 +237,12 @@ export function useAgentStream(options: UseAgentStreamOptions) {
   const recoveredBindingAttemptKeyRef = useRef<string | null>(null);
   const getMessagesRef = useRef(getMessages);
   const getThreadItemsRef = useRef(getThreadItems);
-  const queuedTurnsRef = useRef(queuedTurns);
   getMessagesRef.current = getMessages;
   getThreadItemsRef.current = getThreadItems;
-  queuedTurnsRef.current = queuedTurns;
 
   const preparedSendEnv = useMemo<AgentStreamPreparedSendEnv>(
     () =>
       createAgentStreamPreparedSendEnv({
-        queuedTurnsCount: queuedTurns.length,
-        threadBusy,
         runtime,
         ensureSession,
         attemptSilentTurnRecovery,
@@ -265,10 +253,9 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         modelRef,
         reasoningEffortRef,
         sessionIdRef,
-        hasPendingPreparedSubmit: () =>
-          preparedSubmitGateRef.current.hasPending(),
         runPreparedSubmit: (task) => preparedSubmitGateRef.current.run(task),
         getWorkspaceIdForSubmit,
+        getThreadIdForSubmit,
         getSyncedSessionModelPreference,
         getSyncedSessionExecutionStrategy,
         getSyncedSessionRecentPreferences,
@@ -287,7 +274,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         setThreadTurns,
         setCurrentTurnId,
         setExecutionRuntime,
-        setQueuedTurns,
         setPendingActions,
         setWorkspacePathMissing,
         setIsSending,
@@ -304,6 +290,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       clawTraceEnabled,
       soulCopy,
       getWorkspaceIdForSubmit,
+      getThreadIdForSubmit,
       getSyncedSessionModelPreference,
       getSyncedSessionExecutionStrategy,
       getSyncedSessionRecentPreferences,
@@ -314,17 +301,14 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       providerTypeRef,
       reasoningEffortRef,
       refreshSessionReadModel,
-      queuedTurns.length,
       runtime,
       sessionIdRef,
-      threadBusy,
       setActiveStream,
       setCurrentTurnId,
       setExecutionRuntime,
       setIsSending,
       setMessages,
       setPendingActions,
-      setQueuedTurns,
       setThreadItems,
       setThreadTurns,
       setWorkspacePathMissing,
@@ -336,7 +320,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     () =>
       resolveAgentStreamResumeBindingTarget({
         currentTurnId,
-        queuedTurns,
         sessionId: sessionId ?? sessionIdRef.current,
         threadBusy,
         threadRead,
@@ -344,7 +327,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       }),
     [
       currentTurnId,
-      queuedTurns,
       sessionId,
       sessionIdRef,
       threadBusy,
@@ -397,7 +379,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       setIsSending,
       setMessages,
       setPendingActions,
-      setQueuedTurns,
       setThreadItems,
       setThreadTurns,
       soulCopy,
@@ -442,7 +423,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     setIsSending,
     setMessages,
     setPendingActions,
-    setQueuedTurns,
     setThreadItems,
     setThreadTurns,
     soulCopy,
@@ -492,6 +472,8 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     await stopActiveAgentStream({
       activeStream: activeStreamRef.current,
       sessionIdRef,
+      threadId: getThreadIdForSubmit(),
+      currentTurnId,
       runtime,
       removeStreamListener,
       refreshSessionReadModel,
@@ -501,7 +483,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       setMessages,
       getMessages: () => getMessagesRef.current?.() ?? [],
       getThreadItems: () => getThreadItemsRef.current?.() ?? [],
-      getQueuedTurns: () => queuedTurnsRef.current,
       setActiveStream,
       submittedDraftFallback: submittedDraftFallbackRef.current,
       onRestoreInterruptedInput,
@@ -526,28 +507,10 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     setThreadTurns,
     removeStreamListener,
     activeStreamRef,
+    currentTurnId,
+    getThreadIdForSubmit,
     getThreadItemsRef,
-    queuedTurnsRef,
   ]);
-
-  const removeQueuedTurn = useCallback(
-    async (queuedTurnId: string) => {
-      return removeQueuedAgentTurn({
-        runtime,
-        queuedTurnId,
-        sessionIdRef,
-        refreshSessionReadModel,
-        notify: {
-          info: () => undefined,
-          error: (message) => toast.error(message),
-        },
-        onError: (error) => {
-          console.error("[AgentChat] 移除排队消息失败:", error);
-        },
-      });
-    },
-    [refreshSessionReadModel, runtime, sessionIdRef],
-  );
 
   const compactSession = useCallback(async () => {
     const activeSessionId = sessionIdRef.current;
@@ -602,60 +565,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     activeStreamRef,
   ]);
 
-  const resumeThread = useCallback(async () => {
-    return resumeAgentStreamThread({
-      runtime,
-      sessionIdRef,
-      refreshSessionReadModel,
-      notify: {
-        info: (message) => toast.info(message),
-        error: (message) => toast.error(message),
-      },
-      onError: (error) => {
-        console.error("[AgentChat] 恢复线程执行失败:", error);
-      },
-    });
-  }, [refreshSessionReadModel, runtime, sessionIdRef]);
-
-  const promoteQueuedTurn = useCallback(
-    async (queuedTurnId: string) => {
-      return promoteQueuedAgentTurn({
-        runtime,
-        queuedTurnId,
-        threadId: threadRead?.thread_id,
-        activeStream: activeStreamRef.current,
-        removeStreamListener,
-        sessionIdRef,
-        refreshSessionReadModel,
-        setThreadItems,
-        setThreadTurns,
-        setCurrentTurnId,
-        setMessages,
-        setActiveStream,
-        notify: {
-          info: (message) => toast.info(message),
-          error: (message) => toast.error(message),
-        },
-        onError: (error) => {
-          console.error("[AgentChat] 立即执行排队消息失败:", error);
-        },
-      });
-    },
-    [
-      activeStreamRef,
-      refreshSessionReadModel,
-      removeStreamListener,
-      runtime,
-      sessionIdRef,
-      setActiveStream,
-      setCurrentTurnId,
-      setMessages,
-      setThreadItems,
-      setThreadTurns,
-      threadRead?.thread_id,
-    ],
-  );
-
   return {
     isSending,
     activeStreamEventName,
@@ -663,9 +572,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     sendMessage,
     compactSession,
     stopSending,
-    resumeThread,
-    promoteQueuedTurn,
-    removeQueuedTurn,
     detachStreamBindings: clearStreamBindings,
   };
 }

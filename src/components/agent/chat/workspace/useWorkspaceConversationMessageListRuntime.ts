@@ -20,8 +20,6 @@ type WorkspaceConversationMessageListPendingActions =
   WorkspaceConversationMessageListRuntime["pendingActions"];
 type WorkspaceConversationMessageListSubmittedActions =
   WorkspaceConversationMessageListRuntime["submittedActionsInFlight"];
-type WorkspaceConversationMessageListQueuedTurns =
-  WorkspaceConversationMessageListRuntime["queuedTurns"];
 type WorkspaceConversationMessageListSessionHistoryWindow =
   WorkspaceConversationMessageListRuntime["sessionHistoryWindow"];
 type WorkspaceConversationMessageListPendingA2UIAction =
@@ -40,7 +38,6 @@ interface WorkspaceConversationMessageListProjectionInput {
   isSending: WorkspaceConversationMessageListRuntime["isSending"];
   messages: WorkspaceConversationMessageListMessages;
   pendingActions: WorkspaceConversationMessageListPendingActions;
-  queuedTurns: WorkspaceConversationMessageListQueuedTurns;
   sessionHistoryWindow: WorkspaceConversationMessageListSessionHistoryWindow;
   submittedActionsInFlight: WorkspaceConversationMessageListSubmittedActions;
   threadItems: WorkspaceConversationMessageListThreadItems;
@@ -64,9 +61,7 @@ interface WorkspaceConversationMessageListActionsInput {
   onOpenSubagentSession: WorkspaceConversationMessageListRuntime["onOpenSubagentSession"];
   onOpenUrlPreview: WorkspaceConversationMessageListRuntime["onOpenUrlPreview"];
   onPermissionResponse: WorkspaceConversationMessageListRuntime["onPermissionResponse"];
-  onPromoteQueuedTurn: WorkspaceConversationMessageListRuntime["onPromoteQueuedTurn"];
   onReplayPendingRequest: WorkspaceConversationMessageListRuntime["onReplayPendingRequest"];
-  onResumeThread: WorkspaceConversationMessageListRuntime["onResumeThread"];
   onSaveMessageAsKnowledge: WorkspaceConversationMessageListRuntime["onSaveMessageAsKnowledge"];
   onSaveMessageAsSkill: WorkspaceConversationMessageListRuntime["onSaveMessageAsSkill"];
   onWriteFile: (
@@ -131,14 +126,11 @@ export function useWorkspaceConversationMessageListRuntime({
       executionRuntime: projection.executionRuntime,
       pendingActions: projection.pendingActions,
       submittedActionsInFlight: projection.submittedActionsInFlight,
-      queuedTurns: projection.queuedTurns,
       sessionHistoryWindow: projection.sessionHistoryWindow,
       onLoadFullHistory: actions.onLoadFullHistory,
       isSending: projection.isSending,
       onInterruptCurrentTurn: actions.onInterruptCurrentTurn,
-      onResumeThread: actions.onResumeThread,
       onReplayPendingRequest: actions.onReplayPendingRequest,
-      onPromoteQueuedTurn: actions.onPromoteQueuedTurn,
       onDeleteMessage: actions.onDeleteMessage,
       onEditMessage: actions.onEditMessage,
       onA2UISubmit: actions.onA2UISubmit,

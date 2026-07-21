@@ -878,7 +878,7 @@ describe("InlineToolProcessStep", () => {
         output: JSON.stringify({
           request_metadata: {
             turnId: "turn-1",
-            route: "agentSession/turn/start",
+            route: "turn/start",
           },
           diagnostics: {
             source: "runtime",
@@ -895,7 +895,7 @@ describe("InlineToolProcessStep", () => {
 
     expect(container.textContent).toContain("已完成");
     expect(container.textContent).not.toContain("request_metadata");
-    expect(container.textContent).not.toContain("agentSession/turn/start");
+    expect(container.textContent).not.toContain("turn/start");
     expect(container.textContent).not.toContain("tool_result_projection");
     expect(container.querySelector('[data-testid="markdown-renderer"]')).toBeNull();
   });

@@ -16,9 +16,9 @@ const FAILED_THREAD_STATUSES = new Set([
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
 const APP_SERVER_METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
-const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
+const APP_SERVER_METHOD_THREAD_START = "thread/start";
 const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
-const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_THREAD_READ = "thread/read";
 const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ =
   "agentSession/objective/read";
 const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET =
@@ -27,10 +27,10 @@ const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE =
   "agentSession/objective/continue";
 const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_AUDIT =
   "agentSession/objective/audit";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
-  "agentSession/turn/start";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =
-  "agentSession/turn/cancel";
+const APP_SERVER_METHOD_TURN_START =
+  "turn/start";
+const APP_SERVER_METHOD_TURN_INTERRUPT =
+  "turn/interrupt";
 const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
 const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
@@ -230,7 +230,7 @@ export async function createAgentSessionCurrent(
       : {};
   const response = await invokeAppServerMethod(
     options,
-    APP_SERVER_METHOD_AGENT_SESSION_START,
+    APP_SERVER_METHOD_THREAD_START,
     {
       appId: "desktop",
       workspaceId,
@@ -254,7 +254,7 @@ export async function createAgentSessionCurrent(
   );
   const sessionId = String(response?.session?.sessionId || "").trim();
   if (!sessionId) {
-    throw new Error("agentSession/start 未返回 sessionId");
+    throw new Error("thread/start 未返回 sessionId");
   }
   return sessionId;
 }
@@ -371,7 +371,7 @@ export async function readAgentSessionDetailCurrent(
 ) {
   const response = await invokeAppServerMethod(
     options,
-    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    APP_SERVER_METHOD_THREAD_READ,
     {
       sessionId,
       historyLimit,
@@ -423,7 +423,7 @@ export async function startAgentSessionTurnCurrent(
   });
   return invoke(
     options,
-    APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+    APP_SERVER_METHOD_TURN_START,
     compactRecord({
       sessionId,
       turnId,
@@ -443,7 +443,7 @@ export async function cancelAgentSessionTurnCurrent(
 ) {
   return invokeAppServerMethod(
     options,
-    APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+    APP_SERVER_METHOD_TURN_INTERRUPT,
     {
       sessionId,
       turnId,
@@ -498,7 +498,7 @@ export async function readAgentRuntimeThreadCurrent(
 ) {
   const response = await invoke(
     options,
-    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    APP_SERVER_METHOD_THREAD_READ,
     compactRecord({
       sessionId,
       historyLimit,

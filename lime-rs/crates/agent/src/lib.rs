@@ -32,14 +32,11 @@ pub mod protocol_projection;
 mod provider_configuration;
 pub mod provider_continuation_state;
 pub mod provider_runtime_governor;
-pub mod queued_turn;
 mod request_tool_policy;
 mod request_user_input_bridge;
 pub mod runtime_projection_snapshot;
-pub mod runtime_queue;
 mod runtime_state;
 mod runtime_state_support;
-mod runtime_support;
 mod session_configuration;
 mod session_execution_runtime;
 mod session_record_sql;
@@ -114,7 +111,6 @@ pub use provider_runtime_governor::{
     release_provider_runtime_permit, resolve_provider_runtime_parallel_budget,
     snapshot_provider_runtime_lease, ProviderRuntimeGovernorSnapshot, ProviderRuntimePermit,
 };
-pub use queued_turn::QueuedTurnSnapshot;
 pub use request_tool_policy::{
     merge_system_prompt_with_request_tool_policy,
     request_tool_policy_with_additional_required_tools, resolve_request_tool_policy,
@@ -123,17 +119,10 @@ pub use request_tool_policy::{
     REQUEST_TOOL_POLICY_MARKER,
 };
 pub use runtime_projection_snapshot::RuntimeProjectionSnapshot;
-pub use runtime_queue::{
-    clear_runtime_queue, finish_active_runtime_turn_if_matches, list_runtime_queue_snapshots,
-    promote_runtime_queued_turn, remove_runtime_queued_turn,
-    resume_persisted_runtime_queues_on_startup, resume_runtime_queue_if_needed,
-    submit_runtime_turn, RuntimeQueueEventEmitter, RuntimeQueueExecutor,
-};
 pub use runtime_state::AgentRuntimeState;
 pub use runtime_state_support::{
     is_skill_registered, register_project_skill_from_directory, reload_skills,
 };
-pub use runtime_support::initialize_agent_runtime;
 pub use session_configuration::{
     build_agent_session_config, AgentSessionConfig, AgentSessionConfigurationRequest,
     SessionConfigBuilder,

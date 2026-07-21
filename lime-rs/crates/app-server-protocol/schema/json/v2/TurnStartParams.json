@@ -1,0 +1,377 @@
+{
+  "$defs": {
+    "AdditionalContextEntry": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/AdditionalContextKind"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "type": "object"
+    },
+    "AdditionalContextKind": {
+      "enum": [
+        "application",
+        "untrusted"
+      ],
+      "type": "string"
+    },
+    "ByteRange": {
+      "properties": {
+        "end": {
+          "description": "Exclusive byte offset in the UTF-8 text buffer.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start": {
+          "description": "Inclusive byte offset in the UTF-8 text buffer.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "end",
+        "start"
+      ],
+      "type": "object"
+    },
+    "CollaborationMode": {
+      "description": "Collaboration mode for a session or turn.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/ModeKind"
+        },
+        "settings": {
+          "$ref": "#/$defs/CollaborationModeSettings"
+        }
+      },
+      "required": [
+        "mode",
+        "settings"
+      ],
+      "type": "object"
+    },
+    "CollaborationModeSettings": {
+      "description": "Collaboration mode settings copied from the Codex protocol shape.",
+      "properties": {
+        "developer_instructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "type": "object"
+    },
+    "ImageDetail": {
+      "enum": [
+        "auto",
+        "high",
+        "low",
+        "original"
+      ],
+      "type": "string"
+    },
+    "ModeKind": {
+      "description": "Initial collaboration mode for a turn or session.",
+      "enum": [
+        "default",
+        "plan"
+      ],
+      "type": "string"
+    },
+    "TextElement": {
+      "properties": {
+        "byteRange": {
+          "$ref": "#/$defs/ByteRange"
+        },
+        "placeholder": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "byteRange"
+      ],
+      "type": "object"
+    },
+    "TurnEnvironmentParams": {
+      "description": "Environment override shared by `thread/start`, `turn/start`, and resume.",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "environmentId": {
+          "type": "string"
+        },
+        "runtimeWorkspaceRoots": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd",
+        "environmentId"
+      ],
+      "type": "object"
+    },
+    "UserInput": {
+      "description": "User input parts accepted by the v2 turn contract.",
+      "oneOf": [
+        {
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "text_elements": {
+              "items": {
+                "$ref": "#/$defs/TextElement"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ImageDetail"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "image",
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ImageDetail"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "localImage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "skill",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "path",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "mention",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "path",
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "additionalContext": {
+      "additionalProperties": {
+        "$ref": "#/$defs/AdditionalContextEntry"
+      },
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "approvalPolicy": true,
+    "approvalsReviewer": true,
+    "clientUserMessageId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "collaborationMode": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CollaborationMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cwd": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "effort": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "environments": {
+      "items": {
+        "$ref": "#/$defs/TurnEnvironmentParams"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "input": {
+      "items": {
+        "$ref": "#/$defs/UserInput"
+      },
+      "type": "array"
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "multiAgentMode": true,
+    "outputSchema": true,
+    "permissions": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "personality": true,
+    "responsesapiClientMetadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "runtimeWorkspaceRoots": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "sandboxPolicy": true,
+    "serviceTier": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "summary": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "input",
+    "threadId"
+  ],
+  "title": "TurnStartParams",
+  "type": "object"
+}

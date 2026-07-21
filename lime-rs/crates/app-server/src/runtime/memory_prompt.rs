@@ -3,10 +3,9 @@ use super::context_packet::{
 };
 use super::output_refs::SIDECAR_REF_FIELD;
 use super::sidecar_store::{session_scoped_relative_path, SidecarWriteRequest};
-use super::RuntimeCore;
+use super::{RuntimeCore, TurnStartRequest};
 use app_server_protocol::{
-    AgentSessionTurnStartParams, MemoryStoreReadParams, MemoryStoreRootParams, MemoryStoreScope,
-    RuntimeOptions,
+    MemoryStoreReadParams, MemoryStoreRootParams, MemoryStoreScope, RuntimeOptions,
 };
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
@@ -30,8 +29,11 @@ pub(crate) use super::soul::memory_soul_prompt_context_from_config;
 impl RuntimeCore {
     pub(in crate::runtime) async fn prepare_memory_prompt_context(
         &self,
-        params: &mut AgentSessionTurnStartParams,
+        params: &mut TurnStartRequest,
     ) {
+        if !self.session_memory_enabled(&params.session_id) {
+            return;
+        }
         let Some(root) = memory_summary_root(params) else {
             return;
         };
@@ -91,7 +93,7 @@ impl RuntimeCore {
 
     pub(in crate::runtime) fn prepare_session_compaction_prompt_context(
         &self,
-        params: &mut AgentSessionTurnStartParams,
+        params: &mut TurnStartRequest,
     ) {
         let Some(context) = self.latest_session_compaction_prompt_context(&params.session_id)
         else {
@@ -444,7 +446,7 @@ fn soul_packet_from_metadata(
     super::soul::soul_packet_from_metadata(config_metadata, runtime_metadata)
 }
 
-fn memory_summary_root(params: &AgentSessionTurnStartParams) -> Option<MemoryStoreRootParams> {
+fn memory_summary_root(params: &TurnStartRequest) -> Option<MemoryStoreRootParams> {
     workspace_root_from_runtime_options(params.runtime_options.as_ref())
         .map(|workspace_root| MemoryStoreRootParams {
             scope: MemoryStoreScope::Workspace,
@@ -520,7 +522,7 @@ fn sidecar_file_stem(value: &str) -> String {
 }
 
 pub(in crate::runtime) fn merge_runtime_options_metadata(
-    params: &mut AgentSessionTurnStartParams,
+    params: &mut TurnStartRequest,
     key: &str,
     value: Value,
 ) {
@@ -541,7 +543,7 @@ pub(in crate::runtime) fn merge_runtime_options_metadata(
 }
 
 pub(in crate::runtime) fn merge_context_packet_telemetry(
-    params: &mut AgentSessionTurnStartParams,
+    params: &mut TurnStartRequest,
     telemetry: Value,
 ) {
     let options = params

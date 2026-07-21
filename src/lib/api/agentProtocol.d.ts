@@ -1,5 +1,3 @@
-import { type QueuedTurnSnapshot } from "./queuedTurn";
-import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type {
   AgentApprovalPolicy,
   AgentExecutionStrategy,
@@ -11,12 +9,7 @@ import type {
   AgentSessionExecutionRuntimeTaskProfile,
   AgentTurnOutputSchemaRuntime,
 } from "./agentExecutionRuntime";
-import type {
-  AutoContinueRequestPayload,
-  ImageInput,
-  RuntimeProviderConfig,
-} from "./agentRuntime/sessionTypes";
-import type { AppServerAgentSessionTurnStartParams } from "./appServer";
+import type { TurnStartParams } from "@limecloud/app-server-client";
 export interface AgentContextTraceStep {
   stage: string;
   detail: string;
@@ -36,9 +29,17 @@ export interface AgentToolExecutionResult {
   structuredContent?: unknown;
   structured_content?: unknown;
 }
+export interface AgentMessageTextElement {
+  byte_range: {
+    start: number;
+    end: number;
+  };
+  placeholder?: string;
+}
 export interface AgentMessageContentText {
   type: "text";
   text: string;
+  text_elements?: AgentMessageTextElement[];
 }
 export interface AgentMessageContentThinking {
   type: "thinking";
@@ -69,7 +70,21 @@ export interface AgentMessageContentActionRequired {
 export interface AgentMessageContentImage {
   type: "image";
   mime_type: string;
+  /** 内联图片使用 data；历史文件/URL 图片使用 uri/source_path，data 保持为空。 */
   data: string;
+  uri?: string;
+  source_path?: string;
+  detail?: "auto" | "low" | "high" | "original";
+}
+export interface AgentMessageContentSkill {
+  type: "skill";
+  name: string;
+  path: string;
+}
+export interface AgentMessageContentMention {
+  type: "mention";
+  name: string;
+  path: string;
 }
 export type AgentMessageContent =
   | AgentMessageContentText
@@ -77,7 +92,9 @@ export type AgentMessageContent =
   | AgentMessageContentToolRequest
   | AgentMessageContentToolResponse
   | AgentMessageContentActionRequired
-  | AgentMessageContentImage;
+  | AgentMessageContentImage
+  | AgentMessageContentSkill
+  | AgentMessageContentMention;
 export interface AgentMessage {
   id?: string;
   role: string;
@@ -144,6 +161,7 @@ interface AgentThreadItemBase {
 export interface AgentThreadUserMessageItem extends AgentThreadItemBase {
   type: "user_message";
   content: string;
+  content_parts?: AgentMessageContent[];
 }
 export interface AgentThreadContentReference {
   uri: string;
@@ -198,9 +216,32 @@ export interface AgentThreadCommandExecutionItem extends AgentThreadItemBase {
   exit_code?: number;
   error?: string;
 }
+export type AgentThreadPatchChangeKind =
+  | {
+      type: "add";
+    }
+  | {
+      type: "delete";
+    }
+  | {
+      type: "update";
+      move_path?: string | null;
+    };
+export interface AgentThreadPatchChange {
+  path: string;
+  kind: AgentThreadPatchChangeKind;
+  diff: string;
+}
+export type AgentThreadPatchApplyStatus =
+  | "inProgress"
+  | "completed"
+  | "declined"
+  | "failed";
 export interface AgentThreadPatchItem extends AgentThreadItemBase {
   type: "patch";
   text: string;
+  changes?: AgentThreadPatchChange[];
+  file_status?: AgentThreadPatchApplyStatus;
   summary?: string[];
   paths?: string[];
   success?: boolean;
@@ -212,6 +253,8 @@ export interface AgentThreadWebSearchItem extends AgentThreadItemBase {
   type: "web_search";
   query?: string;
   action?: string;
+  action_data?: unknown;
+  results?: unknown[];
   output?: string;
 }
 export interface AgentThreadHookOutputEntry {
@@ -746,26 +789,6 @@ export interface AgentEventQuotaBlocked {
   type: "quota_blocked";
   limit_event: AgentSessionExecutionRuntimeLimitEvent;
 }
-export interface AgentEventQueueAdded {
-  type: "queue_added";
-  session_id: string;
-  queued_turn: QueuedTurnSnapshot;
-}
-export interface AgentEventQueueRemoved {
-  type: "queue_removed";
-  session_id: string;
-  queued_turn_id: string;
-}
-export interface AgentEventQueueStarted {
-  type: "queue_started";
-  session_id: string;
-  queued_turn_id: string;
-}
-export interface AgentEventQueueCleared {
-  type: "queue_cleared";
-  session_id: string;
-  queued_turn_ids: string[];
-}
 export interface AgentEventMessage {
   type: "message";
   message: AgentMessage;
@@ -825,40 +848,13 @@ export type AgentEvent =
   | AgentEventRateLimitHit
   | AgentEventQuotaLow
   | AgentEventQuotaBlocked
-  | AgentEventQueueAdded
-  | AgentEventQueueRemoved
-  | AgentEventQueueStarted
-  | AgentEventQueueCleared
   | AgentEventMessage
   | AgentEventWarning
   | AgentEventError;
-export interface AgentUserPreferences {
-  providerConfig?: RuntimeProviderConfig;
-  providerPreference?: string;
-  modelPreference?: string;
-  reasoningEffort?: string;
-  thinking?: boolean;
-  webSearch?: boolean;
-  searchMode?: RuntimeSearchMode;
-  approvalPolicy?: AgentApprovalPolicy;
-  sandboxPolicy?: AgentSandboxPolicy;
-  executionStrategy?: AgentExecutionStrategy;
-  autoContinue?: AutoContinueRequestPayload;
-}
 export interface AgentUserInputOp {
   type: "user_input";
-  text: string;
-  sessionId: string;
   eventName: string;
-  workspaceId?: string;
-  turnId?: string;
-  images?: ImageInput[];
-  preferences?: AgentUserPreferences;
-  systemPrompt?: string;
-  metadata?: Record<string, unknown>;
-  queueIfBusy?: boolean;
-  queuedTurnId?: string;
-  skipPreSubmitResume?: boolean;
+  turn: TurnStartParams;
 }
 export interface AgentInterruptOp {
   type: "interrupt";
@@ -889,5 +885,5 @@ export type AgentOp =
 export declare function parseAgentEvent(data: unknown): AgentEvent | null;
 export declare function createAgentSessionTurnStartParamsFromUserInputOp(
   op: AgentUserInputOp,
-): AppServerAgentSessionTurnStartParams;
+): TurnStartParams;
 export {};

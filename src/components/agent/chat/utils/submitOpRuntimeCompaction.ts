@@ -1,14 +1,8 @@
-import type {
-  AgentExecutionStrategy,
-  AgentSessionExecutionRuntime,
-} from "@/lib/api/agentExecutionRuntime";
-import type { RuntimeProviderConfig } from "@/lib/api/agentRuntime/sessionTypes";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 import { normalizeHarnessSessionMode } from "./harnessSessionMode";
-import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
-import { compactSubmitOpToolPreferences } from "./submitOpToolPreferenceCompaction";
 
 const HARNESS_CONTENT_ID_KEYS = ["content_id", "contentId"] as const;
 const HARNESS_ACCESS_MODE_KEYS = ["access_mode", "accessMode"] as const;
@@ -19,6 +13,23 @@ const HARNESS_RUN_TITLE_KEYS = ["run_title", "runTitle", "title"] as const;
 const HARNESS_IMAGE_COMMAND_INTENT_KEYS = [
   "image_command_intent",
   "imageCommandIntent",
+] as const;
+const HARNESS_THINKING_PREFERENCE_KEYS = [
+  "thinking",
+  "thinking_enabled",
+  "thinkingEnabled",
+] as const;
+const HARNESS_WEB_SEARCH_PREFERENCE_KEYS = [
+  "web_search",
+  "webSearch",
+  "web_search_enabled",
+  "webSearchEnabled",
+] as const;
+const HARNESS_TASK_PREFERENCE_KEYS = ["task", "task_mode", "taskMode"] as const;
+const HARNESS_SUBAGENT_PREFERENCE_KEYS = [
+  "subagent",
+  "subagent_mode",
+  "subagentMode",
 ] as const;
 const RETIRED_HARNESS_IMAGE_SKILL_LAUNCH_KEYS = [
   "image_skill_launch",
@@ -44,6 +55,7 @@ const RETIRED_HARNESS_TEAM_SELECTION_KEYS = [
 ] as const;
 const IMAGE_GENERATION_CONTRACT_KEY = "image_generation";
 const IMAGE_GENERATION_ROUTING_SLOT = "image_generation_model";
+
 function normalizeRuntimeIdentifier(value?: string | null): string {
   return value?.trim().toLowerCase() || "";
 }
@@ -65,25 +77,31 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function requestHarness(
+  requestMetadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!requestMetadata) {
+    return undefined;
+  }
+  return isPlainRecord(requestMetadata.harness)
+    ? requestMetadata.harness
+    : requestMetadata;
+}
+
 function readHarnessStringFromRequestMetadata(
   requestMetadata: Record<string, unknown> | undefined,
   keys: readonly string[],
 ): string | null {
-  if (!requestMetadata) {
+  const harness = requestHarness(requestMetadata);
+  if (!harness) {
     return null;
   }
-
-  const nestedHarness = requestMetadata.harness;
-  const harness = isPlainRecord(nestedHarness)
-    ? (nestedHarness as Record<string, unknown>)
-    : requestMetadata;
-
   for (const key of keys) {
-    if (typeof harness[key] === "string" && harness[key].trim()) {
-      return harness[key] as string;
+    const value = harness[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
     }
   }
-
   return null;
 }
 
@@ -91,22 +109,16 @@ function readHarnessObjectFromRequestMetadata(
   requestMetadata: Record<string, unknown> | undefined,
   keys: readonly string[],
 ): Record<string, unknown> | null {
-  if (!requestMetadata) {
+  const harness = requestHarness(requestMetadata);
+  if (!harness) {
     return null;
   }
-
-  const nestedHarness = requestMetadata.harness;
-  const harness = isPlainRecord(nestedHarness)
-    ? (nestedHarness as Record<string, unknown>)
-    : requestMetadata;
-
   for (const key of keys) {
     const value = harness[key];
     if (isPlainRecord(value)) {
-      return value as Record<string, unknown>;
+      return value;
     }
   }
-
   return null;
 }
 
@@ -120,7 +132,6 @@ function readRecordString(
       return value.trim();
     }
   }
-
   return null;
 }
 
@@ -130,7 +141,6 @@ function hasImageGenerationContractMarker(
   if (!record) {
     return false;
   }
-
   const contractKey = normalizeRuntimeIdentifier(
     readRecordString(record, [
       "contract_key",
@@ -142,20 +152,17 @@ function hasImageGenerationContractMarker(
   if (contractKey === IMAGE_GENERATION_CONTRACT_KEY) {
     return true;
   }
-
   const routingSlot = normalizeRuntimeIdentifier(
     readRecordString(record, ["routing_slot", "routingSlot"]),
   );
   if (routingSlot === IMAGE_GENERATION_ROUTING_SLOT) {
     return true;
   }
-
   const runtimeContract = isPlainRecord(record.runtime_contract)
-    ? (record.runtime_contract as Record<string, unknown>)
+    ? record.runtime_contract
     : isPlainRecord(record.runtimeContract)
-      ? (record.runtimeContract as Record<string, unknown>)
+      ? record.runtimeContract
       : null;
-
   return hasImageGenerationContractMarker(runtimeContract);
 }
 
@@ -169,22 +176,20 @@ function hasImageGenerationLaunchRouting(
   if (!launch) {
     return false;
   }
-
   const requestContext = isPlainRecord(launch.request_context)
-    ? (launch.request_context as Record<string, unknown>)
+    ? launch.request_context
     : isPlainRecord(launch.requestContext)
-      ? (launch.requestContext as Record<string, unknown>)
+      ? launch.requestContext
       : null;
   const imageTask = isPlainRecord(launch.image_task)
-    ? (launch.image_task as Record<string, unknown>)
+    ? launch.image_task
     : isPlainRecord(launch.imageTask)
-      ? (launch.imageTask as Record<string, unknown>)
+      ? launch.imageTask
       : isPlainRecord(requestContext?.image_task)
-        ? (requestContext?.image_task as Record<string, unknown>)
+        ? requestContext.image_task
         : isPlainRecord(requestContext?.imageTask)
-          ? (requestContext?.imageTask as Record<string, unknown>)
+          ? requestContext.imageTask
           : null;
-
   return (
     hasImageGenerationContractMarker(launch) ||
     hasImageGenerationContractMarker(imageTask)
@@ -198,56 +203,153 @@ function omitHarnessFieldsFromRequestMetadata(
   if (!requestMetadata) {
     return requestMetadata;
   }
-
   const nestedHarness = requestMetadata.harness;
   const usesNestedHarness = isPlainRecord(nestedHarness);
   const harness = usesNestedHarness
     ? { ...(nestedHarness as Record<string, unknown>) }
     : { ...requestMetadata };
   let changed = false;
-
   for (const key of keys) {
-    if (!(key in harness)) {
-      continue;
+    if (key in harness) {
+      delete harness[key];
+      changed = true;
     }
-    delete harness[key];
-    changed = true;
   }
-
   if (!changed) {
     return requestMetadata;
   }
-
-  if (usesNestedHarness) {
-    if (Object.keys(harness).length === 0) {
-      const { harness: _removedHarness, ...rest } = requestMetadata;
-      return Object.keys(rest).length > 0 ? rest : undefined;
-    }
-    return {
-      ...requestMetadata,
-      harness,
-    };
+  if (!usesNestedHarness) {
+    return Object.keys(harness).length > 0 ? harness : undefined;
   }
-
-  return Object.keys(harness).length > 0 ? harness : undefined;
+  if (Object.keys(harness).length === 0) {
+    const { harness: _removedHarness, ...rest } = requestMetadata;
+    return Object.keys(rest).length > 0 ? rest : undefined;
+  }
+  return { ...requestMetadata, harness };
 }
 
-function omitRetiredHarnessMetadata(
+function omitHarnessPreferenceFromRequestMetadata(
   requestMetadata: Record<string, unknown> | undefined,
+  keys: readonly string[],
 ): Record<string, unknown> | undefined {
-  return omitHarnessFieldsFromRequestMetadata(requestMetadata, [
+  if (!requestMetadata) {
+    return requestMetadata;
+  }
+  const nestedHarness = requestMetadata.harness;
+  const usesNestedHarness = isPlainRecord(nestedHarness);
+  const harness: Record<string, unknown> = usesNestedHarness
+    ? (nestedHarness as Record<string, unknown>)
+    : requestMetadata;
+  if (!isPlainRecord(harness.preferences)) {
+    return requestMetadata;
+  }
+  const preferences = { ...harness.preferences };
+  let changed = false;
+  for (const key of keys) {
+    if (key in preferences) {
+      delete preferences[key];
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return requestMetadata;
+  }
+  const nextHarness = { ...harness };
+  if (Object.keys(preferences).length > 0) {
+    nextHarness.preferences = preferences;
+  } else {
+    delete nextHarness.preferences;
+  }
+  if (!usesNestedHarness) {
+    return Object.keys(nextHarness).length > 0 ? nextHarness : undefined;
+  }
+  if (Object.keys(nextHarness).length === 0) {
+    const { harness: _removedHarness, ...rest } = requestMetadata;
+    return Object.keys(rest).length > 0 ? rest : undefined;
+  }
+  return { ...requestMetadata, harness: nextHarness };
+}
+
+function readHarnessPreferenceFromRequestMetadata(
+  requestMetadata: Record<string, unknown> | undefined,
+  keys: readonly string[],
+): boolean | null {
+  const preferences = requestHarness(requestMetadata)?.preferences;
+  if (!isPlainRecord(preferences)) {
+    return null;
+  }
+  for (const key of keys) {
+    if (typeof preferences[key] === "boolean") {
+      return preferences[key];
+    }
+  }
+  return null;
+}
+
+function knownPreference(
+  executionRuntime: AgentSessionExecutionRuntime | null | undefined,
+  syncedRecentPreferences: ChatToolPreferences | null | undefined,
+  key: "task" | "subagent",
+): boolean | null {
+  if (typeof syncedRecentPreferences?.[key] === "boolean") {
+    return syncedRecentPreferences[key];
+  }
+  const runtimeValue = executionRuntime?.recent_preferences?.[key];
+  return typeof runtimeValue === "boolean" ? runtimeValue : null;
+}
+
+function sanitizeSubmitMetadata(options: {
+  requestMetadata?: Record<string, unknown>;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
+  syncedRecentPreferences?: ChatToolPreferences | null;
+}): Record<string, unknown> | undefined {
+  let metadata = omitHarnessFieldsFromRequestMetadata(options.requestMetadata, [
     ...RETIRED_HARNESS_IMAGE_SKILL_LAUNCH_KEYS,
     ...RETIRED_HARNESS_TEAM_SELECTION_KEYS,
   ]);
+  metadata = omitHarnessPreferenceFromRequestMetadata(
+    metadata,
+    HARNESS_THINKING_PREFERENCE_KEYS,
+  );
+  metadata = omitHarnessPreferenceFromRequestMetadata(
+    metadata,
+    HARNESS_WEB_SEARCH_PREFERENCE_KEYS,
+  );
+  for (const [key, keys] of [
+    ["task", HARNESS_TASK_PREFERENCE_KEYS],
+    ["subagent", HARNESS_SUBAGENT_PREFERENCE_KEYS],
+  ] as const) {
+    const requested = readHarnessPreferenceFromRequestMetadata(metadata, keys);
+    const known = knownPreference(
+      options.executionRuntime,
+      options.syncedRecentPreferences,
+      key,
+    );
+    if (requested !== null && known !== null && requested === known) {
+      metadata = omitHarnessPreferenceFromRequestMetadata(metadata, keys);
+    }
+  }
+  return metadata;
 }
 
-function normalizeComparableText(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.trim();
+function normalizeComparableText(value?: string | null): string | null {
+  const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function omitSyncedHarnessValue(
+  metadata: Record<string, unknown> | undefined,
+  keys: readonly string[],
+  knownValue: string | null | undefined,
+  normalize: (value?: string | null) => string | null = normalizeComparableText,
+): Record<string, unknown> | undefined {
+  const requestValue = normalize(
+    readHarnessStringFromRequestMetadata(metadata, keys),
+  );
+  const known = normalize(knownValue);
+  return requestValue !== null && known !== null && requestValue === known
+    ? omitHarnessFieldsFromRequestMetadata(metadata, keys)
+    : metadata;
 }
 
 export interface BuildSubmitOpRuntimeCompactionOptions {
@@ -255,262 +357,75 @@ export interface BuildSubmitOpRuntimeCompactionOptions {
   executionRuntime?: AgentSessionExecutionRuntime | null;
   syncedRecentPreferences?: ChatToolPreferences | null;
   syncedSessionModelPreference?: SessionModelPreference | null;
-  syncedExecutionStrategy?: AgentExecutionStrategy | null;
-  effectiveExecutionStrategy: AgentExecutionStrategy;
   effectiveProviderType: string;
   effectiveModel: string;
-  modelOverride?: string;
-  requestedWebSearch?: boolean;
-  requestedThinking?: boolean;
 }
 
 export interface SubmitOpRuntimeCompactionResult {
   metadata?: Record<string, unknown>;
-  providerConfig?: RuntimeProviderConfig;
-  shouldSubmitProviderPreference: boolean;
-  shouldSubmitModelPreference: boolean;
-  shouldSubmitExecutionStrategy: boolean;
-  shouldSubmitWebSearch: boolean;
-  shouldSubmitThinking: boolean;
-  webSearchPreference?: boolean;
-  thinkingPreference?: boolean;
+  shouldSubmitModel: boolean;
 }
 
-function resolveImageOrchestrationProviderConfig(params: {
-  effectiveProviderType: string;
-  effectiveModel: string;
-  syncedSessionModelPreference?: SessionModelPreference | null;
-  executionRuntime?: AgentSessionExecutionRuntime | null;
-}): RuntimeProviderConfig | undefined {
-  const candidates = [
-    {
-      provider: params.effectiveProviderType.trim(),
-      model: params.effectiveModel.trim(),
-    },
-    {
-      provider: params.syncedSessionModelPreference?.providerType?.trim() || "",
-      model: params.syncedSessionModelPreference?.model?.trim() || "",
-    },
-    {
-      provider: params.executionRuntime?.provider_selector?.trim() || "",
-      model: params.executionRuntime?.model_name?.trim() || "",
-    },
-  ];
-
-  const selection = candidates.find(
-    (candidate) =>
-      candidate.provider &&
-      candidate.model &&
-      !selectionLooksImageGenerationOnly(candidate),
-  );
-  if (!selection) {
-    return undefined;
+function shouldSubmitTurnModel(
+  options: BuildSubmitOpRuntimeCompactionOptions,
+  metadata: Record<string, unknown> | undefined,
+): boolean {
+  const effectiveModel = normalizeRuntimeIdentifier(options.effectiveModel);
+  if (!effectiveModel) {
+    return false;
   }
-
-  return {
-    provider_id: selection.provider,
-    provider_name: selection.provider,
-    model_name: selection.model,
-  };
+  if (
+    hasImageGenerationLaunchRouting(metadata) &&
+    selectionLooksImageGenerationOnly({
+      provider: options.effectiveProviderType,
+      model: options.effectiveModel,
+    })
+  ) {
+    return false;
+  }
+  const syncedModel = normalizeRuntimeIdentifier(
+    options.syncedSessionModelPreference?.model,
+  );
+  return !syncedModel || syncedModel !== effectiveModel;
 }
 
 export function buildSubmitOpRuntimeCompaction(
   options: BuildSubmitOpRuntimeCompactionOptions,
 ): SubmitOpRuntimeCompactionResult {
-  const {
-    executionRuntime,
-    syncedRecentPreferences,
-    syncedSessionModelPreference,
-    syncedExecutionStrategy,
-    effectiveExecutionStrategy,
-    effectiveProviderType,
-    effectiveModel,
-    modelOverride,
-    requestedWebSearch,
-    requestedThinking,
-  } = options;
-  const requestMetadata = omitRetiredHarnessMetadata(options.requestMetadata);
-
-  const syncedProviderSelector =
-    syncedSessionModelPreference?.providerType?.trim() || null;
-  const syncedModelName = syncedSessionModelPreference?.model?.trim() || null;
-  const hasImageGenerationRouting =
-    hasImageGenerationLaunchRouting(requestMetadata);
-  const hasExplicitModelOverride = Boolean(modelOverride?.trim());
-  const normalizedEffectiveProviderType = normalizeRuntimeIdentifier(
-    effectiveProviderType,
+  let metadata = sanitizeSubmitMetadata(options);
+  metadata = omitSyncedHarnessValue(
+    metadata,
+    HARNESS_CONTENT_ID_KEYS,
+    options.executionRuntime?.recent_content_id,
   );
-  const normalizedEffectiveModel = normalizeRuntimeIdentifier(effectiveModel);
-  const hasEffectiveProviderType = Boolean(normalizedEffectiveProviderType);
-  const hasEffectiveModel = Boolean(normalizedEffectiveModel);
-  const effectiveSelectionLooksImageOnly = selectionLooksImageGenerationOnly({
-    provider: effectiveProviderType,
-    model: effectiveModel,
-  });
-  const imageOrchestrationProviderConfig = hasImageGenerationRouting
-    ? resolveImageOrchestrationProviderConfig({
-        effectiveProviderType,
-        effectiveModel,
-        syncedSessionModelPreference,
-        executionRuntime,
-      })
-    : undefined;
-  const shouldSuppressImageOnlyEffectivePreferences = Boolean(
-    hasImageGenerationRouting && effectiveSelectionLooksImageOnly,
+  metadata = omitSyncedHarnessValue(
+    metadata,
+    HARNESS_ACCESS_MODE_KEYS,
+    options.executionRuntime?.recent_access_mode,
   );
-  const shouldSubmitProviderPreference =
-    hasEffectiveProviderType &&
-    hasEffectiveModel &&
-    !shouldSuppressImageOnlyEffectivePreferences &&
-    (!syncedProviderSelector ||
-      !syncedModelName ||
-      normalizeRuntimeIdentifier(syncedProviderSelector) !==
-        normalizedEffectiveProviderType);
-  // executionRuntime 只说明上一轮使用过什么模型，不能证明后端已持久化 session model fallback。
-  const shouldSubmitModelPreference =
-    hasEffectiveProviderType &&
-    hasEffectiveModel &&
-    !shouldSuppressImageOnlyEffectivePreferences &&
-    (hasExplicitModelOverride ||
-      shouldSubmitProviderPreference ||
-      !syncedProviderSelector ||
-      !syncedModelName ||
-      normalizeRuntimeIdentifier(syncedModelName) !== normalizedEffectiveModel);
-  const normalizedEffectiveExecutionStrategy = normalizeExecutionStrategy(
-    effectiveExecutionStrategy,
+  metadata = omitSyncedHarnessValue(
+    metadata,
+    HARNESS_THEME_KEYS,
+    options.executionRuntime?.recent_theme,
   );
-
-  const knownExecutionStrategy = syncedExecutionStrategy
-    ? normalizeExecutionStrategy(syncedExecutionStrategy)
-    : executionRuntime?.execution_strategy
-      ? normalizeExecutionStrategy(executionRuntime.execution_strategy)
-      : null;
-  const shouldSubmitExecutionStrategy =
-    normalizedEffectiveExecutionStrategy !== "react" &&
-    (!knownExecutionStrategy ||
-      normalizeRuntimeIdentifier(knownExecutionStrategy) !==
-        normalizeRuntimeIdentifier(normalizedEffectiveExecutionStrategy));
-
-  const preferenceCompaction = compactSubmitOpToolPreferences({
-    requestMetadata,
-    executionRuntime,
-    syncedRecentPreferences,
-    requestedWebSearch,
-    requestedThinking,
-  });
-  let metadata = preferenceCompaction.metadata;
-
-  const requestContentId = normalizeComparableText(
-    readHarnessStringFromRequestMetadata(metadata, HARNESS_CONTENT_ID_KEYS),
+  metadata = omitSyncedHarnessValue(
+    metadata,
+    HARNESS_SESSION_MODE_KEYS,
+    options.executionRuntime?.recent_session_mode,
+    normalizeHarnessSessionMode,
   );
-  const knownRecentContentId = normalizeComparableText(
-    executionRuntime?.recent_content_id,
+  metadata = omitSyncedHarnessValue(
+    metadata,
+    HARNESS_GATE_KEY_KEYS,
+    options.executionRuntime?.recent_gate_key,
   );
-  if (
-    requestContentId !== null &&
-    knownRecentContentId !== null &&
-    requestContentId === knownRecentContentId
-  ) {
-    metadata = omitHarnessFieldsFromRequestMetadata(
-      metadata,
-      HARNESS_CONTENT_ID_KEYS,
-    );
-  }
-
-  const requestAccessMode = normalizeComparableText(
-    readHarnessStringFromRequestMetadata(metadata, HARNESS_ACCESS_MODE_KEYS),
+  metadata = omitSyncedHarnessValue(
+    metadata,
+    HARNESS_RUN_TITLE_KEYS,
+    options.executionRuntime?.recent_run_title,
   );
-  const knownRecentAccessMode = normalizeComparableText(
-    executionRuntime?.recent_access_mode,
-  );
-  if (
-    requestAccessMode !== null &&
-    knownRecentAccessMode !== null &&
-    requestAccessMode === knownRecentAccessMode
-  ) {
-    metadata = omitHarnessFieldsFromRequestMetadata(
-      metadata,
-      HARNESS_ACCESS_MODE_KEYS,
-    );
-  }
-
-  const requestTheme = normalizeComparableText(
-    readHarnessStringFromRequestMetadata(metadata, HARNESS_THEME_KEYS),
-  );
-  const knownRecentTheme = normalizeComparableText(
-    executionRuntime?.recent_theme,
-  );
-  if (
-    requestTheme !== null &&
-    knownRecentTheme !== null &&
-    requestTheme === knownRecentTheme
-  ) {
-    metadata = omitHarnessFieldsFromRequestMetadata(
-      metadata,
-      HARNESS_THEME_KEYS,
-    );
-  }
-
-  const requestSessionMode = normalizeHarnessSessionMode(
-    readHarnessStringFromRequestMetadata(metadata, HARNESS_SESSION_MODE_KEYS),
-  );
-  const knownRecentSessionMode = normalizeHarnessSessionMode(
-    executionRuntime?.recent_session_mode,
-  );
-  if (
-    requestSessionMode !== null &&
-    knownRecentSessionMode !== null &&
-    requestSessionMode === knownRecentSessionMode
-  ) {
-    metadata = omitHarnessFieldsFromRequestMetadata(
-      metadata,
-      HARNESS_SESSION_MODE_KEYS,
-    );
-  }
-
-  const requestGateKey = normalizeComparableText(
-    readHarnessStringFromRequestMetadata(metadata, HARNESS_GATE_KEY_KEYS),
-  );
-  const knownRecentGateKey = normalizeComparableText(
-    executionRuntime?.recent_gate_key,
-  );
-  if (
-    requestGateKey !== null &&
-    knownRecentGateKey !== null &&
-    requestGateKey === knownRecentGateKey
-  ) {
-    metadata = omitHarnessFieldsFromRequestMetadata(
-      metadata,
-      HARNESS_GATE_KEY_KEYS,
-    );
-  }
-
-  const requestRunTitle = normalizeComparableText(
-    readHarnessStringFromRequestMetadata(metadata, HARNESS_RUN_TITLE_KEYS),
-  );
-  const knownRecentRunTitle = normalizeComparableText(
-    executionRuntime?.recent_run_title,
-  );
-  if (
-    requestRunTitle !== null &&
-    knownRecentRunTitle !== null &&
-    requestRunTitle === knownRecentRunTitle
-  ) {
-    metadata = omitHarnessFieldsFromRequestMetadata(
-      metadata,
-      HARNESS_RUN_TITLE_KEYS,
-    );
-  }
-
   return {
     metadata,
-    providerConfig: imageOrchestrationProviderConfig,
-    shouldSubmitProviderPreference,
-    shouldSubmitModelPreference,
-    shouldSubmitExecutionStrategy,
-    shouldSubmitWebSearch: preferenceCompaction.shouldSubmitWebSearch,
-    shouldSubmitThinking: preferenceCompaction.shouldSubmitThinking,
-    webSearchPreference: preferenceCompaction.webSearchPreference,
-    thinkingPreference: preferenceCompaction.thinkingPreference,
+    shouldSubmitModel: shouldSubmitTurnModel(options, metadata),
   };
 }

@@ -1,23 +1,32 @@
 import {
   AppServerClient,
   type AppServerAgentSessionActionRespondParams,
-  type AppServerAgentSessionTurnStartParams,
   type AppServerJsonRpcNotification,
+  type AppServerThreadReadResponse,
+  type AppServerThreadShellCommandParams,
 } from "@/lib/api/appServer";
+import type {
+  AppServerRequestResult,
+  ThreadResumeParams,
+  ThreadResumeResponse,
+  TurnStartParams,
+  TurnSteerParams,
+  TurnSteerResponse,
+} from "@limecloud/app-server-client";
+import type { AgentRuntimeClient as StandardAgentRuntimeClient } from "@limecloud/agent-runtime-client";
+import type { AgentRuntimeCapabilityManifest } from "@limecloud/agent-ui-contracts";
 import { type AgentRuntimeCommandInvoke } from "./transport";
 import type {
+  AgentRuntimeCapabilityManifestRequest,
   AgentRuntimeCompactSessionRequest,
   AgentRuntimeDiffFileCheckpointRequest,
   AgentRuntimeGetFileCheckpointRequest,
   AgentRuntimeInterruptTurnRequest,
   AgentRuntimeListFileCheckpointsRequest,
-  AgentRuntimePromoteQueuedTurnRequest,
-  AgentRuntimeRemoveQueuedTurnRequest,
   AgentRuntimeReplayRequestRequest,
   AgentRuntimeReplayedActionRequiredView,
   AgentRuntimeRespondActionRequest,
   AgentRuntimeRestoreFileCheckpointRequest,
-  AgentRuntimeResumeThreadRequest,
 } from "./requestTypes";
 import type {
   AgentRuntimeFileCheckpointDetail,
@@ -26,22 +35,39 @@ import type {
   AgentRuntimeFileCheckpointRestoreResult,
   AgentRuntimeThreadReadModel,
 } from "./sessionTypes";
+
 export type AgentRuntimeAppServerClient = Pick<
   AppServerClient,
-  "readSession" | "startTurn" | "cancelTurn" | "respondAction" | "drainEvents"
+  | "readThread"
+  | "runThreadShellCommand"
+  | "startTurn"
+  | "steerTurn"
+  | "cancelTurn"
+  | "replayAction"
+  | "compactAgentSession"
+  | "resumeThread"
+  | "respondAction"
+  | "drainEvents"
+  | "listAgentSessionFileCheckpoints"
+  | "getAgentSessionFileCheckpoint"
+  | "diffAgentSessionFileCheckpoint"
+  | "restoreAgentSessionFileCheckpoint"
+  | "listCapabilities"
+>;
+export type AgentRuntimeLifecycleClient = Pick<
+  StandardAgentRuntimeClient,
+  "startTurn" | "steerTurn" | "cancelTurn" | "respondAction" | "readThread"
 >;
 export interface AgentRuntimeThreadClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeAppServerClient;
+  standardRuntimeClient?: AgentRuntimeLifecycleClient;
   isAppServerTurnLifecycleAvailable?: () => boolean;
   enableAppServerEventDrain?: boolean;
 }
-export declare function createThreadClient({
-  invokeCommand,
-  appServerClient,
-  isAppServerTurnLifecycleAvailable,
-  enableAppServerEventDrain,
-}?: AgentRuntimeThreadClientDeps): {
+export declare function createThreadClient(
+  deps?: AgentRuntimeThreadClientDeps,
+): {
   compactAgentRuntimeSession: (
     request: AgentRuntimeCompactSessionRequest,
   ) => Promise<void>;
@@ -51,21 +77,22 @@ export declare function createThreadClient({
   getAgentRuntimeFileCheckpoint: (
     request: AgentRuntimeGetFileCheckpointRequest,
   ) => Promise<AgentRuntimeFileCheckpointDetail>;
+  getAgentRuntimeCapabilityManifest: (
+    request?: AgentRuntimeCapabilityManifestRequest,
+  ) => Promise<AgentRuntimeCapabilityManifest>;
   getAgentRuntimeThreadRead: (
-    sessionId: string,
+    threadId: string,
   ) => Promise<AgentRuntimeThreadReadModel>;
+  readAgentRuntimeThread: (
+    threadId: string,
+  ) => Promise<AppServerThreadReadResponse>;
+  readThreadSessionId: (threadId: string) => Promise<string>;
   interruptAgentRuntimeTurn: (
     request: AgentRuntimeInterruptTurnRequest,
   ) => Promise<boolean>;
   listAgentRuntimeFileCheckpoints: (
     request: AgentRuntimeListFileCheckpointsRequest,
   ) => Promise<AgentRuntimeFileCheckpointListResult>;
-  promoteAgentRuntimeQueuedTurn: (
-    request: AgentRuntimePromoteQueuedTurnRequest,
-  ) => Promise<boolean>;
-  removeAgentRuntimeQueuedTurn: (
-    request: AgentRuntimeRemoveQueuedTurnRequest,
-  ) => Promise<boolean>;
   replayAgentRuntimeRequest: (
     request: AgentRuntimeReplayRequestRequest,
   ) => Promise<AgentRuntimeReplayedActionRequiredView | null>;
@@ -75,12 +102,17 @@ export declare function createThreadClient({
   restoreAgentRuntimeFileCheckpoint: (
     request: AgentRuntimeRestoreFileCheckpointRequest,
   ) => Promise<AgentRuntimeFileCheckpointRestoreResult>;
-  resumeAgentRuntimeThread: (
-    request: AgentRuntimeResumeThreadRequest,
-  ) => Promise<boolean>;
-  submitAgentRuntimeTurn: (
-    request: AppServerAgentSessionTurnStartParams,
+  resumeThread: (
+    request: ThreadResumeParams,
+  ) => Promise<AppServerRequestResult<ThreadResumeResponse>>;
+  runUserShellCommand: (
+    request: AppServerThreadShellCommandParams,
+    eventName: string,
   ) => Promise<void>;
+  steerAgentRuntimeTurn: (
+    request: TurnSteerParams,
+  ) => Promise<AppServerRequestResult<TurnSteerResponse>>;
+  submitAgentRuntimeTurn: (request: TurnStartParams) => Promise<void>;
 };
 export declare function publishAppServerAgentSessionNotifications(
   eventName: string | undefined,
@@ -92,42 +124,49 @@ export declare function projectAppServerAgentEventPayload(
 export declare function appServerActionRespondParamsFromRequest(
   request: AgentRuntimeRespondActionRequest,
 ): AppServerAgentSessionActionRespondParams;
-export declare const compactAgentRuntimeSession: (
-    request: AgentRuntimeCompactSessionRequest,
-  ) => Promise<void>,
-  diffAgentRuntimeFileCheckpoint: (
-    request: AgentRuntimeDiffFileCheckpointRequest,
-  ) => Promise<AgentRuntimeFileCheckpointDiffResult>,
-  getAgentRuntimeFileCheckpoint: (
-    request: AgentRuntimeGetFileCheckpointRequest,
-  ) => Promise<AgentRuntimeFileCheckpointDetail>,
-  getAgentRuntimeThreadRead: (
-    sessionId: string,
-  ) => Promise<AgentRuntimeThreadReadModel>,
-  interruptAgentRuntimeTurn: (
-    request: AgentRuntimeInterruptTurnRequest,
-  ) => Promise<boolean>,
-  listAgentRuntimeFileCheckpoints: (
-    request: AgentRuntimeListFileCheckpointsRequest,
-  ) => Promise<AgentRuntimeFileCheckpointListResult>,
-  promoteAgentRuntimeQueuedTurn: (
-    request: AgentRuntimePromoteQueuedTurnRequest,
-  ) => Promise<boolean>,
-  removeAgentRuntimeQueuedTurn: (
-    request: AgentRuntimeRemoveQueuedTurnRequest,
-  ) => Promise<boolean>,
-  replayAgentRuntimeRequest: (
-    request: AgentRuntimeReplayRequestRequest,
-  ) => Promise<AgentRuntimeReplayedActionRequiredView | null>,
-  respondAgentRuntimeAction: (
-    request: AgentRuntimeRespondActionRequest,
-  ) => Promise<void>,
-  restoreAgentRuntimeFileCheckpoint: (
-    request: AgentRuntimeRestoreFileCheckpointRequest,
-  ) => Promise<AgentRuntimeFileCheckpointRestoreResult>,
-  resumeAgentRuntimeThread: (
-    request: AgentRuntimeResumeThreadRequest,
-  ) => Promise<boolean>,
-  submitAgentRuntimeTurn: (
-    request: AppServerAgentSessionTurnStartParams,
-  ) => Promise<void>;
+export declare const compactAgentRuntimeSession: ReturnType<
+    typeof createThreadClient
+  >["compactAgentRuntimeSession"],
+  diffAgentRuntimeFileCheckpoint: ReturnType<
+    typeof createThreadClient
+  >["diffAgentRuntimeFileCheckpoint"],
+  getAgentRuntimeCapabilityManifest: ReturnType<
+    typeof createThreadClient
+  >["getAgentRuntimeCapabilityManifest"],
+  getAgentRuntimeFileCheckpoint: ReturnType<
+    typeof createThreadClient
+  >["getAgentRuntimeFileCheckpoint"],
+  getAgentRuntimeThreadRead: ReturnType<
+    typeof createThreadClient
+  >["getAgentRuntimeThreadRead"],
+  readAgentRuntimeThread: ReturnType<
+    typeof createThreadClient
+  >["readAgentRuntimeThread"],
+  readThreadSessionId: ReturnType<
+    typeof createThreadClient
+  >["readThreadSessionId"],
+  interruptAgentRuntimeTurn: ReturnType<
+    typeof createThreadClient
+  >["interruptAgentRuntimeTurn"],
+  listAgentRuntimeFileCheckpoints: ReturnType<
+    typeof createThreadClient
+  >["listAgentRuntimeFileCheckpoints"],
+  replayAgentRuntimeRequest: ReturnType<
+    typeof createThreadClient
+  >["replayAgentRuntimeRequest"],
+  respondAgentRuntimeAction: ReturnType<
+    typeof createThreadClient
+  >["respondAgentRuntimeAction"],
+  restoreAgentRuntimeFileCheckpoint: ReturnType<
+    typeof createThreadClient
+  >["restoreAgentRuntimeFileCheckpoint"],
+  resumeThread: ReturnType<typeof createThreadClient>["resumeThread"],
+  runUserShellCommand: ReturnType<
+    typeof createThreadClient
+  >["runUserShellCommand"],
+  steerAgentRuntimeTurn: ReturnType<
+    typeof createThreadClient
+  >["steerAgentRuntimeTurn"],
+  submitAgentRuntimeTurn: ReturnType<
+    typeof createThreadClient
+  >["submitAgentRuntimeTurn"];

@@ -15,9 +15,7 @@ import {
   DEFAULT_CHAT_TOOL_PREFERENCES,
   type ChatToolPreferences,
 } from "../utils/chatToolPreferences";
-import {
-  deriveRuntimeToolAvailability,
-} from "../utils/runtimeToolAvailability";
+import { deriveRuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import type { WorkspaceGeneralWorkbenchHarnessPanelBaseProps } from "./useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import type { WorkspaceHandleSend } from "./useWorkspaceSendActions";
@@ -97,7 +95,6 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   soulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
   soulArtifactVoiceEnabledForTurn: boolean;
   onSoulArtifactVoiceEnabledForTurnChange: (enabled: boolean) => void;
-  removeQueuedTurn: InputbarParams["onRemoveQueuedTurn"];
   generalWorkbenchEntryPrompt: InputbarPresentationParams["generalWorkbenchEntryPrompt"];
   handleRestartGeneralWorkbenchEntryPrompt: InputbarPresentationParams["onRestartGeneralWorkbenchEntryPrompt"];
   handleContinueGeneralWorkbenchEntryPrompt: InputbarPresentationParams["onContinueGeneralWorkbenchEntryPrompt"];
@@ -175,7 +172,6 @@ export function useWorkspaceInputbarSceneRuntime({
   soulArtifactVoiceGenerationBrief,
   soulArtifactVoiceEnabledForTurn,
   onSoulArtifactVoiceEnabledForTurnChange,
-  removeQueuedTurn,
   generalWorkbenchEntryPrompt,
   handleRestartGeneralWorkbenchEntryPrompt,
   handleContinueGeneralWorkbenchEntryPrompt,
@@ -199,10 +195,6 @@ export function useWorkspaceInputbarSceneRuntime({
   onToggleFileManager,
   inputCompletionEnabled = true,
 }: UseWorkspaceInputbarSceneRuntimeParams) {
-  const resolvedQueuedTurns = useMemo(
-    () => generalWorkbenchHarnessPanelBaseProps.queuedTurns ?? [],
-    [generalWorkbenchHarnessPanelBaseProps.queuedTurns],
-  );
   const knowledgeRuntime = useWorkspaceKnowledgeRuntime({
     projectRootPath,
     currentSessionTitle,
@@ -366,17 +358,6 @@ export function useWorkspaceInputbarSceneRuntime({
         onToolStatesChange: handleInputbarToolStatesChange,
         onNavigateToSettings: handleNavigateToSkillSettings,
         onRefreshSkills: handleRefreshSkills,
-        queuedTurns: resolvedQueuedTurns,
-        onPromoteQueuedTurn: generalWorkbenchHarnessPanelBaseProps.onPromoteQueuedTurn
-          ? async (queuedTurnId: string) => {
-              return Boolean(
-                await generalWorkbenchHarnessPanelBaseProps.onPromoteQueuedTurn?.(
-                  queuedTurnId,
-                ),
-              );
-            }
-          : undefined,
-        onRemoveQueuedTurn: removeQueuedTurn,
         defaultCuratedTaskReferenceMemoryIds,
         defaultCuratedTaskReferenceEntries,
         pathReferences,
@@ -407,10 +388,7 @@ export function useWorkspaceInputbarSceneRuntime({
         onOpenChange: setHarnessPanelVisible,
         harnessState,
         ...generalWorkbenchHarnessPanelBaseProps,
-        queuedTurns: resolvedQueuedTurns,
         onInterruptCurrentTurn: handleStopSending,
-        onPromoteQueuedTurn:
-          generalWorkbenchHarnessPanelBaseProps.onPromoteQueuedTurn,
         onManageProviders:
           generalWorkbenchHarnessPanelBaseProps.onManageProviders ??
           navigationActions.handleManageProviders,

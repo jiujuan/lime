@@ -2,7 +2,6 @@
 //!
 //! 提供会话文件的 CRUD 操作和生命周期管理。
 
-use crate::app_paths;
 use serde_json::Value;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -11,6 +10,9 @@ use chrono::Utc;
 
 use super::types::{SessionDetail, SessionFile, SessionMeta, SessionSummary};
 
+const ARTIFACTS_DIR_NAME: &str = "artifacts";
+const SESSION_FILES_DIR_NAME: &str = "sessions";
+
 /// 会话文件存储服务
 pub struct SessionFileStorage {
     /// 存储根目录
@@ -18,13 +20,20 @@ pub struct SessionFileStorage {
 }
 
 impl SessionFileStorage {
-    /// 创建新的存储服务
+    /// 创建新的存储服务。
     ///
-    /// 默认使用应用数据目录下的 `lime/sessions`，并兼容旧 Home 历史目录
-    pub fn new() -> Result<Self, String> {
-        let base_dir = Self::get_default_base_dir()?;
-        fs::create_dir_all(&base_dir).map_err(|e| format!("创建会话存储目录失败: {e}"))?;
-        Ok(Self { base_dir })
+    /// `agent_root` 必须是已解析的 AgentRoot；会话文件统一归档到
+    /// `AgentRoot/artifacts/sessions`，避免从存储 owner 内部重新解析平台路径。
+    pub fn new(agent_root: impl AsRef<Path>) -> Result<Self, String> {
+        Self::with_base_dir(Self::base_dir_for_agent_root(agent_root))
+    }
+
+    /// 从 AgentRoot 派生会话文件的唯一存储根。
+    pub fn base_dir_for_agent_root(agent_root: impl AsRef<Path>) -> PathBuf {
+        agent_root
+            .as_ref()
+            .join(ARTIFACTS_DIR_NAME)
+            .join(SESSION_FILES_DIR_NAME)
     }
 
     /// 使用指定目录创建存储服务
@@ -33,29 +42,25 @@ impl SessionFileStorage {
         Ok(Self { base_dir })
     }
 
-    /// 获取默认存储目录
-    fn get_default_base_dir() -> Result<PathBuf, String> {
-        app_paths::resolve_sessions_dir()
-    }
-
     /// 获取会话目录路径
-    fn get_session_dir(&self, session_id: &str) -> PathBuf {
-        self.base_dir.join(session_id)
+    fn get_session_dir(&self, session_id: &str) -> Result<PathBuf, String> {
+        Self::validate_session_id(session_id)?;
+        Ok(self.base_dir.join(session_id))
     }
 
     /// 获取会话元数据文件路径
-    fn get_meta_path(&self, session_id: &str) -> PathBuf {
-        self.get_session_dir(session_id).join(".meta.json")
+    fn get_meta_path(&self, session_id: &str) -> Result<PathBuf, String> {
+        Ok(self.get_session_dir(session_id)?.join(".meta.json"))
     }
 
     /// 获取会话文件目录路径
-    fn get_files_dir(&self, session_id: &str) -> PathBuf {
-        self.get_session_dir(session_id).join("files")
+    fn get_files_dir(&self, session_id: &str) -> Result<PathBuf, String> {
+        Ok(self.get_session_dir(session_id)?.join("files"))
     }
 
     /// 获取会话文件 metadata 目录路径
-    fn get_file_metadata_dir(&self, session_id: &str) -> PathBuf {
-        self.get_session_dir(session_id).join(".filemeta")
+    fn get_file_metadata_dir(&self, session_id: &str) -> Result<PathBuf, String> {
+        Ok(self.get_session_dir(session_id)?.join(".filemeta"))
     }
 
     // ========================================================================
@@ -64,8 +69,8 @@ impl SessionFileStorage {
 
     /// 创建新会话目录
     pub fn create_session(&self, session_id: &str) -> Result<SessionMeta, String> {
-        let session_dir = self.get_session_dir(session_id);
-        let files_dir = self.get_files_dir(session_id);
+        let session_dir = self.get_session_dir(session_id)?;
+        let files_dir = self.get_files_dir(session_id)?;
 
         // 创建目录
         fs::create_dir_all(&files_dir).map_err(|e| format!("创建会话目录失败: {e}"))?;
@@ -80,11 +85,14 @@ impl SessionFileStorage {
 
     /// 检查会话是否存在
     pub fn session_exists(&self, session_id: &str) -> bool {
-        self.get_session_dir(session_id).exists()
+        self.get_session_dir(session_id)
+            .map(|path| path.exists())
+            .unwrap_or(false)
     }
 
     /// 获取或创建会话
     pub fn get_or_create_session(&self, session_id: &str) -> Result<SessionMeta, String> {
+        Self::validate_session_id(session_id)?;
         if self.session_exists(session_id) {
             self.get_meta(session_id)
         } else {
@@ -94,7 +102,7 @@ impl SessionFileStorage {
 
     /// 删除会话目录（包括所有文件）
     pub fn delete_session(&self, session_id: &str) -> Result<(), String> {
-        let session_dir = self.get_session_dir(session_id);
+        let session_dir = self.get_session_dir(session_id)?;
         if session_dir.exists() {
             fs::remove_dir_all(&session_dir).map_err(|e| format!("删除会话目录失败: {e}"))?;
             tracing::info!("[SessionFileStorage] 删除会话目录: {:?}", session_dir);
@@ -144,14 +152,14 @@ impl SessionFileStorage {
 
     /// 读取会话元数据
     pub fn get_meta(&self, session_id: &str) -> Result<SessionMeta, String> {
-        let meta_path = self.get_meta_path(session_id);
+        let meta_path = self.get_meta_path(session_id)?;
         let content = fs::read_to_string(&meta_path).map_err(|e| format!("读取元数据失败: {e}"))?;
         serde_json::from_str(&content).map_err(|e| format!("解析元数据失败: {e}"))
     }
 
     /// 保存会话元数据
     pub fn save_meta(&self, session_id: &str, meta: &SessionMeta) -> Result<(), String> {
-        let meta_path = self.get_meta_path(session_id);
+        let meta_path = self.get_meta_path(session_id)?;
         let content =
             serde_json::to_string_pretty(meta).map_err(|e| format!("序列化元数据失败: {e}"))?;
         fs::write(&meta_path, content).map_err(|e| format!("写入元数据失败: {e}"))
@@ -263,7 +271,7 @@ impl SessionFileStorage {
 
     /// 解析会话文件的绝对路径
     pub fn resolve_file_path(&self, session_id: &str, file_name: &str) -> Result<String, String> {
-        let files_dir = self.get_files_dir(session_id);
+        let files_dir = self.get_files_dir(session_id)?;
         let file_path = self.resolve_session_file_path(session_id, file_name)?;
 
         if !file_path.exists() {
@@ -297,7 +305,7 @@ impl SessionFileStorage {
 
     /// 列出会话中的所有文件
     pub fn list_files(&self, session_id: &str) -> Result<Vec<SessionFile>, String> {
-        let files_dir = self.get_files_dir(session_id);
+        let files_dir = self.get_files_dir(session_id)?;
         let mut files = Vec::new();
 
         if !files_dir.exists() {
@@ -375,7 +383,21 @@ impl SessionFileStorage {
         file_name: &str,
     ) -> Result<PathBuf, String> {
         let relative_path = Self::validate_relative_file_path(file_name)?;
-        Ok(self.get_files_dir(session_id).join(relative_path))
+        Ok(self.get_files_dir(session_id)?.join(relative_path))
+    }
+
+    fn validate_session_id(session_id: &str) -> Result<(), String> {
+        let mut components = Path::new(session_id).components();
+        let is_single_component =
+            matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none();
+        if session_id.is_empty()
+            || session_id.contains('/')
+            || session_id.contains('\\')
+            || !is_single_component
+        {
+            return Err("非法会话 ID".to_string());
+        }
+        Ok(())
     }
 
     fn validate_relative_file_path(file_name: &str) -> Result<PathBuf, String> {
@@ -410,7 +432,7 @@ impl SessionFileStorage {
         file_name: &str,
     ) -> Result<PathBuf, String> {
         let relative_path = Self::validate_relative_file_path(file_name)?;
-        let mut metadata_path = self.get_file_metadata_dir(session_id).join(relative_path);
+        let mut metadata_path = self.get_file_metadata_dir(session_id)?.join(relative_path);
         let file_name = metadata_path
             .file_name()
             .and_then(|value| value.to_str())
@@ -572,12 +594,6 @@ impl SessionFileStorage {
     }
 }
 
-impl Default for SessionFileStorage {
-    fn default() -> Self {
-        Self::new().expect("创建默认会话文件存储失败")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -587,6 +603,35 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let storage = SessionFileStorage::with_base_dir(temp_dir.path().to_path_buf()).unwrap();
         (storage, temp_dir)
+    }
+
+    #[test]
+    fn agent_root_owns_session_artifacts() {
+        let temp_dir = TempDir::new().unwrap();
+        let agent_root = temp_dir.path().join("app-server");
+        let storage = SessionFileStorage::new(&agent_root).unwrap();
+
+        storage.create_session("session-path-contract").unwrap();
+
+        assert!(agent_root
+            .join("artifacts")
+            .join("sessions")
+            .join("session-path-contract")
+            .join(".meta.json")
+            .is_file());
+        assert!(!agent_root.join("sessions").exists());
+    }
+
+    #[test]
+    fn session_id_cannot_escape_artifact_root() {
+        let (storage, _temp) = create_test_storage();
+
+        for session_id in ["", ".", "..", "../escape", "nested/id", "nested\\id"] {
+            assert!(storage.create_session(session_id).is_err());
+            assert!(storage.read_file(session_id, "report.md").is_err());
+            assert!(storage.delete_session(session_id).is_err());
+            assert!(!storage.session_exists(session_id));
+        }
     }
 
     #[test]

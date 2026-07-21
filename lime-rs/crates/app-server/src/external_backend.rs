@@ -394,7 +394,9 @@ mod tests {
             r#"
               import { readFileSync } from 'node:fs';
               const input = JSON.parse(readFileSync(0, 'utf8'));
-              const text = input.request.input?.text ?? '';
+              const text = (input.request.input?.parts ?? [])
+                .map((part) => part.Text?.text ?? '')
+                .join('');
               console.log(JSON.stringify({
                 events: [
                   {
@@ -459,7 +461,8 @@ mod tests {
                 "message.delta",
             ]
         );
-        assert_eq!(output.events[1].payload["input"]["text"], "draft");
+        assert_eq!(output.events[1].payload["input"][0]["type"], "text");
+        assert_eq!(output.events[1].payload["input"][0]["text"], "draft");
         assert_eq!(output.events[4].payload["backend"], "external");
         assert_eq!(output.events[4].payload["kind"], "turnStart");
         assert_eq!(output.events[4].payload["inputTextLength"], 5);

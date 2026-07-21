@@ -1,6 +1,7 @@
 pub mod agent_graph;
 pub mod agent_identity;
 pub mod agent_mailbox;
+pub mod history;
 pub mod runtime_snapshot;
 pub mod session_record;
 pub mod session_repository;
@@ -22,12 +23,15 @@ pub use agent_mailbox::{
     AgentMailboxMessageKind, AgentMailboxResultStatus, AgentMailboxStore, AgentMailboxStoreFuture,
     AppendAgentMailboxMessageParams, PendingAgentMailboxTriggerRecipient,
 };
+pub use history::{
+    CanonicalHistory, ThreadHistoryBuilder, ThreadHistoryBuilderError, ThreadHistoryPage,
+};
 pub use store::{ThreadStore, ThreadStoreFuture};
 pub use types::{
-    ApplyThreadHistoryParams, ApplyThreadHistoryResult, ArchiveThreadParams, ClearableField,
-    CreateThreadParams, DeleteThreadParams, ItemPage, ListItemsParams, ListThreadsParams,
-    ListTurnsParams, PageRequest, ReadThreadParams, StoreCursor, ThreadMetadataPatch, ThreadPage,
-    TurnPage, UpdateThreadMetadataParams,
+    AppendThreadItemsParams, ApplyThreadHistoryParams, ApplyThreadHistoryResult,
+    ArchiveThreadParams, ClearableField, CreateThreadParams, DeleteThreadParams, ItemPage,
+    ListItemsParams, ListThreadsParams, ListTurnsParams, PageRequest, ReadThreadParams,
+    StoreCursor, ThreadMetadataPatch, ThreadPage, TurnPage, UpdateThreadMetadataParams,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

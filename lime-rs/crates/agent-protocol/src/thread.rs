@@ -233,6 +233,29 @@ pub enum FileChangeStatus {
     Failed,
 }
 
+/// Canonical patch change retained by the Thread/Turn/Item history owner.
+///
+/// `path` is always the source path for an update/move. `move_path` is the
+/// destination, mirroring Codex's v2 `PatchChangeKind::Update` contract.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileChange {
+    pub path: String,
+    pub kind: FileChangeKind,
+    pub diff: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum FileChangeKind {
+    Add,
+    Delete,
+    Update {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        move_path: Option<String>,
+    },
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum SubAgentActivityKind {
@@ -349,9 +372,8 @@ pub enum ThreadItemPayload {
         exit_code: Option<i32>,
     },
     File {
-        path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        diff: Option<String>,
+        #[serde(default)]
+        changes: Vec<FileChange>,
         status: FileChangeStatus,
     },
     Media {

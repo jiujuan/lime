@@ -1,4 +1,6 @@
 mod stdio;
+mod unix_socket;
+mod websocket;
 
 use crate::decode_message;
 use crate::encode_message;
@@ -16,10 +18,16 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
+use tokio_util::sync::CancellationToken;
 
 pub use stdio::extract_stdio_initialize_client_name;
 pub use stdio::start_stdio_connection;
 pub use stdio::StdioConnection;
+pub use unix_socket::acquire_app_server_startup_lock;
+pub use unix_socket::prepare_control_socket_path;
+pub use unix_socket::start_control_socket_acceptor;
+pub use unix_socket::AppServerStartupLock;
+pub use websocket::start_websocket_acceptor;
 
 pub const OVERLOADED_ERROR_CODE: i64 = -32001;
 pub const APP_SERVER_CONTROL_SOCKET_DIR_NAME: &str = "app-server-control";
@@ -37,7 +45,6 @@ pub enum AppServerTransport {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AppServerTransportParseError {
     UnsupportedListenUrl(String),
-    InvalidUnixSocketPath { listen_url: String, message: String },
     InvalidWebSocketListenUrl(String),
 }
 
@@ -47,13 +54,6 @@ impl fmt::Display for AppServerTransportParseError {
             Self::UnsupportedListenUrl(listen_url) => write!(
                 formatter,
                 "unsupported --listen URL `{listen_url}`; expected `stdio://`, `unix://PATH`, `ws://IP:PORT`, or `off`"
-            ),
-            Self::InvalidUnixSocketPath {
-                listen_url,
-                message,
-            } => write!(
-                formatter,
-                "invalid unix socket --listen URL `{listen_url}`; failed to resolve socket path: {message}"
             ),
             Self::InvalidWebSocketListenUrl(listen_url) => write!(
                 formatter,
@@ -69,15 +69,21 @@ impl AppServerTransport {
     pub const DEFAULT_LISTEN_URL: &'static str = crate::DEFAULT_LISTEN_URL;
 
     pub fn from_listen_url(listen_url: &str) -> Result<Self, AppServerTransportParseError> {
+        Self::from_listen_url_with_base(listen_url, Path::new("."))
+    }
+
+    pub fn from_listen_url_with_base(
+        listen_url: &str,
+        base_dir: &Path,
+    ) -> Result<Self, AppServerTransportParseError> {
         if listen_url == Self::DEFAULT_LISTEN_URL {
             return Ok(Self::Stdio);
         }
 
         if let Some(raw_socket_path) = listen_url.strip_prefix("unix://") {
             if raw_socket_path.trim().is_empty() {
-                return Err(AppServerTransportParseError::InvalidUnixSocketPath {
-                    listen_url: listen_url.to_string(),
-                    message: "empty unix socket paths must be resolved by the host app".to_string(),
+                return Ok(Self::UnixSocket {
+                    socket_path: app_server_control_socket_path(base_dir),
                 });
             }
             return Ok(Self::UnixSocket {
@@ -116,6 +122,7 @@ pub enum TransportEvent {
         connection_id: ConnectionId,
         origin: ConnectionOrigin,
         writer: mpsc::Sender<QueuedOutgoingMessage>,
+        disconnect_sender: Option<CancellationToken>,
     },
     StdioClientInitialized {
         connection_id: ConnectionId,
@@ -224,6 +231,12 @@ mod tests {
         assert_eq!(
             AppServerTransport::from_listen_url("off"),
             Ok(AppServerTransport::Off)
+        );
+        assert_eq!(
+            AppServerTransport::from_listen_url_with_base("unix://", Path::new("/state")),
+            Ok(AppServerTransport::UnixSocket {
+                socket_path: PathBuf::from("/state/app-server-control/app-server-control.sock")
+            })
         );
         assert_eq!(
             AppServerTransport::from_listen_url("unix:///tmp/app.sock"),

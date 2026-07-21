@@ -62,6 +62,15 @@ pub(super) struct ChangeSetAccumulator {
 }
 
 impl ChangeSetAccumulator {
+    pub(super) fn items_for_turn(&self, turn_id: &str) -> Vec<ThreadItem> {
+        self.changed_items
+            .iter()
+            .filter_map(Option::as_ref)
+            .filter(|item| item.turn_id.as_str() == turn_id)
+            .cloned()
+            .collect()
+    }
+
     pub(super) fn push_item(&mut self, item: ThreadItem) -> Option<ThreadItem> {
         let key = (
             item.thread_id.to_string(),
@@ -342,6 +351,20 @@ fn merge_payload(
                 arguments
             },
             output: merge_tool_output(previous_output, output),
+        },
+        (
+            ThreadItemPayload::File {
+                changes: previous_changes,
+                status: _,
+            },
+            ThreadItemPayload::File { changes, status },
+        ) => ThreadItemPayload::File {
+            changes: if changes.is_empty() {
+                previous_changes
+            } else {
+                changes
+            },
+            status,
         },
         (
             ThreadItemPayload::CollabAgentToolCall {

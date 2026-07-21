@@ -100,7 +100,6 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_asr_credentials")).toBe(false);
     expect(isElectronHostCommand("list_audio_devices")).toBe(false);
     expect(isElectronHostCommand("get_voice_instructions")).toBe(false);
-    expect(isElectronHostCommand("validate_shortcut")).toBe(true);
     expect(isElectronHostCommand("voice_models_delete")).toBe(true);
     expect(isElectronHostCommand("voice_models_download")).toBe(true);
     expect(isElectronHostCommand("voice_models_get_install_state")).toBe(true);

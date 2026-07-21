@@ -26,6 +26,13 @@ pub struct AgentSkillBody {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSkillInstructions {
+    pub name: String,
+    pub path: PathBuf,
+    pub contents: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSkillReferenceBody {
     pub relative_path: String,
     pub content: String,
@@ -66,18 +73,28 @@ pub fn agent_skill_body_locator_from_metadata(
 }
 
 pub fn read_agent_skill_body(locator: &AgentSkillBodyLocator) -> Result<AgentSkillBody, String> {
+    let instructions = read_agent_skill_instructions(locator)?;
+    Ok(AgentSkillBody {
+        locator: locator.clone(),
+        references: read_referenced_files(locator, &instructions.contents)?,
+        markdown_content: instructions.contents,
+    })
+}
+
+pub fn read_agent_skill_instructions(
+    locator: &AgentSkillBodyLocator,
+) -> Result<AgentSkillInstructions, String> {
     ensure_skill_file_path(&locator.skill_file_path)?;
-    let markdown_content = std::fs::read_to_string(&locator.skill_file_path).map_err(|error| {
+    let contents = std::fs::read_to_string(&locator.skill_file_path).map_err(|error| {
         format!(
             "读取 Agent Skill 文件失败: path={}, error={error}",
             locator.skill_file_path.display()
         )
     })?;
-
-    Ok(AgentSkillBody {
-        locator: locator.clone(),
-        references: read_referenced_files(locator, &markdown_content)?,
-        markdown_content,
+    Ok(AgentSkillInstructions {
+        name: locator.name.clone(),
+        path: locator.skill_file_path.clone(),
+        contents,
     })
 }
 
@@ -261,6 +278,30 @@ mod tests {
         assert!(body.markdown_content.contains("# Writer"));
         assert!(body.markdown_content.contains("Full body"));
         assert!(body.references.is_empty());
+    }
+
+    #[test]
+    fn read_agent_skill_instructions_keeps_full_markdown_without_loading_references() {
+        let root = TempDir::new().expect("root");
+        let skill_dir = root.path().join("writer");
+        std::fs::create_dir_all(skill_dir.join("references")).expect("references dir");
+        std::fs::write(skill_dir.join("references/style.md"), "reference body").expect("reference");
+        let skill_path = skill_dir.join("SKILL.md");
+        let contents = "---\nname: Writer\n---\n\nRead references/style.md on demand.";
+        std::fs::write(&skill_path, contents).expect("skill");
+        let locator = AgentSkillBodyLocator {
+            name: "writer".to_string(),
+            scope: AgentSkillScope::Project,
+            directory: skill_dir,
+            skill_file_path: skill_path.clone(),
+        };
+
+        let instructions = read_agent_skill_instructions(&locator).expect("instructions");
+
+        assert_eq!(instructions.name, "writer");
+        assert_eq!(instructions.path, skill_path);
+        assert_eq!(instructions.contents, contents);
+        assert!(!instructions.contents.contains("reference body"));
     }
 
     #[test]

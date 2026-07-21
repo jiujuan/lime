@@ -2,6 +2,7 @@ use super::output_refs;
 use super::projection_repair::ProjectionRepair;
 use super::projection_store::ProjectionReadSession;
 use super::projection_store::ProjectionReadWindow;
+use super::queued_turn_intent;
 use super::read_model;
 use super::read_model_turn_usage;
 use super::turn_input_events;
@@ -212,7 +213,11 @@ pub(in crate::runtime) async fn projection_load_context(
         session: projection.session.clone(),
         turns: projection.turns.clone(),
         turn_inputs: turn_input_events::turn_inputs_from_events(&events),
-        turn_runtime_options: HashMap::new(),
+        turn_runtime_options: queued_turn_intent::runtime_options_from_events(
+            &projection.turns,
+            &events,
+        )
+        .map_err(RuntimeCoreError::Backend)?,
         events: events.clone(),
         output_blobs: events
             .iter()

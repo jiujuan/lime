@@ -105,17 +105,30 @@ pub struct RequestLogger {
 
 impl RequestLogger {
     /// 创建新的日志记录器
-    pub fn new(config: LogRotationConfig) -> Result<Self, LoggerError> {
-        Self::new_with_telemetry_store(config, None)
+    pub fn new(
+        log_dir: impl Into<PathBuf>,
+        config: LogRotationConfig,
+    ) -> Result<Self, LoggerError> {
+        Self::new_with_telemetry_store(log_dir, config, None)
     }
 
     /// 创建新的日志记录器，并可选写入 Telemetry DB
     pub fn new_with_telemetry_store(
+        log_dir: impl Into<PathBuf>,
         config: LogRotationConfig,
         telemetry_store: Option<TelemetryStore>,
     ) -> Result<Self, LoggerError> {
-        let log_dir = lime_core::app_paths::resolve_request_logs_dir()
-            .map_err(LoggerError::DirectoryCreation)?;
+        let log_dir = log_dir.into();
+        if log_dir.as_os_str().is_empty() {
+            return Err(LoggerError::DirectoryCreation(
+                "RequestLogger 需要显式日志目录".to_string(),
+            ));
+        }
+        if config.enable_file_logging {
+            fs::create_dir_all(&log_dir).map_err(|error| {
+                LoggerError::DirectoryCreation(format!("{}: {error}", log_dir.display()))
+            })?;
+        }
 
         let logger = Self {
             logs: RwLock::new(VecDeque::with_capacity(config.max_memory_logs)),
@@ -131,11 +144,6 @@ impl RequestLogger {
         }
 
         Ok(logger)
-    }
-
-    /// 使用默认配置创建日志记录器
-    pub fn with_defaults() -> Result<Self, LoggerError> {
-        Self::new(LogRotationConfig::default())
     }
 
     /// 记录请求日志
@@ -480,11 +488,5 @@ impl RequestLogger {
         }
 
         Ok(loaded_count)
-    }
-}
-
-impl Default for RequestLogger {
-    fn default() -> Self {
-        Self::with_defaults().expect("Failed to create default RequestLogger")
     }
 }

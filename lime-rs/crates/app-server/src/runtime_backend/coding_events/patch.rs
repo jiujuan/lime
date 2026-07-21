@@ -1,10 +1,10 @@
 use crate::RuntimeEvent;
 use lime_agent::AgentToolResult;
 use patch_apply::{
-    parse_patch, ADD_FILE_MARKER, BEGIN_PATCH_MARKER, DELETE_FILE_MARKER, END_PATCH_MARKER,
+    parse_patch, Hunk, ADD_FILE_MARKER, BEGIN_PATCH_MARKER, DELETE_FILE_MARKER, END_PATCH_MARKER,
     UPDATE_FILE_MARKER,
 };
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use super::{
     command_from_arguments, compact_object, dedupe_non_empty, lookup_key, non_empty_string,
@@ -34,6 +34,10 @@ pub(super) fn patch_terminal_events(
     let Some(patch_id) = &tool.patch_id else {
         return Vec::new();
     };
+    let changes = patch_changes_from_result(result).or_else(|| {
+        let changes = patch_changes_from_arguments(tool.arguments.as_ref());
+        (!changes.is_empty()).then_some(changes)
+    });
     if result.success {
         vec![RuntimeEvent::new(
             "patch.applied",
@@ -41,6 +45,7 @@ pub(super) fn patch_terminal_events(
                 "patchId": patch_id,
                 "toolCallId": tool_id,
                 "toolName": tool.name,
+                "changes": changes,
                 "source": "runtime_tool",
             })),
         )]
@@ -50,18 +55,60 @@ pub(super) fn patch_terminal_events(
             .as_deref()
             .and_then(non_empty_string)
             .or_else(|| non_empty_string(&result.output));
+        let declined = patch_declined(result);
         vec![RuntimeEvent::new(
-            "patch.failed",
+            if declined {
+                "patch.declined"
+            } else {
+                "patch.failed"
+            },
             compact_object(json!({
                 "patchId": patch_id,
                 "toolCallId": tool_id,
                 "toolName": tool.name,
-                "failureCategory": patch_failure_category(tool, result),
+                "status": if declined { "declined" } else { "failed" },
+                "failureCategory": if declined { "approval_declined" } else { patch_failure_category(tool, result) },
                 "error": error,
+                "changes": changes,
                 "source": "runtime_tool",
             })),
         )]
     }
+}
+
+pub(super) fn patch_changes_from_arguments(arguments: Option<&Value>) -> Vec<Value> {
+    let Some(patch_text) = patch_text_from_arguments(arguments) else {
+        return Vec::new();
+    };
+    let Ok(parsed) = parse_patch(&patch_text) else {
+        return Vec::new();
+    };
+    parsed
+        .hunks
+        .into_iter()
+        .map(|hunk| match hunk {
+            Hunk::AddFile { path, contents } => json!({
+                "kind": "add",
+                "path": path.to_string_lossy(),
+                "diff": contents,
+            }),
+            Hunk::DeleteFile { path } => json!({
+                "kind": "delete",
+                "path": path.to_string_lossy(),
+                "diff": "",
+            }),
+            Hunk::UpdateFile {
+                path,
+                move_path,
+                chunks,
+            } => json!({
+                "kind": "update",
+                "path": path.to_string_lossy(),
+                "movePath": move_path.map(|path| path.to_string_lossy().into_owned()),
+                "diff": format_update_diff(&chunks),
+            }),
+        })
+        .collect()
 }
 
 pub(super) fn patch_paths_from_arguments(arguments: Option<&Value>) -> Option<Vec<String>> {
@@ -106,6 +153,108 @@ fn patch_failure_category(tool: &TrackedTool, result: &AgentToolResult) -> &'sta
     } else {
         "execution_failed"
     }
+}
+
+fn patch_declined(result: &AgentToolResult) -> bool {
+    let metadata = result.metadata.as_ref();
+    metadata
+        .and_then(|metadata| metadata.get("reasonCode"))
+        .and_then(Value::as_str)
+        == Some("tool_approval_declined")
+        || metadata
+            .and_then(|metadata| metadata.get("tool_outcome"))
+            .and_then(Value::as_str)
+            == Some("aborted")
+}
+
+fn patch_changes_from_result(result: &AgentToolResult) -> Option<Vec<Value>> {
+    let changes = result
+        .metadata
+        .as_ref()?
+        .get("file_changes")?
+        .get("changes")?
+        .as_array()?;
+    let changes = changes
+        .iter()
+        .filter_map(normalize_result_change)
+        .collect::<Vec<_>>();
+    (!changes.is_empty()).then_some(changes)
+}
+
+fn normalize_result_change(change: &Value) -> Option<Value> {
+    let change = change.as_object()?;
+    let kind = change.get("kind")?.as_str()?.to_ascii_lowercase();
+    let source_path = value_string_from_object(change, &["sourcePath", "source_path"]);
+    let destination_path = value_string_from_object(change, &["path"])?;
+    let move_path = value_string_from_object(change, &["movePath", "move_path"]);
+    let (path, kind, move_path) = match kind.as_str() {
+        "add" => (destination_path, "add", None),
+        "delete" => (destination_path, "delete", None),
+        "update" => (destination_path, "update", None),
+        "move_update" | "move" => (
+            source_path.unwrap_or(destination_path),
+            "update",
+            move_path.or_else(|| value_string_from_object(change, &["path"])),
+        ),
+        _ => return None,
+    };
+    Some(json!({
+        "kind": kind,
+        "path": path,
+        "movePath": move_path,
+        "diff": change.get("diff").map(diff_text).unwrap_or_default(),
+    }))
+}
+
+fn format_update_diff(chunks: &[patch_apply::UpdateFileChunk]) -> String {
+    let mut lines = Vec::new();
+    for chunk in chunks {
+        if let Some(context) = &chunk.change_context {
+            lines.push(format!("@@ {context}"));
+        }
+        lines.extend(chunk.old_lines.iter().map(|line| format!("-{line}")));
+        lines.extend(chunk.new_lines.iter().map(|line| format!("+{line}")));
+        if chunk.is_end_of_file {
+            lines.push("*** End of File".to_string());
+        }
+    }
+    lines.join("\n")
+}
+
+fn diff_text(value: &Value) -> String {
+    if let Some(text) = value.as_str() {
+        return text.to_string();
+    }
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|line| {
+            let kind = line.get("kind")?.as_str()?;
+            let value = line
+                .get("value")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            match kind {
+                "add" => Some(format!("+{value}")),
+                "remove" => Some(format!("-{value}")),
+                "context" => Some(format!(" {value}")),
+                "truncated" => Some("...".to_string()),
+                _ => None,
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn value_string_from_object(value: &Map<String, Value>, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        value
+            .get(*key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+    })
 }
 
 fn is_apply_patch_tool(tool_name: &str) -> bool {
@@ -208,6 +357,21 @@ mod tests {
             patch_paths_from_arguments(Some(&arguments)),
             Some(vec!["notes/live.md".to_string()])
         );
+    }
+
+    #[test]
+    fn extracts_canonical_add_delete_update_and_move_changes() {
+        let arguments = json!({
+            "patch": "*** Begin Patch\n*** Add File: src/new.rs\n+new\n*** Delete File: src/dead.rs\n*** Update File: src/current.rs\n@@\n-old\n+new\n*** Update File: src/source.rs\n*** Move to: src/target.rs\n@@\n-before\n+after\n*** End Patch\n",
+        });
+
+        let changes = patch_changes_from_arguments(Some(&arguments));
+        assert_eq!(changes.len(), 4);
+        assert_eq!(changes[0]["kind"], "add");
+        assert_eq!(changes[1]["kind"], "delete");
+        assert_eq!(changes[2]["kind"], "update");
+        assert_eq!(changes[3]["path"], "src/source.rs");
+        assert_eq!(changes[3]["movePath"], "src/target.rs");
     }
 
     #[test]

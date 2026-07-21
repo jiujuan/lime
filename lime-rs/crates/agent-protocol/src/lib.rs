@@ -1,6 +1,8 @@
 pub mod action_required;
 pub mod anthropic;
+pub mod collaboration_mode;
 pub mod context_trace;
+pub mod input;
 pub mod message_content;
 pub mod model_context;
 pub mod openai;
@@ -8,6 +10,9 @@ pub mod provider_trace;
 pub mod session_context;
 pub mod thread;
 pub mod turn_context;
+
+pub use collaboration_mode::{CollaborationMode, CollaborationModeSettings, ModeKind};
+pub use input::{AgentInput, AgentInputError, ByteRange, ImageDetail, TextElement};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -263,7 +268,7 @@ pub struct RuntimeSnapshot {
 pub use message_content::{MessageContentPart, MessageContentReference};
 pub use thread::{
     ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, CollabAgentState,
-    CollabAgentStatus, FileChangeStatus, ItemKind, ItemStatus, PageCursor, PlanStep,
+    CollabAgentStatus, FileChange, FileChangeKind, FileChangeStatus, ItemKind, ItemStatus, PageCursor, PlanStep,
     PlanStepStatus, SortDirection, SubAgentActivityKind, Thread, ThreadActiveFlag,
     ThreadHistoryChange, ThreadHistoryChangeSet, ThreadItem, ThreadItemPayload,
     ThreadItemsListParams, ThreadItemsListResponse, ThreadListParams, ThreadListResponse,

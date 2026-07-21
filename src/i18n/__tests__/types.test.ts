@@ -46,8 +46,6 @@ function assertI18nKeyTypes() {
   i18n.t("common.app.startup.windows.blockingTitle", { ns: "common" });
   i18n.t("common.app.startup.windows.warningTitle", { ns: "common" });
   i18n.t("common.updateNotification.version.new", { ns: "common" });
-  i18n.t("common.shortcutSettings.label", { ns: "common" });
-  i18n.t("common.shortcutSettings.error.invalid", { ns: "common" });
   i18n.t("common.execution.latestRunStatus.status.success", { ns: "common" });
   i18n.t("common.oemCloudAccess.auth.googleSynced", { ns: "common" });
   i18n.t("common.oemCloudAccess.auth.browserPreopenTitle", { ns: "common" });
@@ -336,28 +334,6 @@ function assertI18nKeyTypes() {
     "agentChat.inputbar.controller.curatedTask.reviewSuggestionPrefillHint",
     { ns: "agent" },
   );
-  i18n.t("agentChat.inputbar.queuedTurns.header.count", {
-    ns: "agent",
-    count: 2,
-  });
-  i18n.t("agentChat.inputbar.queuedTurns.header.sequenceHint", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.inputbar.queuedTurns.emptyInput", { ns: "agent" });
-  i18n.t("agentChat.inputbar.queuedTurns.action.expand", { ns: "agent" });
-  i18n.t("agentChat.inputbar.queuedTurns.action.collapse", { ns: "agent" });
-  i18n.t("agentChat.inputbar.queuedTurns.meta.imageCount", {
-    ns: "agent",
-    count: 2,
-  });
-  i18n.t("agentChat.inputbar.queuedTurns.meta.textOnly", { ns: "agent" });
-  i18n.t("agentChat.inputbar.queuedTurns.action.promoteAria", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.inputbar.queuedTurns.action.promoting", { ns: "agent" });
-  i18n.t("agentChat.inputbar.queuedTurns.action.promote", { ns: "agent" });
-  i18n.t("agentChat.inputbar.queuedTurns.action.remove", { ns: "agent" });
-  i18n.t("agentChat.inputbar.queuedTurns.action.removing", { ns: "agent" });
   i18n.t("agentChat.inputbar.composer.advancedSettings.label", {
     ns: "agent",
   });
@@ -1023,8 +999,6 @@ function assertI18nKeyTypes() {
   i18n.t("settings.home.summary.groups", { ns: "settings" });
   i18n.t("settings.home.quickAccess.cardTipAria", { ns: "settings" });
   i18n.t("settings.home.current.title", { ns: "settings" });
-  i18n.t("settings.hotkeys.title", { ns: "settings" });
-  i18n.t("settings.hotkeys.catalog.scene.global.title", { ns: "settings" });
   i18n.t("settings.memory.title", { ns: "settings" });
   i18n.t("settings.memory.soul.title", { ns: "settings" });
   i18n.t("settings.memory.soul.styleProfile.title", { ns: "settings" });

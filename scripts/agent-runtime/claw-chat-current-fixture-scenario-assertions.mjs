@@ -3,13 +3,13 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+  APP_SERVER_METHOD_THREAD_SHELL_COMMAND,
   APP_SERVER_METHOD_WORKFLOW_READ,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   CONTINUE_PROMPT,
   CONTENT_FACTORY_INLINE_IMAGE_URL,
   EVENT_READ_PROBE_TOOL_NAME,
-  EVENT_READ_PROBE_TURN_ID,
   GOAL_PROMPT,
   HOME_HOTPATH_GREETING_SCENARIO,
   HOME_HOTPATH_SCENARIO,
@@ -30,6 +30,7 @@ import { buildContentFactoryArticleWorkspaceScenarioAssertions } from "./claw-ch
 import {
   buildApprovalRequestDecisionScenarioAssertions,
   buildApprovalRequestFullAccessScenarioAssertions,
+  buildApprovalRequestHostInterruptScenarioAssertions,
   buildApprovalRequestResumeScenarioAssertions,
 } from "./claw-chat-current-fixture-approval-assertions.mjs";
 import {
@@ -145,6 +146,9 @@ function buildHomeHotpathScenarioAssertions({
   const postSubmitProjection = hotpath.postSubmitProjection ?? {};
   const completedProjection = hotpath.completedProjection ?? {};
   const expectedPrompt = hotpath.prompt ?? homeHotpathPrompt ?? NEWS_PROMPT;
+  const preTurnTraceAvailable =
+    typeof hotpath.preTurnTrace?.clickAt === "string" &&
+    typeof hotpath.preTurnTrace?.turnStartAt === "string";
   return {
     homeHotpathScenarioRegistered:
       HOME_HOTPATH_SCENARIO === "home-hotpath" &&
@@ -169,19 +173,18 @@ function buildHomeHotpathScenarioAssertions({
     homeHotpathNoFlickerBetweenSubmitAndConversation:
       hotpath.submitToConversationStability?.stable === true,
     homeHotpathPendingProjectionVisibleWithinBudget:
-      typeof hotpath.submitToConversationStability
-        ?.conversationStartedAtMs === "number" &&
+      typeof hotpath.submitToConversationStability?.conversationStartedAtMs ===
+        "number" &&
       hotpath.submitToConversationStability.conversationStartedAtMs <=
         HOME_HOTPATH_PENDING_PROJECTION_VISIBLE_BUDGET_MS,
     homeHotpathNoImperativePendingShell:
-      hotpath.submitToConversationStability?.noImperativePendingShell === true &&
+      hotpath.submitToConversationStability?.noImperativePendingShell ===
+        true &&
       postSubmitProjection.imperativePendingShellCount === 0 &&
       completedProjection.imperativePendingShellCount === 0,
     homeHotpathMainAreaBoundsStable:
       hotpath.submitToConversationStability?.mainAreaBounds?.stable === true,
-    homeHotpathPreTurnTraceWindowAvailable:
-      typeof hotpath.preTurnTrace?.clickAt === "string" &&
-      typeof hotpath.preTurnTrace?.turnStartAt === "string",
+    homeHotpathPreTurnTraceWindowAvailable: preTurnTraceAvailable,
     homeHotpathNoAuxiliaryAppServerBeforeTurnStart:
       Array.isArray(
         hotpath.preTurnTrace?.blockedAuxiliaryMethodsBeforeTurnStart,
@@ -295,6 +298,7 @@ export function buildScenarioAssertions(context) {
     isApprovalRequestDeclineScenario,
     isApprovalRequestDecisionScenario,
     isApprovalRequestFullAccessScenario,
+    isApprovalRequestHostInterruptScenario,
     isApprovalRequestResumeScenario,
     isCancelThenContinueScenario,
     isContentFactoryArticleWorkspaceScenario,
@@ -743,7 +747,7 @@ export function buildScenarioAssertions(context) {
                         APP_SERVER_METHOD_WORKFLOW_READ,
                       ) &&
                       summary.imageCommandWorkflowRead?.sessionId ===
-                        SESSION_ID &&
+                        summary.sessionId &&
                       summary.imageCommandWorkflowRead?.matchedRun
                         ?.workflowKey === "image_command_workflow" &&
                       summary.imageCommandWorkflowRead?.matchedRun?.status ===
@@ -930,50 +934,61 @@ export function buildScenarioAssertions(context) {
                               pageText,
                               summary,
                             })
-                          : isApprovalRequestResumeScenario
-                            ? buildApprovalRequestResumeScenarioAssertions({
-                                appServerRequestMethods,
-                                approvalRequestResumeTurnStart,
-                                pageText,
-                                summary,
-                              })
-                            : isApprovalRequestDecisionScenario
-                              ? buildApprovalRequestDecisionScenarioAssertions({
+                          : isApprovalRequestHostInterruptScenario
+                            ? buildApprovalRequestHostInterruptScenarioAssertions(
+                                {
+                                  appServerRequestMethods,
+                                  approvalRequestResumeTurnStart,
+                                  summary,
+                                },
+                              )
+                            : isApprovalRequestResumeScenario
+                              ? buildApprovalRequestResumeScenarioAssertions({
                                   appServerRequestMethods,
                                   approvalRequestResumeTurnStart,
                                   backendLedger,
-                                  isApprovalRequestCancelScenario,
-                                  isApprovalRequestDeclineScenario,
                                   pageText,
                                   summary,
                                 })
-                              : isTerminalStaleGuardScenario ||
-                                  isTerminalCanceledAfterAnswerScenario ||
-                                  isTerminalFailedAfterAnswerScenario
-                                ? buildTerminalScenarioAssertions({
-                                    isTerminalCanceledAfterAnswerScenario,
-                                    isTerminalFailedAfterAnswerScenario,
-                                    isTerminalStaleGuardScenario,
-                                    summary,
-                                    terminalCanceledAfterAnswerTurnStart,
-                                    terminalFailedAfterAnswerTurnStart,
-                                    terminalStaleGuardFirstTurnStart,
-                                    terminalStaleGuardSecondTurnStart,
-                                  })
-                                : isMcpStructuredContentScenario
-                                  ? buildMcpStructuredContentScenarioAssertions(
-                                      {
-                                        mcpStructuredContentTurnStart,
-                                        summary,
-                                      },
-                                    )
-                                  : isMediaReferenceScenario
-                                    ? buildMediaReferenceScenarioAssertions({
-                                        mediaReferenceTurnStart,
-                                        pageText,
-                                        summary,
-                                      })
-                                    : isSkillsRuntimeScenario
+                              : isApprovalRequestDecisionScenario
+                                ? buildApprovalRequestDecisionScenarioAssertions(
+                                    {
+                                      appServerRequestMethods,
+                                      approvalRequestResumeTurnStart,
+                                      backendLedger,
+                                      isApprovalRequestCancelScenario,
+                                      isApprovalRequestDeclineScenario,
+                                      pageText,
+                                      summary,
+                                    },
+                                  )
+                                : isTerminalStaleGuardScenario ||
+                                    isTerminalCanceledAfterAnswerScenario ||
+                                    isTerminalFailedAfterAnswerScenario
+                                  ? buildTerminalScenarioAssertions({
+                                      isTerminalCanceledAfterAnswerScenario,
+                                      isTerminalFailedAfterAnswerScenario,
+                                      isTerminalStaleGuardScenario,
+                                      summary,
+                                      terminalCanceledAfterAnswerTurnStart,
+                                      terminalFailedAfterAnswerTurnStart,
+                                      terminalStaleGuardFirstTurnStart,
+                                      terminalStaleGuardSecondTurnStart,
+                                    })
+                                  : isMcpStructuredContentScenario
+                                    ? buildMcpStructuredContentScenarioAssertions(
+                                        {
+                                          mcpStructuredContentTurnStart,
+                                          summary,
+                                        },
+                                      )
+                                    : isMediaReferenceScenario
+                                      ? buildMediaReferenceScenarioAssertions({
+                                          mediaReferenceTurnStart,
+                                          pageText,
+                                          summary,
+                                        })
+                                      : isSkillsRuntimeScenario
                                         ? buildSkillsRuntimeScenarioAssertions({
                                             explicitSkillsRuntimeTurnStart,
                                             manualEnableRuntimeBinding,
@@ -1011,7 +1026,7 @@ export function buildScenarioAssertions(context) {
                                                   ),
                                                 fixtureCancelReachedBackend:
                                                   latestTurnCancel?.sessionId ===
-                                                    SESSION_ID &&
+                                                    summary.sessionId &&
                                                   typeof latestTurnCancel?.turnId ===
                                                     "string" &&
                                                   latestTurnCancel.turnId.trim()
@@ -1023,7 +1038,8 @@ export function buildScenarioAssertions(context) {
                                                   summary.readModelCanceled
                                                     ?.includesPrompt === true &&
                                                   summary.readModelCanceled
-                                                    ?.includesCanceled === true,
+                                                    ?.hasInterruptedTurn ===
+                                                    true,
                                                 ...(isCancelThenContinueScenario
                                                   ? {
                                                       continuePromptReachedBackend:
@@ -1430,7 +1446,9 @@ export function buildScenarioAssertions(context) {
                                                           summary.eventReadProbe
                                                             ?.events
                                                             ?.eventTurnIds?.[0] ===
-                                                            EVENT_READ_PROBE_TURN_ID,
+                                                            summary
+                                                              .eventReadProbe
+                                                              ?.turnId,
                                                         readModelEventReadAligned:
                                                           summary.eventReadProbe
                                                             ?.readModel
@@ -1460,7 +1478,9 @@ export function buildScenarioAssertions(context) {
                                                           summary.eventReadProbe
                                                             ?.readModel
                                                             ?.toolTurnId ===
-                                                            EVENT_READ_PROBE_TURN_ID,
+                                                            summary
+                                                              .eventReadProbe
+                                                              ?.turnId,
                                                         guiNoPlanUiWithoutProposedPlan:
                                                           summary.guiCompleted
                                                             ?.planUiAbsentWithoutProposedPlan ===
@@ -1502,5 +1522,31 @@ export function buildScenarioAssertions(context) {
                                                             ?.noDuplicateFinalText ===
                                                           true,
                                                       };
-  return scenarioAssertions;
+  const userShellGate = summary.userShellGate;
+  const userShellAssertions = userShellGate
+    ? {
+        userShellGuiInputSubmitted:
+          userShellGate.assertions?.guiInputSubmitted === true,
+        userShellUsesCurrentMethod: appServerRequestMethods.includes(
+          APP_SERVER_METHOD_THREAD_SHELL_COMMAND,
+        ),
+        userShellCommandItemStarted:
+          userShellGate.assertions?.commandItemStarted === true,
+        userShellCommandItemCompleted:
+          userShellGate.assertions?.commandItemCompleted === true,
+        userShellCommandOutputVisible:
+          userShellGate.assertions?.commandOutputVisible === true,
+        userShellCommandOutputPersisted:
+          userShellGate.assertions?.commandOutputPersisted === true,
+        userShellCommandExitCodeZero:
+          userShellGate.assertions?.commandExitCodeZero === true,
+        userShellCommandSourceCurrent:
+          userShellGate.assertions?.commandSourceUserShell === true,
+        userShellIdentityConsistent:
+          userShellGate.assertions?.identityConsistent === true,
+        userShellInputReadyAfterCompletion:
+          userShellGate.assertions?.inputReadyAfterCompletion === true,
+      }
+    : {};
+  return { ...scenarioAssertions, ...userShellAssertions };
 }

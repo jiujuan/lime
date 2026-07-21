@@ -1,8 +1,9 @@
 use crate::RuntimeCore;
+use app_server_protocol::protocol::v2::Method as V2Method;
 use app_server_protocol::{
     app_server_request_access, app_server_request_serialization_scope, error_codes,
     AppServerRequestAccess, AppServerRequestSerializationScope, JsonRpcError, JsonRpcErrorResponse,
-    JsonRpcMessage, JsonRpcRequest, METHOD_AGENT_SESSION_EVENT,
+    JsonRpcMessage, JsonRpcRequest,
 };
 use std::collections::HashMap;
 use std::future::Future;
@@ -42,9 +43,15 @@ pub(super) async fn request_serialization_scope(
         return Ok(None);
     };
     let params = request.params.as_ref();
+    let is_v2_method = V2Method::parse(&request.method).is_some();
     let key = match scope {
         AppServerRequestSerializationScope::Thread => {
-            let Some(key) = thread_scope_param(runtime, params).await? else {
+            let key = if is_v2_method {
+                scope_param(params, &["threadId"])?
+            } else {
+                thread_scope_param(runtime, params).await?
+            };
+            let Some(key) = key else {
                 return Ok(None);
             };
             RequestSerializationQueueKey::Thread(key)
@@ -111,28 +118,6 @@ pub(super) async fn resolve_request_serialization_scope(
                 error,
             })
         })
-}
-
-pub(super) fn is_turn_admission_notification(message: &JsonRpcMessage) -> bool {
-    let JsonRpcMessage::Notification(notification) = message else {
-        return false;
-    };
-    if notification.method != METHOD_AGENT_SESSION_EVENT {
-        return false;
-    }
-    let Some(params) = notification.params.as_ref() else {
-        return false;
-    };
-    params
-        .get("event")
-        .and_then(|event| event.get("type"))
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|event_type| event_type == "turn.accepted")
-        || params
-            .get("typedEvent")
-            .and_then(|event| event.get("method"))
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|method| method == "turn/accepted")
 }
 
 fn scope_param(
@@ -257,36 +242,6 @@ impl RequestSerializationQueues {
         let _lease = self.acquire(&scope).await;
         let output = future.await;
         output
-    }
-
-    pub(super) async fn run_until_released<F, R>(
-        &self,
-        scope: Option<RequestSerializationScope>,
-        release: R,
-        future: F,
-    ) -> F::Output
-    where
-        F: Future,
-        R: Future,
-    {
-        let Some(scope) = scope else {
-            return future.await;
-        };
-
-        let lease = self.acquire(&scope).await;
-        tokio::pin!(future);
-        tokio::pin!(release);
-        tokio::select! {
-            biased;
-            output = &mut future => {
-                drop(lease);
-                output
-            }
-            _ = &mut release => {
-                drop(lease);
-                future.await
-            }
-        }
     }
 
     async fn acquire(&self, scope: &RequestSerializationScope) -> RequestSerializationLease {

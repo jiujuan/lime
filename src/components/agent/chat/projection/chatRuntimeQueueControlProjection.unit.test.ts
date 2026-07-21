@@ -1,118 +1,73 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadReadResponse } from "@limecloud/app-server-client";
+import type { ThreadReadResponse, Turn } from "@limecloud/app-server-client";
 import { projectChatRuntimeQueueControl } from "./chatRuntimeQueueControlProjection";
 
 function readResponse(
-  turns: ThreadReadResponse["thread"]["turns"],
+  turns: Turn[] | undefined,
   overrides: Partial<ThreadReadResponse["thread"]> = {},
 ): ThreadReadResponse {
   return {
     thread: {
-      archived: false,
-      createdAtMs: 100,
+      cliVersion: "test",
+      createdAt: 0.1,
+      cwd: "/tmp/workspace",
+      ephemeral: false,
+      id: "thread-1",
+      modelProvider: "openai",
+      preview: "",
       sessionId: "session-1",
-      status: { type: "active" },
-      threadId: "thread-1",
+      source: "appServer",
+      status: { type: "active", activeFlags: [] },
       turns,
-      turnsView: "full",
-      updatedAtMs: 200,
+      updatedAt: 0.2,
       ...overrides,
     },
   };
 }
 
-function turn(
-  turnId: string,
-  overrides: Partial<
-    NonNullable<ThreadReadResponse["thread"]["turns"]>[number]
-  > = {},
-) {
-  return {
-    createdAtMs: 100,
-    sessionId: "session-1",
-    status: "completed" as const,
-    threadId: "thread-1",
-    turnId,
-    updatedAtMs: 200,
-    ...overrides,
-  };
+function turn(id: string, status: Turn["status"] = "completed"): Turn {
+  return { id, status };
 }
 
 describe("projectChatRuntimeQueueControl", () => {
-  it("projects one active turn and queued turns from hydrated canonical data", () => {
-    const result = projectChatRuntimeQueueControl(
-      readResponse([
-        turn("turn-active", {
-          status: "inProgress",
-          queue: { state: "running" },
-        }),
-        turn("turn-queued", {
-          status: "inProgress",
-          queue: { state: "queued", position: 1 },
-        }),
-        turn("turn-done"),
-      ]),
-    );
-
-    expect(result).toEqual({
-      ok: true,
-      projection: {
-        threadId: "thread-1",
-        updatedAtMs: 200,
-        activeTurnId: "turn-active",
-        queuedTurnIds: ["turn-queued"],
-      },
-    });
-  });
-
-  it("fails closed for summary or missing turn hydration", () => {
+  it("projects the active turn from a hydrated v2 Thread", () => {
     expect(
       projectChatRuntimeQueueControl(
-        readResponse(undefined, { turnsView: "summary" }),
-      ),
-    ).toMatchObject({ ok: false });
-    expect(
-      projectChatRuntimeQueueControl(
-        readResponse(undefined, { turnsView: "notLoaded" }),
-      ),
-    ).toMatchObject({ ok: false });
-    expect(
-      projectChatRuntimeQueueControl(readResponse(undefined)),
-    ).toMatchObject({ ok: false });
-  });
-
-  it("projects all-terminal turns with no active turn", () => {
-    expect(
-      projectChatRuntimeQueueControl(
-        readResponse([
-          turn("turn-completed"),
-          turn("turn-completed-running", { queue: { state: "running" } }),
-          turn("turn-failed", {
-            status: "failed",
-            queue: { state: "running" },
-          }),
-          turn("turn-interrupted", {
-            status: "interrupted",
-            queue: { state: "running" },
-          }),
-          turn("turn-not-queued", {
-            status: "failed",
-            queue: { state: "notQueued" },
-          }),
-        ]),
+        readResponse([turn("turn-active", "inProgress"), turn("turn-done")]),
       ),
     ).toEqual({
       ok: true,
       projection: {
         threadId: "thread-1",
         updatedAtMs: 200,
-        activeTurnId: null,
+        activeTurnId: "turn-active",
         queuedTurnIds: [],
       },
     });
   });
 
-  it("fails closed for duplicate, cross-thread, and multiple active turns", () => {
+  it("fails closed when turns are not hydrated", () => {
+    expect(
+      projectChatRuntimeQueueControl(readResponse(undefined)),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("projects terminal turns without an active turn", () => {
+    expect(
+      projectChatRuntimeQueueControl(
+        readResponse([
+          turn("turn-completed"),
+          turn("turn-failed", "failed"),
+          turn("turn-interrupted", "interrupted"),
+        ]),
+      ),
+    ).toMatchObject({
+      ok: true,
+      projection: { activeTurnId: null, queuedTurnIds: [] },
+    });
+  });
+
+  it("fails closed for duplicate or multiple active turns", () => {
     expect(
       projectChatRuntimeQueueControl(
         readResponse([turn("turn-1"), turn("turn-1")]),
@@ -120,35 +75,21 @@ describe("projectChatRuntimeQueueControl", () => {
     ).toMatchObject({ ok: false });
     expect(
       projectChatRuntimeQueueControl(
-        readResponse([turn("turn-cross", { threadId: "thread-other" })]),
-      ),
-    ).toMatchObject({ ok: false });
-    expect(
-      projectChatRuntimeQueueControl(
         readResponse([
-          turn("turn-a", { status: "inProgress" }),
-          turn("turn-b", { status: "inProgress" }),
+          turn("turn-a", "inProgress"),
+          turn("turn-b", "inProgress"),
         ]),
       ),
     ).toMatchObject({ ok: false });
   });
 
-  it("fails closed for session mismatch, invalid queue/status combinations, and timestamps", () => {
+  it("fails closed for invalid identity or timestamp", () => {
     expect(
-      projectChatRuntimeQueueControl(
-        readResponse([turn("turn-session", { sessionId: "session-other" })]),
-      ),
+      projectChatRuntimeQueueControl(readResponse([], { id: "" })),
     ).toMatchObject({ ok: false });
     expect(
       projectChatRuntimeQueueControl(
-        readResponse([
-          turn("turn-terminal-queued", { queue: { state: "queued" } }),
-        ]),
-      ),
-    ).toMatchObject({ ok: false });
-    expect(
-      projectChatRuntimeQueueControl(
-        readResponse([turn("turn-bad-time", { updatedAtMs: Number.NaN })]),
+        readResponse([], { updatedAt: Number.NaN }),
       ),
     ).toMatchObject({ ok: false });
   });

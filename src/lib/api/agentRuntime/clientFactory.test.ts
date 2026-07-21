@@ -35,17 +35,13 @@ const appServerManagedObjective = {
 };
 
 function appServerClientMock(): AgentRuntimeAppServerClient {
-  return {
+  const client = {
     startSession: vi.fn().mockResolvedValue({
       id: 1,
       result: {
-        session: {
+        thread: {
+          id: "thread-1",
           sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "desktop",
-          status: "idle",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:00.000Z",
         },
       },
       response: {
@@ -125,16 +121,29 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
-    archiveManySessions: vi.fn().mockResolvedValue({
+    archiveThread: vi.fn().mockResolvedValue({
       id: 1,
-      result: {
-        updatedSessionIds: ["session-1"],
-        updatedCount: 1,
-      },
+      result: {},
       response: {
         id: 1,
         result: {},
       },
+      messages: [],
+      notifications: [],
+    }),
+    unarchiveThread: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        thread: {
+          id: "thread-1",
+          sessionId: "session-1",
+          createdAt: 1780704000,
+          updatedAt: 1780704000,
+          status: { type: "idle" },
+          turns: [],
+        },
+      },
+      response: { id: 1, result: {} },
       messages: [],
       notifications: [],
     }),
@@ -189,15 +198,18 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       return Promise.resolve({
         id: 1,
         result: {
-          sessions: [
+          data: [
             {
+              id: "thread-1",
               sessionId: "session-1",
-              threadId: "thread-1",
-              title: "Session 1",
-              model: "gpt-5.4",
-              createdAt: "2026-06-06T00:00:00.000Z",
-              updatedAt: "2026-06-06T00:00:00.000Z",
-              messagesCount: 0,
+              preview: "Session 1",
+              modelProvider: "gpt-5.4",
+              createdAt: 1780704000,
+              updatedAt: 1780704000,
+              cwd: "/tmp/workspace-1",
+              extra: { workspaceId: "workspace-1" },
+              status: { type: "idle" },
+              turns: [],
             },
           ],
         },
@@ -208,6 +220,13 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
         messages: [],
         notifications: [],
       });
+    }),
+    runThreadShellCommand: vi.fn().mockResolvedValue({
+      id: 4,
+      result: {},
+      response: { id: 4, result: {} },
+      messages: [],
+      notifications: [],
     }),
     startTurn: vi.fn().mockResolvedValue({}),
     cancelTurn: vi.fn().mockResolvedValue({}),
@@ -254,63 +273,13 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
-    resumeAgentSessionThread: vi.fn().mockResolvedValue({
+    resumeThread: vi.fn().mockResolvedValue({
       id: 1,
       result: {
-        session: {
-          sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "agent-chat",
-          status: "running",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:00.000Z",
-        },
-        turns: [],
-        resumed: true,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    removeAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        session: {
-          sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "agent-chat",
-          status: "idle",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:00.000Z",
-        },
-        turns: [],
-        queuedTurnId: "queued-1",
-        removed: true,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    promoteAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        session: {
-          sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "agent-chat",
-          status: "running",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:00.000Z",
-        },
-        turns: [],
-        queuedTurnId: "queued-1",
-        promoted: true,
+        thread: { id: "thread-1", sessionId: "session-1", turns: [] },
+        model: "gpt-5.4",
+        modelProvider: "openai",
+        cwd: "/tmp/workspace",
       },
       response: {
         id: 1,
@@ -691,7 +660,28 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       notifications: [],
     }),
     drainEvents: vi.fn().mockResolvedValue([]),
-  };
+  } as AgentRuntimeAppServerClient;
+  client.readThread = vi.fn().mockResolvedValue({
+    id: 1,
+    result: {
+      thread: {
+        id: "thread-1",
+        sessionId: "session-1",
+        preview: "Session 1",
+        modelProvider: "gpt-5.4",
+        createdAt: 1780704000,
+        updatedAt: 1780704000,
+        cwd: "/tmp/workspace-1",
+        extra: { workspaceId: "workspace-1" },
+        status: { type: "idle" },
+        turns: [],
+      },
+    },
+    response: { id: 1, result: {} },
+    messages: [],
+    notifications: [],
+  });
+  return client;
 }
 
 function standardRuntimeClientMock(): AgentRuntimeLifecycleClient {
@@ -751,21 +741,22 @@ describe("agentRuntime clientFactory", () => {
     const client = createAgentRuntimeClient({ invoke, appServerClient });
 
     await expect(
-      client.resumeAgentRuntimeThread({
-        session_id: "session-1",
+      client.resumeThread({
+        threadId: "thread-1",
       }),
-    ).resolves.toBe(true);
+    ).resolves.toMatchObject({
+      result: {
+        thread: { id: "thread-1" },
+      },
+    });
     expect(client).not.toHaveProperty("siteListAdapters");
     expect(client).not.toHaveProperty("siteRunAdapter");
     expect(client).not.toHaveProperty("spawnAgentRuntimeSubagent");
     expect(client).not.toHaveProperty("waitAgentRuntimeSubagents");
 
-    expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      resumeContract: expect.objectContaining({
-        schemaVersion: "lime-runtime-resume-contract/v0.1",
-        sessionId: "session-1",
-      }),
+    expect(appServerClient.resumeThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      excludeTurns: true,
     });
     expect(invoke).not.toHaveBeenCalled();
   });
@@ -776,17 +767,18 @@ describe("agentRuntime clientFactory", () => {
     const client = createAgentRuntimeClient({ bridgeInvoke, appServerClient });
 
     await expect(
-      client.resumeAgentRuntimeThread({
-        session_id: "session-1",
+      client.resumeThread({
+        threadId: "thread-1",
       }),
-    ).resolves.toBe(true);
+    ).resolves.toMatchObject({
+      result: {
+        thread: { id: "thread-1" },
+      },
+    });
 
-    expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      resumeContract: expect.objectContaining({
-        schemaVersion: "lime-runtime-resume-contract/v0.1",
-        sessionId: "session-1",
-      }),
+    expect(appServerClient.resumeThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      excludeTurns: true,
     });
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
@@ -801,7 +793,12 @@ describe("agentRuntime clientFactory", () => {
     });
 
     await expect(
-      client.createAgentRuntimeSession("workspace-1", "新会话", "react"),
+      client.createAgentRuntimeSession("workspace-1", "新会话", "react", {
+        metadata: {
+          providerSelector: "fixture-provider",
+          modelName: "fixture-model",
+        },
+      }),
     ).resolves.toBe("session-1");
     await expect(
       client.listAgentRuntimeSessions({ workspaceId: "workspace-1" }),
@@ -822,29 +819,37 @@ describe("agentRuntime clientFactory", () => {
       client.updateAgentRuntimeSession({
         session_id: "session-1",
         name: "新标题",
-        archived: true,
       }),
+    ).resolves.toBeUndefined();
+    await expect(
+      client.archiveAgentRuntimeSession("session-1"),
     ).resolves.toBeUndefined();
     await expect(client.deleteAgentRuntimeSession("session-1")).resolves.toBe(
       undefined,
     );
 
-    expect(appServerClient.startSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        appId: "desktop",
-        workspaceId: "workspace-1",
-      }),
-    );
-    expect(appServerClient.request).toHaveBeenCalledWith("agentSession/list", {
-      workspaceId: "workspace-1",
+    expect(appServerClient.startSession).toHaveBeenCalledWith({
+      cwd: undefined,
+      historyMode: "paginated",
+      model: "fixture-model",
+      modelProvider: "fixture-provider",
+      serviceName: "新会话",
+      threadSource: "appServer",
     });
-    expect(appServerClient.readSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
+    expect(appServerClient.request).toHaveBeenCalledWith("thread/list", {
+      archived: false,
+      limit: 100,
+    });
+    expect(appServerClient.readThread).toHaveBeenCalledWith({
+      threadId: "session-1",
+      includeTurns: false,
     });
     expect(appServerClient.updateSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       title: "新标题",
-      archived: true,
+    });
+    expect(appServerClient.archiveThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
     });
     expect(appServerClient.deleteSession).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -852,73 +857,33 @@ describe("agentRuntime clientFactory", () => {
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
 
-  it("App Server detail 缺省旧数组字段时 get session 应补齐为可 hydrate 结构", async () => {
+  it("canonical failed Turn 应恢复为空消息结构并保留失败状态", async () => {
     const appServerClient = appServerClientMock();
-    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+    vi.mocked(appServerClient.readThread).mockResolvedValue({
       id: 1,
       result: {
-        session: {
+        thread: {
+          id: "thread-failed",
           sessionId: "session-failed",
-          threadId: "thread-failed",
-          appId: "agent-chat",
-          status: "failed",
-          createdAt: "2026-06-07T04:39:20.025Z",
-          updatedAt: "2026-06-07T04:42:05.905Z",
-        },
-        turns: [
-          {
-            turnId: "turn-failed",
-            sessionId: "session-failed",
-            threadId: "thread-failed",
-            status: "failed",
-            startedAt: "2026-06-07T04:39:20.100Z",
-            completedAt: "2026-06-07T04:42:05.905Z",
-          },
-        ],
-        detail: {
-          id: "session-failed",
-          thread_id: "thread-failed",
-          created_at: 1780807160025,
-          updated_at: 1780807325905,
-          thread_read: {
-            thread_id: "thread-failed",
-            status: "failed",
-          },
-        },
-      },
-      response: {
-        id: 1,
-        result: {
-          session: {
-            sessionId: "session-failed",
-            threadId: "thread-failed",
-            appId: "agent-chat",
-            status: "failed",
-            createdAt: "2026-06-07T04:39:20.025Z",
-            updatedAt: "2026-06-07T04:42:05.905Z",
-          },
+          preview: "Failed Session",
+          modelProvider: "openai",
+          cwd: "/tmp/work",
+          createdAt: 1780807160,
+          updatedAt: 1780807325,
+          status: { type: "systemError" },
           turns: [
             {
-              turnId: "turn-failed",
-              sessionId: "session-failed",
-              threadId: "thread-failed",
+              id: "turn-failed",
               status: "failed",
-              startedAt: "2026-06-07T04:39:20.100Z",
-              completedAt: "2026-06-07T04:42:05.905Z",
+              startedAt: 1780807160,
+              completedAt: 1780807325,
+              error: { message: "provider failed" },
+              items: [],
             },
           ],
-          detail: {
-            id: "session-failed",
-            thread_id: "thread-failed",
-            created_at: 1780807160025,
-            updated_at: 1780807325905,
-            thread_read: {
-              thread_id: "thread-failed",
-              status: "failed",
-            },
-          },
         },
       },
+      response: { id: 1, result: {} },
       messages: [],
       notifications: [],
     });
@@ -937,6 +902,7 @@ describe("agentRuntime clientFactory", () => {
           id: "turn-failed",
           thread_id: "thread-failed",
           status: "failed",
+          error_message: "provider failed",
         },
       ],
       items: [],
@@ -958,27 +924,15 @@ describe("agentRuntime clientFactory", () => {
     });
 
     await client.submitAgentRuntimeTurn({
-      sessionId: "session-1",
-      input: { text: "继续" },
-      runtimeOptions: {
-        stream: true,
-        eventName: "event-1",
-        runtimeRequest: { workspaceId: "workspace-1" },
-      },
+      threadId: "thread-1",
+      input: [{ type: "text", text: "继续" }],
+      additionalContext: { workspaceId: "workspace-1" },
     });
 
     expect(appServerClient.startTurn).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      input: {
-        text: "继续",
-      },
-      runtimeOptions: {
-        stream: true,
-        eventName: "event-1",
-        runtimeRequest: {
-          workspaceId: "workspace-1",
-        },
-      },
+      threadId: "thread-1",
+      input: [{ type: "text", text: "继续" }],
+      additionalContext: { workspaceId: "workspace-1" },
     });
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
@@ -996,12 +950,8 @@ describe("agentRuntime clientFactory", () => {
 
     await expect(
       client.submitAgentRuntimeTurn({
-        sessionId: "session-1",
-        input: { text: "继续" },
-        runtimeOptions: {
-          stream: true,
-          eventName: "event-1",
-        },
+        threadId: "thread-1",
+        input: [{ type: "text", text: "继续" }],
       }),
     ).resolves.toBeUndefined();
     await expect(
@@ -1012,18 +962,13 @@ describe("agentRuntime clientFactory", () => {
     });
 
     expect(standardRuntimeClient.startTurn).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      input: {
-        text: "继续",
-      },
-      runtimeOptions: {
-        stream: true,
-        eventName: "event-1",
-      },
+      threadId: "thread-1",
+      input: [{ type: "text", text: "继续" }],
     });
     expect(standardRuntimeClient.readThread).not.toHaveBeenCalled();
-    expect(appServerClient.readSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
+    expect(appServerClient.readThread).toHaveBeenCalledWith({
+      threadId: "session-1",
+      includeTurns: true,
     });
     expect(appServerClient.startTurn).not.toHaveBeenCalled();
     expect(bridgeInvoke).not.toHaveBeenCalled();

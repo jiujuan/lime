@@ -69,6 +69,7 @@ import {
   type ProviderModelFetchStatus,
   type ProviderModelFetchStatusCopy,
 } from "./providerModelFetchHelpers";
+import { formatProviderConnectionError } from "./providerConnectionError";
 
 export type ModelAddView = "catalog" | "configure";
 export type ModelCatalogCategory =
@@ -1484,6 +1485,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
 
     setSubmitting(true);
     setSubmitError(null);
+    let persistedProviderId: string | null = null;
 
     try {
       const request: AddCustomProviderRequest = {
@@ -1536,25 +1538,57 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         setPersistedApiKey({ providerId, value: nextApiKey });
       }
 
+      persistedProviderId = providerId;
+
       const testResult = await apiKeyProviderApi.testConnection(
         providerId,
         normalizedFormState.models[0],
       );
 
       if (!testResult.success) {
-        onActivated(providerId);
+        const message = formatProviderConnectionError(testResult.error, {
+          fallback: t(
+            "settings.providers.setting.feedback.connection.failureDefault",
+          ),
+          timeout: t(
+            "settings.providers.feedback.connection.timeout",
+            "连接测试超时。请确认 API Base URL 可访问后重试。",
+          ),
+        });
+        setSubmitError(
+          t("settings.providers.modelAdd.feedback.submit.savedButTestFailed", {
+            message,
+            defaultValue: "配置已保存，但连接测试未通过：{{message}}",
+          }),
+        );
         return;
       }
 
       onActivated(providerId);
     } catch (error) {
+      const message = formatProviderConnectionError(error, {
+        fallback: t(
+          "settings.providers.modelAdd.feedback.submit.errorDefault",
+          "保存并测试失败",
+        ),
+        timeout: t(
+          "settings.providers.feedback.connection.timeout",
+          "连接测试超时。请确认 API Base URL 可访问后重试。",
+        ),
+      });
       setSubmitError(
-        error instanceof Error
-          ? error.message
-          : t(
-              "settings.providers.modelAdd.feedback.submit.errorDefault",
-              "测试连接并激活失败",
-            ),
+        persistedProviderId
+          ? t(
+              "settings.providers.modelAdd.feedback.submit.savedButTestFailed",
+              {
+                message,
+                defaultValue: "配置已保存，但连接测试未通过：{{message}}",
+              },
+            )
+          : t("settings.providers.modelAdd.feedback.submit.saveFailed", {
+              message,
+              defaultValue: "保存配置失败：{{message}}",
+            }),
       );
     } finally {
       setSubmitting(false);
@@ -2212,10 +2246,15 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
 
           {submitError ? (
             <div
-              className="rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+              className="flex items-start gap-2 rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
               data-testid="model-add-error"
+              role="alert"
+              aria-live="polite"
             >
-              {submitError}
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="min-w-0 break-words leading-5">
+                {submitError}
+              </span>
             </div>
           ) : null}
 
@@ -2225,14 +2264,17 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               void activateProvider();
             }}
             disabled={submitting}
-            className="h-12 w-full rounded-full border border-emerald-900/15 bg-white text-sm font-semibold text-slate-500 shadow-sm shadow-slate-950/5 hover:bg-emerald-50 hover:text-emerald-800"
+            className="h-12 w-full rounded-full bg-slate-950 text-sm font-semibold text-white shadow-sm shadow-slate-950/10 hover:bg-slate-800"
             data-testid="model-activate-button"
           >
             {submitting ? (
-              t(
-                "settings.providers.modelAdd.action.testingConnection",
-                "正在测试连接...",
-              )
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t(
+                  "settings.providers.modelAdd.action.testingConnection",
+                  "正在保存并测试...",
+                )}
+              </>
             ) : (
               <>
                 <Zap className="mr-2 h-4 w-4" />

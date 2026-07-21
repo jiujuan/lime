@@ -5,20 +5,97 @@ use app_server_protocol::{
     ThreadReadParams, ThreadReadResponse, ThreadTurnsListParams, ThreadTurnsListResponse,
 };
 use thread_store::{
-    ListItemsParams, ListThreadsParams, ListTurnsParams, PageRequest, ReadThreadParams,
-    StoreCursor, ThreadStore,
+    ArchiveThreadParams, ListItemsParams, ListThreadsParams, ListTurnsParams, PageRequest,
+    ReadThreadParams, StoreCursor, ThreadStore,
 };
 
 const DEFAULT_PAGE_LIMIT: u32 = 100;
 
+pub(crate) struct RuntimeThreadResumeSnapshot {
+    pub thread: agent_protocol::Thread,
+    pub active_turn_id: Option<agent_protocol::TurnId>,
+}
+
 impl RuntimeCore {
+    pub async fn archive_thread(
+        &self,
+        thread_id: agent_protocol::ThreadId,
+    ) -> Result<bool, RuntimeCoreError> {
+        let store = self.canonical_thread_store()?;
+        let current = store
+            .read_thread(ReadThreadParams {
+                thread_id: thread_id.clone(),
+                include_archived: true,
+                turns_view: agent_protocol::ThreadTurnsView::NotLoaded,
+            })
+            .await
+            .map_err(store_error)?
+            .ok_or_else(|| RuntimeCoreError::Backend(format!("thread not found: {thread_id}")))?;
+        store
+            .archive_thread(ArchiveThreadParams { thread_id })
+            .await
+            .map_err(store_error)?;
+        Ok(!current.archived)
+    }
+
+    pub async fn unarchive_thread(
+        &self,
+        thread_id: agent_protocol::ThreadId,
+    ) -> Result<(agent_protocol::Thread, bool), RuntimeCoreError> {
+        let store = self.canonical_thread_store()?;
+        let current = store
+            .read_thread(ReadThreadParams {
+                thread_id: thread_id.clone(),
+                include_archived: true,
+                turns_view: agent_protocol::ThreadTurnsView::NotLoaded,
+            })
+            .await
+            .map_err(store_error)?
+            .ok_or_else(|| RuntimeCoreError::Backend(format!("thread not found: {thread_id}")))?;
+        let thread = store
+            .unarchive_thread(ArchiveThreadParams { thread_id })
+            .await
+            .map_err(store_error)?;
+        Ok((thread, current.archived))
+    }
+
+    pub(crate) async fn resume_thread(
+        &self,
+        thread_id: agent_protocol::ThreadId,
+    ) -> Result<RuntimeThreadResumeSnapshot, RuntimeCoreError> {
+        let response = self
+            .read_thread(ThreadReadParams {
+                thread_id,
+                turns_view: agent_protocol::ThreadTurnsView::NotLoaded,
+            })
+            .await?;
+        let session_id = response.thread.session_id.clone();
+        self.ensure_current_session_hydrated(session_id.as_str())
+            .await?;
+        let active_turn_id = self
+            .session_loops
+            .snapshot(session_id.as_str())
+            .await
+            .map_err(|error| {
+                RuntimeCoreError::Backend(format!(
+                    "read runtime session snapshot for thread resume: {error}"
+                ))
+            })?
+            .and_then(|snapshot| snapshot.active_turn_id)
+            .map(agent_protocol::TurnId::new);
+        Ok(RuntimeThreadResumeSnapshot {
+            thread: response.thread,
+            active_turn_id,
+        })
+    }
+
     pub async fn read_thread(
         &self,
         params: ThreadReadParams,
     ) -> Result<ThreadReadResponse, RuntimeCoreError> {
         let store = self.canonical_thread_store()?;
         let thread_id = params.thread_id.clone();
-        let thread = store
+        let mut thread = store
             .read_thread(ReadThreadParams {
                 thread_id: params.thread_id,
                 include_archived: true,
@@ -27,6 +104,16 @@ impl RuntimeCore {
             .await
             .map_err(store_error)?
             .ok_or_else(|| RuntimeCoreError::Backend(format!("thread not found: {thread_id}")))?;
+        if let Some(product) = self
+            .projection_store
+            .as_deref()
+            .map(|store| store.read_thread_product_projection(thread.session_id.as_str()))
+            .transpose()
+            .map_err(RuntimeCoreError::Backend)?
+            .flatten()
+        {
+            merge_thread_product_projection(&mut thread.metadata, product);
+        }
         Ok(ThreadReadResponse { thread })
     }
 
@@ -122,6 +209,19 @@ impl RuntimeCore {
     }
 }
 
+fn merge_thread_product_projection(metadata: &mut serde_json::Value, product: serde_json::Value) {
+    let Some(product) = product.as_object() else {
+        return;
+    };
+    if !metadata.is_object() {
+        *metadata = serde_json::Value::Object(serde_json::Map::new());
+    }
+    let Some(metadata) = metadata.as_object_mut() else {
+        return;
+    };
+    metadata.extend(product.clone());
+}
+
 fn store_page(page: PageCursor) -> Result<PageRequest, RuntimeCoreError> {
     let cursor = page
         .cursor
@@ -148,6 +248,7 @@ mod tests {
         ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn, TurnAdmissionState,
         TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
     };
+    use app_server_protocol::AgentEvent;
     use serde_json::json;
     use std::sync::Arc;
     use thread_store::{
@@ -230,6 +331,49 @@ mod tests {
             })
             .await
             .expect("apply history");
+        store
+            .apply_event(&AgentEvent {
+                event_id: "artifact-current".to_string(),
+                sequence: 1,
+                session_id: thread.session_id.to_string(),
+                thread_id: Some(thread.thread_id.to_string()),
+                turn_id: None,
+                event_type: "artifact.snapshot".to_string(),
+                timestamp: "2026-07-21T00:00:00Z".to_string(),
+                payload: json!({
+                    "session": {
+                        "createdAt": "2026-07-21T00:00:00Z",
+                        "updatedAt": "2026-07-21T00:00:00Z",
+                        "workspaceId": "workspace-current"
+                    },
+                    "artifact": {
+                        "artifactId": "workspace-patch-current",
+                        "kind": "content_factory.workspace_patch",
+                        "metadata": {
+                            "contentFactoryWorkspacePatch": {
+                                "schemaVersion": "article-workspace.v1",
+                                "appId": "content-factory-app",
+                                "sessionId": thread.session_id,
+                                "workspaceId": "workspace-current",
+                                "objects": [{
+                                    "ref": {
+                                        "appId": "content-factory-app",
+                                        "kind": "articleDraft",
+                                        "id": "article-current",
+                                        "sessionId": thread.session_id,
+                                        "artifactIds": ["artifact-current"]
+                                    },
+                                    "title": "Current article",
+                                    "status": "ready",
+                                    "previewArtifactId": "artifact-current",
+                                    "source": {"markdown": "# Current article"}
+                                }]
+                            }
+                        }
+                    }
+                }),
+            })
+            .expect("apply product projection");
 
         let runtime = RuntimeCore::default().with_projection_store(store);
         let visible = runtime
@@ -273,6 +417,15 @@ mod tests {
             read.thread.turns[0].items[0].item_id.as_str(),
             "item_item-current"
         );
+        assert_eq!(
+            read.thread.metadata["articleWorkspace"]["objects"][0]["ref"]["id"],
+            "article-current"
+        );
+        assert!(read.thread.metadata["artifacts"]
+            .as_array()
+            .expect("thread artifacts")
+            .iter()
+            .any(|artifact| artifact["artifactRef"] == "artifact-current"));
 
         let turns = runtime
             .list_thread_turns(ThreadTurnsListParams {

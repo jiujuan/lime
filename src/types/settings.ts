@@ -26,7 +26,6 @@ export enum SettingsTabs {
 
   // 通用
   Appearance = "appearance",
-  Hotkeys = "hotkeys",
   Memory = "memory",
   ArchivedConversations = "archived-conversations",
 

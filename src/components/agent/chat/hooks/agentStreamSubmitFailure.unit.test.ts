@@ -56,7 +56,6 @@ describe("handleAgentStreamSubmitFailure", () => {
       requestLogId: null,
       requestStartedAt: Date.now(),
       requestFinished: false,
-      queuedTurnId: null,
     };
     const soulCopy = resolveSoulInteractionCopy({
       soul: {
@@ -76,7 +75,6 @@ describe("handleAgentStreamSubmitFailure", () => {
       content: "帮我整理资料",
       images: [] as MessageImage[],
       assistantMsgId: "assistant-1",
-      expectingQueue: false,
       eventName: "turn-1",
       activeStreamRef: {
         current: null,
@@ -135,7 +133,6 @@ describe("handleAgentStreamSubmitFailure", () => {
       requestLogId: null,
       requestStartedAt: Date.now(),
       requestFinished: false,
-      queuedTurnId: "queued-submit-failure",
     };
     const clearActiveStreamIfMatch = vi.fn(() => true);
     const markOptimisticFailure = vi.fn();
@@ -146,7 +143,6 @@ describe("handleAgentStreamSubmitFailure", () => {
       content: "排队输入",
       images: [] as MessageImage[],
       assistantMsgId: "assistant-queued-submit-failure",
-      expectingQueue: true,
       eventName: "turn-queued-submit-failure",
       activeStreamRef: {
         current: null,

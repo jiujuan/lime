@@ -10,6 +10,7 @@ import { useWorkspaceProjectSelection } from "./useWorkspaceProjectSelection";
 interface HookHarness {
   getValue: () => ReturnType<typeof useWorkspaceProjectSelection>;
   rerender: (props?: {
+    autoRunInitialPromptOnMount?: boolean;
     externalProjectId?: string | null;
     initialSessionId?: string | null;
     newChatAt?: number;
@@ -20,6 +21,7 @@ interface HookHarness {
 
 function mountHook(
   initialProps: {
+    autoRunInitialPromptOnMount?: boolean;
     externalProjectId?: string | null;
     initialSessionId?: string | null;
     newChatAt?: number;
@@ -33,6 +35,7 @@ function mountHook(
   let hookValue: ReturnType<typeof useWorkspaceProjectSelection> | null = null;
 
   function TestComponent(props: {
+    autoRunInitialPromptOnMount?: boolean;
     externalProjectId?: string | null;
     initialSessionId?: string | null;
     newChatAt?: number;
@@ -43,6 +46,7 @@ function mountHook(
   }
 
   const render = (props?: {
+    autoRunInitialPromptOnMount?: boolean;
     externalProjectId?: string | null;
     initialSessionId?: string | null;
     newChatAt?: number;
@@ -151,6 +155,32 @@ describe("useWorkspaceProjectSelection", () => {
       expect(harness.getValue().projectId).toBeUndefined();
       expect(harness.getValue().projectSelectionSource).toBe("none");
       expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("自动发送的新会话在请求处理后仍不应恢复旧会话", () => {
+    sessionStorage.setItem(
+      "agent_curr_sessionId_global",
+      JSON.stringify("session-previous"),
+    );
+    const harness = mountHook({
+      autoRunInitialPromptOnMount: true,
+      externalProjectId: "project-current",
+      newChatAt: 123,
+    });
+
+    try {
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
+
+      act(() => {
+        harness.getValue().markNewChatRequestHandled("123");
+      });
+
+      expect(harness.getValue().hasHandledNewChatRequest("123")).toBe(true);
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
+      expect(harness.getValue().projectId).toBe("project-current");
     } finally {
       harness.unmount();
     }

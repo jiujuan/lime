@@ -1,5 +1,4 @@
 //! 日志管理模块
-use crate::app_paths;
 use crate::config::LoggingConfig;
 use chrono::{Duration, Local, Utc};
 use regex::Regex;
@@ -9,6 +8,10 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+const OBSERVABILITY_DIR_NAME: &str = "observability";
+const LOG_DIR_NAME: &str = "log";
+const LOG_FILE_NAME: &str = "lime.log";
 
 #[derive(Debug, Clone)]
 pub struct LogStoreConfig {
@@ -43,33 +46,60 @@ pub struct LogStore {
     log_file_path: Option<PathBuf>,
 }
 
-impl Default for LogStore {
-    fn default() -> Self {
-        let log_dir = app_paths::best_effort_runtime_subdir("logs");
-        let _ = fs::create_dir_all(&log_dir);
-        let log_file = log_dir.join("lime.log");
-        let config = LogStoreConfig::default();
+impl LogStore {
+    /// 使用显式 AgentRoot 创建有界 text log store。
+    pub fn new(agent_root: impl AsRef<Path>) -> Result<Self, String> {
+        Self::with_config(agent_root, LogStoreConfig::default())
+    }
+
+    /// 创建不接触文件系统的测试/短生命周期 store。
+    pub fn in_memory() -> Self {
+        let mut config = LogStoreConfig::default();
+        config.enable_file_logging = false;
         Self {
             logs: VecDeque::new(),
             max_logs: config.max_logs,
             config,
-            log_file_path: Some(log_file),
+            log_file_path: None,
         }
     }
-}
 
-impl LogStore {
-    pub fn new() -> Self {
-        Self::default()
+    /// 从 AgentRoot 派生 text diagnostics 的唯一 current 文件。
+    pub fn log_file_path_for_agent_root(agent_root: impl AsRef<Path>) -> PathBuf {
+        agent_root
+            .as_ref()
+            .join(OBSERVABILITY_DIR_NAME)
+            .join(LOG_DIR_NAME)
+            .join(LOG_FILE_NAME)
     }
 
     /// 使用自定义配置创建 LogStore
-    pub fn with_custom_config(retention_days: u32, enabled: bool) -> Self {
-        let mut store = Self::default();
-        store.config.retention_days = retention_days;
-        store.config.enable_file_logging = enabled;
-        store.max_logs = store.config.max_logs;
-        store
+    pub fn with_custom_config(
+        agent_root: impl AsRef<Path>,
+        retention_days: u32,
+        enabled: bool,
+    ) -> Result<Self, String> {
+        let mut config = LogStoreConfig::default();
+        config.retention_days = retention_days;
+        config.enable_file_logging = enabled;
+        Self::with_config(agent_root, config)
+    }
+
+    fn with_config(agent_root: impl AsRef<Path>, config: LogStoreConfig) -> Result<Self, String> {
+        let log_file_path = Self::log_file_path_for_agent_root(agent_root);
+        if config.enable_file_logging {
+            let log_dir = log_file_path
+                .parent()
+                .ok_or_else(|| "无法解析日志目录".to_string())?;
+            fs::create_dir_all(log_dir)
+                .map_err(|error| format!("无法创建日志目录 {}: {error}", log_dir.display()))?;
+        }
+        Ok(Self {
+            logs: VecDeque::new(),
+            max_logs: config.max_logs,
+            config,
+            log_file_path: Some(log_file_path),
+        })
     }
 
     pub fn add(&mut self, level: &str, message: &str) {
@@ -97,23 +127,6 @@ impl LogStore {
         }
     }
 
-    /// 记录原始响应到单独的文件（用于调试）
-    pub fn log_raw_response(&self, request_id: &str, body: &str) {
-        if let Some(ref log_path) = self.log_file_path {
-            let log_dir = log_path.parent().unwrap_or(std::path::Path::new("."));
-            let raw_file = log_dir.join(format!("raw_response_{request_id}.txt"));
-            let sanitized = sanitize_log_message(body);
-            if let Ok(mut file) = OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(&raw_file)
-            {
-                let _ = file.write_all(sanitized.as_bytes());
-            }
-        }
-    }
-
     pub fn get_logs(&self) -> Vec<LogEntry> {
         self.logs.iter().cloned().collect()
     }
@@ -132,10 +145,12 @@ impl LogStore {
         }
     }
 
-    pub fn get_log_file_path(&self) -> Option<String> {
-        self.log_file_path
-            .as_ref()
-            .map(|p| p.to_string_lossy().to_string())
+    pub fn log_file_path(&self) -> Option<&Path> {
+        self.log_file_path.as_deref()
+    }
+
+    pub fn entry_count(&self) -> usize {
+        self.logs.len()
     }
 
     fn rotate_log_file_if_needed(&self, path: &Path) {
@@ -247,8 +262,11 @@ impl LogStore {
 
 pub type SharedLogStore = Arc<parking_lot::RwLock<LogStore>>;
 
-pub fn create_log_store_from_config(logging: &LoggingConfig) -> LogStore {
-    LogStore::with_custom_config(logging.retention_days, logging.enabled)
+pub fn create_log_store_from_config(
+    agent_root: impl AsRef<Path>,
+    logging: &LoggingConfig,
+) -> Result<LogStore, String> {
+    LogStore::with_custom_config(agent_root, logging.retention_days, logging.enabled)
 }
 
 /// P2 安全修复：扩展日志脱敏规则，覆盖更多敏感字段
@@ -294,6 +312,46 @@ pub fn sanitize_log_message(message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::sanitize_log_message;
+    use super::LogStore;
+
+    #[test]
+    fn agent_root_owns_text_diagnostics_log() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let agent_root = temp.path().join("app-server");
+        let mut store = LogStore::new(&agent_root).expect("log store");
+
+        store.add("info", "storage alignment");
+
+        let expected = agent_root
+            .join("observability")
+            .join("log")
+            .join("lime.log");
+        assert_eq!(store.log_file_path(), Some(expected.as_path()));
+        assert!(expected.is_file());
+        assert!(!agent_root.join("logs").exists());
+    }
+
+    #[test]
+    fn disabled_file_logging_does_not_create_log_directory() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let agent_root = temp.path().join("app-server");
+        let store = LogStore::with_custom_config(&agent_root, 7, false).expect("log store");
+        let expected = agent_root
+            .join("observability")
+            .join("log")
+            .join("lime.log");
+
+        assert_eq!(store.log_file_path(), Some(expected.as_path()));
+        assert!(!agent_root.exists());
+    }
+
+    #[test]
+    fn in_memory_store_has_no_file_owner() {
+        let store = LogStore::in_memory();
+
+        assert!(store.log_file_path().is_none());
+        assert_eq!(store.entry_count(), 0);
+    }
 
     #[test]
     fn test_sanitize_bearer_token() {

@@ -25,7 +25,6 @@ interface AgentStreamErrorRequestLogPayload {
 
 export interface AgentStreamErrorFailurePlan {
   errorMessage: string;
-  queuedTurnIds: string[];
   requestLogPayload: AgentStreamErrorRequestLogPayload;
   toast: AgentStreamErrorToastPlan;
 }
@@ -37,9 +36,6 @@ export interface AgentStreamFailedTimelineStatePlan {
   pendingItemKey: string;
   pendingTurnKey: string;
 }
-
-const resolveQueuedTurnIds = (queuedTurnId?: string | null): string[] =>
-  queuedTurnId ? [queuedTurnId] : [];
 
 export function buildAgentStreamErrorToastPlan(
   errorMessage: string,
@@ -72,7 +68,11 @@ export function buildAgentStreamFailedAssistantMessagePatch(params: {
   ).trim();
   const content =
     partialContent ||
-    buildFailedAgentMessageContent(params.errorMessage, undefined, params.soulCopy);
+    buildFailedAgentMessageContent(
+      params.errorMessage,
+      undefined,
+      params.soulCopy,
+    );
   const processParts = (params.previousContentParts || []).filter(
     (part) => part.type !== "text",
   );
@@ -95,11 +95,9 @@ export function buildAgentStreamFailedAssistantMessagePatch(params: {
 
 export function buildAgentStreamErrorFailurePlan(params: {
   errorMessage: string;
-  queuedTurnId?: string | null;
 }): AgentStreamErrorFailurePlan {
   return {
     errorMessage: params.errorMessage,
-    queuedTurnIds: resolveQueuedTurnIds(params.queuedTurnId),
     requestLogPayload: {
       eventType: "chat_request_error",
       status: "error",

@@ -49,6 +49,8 @@ const {
   mockEnsureProjectWorkspace,
   mockCreateProjectGitWorktree,
   mockRevealPathInFinder,
+  mockArchiveAgentRuntimeSession,
+  mockUnarchiveAgentRuntimeSession,
   mockUpdateAgentRuntimeSession,
   mockDeleteAgentRuntimeSession,
   mockScanConversationImportSource,
@@ -92,6 +94,8 @@ const {
   mockEnsureProjectWorkspace: vi.fn(),
   mockCreateProjectGitWorktree: vi.fn(),
   mockRevealPathInFinder: vi.fn(),
+  mockArchiveAgentRuntimeSession: vi.fn(),
+  mockUnarchiveAgentRuntimeSession: vi.fn(),
   mockUpdateAgentRuntimeSession: vi.fn(),
   mockDeleteAgentRuntimeSession: vi.fn(),
   mockScanConversationImportSource: vi.fn(),
@@ -178,6 +182,8 @@ export {
   mockToastError,
   mockToastInfo,
   mockToastSuccess,
+  mockArchiveAgentRuntimeSession,
+  mockUnarchiveAgentRuntimeSession,
   mockUpdateAgentRuntimeSession,
 };
 
@@ -196,8 +202,10 @@ vi.mock("@/i18n/legacy-patch/I18nPatchProvider", () => ({
 
 vi.mock("@/lib/api/agentRuntime/sessionClient", () => ({
   AGENT_RUNTIME_SESSIONS_CHANGED_EVENT: "lime:agent-runtime-sessions-changed",
+  archiveAgentRuntimeSession: mockArchiveAgentRuntimeSession,
   deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
+  unarchiveAgentRuntimeSession: mockUnarchiveAgentRuntimeSession,
   updateAgentRuntimeSession: mockUpdateAgentRuntimeSession,
 }));
 
@@ -694,6 +702,8 @@ export async function resetAppSidebarTest() {
     },
   });
   mockRevealPathInFinder.mockResolvedValue(undefined);
+  mockArchiveAgentRuntimeSession.mockResolvedValue(undefined);
+  mockUnarchiveAgentRuntimeSession.mockResolvedValue(undefined);
   mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
   mockDeleteAgentRuntimeSession.mockResolvedValue(undefined);
   mockScanConversationImportSource.mockResolvedValue({

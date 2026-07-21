@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
-pub const RUNTIME_RESUME_CONTRACT_SCHEMA_VERSION: &str = "lime-runtime-resume-contract/v0.1";
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum AgentSessionCwdFilter {
@@ -73,8 +71,6 @@ pub struct AgentSessionUpdateParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub archived: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_selector: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_name: Option<String>,
@@ -96,20 +92,6 @@ pub struct AgentSessionUpdateParams {
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionUpdateResponse {
     pub session: AgentSessionOverview,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentSessionArchiveManyParams {
-    #[serde(default)]
-    pub session_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentSessionArchiveManyResponse {
-    #[serde(default)]
-    pub sessions: Vec<AgentSessionOverview>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -286,51 +268,6 @@ pub struct AgentSessionCompactResponse {
     #[serde(default)]
     pub turns: Vec<AgentTurn>,
     pub compacted: bool,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentSessionThreadResumeParams {
-    pub session_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resume_contract: Option<RuntimeResumeContract>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeResumeContract {
-    pub schema_version: String,
-    pub runtime_id: String,
-    pub session_id: String,
-    pub turn_id: String,
-    pub resume_mode: String,
-    #[serde(default)]
-    pub open_action_ids: Vec<String>,
-    #[serde(default)]
-    pub decisions: Vec<RuntimeResumeActionDecision>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<String>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeResumeActionDecision {
-    pub action_id: String,
-    pub decision: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub response: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentSessionThreadResumeResponse {
-    pub session: AgentSession,
-    #[serde(default)]
-    pub turns: Vec<AgentTurn>,
-    pub resumed: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

@@ -173,6 +173,7 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
         payload: {
           prompt: "春日咖啡馆插画",
           raw_text: "@配图 春日咖啡馆插画",
+          turn_id: "turn-complete",
           count: 2,
           size: "1024x1024",
           provider_id: "openai",
@@ -277,6 +278,7 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
     expect(snapshot?.task.assistantIntro).toBe(
       "我先按春日咖啡馆插画整理构图，保留窗边和细节两张。",
     );
+    expect(snapshot?.message.runtimeTurnId).toBe("turn-complete");
     expect(snapshot?.updatedAt).toBe(Date.parse("2026-07-02T08:00:00.000Z"));
     expect(snapshot?.outputs.map((output) => output.url)).toEqual([
       "https://cdn.example.com/hero.png",

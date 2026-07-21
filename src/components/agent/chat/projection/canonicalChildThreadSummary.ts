@@ -39,6 +39,19 @@ interface SelectCanonicalChildThreadSummariesOptions {
   threads: AppServerThread[];
 }
 
+interface CanonicalAgentStateFact {
+  message?: string;
+  status: CanonicalAgentStatus;
+}
+
+interface CanonicalThreadExtra {
+  agentPath?: string;
+  agentState?: CanonicalAgentStateFact;
+  lastTaskMessage?: string;
+}
+
+type CanonicalTurn = NonNullable<AppServerThread["turns"]>[number];
+
 export function selectCanonicalChildThreadSummaries({
   parentThreadId,
   referencedChildThreadIds = [],
@@ -54,7 +67,7 @@ export function selectCanonicalChildThreadSummaries({
     if (thread.parentThreadId !== normalizedParentThreadId) {
       continue;
     }
-    summaries.set(thread.threadId, summaryFromThread(thread));
+    summaries.set(thread.id, summaryFromThread(thread));
   }
   for (const childThreadId of referencedChildThreadIds) {
     const normalizedChildThreadId = childThreadId.trim();
@@ -120,15 +133,18 @@ export function summarizeCanonicalChildThreads(
   };
 }
 
-function summaryFromThread(thread: AppServerThread): CanonicalChildThreadSummary {
-  const path = thread.agentPath?.trim() || undefined;
+function summaryFromThread(
+  thread: AppServerThread,
+): CanonicalChildThreadSummary {
+  const extra = readCanonicalThreadExtra(thread.extra);
+  const path = extra.agentPath;
   const nickname = thread.agentNickname?.trim() || undefined;
   const role = thread.agentRole?.trim() || undefined;
-  const taskSummary = thread.lastTaskMessage?.trim() || undefined;
-  const status = resolveCanonicalAgentStatus(thread);
+  const taskSummary = extra.lastTaskMessage;
+  const status = resolveCanonicalAgentStatus(thread, extra.agentState);
   const latestTurn = latestCanonicalTurn(thread);
   const statusMessage =
-    thread.agentState?.message?.trim() ||
+    extra.agentState?.message ||
     (status === "errored" ? latestTurn?.error?.message?.trim() : undefined);
 
   return {
@@ -140,7 +156,7 @@ function summaryFromThread(thread: AppServerThread): CanonicalChildThreadSummary
       thread.name?.trim() ??
       lastPathSegment(path) ??
       thread.preview?.trim() ??
-      thread.threadId,
+      thread.id,
     parentThreadId: thread.parentThreadId ?? "",
     ...(path ? { path } : {}),
     ...(role ? { role } : {}),
@@ -148,21 +164,22 @@ function summaryFromThread(thread: AppServerThread): CanonicalChildThreadSummary
     status,
     ...(statusMessage ? { statusMessage } : {}),
     ...(taskSummary ? { taskSummary } : {}),
-    threadId: thread.threadId,
-    updatedAtMs: thread.updatedAtMs,
+    threadId: thread.id,
+    updatedAtMs: thread.updatedAt * 1_000,
   };
 }
 
 function resolveCanonicalAgentStatus(
   thread: AppServerThread,
+  agentState: CanonicalAgentStateFact | undefined,
 ): CanonicalAgentStatus {
-  if (thread.agentState) {
-    return thread.agentState.status;
+  if (agentState) {
+    return agentState.status;
   }
-  if (thread.status.type === "active") {
+  if (thread.status?.type === "active") {
     return "running";
   }
-  if (thread.status.type === "systemError") {
+  if (thread.status?.type === "systemError") {
     return "errored";
   }
 
@@ -180,12 +197,18 @@ function resolveCanonicalAgentStatus(
   }
 }
 
-function latestCanonicalTurn(thread: AppServerThread) {
+function latestCanonicalTurn(
+  thread: AppServerThread,
+): CanonicalTurn | undefined {
   return [...(thread.turns ?? [])].sort(
     (left, right) =>
-      right.updatedAtMs - left.updatedAtMs ||
-      right.turnId.localeCompare(left.turnId),
+      canonicalTurnTimestamp(right) - canonicalTurnTimestamp(left) ||
+      right.id.localeCompare(left.id),
   )[0];
+}
+
+function canonicalTurnTimestamp(turn: CanonicalTurn): number {
+  return turn.completedAt ?? turn.startedAt ?? 0;
 }
 
 function compareChildSummaries(
@@ -200,4 +223,54 @@ function compareChildSummaries(
 
 function lastPathSegment(path: string | undefined): string | undefined {
   return path?.split("/").filter(Boolean).at(-1);
+}
+
+function readCanonicalThreadExtra(value: unknown): CanonicalThreadExtra {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const agentPath = readTrimmedString(value.agentPath);
+  const lastTaskMessage = readTrimmedString(value.lastTaskMessage);
+  const agentState = readCanonicalAgentState(value.agentState);
+  return {
+    ...(agentPath ? { agentPath } : {}),
+    ...(agentState ? { agentState } : {}),
+    ...(lastTaskMessage ? { lastTaskMessage } : {}),
+  };
+}
+
+function readCanonicalAgentState(
+  value: unknown,
+): CanonicalAgentStateFact | undefined {
+  if (!isRecord(value) || !isCanonicalAgentStatus(value.status)) {
+    return undefined;
+  }
+  const message = readTrimmedString(value.message);
+  return {
+    status: value.status,
+    ...(message ? { message } : {}),
+  };
+}
+
+function isCanonicalAgentStatus(value: unknown): value is CanonicalAgentStatus {
+  switch (value) {
+    case "pendingInit":
+    case "running":
+    case "interrupted":
+    case "completed":
+    case "errored":
+    case "shutdown":
+    case "notFound":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function readTrimmedString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

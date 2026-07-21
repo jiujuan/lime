@@ -43,12 +43,10 @@ interface HarnessProps {
 
 const mountedRoots: MountedHarness[] = [];
 let latestSend:
-  | ((
-      metadata?: {
-        triggeredAt?: number;
-        triggerSource?: "button" | "enter" | "ime" | "adapter";
-      },
-    ) => Promise<void>)
+  | ((metadata?: {
+      triggeredAt?: number;
+      triggerSource?: "button" | "enter" | "ime" | "adapter";
+    }) => Promise<void>)
   | null = null;
 let clearPathReferencesMock: ReturnType<typeof vi.fn>;
 let clearActiveCapabilityMock: ReturnType<typeof vi.fn>;
@@ -388,7 +386,7 @@ describe("useInputbarSend", () => {
     expect(clearActiveCapabilityMock).not.toHaveBeenCalled();
   });
 
-  it("技能路由和计划模式 metadata 不应因显式文本发送丢失", async () => {
+  it("技能路由和 typed 计划模式不应因显式文本发送丢失", async () => {
     const onSend = vi.fn().mockResolvedValue(true);
     renderHarness({
       activeCapability: createInstalledSkillSelection(),
@@ -424,19 +422,7 @@ describe("useInputbarSend", () => {
           },
         },
         displayContent: "生成一份能力报告",
-        requestMetadata: {
-          harness: {
-            task_mode_enabled: true,
-            collaboration_mode: {
-              mode: "plan",
-              source: "inputbar",
-            },
-            preferences: {
-              task: true,
-              task_mode: true,
-            },
-          },
-        },
+        collaborationMode: "plan",
         toolPreferencesOverride: {
           task: true,
           subagent: true,

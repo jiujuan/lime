@@ -5,10 +5,15 @@ import { describe, expect, it } from "vitest";
 
 describe("AgentChatWorkspace Task Center navigation runtime boundary", () => {
   it("topic switch、initial session navigation 和 tab session 必须由 Task Center navigation runtime 组合", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const commandWiringSource = readFileSync(
       join(
         process.cwd(),

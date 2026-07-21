@@ -38,7 +38,6 @@ describe("agentStream input restore policy", () => {
     expect(plan).toMatchObject({
       shouldRestoreComposer: true,
       reason: "output_free_interrupted_turn",
-      queuedTurnHandling: "none",
       draft: {
         text: "继续生成提纲",
         images: [image],
@@ -79,194 +78,21 @@ describe("agentStream input restore policy", () => {
     });
   });
 
-  it("visible output cancel 有 queued rich input 时应恢复 queued draft 而不是 active prompt", () => {
+  it("没有当前 submitted draft 时不应恢复输入", () => {
     const plan = resolveInterruptedInputRestorePlan({
-      submittedDraft: {
-        text: "active prompt",
-      },
       assistantMessage: {
-        id: "assistant-visible",
+        id: "assistant-empty-without-draft",
         role: "assistant",
         content: "",
         timestamp: new Date("2026-03-29T00:00:00.000Z"),
-        contentParts: [
-          {
-            type: "text",
-            text: "active output should stay visible",
-          },
-        ],
-      },
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-rich",
-          message_preview: "/capability-report queued",
-          message_text: "/capability-report queued",
-          created_at: 1,
-          image_count: 1,
-          position: 1,
-          input_attachments: [
-            {
-              kind: "image",
-              uri: "data:image/png;base64,aW1hZ2U=",
-              metadata: {
-                mediaType: "image/png",
-                sourcePath: "/tmp/queued.png",
-              },
-            },
-          ],
-          path_references: [
-            {
-              id: "file:/project/report.md",
-              path: "/project/report.md",
-              name: "report.md",
-              isDir: false,
-              source: "file_manager",
-            },
-          ],
-          text_elements: [
-            {
-              type: "text",
-              text: "queued rich prompt",
-            },
-          ],
-          input_capability_route: {
-            kind: "installed_skill",
-            skillKey: "capability-report",
-            skillName: "Capability Report",
-          },
-        },
-      ],
-    });
-
-    expect(plan).toMatchObject({
-      shouldRestoreComposer: true,
-      reason: "queued_turn_restored_after_interrupt",
-      queuedTurnHandling: "restore_first",
-      draft: {
-        text: "queued rich prompt",
-        images: [
-          {
-            data: "aW1hZ2U=",
-            mediaType: "image/png",
-            sourceUri: "data:image/png;base64,aW1hZ2U=",
-            sourcePath: "/tmp/queued.png",
-          },
-        ],
-        pathReferences: [
-          {
-            path: "/project/report.md",
-            name: "report.md",
-          },
-        ],
-        textElements: [
-          {
-            type: "text",
-            text: "queued rich prompt",
-          },
-        ],
-        inputCapabilityRoute: {
-          kind: "installed_skill",
-          skillKey: "capability-report",
-          skillName: "Capability Report",
-        },
       },
     });
-  });
 
-  it("queued rich input 的 file image attachment 不应被降级丢弃", () => {
-    const plan = resolveInterruptedInputRestorePlan({
-      submittedDraft: {
-        text: "active prompt",
-      },
-      assistantMessage: {
-        id: "assistant-visible",
-        role: "assistant",
-        content: "active output",
-        timestamp: new Date("2026-03-29T00:00:00.000Z"),
-      },
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-file-image",
-          message_preview: "queued",
-          message_text: "queued",
-          created_at: 1,
-          image_count: 1,
-          position: 1,
-          input_attachments: [
-            {
-              kind: "image",
-              uri: "file://queued.png",
-              metadata: {
-                mediaType: "image/png",
-                sourcePath: "/project/queued.png",
-              },
-            },
-          ],
-        },
-      ],
+    expect(plan).toEqual({
+      shouldRestoreComposer: false,
+      reason: "no_submitted_draft",
+      draft: null,
     });
-
-    expect(plan.draft?.images).toEqual([
-      {
-        data: "",
-        mediaType: "image/png",
-        sourceUri: "file://queued.png",
-        sourcePath: "/project/queued.png",
-        previewUrl: "file://queued.png",
-        metadata: {
-          mediaType: "image/png",
-          sourcePath: "/project/queued.png",
-        },
-      },
-    ]);
-  });
-
-  it("queued rich input 的裸 base64 image uri 应恢复为 data image 预览", () => {
-    const plan = resolveInterruptedInputRestorePlan({
-      submittedDraft: {
-        text: "active prompt",
-      },
-      assistantMessage: {
-        id: "assistant-visible",
-        role: "assistant",
-        content: "active output",
-        timestamp: new Date("2026-03-29T00:00:00.000Z"),
-      },
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-base64-image",
-          message_preview: "queued",
-          message_text: "queued",
-          created_at: 1,
-          image_count: 1,
-          position: 1,
-          input_attachments: [
-            {
-              kind: "image",
-              uri: "aW1hZ2U=",
-              metadata: {
-                mediaType: "image/png",
-                sourcePath: "/project/queued.png",
-              },
-            },
-          ],
-        },
-      ],
-    });
-
-    expect(plan.draft?.images).toEqual([
-      {
-        data: "aW1hZ2U=",
-        mediaType: "image/png",
-        sourceUri: "aW1hZ2U=",
-        sourcePath: "/project/queued.png",
-        previewUrl: undefined,
-        metadata: {
-          mediaType: "image/png",
-          sourcePath: "/project/queued.png",
-        },
-      },
-    ]);
   });
 
   it("final_answer 文本已经出现时不应恢复输入", () => {
@@ -499,102 +325,6 @@ describe("agentStream input restore policy", () => {
       shouldRestoreComposer: false,
       reason: "side_effect_activity_present",
       draft: null,
-    });
-  });
-
-  it("queued steer / manual interrupt 应保留队列顺序且不降级为普通字符串", () => {
-    const plan = resolveInterruptedInputRestorePlan({
-      submittedDraft: {
-        text: "当前草稿",
-        images: [
-          {
-            data: "image-data",
-            mediaType: "image/png",
-          },
-        ],
-      },
-      assistantMessage: {
-        id: "assistant-empty",
-        role: "assistant",
-        content: "",
-        timestamp: new Date("2026-03-29T00:00:00.000Z"),
-      },
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-2",
-          message_preview: "第二条",
-          message_text: "第二条排队输入",
-          created_at: 2,
-          image_count: 1,
-          position: 2,
-        },
-        {
-          queued_turn_id: "queued-1",
-          message_preview: "第一条",
-          message_text: "第一条排队输入",
-          created_at: 1,
-          image_count: 2,
-          position: 1,
-          attachments: [
-            {
-              kind: "image",
-              uri: "file://queued-1.png",
-            },
-          ],
-          path_references: [
-            {
-              path: "/project/queued-1.md",
-              name: "queued-1.md",
-              isDir: false,
-              source: "file_manager",
-            },
-          ],
-          text_elements: [{ type: "text", text: "第一条排队输入" }],
-          input_capability_route: {
-            kind: "installed_skill",
-            skillKey: "code-review",
-            skillName: "Code Review",
-          },
-        },
-      ],
-    });
-
-    expect(plan).toMatchObject({
-      shouldRestoreComposer: true,
-      reason: "output_free_interrupted_turn",
-      queuedTurnHandling: "preserve",
-      draft: {
-        text: "当前草稿",
-        images: [
-          {
-            data: "image-data",
-            mediaType: "image/png",
-          },
-        ],
-      },
-    });
-    expect(plan.queuedTurns.map((item) => item.queued_turn_id)).toEqual([
-      "queued-1",
-      "queued-2",
-    ]);
-    expect(plan.queuedTurns[0]).toMatchObject({
-      message_text: "第一条排队输入",
-      image_count: 2,
-      attachments: [
-        {
-          uri: "file://queued-1.png",
-        },
-      ],
-      path_references: [
-        {
-          path: "/project/queued-1.md",
-        },
-      ],
-      text_elements: [{ type: "text", text: "第一条排队输入" }],
-      input_capability_route: {
-        kind: "installed_skill",
-        skillKey: "code-review",
-      },
     });
   });
 });

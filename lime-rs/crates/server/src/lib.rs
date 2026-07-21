@@ -24,8 +24,6 @@ use lime_core::models::anthropic::*;
 use lime_core::models::runtime_api_key_id_from_credential_uuid;
 use lime_infra::injection::Injector;
 use lime_processor::{RequestContext, RequestProcessor};
-use lime_providers::providers::claude_custom::ClaudeCustomProvider;
-use lime_providers::providers::openai_custom::OpenAICustomProvider;
 use lime_server_utils::models;
 use lime_websocket::{WsConfig, WsConnectionManager, WsStats};
 use serde::{Deserialize, Serialize};
@@ -285,8 +283,6 @@ pub struct ServerState {
     pub running: bool,
     pub requests: u64,
     pub start_time: Option<std::time::Instant>,
-    pub openai_custom_provider: OpenAICustomProvider,
-    pub claude_custom_provider: ClaudeCustomProvider,
     pub default_provider_ref: Arc<RwLock<String>>,
     /// 路由器引用（用于动态更新默认 Provider）
     pub router_ref: Option<Arc<RwLock<lime_core::router::Router>>>,
@@ -306,8 +302,6 @@ pub struct ServerState {
 
 impl ServerState {
     pub fn new(config: Config) -> Self {
-        let openai_custom = OpenAICustomProvider::new();
-        let claude_custom = ClaudeCustomProvider::new();
         let default_provider_ref = Arc::new(RwLock::new(config.default_provider.clone()));
         let idempotency_store = Arc::new(middleware::idempotency::IdempotencyStore::new(
             middleware::idempotency::IdempotencyConfig::default(),
@@ -330,8 +324,6 @@ impl ServerState {
             running: false,
             requests: 0,
             start_time: None,
-            openai_custom_provider: openai_custom,
-            claude_custom_provider: claude_custom,
             default_provider_ref,
             router_ref: None,
             shutdown_tx: None,

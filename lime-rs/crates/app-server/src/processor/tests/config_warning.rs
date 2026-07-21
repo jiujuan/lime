@@ -4,10 +4,9 @@ use super::tests_support::initialize_processor;
 use crate::processor::config_warning::{ConfigWarningProvider, ConfigWarningScope};
 use crate::RuntimeCore;
 use app_server_protocol::{
-    AgentInput, AgentSessionStartParams, AgentSessionTurnStartParams, ClientCapabilities,
-    ClientInfo, ConfigWarningNotification, InitializeParams, JsonRpcMessage, JsonRpcRequest,
-    RequestId, ServerNotification, METHOD_AGENT_SESSION_TURN_START, METHOD_CONFIG_WARNING,
-    METHOD_INITIALIZE,
+    AgentSessionStartParams, ClientCapabilities, ClientInfo, ConfigWarningNotification,
+    InitializeParams, JsonRpcMessage, JsonRpcRequest, RequestId, ServerNotification,
+    METHOD_CONFIG_WARNING, METHOD_INITIALIZE, METHOD_TURN_START,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -130,8 +129,13 @@ async fn initialize_returns_all_config_warning_notifications() {
 
 #[tokio::test]
 async fn turn_start_returns_config_warning_notification_on_request_response_path() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection_store = Arc::new(
+        crate::ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
     let processor = crate::processor::RequestProcessor::new_with_config_warning_provider(
-        RuntimeCore::default(),
+        RuntimeCore::default().with_projection_store(projection_store),
         scoped_config_warning_provider(),
     );
     initialize_processor(&processor).await;
@@ -151,21 +155,11 @@ async fn turn_start_returns_config_warning_notification_on_request_response_path
     let messages = processor
         .handle_request(JsonRpcRequest::new(
             RequestId::Integer(2),
-            METHOD_AGENT_SESSION_TURN_START,
-            Some(
-                serde_json::to_value(AgentSessionTurnStartParams {
-                    session_id: "sess_config_warning".to_string(),
-                    turn_id: Some("turn_config_warning".to_string()),
-                    input: AgentInput {
-                        text: "hello".to_string(),
-                        attachments: Vec::new(),
-                    },
-                    runtime_options: None,
-                    queue_if_busy: false,
-                    skip_pre_submit_resume: false,
-                })
-                .expect("turn params"),
-            ),
+            METHOD_TURN_START,
+            Some(json!({
+                "threadId": "thread_config_warning",
+                "input": [{"type": "text", "text": "hello"}]
+            })),
         ))
         .await
         .expect("turn start");

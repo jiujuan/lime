@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { Message } from "../types";
 import { buildWaitingAgentRuntimeStatus } from "../utils/agentRuntimeStatus";
 import {
@@ -17,7 +16,7 @@ function createStateSetter<T>(getValue: () => T, setValue: (value: T) => void) {
 }
 
 describe("agentStreamSubmissionLifecycle", () => {
-  it("应先注入 optimistic turn/item，并在 activateStream 后切换到真实 session", () => {
+  it("应在 canonical start 判定后注入 optimistic turn/item", () => {
     const assistantMsg: Message = {
       id: "assistant-1",
       role: "assistant",
@@ -32,7 +31,6 @@ describe("agentStreamSubmissionLifecycle", () => {
 
     let activeStream: ActiveStreamState | null = null;
     let messages: Message[] = [assistantMsg];
-    let queuedTurns: QueuedTurnSnapshot[] = [];
     let threadItems: AgentThreadItem[] = [];
     let threadTurns: AgentThreadTurn[] = [];
     let currentTurnId: string | null = null;
@@ -42,8 +40,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       assistantMsgId: assistantMsg.id,
       userMsgId: "user-1",
       content: "继续生成",
-      expectingQueue: false,
-      initialThreadId: "local-thread:assistant-1",
       listenerMapRef: { current: new Map() },
       setActiveStream: (next) => {
         activeStream = next;
@@ -52,12 +48,6 @@ describe("agentStreamSubmissionLifecycle", () => {
         () => messages,
         (value) => {
           messages = value;
-        },
-      ),
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
         },
       ),
       setThreadItems: createStateSetter(
@@ -80,29 +70,27 @@ describe("agentStreamSubmissionLifecycle", () => {
       ),
     });
 
-    expect(threadTurns).toHaveLength(1);
-    expect(threadTurns[0]?.thread_id).toBe("local-thread:assistant-1");
-    expect(threadItems).toHaveLength(1);
-    expect(threadItems[0]?.thread_id).toBe("local-thread:assistant-1");
-    expect(currentTurnId).toBe(lifecycle.pendingTurnKey);
+    expect(threadTurns).toHaveLength(0);
+    expect(threadItems).toHaveLength(0);
+    expect(currentTurnId).toBeNull();
 
     const runtimeStatus = buildWaitingAgentRuntimeStatus({
       executionStrategy: "react",
     });
-    lifecycle.activateStream("session-1", runtimeStatus);
+    lifecycle.activateStream("session-1", runtimeStatus, "thread-1");
 
     expect(activeStream).toEqual({
       assistantMsgId: "assistant-1",
       eventName: lifecycle.eventName,
       sessionId: "session-1",
-      turnId: expect.any(String),
       pendingTurnKey: lifecycle.pendingTurnKey,
       pendingItemKey: lifecycle.pendingItemKey,
       submittedDraft: null,
     });
     expect(messages[0]?.runtimeStatus).toEqual(runtimeStatus);
-    expect(threadTurns[0]?.thread_id).toBe("session-1");
-    expect(threadItems[0]?.thread_id).toBe("session-1");
+    expect(threadTurns[0]?.thread_id).toBe("thread-1");
+    expect(threadItems[0]?.thread_id).toBe("thread-1");
+    expect(currentTurnId).toBe(lifecycle.pendingTurnKey);
   });
 
   it("markOptimisticFailure 应标记 pending turn/item 为 failed", () => {
@@ -119,7 +107,6 @@ describe("agentStreamSubmissionLifecycle", () => {
     };
 
     let messages: Message[] = [assistantMsg];
-    let queuedTurns: QueuedTurnSnapshot[] = [];
     let threadItems: AgentThreadItem[] = [];
     let threadTurns: AgentThreadTurn[] = [];
     let currentTurnId: string | null = null;
@@ -129,20 +116,12 @@ describe("agentStreamSubmissionLifecycle", () => {
       assistantMsgId: assistantMsg.id,
       userMsgId: null,
       content: "继续生成",
-      expectingQueue: false,
-      initialThreadId: "local-thread:assistant-2",
       listenerMapRef: { current: new Map() },
       setActiveStream: () => {},
       setMessages: createStateSetter(
         () => messages,
         (value) => {
           messages = value;
-        },
-      ),
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
         },
       ),
       setThreadItems: createStateSetter(
@@ -165,6 +144,11 @@ describe("agentStreamSubmissionLifecycle", () => {
       ),
     });
 
+    lifecycle.activateStream(
+      "session-2",
+      buildWaitingAgentRuntimeStatus({ executionStrategy: "react" }),
+      "thread-2",
+    );
     lifecycle.markOptimisticFailure("发送失败");
 
     expect(threadTurns[0]?.status).toBe("failed");
@@ -177,101 +161,7 @@ describe("agentStreamSubmissionLifecycle", () => {
     expect(threadItems[0].text).toContain("失败");
   });
 
-  it("queue event 删除只过滤 id，不在前端重排 position", () => {
-    const assistantMsg: Message = {
-      id: "assistant-queued-position",
-      role: "assistant",
-      content: "",
-      timestamp: new Date("2026-03-27T01:00:00.000Z"),
-      isThinking: true,
-      contentParts: [],
-      runtimeStatus: buildWaitingAgentRuntimeStatus({
-        executionStrategy: "react",
-      }),
-    };
-
-    let messages: Message[] = [assistantMsg];
-    let queuedTurns: QueuedTurnSnapshot[] = [
-      {
-        queued_turn_id: "queued-0",
-        message_preview: "第一条",
-        message_text: "第一条",
-        created_at: 1,
-        image_count: 0,
-        position: 0,
-      },
-      {
-        queued_turn_id: "queued-1",
-        message_preview: "第二条",
-        message_text: "第二条",
-        created_at: 2,
-        image_count: 0,
-        position: 1,
-      },
-      {
-        queued_turn_id: "queued-2",
-        message_preview: "第三条",
-        message_text: "第三条",
-        created_at: 3,
-        image_count: 0,
-        position: 2,
-      },
-    ];
-    let threadItems: AgentThreadItem[] = [];
-    let threadTurns: AgentThreadTurn[] = [];
-    let currentTurnId: string | null = null;
-
-    const lifecycle = createAgentStreamSubmissionLifecycle({
-      assistantMsg,
-      assistantMsgId: assistantMsg.id,
-      userMsgId: null,
-      content: "继续生成",
-      expectingQueue: true,
-      initialThreadId: "thread-queued-position",
-      listenerMapRef: { current: new Map() },
-      setActiveStream: () => {},
-      setMessages: createStateSetter(
-        () => messages,
-        (value) => {
-          messages = value;
-        },
-      ),
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
-        },
-      ),
-      setThreadItems: createStateSetter(
-        () => threadItems,
-        (value) => {
-          threadItems = value;
-        },
-      ),
-      setThreadTurns: createStateSetter(
-        () => threadTurns,
-        (value) => {
-          threadTurns = value;
-        },
-      ),
-      setCurrentTurnId: createStateSetter(
-        () => currentTurnId,
-        (value) => {
-          currentTurnId = value;
-        },
-      ),
-    });
-
-    lifecycle.removeQueuedTurnsFromProjection(["queued-0"]);
-
-    expect(queuedTurns.map((item) => item.queued_turn_id)).toEqual([
-      "queued-1",
-      "queued-2",
-    ]);
-    expect(queuedTurns.map((item) => item.position)).toEqual([1, 2]);
-  });
-
-  it("queued optimistic 消息创建时应直接绑定 request turn identity", () => {
+  it("canonical disposition 判定前不应绑定 optimistic turn identity", () => {
     const userMsg: Message = {
       id: "user-queued-binding",
       role: "user",
@@ -294,8 +184,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       userMsg,
       userMsgId: userMsg.id,
       content: userMsg.content,
-      expectingQueue: true,
-      initialThreadId: "thread-queued-binding",
       listenerMapRef: { current: new Map() },
       setActiveStream: () => {},
       setMessages: createStateSetter(
@@ -304,17 +192,16 @@ describe("agentStreamSubmissionLifecycle", () => {
           messages = value;
         },
       ),
-      setQueuedTurns: () => {},
       setThreadItems: () => {},
       setThreadTurns: () => {},
       setCurrentTurnId: () => {},
     });
 
     expect(messages.map((message) => message.runtimeTurnId)).toEqual([
-      lifecycle.requestTurnId,
-      lifecycle.requestTurnId,
+      undefined,
+      undefined,
     ]);
-
+    expect(lifecycle.isStreamActivated()).toBe(false);
   });
 
   it("所有回合只创建一条稳定的运行摘要投影", () => {
@@ -332,7 +219,6 @@ describe("agentStreamSubmissionLifecycle", () => {
 
     let activeStream: ActiveStreamState | null = null;
     let messages: Message[] = [assistantMsg];
-    let queuedTurns: QueuedTurnSnapshot[] = [];
     let threadItems: AgentThreadItem[] = [];
     let threadTurns: AgentThreadTurn[] = [];
     let currentTurnId: string | null = null;
@@ -342,8 +228,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       assistantMsgId: assistantMsg.id,
       userMsgId: "user-fast",
       content: "只回答 OK",
-      expectingQueue: false,
-      initialThreadId: "local-thread:assistant-fast",
       listenerMapRef: { current: new Map() },
       setActiveStream: (next) => {
         activeStream = next;
@@ -352,12 +236,6 @@ describe("agentStreamSubmissionLifecycle", () => {
         () => messages,
         (value) => {
           messages = value;
-        },
-      ),
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
         },
       ),
       setThreadItems: createStateSetter(
@@ -380,21 +258,21 @@ describe("agentStreamSubmissionLifecycle", () => {
       ),
     });
 
-    expect(threadTurns).toHaveLength(1);
-    expect(threadItems).toHaveLength(1);
+    expect(threadTurns).toHaveLength(0);
+    expect(threadItems).toHaveLength(0);
 
     const runtimeStatus = buildWaitingAgentRuntimeStatus({
       executionStrategy: "react",
     });
-    lifecycle.activateStream("session-fast", runtimeStatus);
+    lifecycle.activateStream("session-fast", runtimeStatus, "thread-fast");
 
     expect(activeStream).toEqual(
       expect.objectContaining({ sessionId: "session-fast" }),
     );
     expect(messages[0]?.runtimeStatus).toEqual(runtimeStatus);
-    expect(threadTurns[0]?.thread_id).toBe("session-fast");
+    expect(threadTurns[0]?.thread_id).toBe("thread-fast");
     expect(threadItems).toHaveLength(1);
-    expect(threadItems[0]?.thread_id).toBe("session-fast");
+    expect(threadItems[0]?.thread_id).toBe("thread-fast");
   });
 
   it("activateStream 应恢复首轮建会话时被快照覆盖的本地用户与助手草稿", () => {
@@ -437,8 +315,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       userMsgId: userMsg.id,
       userMsg,
       content: userMsg.content,
-      expectingQueue: false,
-      initialThreadId: "local-thread:assistant-image",
       listenerMapRef: { current: new Map() },
       setActiveStream: () => {},
       setMessages: createStateSetter(
@@ -446,10 +322,6 @@ describe("agentStreamSubmissionLifecycle", () => {
         (value) => {
           messages = value;
         },
-      ),
-      setQueuedTurns: createStateSetter(
-        () => [] as QueuedTurnSnapshot[],
-        () => {},
       ),
       setThreadItems: createStateSetter(
         () => threadItems,
@@ -525,8 +397,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       userMsgId: userMsg.id,
       userMsg,
       content: userMsg.content,
-      expectingQueue: false,
-      initialThreadId: "local-thread:assistant-image-dedupe",
       listenerMapRef: { current: new Map() },
       setActiveStream: () => {},
       setMessages: createStateSetter(
@@ -534,10 +404,6 @@ describe("agentStreamSubmissionLifecycle", () => {
         (value) => {
           messages = value;
         },
-      ),
-      setQueuedTurns: createStateSetter(
-        () => [] as QueuedTurnSnapshot[],
-        () => {},
       ),
       setThreadItems: createStateSetter(
         () => threadItems,
@@ -612,8 +478,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       userMsgId: userMsg.id,
       userMsg,
       content: userMsg.content,
-      expectingQueue: false,
-      initialThreadId: "local-thread:assistant-image-attachment",
       listenerMapRef: { current: new Map() },
       setActiveStream: () => {},
       setMessages: createStateSetter(
@@ -621,10 +485,6 @@ describe("agentStreamSubmissionLifecycle", () => {
         (value) => {
           messages = value;
         },
-      ),
-      setQueuedTurns: createStateSetter(
-        () => [] as QueuedTurnSnapshot[],
-        () => {},
       ),
       setThreadItems: createStateSetter(
         () => threadItems,

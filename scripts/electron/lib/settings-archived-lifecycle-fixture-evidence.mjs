@@ -2,8 +2,8 @@ import path from "node:path";
 
 export const ARCHIVED_LIFECYCLE_SCENARIO_ID = "archived-lifecycle-recovery";
 export const ARCHIVED_LIFECYCLE_REQUIRED_METHODS = [
-  "agentSession/list",
-  "agentSession/read",
+  "thread/list",
+  "thread/read",
   "agentSession/update",
 ];
 
@@ -151,7 +151,7 @@ export function createSettingsArchivedLifecycleEvidence({
     priority: "P0",
     proofLevel: "Gate B-R",
     claimBoundary:
-      "Real Electron persisted conversation archive from the sidebar, Settings archived-conversation restore, and cold-restart readback through current agentSession/list/read/update. The owner fixture uses an unavailable model backend, and this adapter stores only lifecycle booleans, current methods, error counts, and screenshots; it does not store conversation content, identities, database rows, paths, or import payloads.",
+      "Real Electron persisted conversation archive from the sidebar, Settings archived-conversation restore, and cold-restart readback through current thread/list/read/update. The owner fixture uses an unavailable model backend, and this adapter stores only lifecycle booleans, current methods, error counts, and screenshots; it does not store conversation content, identities, database rows, paths, or import payloads.",
     candidateRunId: validateName(candidateRunId, "run-id"),
     testOnly: true,
     startedAt,

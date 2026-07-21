@@ -1,7 +1,4 @@
-import type {
-  CanonicalThreadEventNotification,
-  AgentSessionEventNotification,
-} from "@limecloud/app-server-client";
+import type { AgentRuntimeLifecycleNotification } from "@limecloud/app-server-client";
 import {
   AgentRuntimeEventSequenceGate,
   type AgentRuntimeSequenceVerifierLike,
@@ -9,13 +6,13 @@ import {
 } from "./eventVerifier.js";
 
 export interface AgentRuntimeEventPipelineContext {
-  notification: AgentSessionEventNotification;
-  event: CanonicalThreadEventNotification;
+  notification: AgentRuntimeLifecycleNotification;
+  event: AgentRuntimeLifecycleNotification;
 }
 
 export type AgentRuntimeEventMiddlewareResult =
-  | AgentSessionEventNotification
-  | readonly AgentSessionEventNotification[]
+  | AgentRuntimeLifecycleNotification
+  | readonly AgentRuntimeLifecycleNotification[]
   | undefined
   | null
   | false
@@ -47,14 +44,14 @@ export interface AgentRuntimeEventPipelineOptions {
 
 export interface AgentRuntimeEventPipelineAcceptedResult {
   accepted: true;
-  notifications: AgentSessionEventNotification[];
-  notification: AgentSessionEventNotification;
+  notifications: AgentRuntimeLifecycleNotification[];
+  notification: AgentRuntimeLifecycleNotification;
 }
 
 export interface AgentRuntimeEventPipelineRejectedResult {
   accepted: false;
   reason: "dropped" | "sequence_violation";
-  notification?: AgentSessionEventNotification;
+  notification?: AgentRuntimeLifecycleNotification;
 }
 
 export type AgentRuntimeEventPipelineResult =
@@ -77,25 +74,19 @@ export class AgentRuntimeEventPipeline {
   }
 
   async process(
-    notification: AgentSessionEventNotification,
+    notification: AgentRuntimeLifecycleNotification,
   ): Promise<AgentRuntimeEventPipelineResult> {
-    if (!notification.params.canonicalEvent) {
-      return { accepted: false, reason: "dropped" };
-    }
     return await this.#processFrom(0, [notification]);
   }
 
   processSync(
-    notification: AgentSessionEventNotification,
+    notification: AgentRuntimeLifecycleNotification,
   ): AgentRuntimeEventPipelineResult {
-    if (!notification.params.canonicalEvent) {
-      return { accepted: false, reason: "dropped" };
-    }
     return this.#processFromSync(0, [notification]);
   }
 
   async flush(): Promise<AgentRuntimeEventPipelineResult> {
-    const accepted: AgentSessionEventNotification[] = [];
+    const accepted: AgentRuntimeLifecycleNotification[] = [];
     for (let index = 0; index < this.#middlewares.length; index += 1) {
       const result = await runFlush(this.#middlewares[index]);
       const flushed = normalizeFlushResult(result);
@@ -115,7 +106,7 @@ export class AgentRuntimeEventPipeline {
   }
 
   flushSync(): AgentRuntimeEventPipelineResult {
-    const accepted: AgentSessionEventNotification[] = [];
+    const accepted: AgentRuntimeLifecycleNotification[] = [];
     for (let index = 0; index < this.#middlewares.length; index += 1) {
       const result = runFlushSync(this.#middlewares[index]);
       const flushed = normalizeFlushResult(result);
@@ -136,17 +127,15 @@ export class AgentRuntimeEventPipeline {
 
   async #processFrom(
     startIndex: number,
-    notifications: readonly AgentSessionEventNotification[],
+    notifications: readonly AgentRuntimeLifecycleNotification[],
   ): Promise<AgentRuntimeEventPipelineResult> {
     let current = [...notifications];
     for (let index = startIndex; index < this.#middlewares.length; index += 1) {
-      const next: AgentSessionEventNotification[] = [];
+      const next: AgentRuntimeLifecycleNotification[] = [];
       for (const notification of current) {
-        const event = notification.params.canonicalEvent;
-        if (!event) continue;
         const result = await runMiddleware(this.#middlewares[index], {
           notification,
-          event,
+          event: notification,
         });
         next.push(...normalizeMiddlewareResult(result, notification));
       }
@@ -160,17 +149,15 @@ export class AgentRuntimeEventPipeline {
 
   #processFromSync(
     startIndex: number,
-    notifications: readonly AgentSessionEventNotification[],
+    notifications: readonly AgentRuntimeLifecycleNotification[],
   ): AgentRuntimeEventPipelineResult {
     let current = [...notifications];
     for (let index = startIndex; index < this.#middlewares.length; index += 1) {
-      const next: AgentSessionEventNotification[] = [];
+      const next: AgentRuntimeLifecycleNotification[] = [];
       for (const notification of current) {
-        const event = notification.params.canonicalEvent;
-        if (!event) continue;
         const result = runMiddlewareSync(this.#middlewares[index], {
           notification,
-          event,
+          event: notification,
         });
         next.push(...normalizeMiddlewareResult(result, notification));
       }
@@ -183,13 +170,10 @@ export class AgentRuntimeEventPipeline {
   }
 
   #verifyNotifications(
-    notifications: readonly AgentSessionEventNotification[],
+    notifications: readonly AgentRuntimeLifecycleNotification[],
   ): AgentRuntimeEventPipelineResult {
-    const accepted: AgentSessionEventNotification[] = [];
+    const accepted: AgentRuntimeLifecycleNotification[] = [];
     for (const notification of notifications) {
-      if (!notification.params.canonicalEvent) {
-        continue;
-      }
       const verification = this.#sequenceGate.verify(notification);
       if (!verification.accepted) {
         return {
@@ -212,21 +196,8 @@ export class AgentRuntimeEventPipeline {
   }
 }
 
-export function withEvent(
-  notification: AgentSessionEventNotification,
-  event: CanonicalThreadEventNotification,
-): AgentSessionEventNotification {
-  return {
-    ...notification,
-    params: {
-      ...notification.params,
-      canonicalEvent: event,
-    },
-  };
-}
-
 function acceptedNotificationsResult(
-  notifications: readonly AgentSessionEventNotification[],
+  notifications: readonly AgentRuntimeLifecycleNotification[],
 ): AgentRuntimeEventPipelineResult {
   if (notifications.length === 0) {
     return { accepted: false, reason: "dropped" };
@@ -240,8 +211,8 @@ function acceptedNotificationsResult(
 
 function normalizeMiddlewareResult(
   result: AgentRuntimeEventMiddlewareResult,
-  original: AgentSessionEventNotification,
-): AgentSessionEventNotification[] {
+  original: AgentRuntimeLifecycleNotification,
+): AgentRuntimeLifecycleNotification[] {
   if (result === false || result === null) {
     return [];
   }
@@ -253,7 +224,7 @@ function normalizeMiddlewareResult(
 
 function normalizeFlushResult(
   result: AgentRuntimeEventMiddlewareResult,
-): AgentSessionEventNotification[] {
+): AgentRuntimeLifecycleNotification[] {
   if (result === false || result === null || result === undefined) {
     return [];
   }
@@ -320,12 +291,8 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isNotificationArray(
   value: AgentRuntimeEventMiddlewareResult,
-): value is readonly AgentSessionEventNotification[] {
+): value is readonly AgentRuntimeLifecycleNotification[] {
   return Array.isArray(value);
 }

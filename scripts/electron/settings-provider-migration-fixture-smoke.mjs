@@ -13,7 +13,6 @@ import {
   CUSTOM_PROVIDER_NAME,
   CUSTOM_PROVIDER_TYPE,
   ELECTRON_REQUIRED_METHODS,
-  PRODUCT_DB_MIGRATION_CLEANUP_POLICY,
   SEED_REQUIRED_METHODS,
   UI_SELECTED_PROVIDER_KEY,
   applyFailedMigrationSurfaceEvidence,
@@ -197,8 +196,6 @@ async function launchElectronFixture({
       ...runtimeEnv.env,
       ...appServerEnv,
       APP_SERVER_BACKEND_MODE: "unavailable",
-      APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP:
-        PRODUCT_DB_MIGRATION_CLEANUP_POLICY,
       ELECTRON_E2E_USER_DATA_DIR: runtimeEnv.electronUserDataDir,
       LIME_ELECTRON_E2E: "1",
       LIME_ELECTRON_BRAND_DEV_APP: "0",
@@ -566,7 +563,6 @@ async function run() {
     appUrl: options.appUrl || null,
     appUrlReady: null,
     backendMode: "unavailable",
-    productDbMigrationCleanupPolicy: PRODUCT_DB_MIGRATION_CLEANUP_POLICY,
     electronRenderer: false,
     electronPreloadBridge: false,
     electronIpcSeen: false,
@@ -589,7 +585,8 @@ async function run() {
     providerId: null,
     providerName: CUSTOM_PROVIDER_NAME,
     providerVisibleInGui: false,
-    migrationMarkerExists: false,
+    migrationManifestExists: false,
+    migrationManifest: null,
     oldProductDbExists: false,
     oldProductDbUserSchemaObjectCount: null,
     migratedProductDbExists: false,
@@ -625,7 +622,7 @@ async function run() {
     permissionUserVisible: false,
     permissionSourceUnchanged: false,
     permissionSourceSchemaObjectCount: null,
-    permissionMigrationMarkerExists: null,
+    permissionMigrationManifestExists: null,
     permissionMigratedProductDbExists: null,
     permissionConsoleErrorCount: 0,
     permissionPageErrorCount: 0,
@@ -726,9 +723,26 @@ async function run() {
       seed.providerId,
       "迁移后",
     );
-    summary.migrationMarkerExists = fs.existsSync(
-      runtimeEnv.migrationMarkerPath,
+    summary.migrationManifestExists = fs.existsSync(
+      runtimeEnv.migrationManifestPath,
     );
+    if (summary.migrationManifestExists) {
+      const manifest = JSON.parse(
+        fs.readFileSync(runtimeEnv.migrationManifestPath, "utf8"),
+      );
+      summary.migrationManifest = {
+        schemaVersion: manifest.schemaVersion,
+        migrationId: manifest.migrationId,
+        state: manifest.state,
+        mode: manifest.mode,
+        targetRelativePath: manifest.target?.relativePath,
+        sourceSha256Length:
+          manifest.source?.snapshot?.fingerprint?.sha256?.length,
+        targetSha256Length:
+          manifest.target?.snapshot?.fingerprint?.sha256?.length,
+        cleanupAuthorizedAt: manifest.cleanupAuthorizedAt,
+      };
+    }
     summary.oldProductDbExists = fs.existsSync(runtimeEnv.oldProductDbPath);
     summary.oldProductDbUserSchemaObjectCount =
       readProductDbUserSchemaObjectCount(runtimeEnv);
@@ -737,13 +751,25 @@ async function run() {
     );
 
     assert(
-      summary.migrationMarkerExists,
-      "迁移后 app-server data-dir 未写入 .migration_completed",
+      summary.migrationManifestExists,
+      "迁移后 app-server data-dir 未写入 migration-manifest.json",
+    );
+    assert(
+      summary.migrationManifest?.schemaVersion === "storage-migration.v1" &&
+        summary.migrationManifest?.migrationId === "database-path-v1" &&
+        summary.migrationManifest?.state === "completed" &&
+        summary.migrationManifest?.mode === "copied" &&
+        summary.migrationManifest?.targetRelativePath === "lime.db" &&
+        summary.migrationManifest?.sourceSha256Length === 64 &&
+        summary.migrationManifest?.targetSha256Length === 64 &&
+        summary.migrationManifest?.cleanupAuthorizedAt === null,
+      `迁移 manifest 契约不完整: ${JSON.stringify(summary.migrationManifest)}`,
     );
     assert(summary.migratedProductDbExists, "迁移目标 Product DB 未创建");
     assert(
-      summary.oldProductDbUserSchemaObjectCount === 0,
-      `迁移后旧 Product DB 仍保留业务 schema 对象: ${summary.oldProductDbUserSchemaObjectCount}`,
+      summary.oldProductDbExists &&
+        summary.oldProductDbUserSchemaObjectCount > 0,
+      `迁移启动流程修改了旧 Product DB: exists=${summary.oldProductDbExists} schemaObjects=${summary.oldProductDbUserSchemaObjectCount}`,
     );
 
     await page.screenshot({ path: screenshotPath, fullPage: true });
@@ -868,8 +894,8 @@ async function run() {
       permissionSourceHash;
     summary.permissionSourceSchemaObjectCount =
       readProductDbUserSchemaObjectCount(permissionRuntimeEnv);
-    summary.permissionMigrationMarkerExists = fs.existsSync(
-      permissionRuntimeEnv.migrationMarkerPath,
+    summary.permissionMigrationManifestExists = fs.existsSync(
+      permissionRuntimeEnv.migrationManifestPath,
     );
     summary.permissionMigratedProductDbExists = fs.existsSync(
       permissionRuntimeEnv.migratedProductDbPath,

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import process from "node:process";
 import { describe, expect, it } from "vitest";
@@ -63,13 +63,6 @@ describe("agentStreamFlowControl current runtime boundary", () => {
         ]),
       ],
       [
-        "resolveQueuedTurnsForRestore",
-        new Set([
-          "src/components/agent/chat/hooks/agentStreamFlowControl.ts",
-          "src/components/agent/chat/hooks/agentStreamInputRestorePlan.ts",
-        ]),
-      ],
-      [
         "resolveInterruptedInputRestorePlan",
         new Set([
           "src/components/agent/chat/hooks/agentStreamFlowControl.ts",
@@ -82,22 +75,6 @@ describe("agentStreamFlowControl current runtime boundary", () => {
           "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
           "src/components/agent/chat/hooks/agentStreamSubmissionLifecycle.ts",
           "src/components/agent/chat/hooks/useAgentSession.ts",
-        ]),
-      ],
-      [
-        "upsertQueuedTurnSnapshot",
-        new Set([
-          "src/components/agent/chat/hooks/agentQueuedTurnProjection.ts",
-          "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
-          "src/components/agent/chat/hooks/agentStreamSubmissionLifecycle.ts",
-        ]),
-      ],
-      [
-        "removeQueuedTurnSnapshots",
-        new Set([
-          "src/components/agent/chat/hooks/agentQueuedTurnProjection.ts",
-          "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
-          "src/components/agent/chat/hooks/agentStreamSubmissionLifecycle.ts",
         ]),
       ],
     ]);
@@ -114,7 +91,7 @@ describe("agentStreamFlowControl current runtime boundary", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("停止恢复 queued draft 必须走 current read model 能力，不允许 optional runtime fallback", () => {
+  it("停止恢复只处理当前 submitted draft，不读取 queued turn 作为第二事实源", () => {
     const source = readFileSync(
       join(
         process.cwd(),
@@ -130,8 +107,11 @@ describe("agentStreamFlowControl current runtime boundary", () => {
       "utf8",
     );
 
-    expect(source).toContain("resolveQueuedTurnsForRestore({");
-    expect(restorePlanSource).toContain("runtime.getSessionReadModel");
+    expect(source).not.toContain("queuedTurns:");
+    expect(source).not.toContain("resolveQueuedTurnsForRestore({");
+    expect(restorePlanSource).not.toContain("resolveQueuedTurnsForRestore");
+    expect(restorePlanSource).not.toContain("QueuedTurnSnapshot");
+    expect(restorePlanSource).not.toContain("runtime.getSessionReadModel");
     expect(source).not.toContain("typeof runtime.getSessionReadModel");
     expect(source).not.toContain('getSessionReadModel === "function"');
     expect(source).not.toContain("setQueuedTurns");
@@ -141,8 +121,8 @@ describe("agentStreamFlowControl current runtime boundary", () => {
     );
   });
 
-  it("queued turn 本地删除只能由 queue lifecycle event 投影触发", () => {
-    const lifecycleEventsSource = readFileSync(
+  it("停止恢复不得驱动 queued turn 本地删除", () => {
+    const runtimeLifecycleSource = readFileSync(
       join(
         process.cwd(),
         "src/components/agent/chat/hooks/agentStreamRuntimeLifecycleEvents.ts",
@@ -184,20 +164,18 @@ describe("agentStreamFlowControl current runtime boundary", () => {
       ),
       "utf8",
     );
-    const queuedTurnProjectionSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/hooks/agentQueuedTurnProjection.ts",
-      ),
-      "utf8",
-    );
-
-    expect(lifecycleEventsSource).toContain('case "queue_removed"');
-    expect(lifecycleEventsSource).toContain('case "queue_started"');
-    expect(lifecycleEventsSource).toContain('case "queue_cleared"');
-    expect(lifecycleEventsSource).toContain("removeQueuedTurnsFromProjection");
     for (const { name, source } of readProductionHookSources()) {
       expect(source, name).not.toContain("removeQueuedTurnState");
+    }
+    for (const retiredQueueEvent of [
+      "queue_added",
+      "queue_removed",
+      "queue_started",
+      "queue_cleared",
+      "handleAgentStreamQueueEvent",
+      "removeQueuedTurnsFromProjection",
+    ]) {
+      expect(runtimeLifecycleSource).not.toContain(retiredQueueEvent);
     }
     expect(runtimeActionsSource).not.toContain("removeQueuedTurnState");
     expect(runtimeHandlerSource).not.toContain(
@@ -207,74 +185,40 @@ describe("agentStreamFlowControl current runtime boundary", () => {
       "removeQueuedTurnState(errorFailurePlan.queuedTurnIds)",
     );
     expect(submitFailureSource).not.toContain("removeQueuedTurnState");
-    expect(submissionLifecycleSource).toContain("upsertQueuedTurnSnapshot");
-    expect(submissionLifecycleSource).toContain("removeQueuedTurnSnapshots");
-    expect(resumeBindingSource).toContain("upsertQueuedTurnSnapshot");
-    expect(resumeBindingSource).toContain("removeQueuedTurnSnapshots");
-    expect(submissionLifecycleSource).not.toContain(".sort((left, right)");
-    expect(resumeBindingSource).not.toContain(".sort((left, right)");
-    expect(submissionLifecycleSource).not.toContain("new Set(queuedTurnIds)");
-    expect(resumeBindingSource).not.toContain("new Set(queuedTurnIds)");
-    expect(submissionLifecycleSource).not.toContain("position: index + 1");
-    expect(resumeBindingSource).not.toContain("position: index + 1");
-    expect(queuedTurnProjectionSource).not.toContain("position: index + 1");
-  });
-
-  it("queued turn 状态写入只能来自 read model snapshot 或 queue event projection owner", () => {
-    const allowedSetQueuedTurnsPatterns = new Map<string, Set<string>>([
-      [
-        "agentStreamSubmissionLifecycle.ts",
-        new Set([
-          "setQueuedTurns((prev) => upsertQueuedTurnSnapshot(prev, nextQueuedTurn));",
-          "setQueuedTurns((prev) => removeQueuedTurnSnapshots(prev, queuedTurnIds));",
-        ]),
-      ],
-      [
-        "agentStreamResumeBinding.ts",
-        new Set([
-          "setQueuedTurns((prev) => upsertQueuedTurnSnapshot(prev, queuedTurn));",
-          "setQueuedTurns((prev) => removeQueuedTurnSnapshots(prev, queuedTurnIds));",
-        ]),
-      ],
-      [
-        "useAgentSession.ts",
-        new Set([
-          "setQueuedTurns(stableSnapshot.queuedTurns);",
-          "setQueuedTurns(snapshot.queuedTurns);",
-        ]),
-      ],
-    ]);
-
-    const offenders: string[] = [];
-    for (const { name, source } of readProductionHookSources()) {
-      const allowedPatterns =
-        allowedSetQueuedTurnsPatterns.get(name) ?? new Set();
-      for (const match of source.matchAll(
-        /setQueuedTurns\([^;\n]+(?:\n\s*[^;\n]+)*;/g,
-      )) {
-        const statement = match[0].replace(/\s+/g, " ").trim();
-        const isAllowed = [...allowedPatterns].some(
-          (pattern) => pattern.replace(/\s+/g, " ").trim() === statement,
-        );
-        if (!isAllowed) {
-          offenders.push(`${name}: ${statement}`);
-        }
-      }
+    for (const source of [submissionLifecycleSource, resumeBindingSource]) {
+      expect(source).not.toContain("upsertQueuedTurnSnapshot");
+      expect(source).not.toContain("removeQueuedTurnSnapshots");
+      expect(source).not.toContain("QueuedTurnSnapshot");
+      expect(source).not.toContain("setQueuedTurns");
     }
-
-    expect(offenders).toEqual([]);
   });
 
-  it("queue projection 旁路只能产生活动投影 / 摘要 / refresh，不允许成为 queuedTurns 或输入恢复事实源", () => {
+  it("send/lifecycle 不得重建 Renderer queued-turn 状态 owner", () => {
+    for (const relativePath of [
+      "src/components/agent/chat/hooks/agentStreamSubmissionLifecycle.ts",
+      "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
+      "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.ts",
+      "src/components/agent/chat/hooks/agentStreamUserInputSubmission.ts",
+    ]) {
+      const source = readSource(relativePath);
+      expect(source, relativePath).not.toContain("setQueuedTurns");
+      expect(source, relativePath).not.toContain("QueuedTurnSnapshot");
+      expect(source, relativePath).not.toContain("expectingQueue");
+    }
+  });
+
+  it("已删除的 queue projection 旁路不得回流", () => {
+    for (const relativePath of [
+      "src/components/agent/chat/projection/queueProjection.ts",
+      "packages/agent-runtime-projection/src/queueEvents.ts",
+      "src/components/agent/chat/hooks/agentQueuedTurnProjection.ts",
+      "src/components/agent/chat/hooks/agentQueuedTurnProjection.unit.test.ts",
+    ]) {
+      expect(existsSync(join(process.cwd(), relativePath)), relativePath).toBe(
+        false,
+      );
+    }
     const projectionSources = new Map([
-      [
-        "src/components/agent/chat/projection/queueProjection.ts",
-        readSource("src/components/agent/chat/projection/queueProjection.ts"),
-      ],
-      [
-        "packages/agent-runtime-projection/src/queueEvents.ts",
-        readSource("packages/agent-runtime-projection/src/queueEvents.ts"),
-      ],
       [
         "src/components/agent/chat/projection/agentUiEventProjection.ts",
         readSource(
@@ -299,6 +243,7 @@ describe("agentStreamFlowControl current runtime boundary", () => {
       expect(source, name).not.toContain("replacePendingImages");
       expect(source, name).not.toContain("position: index + 1");
       expect(source, name).not.toContain(".sort((left, right)");
+      expect(source, name).not.toContain("buildQueueProjectionEvents");
     }
   });
 

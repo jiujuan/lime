@@ -12,6 +12,16 @@
         "experimental": {
           "default": false,
           "type": "boolean"
+        },
+        "optOutNotificationMethods": {
+          "description": "Exact notification method names suppressed for this connection.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         }
       },
       "type": "object"

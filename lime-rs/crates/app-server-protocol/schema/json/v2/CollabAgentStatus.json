@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "completed",
+    "errored",
+    "interrupted",
+    "notFound",
+    "pendingInit",
+    "running",
+    "shutdown"
+  ],
+  "title": "CollabAgentStatus",
+  "type": "string"
+}

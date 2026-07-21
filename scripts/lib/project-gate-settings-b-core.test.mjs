@@ -85,7 +85,7 @@ function providerMigrationSummary(overrides = {}) {
     permissionFailureCauseSeen: true,
     permissionUserVisible: true,
     permissionSourceUnchanged: true,
-    permissionMigrationMarkerExists: false,
+    permissionMigrationManifestExists: false,
     permissionMigratedProductDbExists: false,
     permissionPageErrorCount: 0,
     permissionRendererCrashCount: 0,

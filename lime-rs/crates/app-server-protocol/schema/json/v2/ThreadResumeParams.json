@@ -1,0 +1,151 @@
+{
+  "$defs": {
+    "SortDirection": {
+      "enum": [
+        "asc",
+        "desc"
+      ],
+      "type": "string"
+    },
+    "ThreadResumeInitialTurnsPageParams": {
+      "properties": {
+        "itemsView": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnItemsView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sortDirection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SortDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "TurnItemsView": {
+      "enum": [
+        "full",
+        "notLoaded",
+        "summary"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "approvalPolicy": true,
+    "approvalsReviewer": true,
+    "baseInstructions": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "config": {
+      "additionalProperties": true,
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "cwd": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "developerInstructions": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "excludeTurns": {
+      "type": "boolean"
+    },
+    "history": {
+      "items": true,
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "initialTurnsPage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThreadResumeInitialTurnsPageParams"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modelProvider": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "path": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "permissions": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "personality": true,
+    "runtimeWorkspaceRoots": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "sandbox": true,
+    "serviceTier": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ],
+  "title": "ThreadResumeParams",
+  "type": "object"
+}

@@ -1,11 +1,8 @@
-import {
-  AppServerClient,
-  type AppServerAgentSessionReadResponse,
-} from "@/lib/api/appServer";
-import { projectAppServerSessionReadToThreadReadModel } from "./appServerReadModelProjection";
+import { AppServerClient } from "@/lib/api/appServer";
+import { readCanonicalThreadDetail } from "./appServerCanonicalThreadProjection";
 import type { AgentRuntimeThreadReadModel } from "./sessionTypes";
 
-export type AppServerSessionReadClient = Pick<AppServerClient, "readSession">;
+export type AppServerSessionReadClient = Pick<AppServerClient, "readThread">;
 
 export interface AppServerReadModelClientDeps {
   appServerClient?: AppServerSessionReadClient;
@@ -15,17 +12,20 @@ export function createAppServerReadModelClient({
   appServerClient = new AppServerClient(),
 }: AppServerReadModelClientDeps = {}) {
   async function getAgentRuntimeThreadRead(
-    sessionId: string,
+    threadId: string,
   ): Promise<AgentRuntimeThreadReadModel> {
-    const normalizedSessionId = sessionId.trim();
-    if (!normalizedSessionId) {
-      throw new Error("sessionId is required to read App Server session");
+    const normalizedThreadId = threadId.trim();
+    if (!normalizedThreadId) {
+      throw new Error(
+        "threadId is required to read canonical App Server thread",
+      );
     }
 
-    const response = await appServerClient.readSession({
-      sessionId: normalizedSessionId,
+    const response = await appServerClient.readThread({
+      threadId: normalizedThreadId,
+      includeTurns: true,
     });
-    return projectAppServerSessionReadResult(response.result);
+    return projectAppServerThreadReadResult(response.result);
   }
 
   return {
@@ -33,95 +33,17 @@ export function createAppServerReadModelClient({
   };
 }
 
-export function projectAppServerSessionReadResult(
+export function projectAppServerThreadReadResult(
   value: unknown,
 ): AgentRuntimeThreadReadModel {
-  assertAgentSessionReadResponse(value);
-  return projectAppServerSessionReadToThreadReadModel(value);
-}
-
-export function assertAgentSessionReadResponse(
-  value: unknown,
-): asserts value is AppServerAgentSessionReadResponse {
-  if (!isAgentSessionReadResponse(value)) {
-    throw new Error("agentSession/read did not return session read model");
+  const detail = readCanonicalThreadDetail(value);
+  const readModel = detail?.thread_read;
+  if (!detail || !readModel) {
+    throw new Error("thread/read did not return canonical thread read model");
   }
-}
-
-function isAgentSessionReadResponse(
-  value: unknown,
-): value is AppServerAgentSessionReadResponse {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const response = value as Record<string, unknown>;
-  return (
-    isAgentSession(response.session) &&
-    Array.isArray(response.turns) &&
-    response.turns.every(isAgentTurn)
-  );
-}
-
-function isAgentSession(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const session = value as Record<string, unknown>;
-  return (
-    isNonEmptyString(session.sessionId) &&
-    isNonEmptyString(session.threadId) &&
-    isNonEmptyString(session.appId) &&
-    isAgentSessionStatus(session.status) &&
-    typeof session.createdAt === "string" &&
-    typeof session.updatedAt === "string"
-  );
-}
-
-function isAgentTurn(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const turn = value as Record<string, unknown>;
-  return (
-    isNonEmptyString(turn.turnId) &&
-    isNonEmptyString(turn.sessionId) &&
-    isNonEmptyString(turn.threadId) &&
-    isAgentTurnStatus(turn.status) &&
-    optionalString(turn.startedAt) &&
-    optionalString(turn.completedAt)
-  );
-}
-
-function isAgentSessionStatus(value: unknown): boolean {
-  return (
-    value === "idle" ||
-    value === "running" ||
-    value === "waitingAction" ||
-    value === "completed" ||
-    value === "failed" ||
-    value === "canceled"
-  );
-}
-
-function isAgentTurnStatus(value: unknown): boolean {
-  return (
-    value === "accepted" ||
-    value === "queued" ||
-    value === "running" ||
-    value === "waitingAction" ||
-    value === "completed" ||
-    value === "failed" ||
-    value === "canceled"
-  );
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function optionalString(value: unknown): boolean {
-  return typeof value === "undefined" || typeof value === "string";
+  return {
+    ...readModel,
+    thread_id: detail.thread_id ?? readModel.thread_id,
+    updated_at: detail.updated_at ?? readModel.updated_at,
+  };
 }

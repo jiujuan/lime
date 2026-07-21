@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "active",
+    "blocked",
+    "budgetLimited",
+    "complete",
+    "paused",
+    "usageLimited"
+  ],
+  "title": "ThreadGoalStatus",
+  "type": "string"
+}

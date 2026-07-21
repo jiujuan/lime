@@ -30,17 +30,24 @@ export interface AppServerClient {
   ): protocol.JsonRpcRequest;
   readThread(params: protocol.ThreadReadParams): protocol.JsonRpcRequest;
   listThreads(params?: protocol.ThreadListParams): protocol.JsonRpcRequest;
+  archiveThread(params: protocol.ThreadArchiveParams): protocol.JsonRpcRequest;
+  unarchiveThread(
+    params: protocol.ThreadUnarchiveParams,
+  ): protocol.JsonRpcRequest;
   listThreadTurns(
     params: protocol.ThreadTurnsListParams,
   ): protocol.JsonRpcRequest;
   listThreadItems(
     params: protocol.ThreadItemsListParams,
   ): protocol.JsonRpcRequest;
+  updateThreadSettings(
+    params: protocol.ThreadSettingsUpdateParams,
+  ): protocol.JsonRpcRequest;
+  setThreadMemoryMode(
+    params: protocol.ThreadMemoryModeSetParams,
+  ): protocol.JsonRpcRequest;
   updateSession(
     params: protocol.AgentSessionUpdateParams,
-  ): protocol.JsonRpcRequest;
-  archiveManySessions(
-    params: protocol.AgentSessionArchiveManyParams,
   ): protocol.JsonRpcRequest;
   deleteSession(
     params: protocol.AgentSessionDeleteParams,
@@ -66,9 +73,7 @@ export interface AppServerClient {
   compactAgentSession(
     params: protocol.AgentSessionCompactParams,
   ): protocol.JsonRpcRequest;
-  resumeAgentSessionThread(
-    params: protocol.AgentSessionThreadResumeParams,
-  ): protocol.JsonRpcRequest;
+  resumeThread(params: protocol.ThreadResumeParams): protocol.JsonRpcRequest;
   removeAgentSessionQueuedTurn(
     params: protocol.AgentSessionQueuedTurnRemoveParams,
   ): protocol.JsonRpcRequest;
@@ -667,9 +672,7 @@ export interface AppServerClient {
   saveReviewDecision(
     params: protocol.AgentSessionReviewDecisionSaveParams,
   ): protocol.JsonRpcRequest;
-  startSession(
-    params: protocol.AgentSessionStartParams,
-  ): protocol.JsonRpcRequest;
+  startSession(params: protocol.ThreadStartParams): protocol.JsonRpcRequest;
   readSession(params: protocol.AgentSessionReadParams): protocol.JsonRpcRequest;
   readAgentSessionMedia(
     params: protocol.AgentSessionMediaReadParams,
@@ -772,12 +775,9 @@ export interface AppServerClient {
   readConversationImportJob(
     params: protocol.ConversationImportJobReadParams,
   ): protocol.JsonRpcRequest;
-  startTurn(
-    params: protocol.AgentSessionTurnStartParams,
-  ): protocol.JsonRpcRequest;
-  cancelTurn(
-    params: protocol.AgentSessionTurnCancelParams,
-  ): protocol.JsonRpcRequest;
+  startTurn(params: protocol.TurnStartParams): protocol.JsonRpcRequest;
+  steerTurn(params: protocol.TurnSteerParams): protocol.JsonRpcRequest;
+  cancelTurn(params: protocol.TurnInterruptParams): protocol.JsonRpcRequest;
   replayAction(
     params: protocol.AgentSessionActionReplayParams,
   ): protocol.JsonRpcRequest;

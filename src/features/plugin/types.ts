@@ -1443,6 +1443,7 @@ export interface PluginTaskRequest {
   title: string;
   prompt?: string;
   sessionId?: string;
+  threadId?: string;
   workspaceId?: string;
   taskId?: string;
   turnId?: string;

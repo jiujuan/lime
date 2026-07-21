@@ -3,8 +3,6 @@ import type {
   AgentSessionExecutionRuntimeAccessMode,
   AgentSessionExecutionRuntimePreferences,
 } from "../agentExecutionRuntime";
-import type { AgentRuntimeResumeActionDecision } from "@limecloud/agent-ui-contracts";
-
 export interface AgentRuntimeCreateSessionOptions {
   runStartHooks?: boolean;
   workingDir?: string | null;
@@ -20,13 +18,6 @@ export interface AgentRuntimeInterruptTurnRequest {
 export interface AgentRuntimeCompactSessionRequest {
   session_id: string;
   event_name: string;
-}
-
-export interface AgentRuntimeResumeThreadRequest {
-  session_id: string;
-  turn_id?: string;
-  open_action_ids?: string[];
-  decisions?: AgentRuntimeResumeActionDecision[];
 }
 
 export interface AgentRuntimeCapabilityManifestRequest {
@@ -83,16 +74,6 @@ export interface AgentRuntimeRestoreFileCheckpointRequest {
   create_backup?: boolean;
 }
 
-export interface AgentRuntimeRemoveQueuedTurnRequest {
-  session_id: string;
-  queued_turn_id: string;
-}
-
-export interface AgentRuntimePromoteQueuedTurnRequest {
-  session_id: string;
-  queued_turn_id: string;
-}
-
 export interface AgentRuntimeRespondActionRequest {
   session_id: string;
   request_id: string;
@@ -136,7 +117,6 @@ export interface AgentRuntimeUpdateSessionRequest {
   provider_name?: string;
   model_name?: string;
   execution_strategy?: AgentExecutionStrategy;
-  archived?: boolean;
   recent_access_mode?: AgentSessionExecutionRuntimeAccessMode;
   recent_preferences?: AgentSessionExecutionRuntimePreferences;
   article_workspace_selected_object_ref?: Record<string, unknown> | null;

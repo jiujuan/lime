@@ -13,19 +13,31 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thread_store::{
-    ApplyThreadHistoryParams, ApplyThreadHistoryResult, ArchiveThreadParams, CreateThreadParams,
-    DeleteThreadParams, ItemPage, ListItemsParams, ListThreadsParams, ListTurnsParams,
-    ReadThreadParams, StoreCursor, ThreadMetadataPatch, ThreadPage, ThreadSpawnEdgeStatus,
-    ThreadStore, ThreadStoreError, ThreadStoreFuture, ThreadStoreResult, TurnPage,
-    UpdateThreadMetadataParams,
+    AppendThreadItemsParams, ApplyThreadHistoryParams, ApplyThreadHistoryResult,
+    ArchiveThreadParams, CreateThreadParams, DeleteThreadParams, ItemPage, ListItemsParams,
+    ListThreadsParams, ListTurnsParams, ReadThreadParams, StoreCursor, ThreadMetadataPatch,
+    ThreadPage, ThreadSpawnEdgeStatus, ThreadStore, ThreadStoreError, ThreadStoreFuture,
+    ThreadStoreResult, TurnPage, UpdateThreadMetadataParams,
 };
 
+use super::projection_rebuild::{projected_tables_are_empty, rebuild_projected_thread_snapshot};
 use super::{ProjectionStore, StoredSession};
 
 mod agent_graph;
+mod goal;
+mod goal_accounting;
+mod goal_projection;
+#[cfg(test)]
+mod goal_projection_tests;
+mod goal_rebind;
+mod history_builder;
 mod persistence;
 mod queries;
 
+use history_builder::{normalize_persisted_change_set, normalize_replayed_change_set};
+
+pub(crate) use goal::ThreadGoalStoreError;
+pub(crate) use goal_rebind::ActiveTurnGoalBinding;
 use persistence::{apply_change_set, create_thread_store_schema, refresh_thread_snapshot};
 use queries::{
     ensure_thread_visible, hydrate_thread, hydrate_turn, is_pending_spawn_thread,
@@ -54,6 +66,131 @@ impl ProjectionStore {
         self.open_thread_store()
             .map(|_| ())
             .map_err(|error| error.to_string())
+    }
+
+    pub(super) fn rebuild_canonical_rollouts_if_empty(&self) -> Result<usize, String> {
+        let Some(rollout_store) = self.rollout_store() else {
+            return Ok(0);
+        };
+        let mut conn = self
+            .open_thread_store()
+            .map_err(|error| error.to_string())?;
+        let existing_count = conn
+            .query_row("SELECT COUNT(*) FROM canonical_threads", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map_err(|error| error.to_string())?;
+        let rebuild_projected = projected_tables_are_empty(&conn)?;
+        if existing_count > 0 {
+            if !rebuild_projected {
+                return Ok(0);
+            }
+            let thread_ids = {
+                let mut statement = conn
+                    .prepare("SELECT thread_id FROM canonical_threads ORDER BY thread_id")
+                    .map_err(|error| error.to_string())?;
+                let rows = statement
+                    .query_map([], |row| row.get::<_, String>(0))
+                    .map_err(|error| error.to_string())?;
+                rows.collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| error.to_string())?
+            };
+            let tx = conn
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(store_error)
+                .map_err(|error| error.to_string())?;
+            for thread_id in &thread_ids {
+                let thread_id = ThreadId::new(thread_id.clone());
+                let last_sequence = tx
+                    .query_row(
+                        "SELECT last_sequence FROM canonical_threads WHERE thread_id = ?1",
+                        params![thread_id.as_str()],
+                        |row| row.get::<_, Option<i64>>(0),
+                    )
+                    .map_err(|error| error.to_string())?
+                    .unwrap_or_default()
+                    .max(0) as u64;
+                let (mut thread, _) = read_thread_row(&tx, &thread_id)
+                    .map_err(|error| error.to_string())?
+                    .ok_or_else(|| format!("canonical thread {thread_id} is missing"))?;
+                hydrate_thread(&tx, &mut thread, ThreadTurnsView::Full)
+                    .map_err(|error| error.to_string())?;
+                rebuild_projected_thread_snapshot(&tx, &thread, last_sequence)?;
+            }
+            tx.commit().map_err(|error| error.to_string())?;
+            return Ok(thread_ids.len());
+        }
+        let snapshots = rollout_store.snapshots()?;
+        if snapshots.is_empty() {
+            return Ok(0);
+        }
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(store_error)
+            .map_err(|error| error.to_string())?;
+        let mut rebuilt = 0;
+        for snapshot in snapshots {
+            let mut thread = snapshot.initial_thread;
+            if !thread.turns.is_empty() {
+                return Err("rollout session metadata must not embed turns".to_string());
+            }
+            thread.archived = snapshot.archived;
+            let rollout_path = rollout_store.location_storage_path(&snapshot.relative_path)?;
+            insert_thread_row(&tx, thread.clone(), Some(&rollout_path))
+                .map_err(|error| error.to_string())?;
+            let mut last_sequence = None;
+            for record in snapshot.history {
+                if last_sequence.is_some_and(|last| record.sequence <= last) {
+                    return Err(format!(
+                        "rollout history sequence {} is not after {}",
+                        record.sequence,
+                        last_sequence.unwrap_or_default()
+                    ));
+                }
+                let params = ApplyThreadHistoryParams {
+                    session_id: thread.session_id.clone(),
+                    thread_id: thread.thread_id.clone(),
+                    changes: record.changes,
+                };
+                validate_change_set(&params).map_err(|error| error.to_string())?;
+                if params.changes.sequence != record.sequence {
+                    return Err(format!(
+                        "rollout history sequence mismatch at {}",
+                        record.sequence
+                    ));
+                }
+                apply_change_set(&tx, &params).map_err(|error| error.to_string())?;
+                refresh_thread_snapshot(&tx, &thread.thread_id, record.sequence)
+                    .map_err(|error| error.to_string())?;
+                tx.execute(
+                    "INSERT INTO canonical_history_applies (thread_id, sequence, fingerprint)
+                     VALUES (?1, ?2, ?3)",
+                    params![
+                        thread.thread_id.as_str(),
+                        to_i64(record.sequence, "history sequence")
+                            .map_err(|error| error.to_string())?,
+                        record.fingerprint,
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
+                last_sequence = Some(record.sequence);
+            }
+            if rebuild_projected {
+                let (mut projected_thread, _) = read_thread_row(&tx, &thread.thread_id)
+                    .map_err(|error| error.to_string())?
+                    .ok_or_else(|| "rebuilt canonical thread is missing".to_string())?;
+                hydrate_thread(&tx, &mut projected_thread, ThreadTurnsView::Full)
+                    .map_err(|error| error.to_string())?;
+                rebuild_projected_thread_snapshot(
+                    &tx,
+                    &projected_thread,
+                    last_sequence.unwrap_or_default(),
+                )?;
+            }
+            rebuilt += 1;
+        }
+        tx.commit().map_err(|error| error.to_string())?;
+        Ok(rebuilt)
     }
 
     pub(crate) fn is_pending_thread_spawn_sync(
@@ -106,8 +243,9 @@ impl ProjectionStore {
             thread_id,
             changes,
         })
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+        self.apply_goal_accounting_events_sync(stored, events)
+            .map_err(|error| error.to_string())
     }
 
     pub(super) fn repair_canonical_history(
@@ -115,6 +253,10 @@ impl ProjectionStore {
         stored: &StoredSession,
         events: &[AgentEvent],
     ) -> Result<(), String> {
+        if self.rollout_store().is_some() {
+            // Raw diagnostic events are not allowed to replace canonical rollout history.
+            return Ok(());
+        }
         let changes = super::thread_item_projection::materialize_events(
             events,
             &stored.session.session_id,
@@ -122,6 +264,9 @@ impl ProjectionStore {
         )
         .map_err(|error| error.to_string())?;
         let thread_id = ThreadId::new(stored.session.thread_id.clone());
+        let session_id = agent_protocol::SessionId::new(stored.session.session_id.clone());
+        let changes = normalize_replayed_change_set(&session_id, &thread_id, changes)
+            .map_err(|error| error.to_string())?;
         let current = self
             .read_thread_sync(ReadThreadParams {
                 thread_id: thread_id.clone(),
@@ -180,6 +325,11 @@ impl ProjectionStore {
                 )));
             }
             tx.execute(
+                "DELETE FROM canonical_items WHERE thread_id = ?1",
+                params![thread_id.as_str()],
+            )
+            .map_err(store_error)?;
+            tx.execute(
                 "DELETE FROM canonical_turns WHERE thread_id = ?1",
                 params![thread_id.as_str()],
             )
@@ -195,7 +345,7 @@ impl ProjectionStore {
             )
             .map_err(store_error)?;
         } else {
-            insert_thread_row(&tx, canonical_thread_from_stored_session(stored))?;
+            insert_thread_row(&tx, canonical_thread_from_stored_session(stored), None)?;
         }
 
         if apply_params.changes.sequence > 0 {
@@ -215,11 +365,25 @@ impl ProjectionStore {
         tx.commit().map_err(store_error)
     }
 
-    fn open_thread_store(&self) -> ThreadStoreResult<Connection> {
-        let conn = Connection::open(self.path()).map_err(store_error)?;
+    pub(super) fn open_thread_store(&self) -> ThreadStoreResult<Connection> {
+        let conn = Connection::open(self.state_path()).map_err(store_error)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(store_error)?;
-        create_thread_store_schema(&conn)?;
+        if self.state_path() != self.thread_history_path() {
+            conn.execute(
+                "ATTACH DATABASE ?1 AS thread_history",
+                params![self.thread_history_path().to_string_lossy().as_ref()],
+            )
+            .map_err(store_error)?;
+        }
+        if self.state_path() != self.path() && self.thread_history_path() != self.path() {
+            conn.execute(
+                "ATTACH DATABASE ?1 AS projection",
+                params![self.path().to_string_lossy().as_ref()],
+            )
+            .map_err(store_error)?;
+        }
+        create_thread_store_schema(&conn, self.state_path() != self.thread_history_path())?;
         Ok(conn)
     }
 
@@ -227,8 +391,29 @@ impl ProjectionStore {
         if !params.thread.turns.is_empty() {
             return Err(error("create_thread rejects embedded turns"));
         }
-        let conn = self.open_thread_store()?;
-        insert_thread_row(&conn, params.thread)
+        validate_thread_identity(&params.thread)?;
+        let thread = thread_without_turns(params.thread);
+        let rollout_path = self
+            .rollout_store()
+            .map(|store| {
+                let path = store.path_for_thread(&thread).map_err(error)?;
+                let stored = store.storage_path(&path).map_err(error)?;
+                Ok::<_, ThreadStoreError>((path, stored))
+            })
+            .transpose()?;
+        let mut conn = self.open_thread_store()?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(store_error)?;
+        insert_thread_row(
+            &tx,
+            thread.clone(),
+            rollout_path.as_ref().map(|(_, stored)| stored.as_str()),
+        )?;
+        if let (Some(store), Some((path, _))) = (self.rollout_store(), rollout_path.as_ref()) {
+            store.ensure_thread(path, &thread).map_err(error)?;
+        }
+        tx.commit().map_err(store_error)
     }
 
     pub(crate) fn read_thread_sync(
@@ -307,25 +492,88 @@ impl ProjectionStore {
         Ok(())
     }
 
+    fn append_items_sync(
+        &self,
+        params: AppendThreadItemsParams,
+    ) -> ThreadStoreResult<ApplyThreadHistoryResult> {
+        validate_append_items(&params)?;
+        if params.items.is_empty() {
+            let conn = self.open_thread_store()?;
+            let stored_session_id = conn
+                .query_row(
+                    "SELECT session_id FROM canonical_threads WHERE thread_id = ?1",
+                    params![params.thread_id.as_str()],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(store_error)?
+                .ok_or_else(|| error(format!("thread {} does not exist", params.thread_id)))?;
+            if stored_session_id != params.session_id.as_str() {
+                return Err(error("session/thread identity mismatch"));
+            }
+            return Ok(ApplyThreadHistoryResult {
+                sequence: params.sequence,
+                applied: false,
+            });
+        }
+        self.apply_history_sync_with_snapshot(
+            ApplyThreadHistoryParams {
+                session_id: params.session_id,
+                thread_id: params.thread_id,
+                changes: ThreadHistoryChangeSet {
+                    sequence: params.sequence,
+                    changed_items: params.items,
+                    ..Default::default()
+                },
+            },
+            false,
+        )
+    }
+
     fn apply_history_sync(
         &self,
         params: ApplyThreadHistoryParams,
+    ) -> ThreadStoreResult<ApplyThreadHistoryResult> {
+        self.apply_history_sync_with_snapshot(params, true)
+    }
+
+    fn apply_history_sync_with_snapshot(
+        &self,
+        mut params: ApplyThreadHistoryParams,
+        refresh_snapshot: bool,
     ) -> ThreadStoreResult<ApplyThreadHistoryResult> {
         validate_change_set(&params)?;
         let fingerprint = change_fingerprint(&params)?;
         let mut conn = self.open_thread_store()?;
         let tx = conn.transaction().map_err(store_error)?;
-        let (stored_session_id, last_sequence) = tx
+        let (stored_session_id, last_sequence, rollout_path, archived) = tx
             .query_row(
-                "SELECT session_id, last_sequence FROM canonical_threads WHERE thread_id = ?1",
+                "SELECT session_id, last_sequence, rollout_path, archived
+                 FROM canonical_threads WHERE thread_id = ?1",
                 params![params.thread_id.as_str()],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<i64>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, i64>(3)? != 0,
+                    ))
+                },
             )
             .optional()
             .map_err(store_error)?
             .ok_or_else(|| error(format!("thread {} does not exist", params.thread_id)))?;
         if stored_session_id != params.session_id.as_str() {
             return Err(error("session/thread identity mismatch"));
+        }
+        if archived {
+            return Err(error(format!("thread {} is archived", params.thread_id)));
+        }
+        if self.rollout_store().is_some() && rollout_path.is_none() {
+            return Err(error(format!(
+                "thread {} has no rollout_path; migration is required",
+                params.thread_id
+            )));
         }
 
         if let Some(existing) = tx
@@ -342,6 +590,17 @@ impl ProjectionStore {
             .map_err(store_error)?
         {
             if existing == fingerprint {
+                if let (Some(store), Some(path)) = (self.rollout_store(), rollout_path.as_deref()) {
+                    store
+                        .verify_history(
+                            std::path::Path::new(path),
+                            params.session_id.as_str(),
+                            params.thread_id.as_str(),
+                            params.changes.sequence,
+                            &fingerprint,
+                        )
+                        .map_err(error)?;
+                }
                 return Ok(ApplyThreadHistoryResult {
                     sequence: params.changes.sequence,
                     applied: false,
@@ -352,6 +611,13 @@ impl ProjectionStore {
                 params.changes.sequence
             )));
         }
+        params.changes = normalize_persisted_change_set(
+            &tx,
+            &params.session_id,
+            &params.thread_id,
+            last_sequence,
+            params.changes,
+        )?;
         if last_sequence.is_some_and(|value| params.changes.sequence <= value.max(0) as u64) {
             return Err(error(format!(
                 "stale history sequence {} after {}",
@@ -361,7 +627,18 @@ impl ProjectionStore {
         }
 
         apply_change_set(&tx, &params)?;
-        refresh_thread_snapshot(&tx, &params.thread_id, params.changes.sequence)?;
+        if refresh_snapshot {
+            refresh_thread_snapshot(&tx, &params.thread_id, params.changes.sequence)?;
+        } else {
+            tx.execute(
+                "UPDATE canonical_threads SET last_sequence = ?2 WHERE thread_id = ?1",
+                params![
+                    params.thread_id.as_str(),
+                    to_i64(params.changes.sequence, "history sequence")?
+                ],
+            )
+            .map_err(store_error)?;
+        }
         tx.execute(
             "INSERT INTO canonical_history_applies (thread_id, sequence, fingerprint)
              VALUES (?1, ?2, ?3)",
@@ -372,6 +649,17 @@ impl ProjectionStore {
             ],
         )
         .map_err(store_error)?;
+        if let (Some(store), Some(path)) = (self.rollout_store(), rollout_path.as_deref()) {
+            store
+                .append_history(
+                    std::path::Path::new(path),
+                    params.session_id.as_str(),
+                    params.thread_id.as_str(),
+                    &fingerprint,
+                    &params.changes,
+                )
+                .map_err(error)?;
+        }
         tx.commit().map_err(store_error)?;
         Ok(ApplyThreadHistoryResult {
             sequence: params.changes.sequence,
@@ -473,21 +761,102 @@ impl ProjectionStore {
         archived: bool,
     ) -> ThreadStoreResult<Option<Thread>> {
         let mut conn = self.open_thread_store()?;
-        let tx = conn.transaction().map_err(store_error)?;
-        let Some((mut thread, _)) = read_thread_row(&tx, &params.thread_id)? else {
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(store_error)?;
+        let result = self.set_archived_in_tx(&tx, params, archived)?;
+        tx.commit().map_err(store_error)?;
+        Ok(result)
+    }
+
+    fn set_archived_in_tx(
+        &self,
+        tx: &Transaction<'_>,
+        params: ArchiveThreadParams,
+        archived: bool,
+    ) -> ThreadStoreResult<Option<Thread>> {
+        let Some((mut thread, current_archived)) = read_thread_row(tx, &params.thread_id)? else {
             return Err(error(format!("thread {} does not exist", params.thread_id)));
         };
+        let rollout_path = tx
+            .query_row(
+                "SELECT rollout_path FROM canonical_threads WHERE thread_id = ?1",
+                params![params.thread_id.as_str()],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .map_err(store_error)?;
+        if self.rollout_store().is_some() && rollout_path.is_none() {
+            return Err(error(format!(
+                "thread {} has no rollout_path; migration is required",
+                params.thread_id
+            )));
+        }
+        if current_archived == archived {
+            if let (Some(store), Some(path)) = (self.rollout_store(), rollout_path.as_deref()) {
+                store
+                    .verify_location(
+                        std::path::Path::new(path),
+                        thread.session_id.as_str(),
+                        thread.thread_id.as_str(),
+                        archived,
+                    )
+                    .map_err(error)?;
+            }
+            return if archived { Ok(None) } else { Ok(Some(thread)) };
+        }
         thread.archived = archived;
+        let rollout_move = match (self.rollout_store(), rollout_path.as_deref()) {
+            (Some(store), Some(path)) => {
+                let current = std::path::PathBuf::from(path);
+                let next = if archived {
+                    store.archive_path(&current)
+                } else {
+                    store.unarchive_path(&current)
+                }
+                .map_err(error)?;
+                let stored = store.location_storage_path(&next).map_err(error)?;
+                Some((current, next, stored))
+            }
+            (Some(_), None) => unreachable!("missing rollout path rejected above"),
+            (None, _) => None,
+        };
+        let next_rollout_path = rollout_move
+            .as_ref()
+            .map(|(_, _, stored)| stored.clone())
+            .or(rollout_path);
         tx.execute(
-            "UPDATE canonical_threads SET archived = ?2, thread_json = ?3 WHERE thread_id = ?1",
+            "UPDATE canonical_threads
+             SET archived = ?2, thread_json = ?3, rollout_path = ?4
+             WHERE thread_id = ?1",
             params![
                 params.thread_id.as_str(),
                 i64::from(archived),
                 encode_json(&thread)?,
+                next_rollout_path,
             ],
         )
         .map_err(store_error)?;
-        tx.commit().map_err(store_error)?;
+        if let (Some(store), Some((current, expected, _))) =
+            (self.rollout_store(), rollout_move.as_ref())
+        {
+            let moved = if archived {
+                store.archive(
+                    current,
+                    thread.session_id.as_str(),
+                    thread.thread_id.as_str(),
+                )
+            } else {
+                store.unarchive(
+                    current,
+                    thread.session_id.as_str(),
+                    thread.thread_id.as_str(),
+                )
+            }
+            .map_err(error)?;
+            if &moved != expected {
+                return Err(error("rollout move resolved an unexpected destination"));
+            }
+        }
         if archived {
             Ok(None)
         } else {
@@ -496,13 +865,29 @@ impl ProjectionStore {
     }
 
     fn delete_thread_sync(&self, params: DeleteThreadParams) -> ThreadStoreResult<()> {
-        let conn = self.open_thread_store()?;
-        conn.execute(
+        let mut conn = self.open_thread_store()?;
+        let tx = conn.transaction().map_err(store_error)?;
+        tx.execute(
+            "DELETE FROM canonical_items WHERE thread_id = ?1",
+            params![params.thread_id.as_str()],
+        )
+        .map_err(store_error)?;
+        tx.execute(
+            "DELETE FROM canonical_turns WHERE thread_id = ?1",
+            params![params.thread_id.as_str()],
+        )
+        .map_err(store_error)?;
+        tx.execute(
+            "DELETE FROM canonical_history_applies WHERE thread_id = ?1",
+            params![params.thread_id.as_str()],
+        )
+        .map_err(store_error)?;
+        tx.execute(
             "DELETE FROM canonical_threads WHERE thread_id = ?1",
             params![params.thread_id.as_str()],
         )
         .map_err(store_error)?;
-        Ok(())
+        tx.commit().map_err(store_error)
     }
 
     fn history_sequence_sync(&self, thread_id: ThreadId) -> ThreadStoreResult<Option<u64>> {
@@ -636,6 +1021,14 @@ impl ThreadStore for ProjectionStore {
         Box::pin(async move { store.list_threads_sync(params) })
     }
 
+    fn append_items(
+        &self,
+        params: AppendThreadItemsParams,
+    ) -> ThreadStoreFuture<'_, ApplyThreadHistoryResult> {
+        let store = self.clone();
+        Box::pin(async move { store.append_items_sync(params) })
+    }
+
     fn apply_history(
         &self,
         params: ApplyThreadHistoryParams,
@@ -738,6 +1131,24 @@ fn validate_change_set(params: &ApplyThreadHistoryParams) -> ThreadStoreResult<(
         if item.session_id != params.session_id || item.thread_id != params.thread_id {
             return Err(error("item identity does not match history change set"));
         }
+        if item.sequence > params.changes.sequence {
+            return Err(error(format!(
+                "item sequence {} exceeds history sequence {}",
+                item.sequence, params.changes.sequence
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_append_items(params: &AppendThreadItemsParams) -> ThreadStoreResult<()> {
+    if params.sequence > i64::MAX as u64 {
+        return Err(error("history sequence exceeds SQLite range"));
+    }
+    for item in &params.items {
+        if item.session_id != params.session_id || item.thread_id != params.thread_id {
+            return Err(error("item identity does not match append parameters"));
+        }
     }
     Ok(())
 }
@@ -749,15 +1160,19 @@ fn validate_thread_identity(thread: &Thread) -> ThreadStoreResult<()> {
     Ok(())
 }
 
-fn insert_thread_row(conn: &Connection, thread: Thread) -> ThreadStoreResult<()> {
+fn insert_thread_row(
+    conn: &Connection,
+    thread: Thread,
+    rollout_path: Option<&str>,
+) -> ThreadStoreResult<()> {
     validate_thread_identity(&thread)?;
     let thread = thread_without_turns(thread);
     let encoded = encode_json(&thread)?;
     conn.execute(
         "INSERT INTO canonical_threads (
             thread_id, session_id, thread_json, created_at_ms, updated_at_ms,
-            recency_at_ms, archived, last_sequence
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
+            recency_at_ms, archived, last_sequence, rollout_path
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8)",
         params![
             thread.thread_id.as_str(),
             thread.session_id.as_str(),
@@ -766,6 +1181,7 @@ fn insert_thread_row(conn: &Connection, thread: Thread) -> ThreadStoreResult<()>
             thread.updated_at_ms,
             thread.recency_at_ms,
             i64::from(thread.archived),
+            rollout_path,
         ],
     )
     .map_err(|source| error(format!("cannot create canonical thread: {source}")))?;

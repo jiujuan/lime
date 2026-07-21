@@ -8,12 +8,8 @@ import {
 export function sanitizeBackendLedgerForEvidence(backendLedger) {
   return backendLedger.map((entry) => {
     if (entry?.kind === "turnStart") {
-      const runtimeHarness =
-        entry.runtimeRequest?.metadata?.harness ??
-        {};
-      const expert =
-        entry.runtimeRequest?.metadata?.expert ??
-        {};
+      const runtimeHarness = entry.runtimeRequest?.metadata?.harness ?? {};
+      const expert = entry.runtimeRequest?.metadata?.expert ?? {};
       const harnessExpert =
         runtimeHarness?.expert && typeof runtimeHarness.expert === "object"
           ? runtimeHarness.expert
@@ -182,12 +178,7 @@ export function summarizeBackendLedger(backendLedger) {
       ? Math.max(...latestTurnEmitTimes) - Math.min(...latestTurnEmitTimes)
       : 0;
   const runtimeRequest = latestTurnStart?.runtimeRequest ?? null;
-  const collaborationMode =
-    runtimeRequest?.metadata?.harness?.collaboration_mode
-      ?.mode ??
-    runtimeRequest?.metadata?.harness?.collaborationMode
-      ?.mode ??
-    null;
+  const collaborationMode = runtimeRequest?.collaborationMode?.mode ?? null;
   return {
     kinds: backendLedger.map((entry) => entry.kind),
     turnStartCount: turnStartEntries.length,

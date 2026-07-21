@@ -319,8 +319,10 @@ export async function testTranscribeVoiceModelFile(
   modelId: string,
   filePath: string,
 ): Promise<VoiceModelTestTranscribeResult> {
+  const state = await getVoiceModelInstallState(modelId);
   const response = await createAppServerClient().testTranscribeVoiceModelFile({
     model_id: modelId,
+    install_dir: state.install_dir,
     file_path: filePath,
   });
   return assertTestTranscribeResult(

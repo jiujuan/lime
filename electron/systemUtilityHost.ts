@@ -1,62 +1,20 @@
-/* global process */
 import path from "node:path";
-import { app, globalShortcut, shell } from "./electronRuntime";
+import { app, shell } from "./electronRuntime";
 
 type HostArgs = Record<string, unknown> | null | undefined;
 type ConfigReader = () => Promise<Record<string, unknown>>;
 
 type SystemUtilityHostOptions = {
-  userDataDir: string;
+  appDataRoot: string;
   readConfig: ConfigReader;
 };
 
-const FALLBACK_VOICE_SHORTCUT = "CommandOrControl+Shift+V";
-const RESERVED_SHORTCUT_REASON =
-  "快捷键与系统输入法切换冲突，请换成包含字母或数字的组合，例如 CommandOrControl+Shift+V";
-const RESERVED_SHORTCUTS = [
-  ["commandorcontrol", "space"],
-  ["control", "space"],
-  ["command", "space"],
-  ["super", "space"],
-  ["alt", "space"],
-  ["shift", "space"],
-  ["control", "alt", "space"],
-  ["commandorcontrol", "alt", "space"],
-] as const;
-const MODIFIER_TOKENS = new Set([
-  "commandorcontrol",
-  "command",
-  "control",
-  "alt",
-  "shift",
-  "super",
-]);
-const SPECIAL_SHORTCUT_KEYS = new Set([
-  "space",
-  "tab",
-  "enter",
-  "return",
-  "escape",
-  "esc",
-  "backspace",
-  "delete",
-  "insert",
-  "home",
-  "end",
-  "pageup",
-  "pagedown",
-  "up",
-  "down",
-  "left",
-  "right",
-]);
-
 export class SystemUtilityHost {
-  readonly #userDataDir: string;
+  readonly #appDataRoot: string;
   readonly #readConfig: ConfigReader;
 
   constructor(options: SystemUtilityHostOptions) {
-    this.#userDataDir = options.userDataDir;
+    this.#appDataRoot = options.appDataRoot;
     this.#readConfig = options.readConfig;
   }
 
@@ -72,47 +30,6 @@ export class SystemUtilityHost {
     const url = readRequiredString(request, "url");
     await shell.openExternal(normalizeSystemSettingsUrl(url));
     return {};
-  }
-
-  async getVoiceShortcutRuntimeStatus(): Promise<Record<string, unknown>> {
-    const config = await this.#readConfig();
-    const requestedShortcut =
-      readString(
-        readRecord(readRecord(config, "experimental"), "voice_input"),
-        "shortcut",
-      ) ?? FALLBACK_VOICE_SHORTCUT;
-    let shortcut = requestedShortcut;
-    let fnNote = "Fn 按住录音尚未接入；当前使用普通语音快捷键回退。";
-    try {
-      assertValidShortcut(shortcut);
-    } catch {
-      shortcut = FALLBACK_VOICE_SHORTCUT;
-      fnNote =
-        "语音快捷键配置不可解析，已使用默认普通语音快捷键回退；Fn 按住录音尚未接入。";
-    }
-    const shortcutRegistered = globalShortcut.isRegistered(shortcut);
-
-    return {
-      shortcut_registered: shortcutRegistered,
-      registered_shortcut: shortcutRegistered ? shortcut : null,
-      fn_supported: process.platform === "darwin",
-      fn_registered: false,
-      fn_fallback_shortcut: shortcut,
-      fn_note: fnNote,
-    };
-  }
-
-  validateShortcut(args: HostArgs): boolean {
-    const request = readRequest(args);
-    const shortcut =
-      readString(request, "shortcutStr") ??
-      readString(request, "shortcut_str") ??
-      readString(request, "shortcut") ??
-      readString(args, "shortcutStr") ??
-      readString(args, "shortcut_str") ??
-      readString(args, "shortcut");
-    assertValidShortcut(shortcut);
-    return true;
   }
 
   async getEnvironmentPreview(): Promise<Record<string, unknown>> {
@@ -155,7 +72,7 @@ export class SystemUtilityHost {
   }
 
   getBrowserConnectorSettings(): Record<string, unknown> {
-    const installRoot = path.join(this.#userDataDir, "browser-connectors");
+    const installRoot = path.join(this.#appDataRoot, "connectors", "browser");
     return {
       enabled: true,
       install_root_dir: installRoot,
@@ -172,7 +89,7 @@ export class SystemUtilityHost {
   }
 
   getBrowserConnectorInstallStatus(): Record<string, unknown> {
-    const installRoot = path.join(this.#userDataDir, "browser-connectors");
+    const installRoot = path.join(this.#appDataRoot, "connectors", "browser");
     return {
       status: "not_installed",
       install_root_dir: installRoot,
@@ -267,84 +184,6 @@ function emptyDiagnosticList(command: string): Array<Record<string, unknown>> {
     enumerable: false,
   });
   return result;
-}
-
-function assertValidShortcut(shortcut: string | null): void {
-  if (!shortcut) {
-    throw new Error("快捷键不能为空");
-  }
-  const tokens = normalizeShortcutTokens(shortcut);
-  const hasModifier = tokens.some((token) => MODIFIER_TOKENS.has(token));
-  const keyTokens = tokens.filter((token) => !MODIFIER_TOKENS.has(token));
-  if (
-    !hasModifier ||
-    keyTokens.length !== 1 ||
-    !isValidShortcutKey(keyTokens[0])
-  ) {
-    throw new Error(`无法解析快捷键 '${shortcut}'`);
-  }
-  if (isReservedShortcut(tokens)) {
-    throw new Error(RESERVED_SHORTCUT_REASON);
-  }
-}
-
-function normalizeShortcutTokens(shortcut: string): string[] {
-  const tokens = shortcut
-    .split("+")
-    .map(normalizeShortcutToken)
-    .filter(Boolean);
-  return [...new Set(tokens)].sort();
-}
-
-function normalizeShortcutToken(token: string): string {
-  const compact = token
-    .trim()
-    .toLowerCase()
-    .replace(/[ _-]+/g, "");
-
-  switch (compact) {
-    case "ctrl":
-    case "control":
-      return "control";
-    case "cmd":
-    case "command":
-      return "command";
-    case "cmdorctrl":
-    case "cmdorcontrol":
-    case "commandorcontrol":
-      return "commandorcontrol";
-    case "option":
-    case "alt":
-      return "alt";
-    case "win":
-    case "windows":
-    case "meta":
-    case "super":
-      return "super";
-    case "spacebar":
-    case "space":
-      return "space";
-    default:
-      return compact;
-  }
-}
-
-function isValidShortcutKey(token: string): boolean {
-  if (/^[a-z0-9]$/.test(token)) {
-    return true;
-  }
-  if (/^f(?:[1-9]|1[0-9]|2[0-4])$/.test(token)) {
-    return true;
-  }
-  return SPECIAL_SHORTCUT_KEYS.has(token);
-}
-
-function isReservedShortcut(tokens: string[]): boolean {
-  return RESERVED_SHORTCUTS.some(
-    (candidate) =>
-      candidate.length === tokens.length &&
-      candidate.every((token) => tokens.includes(token)),
-  );
 }
 
 function normalizeExternalUrl(input: string): string {

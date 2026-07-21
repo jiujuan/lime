@@ -387,7 +387,7 @@ export function buildDeferredMcpVisibleDomAssertions({
     : [];
   const currentReadObserved = appServerCalls.some(
     (call) =>
-      call?.method === "agentSession/read" &&
+      call?.method === "thread/read" &&
       call?.transport === "electron-ipc" &&
       call?.status === "success",
   );

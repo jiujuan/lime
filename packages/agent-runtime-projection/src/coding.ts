@@ -1,6 +1,7 @@
 import type {
   AgentRuntimeEventProjection,
   AgentRuntimeExecutionEvent,
+  AgentRuntimeExecutionEventStatus,
   AgentRuntimeProjectionInput,
   AgentUiArtifactRefView,
   AgentUiDiagnosticView,
@@ -133,6 +134,7 @@ export interface CodingWorkbenchProjectionInput<
   TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent,
 > extends AgentRuntimeProjectionInput<TEvent> {
   codingReadModel?: CodingReadModelFacts | null;
+  threadItems?: readonly unknown[];
 }
 
 export type CodingWorkbenchStatus =
@@ -332,14 +334,17 @@ function valueStringArray(...values: unknown[]): string[] {
   for (const value of values) {
     if (Array.isArray(value)) {
       return value.filter(
-        (item): item is string => typeof item === "string" && Boolean(item.trim()),
+        (item): item is string =>
+          typeof item === "string" && Boolean(item.trim()),
       );
     }
   }
   return [];
 }
 
-function valueRecord(...values: unknown[]): Record<string, unknown> | undefined {
+function valueRecord(
+  ...values: unknown[]
+): Record<string, unknown> | undefined {
   for (const value of values) {
     if (isRecord(value)) return value;
   }
@@ -366,7 +371,9 @@ function safePreview(value: string | undefined): string | undefined {
 
 function safeCommand(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  if (/(?:api[-_]?key|authorization|password|secret|token)[=\s:]/i.test(value)) {
+  if (
+    /(?:api[-_]?key|authorization|password|secret|token)[=\s:]/i.test(value)
+  ) {
     return undefined;
   }
   return safePreview(value);
@@ -409,6 +416,143 @@ function isCodingEvent(event: AgentRuntimeExecutionEvent): boolean {
     eventClass.startsWith("test.") ||
     eventClass === "sandbox.blocked" ||
     payloadString(event, "profileId") === "coding"
+  );
+}
+
+function threadItemRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+function threadItemStatus(
+  item: Record<string, unknown>,
+  exitCode?: number,
+): AgentRuntimeExecutionEventStatus {
+  if (typeof exitCode === "number" && exitCode !== 0) return "failed";
+  const status = valueString(item.status)?.toLowerCase();
+  if (status === "failed" || status === "error") return "failed";
+  if (status === "in_progress" || status === "running") return "running";
+  if (status === "canceled" || status === "cancelled") return "canceled";
+  return "completed";
+}
+
+function threadItemTimestamp(item: Record<string, unknown>): string {
+  return (
+    valueString(
+      item.updated_at,
+      item.updatedAt,
+      item.started_at,
+      item.startedAt,
+    ) ?? new Date(0).toISOString()
+  );
+}
+
+function testSuiteFromCommand(command: string): string | undefined {
+  const separator = command.split(/\s+--\s+/u)[1]?.trim();
+  return separator || undefined;
+}
+
+function executionEventsFromThreadItems(
+  threadItems: readonly unknown[] | undefined,
+): AgentRuntimeExecutionEvent[] {
+  if (!threadItems?.length) return [];
+  const latestFileItems = new Map<string, Record<string, unknown>>();
+  const commandItems: Record<string, unknown>[] = [];
+
+  threadItems.forEach((value) => {
+    const item = threadItemRecord(value);
+    if (!item) return;
+    const type = valueString(item.type);
+    if (type === "command_execution") {
+      commandItems.push(item);
+      return;
+    }
+    if (type !== "patch") return;
+    const paths = valueStringArray(item.paths, item.path);
+    paths.forEach((path) => {
+      const previous = latestFileItems.get(path);
+      const sequence = valueNumber(item.sequence) ?? 0;
+      if (!previous || sequence >= (valueNumber(previous.sequence) ?? 0)) {
+        latestFileItems.set(path, item);
+      }
+    });
+  });
+
+  const events: AgentRuntimeExecutionEvent[] = [];
+  latestFileItems.forEach((item, path) => {
+    const id = valueString(item.id) ?? `thread-item:file:${path}`;
+    const createdAt = threadItemTimestamp(item);
+    events.push({
+      id: `thread-item:${id}:file`,
+      kind: "source",
+      status: threadItemStatus(item),
+      eventClass: "file.changed",
+      title: path,
+      sequence: valueNumber(item.sequence),
+      threadId: valueString(item.thread_id, item.threadId),
+      turnId: valueString(item.turn_id, item.turnId),
+      artifactRefs: valueStringArray(item.artifactRefs, item.artifact_refs),
+      createdAt,
+      completedAt: valueString(item.completed_at, item.completedAt),
+      payload: {
+        path,
+        changeKind: "modified",
+        preview: valueString(item.text, item.summary),
+      },
+    });
+  });
+
+  commandItems.forEach((item) => {
+    const id = valueString(item.id) ?? "thread-item:command";
+    const command = valueString(item.command) ?? id;
+    const exitCode = valueNumber(item.exit_code, item.exitCode);
+    const status = threadItemStatus(item, exitCode);
+    const createdAt = threadItemTimestamp(item);
+    const base = {
+      kind: "tool" as const,
+      status,
+      threadId: valueString(item.thread_id, item.threadId),
+      turnId: valueString(item.turn_id, item.turnId),
+      sequence: valueNumber(item.sequence),
+      createdAt,
+      completedAt: valueString(item.completed_at, item.completedAt),
+    };
+    events.push({
+      ...base,
+      id: `thread-item:${id}:command`,
+      eventClass: "command.exited",
+      title: command,
+      payload: {
+        commandId: id,
+        command,
+        cwd: valueString(item.cwd),
+        preview: valueString(item.aggregated_output, item.output),
+        exitCode,
+      },
+    });
+
+    const suite = testSuiteFromCommand(command);
+    if (suite) {
+      events.push({
+        ...base,
+        id: `thread-item:${id}:test`,
+        eventClass: "test.completed",
+        title: suite,
+        sequence: (valueNumber(item.sequence) ?? 0) + 0.001,
+        payload: {
+          testRunId: `${id}:test`,
+          commandId: id,
+          suite,
+          result: status === "failed" ? "failed" : "passed",
+          passed: status === "failed" ? 0 : 1,
+          failed: status === "failed" ? 1 : 0,
+          outputRef: valueString(item.outputRef, item.output_ref),
+        },
+      });
+    }
+  });
+
+  return events.sort(
+    (left, right) => eventSequence(left) - eventSequence(right),
   );
 }
 
@@ -464,7 +608,10 @@ function statusFromRuntime(
   if (codingEvents.some((event) => event.status === "failed")) {
     return "failed";
   }
-  if (state.runtime.status === "running" || state.runtime.status === "waiting") {
+  if (
+    state.runtime.status === "running" ||
+    state.runtime.status === "waiting"
+  ) {
     return "running";
   }
   if (state.runtime.status === "completed") {
@@ -486,7 +633,9 @@ function buildMainObject(
   readModel?: CodingReadModelFacts | null,
 ): CodingMainObjectView {
   const latest = codingEvents.at(-1);
-  const activePatch = [...patches].reverse().find((patch) => patch.status === "running");
+  const activePatch = [...patches]
+    .reverse()
+    .find((patch) => patch.status === "running");
   return {
     id:
       latest?.turnId ??
@@ -509,7 +658,10 @@ function collectFiles(
 ): CodingFileView[] {
   const files = new Map<string, CodingFileView>();
   events.forEach((event) => {
-    if (event.eventClass !== "file.read" && event.eventClass !== "file.changed") {
+    if (
+      event.eventClass !== "file.read" &&
+      event.eventClass !== "file.changed"
+    ) {
       return;
     }
     const path = safeRelativePath(payloadString(event, "path", "relativePath"));
@@ -652,9 +804,7 @@ function isCodingArtifact(artifact: CodingReadModelArtifactFact): boolean {
   );
 }
 
-function readModelArtifact(
-  value: unknown,
-): CodingReadModelArtifactFact | null {
+function readModelArtifact(value: unknown): CodingReadModelArtifactFact | null {
   return isRecord(value) ? (value as CodingReadModelArtifactFact) : null;
 }
 
@@ -668,7 +818,9 @@ function changeFromReadModelArtifact(
   const artifactRef = valueString(artifact.artifact_ref, artifact.artifactRef);
   const sourceEventId =
     valueString(artifact.event_id, artifact.eventId) ??
-    (artifactRef ? `read-model:artifact:${artifactRef}` : `read-model:path:${path}`);
+    (artifactRef
+      ? `read-model:artifact:${artifactRef}`
+      : `read-model:path:${path}`);
   const checkpointRef = artifactCheckpointRef(artifact, metadata);
   return compact({
     id: sourceEventId,
@@ -724,7 +876,9 @@ function mergeChanges(
     .map(({ sequence: _sequence, fileId: _fileId, ...change }) => change);
 }
 
-function filesFromChanges(changes: readonly FileChangeView[]): CodingFileView[] {
+function filesFromChanges(
+  changes: readonly FileChangeView[],
+): CodingFileView[] {
   const files = new Map<string, CodingFileView>();
   changes.forEach((change) => {
     files.set(change.path, {
@@ -751,7 +905,9 @@ function fileFromReadModelArtifact(
   const artifactRef = valueString(artifact.artifact_ref, artifact.artifactRef);
   const sourceEventId =
     valueString(artifact.event_id, artifact.eventId) ??
-    (artifactRef ? `read-model:artifact:${artifactRef}` : `read-model:path:${path}`);
+    (artifactRef
+      ? `read-model:artifact:${artifactRef}`
+      : `read-model:path:${path}`);
   return compact({
     id: artifactRef ?? path,
     path,
@@ -864,13 +1020,16 @@ function collectCommands(
       commandId,
       status: event.status,
       title: event.title,
-      command: safeCommand(payloadString(event, "command")) ?? previous?.command,
+      command:
+        safeCommand(payloadString(event, "command")) ?? previous?.command,
       canonicalCommand:
-        safeCommand(payloadString(event, "canonicalCommand", "canonical_command")) ??
-        previous?.canonicalCommand,
+        safeCommand(
+          payloadString(event, "canonicalCommand", "canonical_command"),
+        ) ?? previous?.canonicalCommand,
       commandSummary:
-        safeCommand(payloadString(event, "commandSummary", "command_summary")) ??
-        previous?.commandSummary,
+        safeCommand(
+          payloadString(event, "commandSummary", "command_summary"),
+        ) ?? previous?.commandSummary,
       commandArgv: [
         ...new Set([
           ...(previous?.commandArgv ?? []),
@@ -891,7 +1050,9 @@ function collectCommands(
         previous ?? {},
         codingProcessFactsFromInput(payload(event)),
       ),
-      outputRefs: [...new Set([...(previous?.outputRefs ?? []), ...outputRefs(event)])],
+      outputRefs: [
+        ...new Set([...(previous?.outputRefs ?? []), ...outputRefs(event)]),
+      ],
       preview:
         safePreview(payloadString(event, "preview", "summary")) ??
         previous?.preview,
@@ -918,18 +1079,23 @@ function collectTests(
       status: event.status,
       title: event.title,
       commandId: payloadString(event, "commandId") ?? previous?.commandId,
-      command: safeCommand(payloadString(event, "command")) ?? previous?.command,
+      command:
+        safeCommand(payloadString(event, "command")) ?? previous?.command,
       canonicalCommand:
-        safeCommand(payloadString(event, "canonicalCommand", "canonical_command")) ??
-        previous?.canonicalCommand,
+        safeCommand(
+          payloadString(event, "canonicalCommand", "canonical_command"),
+        ) ?? previous?.canonicalCommand,
       commandSummary:
-        safeCommand(payloadString(event, "commandSummary", "command_summary")) ??
-        previous?.commandSummary,
+        safeCommand(
+          payloadString(event, "commandSummary", "command_summary"),
+        ) ?? previous?.commandSummary,
       suite: payloadString(event, "suite") ?? previous?.suite,
       result: payloadString(event, "result", "status") ?? previous?.result,
       passed: payloadNumber(event, "passed") ?? previous?.passed,
       failed: payloadNumber(event, "failed") ?? previous?.failed,
-      outputRefs: [...new Set([...(previous?.outputRefs ?? []), ...outputRefs(event)])],
+      outputRefs: [
+        ...new Set([...(previous?.outputRefs ?? []), ...outputRefs(event)]),
+      ],
       failureCategory:
         payloadString(event, "failureCategory") ?? previous?.failureCategory,
       sourceEventIds: [...(previous?.sourceEventIds ?? []), event.id],
@@ -954,7 +1120,9 @@ function commandFromReadModel(
     commandId,
     status: valueString(command.status) ?? "running",
     title:
-      safeCommand(valueString(command.command_summary, command.commandSummary)) ??
+      safeCommand(
+        valueString(command.command_summary, command.commandSummary),
+      ) ??
       safeCommand(valueString(command.command)) ??
       commandId,
     command: safeCommand(valueString(command.command)),
@@ -1010,10 +1178,7 @@ function testFromReadModel(
     passed: valueNumber(test.passed),
     failed: valueNumber(test.failed),
     outputRefs: valueStringArray(test.output_refs, test.outputRefs),
-    failureCategory: valueString(
-      test.failure_category,
-      test.failureCategory,
-    ),
+    failureCategory: valueString(test.failure_category, test.failureCategory),
     sourceEventIds: sourceEventIds.length
       ? sourceEventIds
       : [`read-model:test:${testRunId}`],
@@ -1095,7 +1260,10 @@ function mergeCommands(
     .filter((command): command is CommandOutputView => Boolean(command))
     .forEach((command) => {
       const existing = byId.get(command.commandId);
-      byId.set(command.commandId, existing ? { ...command, ...existing } : command);
+      byId.set(
+        command.commandId,
+        existing ? { ...command, ...existing } : command,
+      );
     });
   return Array.from(byId.values());
 }
@@ -1211,18 +1379,24 @@ export function projectCodingWorkbenchView<
     diagnostics,
     ui: {
       preferredTab: preferredTab({ changes, commands, tests }),
-      stale: state.hydration.status === "stale" || state.hydration.status === "degraded",
+      stale:
+        state.hydration.status === "stale" ||
+        state.hydration.status === "degraded",
     },
   };
 }
 
 export function projectCodingWorkbenchViewFromEvents<
   TEvent extends AgentRuntimeExecutionEvent,
->(
-  input?: CodingWorkbenchProjectionInput<TEvent>,
-): CodingWorkbenchView<TEvent> {
+>(input?: CodingWorkbenchProjectionInput<TEvent>): CodingWorkbenchView<TEvent> {
+  const executionEvents = input?.executionEvents?.length
+    ? input.executionEvents
+    : (executionEventsFromThreadItems(input?.threadItems) as TEvent[]);
   return projectCodingWorkbenchView(
-    projectAgentUiState(input),
+    projectAgentUiState({
+      ...input,
+      executionEvents,
+    }),
     input?.codingReadModel,
   );
 }

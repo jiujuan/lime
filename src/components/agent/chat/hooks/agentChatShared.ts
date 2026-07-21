@@ -3,7 +3,7 @@ import type {
   AgentSessionInfo,
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime/sessionTypes";
-import type { RuntimeSearchMode } from "@limecloud/app-server-client";
+import type { ModeKind, RuntimeSearchMode } from "@limecloud/app-server-client";
 import type {
   AgentRuntimeStatus,
   Message,
@@ -55,6 +55,7 @@ export interface Topic {
   executionStrategy: AgentExecutionStrategy;
   status: TaskStatus;
   statusReason?: TaskStatusReason;
+  queuedTurnCount?: number;
   lastPreview: string;
   isPinned: boolean;
   hasUnread: boolean;
@@ -110,6 +111,7 @@ export interface SendMessageOptions {
   purpose?: Message["purpose"];
   observer?: SendMessageObserver;
   requestMetadata?: Record<string, unknown>;
+  collaborationMode?: ModeKind;
   assistantDraft?: AssistantDraftState;
   inputRestoreDraft?: InterruptedInputDraftSnapshot;
   displayContent?: string;
@@ -125,7 +127,6 @@ export interface SendMessageOptions {
   targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
-  skipPreSubmitResume?: boolean;
 }
 
 export interface WorkspacePathMissingState {
@@ -657,6 +658,7 @@ export const mapSessionToTopic = (session: AgentSessionInfo): Topic => {
     executionStrategy: normalizeExecutionStrategy(session.execution_strategy),
     status,
     statusReason,
+    queuedTurnCount: session.queued_turn_count,
     lastPreview,
     isPinned: false,
     hasUnread: false,

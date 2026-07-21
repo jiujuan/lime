@@ -1,7 +1,7 @@
-use super::{RuntimeCore, RuntimeCoreError, RuntimeHostContext};
+use super::{RuntimeCore, RuntimeCoreError, RuntimeHostContext, TurnStartRequest};
 use app_server_protocol::{
-    AgentInput, AgentSessionReadParams, AgentSessionStartParams, AgentSessionTurnStartParams,
-    BusinessObjectRef, RuntimeOptions, RuntimeRequest,
+    AgentSessionReadParams, AgentSessionStartParams, BusinessObjectRef, RuntimeOptions,
+    RuntimeRequest,
 };
 use async_trait::async_trait;
 use lime_gateway::agent_runner::{
@@ -30,13 +30,10 @@ impl GatewayAgentRunner for RuntimeGatewayAgentRunner {
         ensure_gateway_session(&runtime, &request)?;
         let output = runtime
             .start_turn(
-                AgentSessionTurnStartParams {
+                TurnStartRequest {
                     session_id: request.session_id.clone(),
                     turn_id: None,
-                    input: AgentInput {
-                        text: request.input_text.clone(),
-                        attachments: Vec::new(),
-                    },
+                    input: vec![agent_protocol::AgentInput::text(request.input_text.clone())],
                     runtime_options: Some(RuntimeOptions {
                         stream: false,
                         runtime_request: Some(RuntimeRequest {

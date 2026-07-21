@@ -500,6 +500,9 @@ export function buildParsedImageTaskSnapshot(params: {
     normalizedStatus,
   });
   const workflowRun = readImageCommandRunSnapshot([payload, params.taskRecord]);
+  const runtimeTurnId =
+    readString([payload, params.taskRecord], ["turn_id", "turnId"]) ||
+    undefined;
   const soulMetadata = readImageGenerationSoulMetadata([
     resultRecord,
     attemptResultRecord,
@@ -763,6 +766,7 @@ export function buildParsedImageTaskSnapshot(params: {
       role: "assistant",
       content: assistantIntro,
       timestamp: messageTimestamp,
+      runtimeTurnId,
       imageWorkbenchPreview: preview,
     },
     task: {
@@ -846,6 +850,8 @@ export function buildPendingImageTaskSnapshot(params: {
       ["model", "modelName", "model_name"],
     ) || null;
   const workflowRun = readImageCommandRunSnapshot([params.payload || null]);
+  const runtimeTurnId =
+    readString([params.payload || null], ["turn_id", "turnId"]) || undefined;
   const soulMetadata = readImageGenerationSoulMetadata([
     params.payload || null,
   ]);
@@ -881,6 +887,7 @@ export function buildPendingImageTaskSnapshot(params: {
         content: fallbackAssistantIntro,
         timestamp: startedAt,
         isThinking: false,
+        runtimeTurnId,
         imageWorkbenchPreview: {
           taskId: params.taskId,
           prompt: previewPrompt,

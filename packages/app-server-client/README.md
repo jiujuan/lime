@@ -6,7 +6,8 @@ that talk to `app-server` over JSON-RPC.
 Current scope:
 
 - build initialize / initialized requests;
-- build current `agentSession/*` and canonical `thread/*` requests;
+- build current `thread/*` and `turn/*` requests plus the remaining
+  session-scoped action, media, and evidence requests;
 - encode and decode newline-delimited JSON-RPC messages;
 - resolve sidecar binary names, packaged paths, and stdio launch args;
 - read release manifest metadata and select the current platform artifact;
@@ -14,8 +15,10 @@ Current scope:
 - verify the sidecar binary sha256 before launch;
 - spawn / connect a stdio sidecar with the initialize handshake;
 - supervise sidecar crash, startup failure, and restart with deterministic backoff;
-- route `agentSession/event` notifications into app-owned renderer state;
-- use `AppServerConnection` for typed `agentSession/*` request / response flows.
+- route direct v2 Thread / Turn / Item lifecycle notifications into app-owned
+  state, including `item/agentMessage/delta`;
+- keep `agentSession/event` only as the raw `media.read.*` side-channel;
+- use `AppServerConnection` for typed App Server request / response flows;
 - use `AgentRuntimeClient` as the standard facade for runtime turn, action,
   thread read, evidence export, and event subscription flows.
 
@@ -50,25 +53,23 @@ const { connection } = connected;
 app.on("before-quit", () => void lifecycle.stop());
 
 const eventRouter = new AppServerAgentEventRouter();
-eventRouter.subscribe((event) => {
-  mainWindow.webContents.send("agent:event", event);
+eventRouter.subscribeLifecycle((notification) => {
+  mainWindow.webContents.send("agent:lifecycle", notification);
+});
+eventRouter.subscribe((mediaEvent) => {
+  mainWindow.webContents.send("agent:media", mediaEvent);
 });
 
 const session = await connection.startSession({
-  appId: "host-app",
-  workspaceId: workspace.id,
-  businessObjectRef: {
-    kind: "document",
-    id: document.id,
-    title: document.title,
-  },
+  serviceName: "host-app",
+  threadSource: "desktop",
+  historyMode: "paginated",
 });
 
 const turn = await connection.startTurn({
-  sessionId: session.result.session.sessionId,
-  input: { text: "生成草稿" },
-  runtimeOptions: { capabilityId: "draft.write", stream: true },
-  queueIfBusy: true,
+  threadId: session.result.thread.id,
+  input: [{ type: "text", text: "生成草稿" }],
+  model: "gpt-5-codex",
 });
 
 for (const result of [session, turn]) {
@@ -93,19 +94,21 @@ const runtime = createAgentRuntimeClient(connection, {
   request: { timeoutMs: 120_000 },
 });
 
-runtime.subscribeEvents((event) => {
-  mainWindow.webContents.send("agent:event", event);
+runtime.subscribeLifecycleEvents((notification) => {
+  mainWindow.webContents.send("agent:lifecycle", notification);
+});
+runtime.subscribeEvents((mediaEvent) => {
+  mainWindow.webContents.send("agent:media", mediaEvent);
 });
 
 await runtime.startTurn({
-  sessionId: session.result.session.sessionId,
-  input: { text: "整理资料并生成草稿" },
-  runtimeOptions: { stream: true, eventName: "agentSession/event" },
+  threadId: session.result.thread.id,
+  input: [{ type: "text", text: "整理资料并生成草稿" }],
 });
 
 const thread = await runtime.readThread({
-  threadId: session.result.session.threadId,
-  turnsView: "full",
+  threadId: session.result.thread.id,
+  includeTurns: true,
 });
 
 await runtime.exportEvidence({
@@ -115,10 +118,11 @@ await runtime.exportEvidence({
 ```
 
 `AgentRuntimeClient` is a facade over the current App Server JSON-RPC methods.
-`readThread` maps to canonical `thread/read` and requires a hydrated
-`threadId`; callers should use the returned `thread.sessionId` only when a
-legacy session-scoped method still requires it. This package does not invent a
-separate task read protocol.
+`readThread` maps to `thread/read` and requires a hydrated `threadId`.
+Lifecycle delivery uses the direct v2 server notifications
+`thread/started`, `turn/started`, `turn/completed`, `item/started`,
+`item/completed`, and `item/agentMessage/delta`. The raw event subscription is
+reserved for `media.read.*`; it is not a second lifecycle protocol.
 
 This package does not import Lime Rust crates, Tauri commands, Agent DTOs, or
 renderer UI code. Electron apps should use it from main / preload boundaries and

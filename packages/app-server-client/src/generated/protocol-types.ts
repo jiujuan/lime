@@ -7,7 +7,6 @@ export const METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
 export const METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT =
   "agentSession/analysisHandoff/export";
-export const METHOD_AGENT_SESSION_ARCHIVE_MANY = "agentSession/archiveMany";
 export const METHOD_AGENT_SESSION_COMPACT = "agentSession/compact";
 export const METHOD_AGENT_SESSION_DELETE = "agentSession/delete";
 export const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
@@ -21,7 +20,6 @@ export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE =
   "agentSession/fileCheckpoint/restore";
 export const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
   "agentSession/handoffBundle/export";
-export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
 export const METHOD_AGENT_SESSION_MEDIA_READ = "agentSession/media/read";
 export const METHOD_AGENT_SESSION_OBJECTIVE_AUDIT =
   "agentSession/objective/audit";
@@ -38,7 +36,6 @@ export const METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE =
   "agentSession/queuedTurn/promote";
 export const METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE =
   "agentSession/queuedTurn/remove";
-export const METHOD_AGENT_SESSION_READ = "agentSession/read";
 export const METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT =
   "agentSession/replayCase/export";
 export const METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE =
@@ -47,12 +44,8 @@ export const METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT =
   "agentSession/reviewDecisionTemplate/export";
 export const METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND =
   "agentSession/runtimeEvents/append";
-export const METHOD_AGENT_SESSION_START = "agentSession/start";
-export const METHOD_AGENT_SESSION_THREAD_RESUME = "agentSession/thread/resume";
 export const METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =
   "agentSession/toolInventory/read";
-export const METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
-export const METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
 export const METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
 export const METHOD_ARTIFACT_READ = "artifact/read";
 export const METHOD_AUTOMATION_JOB_CREATE = "automationJob/create";
@@ -153,6 +146,14 @@ export const METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL =
   "gatewayTunnel/syncWebhookUrl";
 export const METHOD_INITIALIZE = "initialize";
 export const METHOD_INITIALIZED = "initialized";
+export const METHOD_AGENT_MESSAGE_DELTA = "item/agentMessage/delta";
+export const METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL =
+  "item/commandExecution/requestApproval";
+export const METHOD_ITEM_COMPLETED = "item/completed";
+export const METHOD_ITEM_FILE_CHANGE_REQUEST_APPROVAL =
+  "item/fileChange/requestApproval";
+export const METHOD_ITEM_STARTED = "item/started";
+export const METHOD_ITEM_TOOL_REQUEST_USER_INPUT = "item/tool/requestUserInput";
 export const METHOD_KNOWLEDGE_CONTEXT_RESOLVE = "knowledgeContext/resolve";
 export const METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE =
   "knowledgeContextRun/validate";
@@ -320,10 +321,32 @@ export const METHOD_SOUL_STYLE_PACK_LIST = "soulStylePack/list";
 export const METHOD_SOUL_STYLE_PACK_STATUS_SET = "soulStylePack/status/set";
 export const METHOD_SOUL_STYLE_PACK_UNINSTALL = "soulStylePack/uninstall";
 export const METHOD_TELEGRAM_CHANNEL_PROBE = "telegramChannel/probe";
+export const METHOD_THREAD_ARCHIVE = "thread/archive";
+export const METHOD_THREAD_ARCHIVED = "thread/archived";
+export const METHOD_THREAD_GOAL_CLEAR = "thread/goal/clear";
+export const METHOD_THREAD_GOAL_CLEARED = "thread/goal/cleared";
+export const METHOD_THREAD_GOAL_GET = "thread/goal/get";
+export const METHOD_THREAD_GOAL_SET = "thread/goal/set";
+export const METHOD_THREAD_GOAL_UPDATED = "thread/goal/updated";
 export const METHOD_THREAD_ITEMS_LIST = "thread/items/list";
 export const METHOD_THREAD_LIST = "thread/list";
+export const METHOD_THREAD_MEMORY_MODE_SET = "thread/memoryMode/set";
 export const METHOD_THREAD_READ = "thread/read";
+export const METHOD_THREAD_RESUME = "thread/resume";
+export const METHOD_THREAD_SETTINGS_UPDATE = "thread/settings/update";
+export const METHOD_THREAD_SETTINGS_UPDATED = "thread/settings/updated";
+export const METHOD_THREAD_SHELL_COMMAND = "thread/shellCommand";
+export const METHOD_THREAD_START = "thread/start";
+export const METHOD_THREAD_STARTED = "thread/started";
+export const METHOD_THREAD_TOKEN_USAGE_UPDATED = "thread/tokenUsage/updated";
 export const METHOD_THREAD_TURNS_LIST = "thread/turns/list";
+export const METHOD_THREAD_UNARCHIVE = "thread/unarchive";
+export const METHOD_THREAD_UNARCHIVED = "thread/unarchived";
+export const METHOD_TURN_COMPLETED = "turn/completed";
+export const METHOD_TURN_INTERRUPT = "turn/interrupt";
+export const METHOD_TURN_START = "turn/start";
+export const METHOD_TURN_STARTED = "turn/started";
+export const METHOD_TURN_STEER = "turn/steer";
 export const METHOD_USAGE_STATS_DAILY_TRENDS_LIST =
   "usageStats/dailyTrends/list";
 export const METHOD_USAGE_STATS_MODEL_RANKING_LIST =
@@ -401,10 +424,6 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
-    method: "agentSession/archiveMany",
-  },
-  {
-    kind: "request",
     method: "agentSession/compact",
   },
   {
@@ -434,10 +453,6 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "agentSession/handoffBundle/export",
-  },
-  {
-    kind: "request",
-    method: "agentSession/list",
   },
   {
     kind: "request",
@@ -477,10 +492,6 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
-    method: "agentSession/read",
-  },
-  {
-    kind: "request",
     method: "agentSession/replayCase/export",
   },
   {
@@ -497,23 +508,7 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
-    method: "agentSession/start",
-  },
-  {
-    kind: "request",
-    method: "agentSession/thread/resume",
-  },
-  {
-    kind: "request",
     method: "agentSession/toolInventory/read",
-  },
-  {
-    kind: "request",
-    method: "agentSession/turn/cancel",
-  },
-  {
-    kind: "request",
-    method: "agentSession/turn/start",
   },
   {
     kind: "request",
@@ -814,6 +809,30 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "notification",
     method: "initialized",
+  },
+  {
+    kind: "notification",
+    method: "item/agentMessage/delta",
+  },
+  {
+    kind: "serverRequest",
+    method: "item/commandExecution/requestApproval",
+  },
+  {
+    kind: "notification",
+    method: "item/completed",
+  },
+  {
+    kind: "serverRequest",
+    method: "item/fileChange/requestApproval",
+  },
+  {
+    kind: "notification",
+    method: "item/started",
+  },
+  {
+    kind: "serverRequest",
+    method: "item/tool/requestUserInput",
   },
   {
     kind: "request",
@@ -1401,6 +1420,34 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
+    method: "thread/archive",
+  },
+  {
+    kind: "notification",
+    method: "thread/archived",
+  },
+  {
+    kind: "request",
+    method: "thread/goal/clear",
+  },
+  {
+    kind: "notification",
+    method: "thread/goal/cleared",
+  },
+  {
+    kind: "request",
+    method: "thread/goal/get",
+  },
+  {
+    kind: "request",
+    method: "thread/goal/set",
+  },
+  {
+    kind: "notification",
+    method: "thread/goal/updated",
+  },
+  {
+    kind: "request",
     method: "thread/items/list",
   },
   {
@@ -1409,11 +1456,71 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
+    method: "thread/memoryMode/set",
+  },
+  {
+    kind: "request",
     method: "thread/read",
   },
   {
     kind: "request",
+    method: "thread/resume",
+  },
+  {
+    kind: "request",
+    method: "thread/settings/update",
+  },
+  {
+    kind: "notification",
+    method: "thread/settings/updated",
+  },
+  {
+    kind: "request",
+    method: "thread/shellCommand",
+  },
+  {
+    kind: "request",
+    method: "thread/start",
+  },
+  {
+    kind: "notification",
+    method: "thread/started",
+  },
+  {
+    kind: "notification",
+    method: "thread/tokenUsage/updated",
+  },
+  {
+    kind: "request",
     method: "thread/turns/list",
+  },
+  {
+    kind: "request",
+    method: "thread/unarchive",
+  },
+  {
+    kind: "notification",
+    method: "thread/unarchived",
+  },
+  {
+    kind: "notification",
+    method: "turn/completed",
+  },
+  {
+    kind: "request",
+    method: "turn/interrupt",
+  },
+  {
+    kind: "request",
+    method: "turn/start",
+  },
+  {
+    kind: "notification",
+    method: "turn/started",
+  },
+  {
+    kind: "request",
+    method: "turn/steer",
   },
   {
     kind: "request",
@@ -1608,18 +1715,6 @@ export const GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES = [
     scope: "thread",
   },
   {
-    method: "agentSession/thread/resume",
-    scope: "thread",
-  },
-  {
-    method: "agentSession/turn/cancel",
-    scope: "thread",
-  },
-  {
-    method: "agentSession/turn/start",
-    scope: "thread",
-  },
-  {
     method: "browserSession/action/execute",
     scope: "browserSession",
   },
@@ -1696,7 +1791,27 @@ export const GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES = [
     scope: "projectShellSession",
   },
   {
+    method: "thread/archive",
+    scope: "thread",
+  },
+  {
+    method: "thread/goal/clear",
+    scope: "thread",
+  },
+  {
+    method: "thread/goal/get",
+    scope: "thread",
+  },
+  {
+    method: "thread/goal/set",
+    scope: "thread",
+  },
+  {
     method: "thread/items/list",
+    scope: "thread",
+  },
+  {
+    method: "thread/memoryMode/set",
     scope: "thread",
   },
   {
@@ -1704,7 +1819,35 @@ export const GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES = [
     scope: "thread",
   },
   {
+    method: "thread/resume",
+    scope: "thread",
+  },
+  {
+    method: "thread/settings/update",
+    scope: "thread",
+  },
+  {
+    method: "thread/shellCommand",
+    scope: "thread",
+  },
+  {
     method: "thread/turns/list",
+    scope: "thread",
+  },
+  {
+    method: "thread/unarchive",
+    scope: "thread",
+  },
+  {
+    method: "turn/interrupt",
+    scope: "thread",
+  },
+  {
+    method: "turn/start",
+    scope: "thread",
+  },
+  {
+    method: "turn/steer",
     scope: "thread",
   },
 ] as const;
@@ -1714,6 +1857,13 @@ export type GeneratedAppServerRequestSerializationScopeSpec =
 
 export type GeneratedAppServerRequestSerializationScope =
   GeneratedAppServerRequestSerializationScopeSpec["scope"];
+
+export interface AdditionalContextEntry {
+  kind: AdditionalContextKind;
+  value: string;
+}
+
+export type AdditionalContextKind = "application" | "untrusted";
 
 export interface AgentAttachment {
   kind: string;
@@ -1735,6 +1885,13 @@ export interface AgentEvent {
 export interface AgentInput {
   attachments?: AgentAttachment[];
   text: string;
+}
+
+export interface AgentMessageDeltaNotification {
+  delta: string;
+  itemId: string;
+  threadId: string;
+  turnId: string;
 }
 
 export interface AgentSession {
@@ -1783,19 +1940,6 @@ export type AgentSessionActionType =
   | "elicitation"
   | "tool_confirmation";
 
-export interface AgentSessionAgentMessageDeltaNotification {
-  delta: string;
-  eventId: string;
-  itemId: string;
-  phase?: null | string;
-  sequence: number;
-  sessionId: string;
-  source?: null | string;
-  threadId?: null | string;
-  timestamp: string;
-  turnId?: null | string;
-}
-
 export interface AgentSessionAnalysisHandoffExportParams {
   locale?: null | string;
   sessionId: string;
@@ -1822,14 +1966,6 @@ export interface AgentSessionAnalysisHandoffExportResponse {
   workspaceRoot: string;
 }
 
-export interface AgentSessionArchiveManyParams {
-  sessionIds?: string[];
-}
-
-export interface AgentSessionArchiveManyResponse {
-  sessions?: AgentSessionOverview[];
-}
-
 export interface AgentSessionCompactParams {
   eventName?: null | string;
   sessionId: string;
@@ -1851,9 +1987,7 @@ export interface AgentSessionDeleteResponse {
 }
 
 export interface AgentSessionEventParams {
-  canonicalEvent?: CanonicalThreadEventNotification | null;
   event: AgentEvent;
-  typedEvent?: AgentSessionRuntimeEventNotification | null;
 }
 
 export interface AgentSessionFileCheckpointDetail {
@@ -1972,19 +2106,6 @@ export interface AgentSessionHandoffBundleExportResponse {
   workspaceRoot: string;
 }
 
-export interface AgentSessionItemLifecycleNotification {
-  eventId: string;
-  itemId: string;
-  itemType?: null | string;
-  ordinal?: number | null;
-  sequence: number;
-  sessionId: string;
-  status?: null | string;
-  threadId?: null | string;
-  timestamp: string;
-  turnId?: null | string;
-}
-
 export interface AgentSessionListParams {
   archivedOnly?: boolean | null;
   cwd?: AgentSessionCwdFilter | null;
@@ -2021,18 +2142,6 @@ export interface AgentSessionMediaReadResponse {
   sidecarRef?: unknown;
   totalBytes: number;
   uri: string;
-}
-
-export interface AgentSessionMessageCreatedNotification {
-  eventId: string;
-  input?: AgentInput | null;
-  role?: null | string;
-  sequence: number;
-  sessionId: string;
-  text?: null | string;
-  threadId?: null | string;
-  timestamp: string;
-  turnId?: null | string;
 }
 
 export interface AgentSessionObjectiveAuditParams {
@@ -2266,40 +2375,6 @@ export interface AgentSessionRuntimeEventInput {
   type: string;
 }
 
-export type AgentSessionRuntimeEventNotification =
-  | {
-      method: "message/created";
-      params: AgentSessionMessageCreatedNotification;
-    }
-  | {
-      method: "turn/accepted";
-      params: AgentSessionTurnLifecycleNotification;
-    }
-  | {
-      method: "turn/started";
-      params: AgentSessionTurnLifecycleNotification;
-    }
-  | {
-      method: "turn/completed";
-      params: AgentSessionTurnLifecycleNotification;
-    }
-  | {
-      method: "turn/failed";
-      params: AgentSessionTurnLifecycleNotification;
-    }
-  | {
-      method: "item/agentMessage/delta";
-      params: AgentSessionAgentMessageDeltaNotification;
-    }
-  | {
-      method: "item/started";
-      params: AgentSessionItemLifecycleNotification;
-    }
-  | {
-      method: "item/completed";
-      params: AgentSessionItemLifecycleNotification;
-    };
-
 export interface AgentSessionStartParams {
   appId: string;
   businessObjectRef?: BusinessObjectRef | null;
@@ -2321,17 +2396,6 @@ export type AgentSessionStatus =
   | "running"
   | "waitingAction";
 
-export interface AgentSessionThreadResumeParams {
-  resumeContract?: RuntimeResumeContract | null;
-  sessionId: string;
-}
-
-export interface AgentSessionThreadResumeResponse {
-  resumed: boolean;
-  session: AgentSession;
-  turns?: AgentTurn[];
-}
-
 export interface AgentSessionToolInventoryReadParams {
   browserAssist?: boolean;
   caller?: null | string;
@@ -2350,16 +2414,6 @@ export interface AgentSessionTurnCancelParams {
 
 export type AgentSessionTurnCancelResponse = Record<string, unknown>;
 
-export interface AgentSessionTurnLifecycleNotification {
-  eventId: string;
-  sequence: number;
-  sessionId: string;
-  status: AgentTurnStatus;
-  threadId?: null | string;
-  timestamp: string;
-  turnId?: null | string;
-}
-
 export interface AgentSessionTurnStartParams {
   input: AgentInput;
   queueIfBusy?: boolean;
@@ -2374,7 +2428,6 @@ export interface AgentSessionTurnStartResponse {
 }
 
 export interface AgentSessionUpdateParams {
-  archived?: boolean | null;
   articleWorkspaceEditedDraft?: unknown;
   articleWorkspaceSelectedObjectRef?: unknown;
   executionStrategy?: null | string;
@@ -2596,37 +2649,7 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
-      method: "agentSession/list";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "thread/read";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "thread/list";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "thread/turns/list";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "thread/items/list";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
       method: "agentSession/update";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/archiveMany";
       params?: unknown;
     }
   | {
@@ -2667,11 +2690,6 @@ export type AppServerClientRequest =
   | {
       id: number | string;
       method: "agentSession/compact";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/thread/resume";
       params?: unknown;
     }
   | {
@@ -3851,27 +3869,7 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
-      method: "agentSession/start";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/read";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
       method: "agentSession/media/read";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/turn/start";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/turn/cancel";
       params?: unknown;
     }
   | {
@@ -3921,7 +3919,6 @@ export type AppServerNotificationMethod =
   | "agentSession/event"
   | "configWarning"
   | "initialized"
-  | "serverRequest/resolved"
   | "workspaceRightSurface/pendingChanged";
 
 export type AppServerRequestAccess = "exclusive" | "sharedRead";
@@ -3935,7 +3932,6 @@ export type AppServerRequestMethod =
   | "agentSession/action/replay"
   | "agentSession/action/respond"
   | "agentSession/analysisHandoff/export"
-  | "agentSession/archiveMany"
   | "agentSession/compact"
   | "agentSession/delete"
   | "agentSession/fileCheckpoint/diff"
@@ -3943,7 +3939,6 @@ export type AppServerRequestMethod =
   | "agentSession/fileCheckpoint/list"
   | "agentSession/fileCheckpoint/restore"
   | "agentSession/handoffBundle/export"
-  | "agentSession/list"
   | "agentSession/media/read"
   | "agentSession/objective/audit"
   | "agentSession/objective/clear"
@@ -3953,16 +3948,11 @@ export type AppServerRequestMethod =
   | "agentSession/objective/status/update"
   | "agentSession/queuedTurn/promote"
   | "agentSession/queuedTurn/remove"
-  | "agentSession/read"
   | "agentSession/replayCase/export"
   | "agentSession/reviewDecision/save"
   | "agentSession/reviewDecisionTemplate/export"
   | "agentSession/runtimeEvents/append"
-  | "agentSession/start"
-  | "agentSession/thread/resume"
   | "agentSession/toolInventory/read"
-  | "agentSession/turn/cancel"
-  | "agentSession/turn/start"
   | "agentSession/update"
   | "artifact/read"
   | "automationJob/create"
@@ -4180,10 +4170,6 @@ export type AppServerRequestMethod =
   | "soulStylePack/status/set"
   | "soulStylePack/uninstall"
   | "telegramChannel/probe"
-  | "thread/items/list"
-  | "thread/list"
-  | "thread/read"
-  | "thread/turns/list"
   | "usageStats/dailyTrends/list"
   | "usageStats/modelRanking/list"
   | "usageStats/read"
@@ -4480,20 +4466,6 @@ export interface BusinessObjectRef {
   uri?: null | string;
 }
 
-export type CanonicalThreadEventNotification =
-  | {
-      method: "thread/updated";
-      params: Thread;
-    }
-  | {
-      method: "turn/updated";
-      params: Turn;
-    }
-  | {
-      method: "item/updated";
-      params: ThreadItem;
-    };
-
 export interface CapabilityDescriptor {
   description?: null | string;
   id: string;
@@ -4546,6 +4518,7 @@ export interface ChannelProbeResponse {
 export interface ClientCapabilities {
   eventMethods?: string[];
   experimental?: boolean;
+  optOutNotificationMethods?: string[] | null;
 }
 
 export interface ClientInfo {
@@ -4557,6 +4530,178 @@ export interface ClientInfo {
 export type ClientNotification = {
   method: "initialized";
 };
+
+export type ClientRequest =
+  | {
+      id: number | string;
+      method: "thread/start";
+      params: ThreadStartParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/resume";
+      params: ThreadResumeParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/read";
+      params: ThreadReadParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/list";
+      params: ThreadListParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/archive";
+      params: ThreadArchiveParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/unarchive";
+      params: ThreadUnarchiveParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/turns/list";
+      params: ThreadTurnsListParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/items/list";
+      params: ThreadItemsListParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/settings/update";
+      params: ThreadSettingsUpdateParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/memoryMode/set";
+      params: ThreadMemoryModeSetParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/shellCommand";
+      params: ThreadShellCommandParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/goal/set";
+      params: ThreadGoalSetParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/goal/get";
+      params: ThreadGoalGetParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/goal/clear";
+      params: ThreadGoalClearParams;
+    }
+  | {
+      id: number | string;
+      method: "turn/start";
+      params: TurnStartParams;
+    }
+  | {
+      id: number | string;
+      method: "turn/steer";
+      params: TurnSteerParams;
+    }
+  | {
+      id: number | string;
+      method: "turn/interrupt";
+      params: TurnInterruptParams;
+    };
+
+export interface ClientResponse {
+  id: number | string;
+  result: unknown;
+}
+
+export interface CollabAgentState {
+  message?: null | string;
+  status: CollabAgentStatus;
+}
+
+export type CollabAgentStatus =
+  | "completed"
+  | "errored"
+  | "interrupted"
+  | "notFound"
+  | "pendingInit"
+  | "running"
+  | "shutdown";
+
+export type CollabAgentTool =
+  | "closeAgent"
+  | "resumeAgent"
+  | "sendInput"
+  | "spawnAgent"
+  | "wait";
+
+export type CollabAgentToolCallStatus = "completed" | "failed" | "inProgress";
+
+export type CommandAction =
+  | {
+      command: string;
+      name: string;
+      path: string;
+      type: "read";
+    }
+  | {
+      command: string;
+      path?: null | string;
+      type: "listFiles";
+    }
+  | {
+      command: string;
+      path?: null | string;
+      query?: null | string;
+      type: "search";
+    }
+  | {
+      command: string;
+      type: "unknown";
+    };
+
+export type CommandExecutionApprovalDecision =
+  | "accept"
+  | "acceptForSession"
+  | "cancel"
+  | "decline";
+
+export interface CommandExecutionRequestApprovalParams {
+  approvalId?: null | string;
+  availableDecisions?: CommandExecutionApprovalDecision[] | null;
+  command?: null | string;
+  cwd?: null | string;
+  itemId: string;
+  reason?: null | string;
+  startedAtMs: number;
+  threadId: string;
+  turnId: string;
+}
+
+export interface CommandExecutionRequestApprovalResponse {
+  decision: CommandExecutionApprovalDecision;
+}
+
+export type CommandExecutionSource =
+  | "agent"
+  | "unifiedExecInteraction"
+  | "unifiedExecStartup"
+  | "userShell";
+
+export type CommandExecutionStatus =
+  | "completed"
+  | "declined"
+  | "failed"
+  | "inProgress";
 
 export interface ConfigWarningNotification {
   details?: null | string;
@@ -4939,6 +5084,20 @@ export interface DiagnosticsTraceSummary {
   traceId: string;
 }
 
+export type DynamicToolCallOutputContentItem =
+  | {
+      inputText: {
+        text: string;
+      };
+    }
+  | {
+      inputImage: {
+        image_url: string;
+      };
+    };
+
+export type DynamicToolCallStatus = "completed" | "failed" | "inProgress";
+
 export interface EndpointInfo {
   apiVersion?: null | string;
   baseUrl?: null | string;
@@ -5077,6 +5236,25 @@ export interface ExecutionProcessWriteStdinParams {
   processId: string;
 }
 
+export type FileChangeApprovalDecision =
+  | "accept"
+  | "acceptForSession"
+  | "cancel"
+  | "decline";
+
+export interface FileChangeRequestApprovalParams {
+  grantRoot?: null | string;
+  itemId: string;
+  reason?: null | string;
+  startedAtMs: number;
+  threadId: string;
+  turnId: string;
+}
+
+export interface FileChangeRequestApprovalResponse {
+  decision: FileChangeApprovalDecision;
+}
+
 export interface FileSystemCreateDirectoryParams {
   path: string;
 }
@@ -5134,6 +5312,12 @@ export interface FileSystemReadFilePreviewParams {
 export interface FileSystemRenameFileParams {
   newPath: string;
   oldPath: string;
+}
+
+export interface FileUpdateChange {
+  diff: string;
+  kind: PatchChangeKind;
+  path: string;
 }
 
 export type FramingKind = "json" | "ndjson" | "sse";
@@ -5331,6 +5515,23 @@ export interface GatewayTunnelSyncWebhookUrlResponse {
   webhookUrl: string;
 }
 
+export interface GitInfo {
+  branch?: null | string;
+  originUrl?: null | string;
+  sha?: null | string;
+}
+
+export interface HookPromptFragment {
+  hookRunId: string;
+  text: string;
+}
+
+export interface ImageGenerationItem {
+  id: string;
+  result?: unknown;
+  status?: null | string;
+}
+
 export interface ImageStoryboardSlotInput {
   label?: null | string;
   prompt: string;
@@ -5354,6 +5555,13 @@ export interface ImportedThreadSummary {
   updatedAt?: null | string;
 }
 
+export interface InitializeCapabilities {
+  experimentalApi?: boolean;
+  mcpServerOpenaiFormElicitation?: boolean;
+  optOutNotificationMethods?: string[] | null;
+  requestAttestation?: boolean;
+}
+
 export interface InitializeParams {
   capabilities?: ClientCapabilities;
   clientInfo: ClientInfo;
@@ -5363,6 +5571,20 @@ export interface InitializeResponse {
   capabilities: ServerCapabilities;
   platform: PlatformInfo;
   serverInfo: ServerInfo;
+}
+
+export interface ItemCompletedNotification {
+  completedAtMs: number;
+  item: ThreadItem;
+  threadId: string;
+  turnId: string;
+}
+
+export interface ItemStartedNotification {
+  item: ThreadItem;
+  startedAtMs: number;
+  threadId: string;
+  turnId: string;
 }
 
 export interface KnowledgeCompilePackParams {
@@ -5638,7 +5860,7 @@ export type McpServerElicitationRequestParams = {
   requestedSchema: Record<string, unknown>;
 };
 
-export interface McpServerElicitationResponse {
+export interface McpServerElicitationRequestResponse {
   _meta?: null | Record<string, unknown>;
   action: McpServerElicitationAction;
   content?: unknown;
@@ -5692,6 +5914,15 @@ export interface McpServerUpdateParams {
   server: unknown;
 }
 
+export interface McpToolCallAppContext {
+  actionName?: null | string;
+  appName?: null | string;
+  connectorId: string;
+  linkId?: null | string;
+  resourceUri?: null | string;
+  templateId?: null | string;
+}
+
 export interface McpToolCallParams {
   arguments: unknown;
   toolName: string;
@@ -5702,6 +5933,8 @@ export interface McpToolCallResponse {
   is_error: boolean;
   structuredContent?: unknown;
 }
+
+export type McpToolCallStatus = "completed" | "failed" | "inProgress";
 
 export interface McpToolCallWithCallerParams {
   arguments: unknown;
@@ -5910,6 +6143,18 @@ export interface MediaTaskArtifactVideoCreateParams {
   turnId?: null | string;
 }
 
+export interface MemoryCitation {
+  entries: MemoryCitationEntry[];
+  threadIds: string[];
+}
+
+export interface MemoryCitationEntry {
+  lineEnd: number;
+  lineStart: number;
+  note: string;
+  path: string;
+}
+
 export interface MemoryStoreAddNoteParams {
   content: string;
   scope?: MemoryStoreScope;
@@ -6107,6 +6352,25 @@ export interface MemoryStoreSearchResponse {
   nextCursor?: null | string;
   truncated: boolean;
 }
+
+export type Method =
+  | "thread/archive"
+  | "thread/goal/clear"
+  | "thread/goal/get"
+  | "thread/goal/set"
+  | "thread/items/list"
+  | "thread/list"
+  | "thread/memoryMode/set"
+  | "thread/read"
+  | "thread/resume"
+  | "thread/settings/update"
+  | "thread/shellCommand"
+  | "thread/start"
+  | "thread/turns/list"
+  | "thread/unarchive"
+  | "turn/interrupt"
+  | "turn/start"
+  | "turn/steer";
 
 export interface ModelCapabilitiesInfo {
   functionCalling: boolean;
@@ -6433,6 +6697,24 @@ export interface OpenDeepLinkPayload {
   source?: null | string;
   version?: null | string;
 }
+
+export type PatchApplyStatus =
+  | "completed"
+  | "declined"
+  | "failed"
+  | "inProgress";
+
+export type PatchChangeKind =
+  | {
+      type: "add";
+    }
+  | {
+      type: "delete";
+    }
+  | {
+      move_path?: null | string;
+      type: "update";
+    };
 
 export interface PlatformInfo {
   family: string;
@@ -7118,6 +7400,7 @@ export interface RuntimeProviderConfig {
 export interface RuntimeRequest {
   approvalPolicy?: null | string;
   autoContinue?: boolean | null;
+  collaborationMode?: CollaborationMode | null;
   executionStrategy?: null | string;
   metadata?: unknown;
   modelPreference?: null | string;
@@ -7133,25 +7416,6 @@ export interface RuntimeRequest {
   workingDir?: null | string;
   workspaceId?: null | string;
   workspaceRoot?: null | string;
-}
-
-export interface RuntimeResumeActionDecision {
-  actionId: string;
-  decision: string;
-  metadata?: unknown;
-  response?: unknown;
-}
-
-export interface RuntimeResumeContract {
-  createdAt: string;
-  decisions?: RuntimeResumeActionDecision[];
-  expiresAt?: null | string;
-  openActionIds?: string[];
-  resumeMode: string;
-  runtimeId: string;
-  schemaVersion: string;
-  sessionId: string;
-  turnId: string;
 }
 
 export type RuntimeSearchMode = "auto" | "disabled" | "required";
@@ -7186,24 +7450,83 @@ export interface ServerInfo {
 
 export type ServerNotification =
   | {
-      method: "configWarning";
-      params: ConfigWarningNotification;
+      method: "thread/started";
+      params: ThreadStartedNotification;
+    }
+  | {
+      method: "thread/archived";
+      params: ThreadArchivedNotification;
+    }
+  | {
+      method: "thread/unarchived";
+      params: ThreadUnarchivedNotification;
+    }
+  | {
+      method: "turn/started";
+      params: TurnStartedNotification;
+    }
+  | {
+      method: "turn/completed";
+      params: TurnCompletedNotification;
+    }
+  | {
+      method: "item/started";
+      params: ItemStartedNotification;
+    }
+  | {
+      method: "item/completed";
+      params: ItemCompletedNotification;
+    }
+  | {
+      method: "item/agentMessage/delta";
+      params: AgentMessageDeltaNotification;
+    }
+  | {
+      method: "thread/settings/updated";
+      params: ThreadSettingsUpdatedNotification;
+    }
+  | {
+      method: "thread/tokenUsage/updated";
+      params: ThreadTokenUsageUpdatedNotification;
+    }
+  | {
+      method: "thread/goal/updated";
+      params: ThreadGoalUpdatedNotification;
+    }
+  | {
+      method: "thread/goal/cleared";
+      params: ThreadGoalClearedNotification;
     }
   | {
       method: "serverRequest/resolved";
       params: ServerRequestResolvedNotification;
+    };
+
+export type ServerRequest =
+  | {
+      id: number | string;
+      method: "mcpServer/elicitation/request";
+      params: McpServerElicitationRequestParams;
     }
   | {
-      method: "agentSession/event";
-      params: AgentSessionEventParams;
+      id: number | string;
+      method: "item/commandExecution/requestApproval";
+      params: CommandExecutionRequestApprovalParams;
     }
   | {
-      method: "workspaceRightSurface/pendingChanged";
-      params: WorkspaceRightSurfacePendingChangedParams;
+      id: number | string;
+      method: "item/fileChange/requestApproval";
+      params: FileChangeRequestApprovalParams;
+    }
+  | {
+      id: number | string;
+      method: "item/tool/requestUserInput";
+      params: ToolRequestUserInputParams;
     };
 
 export interface ServerRequestResolvedNotification {
   requestId: number | string;
+  threadId: string;
 }
 
 export interface SessionFileEntry {
@@ -7531,6 +7854,13 @@ export interface SkillWorkflowStep {
   name: string;
 }
 
+export interface SleepItem {
+  durationMs?: number | null;
+  id: string;
+}
+
+export type SortDirection = "asc" | "desc";
+
 export interface SoulStylePackInstallParams {
   enableAfterInstall?: boolean;
   localeSources?: Record<string, unknown>;
@@ -7602,6 +7932,8 @@ export interface StructuredOutputContract {
   type?: null | string;
 }
 
+export type SubAgentActivityKind = "interacted" | "interrupted" | "started";
+
 export interface SupportBundleExportParams {
   includeTraceExport?: SupportBundleTraceExportSelection | null;
 }
@@ -7630,26 +7962,252 @@ export interface TextRange {
   start: TextPosition;
 }
 
+export interface Thread {
+  agentNickname?: null | string;
+  agentRole?: null | string;
+  cliVersion: string;
+  createdAt: number;
+  cwd: string;
+  ephemeral: boolean;
+  extra?: unknown;
+  forkedFromId?: null | string;
+  gitInfo?: GitInfo | null;
+  historyMode?: ThreadHistoryMode;
+  id: string;
+  modelProvider: string;
+  name?: null | string;
+  parentThreadId?: null | string;
+  path?: null | string;
+  preview: string;
+  recencyAt?: number | null;
+  sessionId: string;
+  source: string;
+  status?: ThreadStatus | null;
+  threadSource?: null | string;
+  turns?: Turn[];
+  updatedAt: number;
+}
+
+export type ThreadActiveFlag = "waitingOnApproval" | "waitingOnUserInput";
+
+export interface ThreadArchiveParams {
+  threadId: string;
+}
+
+export type ThreadArchiveResponse = Record<string, unknown>;
+
+export interface ThreadArchivedNotification {
+  threadId: string;
+}
+
+export interface ThreadGoal {
+  createdAt: number;
+  objective: string;
+  status: ThreadGoalStatus;
+  threadId: string;
+  timeUsedSeconds: number;
+  tokenBudget?: number | null;
+  tokensUsed: number;
+  updatedAt: number;
+}
+
+export interface ThreadGoalClearParams {
+  threadId: string;
+}
+
+export interface ThreadGoalClearResponse {
+  cleared: boolean;
+}
+
+export interface ThreadGoalClearedNotification {
+  threadId: string;
+}
+
+export interface ThreadGoalGetParams {
+  threadId: string;
+}
+
+export interface ThreadGoalGetResponse {
+  goal?: ThreadGoal | null;
+}
+
+export interface ThreadGoalSetParams {
+  objective?: null | string;
+  status?: ThreadGoalStatus | null;
+  threadId: string;
+  tokenBudget?: number | null;
+}
+
+export interface ThreadGoalSetResponse {
+  goal: ThreadGoal;
+}
+
+export type ThreadGoalStatus =
+  | "active"
+  | "blocked"
+  | "budgetLimited"
+  | "complete"
+  | "paused"
+  | "usageLimited";
+
+export interface ThreadGoalUpdatedNotification {
+  goal: ThreadGoal;
+  threadId: string;
+  turnId?: null | string;
+}
+
+export type ThreadHistoryMode = "legacy" | "paginated";
+
+export type ThreadItem =
+  | {
+      clientId?: null | string;
+      content: UserInput[];
+      id: string;
+      type: "userMessage";
+    }
+  | {
+      fragments: HookPromptFragment[];
+      id: string;
+      type: "hookPrompt";
+    }
+  | {
+      id: string;
+      memoryCitation?: MemoryCitation | null;
+      phase?: null | string;
+      text: string;
+      type: "agentMessage";
+    }
+  | {
+      id: string;
+      text: string;
+      type: "plan";
+    }
+  | {
+      content?: string[];
+      id: string;
+      summary?: string[];
+      type: "reasoning";
+    }
+  | {
+      aggregatedOutput?: null | string;
+      command: string;
+      commandActions?: CommandAction[];
+      cwd: string;
+      durationMs?: number | null;
+      exitCode?: number | null;
+      id: string;
+      processId?: null | string;
+      source?: CommandExecutionSource;
+      status: CommandExecutionStatus;
+      type: "commandExecution";
+    }
+  | {
+      changes: FileUpdateChange[];
+      id: string;
+      status: PatchApplyStatus;
+      type: "fileChange";
+    }
+  | {
+      appContext?: McpToolCallAppContext | null;
+      arguments: unknown;
+      durationMs?: number | null;
+      error?: unknown;
+      id: string;
+      mcpAppResourceUri?: null | string;
+      pluginId?: null | string;
+      result?: unknown;
+      server: string;
+      status: McpToolCallStatus;
+      tool: string;
+      type: "mcpToolCall";
+    }
+  | {
+      arguments: unknown;
+      contentItems?: DynamicToolCallOutputContentItem[] | null;
+      durationMs?: number | null;
+      id: string;
+      namespace?: null | string;
+      status: DynamicToolCallStatus;
+      success?: boolean | null;
+      tool: string;
+      type: "dynamicToolCall";
+    }
+  | {
+      agentsStates?: Record<string, unknown>;
+      id: string;
+      model?: null | string;
+      prompt?: null | string;
+      reasoningEffort?: null | string;
+      receiverThreadIds: string[];
+      senderThreadId: string;
+      status: CollabAgentToolCallStatus;
+      tool: CollabAgentTool;
+      type: "collabAgentToolCall";
+    }
+  | {
+      agentPath: string;
+      agentThreadId: string;
+      id: string;
+      kind: SubAgentActivityKind;
+      type: "subAgentActivity";
+    }
+  | WebSearchItem
+  | {
+      id: string;
+      path: string;
+      type: "imageView";
+    }
+  | SleepItem
+  | ImageGenerationItem
+  | {
+      id: string;
+      review: string;
+      type: "enteredReviewMode";
+    }
+  | {
+      id: string;
+      review: string;
+      type: "exitedReviewMode";
+    }
+  | {
+      id: string;
+      type: "contextCompaction";
+    };
+
+export interface ThreadItemEntry {
+  item: ThreadItem;
+  turnId: string;
+}
+
 export interface ThreadItemsListParams {
   cursor?: null | string;
   limit?: number | null;
-  sortDirection?: SortDirection;
+  sortDirection?: SortDirection | null;
   threadId: string;
   turnId?: null | string;
 }
 
 export interface ThreadItemsListResponse {
   backwardsCursor?: null | string;
-  data: ThreadItem[];
+  data: ThreadItemEntry[];
   nextCursor?: null | string;
 }
 
+export type ThreadListCwdFilter = string | string[];
+
 export interface ThreadListParams {
+  ancestorThreadId?: null | string;
+  archived?: boolean | null;
   cursor?: null | string;
-  includeArchived?: boolean;
+  cwd?: ThreadListCwdFilter | null;
   limit?: number | null;
-  sortDirection?: SortDirection;
-  turnsView?: ThreadTurnsView;
+  modelProviders?: string[] | null;
+  parentThreadId?: null | string;
+  searchTerm?: null | string;
+  sortDirection?: SortDirection | null;
+  sortKey?: ThreadSortKey | null;
+  sourceKinds?: ThreadSourceKind[] | null;
+  useStateDbOnly?: boolean;
 }
 
 export interface ThreadListResponse {
@@ -7658,20 +8216,209 @@ export interface ThreadListResponse {
   nextCursor?: null | string;
 }
 
-export interface ThreadReadParams {
+export type ThreadMemoryMode = "disabled" | "enabled";
+
+export interface ThreadMemoryModeSetParams {
+  mode: ThreadMemoryMode;
   threadId: string;
-  turnsView?: ThreadTurnsView;
+}
+
+export type ThreadMemoryModeSetResponse = Record<string, unknown>;
+
+export interface ThreadReadParams {
+  includeTurns?: boolean;
+  threadId: string;
 }
 
 export interface ThreadReadResponse {
   thread: Thread;
 }
 
+export interface ThreadResumeInitialTurnsPageParams {
+  itemsView?: TurnItemsView | null;
+  limit?: number | null;
+  sortDirection?: SortDirection | null;
+}
+
+export interface ThreadResumeParams {
+  approvalPolicy?: unknown;
+  approvalsReviewer?: unknown;
+  baseInstructions?: null | string;
+  config?: null | Record<string, unknown>;
+  cwd?: null | string;
+  developerInstructions?: null | string;
+  excludeTurns?: boolean;
+  history?: unknown[] | null;
+  initialTurnsPage?: ThreadResumeInitialTurnsPageParams | null;
+  model?: null | string;
+  modelProvider?: null | string;
+  path?: null | string;
+  permissions?: null | string;
+  personality?: unknown;
+  runtimeWorkspaceRoots?: string[] | null;
+  sandbox?: unknown;
+  serviceTier?: null | string;
+  threadId: string;
+}
+
+export interface ThreadResumeResponse {
+  activePermissionProfile?: unknown;
+  approvalPolicy: unknown;
+  approvalsReviewer: unknown;
+  cwd: string;
+  initialTurnsPage?: TurnsPage | null;
+  instructionSources?: string[];
+  itemsBackwardsCursor?: null | string;
+  model: string;
+  modelProvider: string;
+  multiAgentMode?: unknown;
+  reasoningEffort?: null | string;
+  runtimeWorkspaceRoots?: string[];
+  sandbox: unknown;
+  serviceTier?: null | string;
+  thread: Thread;
+  turnsBackwardsCursor?: null | string;
+}
+
+export interface ThreadSettings {
+  activePermissionProfile?: unknown;
+  approvalPolicy: unknown;
+  approvalsReviewer: unknown;
+  collaborationMode: CollaborationMode;
+  cwd: string;
+  effort?: null | string;
+  model: string;
+  modelProvider: string;
+  personality?: unknown;
+  sandboxPolicy: unknown;
+  serviceTier?: null | string;
+  summary?: unknown;
+}
+
+export interface ThreadSettingsUpdateParams {
+  approvalPolicy?: unknown;
+  approvalsReviewer?: unknown;
+  collaborationMode?: CollaborationMode | null;
+  cwd?: null | string;
+  effort?: null | string;
+  model?: null | string;
+  permissions?: null | string;
+  personality?: unknown;
+  sandboxPolicy?: unknown;
+  serviceTier?: null | string;
+  summary?: unknown;
+  threadId: string;
+}
+
+export type ThreadSettingsUpdateResponse = Record<string, unknown>;
+
+export interface ThreadSettingsUpdatedNotification {
+  threadId: string;
+  threadSettings: ThreadSettings;
+}
+
+export interface ThreadShellCommandParams {
+  command: string;
+  threadId: string;
+}
+
+export type ThreadShellCommandResponse = Record<string, unknown>;
+
+export type ThreadSortKey = "created_at" | "recency_at" | "updated_at";
+
+export type ThreadSourceKind =
+  | "appServer"
+  | "cli"
+  | "exec"
+  | "subAgent"
+  | "subAgentCompact"
+  | "subAgentOther"
+  | "subAgentReview"
+  | "subAgentThreadSpawn"
+  | "unknown"
+  | "vscode";
+
+export interface ThreadStartParams {
+  allowProviderModelFallback?: boolean;
+  approvalPolicy?: unknown;
+  approvalsReviewer?: unknown;
+  baseInstructions?: null | string;
+  config?: null | Record<string, unknown>;
+  cwd?: null | string;
+  developerInstructions?: null | string;
+  dynamicTools?: unknown[] | null;
+  environments?: TurnEnvironmentParams[] | null;
+  ephemeral?: boolean | null;
+  experimentalRawEvents?: boolean;
+  historyMode?: ThreadHistoryMode | null;
+  model?: null | string;
+  modelProvider?: null | string;
+  multiAgentMode?: unknown;
+  permissions?: null | string;
+  personality?: unknown;
+  runtimeWorkspaceRoots?: string[] | null;
+  sandbox?: unknown;
+  selectedCapabilityRoots?: unknown[] | null;
+  serviceName?: null | string;
+  serviceTier?: null | string;
+  sessionStartSource?: ThreadStartSource | null;
+  threadSource?: null | string;
+}
+
+export interface ThreadStartResponse {
+  activePermissionProfile?: unknown;
+  approvalPolicy: unknown;
+  approvalsReviewer: unknown;
+  cwd: string;
+  instructionSources?: string[];
+  model: string;
+  modelProvider: string;
+  multiAgentMode?: unknown;
+  reasoningEffort?: null | string;
+  runtimeWorkspaceRoots?: string[];
+  sandbox: unknown;
+  serviceTier?: null | string;
+  thread: Thread;
+}
+
+export type ThreadStartSource = "clear" | "startup";
+
+export interface ThreadStartedNotification {
+  thread: Thread;
+}
+
+export type ThreadStatus =
+  | {
+      type: "notLoaded";
+    }
+  | {
+      type: "idle";
+    }
+  | {
+      type: "systemError";
+    }
+  | {
+      activeFlags: ThreadActiveFlag[];
+      type: "active";
+    };
+
+export interface ThreadTokenUsage {
+  last: TokenUsageBreakdown;
+  modelContextWindow?: number | null;
+  total: TokenUsageBreakdown;
+}
+
+export interface ThreadTokenUsageUpdatedNotification {
+  threadId: string;
+  tokenUsage: ThreadTokenUsage;
+  turnId: string;
+}
+
 export interface ThreadTurnsListParams {
   cursor?: null | string;
-  itemsView?: TurnItemsView;
+  itemsView?: TurnItemsView | null;
   limit?: number | null;
-  sortDirection?: SortDirection;
+  sortDirection?: SortDirection | null;
   threadId: string;
 }
 
@@ -7681,7 +8428,147 @@ export interface ThreadTurnsListResponse {
   nextCursor?: null | string;
 }
 
+export interface ThreadUnarchiveParams {
+  threadId: string;
+}
+
+export interface ThreadUnarchiveResponse {
+  thread: Thread;
+}
+
+export interface ThreadUnarchivedNotification {
+  threadId: string;
+}
+
+export interface TokenUsageBreakdown {
+  cachedInputTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+}
+
+export interface ToolRequestUserInputAnswer {
+  answers: string[];
+}
+
+export interface ToolRequestUserInputOption {
+  description: string;
+  label: string;
+}
+
+export interface ToolRequestUserInputParams {
+  autoResolutionMs?: number | null;
+  itemId: string;
+  questions: ToolRequestUserInputQuestion[];
+  threadId: string;
+  turnId: string;
+}
+
+export interface ToolRequestUserInputQuestion {
+  header: string;
+  id: string;
+  isOther?: boolean;
+  isSecret?: boolean;
+  options?: ToolRequestUserInputOption[] | null;
+  question: string;
+}
+
+export interface ToolRequestUserInputResponse {
+  answers: Record<string, unknown>;
+}
+
 export type TransportKind = "http" | "local_process" | "sidecar";
+
+export interface Turn {
+  completedAt?: number | null;
+  durationMs?: number | null;
+  error?: TurnError | null;
+  id: string;
+  items?: ThreadItem[];
+  itemsView?: TurnItemsView;
+  startedAt?: number | null;
+  status: TurnStatus;
+}
+
+export interface TurnCompletedNotification {
+  threadId: string;
+  turn: Turn;
+}
+
+export interface TurnEnvironmentParams {
+  cwd: string;
+  environmentId: string;
+  runtimeWorkspaceRoots?: string[] | null;
+}
+
+export interface TurnError {
+  additionalDetails?: null | string;
+  errorInfo?: unknown;
+  message: string;
+}
+
+export interface TurnInterruptParams {
+  threadId: string;
+  turnId: string;
+}
+
+export type TurnInterruptResponse = Record<string, unknown>;
+
+export type TurnItemsView = "full" | "notLoaded" | "summary";
+
+export interface TurnStartParams {
+  additionalContext?: null | Record<string, unknown>;
+  approvalPolicy?: unknown;
+  approvalsReviewer?: unknown;
+  clientUserMessageId?: null | string;
+  collaborationMode?: CollaborationMode | null;
+  cwd?: null | string;
+  effort?: null | string;
+  environments?: TurnEnvironmentParams[] | null;
+  input: UserInput[];
+  model?: null | string;
+  multiAgentMode?: unknown;
+  outputSchema?: unknown;
+  permissions?: null | string;
+  personality?: unknown;
+  responsesapiClientMetadata?: null | Record<string, unknown>;
+  runtimeWorkspaceRoots?: string[] | null;
+  sandboxPolicy?: unknown;
+  serviceTier?: null | string;
+  summary?: null | string;
+  threadId: string;
+}
+
+export interface TurnStartResponse {
+  turn: Turn;
+}
+
+export interface TurnStartedNotification {
+  threadId: string;
+  turn: Turn;
+}
+
+export type TurnStatus = "completed" | "failed" | "inProgress" | "interrupted";
+
+export interface TurnSteerParams {
+  additionalContext?: null | Record<string, unknown>;
+  clientUserMessageId?: null | string;
+  expectedTurnId: string;
+  input: UserInput[];
+  responsesapiClientMetadata?: null | Record<string, unknown>;
+  threadId: string;
+}
+
+export interface TurnSteerResponse {
+  turnId: string;
+}
+
+export interface TurnsPage {
+  backwardsCursor?: null | string;
+  data: Turn[];
+  nextCursor?: null | string;
+}
 
 export interface UsageStatsDailyTrendsListResponse {
   trends?: UsageStatsDailyUsage[];
@@ -7724,6 +8611,33 @@ export interface UsageStatsSummary {
   totalTimeMinutes: number;
   totalTokens: number;
 }
+
+export type UserInput =
+  | {
+      text: string;
+      text_elements?: TextElement[];
+      type: "text";
+    }
+  | {
+      detail?: ImageDetail | null;
+      type: "image";
+      url: string;
+    }
+  | {
+      detail?: ImageDetail | null;
+      path: string;
+      type: "localImage";
+    }
+  | {
+      name: string;
+      path: string;
+      type: "skill";
+    }
+  | {
+      name: string;
+      path: string;
+      type: "mention";
+    };
 
 export interface VoiceAsrBaiduConfig {
   api_key: string;
@@ -7849,6 +8763,7 @@ export interface VoiceModelDefaultSetResponse {
 
 export interface VoiceModelTestTranscribeFileParams {
   file_path: string;
+  install_dir: string;
   model_id: string;
 }
 
@@ -7882,6 +8797,12 @@ export interface VoiceTranscriptionTranscribeAudioResponse {
   provider: VoiceAsrProviderType;
   sample_rate: number;
   text: string;
+}
+
+export interface WebSearchItem {
+  action?: unknown;
+  id: string;
+  query?: null | string;
 }
 
 export interface WechatChannelAccountListResponse {
@@ -8240,332 +9161,35 @@ export type AgentSessionApprovalDecision =
   | "cancel"
   | "decline";
 
-export interface ApprovalAction {
-  description: string;
-  kind: string;
-}
-
-export type ApprovalDecision =
-  | "abort"
-  | "approved"
-  | "approvedForSession"
-  | "denied"
-  | "timedOut";
-
-export type ApprovalScope = "once" | "session" | "turn";
-
-export type CollabAgentOperation =
-  | "close"
-  | "followUp"
-  | "interrupt"
-  | "resume"
-  | "sendMessage"
-  | "spawn"
-  | "wait";
-
-export interface CollabAgentState {
-  message?: null | string;
-  status: CollabAgentStatus;
-}
-
-export type CollabAgentStatus =
-  | "completed"
-  | "errored"
-  | "interrupted"
-  | "notFound"
-  | "pendingInit"
-  | "running"
-  | "shutdown";
-
-export type FileChangeStatus = "applied" | "failed" | "proposed" | "rejected";
-
-export type ItemId = string;
-
-export type ItemKind =
-  | "agentMessage"
-  | "approval"
-  | "collabAgentToolCall"
-  | "command"
-  | "contextCompaction"
-  | "extension"
-  | "file"
-  | "mcpToolCall"
-  | "media"
-  | "plan"
-  | "reasoning"
-  | "subAgent"
-  | "tool"
-  | "userMessage";
-
-export type ItemStatus =
-  | "cancelled"
-  | "completed"
-  | "failed"
-  | "inProgress"
-  | "interrupted"
-  | "pending";
-
-export type MessageContentPart =
-  | {
-      text: string;
-      type: "text";
-    }
-  | {
-      caption?: null | string;
-      kind: string;
-      reference: MessageContentReference;
-      type: "media";
-    };
-
-export interface MessageContentReference {
-  byte_size?: number | null;
-  mime_type: string;
-  preview_url?: null | string;
-  sha256?: null | string;
-  sidecar_ref?: unknown;
-  source_path?: null | string;
-  source_uri?: null | string;
-  title?: null | string;
-  uri: string;
-}
-
-export interface PlanStep {
-  status: PlanStepStatus;
-  step: string;
-}
-
-export type PlanStepStatus = "completed" | "in_progress" | "pending";
-
-export type SubAgentActivityKind = "interacted" | "interrupted" | "started";
-
-export interface Thread {
-  agentNickname?: null | string;
-  agentPath?: null | string;
-  agentRole?: null | string;
-  agentState?: CollabAgentState | null;
-  archived: boolean;
-  createdAtMs: number;
-  forkedFromId?: null | string;
-  lastTaskMessage?: null | string;
-  metadata?: unknown;
-  modelProvider?: string;
-  name?: null | string;
-  parentThreadId?: null | string;
-  preview?: string;
-  product?: null | string;
-  recencyAtMs?: number | null;
-  sessionId: string;
-  status: ThreadStatus;
-  threadId: string;
-  turns?: Turn[];
-  turnsView?: ThreadTurnsView;
-  updatedAtMs: number;
-}
-
-export type ThreadActiveFlag = "waitingOnApproval" | "waitingOnUserInput";
-
-export interface ThreadItem {
-  completedAtMs?: number | null;
-  createdAtMs: number;
-  itemId: ItemId;
-  kind: ItemKind;
-  metadata?: unknown;
-  ordinal: number;
-  payload: ThreadItemPayload;
-  sequence: number;
-  sessionId: string;
-  status: ItemStatus;
-  threadId: string;
-  turnId: string;
-  updatedAtMs: number;
-}
-
-export type ThreadItemPayload =
-  | {
-      client_id?: null | string;
-      content: string;
-      type: "userMessage";
-    }
-  | {
-      content_parts?: MessageContentPart[];
-      phase?: null | string;
-      text: string;
-      type: "agentMessage";
-    }
-  | {
-      explanation?: null | string;
-      plan?: PlanStep[];
-      revision_id: string;
-      source?: null | string;
-      source_item_id?: null | string;
-      text: string;
-      tool_call_id?: null | string;
-      type: "plan";
-    }
-  | {
-      content?: string[];
-      summary?: string[];
-      type: "reasoning";
-    }
-  | {
-      arguments?: ToolArgument[];
-      call_id: string;
-      name: string;
-      output?: ToolOutput | null;
-      type: "tool";
-    }
-  | {
-      arguments?: ToolArgument[];
-      call_id: string;
-      output?: ToolOutput | null;
-      server_name: string;
-      tool_name: string;
-      type: "mcpToolCall";
-    }
-  | {
-      call_id: string;
-      message?: null | string;
-      operation: CollabAgentOperation;
-      output?: ToolOutput | null;
-      target_thread_id?: null | string;
-      type: "collabAgentToolCall";
-    }
-  | {
-      action: ApprovalAction;
-      available_decisions?: ApprovalDecision[];
-      decision?: ApprovalDecision | null;
-      expires_at_ms?: number | null;
-      reason_code?: null | string;
-      request_id: string;
-      requested_at_ms?: number | null;
-      resolved_at_ms?: number | null;
-      scope?: ApprovalScope;
-      type: "approval";
-    }
-  | {
-      command: string;
-      cwd?: null | string;
-      exit_code?: number | null;
-      output?: null | string;
-      type: "command";
-    }
-  | {
-      diff?: null | string;
-      path: string;
-      status: FileChangeStatus;
-      type: "file";
-    }
-  | {
-      mime_type: string;
-      preview?: null | string;
-      type: "media";
-      uri: string;
-    }
-  | {
-      activity: SubAgentActivityKind;
-      child_thread_id: string;
-      detail?: null | string;
-      type: "subAgent";
-    }
-  | {
-      summary?: null | string;
-      type: "contextCompaction";
-      window_id?: null | string;
-    }
-  | {
-      data: unknown;
-      name: string;
-      type: "extension";
-    };
-
-export type ThreadStatus =
-  | {
-      type: "notLoaded";
-    }
-  | {
-      type: "idle";
-    }
-  | {
-      type: "systemError";
-    }
-  | {
-      activeFlags?: ThreadActiveFlag[];
-      type: "active";
-    };
-
-export type ThreadTurnsView = "full" | "notLoaded" | "summary";
-
-export interface ToolArgument {
-  name: string;
-  value: string;
-}
-
-export interface ToolOutput {
-  durationMs?: number | null;
-  error?: null | string;
-  outputRef?: null | string;
-  structuredContent?: unknown;
-  text?: null | string;
-  truncated?: boolean;
-}
-
-export interface Turn {
-  admission?: TurnAdmissionState;
-  approval?: TurnApprovalState;
-  completedAtMs?: number | null;
-  createdAtMs: number;
-  durationMs?: number | null;
-  error?: TurnError | null;
-  items?: ThreadItem[];
-  itemsView?: TurnItemsView;
-  queue?: TurnQueueState;
-  sessionId: string;
-  startedAtMs?: number | null;
-  status: TurnStatus;
-  threadId: string;
-  turnId: string;
-  updatedAtMs: number;
-}
-
-export type TurnAdmissionState = "accepted" | "rejected";
-
-export type TurnApprovalState =
-  | "approved"
-  | "cancelled"
-  | "denied"
-  | "notRequired"
-  | "pending"
-  | "resolved"
-  | "timedOut";
-
-export interface TurnError {
-  code?: null | string;
-  details?: null | string;
-  message: string;
-}
-
-export type TurnItemsView = "full" | "notLoaded" | "summary";
-
-export type TurnQueueState =
-  | {
-      state: "notQueued";
-    }
-  | {
-      position?: number | null;
-      state: "queued";
-    }
-  | {
-      state: "running";
-    };
-
-export type TurnStatus = "completed" | "failed" | "inProgress" | "interrupted";
-
 export type AgentSessionCwdFilter = string | string[];
+
+export interface CollaborationMode {
+  mode: ModeKind;
+  settings: CollaborationModeSettings;
+}
+
+export interface CollaborationModeSettings {
+  developer_instructions?: null | string;
+  model: string;
+  reasoning_effort?: null | string;
+}
+
+export type ModeKind = "default" | "plan";
+
+export interface ByteRange {
+  end: number;
+  start: number;
+}
+
+export type ImageDetail = "auto" | "high" | "low" | "original";
+
+export interface TextElement {
+  byteRange: ByteRange;
+  placeholder?: null | string;
+}
 
 export interface PluginReadinessIssueCategorySummary {
   category: string;
   codes?: string[];
   count: number;
 }
-
-export type SortDirection = "asc" | "desc";

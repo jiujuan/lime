@@ -1,3 +1,4 @@
+use crate::app_server_method_catalog;
 use crate::generated_schema_tree;
 use crate::AppServerMethodKind;
 use crate::AppServerRequestSerializationScope;
@@ -8,7 +9,6 @@ use crate::JsonRpcNotification;
 use crate::JsonRpcRequest;
 use crate::JsonRpcResponse;
 use crate::RequestId;
-use crate::APP_SERVER_METHODS;
 use crate::APP_SERVER_REQUEST_SERIALIZATION_SCOPES;
 use crate::PROTOCOL_VERSION;
 use serde_json::json;
@@ -21,6 +21,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 pub fn protocol_fixture_manifest() -> Value {
+    let methods = app_server_method_catalog();
     json!({
         "protocolVersion": PROTOCOL_VERSION,
         "jsonRpc": {
@@ -33,7 +34,7 @@ pub fn protocol_fixture_manifest() -> Value {
             ],
             "sendsJsonRpcVersionField": false
         },
-        "methods": APP_SERVER_METHODS
+        "methods": methods
             .iter()
             .map(|spec| {
                 json!({
@@ -57,7 +58,8 @@ pub fn protocol_fixture_manifest() -> Value {
             .collect::<Vec<_>>(),
         "schemas": {
             "jsonrpc": crate::JSONRPC_SCHEMA_TYPE_NAMES,
-            "v0": crate::V0_SCHEMA_TYPE_NAMES
+            "v0": crate::V0_SCHEMA_TYPE_NAMES,
+            "v2": crate::V2_SCHEMA_TYPE_NAMES
         }
     })
 }
@@ -289,6 +291,7 @@ fn schema_array_item_sort_key(item: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::v2::SERVER_REQUEST_METHODS;
 
     #[test]
     fn protocol_fixture_manifest_lists_current_methods_without_jsonrpc_field() {
@@ -303,11 +306,17 @@ mod tests {
                 .iter()
                 .filter(|method| method["kind"] == "request")
                 .count(),
-            APP_SERVER_METHODS
+            app_server_method_catalog()
                 .iter()
                 .filter(|method| method.kind == AppServerMethodKind::Request)
                 .count()
         );
+        let methods = manifest["methods"].as_array().expect("methods");
+        for method in SERVER_REQUEST_METHODS {
+            assert!(methods
+                .iter()
+                .any(|spec| { spec["method"] == *method && spec["kind"] == "serverRequest" }));
+        }
         assert_eq!(
             manifest["requestSerializationScopes"]
                 .as_array()

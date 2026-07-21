@@ -38,11 +38,11 @@ const COMMANDS = {
   submitHostResponse: "plugin_runtime_submit_host_response",
 };
 const METHOD_PROOF = [
-  "agentSession/start",
-  "agentSession/turn/start",
-  "agentSession/read",
+  "thread/start",
+  "turn/start",
+  "thread/read",
   "agentSession/action/respond",
-  "agentSession/turn/cancel",
+  "turn/interrupt",
 ];
 
 function printHelp() {

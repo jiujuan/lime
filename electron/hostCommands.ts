@@ -27,6 +27,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import type { ElectronAppServerHost } from "./appServerHost";
+import { resolveCurrentDesktopStorageRoots } from "./appDataPaths";
 import { AppConfigHost, buildDefaultConfig } from "./appConfigHost";
 import {
   openProjectPathWithLocalTool,
@@ -91,6 +92,7 @@ export class ElectronHostCommands {
     appServerHost: ElectronAppServerHost,
     userDataDir = app.getPath("userData"),
     emit: HostEventEmitter = () => undefined,
+    appDataRoot = resolveCurrentDesktopStorageRoots(userDataDir).appDataRoot,
   ) {
     this.#appServerHost = appServerHost;
     this.#userDataDir = userDataDir;
@@ -110,10 +112,10 @@ export class ElectronHostCommands {
       emit,
     );
     this.#systemUtilityHost = new SystemUtilityHost({
-      userDataDir: this.#userDataDir,
+      appDataRoot,
       readConfig: () => this.#readConfig(),
     });
-    this.#voiceModelHost = new VoiceModelHost(this.#userDataDir, emit);
+    this.#voiceModelHost = new VoiceModelHost(appDataRoot, emit);
   }
 
   async invoke(command: string, args?: HostArgs): Promise<unknown> {
@@ -196,10 +198,6 @@ export class ElectronHostCommands {
         return await this.#ensureWorkspaceReady(args);
       case "get_local_skills_for_app":
         return await this.#listLocalSkillsForApp(args);
-      case "get_voice_shortcut_runtime_status":
-        return await this.#systemUtilityHost.getVoiceShortcutRuntimeStatus();
-      case "validate_shortcut":
-        return this.#systemUtilityHost.validateShortcut(args);
       case "voice_models_list_catalog":
         return this.#voiceModelHost.listCatalog();
       case "voice_models_get_install_state":

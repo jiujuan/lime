@@ -1,15 +1,17 @@
+import process from "node:process";
+
 import {
   APPROVAL_REQUEST_CANCEL_SCENARIO,
   APPROVAL_REQUEST_DECLINE_SCENARIO,
   ASSISTANT_DONE_TEXT,
   APPROVAL_REQUEST_FULL_ACCESS_SCENARIO,
+  APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO,
   APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
   ELECTRON_RESIZE_REFLOW_SCENARIO,
-  EXPERT_SKILLS_RUNTIME_SESSION_ID,
   EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
@@ -46,6 +48,7 @@ import {
 import {
   runApprovalRequestDecisionScenario,
   runApprovalRequestFullAccessScenario,
+  runApprovalRequestHostInterruptScenario,
   runApprovalRequestResumeScenario,
 } from "./claw-chat-current-fixture-approval-resume.mjs";
 import { runContentFactoryArticleWorkspaceScenario } from "./claw-chat-current-fixture-content-factory-article-workspace.mjs";
@@ -98,6 +101,7 @@ import {
 import { verifyPlanHistoryHydrate } from "./claw-chat-current-fixture-plan-history.mjs";
 import { runRightSurfaceVisualMatrix } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import { runWebToolsRenderingScenario } from "./claw-chat-current-fixture-web-tools-rendering.mjs";
+import { runUserShellGateScenario } from "./claw-chat-current-fixture-user-shell.mjs";
 import {
   runEventReadProbe,
   waitForSessionReadCanceled,
@@ -106,6 +110,10 @@ import {
   waitForSessionReadPlanCompleted,
 } from "./claw-chat-current-fixture-read-model-waits.mjs";
 import {
+  collectReadModelItems,
+  readModelLatestTurnStatus,
+} from "./claw-chat-current-fixture-read-model-core.mjs";
+import {
   waitForBackendLedgerEntry,
   waitForBackendLedgerTurnStart,
 } from "./claw-chat-current-fixture-backend-ledger.mjs";
@@ -113,15 +121,15 @@ import { resolveSoulStyleFixtureExpectedTexts } from "./claw-chat-current-fixtur
 import { logStage, sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
 function collectReadModelThreadItems(readModel) {
-  const detailItems = Array.isArray(readModel?.detail?.items)
-    ? readModel.detail.items
-    : [];
-  const threadReadItems = Array.isArray(
-    readModel?.detail?.thread_read?.thread_items,
-  )
-    ? readModel.detail.thread_read.thread_items
-    : [];
-  return [...detailItems, ...threadReadItems].filter(Boolean);
+  return collectReadModelItems(readModel);
+}
+
+function isCompletedReadModelTurn(readModel) {
+  return ["completed", "failed", "canceled", "cancelled"].includes(
+    String(readModelLatestTurnStatus(readModel) ?? "")
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 const STREAM_PARSER_BOUNDARY_DEDUPE_GUARDS = [
@@ -153,7 +161,9 @@ function readContentPartsText(value) {
 function collectReadModelAssistantTexts(readModel) {
   const items = collectReadModelThreadItems(readModel);
   const itemTexts = items
-    .filter((item) => item?.type === "agent_message")
+    .filter(
+      (item) => item?.type === "agentMessage" || item?.type === "agent_message",
+    )
     .map((item) => {
       const directText =
         typeof item?.text === "string"
@@ -323,10 +333,8 @@ export async function executeScenarioFlow({
       appServerRequests,
     );
     summary.rightSurfaceVisualMatrixSessionCreation = sanitizeJson({
-      sessionId:
-        expertSessionCreation.session?.session?.sessionId ??
-        expertSessionCreation.session?.sessionId ??
-        null,
+      sessionId: expertSessionCreation.identity.sessionId,
+      threadId: expertSessionCreation.identity.threadId,
       expertId: expertSessionCreation.expertMetadata?.expert?.expertId ?? null,
       skillRefs: expertSessionCreation.expertMetadata?.expert?.skillRefs ?? [],
     });
@@ -341,7 +349,8 @@ export async function executeScenarioFlow({
     );
     summary.guiRightSurfaceVisualMatrixSessionOpened = sanitizeJson(
       await openSessionFromSidebar(page, options, appServerRequests, {
-        sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+        sessionId: expertSessionCreation.identity.sessionId,
+        threadId: expertSessionCreation.identity.threadId,
         title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
       }),
     );
@@ -353,7 +362,7 @@ export async function executeScenarioFlow({
         options,
         workspace,
         appServerRequests,
-        sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+        sessionId: expertSessionCreation.identity.sessionId,
       }),
     );
   } else if (options.scenario === APPROVAL_REQUEST_RESUME_SCENARIO) {
@@ -372,6 +381,17 @@ export async function executeScenarioFlow({
     Object.assign(
       summary,
       await runApprovalRequestFullAccessScenario({
+        page,
+        options,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
+      }),
+    );
+  } else if (options.scenario === APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO) {
+    Object.assign(
+      summary,
+      await runApprovalRequestHostInterruptScenario({
         page,
         options,
         appServerRequests,
@@ -469,7 +489,7 @@ export async function executeScenarioFlow({
               ? {
                   prompt: options.promptOverride,
                 }
-            : undefined,
+              : undefined,
       }),
     );
   } else if (options.scenario === "plan") {
@@ -495,20 +515,10 @@ export async function executeScenarioFlow({
       appServerRequests,
     );
     summary.readModelPlanCompleted = sanitizeJson({
-      latestTurnCompleted:
-        readModelPlanCompleted?.detail?.status === "completed" ||
-        readModelPlanCompleted?.detail?.thread_read?.status === "completed" ||
-        readModelPlanCompleted?.detail?.thread_read?.runtime_summary
-          ?.latestTurnStatus === "completed",
-      detailItemCount: Array.isArray(readModelPlanCompleted?.detail?.items)
-        ? readModelPlanCompleted.detail.items.length
-        : null,
-      latestTurnStatus:
-        readModelPlanCompleted?.detail?.thread_read?.runtime_summary
-          ?.latestTurnStatus ??
-        readModelPlanCompleted?.detail?.thread_read?.status ??
-        readModelPlanCompleted?.detail?.status ??
-        null,
+      latestTurnCompleted: isCompletedReadModelTurn(readModelPlanCompleted),
+      detailItemCount: collectReadModelThreadItems(readModelPlanCompleted)
+        .length,
+      latestTurnStatus: readModelLatestTurnStatus(readModelPlanCompleted),
       includesPrompt: JSON.stringify(readModelPlanCompleted || {}).includes(
         PLAN_PROMPT,
       ),
@@ -539,6 +549,8 @@ export async function executeScenarioFlow({
         options,
         requestLog: appServerRequests,
         readModelPlanCompleted,
+        sessionId: summary.sessionId,
+        threadId: summary.threadId,
       }),
     );
   } else if (options.scenario === "goal") {
@@ -613,6 +625,7 @@ export async function executeScenarioFlow({
       await runMediaReferenceScenario({
         page,
         options,
+        runtimeEnv,
         appServerRequests,
       }),
     );
@@ -747,7 +760,6 @@ export async function executeScenarioFlow({
       }),
     );
   } else if (
-    options.scenario === "expert-skills-runtime" ||
     options.scenario === "expert-plaza-skills-runtime" ||
     options.scenario === "expert-panel-skills-runtime"
   ) {
@@ -763,6 +775,20 @@ export async function executeScenarioFlow({
       }),
     );
   } else {
+    if (
+      options.scenario === "complete" &&
+      process.env.LIME_ENABLE_USER_SHELL_GATE === "1"
+    ) {
+      Object.assign(
+        summary,
+        await runUserShellGateScenario({
+          page,
+          options,
+          appServerRequests,
+          logStage,
+        }),
+      );
+    }
     logStage("send-news-prompt-from-gui");
     summary.inputSend = sanitizeJson(
       await sendNewsPromptFromGui(page, options),
@@ -791,22 +817,14 @@ export async function executeScenarioFlow({
       options,
       appServerRequests,
     );
+    const latestTurnStatus = readModelLatestTurnStatus(readModelCanceled);
     summary.readModelCanceled = sanitizeJson({
-      detailItemCount: Array.isArray(readModelCanceled?.detail?.items)
-        ? readModelCanceled.detail.items.length
-        : null,
-      latestTurnStatus:
-        readModelCanceled?.detail?.thread_read?.runtime_summary
-          ?.latestTurnStatus ??
-        readModelCanceled?.detail?.thread_read?.status ??
-        readModelCanceled?.detail?.status ??
-        null,
+      detailItemCount: collectReadModelItems(readModelCanceled).length,
+      latestTurnStatus,
       includesPrompt: JSON.stringify(readModelCanceled || {}).includes(
         NEWS_PROMPT,
       ),
-      includesCanceled: JSON.stringify(readModelCanceled || {}).includes(
-        "canceled",
-      ),
+      hasInterruptedTurn: latestTurnStatus === "interrupted",
     });
     const cancelLedger = await waitForBackendLedgerEntry(
       runtimeEnv.backendLedgerPath,
@@ -883,11 +901,11 @@ export async function executeScenarioFlow({
     options.scenario !== APPROVAL_REQUEST_RESUME_SCENARIO &&
     options.scenario !== APPROVAL_REQUEST_DECLINE_SCENARIO &&
     options.scenario !== APPROVAL_REQUEST_CANCEL_SCENARIO &&
+    options.scenario !== APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO &&
     options.scenario !== APPROVAL_REQUEST_FULL_ACCESS_SCENARIO &&
     options.scenario !== "web-tools-rendering" &&
     options.scenario !== "mcp-structured-content" &&
     options.scenario !== "skills-runtime" &&
-    options.scenario !== "expert-skills-runtime" &&
     options.scenario !== "expert-plaza-skills-runtime" &&
     options.scenario !== "expert-panel-skills-runtime" &&
     options.scenario !== RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO &&
@@ -928,12 +946,7 @@ export async function executeScenarioFlow({
       detailItemCount: Array.isArray(readModelCompleted?.detail?.items)
         ? readModelCompleted.detail.items.length
         : null,
-      latestTurnStatus:
-        readModelCompleted?.detail?.thread_read?.runtime_summary
-          ?.latestTurnStatus ??
-        readModelCompleted?.detail?.thread_read?.status ??
-        readModelCompleted?.detail?.status ??
-        null,
+      latestTurnStatus: readModelLatestTurnStatus(readModelCompleted),
       includesPrompt: JSON.stringify(readModelCompleted || {}).includes(
         NEWS_PROMPT,
       ),
@@ -952,7 +965,7 @@ export async function executeScenarioFlow({
     });
 
     if (options.scenario !== SOUL_STYLE_SCENARIO) {
-      logStage("probe-agent-session-event-read");
+      logStage("probe-direct-v2-event-read");
       summary.eventReadProbe = await runEventReadProbe(
         page,
         options,

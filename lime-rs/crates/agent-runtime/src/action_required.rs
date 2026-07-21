@@ -1,11 +1,14 @@
+use crate::session_loop::{
+    RuntimeSessionInputHandle, RuntimeSessionResponseKind, RuntimeSessionTaskFailure,
+};
 use agent_protocol::action_required::{ActionRequiredScope, TOOL_CONFIRMATION_ACTION_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::Mutex;
 use tokio::time::timeout;
 use uuid::Uuid;
 
@@ -141,7 +144,6 @@ impl ActionTerminalStatus {
 impl std::error::Error for ActionRequiredError {}
 
 struct PendingAction {
-    response: Option<oneshot::Sender<Value>>,
     descriptor: PendingActionDescriptor,
     restored: bool,
 }
@@ -159,7 +161,7 @@ struct ActionRequiredEntries {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct QueuedActionRequired {
+pub struct ActionRequiredRequest {
     pub id: String,
     pub action_type: String,
     pub tool_id: Option<String>,
@@ -173,62 +175,18 @@ pub struct QueuedActionRequired {
 
 /// 单个 Agent session runtime 的交互等待状态。
 ///
-/// 对齐 Codex `TurnState.pending_user_input`：pending sender 归 session/turn
+/// 对齐 `TurnState.pending_user_input`：pending sender 归 session/turn
 /// 实例所有，不使用进程级 singleton。队列仅用于 Agent reply adapter 退场期间投影事件。
 #[derive(Default)]
 pub struct ActionRequiredState {
     entries: Mutex<ActionRequiredEntries>,
-    queued: Mutex<VecDeque<QueuedActionRequired>>,
 }
 
 impl ActionRequiredState {
-    pub async fn request_and_wait(
-        &self,
-        scope: Option<ActionRequiredScope>,
-        message: String,
-        requested_schema: Value,
-        timeout_duration: Duration,
-    ) -> anyhow::Result<Value> {
-        self.request_and_wait_inner(
-            "runtime_action".to_string(),
-            None,
-            Vec::new(),
-            scope,
-            message,
-            requested_schema,
-            timeout_duration,
-            None::<fn(&QueuedActionRequired)>,
-        )
-        .await
-    }
-
-    pub async fn request_and_wait_with_notification<F>(
-        &self,
-        scope: Option<ActionRequiredScope>,
-        message: String,
-        requested_schema: Value,
-        timeout_duration: Duration,
-        notify: F,
-    ) -> anyhow::Result<Value>
-    where
-        F: FnOnce(&QueuedActionRequired),
-    {
-        self.request_and_wait_inner(
-            TOOL_CONFIRMATION_ACTION_TYPE.to_string(),
-            None,
-            vec!["allow_once".to_string(), "decline".to_string()],
-            scope,
-            message,
-            requested_schema,
-            timeout_duration,
-            Some(notify),
-        )
-        .await
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub async fn request_action_and_wait_with_notification<F>(
         &self,
+        response_handle: RuntimeSessionInputHandle,
+        response_kind: RuntimeSessionResponseKind,
         action_type: impl Into<String>,
         tool_id: Option<String>,
         available_decisions: Vec<String>,
@@ -239,44 +197,20 @@ impl ActionRequiredState {
         notify: F,
     ) -> anyhow::Result<Value>
     where
-        F: FnOnce(&QueuedActionRequired),
+        F: FnOnce(&ActionRequiredRequest),
     {
-        self.request_and_wait_inner(
-            action_type.into(),
-            tool_id,
-            available_decisions,
-            scope,
-            message,
-            requested_schema,
-            timeout_duration,
-            Some(notify),
-        )
-        .await
-    }
-
-    async fn request_and_wait_inner<F>(
-        &self,
-        action_type: String,
-        tool_id: Option<String>,
-        available_decisions: Vec<String>,
-        scope: Option<ActionRequiredScope>,
-        message: String,
-        requested_schema: Value,
-        timeout_duration: Duration,
-        notify: Option<F>,
-    ) -> anyhow::Result<Value>
-    where
-        F: FnOnce(&QueuedActionRequired),
-    {
-        let id = Uuid::new_v4().to_string();
-        let (response, receiver) = oneshot::channel();
+        let id = Uuid::now_v7().to_string();
+        let pending_response = response_handle
+            .register_response(response_kind, id.clone())
+            .await
+            .map_err(action_wait_error)?;
         let created_at_ms = now_millis();
         let deadline_at_ms = created_at_ms
             .map(|created_at_ms| created_at_ms.saturating_add(duration_millis(timeout_duration)));
         let descriptor = PendingActionDescriptor {
             request_id: id.clone(),
             tool_id,
-            action_type,
+            action_type: action_type.into(),
             message: Some(message.clone()),
             requested_schema: Some(requested_schema.clone()),
             available_decisions,
@@ -289,12 +223,11 @@ impl ActionRequiredState {
         self.entries.lock().await.pending.insert(
             id.clone(),
             PendingAction {
-                response: Some(response),
                 descriptor: descriptor.clone(),
                 restored: false,
             },
         );
-        let action = QueuedActionRequired {
+        let action = ActionRequiredRequest {
             id: id.clone(),
             action_type: descriptor.action_type.clone(),
             tool_id: descriptor.tool_id.clone(),
@@ -305,23 +238,20 @@ impl ActionRequiredState {
             created_at_ms: descriptor.created_at_ms,
             deadline_at_ms: descriptor.deadline_at_ms,
         };
-        if let Some(notify) = notify {
-            notify(&action);
-        } else {
-            self.queued.lock().await.push_back(action);
-        }
+        notify(&action);
 
-        let (result, terminal_status) = match timeout(timeout_duration, receiver).await {
-            Ok(Ok(user_data)) => (Ok(user_data), ActionTerminalStatus::Resolved),
-            Ok(Err(_)) => (
-                Err(anyhow::anyhow!("Response channel closed")),
-                ActionTerminalStatus::Canceled,
-            ),
-            Err(_) => (
-                Err(anyhow::anyhow!("Timeout waiting for user response")),
-                ActionTerminalStatus::Expired,
-            ),
-        };
+        let (result, terminal_status) =
+            match timeout(timeout_duration, pending_response.wait()).await {
+                Ok(Ok(user_data)) => return Ok(user_data),
+                Ok(Err(error)) => (
+                    Err(action_wait_error(error)),
+                    ActionTerminalStatus::Canceled,
+                ),
+                Err(_) => (
+                    Err(anyhow::anyhow!("Timeout waiting for user response")),
+                    ActionTerminalStatus::Expired,
+                ),
+            };
         let mut entries = self.entries.lock().await;
         let scope = entries
             .pending
@@ -335,22 +265,20 @@ impl ActionRequiredState {
                 scope,
             });
         drop(entries);
-        self.queued.lock().await.retain(|action| action.id != id);
         result
     }
 
-    pub async fn submit_response(
+    pub async fn resolve_action(
         &self,
         request_id: &str,
         scope: Option<&ActionRequiredScope>,
-        user_data: Value,
     ) -> Result<(), ActionRequiredError> {
         let mut entries = self.entries.lock().await;
         expire_action(&mut entries, request_id);
         if let Some(terminal) = entries.terminal.get(request_id) {
             return Err(terminal_error(request_id, terminal.status));
         }
-        let mut action = entries
+        let action = entries
             .pending
             .remove(request_id)
             .ok_or_else(|| ActionRequiredError::NotFound(request_id.to_string()))?;
@@ -368,28 +296,6 @@ impl ActionRequiredState {
                 },
             );
             return Err(ActionRequiredError::NotResumable(request_id.to_string()));
-        }
-        let Some(response) = action.response.take() else {
-            entries.terminal.insert(
-                request_id.to_string(),
-                TerminalAction {
-                    status: ActionTerminalStatus::Resolved,
-                    scope: action_scope,
-                },
-            );
-            return Err(ActionRequiredError::AlreadyResolved(request_id.to_string()));
-        };
-        if response.send(user_data).is_err() {
-            entries.terminal.insert(
-                request_id.to_string(),
-                TerminalAction {
-                    status: ActionTerminalStatus::ContinuationClosed,
-                    scope: action_scope,
-                },
-            );
-            return Err(ActionRequiredError::ContinuationClosed(
-                request_id.to_string(),
-            ));
         }
         entries.terminal.insert(
             request_id.to_string(),
@@ -419,11 +325,7 @@ impl ActionRequiredState {
             return Err(ActionRequiredError::ScopeMismatch(request_id.to_string()));
         }
         if !action.restored {
-            return action
-                .response
-                .is_some()
-                .then_some(())
-                .ok_or_else(|| ActionRequiredError::AlreadyResolved(request_id.to_string()));
+            return Ok(());
         }
         let scope = action.descriptor.scope.clone();
         entries.pending.remove(request_id);
@@ -462,11 +364,6 @@ impl ActionRequiredState {
                 scope: action.descriptor.scope,
             },
         );
-        drop(entries);
-        self.queued
-            .lock()
-            .await
-            .retain(|action| action.id != request_id);
         Ok(())
     }
 
@@ -508,7 +405,6 @@ impl ActionRequiredState {
         entries.pending.insert(
             descriptor.request_id.clone(),
             PendingAction {
-                response: None,
                 descriptor,
                 restored: true,
             },
@@ -560,10 +456,6 @@ impl ActionRequiredState {
             .terminal
             .retain(|_, action| !scope_matches(Some(scope), action.scope.as_ref()));
         drop(entries);
-        self.queued
-            .lock()
-            .await
-            .retain(|action| !scope_matches(Some(scope), action.scope.as_ref()));
     }
 
     pub async fn cancel_for_scope(&self, scope: &ActionRequiredScope) {
@@ -588,29 +480,6 @@ impl ActionRequiredState {
             );
         }
         drop(entries);
-        self.queued
-            .lock()
-            .await
-            .retain(|action| !scope_matches(Some(scope), action.scope.as_ref()));
-    }
-
-    pub async fn drain_for_scope(
-        &self,
-        scope: Option<&ActionRequiredScope>,
-    ) -> Vec<QueuedActionRequired> {
-        let mut queue = self.queued.lock().await;
-        let mut drained = Vec::new();
-        let mut remaining = VecDeque::new();
-
-        while let Some(action) = queue.pop_front() {
-            if scope_matches(action.scope.as_ref(), scope) {
-                drained.push(action);
-            } else {
-                remaining.push_back(action);
-            }
-        }
-        *queue = remaining;
-        drained
     }
 }
 
@@ -623,6 +492,10 @@ fn now_millis() -> Option<u64> {
 
 fn duration_millis(duration: Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
+fn action_wait_error(error: RuntimeSessionTaskFailure) -> anyhow::Error {
+    anyhow::anyhow!(error.message)
 }
 
 fn expire_action(entries: &mut ActionRequiredEntries, request_id: &str) {
@@ -696,7 +569,12 @@ fn scope_matches(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use crate::session_loop::{
+        RuntimeSessionClosureTask, RuntimeSessionHandle, RuntimeSessionRegistry,
+        RuntimeSessionSubmission,
+    };
+    use std::sync::{Arc, Mutex as StdMutex};
+    use tokio::sync::oneshot;
 
     fn scope(session_id: &str) -> ActionRequiredScope {
         ActionRequiredScope {
@@ -706,41 +584,102 @@ mod tests {
         }
     }
 
+    async fn start_live_request(
+        state: Arc<ActionRequiredState>,
+        session_id: &'static str,
+        response_kind: RuntimeSessionResponseKind,
+        action_type: &'static str,
+        timeout_duration: Duration,
+    ) -> (
+        RuntimeSessionRegistry,
+        RuntimeSessionHandle,
+        RuntimeSessionSubmission,
+        String,
+        oneshot::Receiver<anyhow::Result<Value>>,
+    ) {
+        let registry = RuntimeSessionRegistry::default();
+        let session = registry.get_or_create(session_id).await;
+        let (id_tx, id_rx) = oneshot::channel();
+        let id_tx = Arc::new(StdMutex::new(Some(id_tx)));
+        let (result_tx, result_rx) = oneshot::channel();
+        let result_tx = Arc::new(StdMutex::new(Some(result_tx)));
+        let task = RuntimeSessionClosureTask::new(
+            format!("turn-{session_id}"),
+            Vec::new(),
+            move |context, _input, _cancel| {
+                let state = Arc::clone(&state);
+                let id_tx = Arc::clone(&id_tx);
+                let result_tx = Arc::clone(&result_tx);
+                Box::pin(async move {
+                    let result = state
+                        .request_action_and_wait_with_notification(
+                            context.input_handle(),
+                            response_kind,
+                            action_type,
+                            None,
+                            Vec::new(),
+                            Some(scope(session_id)),
+                            "Continue?".to_string(),
+                            serde_json::json!({ "type": "string" }),
+                            timeout_duration,
+                            move |request| {
+                                if let Some(id_tx) = id_tx.lock().expect("id sender lock").take() {
+                                    let _ = id_tx.send(request.id.clone());
+                                }
+                            },
+                        )
+                        .await;
+                    if let Some(result_tx) = result_tx.lock().expect("result sender lock").take() {
+                        let _ = result_tx.send(result);
+                    }
+                    Ok(())
+                })
+            },
+        );
+        let submission = session
+            .submit(Arc::new(task), false)
+            .await
+            .expect("live request task");
+        let request_id = tokio::time::timeout(Duration::from_secs(1), id_rx)
+            .await
+            .expect("request id timeout")
+            .expect("request id sender");
+        (registry, session, submission, request_id, result_rx)
+    }
+
     #[tokio::test]
     async fn state_is_scoped_and_routes_response_to_pending_turn() {
         let state = Arc::new(ActionRequiredState::default());
-        let requester = Arc::clone(&state);
-        let task = tokio::spawn(async move {
-            requester
-                .request_and_wait(
-                    Some(scope("session-1")),
-                    "Choose".to_string(),
-                    serde_json::json!({ "type": "string" }),
-                    Duration::from_secs(1),
-                )
-                .await
-        });
-
-        tokio::task::yield_now().await;
-        assert!(state
-            .drain_for_scope(Some(&scope("session-2")))
-            .await
-            .is_empty());
-        let queued = state.drain_for_scope(Some(&scope("session-1"))).await;
-        assert_eq!(queued.len(), 1);
+        let (registry, session, submission, request_id, result_rx) = start_live_request(
+            Arc::clone(&state),
+            "session-1",
+            RuntimeSessionResponseKind::AskUser,
+            "ask_user",
+            Duration::from_secs(1),
+        )
+        .await;
         state
-            .submit_response(
-                &queued[0].id,
-                Some(&scope("session-1")),
+            .resolve_action(&request_id, Some(&scope("session-1")))
+            .await
+            .expect("response should be accepted");
+        session
+            .answer_user_input(
+                Some("turn-session-1"),
+                &request_id,
                 serde_json::json!({ "answer": "yes" }),
             )
             .await
-            .expect("response should be accepted");
+            .expect("typed response");
 
         assert_eq!(
-            task.await.expect("task should finish").expect("response"),
+            result_rx.await.expect("response sender").expect("response"),
             serde_json::json!({ "answer": "yes" })
         );
+        assert_eq!(
+            submission.completion.await.expect("task completion"),
+            Ok(crate::session_loop::RuntimeSessionTaskOutcome::Completed)
+        );
+        registry.shutdown("session-1").await.expect("shutdown");
     }
 
     fn restored_descriptor(request_id: &str) -> PendingActionDescriptor {
@@ -774,11 +713,7 @@ mod tests {
         assert_eq!(state.pending_action_descriptors().await, vec![decoded]);
 
         let error = state
-            .submit_response(
-                "restored-1",
-                Some(&scope("session-1")),
-                serde_json::json!({ "confirmed": true }),
-            )
+            .resolve_action("restored-1", Some(&scope("session-1")))
             .await
             .expect_err("restored action must not fake a live continuation");
         assert_eq!(
@@ -792,11 +727,7 @@ mod tests {
         );
         assert_eq!(
             state
-                .submit_response(
-                    "restored-1",
-                    Some(&scope("session-1")),
-                    serde_json::json!({ "confirmed": true }),
-                )
+                .resolve_action("restored-1", Some(&scope("session-1")))
                 .await,
             Err(ActionRequiredError::Terminal(
                 "restored-1".to_string(),
@@ -862,107 +793,107 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cancel_action_releases_live_waiter_without_fake_response() {
+    async fn cancel_action_does_not_own_or_fake_the_live_response() {
         let state = Arc::new(ActionRequiredState::default());
-        let requester = Arc::clone(&state);
-        let (id_sender, id_receiver) = oneshot::channel();
-        let task = tokio::spawn(async move {
-            requester
-                .request_action_and_wait_with_notification(
-                    "ask_user",
-                    None,
-                    Vec::new(),
-                    Some(scope("session-cancel-live")),
-                    "Continue?".to_string(),
-                    serde_json::json!({ "type": "string" }),
-                    Duration::from_secs(1),
-                    move |queued| {
-                        id_sender.send(queued.id.clone()).expect("send request id");
-                    },
-                )
-                .await
-        });
-        let request_id = id_receiver.await.expect("live request id");
+        let (registry, session, submission, request_id, mut result_rx) = start_live_request(
+            Arc::clone(&state),
+            "session-cancel-live",
+            RuntimeSessionResponseKind::AskUser,
+            "ask_user",
+            Duration::from_secs(1),
+        )
+        .await;
 
         state
             .cancel_action(&request_id, Some(&scope("session-cancel-live")))
             .await
             .expect("cancel live action");
 
-        let result = task.await.expect("join live waiter");
-        assert!(result.is_err());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), &mut result_rx)
+                .await
+                .is_err()
+        );
+        assert!(session.interrupt().await.expect("interrupt waiter"));
+        result_rx
+            .await
+            .expect_err("interrupted waiter must close without a response");
         assert_eq!(
             state.terminal_status(&request_id).await,
             Some(ActionTerminalStatus::Canceled)
         );
+        assert_eq!(
+            submission.completion.await.expect("task completion"),
+            Ok(crate::session_loop::RuntimeSessionTaskOutcome::Interrupted)
+        );
+        registry
+            .shutdown("session-cancel-live")
+            .await
+            .expect("shutdown");
     }
 
     #[tokio::test]
     async fn live_tool_notification_uses_typed_descriptor_and_terminalizes_response() {
         let state = Arc::new(ActionRequiredState::default());
-        let requester = Arc::clone(&state);
-        let (id_sender, id_receiver) = oneshot::channel();
-        let task = tokio::spawn(async move {
-            requester
-                .request_and_wait_with_notification(
-                    Some(scope("session-tool")),
-                    "Allow tool?".to_string(),
-                    serde_json::json!({ "type": "boolean" }),
-                    Duration::from_secs(1),
-                    move |queued| {
-                        id_sender.send(queued.id.clone()).expect("send request id");
-                    },
-                )
-                .await
-        });
-        let request_id = id_receiver.await.expect("request id");
+        let (registry, session, submission, request_id, result_rx) = start_live_request(
+            Arc::clone(&state),
+            "session-tool",
+            RuntimeSessionResponseKind::Approval,
+            TOOL_CONFIRMATION_ACTION_TYPE,
+            Duration::from_secs(1),
+        )
+        .await;
         let descriptors = state.pending_action_descriptors().await;
         assert_eq!(descriptors.len(), 1);
         let descriptor = &descriptors[0];
         assert_eq!(descriptor.request_id, request_id);
         assert_eq!(descriptor.action_type, TOOL_CONFIRMATION_ACTION_TYPE);
         assert_eq!(descriptor.tool_id, None);
-        assert_eq!(
-            descriptor.available_decisions,
-            vec!["allow_once".to_string(), "decline".to_string()]
-        );
+        assert!(descriptor.available_decisions.is_empty());
         assert_eq!(descriptor.scope, Some(scope("session-tool")));
         assert!(descriptor.deadline_at_ms.is_some());
 
         state
-            .submit_response(
+            .resolve_action(&request_id, Some(&scope("session-tool")))
+            .await
+            .expect("live continuation response");
+        session
+            .approve(
+                Some("turn-session-tool"),
                 &request_id,
-                Some(&scope("session-tool")),
                 serde_json::json!({ "confirmed": true }),
             )
             .await
-            .expect("live continuation response");
-        task.await.expect("request task").expect("request response");
+            .expect("typed approval");
+        result_rx
+            .await
+            .expect("request result sender")
+            .expect("request response");
         assert_eq!(
             state.terminal_status(&request_id).await,
             Some(ActionTerminalStatus::Resolved)
         );
+        assert_eq!(
+            submission.completion.await.expect("task completion"),
+            Ok(crate::session_loop::RuntimeSessionTaskOutcome::Completed)
+        );
+        registry.shutdown("session-tool").await.expect("shutdown");
     }
 
     #[tokio::test]
     async fn scope_is_required_and_all_fields_are_checked() {
-        let state = Arc::new(ActionRequiredState::default());
-        let requester = Arc::clone(&state);
-        let task = tokio::spawn(async move {
-            requester
-                .request_and_wait(
-                    Some(scope("session-scope")),
-                    "Choose".to_string(),
-                    serde_json::json!({ "type": "string" }),
-                    Duration::from_secs(1),
-                )
-                .await
-        });
-        tokio::task::yield_now().await;
-        let request_id = state.pending_action_descriptors().await[0]
-            .request_id
-            .clone();
+        let state = ActionRequiredState::default();
+        let request_id = "scope-live".to_string();
         let expected = scope("session-scope");
+        let mut descriptor = restored_descriptor(&request_id);
+        descriptor.scope = Some(expected.clone());
+        state.entries.lock().await.pending.insert(
+            request_id.clone(),
+            PendingAction {
+                descriptor,
+                restored: false,
+            },
+        );
         let wrong_scopes = [
             None,
             Some(ActionRequiredScope {
@@ -985,67 +916,68 @@ mod tests {
             );
         }
         state
-            .submit_response(
-                &request_id,
-                Some(&expected),
-                serde_json::json!({ "answer": "yes" }),
-            )
+            .resolve_action(&request_id, Some(&expected))
             .await
             .expect("matching scope");
-        task.await.expect("request task").expect("response");
     }
 
     #[tokio::test]
-    async fn timeout_and_closed_receiver_become_terminal_without_fake_success() {
-        let timed_out = ActionRequiredState::default();
-        let timeout_result = timed_out
-            .request_and_wait(
-                Some(scope("session-timeout")),
-                "Wait".to_string(),
-                serde_json::json!({}),
+    async fn timeout_and_task_abort_become_terminal_without_fake_success() {
+        let timed_out = Arc::new(ActionRequiredState::default());
+        let (timeout_registry, _session, timeout_submission, timeout_id, timeout_result) =
+            start_live_request(
+                Arc::clone(&timed_out),
+                "session-timeout",
+                RuntimeSessionResponseKind::AskUser,
+                "ask_user",
                 Duration::from_millis(1),
             )
             .await;
-        assert!(timeout_result.is_err());
-        let timeout_id = timed_out
-            .entries
-            .lock()
+        assert!(timeout_result
             .await
-            .terminal
-            .keys()
-            .next()
-            .cloned()
-            .expect("timeout terminal id");
+            .expect("timeout result sender")
+            .is_err());
         assert_eq!(
             timed_out.terminal_status(&timeout_id).await,
             Some(ActionTerminalStatus::Expired)
         );
+        assert_eq!(
+            timeout_submission
+                .completion
+                .await
+                .expect("timeout task completion"),
+            Ok(crate::session_loop::RuntimeSessionTaskOutcome::Completed)
+        );
+        timeout_registry
+            .shutdown("session-timeout")
+            .await
+            .expect("timeout shutdown");
 
-        let closed = ActionRequiredState::default();
-        let request_id = "closed-receiver".to_string();
-        let (sender, receiver) = oneshot::channel();
-        drop(receiver);
-        closed.entries.lock().await.pending.insert(
-            request_id.clone(),
-            PendingAction {
-                response: Some(sender),
-                descriptor: restored_descriptor(&request_id),
-                restored: false,
-            },
+        let aborted = Arc::new(ActionRequiredState::default());
+        let (registry, session, submission, request_id, result_rx) = start_live_request(
+            Arc::clone(&aborted),
+            "session-aborted",
+            RuntimeSessionResponseKind::AskUser,
+            "ask_user",
+            Duration::from_secs(1),
+        )
+        .await;
+        assert!(session.interrupt().await.expect("interrupt live task"));
+        aborted.cancel_for_scope(&scope("session-aborted")).await;
+        result_rx
+            .await
+            .expect_err("aborted task must close the response waiter");
+        assert_eq!(
+            submission.completion.await.expect("aborted completion"),
+            Ok(crate::session_loop::RuntimeSessionTaskOutcome::Interrupted)
         );
         assert_eq!(
-            closed
-                .submit_response(
-                    &request_id,
-                    Some(&scope("session-1")),
-                    serde_json::json!({ "confirmed": true }),
-                )
-                .await,
-            Err(ActionRequiredError::ContinuationClosed(request_id.clone()))
+            aborted.terminal_status(&request_id).await,
+            Some(ActionTerminalStatus::Canceled)
         );
-        assert_eq!(
-            closed.terminal_status(&request_id).await,
-            Some(ActionTerminalStatus::ContinuationClosed)
-        );
+        registry
+            .shutdown("session-aborted")
+            .await
+            .expect("aborted shutdown");
     }
 }

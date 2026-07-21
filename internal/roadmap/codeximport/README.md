@@ -1,8 +1,8 @@
 ---
 title: Codex 对话兼容与导入路线图
-status: active
+status: ready-for-gate
 owner: app-server-runtime
-updated: 2026-07-17
+updated: 2026-07-21
 ---
 
 # Codex 对话兼容与导入
@@ -62,7 +62,7 @@ next user turn
 | source discovery、只读安全校验、provenance                                      | current | 保留并收敛到 source adapter                                                                        |
 | `ImportedRuntimeEvent` / `commit_events/tool_lowering`                          | dead    | 已删除；禁止先造 imported product wire 再二次 lowering                                             |
 | `conversationImport/thread/runtimeEvents/read` sidecar 下钻                     | dead    | 已删除；旧 method 只允许负向 guard                                                                 |
-| terminal 历史里的 operational command/tool/approval 展开入口                     | dead    | 删除；历史只投影 final、附件、文件产物/变更与处理时长，canonical item 仍由 read model 保留          |
+| terminal 历史里的 operational command/tool/approval 展开入口                    | dead    | 删除；历史只投影 final、附件、文件产物/变更与处理时长，canonical item 仍由 read model 保留         |
 | `smoke:codex-import-content-studio` 真实数据脚本                                | dead    | 已删除；由 Rust corpus、点击导入 Gate B 与有界真实样本审计承接                                     |
 | Claude Code importer 占位与 unsupported 分支                                    | dead    | 当前无需求，不保留扩展壳                                                                           |
 
@@ -132,7 +132,7 @@ next user turn
 4. 历史工具零重放，source 目录零写入，生产零 mock fallback。
 5. current / deprecated / dead 守卫、架构确认、定向测试和 Gate B evidence 齐全。
 
-当前实现已满足 1-4 与验证门禁；第 5 项仍等待责任开发者填写架构确认，计划保持 `active`，不进入 release evidence。Windows 真实 Electron 路径证据仍需在 Windows runner 补齐，本机只完成跨平台路径定向测试。
+当前实现已满足 1-4 与验证门禁；第 5 项的架构确认已由 `root` 于 2026-07-21 写入执行计划，路线图进入 `ready-for-gate`。Windows 真实 Electron 路径证据仍需在 Windows runner 补齐，本机只完成跨平台路径定向测试，不把该平台缺口标为完成。
 
 执行进度见 [implementation-tracker.md](implementation-tracker.md)，产品边界见
 [prd.md](prd.md)，验收矩阵见 [fidelity-acceptance-matrix.md](fidelity-acceptance-matrix.md)。

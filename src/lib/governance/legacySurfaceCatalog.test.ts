@@ -59,6 +59,217 @@ describe("legacySurfaceCatalog", () => {
     expect("legacyHelperSurfaceMonitors" in agentCommandCatalog).toBe(false);
   });
 
+  it("应阻止第一批已删除前端空壳和重复 UI surface 回流", () => {
+    const expectedTargetsById = {
+      "frontend-image-search-retired-facade-surface": [
+        "src/lib/api/imageSearch.ts",
+        "src/lib/api/imageSearch.test.ts",
+        "src/lib/api/imageSearch.diagnostic.test.ts",
+      ],
+      "frontend-open-url-redundant-helper-surface": [
+        "src/lib/openUrl.ts",
+        "src/lib/openUrl.test.ts",
+      ],
+      "sceneapp-context-layer-directory-surface": [
+        "src/lib/context-layer/index.ts",
+        "src/lib/context-layer/types.ts",
+      ],
+      "compact-right-panel-legacy-shell-surface": [
+        "src/lib/compactRightPanelEvents.ts",
+        "src/components/ui/compact-right-dock-button.tsx",
+        "src/components/ui/compact-right-drawer-header.tsx",
+      ],
+      "agent-chat-generic-artifact-frame-shell-surface": [
+        "src/components/agent/chat/components/ArtifactFrame.tsx",
+      ],
+    } as const;
+
+    for (const [id, targets] of Object.entries(expectedTargetsById)) {
+      const monitor = legacySurfaceCatalogJson.imports.find(
+        (entry) => entry.id === id,
+      );
+
+      expect(monitor).toBeTruthy();
+      expect(monitor?.classification).toBe("dead");
+      expect(monitor?.allowedPaths).toEqual([]);
+      expect(monitor?.targets).toEqual(targets);
+    }
+  });
+
+  it("应阻止第二批 parser、静态 Provider、Voice 与 Relay surface 回流", () => {
+    const expectedTargetsById = {
+      "artifact-fenced-response-parser-surface": [
+        "src/lib/artifact/parser.ts",
+        "src/lib/artifact/parser.test.ts",
+      ],
+      "static-system-provider-config-surface": [
+        "src/lib/config/README.md",
+        "src/lib/config/providers.ts",
+        "src/lib/config/providers.test.ts",
+      ],
+      "voice-unused-preview-device-ui-surface": [
+        "src/lib/voiceLivePreview.ts",
+        "src/lib/voiceLivePreview.test.ts",
+        "src/components/voice/MicrophoneTest.tsx",
+        "src/components/voice/VolumeWaveform.tsx",
+      ],
+      "connect-relay-registry-disabled-hook-surface": [
+        "src/hooks/useRelayRegistry.ts",
+      ],
+    } as const;
+
+    for (const [id, targets] of Object.entries(expectedTargetsById)) {
+      const monitor = legacySurfaceCatalogJson.imports.find(
+        (entry) => entry.id === id,
+      );
+
+      expect(monitor).toBeTruthy();
+      expect(monitor?.classification).toBe("dead");
+      expect(monitor?.allowedPaths).toEqual([]);
+      expect(monitor?.targets).toEqual(targets);
+    }
+
+    const audioDeviceMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "voice-audio-device-list-helper-surface",
+    );
+    expect(audioDeviceMonitor?.classification).toBe("dead");
+    expect(audioDeviceMonitor?.includePathPrefixes).toEqual([
+      "src/lib/api/asrProvider.ts",
+    ]);
+    expect(audioDeviceMonitor?.patterns).toEqual(
+      expect.arrayContaining(["listAudioDevices", "AudioDeviceInfo"]),
+    );
+
+    const relayCopyMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "connect-relay-registry-legacy-patch-copy",
+    );
+    expect(relayCopyMonitor?.classification).toBe("dead");
+    expect(relayCopyMonitor?.includePathPrefixes).toEqual([
+      "src/i18n/legacy-patch",
+    ]);
+    expect(relayCopyMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "hooks\\\\useRelayRegistry.ts",
+        "加载中转商列表失败",
+      ]),
+    );
+  });
+
+  it("应阻止第三批 Hotkeys 页面、Shortcut 编辑器与 Renderer facade 回流", () => {
+    const expectedTargetsById = {
+      "settings-hotkeys-retired-page-surface": [
+        "src/components/settings-v2/general/hotkeys/index.tsx",
+        "src/components/settings-v2/general/hotkeys/index.test.tsx",
+        "src/components/settings-v2/general/hotkeys/hotkeyCatalog.ts",
+        "src/components/settings-v2/general/hotkeys/hotkeyCatalog.test.ts",
+      ],
+      "settings-shortcut-editor-retired-surface": [
+        "src/components/settings-v2/shared/ShortcutSettings.tsx",
+        "src/components/settings-v2/shared/ShortcutSettings.test.tsx",
+      ],
+      "renderer-hotkey-voice-shortcut-facade-surface": [
+        "src/lib/api/hotkeys.ts",
+        "src/lib/api/hotkeys.test.ts",
+        "src/lib/api/voiceShortcutEvents.ts",
+        "src/lib/api/voiceShortcutEvents.test.ts",
+      ],
+    } as const;
+
+    for (const [id, targets] of Object.entries(expectedTargetsById)) {
+      const monitor = legacySurfaceCatalogJson.imports.find(
+        (entry) => entry.id === id,
+      );
+
+      expect(monitor).toBeTruthy();
+      expect(monitor?.classification).toBe("dead");
+      expect(monitor?.allowedPaths).toEqual([]);
+      expect(monitor?.targets).toEqual(targets);
+    }
+
+    const commandMonitor = legacySurfaceCatalogJson.commands.find(
+      (entry) => entry.id === "voice-shortcut-retired-host-commands",
+    );
+    expect(commandMonitor?.classification).toBe("dead");
+    expect(commandMonitor?.commands).toEqual([
+      "get_voice_shortcut_runtime_status",
+      "validate_shortcut",
+    ]);
+    expect(commandMonitor?.allowedPaths).toEqual([
+      "src/lib/desktop-host/voiceMocks.test.ts",
+      "src/lib/desktop-host/core.unhandled-mock.test.ts",
+    ]);
+  });
+
+  it("应阻止第四批 Agent UI 与 article orchestration dead surface 回流", () => {
+    const expectedTargetsById = {
+      "agent-ui-subagents-view-model-surface": [
+        "src/components/agent/chat/projection/agentUiSubagentsViewModel.ts",
+        "src/components/agent/chat/projection/agentUiSubagentsViewModel.test.ts",
+      ],
+      "workspace-article-workflow-read-model-surface": [
+        "src/components/agent/chat/workspace/useWorkspaceArticleWorkflowReadModel.ts",
+        "src/components/agent/chat/workspace/useWorkspaceArticleWorkflowReadModel.test.tsx",
+      ],
+      "workspace-article-editor-orchestration-model-surface": [
+        "src/components/agent/chat/workspace/workspaceArticleEditorOrchestrationModel.ts",
+        "src/components/agent/chat/workspace/workspaceArticleEditorOrchestrationModel.unit.test.ts",
+      ],
+    } as const;
+
+    for (const [id, targets] of Object.entries(expectedTargetsById)) {
+      const monitor = legacySurfaceCatalogJson.imports.find(
+        (entry) => entry.id === id,
+      );
+
+      expect(monitor).toBeTruthy();
+      expect(monitor?.classification).toBe("dead");
+      expect(monitor?.allowedPaths).toEqual([]);
+      expect(monitor?.targets).toEqual(targets);
+    }
+  });
+
+  it("应阻止 Plugin HostDrawer 本地 fallback 模块回流", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "plugin-host-drawer-fallback-module-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/features/plugin/ui/AgentRunHostDrawerFallback.tsx",
+    ]);
+  });
+
+  it("应阻止 Rust runtime queue 与旧 registry surface 回流", () => {
+    const expectedTargetsById = {
+      "rust-runtime-queue-legacy-surface": [
+        "lime-rs/crates/agent-runtime/src/runtime_queue.rs",
+        "lime-rs/crates/agent-runtime/src/runtime_queue/in_memory.rs",
+        "lime-rs/crates/agent-runtime/src/runtime_queue/sqlite.rs",
+      ],
+      "rust-agent-queue-legacy-surface": [
+        "lime-rs/crates/agent/src/queued_turn.rs",
+        "lime-rs/crates/agent/src/runtime_queue.rs",
+        "lime-rs/crates/agent/src/runtime_support.rs",
+      ],
+      "rust-app-server-agent-runtime-registry-legacy-surface": [
+        "lime-rs/crates/app-server/src/agent_runtime_registry.rs",
+      ],
+    } as const;
+
+    for (const [id, targets] of Object.entries(expectedTargetsById)) {
+      const monitor = legacySurfaceCatalogJson.imports.find(
+        (entry) => entry.id === id,
+      );
+
+      expect(monitor).toBeTruthy();
+      expect(monitor?.classification).toBe("dead");
+      expect(monitor?.allowedPaths).toEqual([]);
+      expect(monitor?.targets).toEqual(targets);
+    }
+  });
+
   it("应阻止已删除的默认 Playwright MCP seed 回流", () => {
     const monitor = legacySurfaceCatalogJson.rustText.find(
       (entry) => entry.id === "rust-retired-default-playwright-mcp-seed",
@@ -787,7 +998,7 @@ describe("legacySurfaceCatalog", () => {
     );
 
     expect(monitor).toBeTruthy();
-    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.classification).toBe("dead");
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.targets).toEqual([
       "src/components/voice/AddAsrCredentialModal.tsx",
@@ -1931,6 +2142,20 @@ describe("legacySurfaceCatalog", () => {
     expect(frontendMonitor?.patterns).toEqual(
       expect.arrayContaining(["@/components/provider-pool/api-key"]),
     );
+  });
+
+  it("应阻止 Provider 导出文件名恢复旧品牌前缀", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "frontend-provider-export-retired-brand-filename",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.patterns).toEqual(["lime-providers-"]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/components/api-key-provider",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
   });
 
   it("应记录已删除的 settings-v2 执行轨迹独立页面壳", () => {
@@ -3396,7 +3621,6 @@ describe("legacySurfaceCatalog", () => {
       "src/components/agent/chat/hooks/agentChatStorage.test.ts",
       "src/components/agent/chat/hooks/agentSessionTopicViewModel.unit.test.ts",
       "src/components/agent/chat/utils/sessionExecutionRuntime.test.ts",
-      "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts",
     ]);
     expect(monitor?.patterns).toEqual([
       'execution_strategy: "code_orchestrated"',
@@ -3443,9 +3667,7 @@ describe("legacySurfaceCatalog", () => {
 
     expect(monitor).toBeTruthy();
     expect(monitor?.classification).toBe("dead");
-    expect(monitor?.includePathPrefixes).toEqual([
-      "lime-rs/crates/agent/src",
-    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates/agent/src"]);
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.patterns).toEqual(
       expect.arrayContaining([
@@ -3462,9 +3684,7 @@ describe("legacySurfaceCatalog", () => {
 
     expect(monitor).toBeTruthy();
     expect(monitor?.classification).toBe("dead");
-    expect(monitor?.includePathPrefixes).toEqual([
-      "lime-rs/crates/agent/src",
-    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates/agent/src"]);
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.patterns).toEqual(
       expect.arrayContaining([
@@ -3563,9 +3783,7 @@ describe("legacySurfaceCatalog", () => {
 
     expect(monitor).toBeTruthy();
     expect(monitor?.classification).toBe("dead");
-    expect(monitor?.includePathPrefixes).toEqual([
-      "lime-rs/crates/agent/src",
-    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates/agent/src"]);
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.patterns).toEqual(
       expect.arrayContaining([
@@ -3585,9 +3803,7 @@ describe("legacySurfaceCatalog", () => {
 
     expect(monitor).toBeTruthy();
     expect(monitor?.classification).toBe("dead");
-    expect(monitor?.includePathPrefixes).toEqual([
-      "lime-rs/crates/agent/src",
-    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates/agent/src"]);
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.patterns).toEqual(
       expect.arrayContaining([
@@ -3750,9 +3966,7 @@ describe("legacySurfaceCatalog", () => {
 
     expect(monitor).toBeTruthy();
     expect(monitor?.classification).toBe("dead");
-    expect(monitor?.includePathPrefixes).toEqual([
-      "lime-rs/crates/agent/src",
-    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates/agent/src"]);
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.patterns).toEqual(
       expect.arrayContaining([

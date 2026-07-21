@@ -454,7 +454,7 @@ function validateSnapshot(
   return issues;
 }
 
-export function extractCodexReviewStartItemSnapshot(
+export function extractReviewStartItemSnapshot(
   input: AgentUiReviewStartItemInput,
 ): AgentUiReviewStartSnapshot {
   const response = responseRecord(input);
@@ -523,11 +523,11 @@ function phase(snapshot: AgentUiReviewStartSnapshot): AgentUiPhase {
   return snapshot.exitedSeen ? "completed" : "reviewing";
 }
 
-export function buildCodexReviewStartItemProjectionEvent(
+export function buildReviewStartItemProjectionEvent(
   input: AgentUiReviewStartItemInput,
   context: AgentUiProjectionContext = {},
 ): AgentUiProjectionEvent {
-  const snapshot = extractCodexReviewStartItemSnapshot(input);
+  const snapshot = extractReviewStartItemSnapshot(input);
   const status = runtimeStatus(snapshot);
   const base = buildAgentUiProjectionBase(
     { sourceType: "review_start_item_projection" },

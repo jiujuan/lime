@@ -33,7 +33,6 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
       content: "继续生成一版提纲",
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       assistantMsgId: "assistant-1",
       userMsgId: "user-1",
       effectiveExecutionStrategy: "react",
@@ -81,7 +80,6 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
       content: "整理资料",
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       assistantMsgId: "assistant-soul",
       userMsgId: "user-soul",
       effectiveExecutionStrategy: "react",
@@ -115,7 +113,7 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
     });
   });
 
-  it("队列态应只注入 assistant draft，并保留自定义初始内容", () => {
+  it("跳过 user message 时只注入 assistant draft，并保留自定义初始内容", () => {
     let messages: Message[] = [];
     let isSending = false;
 
@@ -127,7 +125,6 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
       content: "   ",
       images: [],
       skipUserMessage: true,
-      expectingQueue: true,
       assistantMsgId: "assistant-2",
       userMsgId: null,
       assistantDraft: {
@@ -155,9 +152,11 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
       role: "assistant",
       content: "准备执行中",
     });
-    expect(assistantMsg.runtimeStatus?.title).toBe("已加入排队列表");
-    expect(assistantMsg.runtimeStatus?.detail).toContain("空白输入");
-    expect(isSending).toBe(false);
+    expect(assistantMsg.runtimeStatus?.title).toBe("正在启动处理流程");
+    expect(assistantMsg.runtimeStatus?.detail).toBe(
+      "已开始处理，正在准备环境并等待第一条进展。",
+    );
+    expect(isSending).toBe(true);
   });
 
   it("displayContent 应只影响用户可见文案，不影响底层执行内容", () => {
@@ -174,7 +173,6 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
       },
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       assistantMsgId: "assistant-3",
       userMsgId: "user-3",
       effectiveExecutionStrategy: "react",
@@ -212,7 +210,6 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
       content: "@Nanobanana Pro 生成广州塔春天照片",
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       assistantMsgId: "assistant-image",
       userMsgId: "user-image",
       assistantDraft: {
@@ -269,7 +266,6 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
       content: "只回答一个字：好",
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       assistantMsgId: "assistant-4",
       userMsgId: "user-4",
       assistantDraft: {

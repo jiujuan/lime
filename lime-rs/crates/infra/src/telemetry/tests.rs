@@ -10,6 +10,7 @@ use chrono::{Duration, Utc};
 use lime_core::ProviderType;
 use proptest::prelude::*;
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 /// 生成随机的 ProviderType
 fn arb_provider_type() -> impl Strategy<Value = ProviderType> {
@@ -112,7 +113,11 @@ fn create_test_logger() -> RequestLogger {
         max_file_size: 10 * 1024 * 1024,
         enable_file_logging: false, // 测试时禁用文件日志
     };
-    RequestLogger::new(config).expect("Failed to create test logger")
+    RequestLogger::new(
+        std::env::temp_dir().join("lime-request-logger-tests"),
+        config,
+    )
+    .expect("Failed to create test logger")
 }
 
 fn create_test_telemetry_store(temp_dir: &std::path::Path) -> TelemetryStore {
@@ -349,7 +354,11 @@ proptest! {
             max_file_size: 10 * 1024 * 1024,
             enable_file_logging: false,
         };
-        let logger = RequestLogger::new(config).expect("Failed to create logger");
+        let logger = RequestLogger::new(
+            std::env::temp_dir().join("lime-request-logger-tests"),
+            config,
+        )
+        .expect("Failed to create logger");
 
         // 生成并记录日志
         let mut all_ids: Vec<String> = Vec::new();
@@ -450,6 +459,16 @@ fn test_logger_clear() {
 }
 
 #[test]
+fn request_logger_rejects_missing_explicit_log_root() {
+    let error = match RequestLogger::new(PathBuf::new(), LogRotationConfig::default()) {
+        Ok(_) => panic!("missing log root must fail closed"),
+        Err(error) => error,
+    };
+
+    assert!(error.to_string().contains("显式日志目录"));
+}
+
+#[test]
 fn test_logger_dual_writes_telemetry_store() {
     let temp = tempfile::tempdir().expect("tempdir");
     let telemetry_store = create_test_telemetry_store(temp.path());
@@ -459,8 +478,12 @@ fn test_logger_dual_writes_telemetry_store() {
         max_file_size: 10 * 1024 * 1024,
         enable_file_logging: false,
     };
-    let logger = RequestLogger::new_with_telemetry_store(config, Some(telemetry_store.clone()))
-        .expect("logger");
+    let logger = RequestLogger::new_with_telemetry_store(
+        temp.path().join("request-logs"),
+        config,
+        Some(telemetry_store.clone()),
+    )
+    .expect("logger");
     let mut log = RequestLog::new(
         "telemetry-dual-write".to_string(),
         ProviderType::OpenAI,

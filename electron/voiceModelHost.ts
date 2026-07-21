@@ -47,14 +47,11 @@ const VOICE_MODEL_MANIFEST_FILE = "lime-model.json";
 const VOICE_MODEL_DOWNLOAD_PROGRESS_EVENT = "voice-model-download-progress";
 
 export class VoiceModelHost {
-  readonly #userDataDir: string;
+  readonly #appDataRoot: string;
   readonly #emit: HostEventEmitter;
 
-  constructor(
-    userDataDir: string,
-    emit: HostEventEmitter = () => undefined,
-  ) {
-    this.#userDataDir = userDataDir;
+  constructor(appDataRoot: string, emit: HostEventEmitter = () => undefined) {
+    this.#appDataRoot = appDataRoot;
     this.#emit = emit;
   }
 
@@ -303,11 +300,11 @@ export class VoiceModelHost {
   }
 
   #installDir(modelId: string): string {
-    return path.join(this.#userDataDir, "models", "voice", modelId);
+    return path.join(this.#appDataRoot, "models", "voice", modelId);
   }
 
   #downloadsDir(): string {
-    return path.join(this.#userDataDir, "models", "voice", ".downloads");
+    return path.join(this.#appDataRoot, "models", "voice", ".downloads");
   }
 }
 

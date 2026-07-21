@@ -25,7 +25,7 @@ describe("sidebar sessions current smoke guard", () => {
       "summary.seededWorkspaceFilterRequestCount === 0",
     );
     expect(content).toContain(
-      "观察到本地记忆项目污染 agentSession/list workspaceId",
+      "观察到本地记忆项目污染 thread/list workspaceId",
     );
     expect(content).toContain("summarizeInvokeEntries(invokeEntries, options)");
   });
@@ -34,7 +34,7 @@ describe("sidebar sessions current smoke guard", () => {
     const content = readSmokeScript();
 
     expect(content).toContain(
-      'const REQUIRED_APP_SERVER_METHODS = ["agentSession/list"]',
+      'const REQUIRED_APP_SERVER_METHODS = ["thread/list"]',
     );
     expect(content).toContain(
       'const LEGACY_SESSION_COMMANDS = ["agent_runtime_list_sessions"]',

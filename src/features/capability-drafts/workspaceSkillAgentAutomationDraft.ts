@@ -168,7 +168,7 @@ export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
           `按计划运行 Workspace Skill「${displayName}」，交付可审计结果。`,
         success_criteria: [
           copy?.successCriteriaSubmitTurn ??
-            "必须通过 agentSession/turn/start current JSON-RPC 执行",
+            "必须通过 turn/start current JSON-RPC 执行",
           copy?.successCriteriaRuntimeEnable ??
             "必须由 workspace_skill_runtime_enable 在本次运行 session 内显式授权",
           copy?.successCriteriaEvidence ??

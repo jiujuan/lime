@@ -229,7 +229,7 @@ test("projects empty workbench task as idle task surface", () => {
   assert.deepEqual(view.checkpoints.map((checkpoint) => checkpoint.state), ["idle", "idle", "idle", "idle"]);
 });
 
-test("builds a lime.agent turn payload with capability policy", () => {
+test("builds a turn/start payload with capability policy", () => {
   const payload = buildAgentTurnStartPayload({
     pluginId: "content-studio",
     workspacePath: "/tmp/workspace",

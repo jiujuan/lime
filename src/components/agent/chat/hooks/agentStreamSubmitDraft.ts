@@ -4,10 +4,7 @@ import type { Message, MessageImage } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
-import {
-  buildDiagnosticsRuntimeStatusMetadata,
-  buildInitialAgentRuntimeStatus,
-} from "../utils/agentRuntimeStatus";
+import { buildInitialAgentRuntimeStatus } from "../utils/agentRuntimeStatus";
 import {
   extractAgentUiPerformanceTraceMetadata,
   recordAgentStreamPerformanceMetric,
@@ -17,39 +14,11 @@ import {
   shouldRetainSkillInlineProcessFromMetadata,
 } from "../utils/skillInlineProcessRetention";
 
-export function buildQueuedMessagePreview(content: string): string {
-  const compact = content.split(/\s+/).filter(Boolean).join(" ");
-  if (!compact) {
-    return "空白输入";
-  }
-
-  const preview = Array.from(compact).slice(0, 80).join("");
-  return compact.length > preview.length ? `${preview}...` : preview;
-}
-
-export function buildQueuedRuntimeStatus(
-  executionStrategy: AgentExecutionStrategy,
-  content: string,
-) {
-  return {
-    phase: "routing" as const,
-    title: "已加入排队列表",
-    detail: `当前会话仍在执行中，本条消息会在前一条完成后自动开始。待处理内容：${buildQueuedMessagePreview(content)}`,
-    checkpoints: [
-      "已创建待处理阶段",
-      "工具由模型按需判断",
-      "对话执行待命",
-    ],
-    metadata: buildDiagnosticsRuntimeStatusMetadata(),
-  };
-}
-
 interface PrepareAgentStreamSubmitDraftOptions {
   content: string;
   displayContent?: string;
   images: MessageImage[];
   skipUserMessage: boolean;
-  expectingQueue: boolean;
   assistantMsgId: string;
   userMsgId: string | null;
   assistantDraft?: AssistantDraftState;
@@ -70,7 +39,6 @@ export function prepareAgentStreamSubmitDraft(
     displayContent,
     images,
     skipUserMessage,
-    expectingQueue,
     assistantMsgId,
     userMsgId,
     assistantDraft,
@@ -90,17 +58,13 @@ export function prepareAgentStreamSubmitDraft(
     timestamp: new Date(),
     isThinking: true,
     contentParts: [],
-    runtimeStatus: expectingQueue
-      ? buildQueuedRuntimeStatus(
-          effectiveExecutionStrategy,
-          displayContent ?? content,
-        )
-      : assistantDraft?.initialRuntimeStatus ||
-        buildInitialAgentRuntimeStatus({
-          executionStrategy: effectiveExecutionStrategy,
-          skipUserMessage,
-          soulCopy,
-        }),
+    runtimeStatus:
+      assistantDraft?.initialRuntimeStatus ||
+      buildInitialAgentRuntimeStatus({
+        executionStrategy: effectiveExecutionStrategy,
+        skipUserMessage,
+        soulCopy,
+      }),
     purpose: messagePurpose,
     imageWorkbenchPreview: assistantDraft?.imageWorkbenchPreview,
     inlineProcessRetention: shouldRetainSkillInlineProcessFromMetadata(
@@ -136,7 +100,6 @@ export function prepareAgentStreamSubmitDraft(
       performanceTrace,
       {
         assistantContentLength: assistantMsg.content.trim().length,
-        expectingQueue,
         hasAssistantDraftContent: Boolean(assistantMsg.content.trim()),
         phase: assistantMsg.runtimeStatus?.phase ?? null,
         statusTitle: assistantMsg.runtimeStatus?.title ?? null,
@@ -148,7 +111,6 @@ export function prepareAgentStreamSubmitDraft(
         performanceTrace,
         {
           assistantContentLength: assistantMsg.content.trim().length,
-          expectingQueue,
           hasAssistantDraftContent: Boolean(assistantMsg.content.trim()),
           phase: assistantMsg.runtimeStatus?.phase ?? null,
           statusTitle: assistantMsg.runtimeStatus?.title ?? null,
@@ -168,9 +130,7 @@ export function prepareAgentStreamSubmitDraft(
     }
   }
 
-  if (!expectingQueue) {
-    setIsSending(true);
-  }
+  setIsSending(true);
 
   return {
     assistantMsg,

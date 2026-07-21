@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type {
   ActionRequired,
@@ -66,13 +65,10 @@ interface AgentThreadReliabilityPanelProps {
   currentTurnId?: string | null;
   pendingActions?: ActionRequired[];
   submittedActionsInFlight?: ActionRequired[];
-  queuedTurns?: QueuedTurnSnapshot[];
   canInterrupt?: boolean;
   onInterruptCurrentTurn?: () => void | Promise<void>;
-  onResumeThread?: () => boolean | Promise<boolean>;
   onReplayPendingRequest?: (requestId: string) => boolean | Promise<boolean>;
   onLocatePendingRequest?: (requestId: string) => void;
-  onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
   onManageProviders?: (context?: ProviderSettingsFocusContext) => void;
   onOpenExecutionPolicySettings?: (
     context?: ExecutionPolicyFocusContext,
@@ -111,13 +107,10 @@ export const AgentThreadReliabilityPanel: React.FC<
   currentTurnId = null,
   pendingActions = [],
   submittedActionsInFlight = [],
-  queuedTurns = [],
   canInterrupt = false,
   onInterruptCurrentTurn,
-  onResumeThread,
   onReplayPendingRequest,
   onLocatePendingRequest,
-  onPromoteQueuedTurn,
   onManageProviders,
   onOpenExecutionPolicySettings,
   className,
@@ -293,9 +286,7 @@ export const AgentThreadReliabilityPanel: React.FC<
     [agentT],
   );
   const [isInterrupting, setIsInterrupting] = useState(false);
-  const [isResumingThread, setIsResumingThread] = useState(false);
   const [isReplayingRequest, setIsReplayingRequest] = useState(false);
-  const [isPromotingQueuedTurn, setIsPromotingQueuedTurn] = useState(false);
   const [fileCheckpointDialogOpen, setFileCheckpointDialogOpen] =
     useState(false);
   const view = useMemo(
@@ -307,7 +298,6 @@ export const AgentThreadReliabilityPanel: React.FC<
         currentTurnId,
         pendingActions,
         submittedActionsInFlight,
-        queuedTurns,
         t: translateProjection,
         locale,
       }),
@@ -315,7 +305,6 @@ export const AgentThreadReliabilityPanel: React.FC<
       currentTurnId,
       locale,
       pendingActions,
-      queuedTurns,
       submittedActionsInFlight,
       threadItems,
       threadRead,
@@ -393,20 +382,6 @@ export const AgentThreadReliabilityPanel: React.FC<
     onLocatePendingRequest(requestId);
   };
 
-  const handlePromoteQueuedTurn = async () => {
-    const queuedTurnId = view.nextQueuedTurn?.id;
-    if (!queuedTurnId || !onPromoteQueuedTurn || isPromotingQueuedTurn) {
-      return;
-    }
-
-    setIsPromotingQueuedTurn(true);
-    try {
-      await onPromoteQueuedTurn(queuedTurnId);
-    } finally {
-      setIsPromotingQueuedTurn(false);
-    }
-  };
-
   const handleReplayPendingRequest = async () => {
     const requestId = view.pendingRequests[0]?.id;
     if (!requestId || !onReplayPendingRequest || isReplayingRequest) {
@@ -418,19 +393,6 @@ export const AgentThreadReliabilityPanel: React.FC<
       await onReplayPendingRequest(requestId);
     } finally {
       setIsReplayingRequest(false);
-    }
-  };
-
-  const handleResumeThread = async () => {
-    if (!onResumeThread || isResumingThread) {
-      return;
-    }
-
-    setIsResumingThread(true);
-    try {
-      await onResumeThread();
-    } finally {
-      setIsResumingThread(false);
     }
   };
 
@@ -484,7 +446,6 @@ export const AgentThreadReliabilityPanel: React.FC<
             currentTurnId,
             pendingActions,
             submittedActionsInFlight,
-            queuedTurns,
             view,
             harnessState,
             messages,
@@ -536,8 +497,6 @@ export const AgentThreadReliabilityPanel: React.FC<
         activeIncidentsLabel={text("stats.activeIncidents")}
         pendingRequestCount={view.pendingRequestCount}
         pendingRequestsLabel={text("stats.pendingRequests")}
-        queuedTurnCount={view.queuedTurnCount}
-        queuedTurnsLabel={text("stats.queuedTurns")}
       />
 
       <AgentThreadRoutingEvidenceCard
@@ -575,9 +534,7 @@ export const AgentThreadReliabilityPanel: React.FC<
 
       {(canInterrupt && onInterruptCurrentTurn) ||
       (view.pendingRequests.length > 0 && onReplayPendingRequest) ||
-      (view.nextQueuedTurn && onResumeThread) ||
       (view.pendingRequests.length > 0 && onLocatePendingRequest) ||
-      (view.nextQueuedTurn && onPromoteQueuedTurn) ||
       view.recommendations.length > 0 ? (
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
           <div className="text-sm font-medium text-foreground">
@@ -590,12 +547,7 @@ export const AgentThreadReliabilityPanel: React.FC<
                 variant="outline"
                 size="sm"
                 onClick={() => void handleInterrupt()}
-                disabled={
-                  isInterrupting ||
-                  isResumingThread ||
-                  isReplayingRequest ||
-                  isPromotingQueuedTurn
-                }
+                disabled={isInterrupting || isReplayingRequest}
                 className="border-slate-300 bg-white"
               >
                 {isInterrupting ? (
@@ -615,12 +567,7 @@ export const AgentThreadReliabilityPanel: React.FC<
                 variant="outline"
                 size="sm"
                 onClick={() => void handleReplayPendingRequest()}
-                disabled={
-                  isInterrupting ||
-                  isResumingThread ||
-                  isReplayingRequest ||
-                  isPromotingQueuedTurn
-                }
+                disabled={isInterrupting || isReplayingRequest}
                 className="border-sky-300 bg-white text-sky-700 hover:bg-sky-50"
               >
                 {isReplayingRequest ? (
@@ -640,70 +587,11 @@ export const AgentThreadReliabilityPanel: React.FC<
                 variant="outline"
                 size="sm"
                 onClick={handleLocatePendingRequest}
-                disabled={
-                  isInterrupting ||
-                  isResumingThread ||
-                  isReplayingRequest ||
-                  isPromotingQueuedTurn
-                }
+                disabled={isInterrupting || isReplayingRequest}
                 className="border-amber-300 bg-white text-amber-700 hover:bg-amber-50"
               >
                 <Clock3 className="mr-2 h-4 w-4" />
                 {text("actions.locatePendingRequest")}
-              </Button>
-            ) : null}
-
-            {view.nextQueuedTurn && onResumeThread ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleResumeThread()}
-                disabled={
-                  isInterrupting ||
-                  isResumingThread ||
-                  isReplayingRequest ||
-                  isPromotingQueuedTurn
-                }
-                className="border-sky-300 bg-white text-sky-700 hover:bg-sky-50"
-              >
-                {isResumingThread ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <PlayCircle className="mr-2 h-4 w-4" />
-                )}
-                {isResumingThread
-                  ? text("actions.resuming")
-                  : text("actions.resumeThread")}
-              </Button>
-            ) : null}
-
-            {view.nextQueuedTurn && onPromoteQueuedTurn ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handlePromoteQueuedTurn()}
-                disabled={
-                  isInterrupting ||
-                  isResumingThread ||
-                  isReplayingRequest ||
-                  isPromotingQueuedTurn
-                }
-                className="border-sky-300 bg-white text-sky-700 hover:bg-sky-50"
-              >
-                {isPromotingQueuedTurn ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <PlayCircle className="mr-2 h-4 w-4" />
-                )}
-                {isPromotingQueuedTurn
-                  ? text("actions.resuming")
-                  : view.nextQueuedTurn.positionLabel
-                    ? text("actions.promoteQueuedWithPosition", {
-                        position: view.nextQueuedTurn.positionLabel,
-                      })
-                    : text("actions.promoteQueued")}
               </Button>
             ) : null}
           </div>

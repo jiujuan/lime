@@ -4,7 +4,6 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-use super::plugin_data_dir;
 use super::read_json_string;
 use super::safe_hash_path_segment;
 
@@ -32,11 +31,6 @@ struct SeededPluginDescriptorEntry {
     package_hash: String,
     manifest_hash: String,
     worker_entrypoint: Option<String>,
-}
-
-pub(crate) fn materialize_seeded_plugin_runtime_package(state: &Value) -> Result<(), String> {
-    let data_root = plugin_data_dir()?;
-    materialize_seeded_plugin_runtime_package_from_data_root(state, &data_root)
 }
 
 pub(crate) fn materialize_seeded_plugin_runtime_package_from_data_root(

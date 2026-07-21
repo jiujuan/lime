@@ -5,6 +5,7 @@ use super::session_list_scope::SessionListScope;
 use super::session_title;
 use super::status::resolve_agent_session_runtime_state;
 use super::*;
+use agent_protocol::AgentInput as UserInput;
 use app_server_protocol::*;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -88,7 +89,7 @@ fn first_user_message_from_stored_session(stored: &StoredSession) -> Option<Stri
             stored
                 .turn_inputs
                 .get(&turn.turn_id)
-                .and_then(session_title::first_user_message_from_agent_input)
+                .and_then(|input| session_title::first_user_message_from_agent_input(input))
         })
         .or_else(|| {
             stored
@@ -506,7 +507,6 @@ impl RuntimeCore {
                     AgentSessionUpdateParams {
                         session_id: normalized_session_id.clone(),
                         title: params.title.clone(),
-                        archived: params.archived,
                         provider_selector: params.provider_selector.clone(),
                         provider_name: params.provider_name.clone(),
                         model_name: params.model_name.clone(),
@@ -533,58 +533,6 @@ impl RuntimeCore {
         Err(RuntimeCoreError::SessionNotFound(normalized_session_id))
     }
 
-    pub async fn archive_many_agent_sessions(
-        &self,
-        params: AgentSessionArchiveManyParams,
-    ) -> Result<AgentSessionArchiveManyResponse, RuntimeCoreError> {
-        let mut seen = HashSet::new();
-        let mut normalized_session_ids = Vec::new();
-        for session_id in params.session_ids {
-            let normalized = session_id.trim().to_string();
-            if normalized.is_empty() || !seen.insert(normalized.clone()) {
-                continue;
-            }
-            normalized_session_ids.push(normalized);
-        }
-
-        if normalized_session_ids.is_empty() {
-            return Ok(AgentSessionArchiveManyResponse::default());
-        }
-
-        let mut sessions = Vec::new();
-        let mut remaining_persisted_session_ids = Vec::new();
-        for session_id in normalized_session_ids {
-            match self.update_runtime_core_session_overview(
-                AgentSessionUpdateParams {
-                    session_id: session_id.clone(),
-                    archived: Some(true),
-                    ..AgentSessionUpdateParams::default()
-                },
-                &session_id,
-            )? {
-                Some(session) => sessions.push(session),
-                None => remaining_persisted_session_ids.push(session_id),
-            }
-        }
-
-        if !remaining_persisted_session_ids.is_empty() {
-            if let Some(projection_store) = self.projection_store.as_ref() {
-                let (response, _missing_session_ids) = projection_store
-                    .archive_many_sessions(
-                        AgentSessionArchiveManyParams {
-                            session_ids: remaining_persisted_session_ids,
-                        },
-                        timestamp().as_str(),
-                    )
-                    .map_err(RuntimeCoreError::Backend)?;
-                sessions.extend(response.sessions);
-            }
-        }
-
-        sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
-        Ok(AgentSessionArchiveManyResponse { sessions })
-    }
-
     pub async fn delete_agent_session(
         &self,
         params: AgentSessionDeleteParams,
@@ -600,6 +548,10 @@ impl RuntimeCore {
         // Thread projection. Preserve their deletion behavior while closing a
         // runtime only when a canonical owner can be resolved.
         if let Ok(thread_id) = self.resolve_session_thread_id_current(&session_id).await {
+            self.session_loops
+                .shutdown(&session_id)
+                .await
+                .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
             self.backend.close_session(&session_id, &thread_id).await?;
         }
 
@@ -675,11 +627,6 @@ impl RuntimeCore {
         }
         update_session_business_object_metadata(&mut stored.session, &params);
         stored.session.updated_at = timestamp();
-        if params.archived.unwrap_or(false) {
-            return Err(RuntimeCoreError::Backend(
-                "agentSession/update archived is only supported for persisted sessions".to_string(),
-            ));
-        }
         Ok(Some(stored_session_to_overview(stored)))
     }
 
@@ -782,7 +729,7 @@ impl RuntimeCore {
         session_id: &str,
         index: usize,
         turn: AgentTurn,
-        input: AgentInput,
+        input: Vec<UserInput>,
         runtime_options: Option<RuntimeOptions>,
     ) {
         let mut state = self

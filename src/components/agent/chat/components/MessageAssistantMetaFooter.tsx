@@ -1,4 +1,3 @@
-import React from "react";
 import { InputbarRuntimeStatusLine } from "./Inputbar/components/InputbarRuntimeStatusLine";
 import {
   TokenUsageDisplay,

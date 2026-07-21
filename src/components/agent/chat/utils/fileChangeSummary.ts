@@ -11,7 +11,11 @@
  * 与后端 `tools/file/diff_summary.rs` 的结构保持一致。
  */
 
-import type { AgentToolCallState } from "@/lib/api/agentProtocol";
+import type {
+  AgentThreadPatchApplyStatus,
+  AgentThreadPatchChange,
+  AgentToolCallState,
+} from "@/lib/api/agentProtocol";
 import { buildCanvasWorkbenchDiff } from "./canvasWorkbenchDiff";
 
 export type FileChangeKind = "add" | "update" | "delete";
@@ -26,6 +30,8 @@ export interface FileChangeDiffLine {
 
 export interface FileChangeSummary {
   path: string;
+  movePath?: string;
+  fileStatus?: AgentThreadPatchApplyStatus;
   kind: FileChangeKind;
   linesAdded: number;
   linesRemoved: number;
@@ -119,6 +125,60 @@ function countDiff(diff: FileChangeDiffLine[]): {
 }
 
 const MAX_DIFF_LINES = 400;
+
+function canonicalDiffLines(diff: string): FileChangeDiffLine[] {
+  return diff
+    .split("\n")
+    .filter((line) => line.length > 0 && !line.startsWith("@@"))
+    .map((line) => {
+      if (line.startsWith("+") && !line.startsWith("+++")) {
+        return { kind: "add" as const, value: line.slice(1) };
+      }
+      if (line.startsWith("-") && !line.startsWith("---")) {
+        return { kind: "remove" as const, value: line.slice(1) };
+      }
+      return {
+        kind: "context" as const,
+        value: line.startsWith(" ") ? line.slice(1) : line,
+      };
+    });
+}
+
+export function aggregateCanonicalPatchChanges(
+  changes: AgentThreadPatchChange[],
+  status: AgentToolCallState["status"],
+  fileStatus?: AgentThreadPatchApplyStatus,
+): FileChangesAggregate {
+  return aggregateFileChangeSummaries(
+    changes.flatMap((change) => {
+      const path = change.path.trim();
+      const kind = change.kind?.type;
+      if (!path || (kind !== "add" && kind !== "delete" && kind !== "update")) {
+        return [];
+      }
+      const fullDiff = canonicalDiffLines(change.diff);
+      const { added, removed } = countDiff(fullDiff);
+      const movePath =
+        kind === "update" && typeof change.kind.move_path === "string"
+          ? change.kind.move_path.trim()
+          : "";
+      return [
+        {
+          path,
+          ...(movePath ? { movePath } : {}),
+          ...(fileStatus ? { fileStatus } : {}),
+          kind,
+          linesAdded: added,
+          linesRemoved: removed,
+          diff: fullDiff.slice(0, MAX_DIFF_LINES),
+          truncated: fullDiff.length > MAX_DIFF_LINES,
+          source: "backend" as const,
+          status,
+        },
+      ];
+    }),
+  );
+}
 
 function normalizeBackendDiffLine(value: unknown): FileChangeDiffLine | null {
   if (!value || typeof value !== "object") {

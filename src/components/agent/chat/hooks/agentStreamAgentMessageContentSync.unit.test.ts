@@ -8,6 +8,100 @@ import {
 } from "./agentStreamAgentMessageContentSync";
 
 describe("agentStreamAgentMessageContentSync", () => {
+  it("同一 commentary item 的前缀快照应原位替换并保持在后续工具之前", () => {
+    const commentaryText =
+      "第一层已经露出几个可疑点：仓库根目录有 `.DS_Store`、`tsconfig.node.tsbuildinfo`，甚至还有 `lime.db`。先别急着给它们判刑——我继续核对是否被 Git 跟踪、是否有合理用途，再看真正的大头。";
+    const prefixItem: AgentThreadItem = {
+      id: "agent-message-commentary",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "agent_message",
+      status: "in_progress",
+      ordinal: 103,
+      sequence: 150,
+      text: commentaryText.slice(0, 42),
+      phase: "commentary",
+      started_at: "2026-07-18T12:15:54.122Z",
+      updated_at: "2026-07-18T12:15:58.000Z",
+    };
+    const completedItem: AgentThreadItem = {
+      ...prefixItem,
+      status: "completed",
+      sequence: 171,
+      text: commentaryText,
+      updated_at: "2026-07-18T12:16:01.150Z",
+      completed_at: "2026-07-18T12:16:01.150Z",
+    };
+    const toolItem: AgentThreadItem = {
+      id: "tool-read",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "tool_call",
+      tool_name: "Read",
+      arguments: { file_path: "README.md" },
+      status: "completed",
+      ordinal: 104,
+      sequence: 160,
+      started_at: "2026-07-18T12:15:59.000Z",
+      updated_at: "2026-07-18T12:16:00.000Z",
+      completed_at: "2026-07-18T12:16:00.000Z",
+    };
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-18T12:15:54.122Z"),
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-read",
+              name: "Read",
+              arguments: { file_path: "README.md" },
+              status: "completed",
+            },
+          },
+        ],
+      },
+    ];
+    const setMessages: Dispatch<SetStateAction<Message[]>> = vi.fn(
+      (value: SetStateAction<Message[]>) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+
+    syncAssistantAgentMessageContentPartFromThreadItem({
+      assistantMsgId: "assistant-1",
+      item: prefixItem,
+      threadItems: [prefixItem, toolItem],
+      setMessages,
+    });
+    syncAssistantAgentMessageContentPartFromThreadItem({
+      assistantMsgId: "assistant-1",
+      item: completedItem,
+      threadItems: [completedItem, toolItem],
+      setMessages,
+    });
+
+    expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "tool_use",
+    ]);
+    expect(
+      messages[0]?.contentParts?.filter((part) => part.type === "text"),
+    ).toEqual([
+      expect.objectContaining({
+        text: commentaryText,
+        metadata: expect.objectContaining({
+          itemId: "agent-message-commentary",
+          phase: "commentary",
+          sequence: 103,
+        }),
+      }),
+    ]);
+  });
+
   it("完成态合并 agent_message content part 时不应跨 runtime turn 串线", () => {
     const previousTurnItem: AgentThreadItem = {
       id: "agent-message-final-turn-old",
@@ -144,8 +238,7 @@ describe("agentStreamAgentMessageContentSync", () => {
     let nextMessages: Message[] | undefined;
     const setMessages: Dispatch<SetStateAction<Message[]>> = vi.fn(
       (value: SetStateAction<Message[]>) => {
-        nextMessages =
-          typeof value === "function" ? value(messages) : value;
+        nextMessages = typeof value === "function" ? value(messages) : value;
       },
     );
 
@@ -185,8 +278,7 @@ describe("agentStreamAgentMessageContentSync", () => {
     let nextMessages: Message[] | undefined;
     const setMessages: Dispatch<SetStateAction<Message[]>> = vi.fn(
       (value: SetStateAction<Message[]>) => {
-        nextMessages =
-          typeof value === "function" ? value(messages) : value;
+        nextMessages = typeof value === "function" ? value(messages) : value;
       },
     );
 

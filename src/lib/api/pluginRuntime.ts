@@ -143,6 +143,7 @@ export interface PluginRuntimeStartTaskRequest {
   entryKey?: string;
   workspaceId?: string;
   sessionId?: string;
+  threadId?: string;
   taskId?: string;
   taskKind: string;
   idempotencyKey?: string;

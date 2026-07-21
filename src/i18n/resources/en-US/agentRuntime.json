@@ -588,10 +588,7 @@
   "agentChat.threadReliability.panel.actions.replaying": "Replaying",
   "agentChat.threadReliability.panel.actions.replayRequest": "Replay request",
   "agentChat.threadReliability.panel.actions.locatePendingRequest": "Go to pending request",
-  "agentChat.threadReliability.panel.actions.resuming": "Resuming",
-  "agentChat.threadReliability.panel.actions.resumeThread": "Resume run",
-  "agentChat.threadReliability.panel.actions.promoteQueuedWithPosition": "Prioritize {{position}}",
-  "agentChat.threadReliability.panel.actions.promoteQueued": "Prioritize queued turn",
+  "agentChat.threadReliability.panel.actions.promotingQueued": "Promoting queued turn",
   "agentChat.threadReliability.panel.requests.title": "Request needing attention",
   "agentChat.threadReliability.panel.submitted.title": "Response submitted; waiting for thread to continue",
   "agentChat.threadReliability.panel.toast.clipboardUnsupported": "Clipboard copy is not supported in this environment",
@@ -835,7 +832,7 @@
   "agentChat.threadReliability.view.recommendation.failedIncident": "Handle high-priority incidents first",
   "agentChat.threadReliability.view.recommendation.approvalTimeout": "Approval has been waiting too long; handle it soon or stop this run",
   "agentChat.threadReliability.view.recommendation.userInputTimeout": "User input has been waiting too long; add input and continue the thread",
-  "agentChat.threadReliability.view.recommendation.turnStuck": "The current turn has stalled; stop it and resume execution",
+  "agentChat.threadReliability.view.recommendation.turnStuck": "The current turn has stalled; stop it and submit again",
   "agentChat.threadReliability.view.recommendation.providerError": "Provider failures are usually retryable; resume later or resend the turn",
   "agentChat.threadReliability.view.recommendation.toolFailed": "Check the failed tool's parameters or environment before retrying",
   "agentChat.threadReliability.view.recommendation.interrupting": "Stopping the current run; wait for runtime to refresh the final status",
@@ -1196,5 +1193,8 @@
   "agentChat.toolCall.actionOverride.runScript.running": "Running script",
   "agentChat.toolCall.actionOverride.getLog.failed": "Failed to get logs",
   "agentChat.toolCall.actionOverride.getLog.completed": "Logs fetched",
-  "agentChat.toolCall.actionOverride.getLog.running": "Fetching logs"
+  "agentChat.toolCall.actionOverride.getLog.running": "Fetching logs",
+  "agentChat.runtimeWarning.skillNotAvailable": "The selected Skill is not available.",
+  "agentChat.runtimeWarning.skillLoadFailed": "The selected Skill could not be loaded.",
+  "agentChat.runtimeWarning.mentionNotAvailable": "The selected Mention could not be resolved."
 }

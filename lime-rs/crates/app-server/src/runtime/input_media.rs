@@ -1,146 +1,93 @@
-use super::output_refs::SIDECAR_REF_FIELD;
 use super::sidecar_store::{
     session_scoped_relative_path, SidecarBytesWriteRequest, SidecarRef, SidecarStore,
 };
-use app_server_protocol::{AgentAttachment, AgentInput};
+use agent_runtime::reply_input::{RuntimeReplyInputImage, RuntimeReplyInputMedia};
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
+use std::path::Path;
 
 const MAX_INPUT_MEDIA_BYTES: usize = 32 * 1024 * 1024;
 
-pub(super) fn persist_inline_input_media(
-    input: &mut AgentInput,
+pub(super) fn resolve_runtime_input_media(
+    media: RuntimeReplyInputMedia,
     sidecar_store: Option<&SidecarStore>,
     session_id: &str,
-) -> Result<(), String> {
-    for attachment in &mut input.attachments {
-        let Some(source) = attachment.uri.as_deref().map(str::trim) else {
-            continue;
-        };
-        if !source.to_ascii_lowercase().starts_with("data:") {
-            continue;
+) -> Result<RuntimeReplyInputImage, String> {
+    match media {
+        RuntimeReplyInputMedia::Image { uri, detail } => {
+            let uri = uri.trim();
+            if uri.to_ascii_lowercase().starts_with("data:") {
+                let store = sidecar_store.ok_or_else(|| {
+                    "inline provider media requires an initialized App Server sidecar store"
+                        .to_string()
+                })?;
+                let (bytes, media_type) = decode_image_data_url(uri)?;
+                validate_image_bytes(&bytes, Some(&media_type))?;
+                let sidecar_ref = persist_image_bytes(&bytes, &media_type, store, session_id)?;
+                return Ok(RuntimeReplyInputImage {
+                    uri: sidecar_ref.ref_id,
+                    media_type: media_type.clone(),
+                    provider_data: Some(format!(
+                        "data:{media_type};base64,{}",
+                        BASE64_STANDARD.encode(bytes)
+                    )),
+                    detail,
+                });
+            }
+            if uri.to_ascii_lowercase().starts_with("sidecar://") {
+                return Ok(RuntimeReplyInputImage {
+                    uri: uri.to_string(),
+                    media_type: "image/*".to_string(),
+                    provider_data: None,
+                    detail,
+                });
+            }
+            let parsed = url::Url::parse(uri)
+                .map_err(|error| format!("remote provider image URL is invalid: {error}"))?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                return Err("remote provider image must use http or https".to_string());
+            }
+            Ok(RuntimeReplyInputImage {
+                uri: parsed.to_string(),
+                media_type: remote_image_media_type(&parsed).to_string(),
+                provider_data: None,
+                detail,
+            })
         }
-        if !attachment.kind.eq_ignore_ascii_case("image") {
-            return Err(format!(
-                "inline attachment kind '{}' is not supported by the current provider input boundary",
-                attachment.kind
-            ));
+        RuntimeReplyInputMedia::LocalImage { path, detail } => {
+            let path = Path::new(path.trim());
+            if path.as_os_str().is_empty() {
+                return Err("local image path must not be empty".to_string());
+            }
+            let store = sidecar_store.ok_or_else(|| {
+                "local provider image requires an initialized App Server sidecar store".to_string()
+            })?;
+            let metadata = std::fs::metadata(path)
+                .map_err(|error| format!("read local image metadata failed: {error}"))?;
+            if !metadata.is_file() {
+                return Err("local image path must reference a regular file".to_string());
+            }
+            if metadata.len() > MAX_INPUT_MEDIA_BYTES as u64 {
+                return Err(format!(
+                    "provider image input exceeds {} bytes",
+                    MAX_INPUT_MEDIA_BYTES
+                ));
+            }
+            let bytes =
+                std::fs::read(path).map_err(|error| format!("read local image failed: {error}"))?;
+            let media_type = validate_image_bytes(&bytes, None)?.to_string();
+            let sidecar_ref = persist_image_bytes(&bytes, &media_type, store, session_id)?;
+            Ok(RuntimeReplyInputImage {
+                uri: sidecar_ref.ref_id,
+                media_type: media_type.clone(),
+                provider_data: Some(format!(
+                    "data:{media_type};base64,{}",
+                    BASE64_STANDARD.encode(bytes)
+                )),
+                detail,
+            })
         }
-        let store = sidecar_store.ok_or_else(|| {
-            "inline provider media requires an initialized App Server sidecar store".to_string()
-        })?;
-        let (bytes, media_type) = decode_image_data_url(source)?;
-        let digest = hex::encode(Sha256::digest(&bytes));
-        let relative_path = session_scoped_relative_path(
-            session_id,
-            &format!(
-                "media/input-{digest}.{}",
-                extension_for_media_type(&media_type)
-            ),
-        );
-        let sidecar_ref = store.write_bytes(&SidecarBytesWriteRequest {
-            session_id: session_id.to_string(),
-            kind: "media".to_string(),
-            logical_id: format!("input-{digest}"),
-            relative_path,
-            content: bytes,
-        })?;
-        attachment.uri = Some(sidecar_ref.ref_id.clone());
-        let metadata = attachment
-            .metadata
-            .get_or_insert_with(|| Value::Object(Map::new()));
-        let metadata = metadata
-            .as_object_mut()
-            .ok_or_else(|| "provider media attachment metadata must be an object".to_string())?;
-        remove_inline_reference(metadata, "sourceUri");
-        remove_inline_reference(metadata, "source_uri");
-        remove_inline_reference(metadata, "previewUrl");
-        remove_inline_reference(metadata, "preview_url");
-        metadata.insert("mediaType".to_string(), Value::String(media_type));
-        metadata.insert("byteSize".to_string(), Value::from(sidecar_ref.bytes));
-        metadata.insert(
-            "sha256".to_string(),
-            Value::String(sidecar_ref.sha256.clone()),
-        );
-        metadata.insert(
-            SIDECAR_REF_FIELD.to_string(),
-            serde_json::to_value(sidecar_ref)
-                .map_err(|error| format!("serialize input media sidecar ref failed: {error}"))?,
-        );
     }
-    Ok(())
-}
-
-pub(super) fn provider_input_from_references(
-    input: &AgentInput,
-    sidecar_store: Option<&SidecarStore>,
-) -> Result<AgentInput, String> {
-    let mut provider_input = input.clone();
-    for attachment in &mut provider_input.attachments {
-        if !attachment.kind.eq_ignore_ascii_case("image") {
-            continue;
-        }
-        let Some(uri) = attachment.uri.as_deref().map(str::trim) else {
-            continue;
-        };
-        if uri.to_ascii_lowercase().starts_with("data:image/")
-            || uri.starts_with("http://")
-            || uri.starts_with("https://")
-        {
-            continue;
-        }
-        let Some(sidecar_ref) = attachment_sidecar_ref(attachment) else {
-            continue;
-        };
-        let store = sidecar_store.ok_or_else(|| {
-            "provider media reference requires an initialized App Server sidecar store".to_string()
-        })?;
-        let content = store
-            .read_bytes_verified(
-                &sidecar_ref.relative_path,
-                Some(&sidecar_ref.sha256),
-                MAX_INPUT_MEDIA_BYTES as u64,
-            )?
-            .ok_or_else(|| format!("provider media reference {uri} is unavailable"))?;
-        let media_type = attachment_media_type(attachment)
-            .ok_or_else(|| format!("provider media reference {uri} is missing media type"))?;
-        attachment.uri = Some(format!(
-            "data:{media_type};base64,{}",
-            BASE64_STANDARD.encode(content.bytes)
-        ));
-    }
-    Ok(provider_input)
-}
-
-pub(super) fn attachment_reference_uri(attachment: &AgentAttachment) -> Option<String> {
-    attachment_sidecar_ref(attachment)
-        .map(|reference| reference.ref_id)
-        .or_else(|| attachment.uri.clone())
-}
-
-pub(super) fn attachment_media_type(attachment: &AgentAttachment) -> Option<String> {
-    attachment
-        .metadata
-        .as_ref()
-        .and_then(Value::as_object)
-        .and_then(|metadata| {
-            ["mediaType", "media_type", "mimeType", "mime_type"]
-                .iter()
-                .filter_map(|key| metadata.get(*key))
-                .find_map(Value::as_str)
-        })
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-}
-
-fn attachment_sidecar_ref(attachment: &AgentAttachment) -> Option<SidecarRef> {
-    let metadata = attachment.metadata.as_ref()?.as_object()?;
-    [SIDECAR_REF_FIELD, "sidecar_ref"]
-        .iter()
-        .find_map(|key| metadata.get(*key))
-        .and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 
 fn decode_image_data_url(source: &str) -> Result<(Vec<u8>, String), String> {
@@ -181,6 +128,77 @@ fn decode_image_data_url(source: &str) -> Result<(Vec<u8>, String), String> {
     Ok((bytes, media_type))
 }
 
+fn persist_image_bytes(
+    bytes: &[u8],
+    media_type: &str,
+    store: &SidecarStore,
+    session_id: &str,
+) -> Result<SidecarRef, String> {
+    let digest = hex::encode(Sha256::digest(bytes));
+    let relative_path = session_scoped_relative_path(
+        session_id,
+        &format!(
+            "media/input-{digest}.{}",
+            extension_for_media_type(media_type)
+        ),
+    );
+    store.write_bytes(&SidecarBytesWriteRequest {
+        session_id: session_id.to_string(),
+        kind: "media".to_string(),
+        logical_id: format!("input-{digest}"),
+        relative_path,
+        content: bytes.to_vec(),
+    })
+}
+
+fn validate_image_bytes<'a>(
+    bytes: &[u8],
+    declared_media_type: Option<&'a str>,
+) -> Result<&'a str, String> {
+    let detected = detected_image_media_type(bytes)
+        .ok_or_else(|| "provider image input is not a supported image".to_string())?;
+    if let Some(declared) = declared_media_type {
+        if declared != detected {
+            return Err(format!(
+                "provider image media type mismatch: declared {declared}, detected {detected}"
+            ));
+        }
+        return Ok(declared);
+    }
+    Ok(detected)
+}
+
+fn detected_image_media_type(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("image/png");
+    }
+    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some("image/jpeg");
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("image/gif");
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        return Some("image/webp");
+    }
+    None
+}
+
+fn remote_image_media_type(url: &url::Url) -> &'static str {
+    let path = url.path().to_ascii_lowercase();
+    if path.ends_with(".png") {
+        "image/png"
+    } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if path.ends_with(".gif") {
+        "image/gif"
+    } else if path.ends_with(".webp") {
+        "image/webp"
+    } else {
+        "image/*"
+    }
+}
+
 fn extension_for_media_type(media_type: &str) -> &'static str {
     match media_type {
         "image/jpeg" => "jpg",
@@ -190,96 +208,112 @@ fn extension_for_media_type(media_type: &str) -> &'static str {
     }
 }
 
-fn remove_inline_reference(metadata: &mut Map<String, Value>, key: &str) {
-    if metadata
-        .get(key)
-        .and_then(Value::as_str)
-        .is_some_and(|value| value.trim_start().to_ascii_lowercase().starts_with("data:"))
-    {
-        metadata.remove(key);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use agent_protocol::ImageDetail;
 
     const PNG_DATA_URL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
 
     #[test]
-    fn inline_image_is_persisted_as_reference_and_hydrated_only_for_provider() {
+    fn typed_local_image_is_validated_and_sidecarized_for_provider() {
         let root = tempfile::tempdir().expect("sidecar root");
         let store = SidecarStore::new(root.path()).expect("sidecar store");
-        let mut input = AgentInput {
-            text: "describe".to_string(),
-            attachments: vec![AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some(PNG_DATA_URL.to_string()),
-                metadata: Some(json!({
-                    "mediaType": "image/png",
-                    "previewUrl": PNG_DATA_URL
-                })),
-            }],
-        };
+        let image_path = root.path().join("input.png");
+        let (_, encoded) = PNG_DATA_URL.split_once(',').expect("png data URL");
+        let bytes = BASE64_STANDARD.decode(encoded).expect("decode fixture");
+        std::fs::write(&image_path, bytes).expect("write local image");
 
-        persist_inline_input_media(&mut input, Some(&store), "session-1")
-            .expect("persist inline image");
+        let image = resolve_runtime_input_media(
+            RuntimeReplyInputMedia::LocalImage {
+                path: image_path.display().to_string(),
+                detail: Some(ImageDetail::Original),
+            },
+            Some(&store),
+            "session-1",
+        )
+        .expect("resolve local image");
 
-        let persisted = serde_json::to_string(&input).expect("serialize persisted input");
-        assert!(!persisted.contains("base64,"));
-        assert!(input.attachments[0]
-            .uri
+        assert!(image.uri.starts_with("sidecar://media/"));
+        assert_eq!(image.media_type, "image/png");
+        assert_eq!(image.provider_data.as_deref(), Some(PNG_DATA_URL));
+        assert_eq!(image.detail, Some(ImageDetail::Original));
+        assert!(!image
+            .provider_data
             .as_deref()
-            .is_some_and(|uri| uri.starts_with("sidecar://media/")));
-        assert!(input.attachments[0]
-            .metadata
-            .as_ref()
-            .is_some_and(|metadata| {
-                metadata[SIDECAR_REF_FIELD]["relativePath"]
-                    .as_str()
-                    .is_some_and(|path| path.contains("/media/input-"))
-            }));
-
-        let hydrated =
-            provider_input_from_references(&input, Some(&store)).expect("hydrate provider image");
-        assert_eq!(hydrated.attachments[0].uri.as_deref(), Some(PNG_DATA_URL));
-        assert_eq!(
-            attachment_reference_uri(&hydrated.attachments[0]),
-            input.attachments[0].uri
-        );
+            .is_some_and(|value| value.contains(&image_path.display().to_string())));
     }
 
     #[test]
-    fn inline_image_fails_closed_without_sidecar_or_with_invalid_payload() {
-        let mut without_store = AgentInput {
-            text: String::new(),
-            attachments: vec![AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some(PNG_DATA_URL.to_string()),
-                metadata: None,
-            }],
-        };
-        assert!(
-            persist_inline_input_media(&mut without_store, None, "session-1")
-                .expect_err("sidecar is required")
-                .contains("sidecar store")
+    fn typed_remote_and_inline_images_keep_native_provider_shapes() {
+        let remote = resolve_runtime_input_media(
+            RuntimeReplyInputMedia::Image {
+                uri: "https://example.com/assets/image.webp?version=1".to_string(),
+                detail: Some(ImageDetail::High),
+            },
+            None,
+            "session-1",
+        )
+        .expect("resolve remote image");
+        assert_eq!(
+            remote.uri,
+            "https://example.com/assets/image.webp?version=1"
         );
+        assert_eq!(remote.media_type, "image/webp");
+        assert_eq!(remote.provider_data, None);
+        assert_eq!(remote.detail, Some(ImageDetail::High));
 
         let root = tempfile::tempdir().expect("sidecar root");
         let store = SidecarStore::new(root.path()).expect("sidecar store");
-        let mut invalid = AgentInput {
-            text: String::new(),
-            attachments: vec![AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some("data:image/png;base64,%%%".to_string()),
-                metadata: None,
-            }],
-        };
-        assert!(
-            persist_inline_input_media(&mut invalid, Some(&store), "session-1")
-                .expect_err("invalid base64 must fail")
-                .contains("base64 decode failed")
-        );
+        let inline = resolve_runtime_input_media(
+            RuntimeReplyInputMedia::Image {
+                uri: PNG_DATA_URL.to_string(),
+                detail: Some(ImageDetail::Low),
+            },
+            Some(&store),
+            "session-1",
+        )
+        .expect("resolve inline image");
+        assert!(inline.uri.starts_with("sidecar://media/"));
+        assert_eq!(inline.provider_data.as_deref(), Some(PNG_DATA_URL));
+        assert_eq!(inline.detail, Some(ImageDetail::Low));
+    }
+
+    #[test]
+    fn typed_media_rejects_local_leaks_and_mismatched_payloads() {
+        let without_store = resolve_runtime_input_media(
+            RuntimeReplyInputMedia::LocalImage {
+                path: "/workspace/image.png".to_string(),
+                detail: None,
+            },
+            None,
+            "session-1",
+        )
+        .expect_err("local image requires sidecar");
+        assert!(without_store.contains("sidecar store"));
+
+        let root = tempfile::tempdir().expect("sidecar root");
+        let store = SidecarStore::new(root.path()).expect("sidecar store");
+        let mismatched = resolve_runtime_input_media(
+            RuntimeReplyInputMedia::Image {
+                uri: PNG_DATA_URL.replacen("image/png", "image/jpeg", 1),
+                detail: None,
+            },
+            Some(&store),
+            "session-1",
+        )
+        .expect_err("declared MIME must match image signature");
+        assert!(mismatched.contains("media type mismatch"));
+
+        assert!(resolve_runtime_input_media(
+            RuntimeReplyInputMedia::Image {
+                uri: "file:///workspace/image.png".to_string(),
+                detail: None,
+            },
+            Some(&store),
+            "session-1",
+        )
+        .expect_err("remote image cannot use file scheme")
+        .contains("http or https"));
     }
 }

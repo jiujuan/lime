@@ -20,6 +20,7 @@ interface PendingTopicSwitchState {
 }
 
 interface UseWorkspaceProjectSelectionOptions {
+  autoRunInitialPromptOnMount?: boolean;
   externalProjectId?: string | null;
   initialSessionId?: string | null;
   newChatAt?: number;
@@ -39,6 +40,7 @@ export function useWorkspaceProjectSelection(
   options: UseWorkspaceProjectSelectionOptions = {},
 ) {
   const {
+    autoRunInitialPromptOnMount = false,
     externalProjectId,
     initialSessionId,
     keepNewChatSessionRestoreDisabled = false,
@@ -71,6 +73,8 @@ export function useWorkspaceProjectSelection(
     typeof newChatAt === "number" ? String(newChatAt) : null;
   const shouldStartDetachedNewChat =
     incomingNewChatRequestKey !== null && !normalizedInitialSessionId;
+  const shouldKeepFreshAutoSendRestoreDisabled =
+    autoRunInitialPromptOnMount && shouldStartDetachedNewChat;
   const resolveInitialSelection = useCallback((): {
     projectId: string | null;
     source: Exclude<WorkspaceProjectSelectionSource, "external">;
@@ -140,7 +144,9 @@ export function useWorkspaceProjectSelection(
   const shouldDisableSessionRestore =
     hasExplicitInitialSession ||
     (incomingNewChatRequestKey !== null &&
-      (keepNewChatSessionRestoreDisabled || !hasHandledIncomingNewChatRequest));
+      (keepNewChatSessionRestoreDisabled ||
+        shouldKeepFreshAutoSendRestoreDisabled ||
+        !hasHandledIncomingNewChatRequest));
   const projectSelectionSource: WorkspaceProjectSelectionSource =
     normalizedExternalProjectId ? "external" : internalProjectSelectionSource;
 

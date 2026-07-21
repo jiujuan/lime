@@ -5,10 +5,15 @@ import { describe, expect, it } from "vitest";
 
 describe("AgentChatWorkspace local display boundary", () => {
   it("草稿、恢复、选择、横幅、布局和预览状态必须由 local display owner 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -84,10 +89,15 @@ describe("AgentChatWorkspace home input navigation boundary", () => {
 
 describe("AgentChatWorkspace plan decision boundary", () => {
   it("Plan decision 状态机必须由 workspace plan decision runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -125,10 +135,15 @@ describe("AgentChatWorkspace plan decision boundary", () => {
 
 describe("AgentChatWorkspace task center draft state boundary", () => {
   it("Task Center draft state 和 initial navigation 派生必须由 draft state runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const commandWiringSource = readFileSync(
       join(
         process.cwd(),
@@ -182,10 +197,15 @@ describe("AgentChatWorkspace task center draft state boundary", () => {
 
 describe("AgentChatWorkspace general workbench sidebar boundary", () => {
   it("General Workbench sidebar runtime 和 host action 必须由 sidebar host runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -252,10 +272,15 @@ describe("AgentChatWorkspace general workbench sidebar boundary", () => {
 
 describe("AgentChatWorkspace general workbench harness surface boundary", () => {
   it("General Workbench Harness Surface props 必须由 harness surface runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -370,10 +395,15 @@ describe("AgentChatWorkspace general workbench harness surface boundary", () => 
 
 describe("AgentChatWorkspace message knowledge save boundary", () => {
   it("消息沉淀为知识的校验、导航和 fallback import 必须由 message knowledge save runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -406,10 +436,15 @@ describe("AgentChatWorkspace message knowledge save boundary", () => {
 
 describe("AgentChatWorkspace message skill save boundary", () => {
   it("消息保存为 Skill 草稿的校验、导航和提示必须由 message skill save runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -437,10 +472,15 @@ describe("AgentChatWorkspace message skill save boundary", () => {
 
 describe("AgentChatWorkspace general workbench entry prompt actions boundary", () => {
   it("General Workbench entry prompt 的继续、重启和 follow-up 应用必须由 entry prompt actions runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -490,10 +530,15 @@ describe("AgentChatWorkspace general workbench entry prompt actions boundary", (
 
 describe("AgentChatWorkspace expert skill panel runtime boundary", () => {
   it("专家技能、Workspace Skill enable 和插件建议运行态必须由 expert skill panel runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -561,10 +606,15 @@ describe("Workspace Inputbar scene presentation boundary", () => {
 
 describe("AgentChatWorkspace shell chrome boundary", () => {
   it("Shell chrome projection 必须由 workspace shell chrome runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -589,10 +639,15 @@ describe("AgentChatWorkspace shell chrome boundary", () => {
 
 describe("AgentChatWorkspace plugin history restore boundary", () => {
   it("插件历史恢复投影、预览动作和 landing card 必须由专用 runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -607,8 +662,23 @@ describe("AgentChatWorkspace plugin history restore boundary", () => {
       ),
       "utf8",
     );
+    const interactionOwnerSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceArtifactInteractionRuntime.ts",
+      ),
+      "utf8",
+    );
 
-    expect(workspaceSource).toContain("useWorkspaceArtifactSurfaceRuntime({");
+    expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceArtifactInteractionRuntime({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceArtifactSurfaceRuntime({",
+    );
+    expect(interactionOwnerSource).toContain(
+      "useWorkspaceArtifactSurfaceRuntime({",
+    );
     expect(ownerSource).toContain("useWorkspacePluginHistoryRestoreRuntime(");
     for (const retiredWorkspaceOwner of [
       "hasWorkspacePluginHistoryRestoreMetadata(",
@@ -619,6 +689,7 @@ describe("AgentChatWorkspace plugin history restore boundary", () => {
       "<WorkspacePluginHistoryRestoreLandingCard",
     ]) {
       expect(workspaceSource).not.toContain(retiredWorkspaceOwner);
+      expect(interactionOwnerSource).not.toContain(retiredWorkspaceOwner);
       expect(pluginOwnerSource).toContain(retiredWorkspaceOwner);
     }
     expect(workspaceSource).not.toContain(
@@ -634,10 +705,15 @@ describe("AgentChatWorkspace plugin history restore boundary", () => {
 
 describe("AgentChatWorkspace service skill execution card boundary", () => {
   it("站点技能执行卡片组装必须由 service skill execution card runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
@@ -652,8 +728,23 @@ describe("AgentChatWorkspace service skill execution card boundary", () => {
       ),
       "utf8",
     );
+    const interactionOwnerSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceArtifactInteractionRuntime.ts",
+      ),
+      "utf8",
+    );
 
-    expect(workspaceSource).toContain("useWorkspaceArtifactSurfaceRuntime({");
+    expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceArtifactInteractionRuntime({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceArtifactSurfaceRuntime({",
+    );
+    expect(interactionOwnerSource).toContain(
+      "useWorkspaceArtifactSurfaceRuntime({",
+    );
     expect(ownerSource).toContain(
       "useWorkspaceServiceSkillExecutionCardRuntime(",
     );
@@ -673,10 +764,15 @@ describe("AgentChatWorkspace service skill execution card boundary", () => {
 
 describe("AgentChatWorkspace conversation landing surface boundary", () => {
   it("入口 landing / EmptyState 组装必须由 conversation landing surface runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const conversationRuntimeSource = readFileSync(
       join(
         process.cwd(),
@@ -797,7 +893,6 @@ describe("AgentChatWorkspace conversation landing surface boundary", () => {
       "\n    stopSending,",
       "\n    resumeThread,",
       "\n    replayPendingAction,",
-      "\n    promoteQueuedTurn,",
       "\n    deleteMessage,",
       "\n    editMessage,",
       "\n    handleA2UISubmit:",
@@ -863,10 +958,15 @@ describe("AgentChatWorkspace conversation landing surface boundary", () => {
 
 describe("AgentChatWorkspace artifact open boundary", () => {
   it("Artifact / 文件预览动作必须由 artifact open runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const actionOwnerSource = readFileSync(
       join(
         process.cwd(),
@@ -895,8 +995,23 @@ describe("AgentChatWorkspace artifact open boundary", () => {
       ),
       "utf8",
     );
+    const interactionOwnerSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceArtifactInteractionRuntime.ts",
+      ),
+      "utf8",
+    );
 
-    expect(workspaceSource).toContain("useWorkspaceArtifactActionRuntime({");
+    expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceArtifactInteractionRuntime({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceArtifactActionRuntime({",
+    );
+    expect(interactionOwnerSource).toContain(
+      "useWorkspaceArtifactActionRuntime(action)",
+    );
     expect(workspaceSource).not.toContain("useWorkspaceArtifactOpenRuntime({");
     expect(actionOwnerSource).toContain("useWorkspaceArtifactOpenRuntime({");
     expect(ownerSource.split("\n").length).toBeLessThan(800);
@@ -920,6 +1035,9 @@ describe("AgentChatWorkspace artifact open boundary", () => {
       "resolveSiteSavedContentTargetFromRunResult(",
     ]) {
       expect(workspaceSource).not.toContain(retiredWorkspaceArtifactOwner);
+      expect(interactionOwnerSource).not.toContain(
+        retiredWorkspaceArtifactOwner,
+      );
     }
     expect(ownerSource).toContain("useWorkspaceArtifactPreviewActions({");
     expect(ownerSource).toContain("useWorkspaceArtifactWorkbenchActions({");
@@ -937,167 +1055,5 @@ describe("AgentChatWorkspace artifact open boundary", () => {
     expect(serviceSkillOwnerSource).toContain(
       "resolveSiteSavedContentTargetFromRunResult(",
     );
-  });
-});
-
-describe("AgentChatWorkspace image workbench send command boundary", () => {
-  it("Image Workbench 发送路由和主线 submit 必须由 send command runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
-    const ownerSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchRuntime.ts",
-      ),
-      "utf8",
-    );
-    const sendSurfaceSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/workspace/useWorkspaceSendSurfaceRuntime.ts",
-      ),
-      "utf8",
-    );
-    const commandWiringSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
-      ),
-      "utf8",
-    );
-
-    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
-    expect(workspaceSource).not.toContain("useWorkspaceSendSurfaceRuntime({");
-    expect(commandWiringSource).toContain("useWorkspaceSendSurfaceRuntime({");
-    expect(sendSurfaceSource).toContain("useWorkspaceImageWorkbenchRuntime(");
-    expect(ownerSource.split("\n").length).toBeLessThan(160);
-    for (const retiredWorkspaceImageSendOwner of [
-      "submitImageWorkbenchAgentCommandRef",
-      "const refreshImageWorkbenchSendRoute = useCallback",
-      "const prepareImageWorkbenchSkillSend = useCallback",
-      "const resolveImageWorkbenchSendCommandRequest = useCallback",
-      "resolveImageWorkbenchCommandRequestWithSelection",
-      "ensureImageWorkbenchProviderSelectionCommitted(",
-      "applyImagePreferenceToSendRouteSelection(",
-      "buildImageCommandIntentRequestMetadata(",
-      "imageWorkbenchSelectionRef",
-      "imageWorkbenchRequestProviderId",
-      "imageWorkbenchRequestModelId",
-    ]) {
-      expect(workspaceSource).not.toContain(retiredWorkspaceImageSendOwner);
-    }
-    expect(ownerSource).toContain(
-      "useWorkspaceImageWorkbenchSendCommandRuntime({",
-    );
-    expect(ownerSource).toContain("bindWorkspaceHandleSendRef");
-  });
-});
-
-describe("AgentChatWorkspace image workbench provider boundary", () => {
-  it("Image Workbench Provider 偏好和选择状态必须由 provider runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
-    const ownerSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchProviderRuntime.ts",
-      ),
-      "utf8",
-    );
-
-    expect(workspaceSource).toContain(
-      "useWorkspaceImageWorkbenchProviderRuntime({",
-    );
-    expect(ownerSource.split("\n").length).toBeLessThan(220);
-    for (const retiredWorkspaceImageProviderOwner of [
-      "useGlobalMediaGenerationDefaults({",
-      "useImageGen({",
-      "resolveMediaGenerationPreference(",
-      "resolveImageWorkbenchPreferenceViewModel(",
-      "const effectiveGlobalImagePreference",
-      "const imageWorkbenchPreferenceViewModel",
-    ]) {
-      expect(workspaceSource).not.toContain(retiredWorkspaceImageProviderOwner);
-    }
-    expect(ownerSource).toContain("useGlobalMediaGenerationDefaults({");
-    expect(ownerSource).toContain("useImageGen({");
-    expect(ownerSource).toContain("resolveMediaGenerationPreference(");
-    expect(ownerSource).toContain("resolveImageWorkbenchPreferenceViewModel(");
-    expect(ownerSource).toContain("setOnDemandMediaDefaults");
-  });
-});
-
-describe("AgentChatWorkspace image workbench command action boundary", () => {
-  it("Image Workbench 命令启动必须由 command action runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
-    const actionOwnerSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchActionRuntime.ts",
-      ),
-      "utf8",
-    );
-    const commandOwnerSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchCommandActionRuntime.ts",
-      ),
-      "utf8",
-    );
-    const sendSurfaceSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/workspace/useWorkspaceSendSurfaceRuntime.ts",
-      ),
-      "utf8",
-    );
-    const commandWiringSource = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandWiring.ts",
-      ),
-      "utf8",
-    );
-
-    expect(workspaceSource).toContain("useAgentChatWorkspaceCommandWiring({");
-    expect(workspaceSource).not.toContain("useWorkspaceSendSurfaceRuntime({");
-    expect(commandWiringSource).toContain("useWorkspaceSendSurfaceRuntime({");
-    expect(sendSurfaceSource).toContain("useWorkspaceImageWorkbenchRuntime(");
-    expect(commandOwnerSource.split("\n").length).toBeLessThan(400);
-    expect(actionOwnerSource.split("\n").length).toBeLessThan(800);
-    for (const retiredActionRuntimeCommandOwner of [
-      "generateAgentRuntimeTitleResult",
-      "buildImageWorkbenchSessionTitle(",
-      "isLocalImageWorkbenchSessionKey(",
-      "ensureImageWorkbenchProviderSelectionCommitted(",
-      "const handleImageWorkbenchCommand = useCallback",
-      "resolveImageWorkbenchCommandRequest:",
-      "submitImageWorkbenchAgentCommand",
-      "imageWorkbenchSelectionRef",
-      "imageWorkbenchRequestProviderId",
-      "imageWorkbenchRequestModelId",
-    ]) {
-      expect(actionOwnerSource).not.toContain(retiredActionRuntimeCommandOwner);
-    }
-    expect(commandOwnerSource).toContain("generateAgentRuntimeTitleResult");
-    expect(commandOwnerSource).toContain("buildImageWorkbenchSessionTitle(");
-    expect(commandOwnerSource).toContain("isLocalImageWorkbenchSessionKey(");
-    expect(commandOwnerSource).toContain(
-      "ensureImageWorkbenchProviderSelectionCommitted(",
-    );
-    expect(commandOwnerSource).toContain(
-      "const handleImageWorkbenchCommand = useCallback",
-    );
-    expect(commandOwnerSource).toContain(
-      "resolveImageWorkbenchCommandRequest:",
-    );
-    expect(commandOwnerSource).toContain("submitImageWorkbenchAgentCommand");
   });
 });

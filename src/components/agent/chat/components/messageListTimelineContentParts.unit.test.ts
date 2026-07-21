@@ -46,6 +46,7 @@ describe("messageListTimelineContentParts", () => {
           text: "Updated src/App.tsx",
           paths: ["src/App.tsx"],
           success: true,
+          file_status: "completed",
           status: "completed",
           started_at: "2026-07-16T10:00:00.000Z",
           completed_at: "2026-07-16T10:00:01.000Z",
@@ -101,6 +102,82 @@ describe("messageListTimelineContentParts", () => {
         threadItemIds: ["patch-app", "patch-test"],
       },
     });
+  });
+
+  it("单个 canonical FileChange batch 应保留 Add/Delete/Update/Move 和 diff", () => {
+    const contentPart = buildTimelineFileChangesContentPart(
+      buildThreadItems([
+        {
+          id: "patch-batch",
+          type: "patch",
+          turn_id: "turn-file-change-batch",
+          sequence: 1,
+          text: "canonical batch",
+          changes: [
+            {
+              path: "src/added.ts",
+              kind: { type: "add" },
+              diff: "+export const added = true;",
+            },
+            {
+              path: "src/deleted.ts",
+              kind: { type: "delete" },
+              diff: "-export const deleted = true;",
+            },
+            {
+              path: "src/updated.ts",
+              kind: { type: "update" },
+              diff: "-old\n+new",
+            },
+            {
+              path: "src/source.ts",
+              kind: { type: "update", move_path: "src/destination.ts" },
+              diff: "-source\n+destination",
+            },
+          ],
+          paths: [
+            "src/added.ts",
+            "src/deleted.ts",
+            "src/updated.ts",
+            "src/source.ts",
+          ],
+          success: true,
+          file_status: "completed",
+          status: "completed",
+          started_at: "2026-07-21T00:00:00.000Z",
+          completed_at: "2026-07-21T00:00:01.000Z",
+          updated_at: "2026-07-21T00:00:01.000Z",
+        },
+      ]),
+    );
+
+    expect(contentPart).toMatchObject({
+      type: "file_changes_batch",
+      aggregate: {
+        fileCount: 4,
+        totalAdded: 3,
+        totalRemoved: 3,
+        files: [
+          expect.objectContaining({ path: "src/added.ts", kind: "add" }),
+          expect.objectContaining({ path: "src/deleted.ts", kind: "delete" }),
+          expect.objectContaining({ path: "src/updated.ts", kind: "update" }),
+          expect.objectContaining({
+            path: "src/source.ts",
+            movePath: "src/destination.ts",
+            kind: "update",
+          }),
+        ],
+      },
+      metadata: {
+        source: "thread_item_patch",
+        threadItemId: "patch-batch",
+      },
+    });
+    expect(contentPart?.aggregate.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fileStatus: "completed" }),
+      ]),
+    );
   });
 
   it("没有 agent_message 时仍应渲染 timeline 工具过程", () => {

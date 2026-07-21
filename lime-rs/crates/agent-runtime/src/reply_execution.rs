@@ -5,10 +5,18 @@
 
 use crate::reply_host::RuntimeReplyStartError;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RuntimeReplyAttemptErrorKind {
+    #[default]
+    Execution,
+    UsageLimitExceeded,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeReplyAttemptError {
     pub message: String,
     pub emitted_any: bool,
+    kind: RuntimeReplyAttemptErrorKind,
 }
 
 impl RuntimeReplyAttemptError {
@@ -16,7 +24,24 @@ impl RuntimeReplyAttemptError {
         Self {
             message: message.into(),
             emitted_any,
+            kind: RuntimeReplyAttemptErrorKind::Execution,
         }
+    }
+
+    pub fn usage_limit_exceeded(message: impl Into<String>, emitted_any: bool) -> Self {
+        Self {
+            message: message.into(),
+            emitted_any,
+            kind: RuntimeReplyAttemptErrorKind::UsageLimitExceeded,
+        }
+    }
+
+    pub fn kind(&self) -> RuntimeReplyAttemptErrorKind {
+        self.kind
+    }
+
+    pub fn is_usage_limit_exceeded(&self) -> bool {
+        self.kind == RuntimeReplyAttemptErrorKind::UsageLimitExceeded
     }
 }
 
@@ -145,6 +170,16 @@ mod tests {
 
         assert_eq!(error.message, "provider failed");
         assert!(error.emitted_any);
+        assert_eq!(error.kind(), RuntimeReplyAttemptErrorKind::Execution);
+    }
+
+    #[test]
+    fn reply_attempt_error_preserves_usage_limit_kind() {
+        let error = RuntimeReplyAttemptError::usage_limit_exceeded("quota exhausted", false);
+
+        assert_eq!(error.message, "quota exhausted");
+        assert!(!error.emitted_any);
+        assert!(error.is_usage_limit_exceeded());
     }
 
     #[test]

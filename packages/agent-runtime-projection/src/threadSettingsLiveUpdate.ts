@@ -113,7 +113,8 @@ function recordArray(value: unknown): Record<string, unknown>[] {
   }
   const record = readRecord(value);
   if (!record) return [];
-  const nested = record.data ?? record.items ?? record.notifications ?? record.requests;
+  const nested =
+    record.data ?? record.items ?? record.notifications ?? record.requests;
   if (nested !== undefined) return recordArray(nested);
   return [record];
 }
@@ -132,7 +133,9 @@ function stableValue(value: unknown): unknown {
 
 function stableEqual(left: unknown, right: unknown): boolean {
   if (left === undefined || right === undefined) return true;
-  return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
+  return (
+    JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right))
+  );
 }
 
 function readOptionalStringField(
@@ -158,7 +161,9 @@ function readThreadId(value: unknown): string | undefined {
   return readStringField(params ?? record, ["threadId", "thread_id", "id"]);
 }
 
-function unwrapSettingsRecord(value: unknown): Record<string, unknown> | undefined {
+function unwrapSettingsRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
   const record = readRecord(value);
   if (!record) return undefined;
   const params = readRecord(record.params);
@@ -182,7 +187,10 @@ function normalizeMode(value: unknown): string | undefined {
 function normalizeSandboxPolicy(value: unknown): string | undefined {
   if (typeof value === "string") return definedString(value);
   const record = readRecord(value);
-  return readStringField(record, ["type", "policy", "kind"]) ?? (record ? "object" : undefined);
+  return (
+    readStringField(record, ["type", "policy", "kind"]) ??
+    (record ? "object" : undefined)
+  );
 }
 
 function readSettingsSnapshot(value: unknown): AgentUiThreadSettingsSnapshot {
@@ -193,7 +201,12 @@ function readSettingsSnapshot(value: unknown): AgentUiThreadSettingsSnapshot {
       "serviceTier",
       "service_tier",
     ]),
-    cwd: readStringField(record, ["cwd", "path", "workspaceRoot", "workspace_root"]),
+    cwd: readStringField(record, [
+      "cwd",
+      "path",
+      "workspaceRoot",
+      "workspace_root",
+    ]),
     approvalPolicy: readStringField(record, [
       "approvalPolicy",
       "approval_policy",
@@ -203,10 +216,16 @@ function readSettingsSnapshot(value: unknown): AgentUiThreadSettingsSnapshot {
       "approvals_reviewer",
     ]),
     permissions: readStringField(record, ["permissions", "permissionProfile"]),
-    sandboxPolicy: normalizeSandboxPolicy(record?.sandboxPolicy ?? record?.sandbox_policy),
-    effort: readStringField(record, ["effort", "reasoningEffort", "reasoning_effort"]),
+    sandboxPolicy: normalizeSandboxPolicy(
+      record?.sandboxPolicy ?? record?.sandbox_policy,
+    ),
+    effort: readStringField(record, [
+      "effort",
+      "reasoningEffort",
+      "reasoning_effort",
+    ]),
     summary: readStringField(record, ["summary"]),
-    collaborationMode: normalizeMode(record?.collaborationMode ?? record?.collaboration_mode),
+    collaborationMode: normalizeMode(record?.collaborationMode),
     personality: readStringField(record, ["personality"]),
   } satisfies AgentUiThreadSettingsSnapshot);
 }
@@ -228,10 +247,10 @@ function isSettingsNotification(record: Record<string, unknown>): boolean {
   const params = readRecord(record.params);
   return Boolean(
     method === "thread/settings/updated" ||
-      method === "thread_settings_updated" ||
-      method === "thread.settings.updated" ||
-      params?.threadSettings ||
-      params?.thread_settings,
+    method === "thread_settings_updated" ||
+    method === "thread.settings.updated" ||
+    params?.threadSettings ||
+    params?.thread_settings,
   );
 }
 
@@ -256,15 +275,20 @@ function readModelRequestCount(value: unknown): number {
 }
 
 function isSettingsProjectionRecord(record: Record<string, unknown>): boolean {
-  const type = readStringField(record, ["type", "kind", "sourceType", "source_type"]);
+  const type = readStringField(record, [
+    "type",
+    "kind",
+    "sourceType",
+    "source_type",
+  ]);
   const method = readMethod(record);
   return Boolean(
     isSettingsNotification(record) ||
-      method === "thread/settings/update" ||
-      type === "thread_settings" ||
-      type === "thread_settings_updated" ||
-      type === "settings_update" ||
-      type === "thread_settings_live_update_projection",
+    method === "thread/settings/update" ||
+    type === "thread_settings" ||
+    type === "thread_settings_updated" ||
+    type === "settings_update" ||
+    type === "thread_settings_live_update_projection",
   );
 }
 
@@ -280,14 +304,18 @@ function notificationMatchesExpectedFields(
   expected: AgentUiThreadSettingsSnapshot,
 ): boolean {
   if (!notification) return false;
-  for (const key of settingsKeys(expected) as Array<keyof AgentUiThreadSettingsSnapshot>) {
+  for (const key of settingsKeys(expected) as Array<
+    keyof AgentUiThreadSettingsSnapshot
+  >) {
     if (key === "serviceTier" && expected[key] === null) continue;
     if (!valuesMatch(expected[key], notification[key])) return false;
   }
   return true;
 }
 
-function futureRequestRecord(value: unknown): Record<string, unknown> | undefined {
+function futureRequestRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
   return recordArray(value)[0];
 }
 
@@ -298,7 +326,9 @@ function futureRequestUsesModel(
 ): boolean {
   if (expected.model === undefined) return true;
   if (!record) return !required;
-  return readStringField(record, ["model", "model_id", "modelId"]) === expected.model;
+  return (
+    readStringField(record, ["model", "model_id", "modelId"]) === expected.model
+  );
 }
 
 function futureRequestUsesServiceTier(
@@ -308,7 +338,10 @@ function futureRequestUsesServiceTier(
 ): boolean {
   if (expected.serviceTier === undefined) return true;
   if (!record) return !required;
-  const actual = readOptionalStringField(record, ["service_tier", "serviceTier"]);
+  const actual = readOptionalStringField(record, [
+    "service_tier",
+    "serviceTier",
+  ]);
   return valuesMatch(expected.serviceTier, actual);
 }
 
@@ -324,7 +357,8 @@ function futureRequestUsesCwd(
     readStringField(record, ["cwd", "workspaceRoot", "workspace_root"]) ??
     readStringField(record, ["environmentContext", "environment_context"]);
   if (actual?.includes(expected.cwd)) return true;
-  if (typeof environmentContext === "string") return environmentContext.includes(expected.cwd);
+  if (typeof environmentContext === "string")
+    return environmentContext.includes(expected.cwd);
   return false;
 }
 
@@ -336,7 +370,9 @@ function activeTurnSettingsStable(
   if (before === undefined || after === undefined) return true;
   const beforeSettings = readSettingsSnapshot(before);
   const afterSettings = readSettingsSnapshot(after);
-  for (const key of settingsKeys(expected) as Array<keyof AgentUiThreadSettingsSnapshot>) {
+  for (const key of settingsKeys(expected) as Array<
+    keyof AgentUiThreadSettingsSnapshot
+  >) {
     const beforeValue = beforeSettings[key];
     const afterValue = afterSettings[key];
     if (beforeValue !== undefined && !valuesMatch(beforeValue, afterValue)) {
@@ -348,19 +384,22 @@ function activeTurnSettingsStable(
 
 function updateCombinesSandboxPolicyAndPermissions(value: unknown): boolean {
   const settings = readSettingsSnapshot(value);
-  return settings.sandboxPolicy !== undefined && settings.permissions !== undefined;
+  return (
+    settings.sandboxPolicy !== undefined && settings.permissions !== undefined
+  );
 }
 
 function errorRejected(value: unknown): boolean {
   const record = readRecord(value);
   if (!record) return false;
-  if (readBooleanField(record, ["blocked", "failed", "rejected"]) === true) return true;
+  if (readBooleanField(record, ["blocked", "failed", "rejected"]) === true)
+    return true;
   const status = readStringField(record, ["status", "error", "code"]);
   return Boolean(
     status &&
-      ["error", "failed", "rejected", "invalid_request", "-32600"].includes(
-        status.trim().toLowerCase(),
-      ),
+    ["error", "failed", "rejected", "invalid_request", "-32600"].includes(
+      status.trim().toLowerCase(),
+    ),
   );
 }
 
@@ -407,7 +446,10 @@ function validateSnapshot(
       );
     }
   }
-  if (snapshot.settingsNotificationSeen && !snapshot.notificationMatchesExpected) {
+  if (
+    snapshot.settingsNotificationSeen &&
+    !snapshot.notificationMatchesExpected
+  ) {
     issues.push(
       issue(
         "notification_settings_missing_expected_fields",
@@ -521,7 +563,7 @@ function validateSnapshot(
   return issues;
 }
 
-export function extractCodexThreadSettingsLiveUpdateSnapshot(
+export function extractThreadSettingsLiveUpdateSnapshot(
   input: AgentUiThreadSettingsLiveUpdateProjectionInput,
 ): AgentUiThreadSettingsLiveUpdateSnapshot {
   const notifications = readSettingsNotifications(input);
@@ -539,7 +581,8 @@ export function extractCodexThreadSettingsLiveUpdateSnapshot(
       input.turnStartOverride ??
       scopedNotifications[scopedNotifications.length - 1]?.settings,
   );
-  const latestNotification = scopedNotifications[scopedNotifications.length - 1];
+  const latestNotification =
+    scopedNotifications[scopedNotifications.length - 1];
   const futureRequest = futureRequestRecord(input.futureTurnRequest);
   const invalidSandboxPermissionsRejected =
     !updateCombinesSandboxPolicyAndPermissions(input.settingsUpdateRequest) ||
@@ -601,11 +644,11 @@ function runtimeStatus(
   return issues.length > 0 ? "failed" : "completed";
 }
 
-export function buildCodexThreadSettingsLiveUpdateProjectionEvent(
+export function buildThreadSettingsLiveUpdateProjectionEvent(
   input: AgentUiThreadSettingsLiveUpdateProjectionInput,
   context: AgentUiProjectionContext = {},
 ): AgentUiProjectionEvent {
-  const snapshot = extractCodexThreadSettingsLiveUpdateSnapshot(input);
+  const snapshot = extractThreadSettingsLiveUpdateSnapshot(input);
   const status = runtimeStatus(snapshot.validationIssues);
   return compactProjectionFields({
     type: "context.changed",
@@ -632,13 +675,15 @@ export function buildCodexThreadSettingsLiveUpdateProjectionEvent(
       settingsOnlyModelRequestCount: snapshot.settingsOnlyModelRequestCount,
       activeTurnSettingsStable: snapshot.activeTurnSettingsStable,
       futureTurnUsesUpdatedModel: snapshot.futureTurnUsesUpdatedModel,
-      futureTurnUsesUpdatedServiceTier: snapshot.futureTurnUsesUpdatedServiceTier,
+      futureTurnUsesUpdatedServiceTier:
+        snapshot.futureTurnUsesUpdatedServiceTier,
       futureTurnUsesUpdatedCwd: snapshot.futureTurnUsesUpdatedCwd,
       transcriptClean: snapshot.transcriptClean,
       readModelClean: snapshot.readModelClean,
       ackDoesNotMutateCache: snapshot.ackDoesNotMutateCache,
       notificationUpdatesCache: snapshot.notificationUpdatesCache,
-      invalidSandboxPermissionsRejected: snapshot.invalidSandboxPermissionsRejected,
+      invalidSandboxPermissionsRejected:
+        snapshot.invalidSandboxPermissionsRejected,
       threadSettingsLiveUpdate: snapshot,
       validationIssues: snapshot.validationIssues,
     },

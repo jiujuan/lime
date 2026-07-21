@@ -16,11 +16,6 @@ export type SidecarLaunchConfig = {
   binaryPath: string;
   listenUrl: string;
   dataDir?: string;
-  productDbMigrationCleanup?:
-    | "retain"
-    | "clear-rows"
-    | "drop-tables"
-    | "delete-file";
   backendMode?: "external" | "runtime" | "mock" | "unavailable";
   backendCommand?: string;
   backendArgs?: string[];
@@ -57,7 +52,6 @@ export type ResolveSidecarFromManifestOptions =
     backendTimeoutMs?: number;
     appPolicyPath?: string;
     dataDir?: string;
-    productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"];
     expectedProtocolVersion?: string;
   };
 

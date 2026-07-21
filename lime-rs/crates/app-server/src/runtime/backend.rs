@@ -22,7 +22,7 @@ impl ExecutionBackend for MockBackend {
         sink.emit(RuntimeEvent::new(
             "turn.accepted",
             json!({
-                "inputTextLength": request.input.text.len(),
+                "inputTextLength": request.input.concat_text().len(),
                 "backend": "mock",
                 "clientName": request.host.client_name,
             }),

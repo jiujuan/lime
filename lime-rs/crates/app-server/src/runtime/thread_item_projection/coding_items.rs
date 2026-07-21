@@ -84,6 +84,7 @@ pub(super) fn upsert_patch_item(
     };
     let status = match event.event_type.as_str() {
         "patch.failed" => "failed",
+        "patch.declined" => "declined",
         "patch.started" => "in_progress",
         _ => "completed",
     };
@@ -95,6 +96,11 @@ pub(super) fn upsert_patch_item(
     };
 
     update_lifecycle_item(object, event, status);
+    if let Some(changes) = event.payload.get("changes").and_then(Value::as_array) {
+        if !changes.is_empty() {
+            object.insert("changes".to_string(), Value::Array(changes.clone()));
+        }
+    }
     let paths = string_array_field(&event.payload, &["paths", "changedFiles", "changed_files"]);
     if !paths.is_empty() {
         object.insert("summary".to_string(), json!(paths));

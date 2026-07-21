@@ -4,7 +4,6 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_SESSION_READ,
-  IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID,
   IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   IMAGE_COMMAND_DONE_TEXT,
   IMAGE_COMMAND_IMAGE_PROMPT,
@@ -16,8 +15,6 @@ import {
   PLAIN_IMAGE_INTENT_ROUTED_PROMPT,
   PLAIN_IMAGE_INTENT_SCENARIO,
   IMAGE_FIXTURE_MODEL,
-  SESSION_ID,
-  THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { collectAgentUiPerformanceTraceEvidence } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
@@ -117,7 +114,7 @@ function imageTaskArtifactPath(taskArtifact) {
   return task.artifact_path ?? task.artifactPath ?? task.path ?? null;
 }
 
-function serializeReadModelSummary(
+export function serializeReadModelSummary(
   readModel,
   scenarioConfig = resolveImageIntentScenario("image-command"),
 ) {
@@ -127,12 +124,15 @@ function serializeReadModelSummary(
       String(toolCall.tool_name ?? toolCall.toolName ?? toolCall.name ?? "") ===
       IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   );
-  const createTaskOutput = String(
+  const createTaskOutputValue =
     createTaskToolCall?.output ??
-      createTaskToolCall?.output_preview ??
-      createTaskToolCall?.outputPreview ??
-      "",
-  );
+    createTaskToolCall?.output_preview ??
+    createTaskToolCall?.outputPreview ??
+    "";
+  const createTaskOutput =
+    typeof createTaskOutputValue === "string"
+      ? createTaskOutputValue
+      : JSON.stringify(createTaskOutputValue);
 
   return sanitizeJson({
     detailItemCount: Array.isArray(readModel?.detail?.items)
@@ -323,8 +323,8 @@ export async function waitForSessionReadImageCommandCompleted(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: SESSION_ID,
-        historyLimit: 100,
+        threadId: options.threadId,
+        includeTurns: true,
       },
       requestLog,
     );
@@ -382,7 +382,12 @@ function optionalPayloadString(payload, keys) {
   return null;
 }
 
-function imageTaskMatchesScenario(taskArtifact, scenarioConfig, providerId) {
+function imageTaskMatchesScenario(
+  taskArtifact,
+  scenarioConfig,
+  providerId,
+  expectedSessionId,
+) {
   const task = taskOutputCandidate(taskArtifact);
   if (
     task.task_type !== "image_generate" &&
@@ -404,7 +409,7 @@ function imageTaskMatchesScenario(taskArtifact, scenarioConfig, providerId) {
   ]);
   const model = optionalPayloadString(payload, ["model"]);
   return (
-    sessionId === SESSION_ID &&
+    sessionId === expectedSessionId &&
     rawText === scenarioConfig.routedPrompt &&
     prompt === scenarioConfig.imagePrompt &&
     entrySource === scenarioConfig.entrySource &&
@@ -442,6 +447,7 @@ async function waitForImageCommandWorkflowTaskArtifact({
         task,
         scenarioConfig,
         imageFixtureProvider?.providerId ?? null,
+        options.sessionId,
       ),
     );
     lastSnapshot = sanitizeJson({
@@ -775,6 +781,38 @@ export async function waitForGuiImageCommandTerminal(
           text.includes("排队中") ||
           cardText.includes("正在生成") ||
           cardText.includes("图片生成中");
+        const describeElement = (element) => {
+          const rect = element.getBoundingClientRect();
+          const style = window.getComputedStyle(element);
+          return {
+            text: element.textContent || "",
+            display: style.display,
+            visibility: style.visibility,
+            opacity: style.opacity,
+            width: rect.width,
+            height: rect.height,
+          };
+        };
+        const tokenUsageNodes = Array.from(
+          document.querySelectorAll('[data-testid="token-usage-display"]'),
+        ).map(describeElement);
+        const assistantMetaFooterNodes = Array.from(
+          document.querySelectorAll(
+            '[data-testid="assistant-message-meta-footer"]',
+          ),
+        ).map(describeElement);
+        const assistantMessageNodes = Array.from(
+          document.querySelectorAll('[data-message-role="assistant"]'),
+        ).map((element) => ({
+          ...describeElement(element),
+          messageId: element.getAttribute("data-message-id") || "",
+          runtimeTurnId:
+            element.getAttribute("data-runtime-turn-id") || "",
+          hasImageCard: Boolean(element.querySelector(cardSelector)),
+          hasTokenUsage: Boolean(
+            element.querySelector('[data-testid="token-usage-display"]'),
+          ),
+        }));
         return {
           url: window.location.href,
           hasPrompt:
@@ -817,6 +855,9 @@ export async function waitForGuiImageCommandTerminal(
             cardText.includes("已完成") ||
             cardText.includes("生成"),
           visiblePendingStatus,
+          tokenUsageNodes,
+          assistantMetaFooterNodes,
+          assistantMessageNodes,
           bodyText: text,
         };
       },
@@ -865,9 +906,45 @@ export async function waitForGuiImageCommandTerminal(
     }
     await sleep(options.intervalMs);
   }
+  const recentNotificationEvidence = await page
+    .evaluate(async () => {
+      const response = await window.electronAPI?.invoke?.(
+        "app_server_drain_events",
+        { request: { includeRecent: true, limit: 500 } },
+      );
+      const lines = Array.isArray(response?.lines) ? response.lines : [];
+      return lines.flatMap((line) => {
+        try {
+          const message = JSON.parse(String(line));
+          if (
+            message?.method !== "thread/tokenUsage/updated" &&
+            message?.method !== "turn/completed"
+          ) {
+            return [];
+          }
+          const params = message.params;
+          const last = params?.tokenUsage?.last;
+          return [
+            {
+              method: message.method,
+              threadId: params?.threadId ?? null,
+              turnId: params?.turnId ?? params?.turn?.id ?? null,
+              inputTokens: last?.inputTokens ?? null,
+              outputTokens: last?.outputTokens ?? null,
+            },
+          ];
+        } catch {
+          return [];
+        }
+      });
+    })
+    .catch((error) => [{ diagnosticError: String(error?.message || error) }]);
   throw new Error(
     `Claw GUI 未把 @配图 task 轻卡推进终态: ${JSON.stringify(
-      sanitizeJson(lastSnapshot),
+      sanitizeJson({
+        snapshot: lastSnapshot,
+        recentNotifications: recentNotificationEvidence,
+      }),
     )}`,
   );
 }
@@ -1007,7 +1084,7 @@ export async function runImageCommandScenario({
   const scenarioConfig = resolveImageIntentScenario(options.scenario);
   const imageCommandInputSend = sanitizeJson(
     await sendPromptFromGui(page, options, scenarioConfig.inputPrompt, {
-      expectedSessionId: SESSION_ID,
+      expectedSessionId: options.sessionId,
     }),
   );
   if (summary) {
@@ -1036,7 +1113,7 @@ export async function runImageCommandScenario({
   };
   const imageCommandWorkflowTurnStart = {
     kind: "workflow:image_command",
-    sessionId: SESSION_ID,
+    sessionId: options.sessionId,
     turnId,
     inputText: scenarioConfig.routedPrompt,
     providerPreference: traceTurnStart?.providerPreference ?? null,
@@ -1057,6 +1134,27 @@ export async function runImageCommandScenario({
     taskArtifact: imageTaskArtifact.response,
     workspace,
   });
+  const readModelAfterTaskCreate = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_READ,
+    {
+      threadId: options.threadId,
+      includeTurns: true,
+    },
+    appServerRequests,
+  );
+  const readModelImageCommandAfterTaskCreate = sanitizeJson({
+    summary: serializeReadModelSummary(
+      readModelAfterTaskCreate.result,
+      scenarioConfig,
+    ),
+    readModel: readModelAfterTaskCreate.result,
+  });
+  if (summary) {
+    summary.imageCommandTaskArtifact = imageCommandTaskArtifact;
+    summary.readModelImageCommandAfterTaskCreate =
+      readModelImageCommandAfterTaskCreate;
+  }
   const guiImageCommandCompleted = await waitForGuiImageCommandCompleted(
     page,
     options,
@@ -1090,6 +1188,7 @@ export async function runImageCommandScenario({
   const imageCommandWorkflowRead = await readImageCommandWorkflowAudit({
     page,
     appServerRequests,
+    sessionId: options.sessionId,
     turnId,
     taskId: imageCommandTaskArtifactTerminalPatch.taskId,
   });

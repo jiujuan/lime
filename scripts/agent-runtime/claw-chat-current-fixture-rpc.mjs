@@ -3,11 +3,9 @@ import { fileURLToPath } from "node:url";
 import {
   APP_SERVER_DRAIN_EVENTS_COMMAND,
   APP_SERVER_HANDLE_JSON_LINES_COMMAND,
-  APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   APP_SERVER_METHOD_INITIALIZED,
   APP_SERVER_METHOD_INITIALIZE,
   APP_SERVER_METHOD_SESSION_READ,
-  APP_SERVER_METHOD_SESSION_THREAD_RESUME,
   APP_SERVER_METHOD_SESSION_TURN_START,
   APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE,
   FIXTURE_MODEL,
@@ -20,7 +18,6 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
   assert,
-  readArray,
   readRecord,
   readString,
   sanitizeJson,
@@ -32,6 +29,18 @@ import {
   readModelTurnStatus,
   summarizeReadModelQueueState,
 } from "./claw-chat-current-fixture-read-model-core.mjs";
+
+const APP_SERVER_DIRECT_EVENT_TYPES = new Map([
+  ["turn/started", "turn.started"],
+  ["turn/completed", "turn.completed"],
+  ["item/started", "item.started"],
+  ["item/completed", "item.completed"],
+  ["item/agentMessage/delta", "message.delta"],
+]);
+const APP_SERVER_DIRECT_EVENT_METHODS = [
+  "thread/started",
+  ...APP_SERVER_DIRECT_EVENT_TYPES.keys(),
+];
 
 export async function reloadRendererDocument(page, options) {
   const urlBefore = page.url();
@@ -198,36 +207,44 @@ export function decodeJsonRpcLines(lines) {
     : [];
 }
 
-export function agentSessionEventFromMessage(message) {
-  if (message?.method !== APP_SERVER_METHOD_AGENT_SESSION_EVENT) {
+export function runtimeEventFromDirectNotification(message) {
+  const type = APP_SERVER_DIRECT_EVENT_TYPES.get(message?.method);
+  const params = readRecord(message?.params);
+  if (!type || !params) {
     return null;
   }
-  const event = readRecord(message?.params)?.event;
-  if (!event) {
+  const turn = readRecord(params.turn);
+  const item = readRecord(params.item);
+  const threadId = readString(params, "threadId", "thread_id");
+  const turnId =
+    readString(params, "turnId", "turn_id") ?? readString(turn, "id");
+  if (!threadId || !turnId) {
     return null;
   }
+  const itemId =
+    readString(params, "itemId", "item_id") ?? readString(item, "id");
+  const delta = readString(params, "delta");
   return {
-    eventId: readString(event, "eventId", "event_id"),
-    sequence:
-      typeof event.sequence === "number" && Number.isFinite(event.sequence)
-        ? event.sequence
-        : null,
-    sessionId: readString(event, "sessionId", "session_id"),
-    threadId: readString(event, "threadId", "thread_id"),
-    turnId: readString(event, "turnId", "turn_id"),
-    type: readString(event, "type"),
-    timestamp: readString(event, "timestamp"),
-    payload: readRecord(event.payload) ?? event.payload ?? null,
+    eventId: [message.method, threadId, turnId, itemId, delta]
+      .filter(Boolean)
+      .join(":"),
+    sequence: null,
+    sessionId: readString(params, "sessionId", "session_id"),
+    threadId,
+    turnId,
+    type,
+    timestamp: null,
+    payload: params,
   };
 }
 
-export function collectAgentSessionEvents(messages) {
+export function collectRuntimeEvents(messages) {
   return Array.isArray(messages)
-    ? messages.map(agentSessionEventFromMessage).filter(Boolean)
+    ? messages.map(runtimeEventFromDirectNotification).filter(Boolean)
     : [];
 }
 
-export function mergeAgentSessionEvents(events, nextEvents) {
+export function mergeRuntimeEvents(events, nextEvents) {
   const byKey = new Map();
   for (const event of [...events, ...nextEvents]) {
     const key =
@@ -248,7 +265,7 @@ export function mergeAgentSessionEvents(events, nextEvents) {
   });
 }
 
-export function summarizeAgentSessionEvents(events, turnId) {
+export function summarizeRuntimeEvents(events, turnId) {
   const scopedEvents = events.filter((event) => event.turnId === turnId);
   const terminalTypes = new Set([
     "turn.completed",
@@ -463,18 +480,6 @@ export function summarizeAppServerInvocationResult(method, result) {
     });
   }
 
-  if (method === APP_SERVER_METHOD_SESSION_THREAD_RESUME) {
-    const turns = readArray(result, "turns").map((turn) => ({
-      turnId: readModelTurnId(turn),
-      status: readModelTurnStatus(turn),
-    }));
-    return sanitizeJson({
-      resumed: result?.resumed ?? null,
-      turnCount: turns.length,
-      turns,
-    });
-  }
-
   if (method === APP_SERVER_METHOD_SESSION_READ) {
     return summarizeReadModelQueueState(result);
   }
@@ -526,7 +531,9 @@ export async function initializeAppServer(page, requestLog) {
         name: "claw-chat-current-fixture",
         version: "1.0.0",
       },
-      capabilities: { eventMethods: ["agentSession/event"] },
+      capabilities: {
+        eventMethods: APP_SERVER_DIRECT_EVENT_METHODS,
+      },
     },
     requestLog,
   );
@@ -703,6 +710,10 @@ export async function ensureFixtureTextProvider(
   requestLog,
   options = {},
 ) {
+  const modelId =
+    typeof options.modelId === "string" && options.modelId.trim()
+      ? options.modelId.trim()
+      : FIXTURE_MODEL;
   const apiHost =
     typeof options.apiHost === "string" && options.apiHost.trim()
       ? options.apiHost.trim()
@@ -752,15 +763,13 @@ export async function ensureFixtureTextProvider(
   const fetchedModels = Array.isArray(modelFetch.result?.models)
     ? modelFetch.result.models
     : [];
-  const fixtureModel = fetchedModels.find(
-    (model) => model?.id === FIXTURE_MODEL,
-  );
+  const fixtureModel = fetchedModels.find((model) => model?.id === modelId);
 
   return sanitizeJson({
     providerId,
     providerName: provider?.name ?? TEXT_FIXTURE_PROVIDER_NAME,
     apiHost,
-    modelId: FIXTURE_MODEL,
+    modelId,
     modelFetch: {
       source: modelFetch.result?.source ?? null,
       modelCount: fetchedModels.length,

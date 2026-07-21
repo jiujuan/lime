@@ -1,11 +1,9 @@
-/* global process */
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { globalShortcutIsRegisteredMock, openExternalMock } = vi.hoisted(() => ({
-  globalShortcutIsRegisteredMock: vi.fn((_shortcut: string) => false),
+const { openExternalMock } = vi.hoisted(() => ({
   openExternalMock: vi.fn(),
 }));
 
@@ -13,9 +11,6 @@ vi.mock("./electronRuntime", () => ({
   app: {
     getName: () => "Lime",
     getVersion: () => "0.0.0-test",
-  },
-  globalShortcut: {
-    isRegistered: globalShortcutIsRegisteredMock,
   },
   shell: {
     openExternal: openExternalMock,
@@ -33,18 +28,17 @@ async function createTempUserDataDir() {
 }
 
 function createHost(
-  userDataDir: string,
+  appDataRoot: string,
   config: Record<string, unknown> = {},
 ): SystemUtilityHost {
   return new SystemUtilityHost({
-    userDataDir,
+    appDataRoot,
     readConfig: async () => config,
   });
 }
 
 afterEach(async () => {
   vi.clearAllMocks();
-  globalShortcutIsRegisteredMock.mockReturnValue(false);
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) {
@@ -104,72 +98,6 @@ describe("SystemUtilityHost", () => {
     );
   });
 
-  it("getVoiceShortcutRuntimeStatus 读取当前语音快捷键注册状态", async () => {
-    const host = createHost(await createTempUserDataDir(), {
-      experimental: {
-        voice_input: {
-          shortcut: "Alt+F8",
-        },
-      },
-    });
-    globalShortcutIsRegisteredMock.mockImplementation(
-      (shortcut: string) => shortcut === "Alt+F8",
-    );
-
-    await expect(host.getVoiceShortcutRuntimeStatus()).resolves.toEqual({
-      shortcut_registered: true,
-      registered_shortcut: "Alt+F8",
-      fn_supported: process.platform === "darwin",
-      fn_registered: false,
-      fn_fallback_shortcut: "Alt+F8",
-      fn_note: "Fn 按住录音尚未接入；当前使用普通语音快捷键回退。",
-    });
-    expect(globalShortcutIsRegisteredMock).toHaveBeenCalledWith("Alt+F8");
-  });
-
-  it("getVoiceShortcutRuntimeStatus 对无效配置回退默认快捷键", async () => {
-    const host = createHost(await createTempUserDataDir(), {
-      experimental: {
-        voice_input: {
-          shortcut: "InvalidKey",
-        },
-      },
-    });
-
-    await expect(host.getVoiceShortcutRuntimeStatus()).resolves.toEqual({
-      shortcut_registered: false,
-      registered_shortcut: null,
-      fn_supported: process.platform === "darwin",
-      fn_registered: false,
-      fn_fallback_shortcut: "CommandOrControl+Shift+V",
-      fn_note:
-        "语音快捷键配置不可解析，已使用默认普通语音快捷键回退；Fn 按住录音尚未接入。",
-    });
-    expect(globalShortcutIsRegisteredMock).toHaveBeenCalledWith(
-      "CommandOrControl+Shift+V",
-    );
-  });
-
-  it("validateShortcut 校验全局快捷键并拒绝不可解析值", async () => {
-    const host = createHost(await createTempUserDataDir());
-
-    expect(
-      host.validateShortcut({ shortcutStr: "CommandOrControl+Shift+V" }),
-    ).toBe(true);
-    expect(host.validateShortcut({ request: { shortcut_str: "Alt+F4" } })).toBe(
-      true,
-    );
-    expect(() => host.validateShortcut({ shortcutStr: "" })).toThrow(
-      "快捷键不能为空",
-    );
-    expect(() => host.validateShortcut({ shortcutStr: "InvalidKey" })).toThrow(
-      "无法解析快捷键 'InvalidKey'",
-    );
-    expect(() =>
-      host.validateShortcut({ shortcutStr: "CommandOrControl+Space" }),
-    ).toThrow("输入法切换");
-  });
-
   it("getEnvironmentPreview 返回 current 环境预览且不暴露 diagnostic facade", async () => {
     const host = createHost(await createTempUserDataDir(), {
       server: {
@@ -211,13 +139,13 @@ describe("SystemUtilityHost", () => {
   });
 
   it("浏览器诊断占位保持 degraded diagnostic 形态", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
+    const appDataRoot = await createTempUserDataDir();
+    const host = createHost(appDataRoot);
 
     expect(host.getBrowserConnectorSettings()).toEqual(
       expect.objectContaining({
         enabled: true,
-        install_root_dir: path.join(userDataDir, "browser-connectors"),
+        install_root_dir: path.join(appDataRoot, "connectors", "browser"),
         diagnostic: expect.objectContaining({
           command: "get_browser_connector_settings_cmd",
         }),

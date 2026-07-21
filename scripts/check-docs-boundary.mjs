@@ -226,8 +226,11 @@ function main() {
     }
   }
 
+  // 只拦截独立的 docs 根路径；例如 `catalog/docs/tests` 不是旧文档根目录。
   const oldDocsReferencePattern = new RegExp(
-    `docs/(?:${internalOnlyDirectories.join("|")})(?:/|\\b)`,
+    `(^|[^A-Za-z0-9_./-])docs/(?:${internalOnlyDirectories.join(
+      "|",
+    )})(?:/|\\b)`,
   );
   const filesWithOldReferences = [];
 

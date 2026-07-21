@@ -177,14 +177,14 @@ impl SequenceVerifier {
                     }
                 }
             }
-            "patch.applied" | "patch.failed" => {
+            "patch.applied" | "patch.failed" | "patch.declined" => {
                 if let Some(patch_id) = patch_id(event) {
                     if turn.active_patches.remove(&patch_id).is_none() {
                         violations.push(SequenceViolation {
-                            code: if event_class == "patch.applied" {
-                                "patch_applied_without_start"
-                            } else {
-                                "patch_failed_without_start"
+                            code: match event_class {
+                                "patch.applied" => "patch_applied_without_start",
+                                "patch.declined" => "patch_declined_without_start",
+                                _ => "patch_failed_without_start",
                             },
                             event_id: event.event_id.clone(),
                             scope_id: Some(patch_id),
@@ -275,12 +275,14 @@ impl SequenceVerifier {
                         scope_id: Some(action_id.clone()),
                     });
                 }
-                for patch_id in turn.active_patches.keys() {
-                    violations.push(SequenceViolation {
-                        code: "patch_unclosed_at_turn_end",
-                        event_id: event.event_id.clone(),
-                        scope_id: Some(patch_id.clone()),
-                    });
+                if event_class != "turn.canceled" {
+                    for patch_id in turn.active_patches.keys() {
+                        violations.push(SequenceViolation {
+                            code: "patch_unclosed_at_turn_end",
+                            event_id: event.event_id.clone(),
+                            scope_id: Some(patch_id.clone()),
+                        });
+                    }
                 }
                 for command_id in turn.active_commands.keys() {
                     violations.push(SequenceViolation {
@@ -662,12 +664,50 @@ mod tests {
     }
 
     #[test]
+    fn accepts_declined_patch_before_terminal_turn() {
+        let existing = vec![
+            event(
+                "evt_patch_start",
+                "patch.started",
+                json!({ "patchId": "patch_1" }),
+            ),
+            event(
+                "evt_patch_declined",
+                "patch.declined",
+                json!({ "patchId": "patch_1", "status": "declined" }),
+            ),
+        ];
+        let candidate = event("evt_turn_done", "turn.completed", json!({}));
+
+        validate_agent_event_sequence(&existing, &candidate)
+            .expect("declined patch should close before terminal turn");
+    }
+
+    #[test]
+    fn canceled_turn_can_abandon_an_active_patch() {
+        let existing = vec![event(
+            "evt_patch_start",
+            "patch.started",
+            json!({ "patchId": "patch_1" }),
+        )];
+        let candidate = event("evt_turn_canceled", "turn.canceled", json!({}));
+
+        validate_agent_event_sequence(&existing, &candidate)
+            .expect("cancelled turn should abandon its active patch");
+    }
+
+    #[test]
     fn rejects_coding_terminal_events_without_start() {
         for (event_type, payload, expected_code) in [
             (
                 "patch.applied",
                 json!({ "patchId": "patch_1" }),
                 "patch_applied_without_start",
+            ),
+            (
+                "patch.declined",
+                json!({ "patchId": "patch_1" }),
+                "patch_declined_without_start",
             ),
             (
                 "command.exited",

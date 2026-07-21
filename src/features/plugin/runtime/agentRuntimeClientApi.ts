@@ -1,7 +1,6 @@
 import type {
   AgentRuntimeClient,
   AgentSessionActionRespondParams,
-  AgentSessionTurnStartParams,
   StructuredOutputContract,
 } from "@limecloud/agent-runtime-client";
 
@@ -18,6 +17,7 @@ type CanonicalThreadReadResult = Awaited<
 >["result"];
 type CanonicalThread = CanonicalThreadReadResult["thread"];
 type CanonicalTurn = NonNullable<CanonicalThread["turns"]>[number];
+type StartTurnParams = Parameters<AgentRuntimeClient["startTurn"]>[0];
 
 export interface PluginRuntimeClientApiOptions {
   now?: () => string;
@@ -38,9 +38,15 @@ export function createPluginRuntimeCapabilityApiFromClient(
   return {
     async startTask(request) {
       const sessionId = normalizeString(request.sessionId);
+      const threadId = normalizeString(request.threadId);
       if (!sessionId) {
         throw new Error(
-          "AgentRuntimeClient adapter requires an existing sessionId for Plugin tasks.",
+          "AgentRuntimeClient adapter requires a canonical session identity for Plugin tasks.",
+        );
+      }
+      if (!threadId) {
+        throw new Error(
+          "AgentRuntimeClient adapter requires a canonical thread identity for Plugin tasks.",
         );
       }
       const taskId =
@@ -50,8 +56,6 @@ export function createPluginRuntimeCapabilityApiFromClient(
       const eventName =
         normalizeString(request.eventName) ??
         `plugin_runtime:${request.appId}:${taskId}`;
-      const queueIfBusy = request.queueIfBusy ?? true;
-      const queuedTurnId = `plugin-queued-${taskId}`;
       const message = buildPluginRuntimeTaskMessage(request);
       const metadata = {
         ...(request.metadata ?? {}),
@@ -59,46 +63,53 @@ export function createPluginRuntimeCapabilityApiFromClient(
           ? request.runtimeRequest.metadata
           : {}),
       };
-      const structuredOutput = structuredOutputContractFromRequest(request.expectedOutput);
+      const structuredOutput = structuredOutputContractFromRequest(
+        request.expectedOutput,
+      );
       const outputSchema = outputSchemaFromStructuredOutput(
         structuredOutput,
         request.expectedOutput,
       );
-      const startParams: AgentSessionTurnStartParams = omitUndefined({
-        sessionId,
-        turnId: normalizeString(request.turnId),
-        input: {
-          text: message,
-          attachments: [],
-        },
-        runtimeOptions: omitUndefined({
-          stream: true,
-          eventName,
-          queuedTurnId,
-          expectedOutput: request.expectedOutput,
-          structuredOutput,
-          outputSchema,
-          runtimeRequest: mergePluginRuntimeRequest(
-            request.runtimeRequest,
-            request.workspaceId,
-            metadata,
+      const runtimeRequest = mergePluginRuntimeRequest(
+        request.runtimeRequest,
+        request.workspaceId,
+        metadata,
+      );
+      const startParams: StartTurnParams = omitUndefined({
+        threadId,
+        input: [{ type: "text" as const, text: message }],
+        approvalPolicy: runtimeRequest?.approvalPolicy,
+        cwd:
+          normalizeString(runtimeRequest?.workingDir ?? undefined) ??
+          normalizeString(runtimeRequest?.projectRoot ?? undefined) ??
+          normalizeString(runtimeRequest?.workspaceRoot ?? undefined),
+        effort: normalizeString(runtimeRequest?.reasoningEffort ?? undefined),
+        model:
+          normalizeString(runtimeRequest?.modelPreference ?? undefined) ??
+          normalizeString(
+            runtimeRequest?.providerConfig?.modelName ?? undefined,
           ),
+        outputSchema,
+        sandboxPolicy: runtimeRequest?.sandboxPolicy,
+        responsesapiClientMetadata: omitUndefined({
+          eventName,
+          taskId,
+          taskKind: request.taskKind,
+          workspaceId: request.workspaceId,
+          pluginRuntime: {
+            appId: request.appId,
+            entryKey: request.entryKey,
+            taskId,
+            taskKind: request.taskKind,
+          },
+          metadata,
         }),
-        queueIfBusy,
-        skipPreSubmitResume: request.skipPreSubmitResume,
       });
       const response = await runtimeClient.startTurn(startParams);
       const turn = response.result.turn;
-      const threadId = normalizeString(turn.threadId);
-      if (!threadId) {
-        throw new Error(
-          "agentSession/turn/start did not return a canonical threadId",
-        );
-      }
-      if (normalizeString(turn.sessionId) !== sessionId) {
-        throw new Error(
-          "agentSession/turn/start returned a sessionId different from the requested session",
-        );
+      const turnId = normalizeString(turn.id);
+      if (!turnId) {
+        throw new Error("turn/start did not return a canonical turn id");
       }
       return {
         appId: request.appId,
@@ -108,10 +119,10 @@ export function createPluginRuntimeCapabilityApiFromClient(
         taskKind: request.taskKind,
         sessionId,
         threadId,
-        turnId: turn.turnId,
+        turnId,
         eventName,
         status: "accepted",
-        submittedAt: turn.startedAt ?? now(),
+        submittedAt: timestampFromUnixSeconds(turn.startedAt) ?? now(),
       };
     },
     async getTask(request) {
@@ -124,7 +135,7 @@ export function createPluginRuntimeCapabilityApiFromClient(
         appId: request.appId,
         taskId: request.taskId,
         sessionId: thread.sessionId,
-        threadId: thread.threadId,
+        threadId: thread.id,
         status: "thread_read_available",
         taskStatus: threadStatusToPluginTaskStatus(thread),
         taskEvents: [],
@@ -141,27 +152,27 @@ export function createPluginRuntimeCapabilityApiFromClient(
       const requestedTurnId = normalizeString(request.turnId);
       if (
         !activeTurn ||
-        (requestedTurnId && requestedTurnId !== activeTurn.turnId)
+        (requestedTurnId && requestedTurnId !== activeTurn.id)
       ) {
         return {
           appId: request.appId,
           taskId: request.taskId,
           sessionId: thread.sessionId,
-          threadId: thread.threadId,
+          threadId: thread.id,
           cancelled: false,
           status: "not_running",
         };
       }
-      const turnId = activeTurn.turnId;
+      const turnId = activeTurn.id;
       await runtimeClient.cancelTurn({
-        sessionId: thread.sessionId,
+        threadId: thread.id,
         turnId,
       });
       return {
         appId: request.appId,
         taskId: request.taskId,
         sessionId: thread.sessionId,
-        threadId: thread.threadId,
+        threadId: thread.id,
         cancelled: true,
         status: "cancelled",
       };
@@ -254,16 +265,15 @@ function threadStatusToPluginTaskStatus(thread: CanonicalThread): string {
       case "interrupted":
         return "cancelled";
       case "inProgress":
-        return latestTurn.approval === "pending" ||
-          thread.status.type === "active" &&
-            thread.status.activeFlags?.some((flag) =>
-              ["waitingOnApproval", "waitingOnUserInput"].includes(flag),
-            )
+        return thread.status?.type === "active" &&
+          thread.status.activeFlags?.some((flag) =>
+            ["waitingOnApproval", "waitingOnUserInput"].includes(flag),
+          )
           ? "blocked"
           : "running";
     }
   }
-  switch (thread.status.type) {
+  switch (thread.status?.type) {
     case "idle":
       return "idle";
     case "active":
@@ -277,12 +287,10 @@ function threadStatusToPluginTaskStatus(thread: CanonicalThread): string {
 
 function activeThreadTurn(thread: CanonicalThread): CanonicalTurn | undefined {
   const activeTurns = (thread.turns ?? []).filter(
-    (turn) => turn.status === "inProgress" && turn.queue?.state !== "queued",
+    (turn) => turn.status === "inProgress",
   );
   if (activeTurns.length > 1) {
-    throw new Error(
-      `Canonical thread ${thread.threadId} has multiple active turns`,
-    );
+    throw new Error(`Canonical thread ${thread.id} has multiple active turns`);
   }
   return activeTurns[0];
 }
@@ -293,44 +301,43 @@ async function readCanonicalThread(
 ): Promise<CanonicalThread> {
   const response = await runtimeClient.readThread({
     threadId,
-    turnsView: "full",
+    includeTurns: true,
   });
   const thread = response.result.thread;
   if (!thread || typeof thread !== "object") {
     throw new Error(`Canonical thread ${threadId} read returned no thread`);
   }
-  if (thread.threadId !== threadId) {
+  if (thread.id !== threadId) {
     throw new Error(
-      `Canonical thread read returned threadId ${thread.threadId} for ${threadId}`,
+      `Canonical thread read returned threadId ${thread.id} for ${threadId}`,
     );
   }
-  if (thread.turnsView !== "full" || !Array.isArray(thread.turns)) {
-    throw new Error(
-      `Canonical thread ${threadId} read did not return full turns`,
-    );
+  if (!Array.isArray(thread.turns)) {
+    throw new Error(`Canonical thread ${threadId} read did not include turns`);
   }
   if (!normalizeString(thread.sessionId)) {
     throw new Error(`Canonical thread ${threadId} read returned no sessionId`);
   }
   const turnIds = new Set<string>();
   for (const turn of thread.turns) {
-    const turnId = normalizeString(turn.turnId);
+    const turnId = normalizeString(turn.id);
     if (!turnId || turnIds.has(turnId)) {
       throw new Error(
         `Canonical thread ${threadId} read returned invalid turn identity`,
       );
     }
-    if (
-      turn.threadId !== thread.threadId ||
-      turn.sessionId !== thread.sessionId
-    ) {
-      throw new Error(
-        `Canonical thread ${threadId} read returned mismatched turn identity`,
-      );
-    }
     turnIds.add(turnId);
   }
   return thread;
+}
+
+function timestampFromUnixSeconds(
+  value: number | null | undefined,
+): string | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return new Date(value * 1_000).toISOString();
 }
 
 function normalizeString(value: string | undefined): string | undefined {

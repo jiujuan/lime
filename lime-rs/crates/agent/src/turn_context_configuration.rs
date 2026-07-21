@@ -1,4 +1,4 @@
-use agent_protocol::turn_context::TurnOutputSchemaSource;
+use agent_protocol::{turn_context::TurnOutputSchemaSource, CollaborationMode};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -13,7 +13,7 @@ pub struct AgentTurnContextConfigurationRequest {
     pub effort: Option<String>,
     pub approval_policy: Option<String>,
     pub sandbox_policy: Option<String>,
-    pub collaboration_mode: Option<String>,
+    pub collaboration_mode: Option<CollaborationMode>,
     pub user_visible_input_text: Option<String>,
     pub output_schema: Option<Value>,
     pub metadata: HashMap<String, Value>,

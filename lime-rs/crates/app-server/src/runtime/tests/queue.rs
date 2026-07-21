@@ -1,5 +1,6 @@
 use super::support::*;
 use super::*;
+use crate::runtime::session_control::QueuedTurnResume;
 
 #[tokio::test]
 async fn queue_session_controls_use_current_runtime_core_read_model() {
@@ -82,16 +83,10 @@ async fn queue_session_controls_use_current_runtime_core_read_model() {
     );
 
     let blocked_resume = core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_queue".to_string(),
-                resume_contract: None,
-            },
-            RuntimeHostContext::default(),
-        )
+        .resume_next_queued_turn_if_idle("sess_queue", RuntimeHostContext::default())
         .await
         .expect("blocked resume");
-    assert!(!blocked_resume.response.resumed);
+    assert!(matches!(blocked_resume, QueuedTurnResume::Blocked));
 
     core.append_external_runtime_events(
         "sess_queue",
@@ -100,21 +95,23 @@ async fn queue_session_controls_use_current_runtime_core_read_model() {
     )
     .expect("complete running");
     let resumed = core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_queue".to_string(),
-                resume_contract: None,
-            },
-            RuntimeHostContext::default(),
-        )
+        .resume_next_queued_turn_if_idle("sess_queue", RuntimeHostContext::default())
         .await
         .expect("resume queued");
-    assert!(resumed.response.resumed);
-    assert!(resumed
-        .response
-        .turns
-        .iter()
-        .any(|turn| turn.turn_id == "turn_queued" && turn.status == AgentTurnStatus::Accepted));
+    match resumed {
+        QueuedTurnResume::Started {
+            queued_turn_id,
+            events,
+        } => {
+            assert_eq!(queued_turn_id, "turn_queued");
+            assert!(events
+                .iter()
+                .any(|event| event.event_type == "turn.accepted"));
+        }
+        QueuedTurnResume::Empty | QueuedTurnResume::Blocked => {
+            panic!("queued turn helper did not start turn_queued")
+        }
+    }
 
     let second_queued = core
         .start_turn(
@@ -519,8 +516,8 @@ async fn read_session_projects_queued_turn_input_snapshot() {
     assert_eq!(queued["attachments"][0]["kind"], "image");
     assert_eq!(queued["attachments"][0]["uri"], "file://queued.png");
     assert_eq!(
-        queued["input_attachments"][0]["metadata"]["mediaType"],
-        "image/png"
+        queued["input_attachments"][0]["detail"],
+        serde_json::Value::Null
     );
     assert_eq!(queued["path_references"][0]["path"], "/project/report.md");
     assert_eq!(queued["pathReferences"][0]["name"], "report.md");
@@ -689,16 +686,16 @@ async fn resume_queued_turn_preserves_runtime_options_for_backend() {
     .expect("complete running");
 
     let resumed = core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_queue_runtime_options".to_string(),
-                resume_contract: None,
-            },
+        .resume_next_queued_turn_if_idle(
+            "sess_queue_runtime_options",
             RuntimeHostContext::default(),
         )
         .await
         .expect("resume queued");
-    assert!(resumed.response.resumed);
+    assert!(matches!(
+        resumed,
+        QueuedTurnResume::Started { queued_turn_id, .. } if queued_turn_id == "turn_queued"
+    ));
 
     let requests = backend
         .requests
@@ -815,95 +812,6 @@ async fn second_active_turn_without_queue_fails_closed() {
 }
 
 #[tokio::test]
-async fn resume_queued_turn_rejects_incomplete_resume_contract_before_start() {
-    let core = RuntimeCore::default();
-    core.start_session(AgentSessionStartParams {
-        session_id: Some("sess_resume_contract".to_string()),
-        thread_id: Some("thread_resume_contract".to_string()),
-        app_id: "agent-chat".to_string(),
-        workspace_id: Some("workspace-current".to_string()),
-        business_object_ref: None,
-        locale: None,
-    })
-    .expect("session");
-
-    core.start_turn(
-        AgentSessionTurnStartParams {
-            session_id: "sess_resume_contract".to_string(),
-            turn_id: Some("turn_running".to_string()),
-            input: AgentInput {
-                text: "running".to_string(),
-                attachments: Vec::new(),
-            },
-            runtime_options: None,
-            queue_if_busy: false,
-            skip_pre_submit_resume: false,
-        },
-        RuntimeHostContext::default(),
-    )
-    .await
-    .expect("running turn");
-    core.start_turn(
-        AgentSessionTurnStartParams {
-            session_id: "sess_resume_contract".to_string(),
-            turn_id: Some("turn_queued".to_string()),
-            input: AgentInput {
-                text: "queued".to_string(),
-                attachments: Vec::new(),
-            },
-            runtime_options: None,
-            queue_if_busy: true,
-            skip_pre_submit_resume: false,
-        },
-        RuntimeHostContext::default(),
-    )
-    .await
-    .expect("queued turn");
-    core.append_external_runtime_events(
-        "sess_resume_contract",
-        Some("turn_running"),
-        vec![RuntimeEvent::new("turn.completed", json!({}))],
-    )
-    .expect("complete running");
-
-    let error = core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_resume_contract".to_string(),
-                resume_contract: Some(RuntimeResumeContract {
-                    schema_version: RUNTIME_RESUME_CONTRACT_SCHEMA_VERSION.to_string(),
-                    runtime_id: "app-server".to_string(),
-                    session_id: "sess_resume_contract".to_string(),
-                    turn_id: "turn_queued".to_string(),
-                    resume_mode: "selected-actions".to_string(),
-                    open_action_ids: vec!["action-1".to_string()],
-                    decisions: Vec::new(),
-                    expires_at: None,
-                    created_at: "2026-06-12T00:00:00.000Z".to_string(),
-                }),
-            },
-            RuntimeHostContext::default(),
-        )
-        .await
-        .expect_err("incomplete resume contract should fail closed");
-    assert!(matches!(error, RuntimeCoreError::CapabilityDenied(_)));
-
-    let read = core
-        .read_session_current(AgentSessionReadParams {
-            session_id: "sess_resume_contract".to_string(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .await
-        .expect("read session");
-    assert!(read
-        .turns
-        .iter()
-        .any(|turn| turn.turn_id == "turn_queued" && turn.status == AgentTurnStatus::Queued));
-}
-
-#[tokio::test]
 async fn resume_queued_turn_restores_queue_when_backend_fails_before_emit() {
     let core = RuntimeCore::with_backend(Arc::new(FailBeforeEmitBackend {
         start_count: AtomicUsize::new(0),
@@ -980,13 +888,7 @@ async fn resume_queued_turn_restores_queue_when_backend_fails_before_emit() {
     .expect("complete running");
 
     let error = core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_queue_rollback".to_string(),
-                resume_contract: None,
-            },
-            RuntimeHostContext::default(),
-        )
+        .resume_next_queued_turn_if_idle("sess_queue_rollback", RuntimeHostContext::default())
         .await
         .expect_err("resume should fail before backend emits");
     assert!(matches!(error, RuntimeCoreError::Backend(_)));

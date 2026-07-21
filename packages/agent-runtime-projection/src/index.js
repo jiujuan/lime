@@ -14,7 +14,6 @@ export * from "./lifecycle.js";
 export * from "./normalization.js";
 export * from "./planApproval.js";
 export * from "./permissionEvents.js";
-export * from "./queueEvents.js";
 export * from "./refs.js";
 export * from "./routing.js";
 export * from "./runtimeFacts.js";

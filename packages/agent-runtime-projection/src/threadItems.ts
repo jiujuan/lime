@@ -14,6 +14,7 @@ import {
 } from "./envelope.js";
 import { extractArtifactRefs } from "./refs.js";
 import {
+  compactProjectionFields,
   metadataKeys,
   readRecord,
   readStringArrayField,
@@ -46,6 +47,8 @@ export interface AgentUiThreadItemProjectionInput {
   exit_code?: number;
   query?: string;
   action?: string;
+  action_data?: unknown;
+  results?: readonly unknown[] | null;
   request_id?: string;
   action_type?: string;
   prompt?: string;
@@ -270,6 +273,49 @@ function summarizeAgentMessageContentParts(
   };
 }
 
+function extractCanonicalToolItemPayload(
+  metadata: unknown,
+): Record<string, unknown> {
+  const record = readRecord(metadata);
+  const canonicalType = readStringField(record, ["canonical_type"]);
+  if (!canonicalType) {
+    return {};
+  }
+  if (canonicalType === "mcpToolCall") {
+    return compactProjectionFields({
+      canonicalType,
+      mcpServer: readStringField(record, ["server"]),
+      mcpAppContext: readRecord(record?.app_context),
+      mcpPluginId: readStringField(record, ["plugin_id"]),
+      mcpResultContent: Array.isArray(record?.result_content)
+        ? record.result_content
+        : undefined,
+      mcpResultMeta: record?.result_meta,
+    });
+  }
+  if (canonicalType === "dynamicToolCall") {
+    return compactProjectionFields({
+      canonicalType,
+      namespace: readStringField(record, ["namespace"]),
+      contentItems: Array.isArray(record?.content_items)
+        ? record.content_items
+        : undefined,
+    });
+  }
+  if (canonicalType === "collabAgentToolCall") {
+    return compactProjectionFields({
+      canonicalType,
+      senderThreadId: readStringField(record, ["sender_thread_id"]),
+      receiverThreadIds: readStringArrayField(record, ["receiver_thread_ids"]),
+      prompt: readStringField(record, ["prompt"]),
+      model: readStringField(record, ["model"]),
+      reasoningEffort: readStringField(record, ["reasoning_effort"]),
+      agentsStates: readRecord(record?.agents_states),
+    });
+  }
+  return { canonicalType };
+}
+
 export function buildAgentUiThreadItemSubagentActivityEvent(
   sourceType: AgentUiProjectionSourceType | string,
   item: AgentUiThreadItemProjectionInput,
@@ -437,6 +483,7 @@ export function buildAgentUiThreadItemEvent(
           outputPreview: truncateText(item.output),
           errorPreview: truncateText(item.error),
           metadataKeys: metadataKeys(item.metadata),
+          ...extractCanonicalToolItemPayload(item.metadata),
           ...extractAgentUiToolLifecyclePayloadMetadata(item.metadata),
         },
         refs: extractArtifactRefs(item.metadata),
@@ -474,6 +521,11 @@ export function buildAgentUiThreadItemEvent(
           toolName: "web_search",
           queryPreview: truncateText(item.query),
           action: item.action,
+          actionData: item.action_data,
+          results: Array.isArray(item.results) ? item.results : undefined,
+          resultCount: Array.isArray(item.results)
+            ? item.results.length
+            : undefined,
           outputPreview: truncateText(item.output),
         },
       };

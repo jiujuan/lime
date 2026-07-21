@@ -26,7 +26,10 @@ import {
 } from "./agentChatToolResult";
 import { mergeAdjacentAssistantMessages } from "./agentChatHistoryAdjacentMerge";
 import { hydrateSessionDetailMessagesFromArtifacts } from "./agentChatHistoryArtifacts";
-import { appendHistoryMessageAttachments, appendUniqueMessageImage } from "./agentChatHistoryImages";
+import {
+  appendHistoryMessageAttachments,
+  appendUniqueMessageImage,
+} from "./agentChatHistoryImages";
 import { mergeHydratedMessagesWithLocalState } from "./agentChatHistoryLocalMerge";
 import {
   compactHistoricalRestoreMessage,
@@ -152,6 +155,15 @@ export const hydrateSessionDetailMessages = (
           continue;
         }
 
+        if (partType === "skill" || partType === "mention") {
+          const name = readHistoryString(part.name);
+          const path = readHistoryString(part.path);
+          if (name && path) {
+            appendText(`${partType === "skill" ? "$" : "@"}${name} (${path})`);
+          }
+          continue;
+        }
+
         if (
           compactCompletedHistory &&
           (partType === "thinking" ||
@@ -255,7 +267,8 @@ export const hydrateSessionDetailMessages = (
               metadata,
             ),
             metadata,
-            structuredContent: part.structuredContent ?? part.structured_content,
+            structuredContent:
+              part.structuredContent ?? part.structured_content,
           };
           const success = isToolResultSuccessful(normalizedResult);
           const normalizedResultRecord =
@@ -348,7 +361,10 @@ export const hydrateSessionDetailMessages = (
       const content = sanitizedRawContent || imageWorkbenchAssistantIntro;
       const displayContentParts =
         !sanitizedRawContent && imageWorkbenchAssistantIntro
-          ? [{ type: "text" as const, text: imageWorkbenchAssistantIntro }, ...contentParts]
+          ? [
+              { type: "text" as const, text: imageWorkbenchAssistantIntro },
+              ...contentParts,
+            ]
           : contentParts;
       const sanitizedContentParts =
         sanitizeContentPartsForDisplay(displayContentParts, {
@@ -375,8 +391,8 @@ export const hydrateSessionDetailMessages = (
         readHistoryString(msg.runtime_turn_id);
       const usage =
         normalizedRole === "assistant"
-          ? normalizeHistoryUsage(msg.usage) ??
-            resolveSessionDetailTurnUsage(detail, runtimeTurnId)
+          ? (normalizeHistoryUsage(msg.usage) ??
+            resolveSessionDetailTurnUsage(detail, runtimeTurnId))
           : undefined;
 
       if (

@@ -1,7 +1,8 @@
 use super::materializer::materialize_events;
 use agent_protocol::{
-    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, ItemKind, ItemStatus,
-    PlanStepStatus, ThreadItemPayload, TurnApprovalState, TurnQueueState, TurnStatus,
+    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChange,
+    FileChangeKind, ItemKind, ItemStatus, PlanStepStatus, ThreadItemPayload, TurnApprovalState,
+    TurnQueueState, TurnStatus,
 };
 use app_server_protocol::AgentEvent;
 use serde_json::json;
@@ -50,6 +51,97 @@ fn canonical_tool_item(item_id: &str, status: &str, ordinal: u64) -> serde_json:
         },
         "metadata": {"source": "nested-canonical"}
     })
+}
+
+#[test]
+fn artifact_snapshot_lowers_to_applied_file_change() {
+    let changes = materialize_events(
+        &[event(
+            "artifact-snapshot",
+            1,
+            "artifact.snapshot",
+            "turn-1",
+            json!({
+                "artifact": {
+                    "artifactId": "artifact-1",
+                    "filePath": "src/generated.ts",
+                    "content": "export const generated = true;"
+                }
+            }),
+        )],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize artifact snapshot");
+
+    assert_eq!(changes.changed_items.len(), 1);
+    let item = &changes.changed_items[0];
+    assert_eq!(item.status, ItemStatus::Completed);
+    assert_eq!(
+        item.payload,
+        ThreadItemPayload::File {
+            changes: vec![FileChange {
+                path: "src/generated.ts".to_string(),
+                kind: FileChangeKind::Update { move_path: None },
+                diff: "export const generated = true;".to_string(),
+            }],
+            status: agent_protocol::FileChangeStatus::Applied,
+        }
+    );
+}
+
+#[test]
+fn patch_batch_preserves_changes_when_declined_terminal_omits_snapshot() {
+    let changes = materialize_events(
+        &[
+            event(
+                "patch-started",
+                1,
+                "patch.started",
+                "turn-1",
+                json!({
+                    "patchId": "patch-1",
+                    "changes": [
+                        {"kind": "add", "path": "new.txt", "diff": "+new"},
+                        {"kind": "delete", "path": "dead.txt", "diff": "-dead"},
+                        {"kind": "update", "path": "same.txt", "diff": "-old\n+new"},
+                        {
+                            "kind": "update",
+                            "path": "source.txt",
+                            "movePath": "target.txt",
+                            "diff": "-before\n+after"
+                        }
+                    ]
+                }),
+            ),
+            event(
+                "patch-declined",
+                2,
+                "patch.declined",
+                "turn-1",
+                json!({"patchId": "patch-1", "status": "declined"}),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize patch batch");
+
+    assert_eq!(changes.changed_items.len(), 1);
+    let item = &changes.changed_items[0];
+    assert_eq!(item.status, ItemStatus::Completed);
+    let ThreadItemPayload::File { changes, status } = &item.payload else {
+        panic!("file change payload");
+    };
+    assert_eq!(*status, agent_protocol::FileChangeStatus::Rejected);
+    assert_eq!(changes.len(), 4);
+    assert_eq!(
+        changes[3].kind,
+        FileChangeKind::Update {
+            move_path: Some("target.txt".to_string())
+        }
+    );
+    assert_eq!(changes[3].path, "source.txt");
 }
 
 #[test]

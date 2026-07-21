@@ -27,10 +27,7 @@ const RUNTIME_STATUS_LABEL_KEYS = {
   completed: "agentChat.inputbar.runtimeStatus.status.completed",
   failed: "agentChat.inputbar.runtimeStatus.status.failed",
   aborted: "agentChat.inputbar.runtimeStatus.status.aborted",
-} as const satisfies Record<
-  InputbarRuntimeStatusLineModel["status"],
-  string
->;
+} as const satisfies Record<InputbarRuntimeStatusLineModel["status"], string>;
 
 const ACTIVE_RUNTIME_PHASE_LABEL_KEYS = {
   retrying: "agentChat.inputbar.runtimeStatus.phase.retrying",
@@ -189,10 +186,7 @@ export const InputbarRuntimeStatusLine: React.FC<
         ] as AgentI18nKey,
         {},
       )
-    : t(
-        RUNTIME_STATUS_LABEL_KEYS[runtime.status] as AgentI18nKey,
-        {},
-      );
+    : t(RUNTIME_STATUS_LABEL_KEYS[runtime.status] as AgentI18nKey, {});
   const elapsedText =
     startedAtMs && (completedAtMs || now) >= startedAtMs
       ? formatElapsed((completedAtMs || now) - startedAtMs)
@@ -242,16 +236,6 @@ export const InputbarRuntimeStatusLine: React.FC<
       ),
     );
   }
-  if (runtime.queuedTurnCount > 0) {
-    segments.push(
-      t(
-        "agentChat.inputbar.runtimeStatus.segment.queuedTurns" as AgentI18nKey,
-        {
-          count: runtime.queuedTurnCount,
-        },
-      ),
-    );
-  }
   if (runtime.subtaskStats?.total) {
     segments.push(
       t("agentChat.inputbar.runtimeStatus.segment.subtasks" as AgentI18nKey, {
@@ -269,7 +253,10 @@ export const InputbarRuntimeStatusLine: React.FC<
   if (promptCacheNoticeLabel) {
     segments.push(promptCacheNoticeLabel);
   }
-  if (canStop && (runtime.status === "running" || runtime.status === "queued")) {
+  if (
+    canStop &&
+    (runtime.status === "running" || runtime.status === "queued")
+  ) {
     segments.push(
       t("agentChat.inputbar.runtimeStatus.segment.canStop" as AgentI18nKey, {}),
     );

@@ -1,4 +1,10 @@
-import { startContentFactoryHostGenerationFixture } from "../lib/content-factory-host-generation-fixture.mjs";
+import {
+  startContentFactoryHostGenerationFixture,
+} from "../lib/content-factory-host-generation-fixture.mjs";
+import {
+  DEFAULT_FIXTURE_API_KEY,
+  DEFAULT_FIXTURE_MODEL,
+} from "../lib/openai-compatible-fixture-server.mjs";
 import {
   APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   APP_SERVER_METHOD_ARTIFACT_READ,
@@ -11,21 +17,10 @@ import {
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_THREAD_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
-  FIXTURE_MODEL,
-  FIXTURE_PROVIDER,
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
   runWorkspacePatchWorkerDogfoodTurn,
@@ -36,6 +31,7 @@ import {
   buildContentFactoryWorkspacePatch,
 } from "./claw-chat-current-fixture-content-factory-workspace-patches.mjs";
 import {
+  ensureFixtureTextProvider,
   invokeAppServerFromPage,
   reloadRendererDocument,
   waitForRendererReady,
@@ -98,42 +94,60 @@ export async function runContentFactoryArticleWorkspaceScenario({
   const hostGenerationFixture =
     await startContentFactoryHostGenerationFixture();
   try {
+    const fixtureProvider = await ensureFixtureTextProvider(
+      page,
+      appServerRequests,
+      {
+        apiHost: hostGenerationFixture.baseUrl,
+        apiKey: DEFAULT_FIXTURE_API_KEY,
+        modelId: DEFAULT_FIXTURE_MODEL,
+      },
+    );
     const sessionCreation = await createContentFactoryArticleWorkspaceSession(
       page,
       workspace,
       appServerRequests,
+      fixtureProvider,
     );
     const installedStateSave = await saveWorkspacePatchWorkerInstalledState(
       page,
       appServerRequests,
     );
 
-    const runtimeEventsAppend = await appendContentFactoryRuntimeEvents(
-      page,
-      workspace,
-      appServerRequests,
-    );
     const workerTurnStart = await runWorkspacePatchWorkerDogfoodTurn({
       page,
       options,
       workspace,
       requestLog: appServerRequests,
+      identity: sessionCreation.identity,
       hostGenerationFixture,
     });
+    const identity = createContentFactoryScenarioIdentity(
+      sessionCreation.identity,
+      workerTurnStart,
+    );
+    const runtimeEventsAppend = await appendContentFactoryRuntimeEvents(
+      page,
+      workspace,
+      appServerRequests,
+      identity,
+    );
     const actionResultRuntimeEventsAppend =
       await appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
         page,
         workspace,
         appServerRequests,
+        identity,
       );
     const rightSurfaceRequest =
       await requestContentFactoryArticleWorkspaceSurface(
         page,
         workspace,
         appServerRequests,
+        identity,
       );
 
-    await notifySessionChanged(page, workspace.workspaceId);
+    await notifySessionChanged(page, workspace.workspaceId, identity.sessionId);
 
     const guiSessionVisible = await waitForGuiSessionVisible(
       page,
@@ -145,7 +159,8 @@ export async function runContentFactoryArticleWorkspaceScenario({
       options,
       appServerRequests,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        sessionId: identity.sessionId,
+        threadId: identity.threadId,
         title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
       },
     );
@@ -154,6 +169,7 @@ export async function runContentFactoryArticleWorkspaceScenario({
       page,
       options,
       appServerRequests,
+      identity,
     );
     const workerArticleArtifactRef = Array.isArray(articleObjectRef.artifactIds)
       ? articleObjectRef.artifactIds.find(
@@ -184,19 +200,22 @@ export async function runContentFactoryArticleWorkspaceScenario({
         page,
         options,
         appServerRequests,
+        identity,
       );
     const articleEditedDraftReload =
       await reloadContentFactoryArticleWorkspaceSession(
         page,
         options,
         workspace,
+        identity,
       );
     const articleEditedDraftSessionReopened = await openSessionFromSidebar(
       page,
       options,
       appServerRequests,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        sessionId: identity.sessionId,
+        threadId: identity.threadId,
         title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
       },
     );
@@ -219,13 +238,14 @@ export async function runContentFactoryArticleWorkspaceScenario({
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        historyLimit: 20,
+        threadId: identity.threadId,
+        includeTurns: true,
       },
       appServerRequests,
     );
     const readModelSummary = summarizeContentFactoryArticleWorkspaceReadModel(
       readModel.result,
+      identity,
     );
     const readModelArticleArtifactRef =
       readModelSummary.workerArticleObject?.previewArtifactId ||
@@ -239,7 +259,7 @@ export async function runContentFactoryArticleWorkspaceScenario({
       page,
       APP_SERVER_METHOD_ARTIFACT_READ,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        sessionId: identity.sessionId,
         artifactRef: workerArticleArtifactRef,
         includeContent: true,
         limit: 1,
@@ -253,19 +273,20 @@ export async function runContentFactoryArticleWorkspaceScenario({
       page,
       APP_SERVER_METHOD_WORKFLOW_READ,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        sessionId: identity.sessionId,
       },
       appServerRequests,
     );
     const workflowReadSummary = summarizeContentFactoryWorkflowRead(
       workflowRead.result,
+      identity,
     );
     const workflowCancel = await invokeAppServerFromPage(
       page,
       APP_SERVER_METHOD_WORKFLOW_CANCEL,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
+        sessionId: identity.sessionId,
+        workflowRunId: identity.workflowCancelRunId,
         reasonCode: "fixture_cancel_requested",
         reason: "Electron workflow control fixture",
       },
@@ -274,7 +295,7 @@ export async function runContentFactoryArticleWorkspaceScenario({
     const workflowCancelSummary = summarizeContentFactoryWorkflowControl(
       workflowCancel.result,
       {
-        workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
+        workflowRunId: identity.workflowCancelRunId,
         stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID,
       },
     );
@@ -282,8 +303,8 @@ export async function runContentFactoryArticleWorkspaceScenario({
       page,
       APP_SERVER_METHOD_WORKFLOW_RETRY,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+        sessionId: identity.sessionId,
+        workflowRunId: identity.workflowRetryRunId,
         stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
         reasonCode: "fixture_retry_requested",
         reason: "Electron workflow control fixture",
@@ -293,12 +314,15 @@ export async function runContentFactoryArticleWorkspaceScenario({
     const workflowRetrySummary = summarizeContentFactoryWorkflowControl(
       workflowRetry.result,
       {
-        workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+        workflowRunId: identity.workflowRetryRunId,
         stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
       },
     );
     return sanitizeJson({
-      contentFactoryArticleWorkspaceSessionCreation: sessionCreation,
+      contentFactoryArticleWorkspaceSessionCreation: {
+        ...sessionCreation,
+        identity,
+      },
       contentFactoryArticleWorkspaceInstalledStateSave: installedStateSave,
       contentFactoryArticleWorkspaceRuntimeEventsAppend:
         summarizeRuntimeEventsAppend(runtimeEventsAppend.result),
@@ -347,10 +371,11 @@ async function reloadContentFactoryArticleWorkspaceSession(
   page,
   options,
   workspace,
+  identity,
 ) {
   const reload = await reloadRendererDocument(page, options);
   const renderer = await waitForRendererReady(page, options);
-  await notifySessionChanged(page, workspace.workspaceId);
+  await notifySessionChanged(page, workspace.workspaceId, identity.sessionId);
   const sessionVisible = await waitForGuiSessionVisible(
     page,
     options,
@@ -367,11 +392,13 @@ async function updateContentFactoryArticleWorkspaceEditedDraft(
   page,
   options,
   requestLog,
+  identity,
 ) {
   const objectRef = await readContentFactoryArticleDraftObjectRef(
     page,
     options,
     requestLog,
+    identity,
   );
   const editedDraft = {
     objectKey: `${objectRef.appId}:${objectRef.sessionId}:${objectRef.kind}:${objectRef.id}`,
@@ -383,7 +410,7 @@ async function updateContentFactoryArticleWorkspaceEditedDraft(
     page,
     APP_SERVER_METHOD_SESSION_UPDATE,
     {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId: identity.sessionId,
       articleWorkspaceEditedDraft: editedDraft,
     },
     requestLog,
@@ -393,7 +420,7 @@ async function updateContentFactoryArticleWorkspaceEditedDraft(
     sessionId:
       response.result?.session?.sessionId ??
       response.result?.session?.session_id ??
-      CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      identity.sessionId,
     objectKey: editedDraft.objectKey,
     objectRef,
     markdownMarker: CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER,
@@ -405,6 +432,7 @@ async function readContentFactoryArticleDraftObjectRef(
   page,
   options,
   requestLog,
+  identity,
 ) {
   const startedAt = Date.now();
   let lastSummary = null;
@@ -413,13 +441,14 @@ async function readContentFactoryArticleDraftObjectRef(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        historyLimit: 20,
+        threadId: identity.threadId,
+        includeTurns: true,
       },
       requestLog,
     );
     const summary = summarizeContentFactoryArticleWorkspaceReadModel(
       readModel.result,
+      identity,
     );
     lastSummary = summary;
     const objectRef = summary.workerArticleObject?.objectRef;
@@ -827,6 +856,7 @@ async function requestContentFactoryArticleWorkspaceSurface(
   page,
   workspace,
   requestLog,
+  identity,
 ) {
   return await invokeAppServerFromPage(
     page,
@@ -834,7 +864,7 @@ async function requestContentFactoryArticleWorkspaceSurface(
     {
       workspaceId: workspace.workspaceId,
       workspaceRoot: workspace.rootPath,
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId: identity.sessionId,
       surfaceKind: "articleWorkspace",
       origin: "runtime",
       priority: "foreground",
@@ -844,7 +874,7 @@ async function requestContentFactoryArticleWorkspaceSurface(
       metadata: {
         fixtureOrigin: "content-factory-article-workspace",
         contentFactoryWorkspacePatch:
-          buildContentFactoryWorkspacePatch(workspace),
+          buildContentFactoryWorkspacePatch(workspace, identity),
       },
     },
     requestLog,
@@ -855,6 +885,7 @@ async function createContentFactoryArticleWorkspaceSession(
   page,
   workspace,
   requestLog,
+  fixtureProvider,
 ) {
   assert(
     workspace?.rootPath,
@@ -869,83 +900,77 @@ async function createContentFactoryArticleWorkspaceSession(
     page,
     APP_SERVER_METHOD_SESSION_START,
     {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      threadId: CONTENT_FACTORY_ARTICLE_WORKSPACE_THREAD_ID,
-      appId: CONTENT_FACTORY_APP_ID,
-      workspaceId: workspace.workspaceId,
-      workingDir: workspace.rootPath,
-      businessObjectRef: {
-        kind: "agent.session",
-        id: `agent-session:${workspace.workspaceId}:${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}`,
-        title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-        metadata: {
-          title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-          workingDir: workspace.rootPath,
-          working_dir: workspace.rootPath,
-          appId: CONTENT_FACTORY_APP_ID,
-          executionStrategy: "react",
-          runStartHooks: false,
-          harness: {
-            hiddenFromUserRecents: false,
-            source: "smoke:content-factory-article-workspace",
-          },
-        },
-      },
+      model: fixtureProvider.modelId,
+      modelProvider: fixtureProvider.providerId,
+      cwd: workspace.rootPath,
+      runtimeWorkspaceRoots: [workspace.rootPath],
+      serviceName: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+      threadSource: "appServer",
+      historyMode: "paginated",
     },
     requestLog,
   );
-
-  const update = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_SESSION_UPDATE,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-      providerSelector: FIXTURE_PROVIDER,
-      providerName: FIXTURE_PROVIDER,
-      modelName: FIXTURE_MODEL,
-      executionStrategy: "react",
-      recentAccessMode: "full-access",
-      recentPreferences: {
-        searchMode: "auto",
-      },
-    },
-    requestLog,
-  );
+  const thread = session.result?.thread ?? {};
+  const sessionId = String(thread.sessionId ?? "").trim();
+  const threadId = String(thread.id ?? "").trim();
+  assert(sessionId, "thread/start 未返回内容工厂 canonical sessionId");
+  assert(threadId, "thread/start 未返回内容工厂 canonical thread.id");
 
   return sanitizeJson({
-    sessionId:
-      session.result?.session?.sessionId ??
-      session.result?.session?.session_id ??
-      null,
-    updatedSessionId:
-      update.result?.session?.sessionId ??
-      update.result?.session?.session_id ??
-      null,
+    sessionId,
+    threadId,
+    identity: { sessionId, threadId },
+    providerId: fixtureProvider.providerId,
+    modelId: fixtureProvider.modelId,
     appId: CONTENT_FACTORY_APP_ID,
     title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
   });
 }
 
-async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
+function createContentFactoryScenarioIdentity(sessionIdentity, workerTurnStart) {
+  const sessionId = String(sessionIdentity?.sessionId ?? "").trim();
+  const threadId = String(sessionIdentity?.threadId ?? "").trim();
+  const workerTurnId = String(workerTurnStart?.turnId ?? "").trim();
+  const workerTaskId = String(workerTurnStart?.taskId ?? "").trim();
+  assert(sessionId && threadId, "内容工厂场景缺少 canonical thread identity");
+  assert(workerTurnId && workerTaskId, "内容工厂场景缺少 canonical worker turn identity");
+
+  return {
+    sessionId,
+    threadId,
+    workerTurnId,
+    workerTaskId,
+    workflowRunId: `${sessionId}:workflow`,
+    workflowReviewRequestId: `${sessionId}:workflow:review`,
+    workflowCancelRunId: `${sessionId}:workflow:cancel`,
+    workflowRetryRunId: `${sessionId}:workflow:retry`,
+  };
+}
+
+async function appendContentFactoryRuntimeEvents(
+  page,
+  workspace,
+  requestLog,
+  identity,
+) {
   return await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
     {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId: identity.sessionId,
       turnId: null,
       runtimeEvents: [
         {
           type: "workflow.run.started",
           payload: {
-            workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID,
+            workflowRunId: identity.workflowRunId,
             workflowKey: "content_article_workflow",
             workflowTitle: "内容工厂文章生产",
             appId: CONTENT_FACTORY_APP_ID,
-            sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+            sessionId: identity.sessionId,
             workspaceId: workspace.workspaceId,
-            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
-            taskId: "article_job_1",
+            turnId: identity.workerTurnId,
+            taskId: identity.workerTaskId,
             taskKind: "content.article.generate",
             status: "running",
             sourceKind: "plugin_worker",
@@ -981,7 +1006,7 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
                 stepCount: 3,
                 status: "waiting",
                 requestId:
-                  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID,
+                  identity.workflowReviewRequestId,
                 actionType: "ask_user",
                 progressMessage: "等待用户确认文章可进入交付检查",
               },
@@ -991,7 +1016,7 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
         {
           type: "workflow.step.waiting",
           payload: {
-            workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID,
+            workflowRunId: identity.workflowRunId,
             workflowKey: "content_article_workflow",
             stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID,
             stepTitle: "人工复核",
@@ -999,7 +1024,7 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
             stepCount: 3,
             status: "waiting",
             requestId:
-              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID,
+              identity.workflowReviewRequestId,
             actionType: "ask_user",
             progressMessage: "等待用户确认文章可进入交付检查",
           },
@@ -1008,11 +1033,11 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
           type: "workflow.run.started",
           payload: {
             workflowRunId:
-              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
+              identity.workflowCancelRunId,
             workflowKey: "content_article_workflow",
             workflowTitle: "内容工厂取消控制验证",
             appId: CONTENT_FACTORY_APP_ID,
-            sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+            sessionId: identity.sessionId,
             workspaceId: workspace.workspaceId,
             taskId: "article_cancel_job_1",
             taskKind: "content.article.generate",
@@ -1035,13 +1060,13 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
           type: "workflow.run.started",
           payload: {
             workflowRunId:
-              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+              identity.workflowRetryRunId,
             workflowKey: "content_article_workflow",
             workflowTitle: "内容工厂重试控制验证",
             appId: CONTENT_FACTORY_APP_ID,
-            sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+            sessionId: identity.sessionId,
             workspaceId: workspace.workspaceId,
-            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
+            turnId: identity.workerTurnId,
             taskId: "article_retry_job_1",
             taskKind: "content.article.generate",
             status: "running",
@@ -1069,13 +1094,13 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
           type: "workflow.step.failed",
           payload: {
             workflowRunId:
-              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+              identity.workflowRetryRunId,
             workflowKey: "content_article_workflow",
             stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
             stepTitle: "重试草稿生成",
             stepIndex: 0,
             stepCount: 1,
-            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
+            turnId: identity.workerTurnId,
             attempt: 1,
             status: "failed",
             failure: {
@@ -1089,13 +1114,13 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
           type: "workflow.run.failed",
           payload: {
             workflowRunId:
-              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+              identity.workflowRetryRunId,
             workflowKey: "content_article_workflow",
             workflowTitle: "内容工厂重试控制验证",
             appId: CONTENT_FACTORY_APP_ID,
-            sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+            sessionId: identity.sessionId,
             workspaceId: workspace.workspaceId,
-            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
+            turnId: identity.workerTurnId,
             taskId: "article_retry_job_1",
             taskKind: "content.article.generate",
             status: "failed",
@@ -1119,12 +1144,12 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
               metadata: {
                 pluginWorker: {
                   appId: CONTENT_FACTORY_APP_ID,
-                  taskId: "article_job_1",
+                  taskId: identity.workerTaskId,
                   taskKind: "content.article.generate",
-                  turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+                  turnId: identity.workerTurnId,
                 },
                 contentFactoryWorkspacePatch:
-                  buildContentFactoryWorkspacePatch(workspace),
+                  buildContentFactoryWorkspacePatch(workspace, identity),
               },
             },
           },
@@ -1136,7 +1161,7 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
             appId: CONTENT_FACTORY_APP_ID,
             taskId: "image_job_1",
             taskKind: "content.image.generate",
-            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+            turnId: identity.workerTurnId,
             status: "failed",
             errorCode: "worker_invalid_json_output",
             errorMessage: "Plugin worker returned invalid JSON",
@@ -1152,7 +1177,7 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
                 appId: CONTENT_FACTORY_APP_ID,
                 taskId: "image_job_1",
                 taskKind: "content.image.generate",
-                turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+                turnId: identity.workerTurnId,
                 status: "failed",
                 errorCode: "worker_invalid_json_output",
                 failureCategory: "worker_output",
@@ -1174,12 +1199,13 @@ async function appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
   page,
   workspace,
   requestLog,
+  identity,
 ) {
   return await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
     {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId: identity.sessionId,
       turnId: null,
       runtimeEvents: [
         {
@@ -1197,7 +1223,7 @@ async function appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
                   appId: CONTENT_FACTORY_APP_ID,
                   taskId: "image_regenerate_job_1",
                   taskKind: "content.image.generate",
-                  turnId: "turn_content_factory_article_workspace_action",
+                  turnId: identity.workerTurnId,
                   workerEntrypoint: "./runtime/content-factory-worker.mjs",
                   status: "completed",
                   inputSummary: "action=regenerate; object=image-set-1",
@@ -1206,7 +1232,7 @@ async function appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
                   outputArtifactKind: "content_factory.workspace_patch",
                 },
                 contentFactoryWorkspacePatch:
-                  buildContentFactoryActionResultWorkspacePatch(workspace),
+                  buildContentFactoryActionResultWorkspacePatch(workspace, identity),
               },
             },
           },
@@ -1217,7 +1243,7 @@ async function appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
   );
 }
 
-async function notifySessionChanged(page, workspaceId) {
+async function notifySessionChanged(page, workspaceId, sessionId) {
   await page.evaluate(
     ({ sessionId, workspaceId }) => {
       window.dispatchEvent(
@@ -1232,7 +1258,7 @@ async function notifySessionChanged(page, workspaceId) {
       window.dispatchEvent(new Event("focus"));
     },
     {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId,
       workspaceId,
     },
   );
@@ -1731,11 +1757,11 @@ function summarizeRightSurfaceRequest(result) {
   });
 }
 
-function selectContentFactoryWorkerDogfoodEvidence(workerEvidence) {
+function selectContentFactoryWorkerDogfoodEvidence(workerEvidence, identity) {
   const taskEvidenceItems = workerEvidence.filter(
     (evidence) =>
       readString(evidence?.taskId, evidence?.task_id) ===
-      CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+      identity.workerTaskId,
   );
   const completedTaskEvidence = taskEvidenceItems.find((evidence) =>
     isCompletedContentFactoryWorkerEvidence(evidence),
@@ -1783,10 +1809,16 @@ function isCompletedContentFactoryWorkerEvidence(evidence) {
   );
 }
 
-function summarizeContentFactoryArticleWorkspaceReadModel(result) {
+function summarizeContentFactoryArticleWorkspaceReadModel(result, identity) {
   const detail = asRecord(result?.detail) ?? asRecord(result);
+  const thread = asRecord(result?.thread) ?? {};
+  const threadExtra = asRecord(thread.extra) ?? {};
   const threadRead =
-    asRecord(detail?.threadRead) ?? asRecord(detail?.thread_read) ?? {};
+    asRecord(detail?.threadRead) ??
+    asRecord(detail?.thread_read) ??
+    asRecord(threadExtra.threadRead) ??
+    asRecord(threadExtra.thread_read) ??
+    thread;
   const workflowRuns = readArray(
     threadRead.workflowRuns,
     threadRead.workflow_runs,
@@ -1804,6 +1836,8 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
     asRecord(threadRead.article_workspace) ??
     asRecord(detail?.articleWorkspace) ??
     asRecord(detail?.article_workspace) ??
+    asRecord(threadExtra.articleWorkspace) ??
+    asRecord(threadExtra.article_workspace) ??
     {};
   const objects = readArray(articleWorkspace.objects);
   const workerEvidence = readArray(
@@ -1814,7 +1848,11 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
     asRecord(articleWorkspace.editedDraft) ??
     asRecord(articleWorkspace.edited_draft) ??
     {};
-  const artifacts = readArray(threadRead.artifacts, detail?.artifacts);
+  const artifacts = readArray(
+    threadRead.artifacts,
+    detail?.artifacts,
+    threadExtra.artifacts,
+  );
   const articleArtifact = findArtifactByRef(
     artifacts,
     CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
@@ -1848,7 +1886,7 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
       "image_regenerate_job_1",
   );
   const workerDogfoodEvidence =
-    selectContentFactoryWorkerDogfoodEvidence(workerEvidence);
+    selectContentFactoryWorkerDogfoodEvidence(workerEvidence, identity);
   const workerArticleObject = objects.find((object) => {
     if (productObjectKind(object) !== "articleDraft") {
       return false;
@@ -1856,7 +1894,7 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
     const source = asRecord(object?.source) ?? {};
     return (
       readString(source.taskId, source.task_id) ===
-      CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID
+      identity.workerTaskId
     );
   });
   const workerArticleSource = asRecord(workerArticleObject?.source) ?? {};
@@ -2252,7 +2290,7 @@ function summarizeArticleRefRecord(ref) {
   });
 }
 
-function summarizeContentFactoryWorkflowRead(result) {
+function summarizeContentFactoryWorkflowRead(result, identity) {
   const workflow = asRecord(result?.workflow) ?? {};
   const workflowRuns = readArray(
     result?.workflowRuns,
@@ -2271,7 +2309,7 @@ function summarizeContentFactoryWorkflowRead(result) {
     workflowRuns.find(
       (item) =>
         readString(item?.workflowRunId, item?.workflow_run_id) ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID,
+        identity.workflowRunId,
     ) ?? workflowRuns[0];
   const waitingStep =
     workflowSteps.find(
@@ -2283,7 +2321,7 @@ function summarizeContentFactoryWorkflowRead(result) {
     (item) =>
       readString(item?.actionType, item?.action_type) === "respond" &&
       readString(item?.requestId, item?.request_id) ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID,
+        identity.workflowReviewRequestId,
   );
 
   return sanitizeJson({

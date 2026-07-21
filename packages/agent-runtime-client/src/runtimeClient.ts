@@ -4,18 +4,25 @@ import {
   type AgentRuntimeClientOptions as BaseAgentRuntimeClientOptions,
   type AgentRuntimeClientSubscription,
   type AgentRuntimeEventListener,
-  type CanonicalThreadEventListener,
+  type AgentRuntimeLifecycleEventListener,
+  type AgentRuntimeLifecycleNotification,
+  type AgentRuntimeNotification,
   type AgentSessionActionRespondParams,
   type AgentSessionActionRespondResponse,
-  type AgentSessionEventNotification,
   type ThreadReadParams,
   type ThreadReadResponse,
+  type ThreadMemoryModeSetParams,
+  type ThreadMemoryModeSetResponse,
+  type ThreadSettingsUpdateParams,
+  type ThreadSettingsUpdateResponse,
   type AgentSessionToolInventoryReadParams,
   type AgentSessionToolInventoryReadResponse,
-  type AgentSessionTurnCancelParams,
-  type AgentSessionTurnCancelResponse,
-  type AgentSessionTurnStartParams,
-  type AgentSessionTurnStartResponse,
+  type TurnInterruptParams,
+  type TurnInterruptResponse,
+  type TurnStartParams,
+  type TurnStartResponse,
+  type TurnSteerParams,
+  type TurnSteerResponse,
   type AppServerConnection,
   type AppServerRequestOptions,
   type AppServerRequestResult,
@@ -23,9 +30,9 @@ import {
   type EvidenceExportResponse,
   type JsonRpcMessage,
   type StructuredOutputContract,
+  serverNotification,
   agentSessionEventNotification,
   agentSessionMediaReadEventNotification,
-  canonicalThreadEventNotification,
 } from "@limecloud/app-server-client";
 
 export type { StructuredOutputContract };
@@ -51,9 +58,9 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
   readonly connection: AppServerConnection;
   readonly #base: BaseAppServerAgentRuntimeClient;
   readonly #listeners = new Set<AgentRuntimeEventListener>();
-  readonly #canonicalListeners = new Set<CanonicalThreadEventListener>();
+  readonly #lifecycleListeners = new Set<AgentRuntimeLifecycleEventListener>();
   readonly #eventPipeline: AgentRuntimeEventPipeline;
-  readonly #pendingNextEvents: AgentSessionEventNotification[] = [];
+  readonly #pendingNextEvents: AgentRuntimeNotification[] = [];
 
   constructor(
     connection: AppServerConnection,
@@ -72,16 +79,23 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
   }
 
   async startTurn(
-    params: AgentSessionTurnStartParams,
+    params: TurnStartParams,
     options?: AppServerRequestOptions,
-  ): Promise<AppServerRequestResult<AgentSessionTurnStartResponse>> {
+  ): Promise<AppServerRequestResult<TurnStartResponse>> {
     return await this.#base.startTurn(params, options);
   }
 
-  async cancelTurn(
-    params: AgentSessionTurnCancelParams,
+  async steerTurn(
+    params: TurnSteerParams,
     options?: AppServerRequestOptions,
-  ): Promise<AppServerRequestResult<AgentSessionTurnCancelResponse>> {
+  ): Promise<AppServerRequestResult<TurnSteerResponse>> {
+    return await this.#base.steerTurn(params, options);
+  }
+
+  async cancelTurn(
+    params: TurnInterruptParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<TurnInterruptResponse>> {
     return await this.#base.cancelTurn(params, options);
   }
 
@@ -97,6 +111,20 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     options?: AppServerRequestOptions,
   ): Promise<AppServerRequestResult<ThreadReadResponse>> {
     return await this.#base.readThread(params, options);
+  }
+
+  async updateThreadSettings(
+    params: ThreadSettingsUpdateParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<ThreadSettingsUpdateResponse>> {
+    return await this.#base.updateThreadSettings(params, options);
+  }
+
+  async setThreadMemoryMode(
+    params: ThreadMemoryModeSetParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<ThreadMemoryModeSetResponse>> {
+    return await this.#base.setThreadMemoryMode(params, options);
   }
 
   async readToolInventory(
@@ -124,82 +152,84 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     };
   }
 
-  subscribeCanonicalEvents(
-    listener: CanonicalThreadEventListener,
+  subscribeLifecycleEvents(
+    listener: AgentRuntimeLifecycleEventListener,
   ): AgentRuntimeClientSubscription {
-    this.#canonicalListeners.add(listener);
+    this.#lifecycleListeners.add(listener);
     return {
       unsubscribe: () => {
-        this.#canonicalListeners.delete(listener);
+        this.#lifecycleListeners.delete(listener);
       },
     };
   }
 
   async dispatchEvent(message: JsonRpcMessage): Promise<boolean> {
+    const lifecycle = serverNotification(message);
+    if (lifecycle) {
+      const result = await this.#dispatchLifecycle(lifecycle);
+      return result.accepted;
+    }
     const notification = agentSessionEventNotification(message);
-    if (!notification) {
+    if (
+      !notification ||
+      !agentSessionMediaReadEventNotification(notification)
+    ) {
       return false;
     }
-    const result = await this.#dispatchNotification(notification);
-    return result.accepted;
+    for (const listener of this.#listeners) {
+      await listener(notification.params.event, notification);
+    }
+    return true;
   }
 
-  async #dispatchNotification(
-    notification: AgentSessionEventNotification,
+  async #dispatchLifecycle(
+    notification: AgentRuntimeLifecycleNotification,
   ): Promise<AgentRuntimeEventPipelineResult> {
-    const canonicalEvent = canonicalThreadEventNotification(notification);
-    if (!canonicalEvent) {
-      if (!agentSessionMediaReadEventNotification(notification)) {
-        return { accepted: false, reason: "dropped" };
-      }
-      for (const listener of this.#listeners) {
-        await listener(notification.params.event, notification);
-      }
-      return {
-        accepted: true,
-        notification,
-        notifications: [notification],
-      };
-    }
     const pipelineResult = await this.#eventPipeline.process(notification);
     if (!pipelineResult.accepted) {
       return pipelineResult;
     }
     for (const notification of pipelineResult.notifications) {
-      const event = canonicalThreadEventNotification(notification);
-      if (!event) continue;
-      for (const listener of this.#canonicalListeners) {
-        await listener(event, notification);
+      for (const listener of this.#lifecycleListeners) {
+        await listener(notification, notification);
       }
     }
     return pipelineResult;
   }
 
-  async nextEvent(timeoutMs?: number): Promise<AgentSessionEventNotification> {
+  async nextEvent(timeoutMs?: number): Promise<AgentRuntimeNotification> {
     for (;;) {
       const pending = this.#pendingNextEvents.shift();
       if (pending) {
         return pending;
       }
       const notification = await this.connection.nextNotification(timeoutMs);
+      const lifecycle = serverNotification(notification);
+      if (lifecycle) {
+        const result = await this.#dispatchLifecycle(lifecycle);
+        if (result.accepted) {
+          const [next, ...rest] = result.notifications;
+          this.#pendingNextEvents.push(...rest);
+          return next;
+        }
+        if (result.reason === "dropped") {
+          continue;
+        }
+        if (result.reason === "sequence_violation") {
+          throw this.#eventPipeline.sequenceViolationError();
+        }
+      }
       const agentNotification = agentSessionEventNotification(notification);
-      if (!agentNotification) {
+      if (
+        !agentNotification ||
+        !agentSessionMediaReadEventNotification(agentNotification)
+      ) {
         continue;
       }
-      const result = await this.#dispatchNotification(
-        agentNotification,
-      );
-      if (result.accepted) {
-        const [next, ...rest] = result.notifications;
-        this.#pendingNextEvents.push(...rest);
-        return next;
+      for (const listener of this.#listeners) {
+        await listener(agentNotification.params.event, agentNotification);
       }
-      if (result.reason === "dropped") {
-        continue;
-      }
-      if (result.reason === "sequence_violation") {
-        throw this.#eventPipeline.sequenceViolationError();
-      }
+      return agentNotification;
     }
   }
 }

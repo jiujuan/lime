@@ -5,14 +5,26 @@ import { describe, expect, it } from "vitest";
 
 describe("AgentChatWorkspace Task Center surface runtime boundary", () => {
   it("草稿 surface、pending preview 和物化路由必须由 Task Center surface runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),
         "src/components/agent/chat/workspace/useWorkspaceTaskCenterSurfaceRuntime.ts",
+      ),
+      "utf8",
+    );
+    const shellInteractionOwnerSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceShellInteractionRuntime.ts",
       ),
       "utf8",
     );
@@ -24,7 +36,15 @@ describe("AgentChatWorkspace Task Center surface runtime boundary", () => {
       "utf8",
     );
 
-    expect(workspaceSource).toContain("useWorkspaceTaskCenterSurfaceRuntime({");
+    expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceShellInteractionRuntime({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceTaskCenterSurfaceRuntime({",
+    );
+    expect(shellInteractionOwnerSource).toContain(
+      "useWorkspaceTaskCenterSurfaceRuntime({",
+    );
     expect(ownerSource.split("\n").length).toBeLessThan(120);
     for (const retiredWorkspaceTaskCenterSurfaceGlue of [
       "resolveTaskCenterDraftSurfaceState(",
@@ -33,6 +53,9 @@ describe("AgentChatWorkspace Task Center surface runtime boundary", () => {
       "buildClawAgentParams({",
     ]) {
       expect(workspaceSource).not.toContain(
+        retiredWorkspaceTaskCenterSurfaceGlue,
+      );
+      expect(shellInteractionOwnerSource).not.toContain(
         retiredWorkspaceTaskCenterSurfaceGlue,
       );
       expect(ownerSource).toContain(retiredWorkspaceTaskCenterSurfaceGlue);

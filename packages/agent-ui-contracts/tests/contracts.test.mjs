@@ -8,7 +8,6 @@ import {
   AgentUiContractValidationError,
   AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA,
   AGENT_RUNTIME_EVENT_SCHEMA,
-  AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA,
   AGENT_RUNTIME_STATE_DELTA_SCHEMA,
   AGENT_UI_PROJECTION_STATE_SCHEMA,
   agentUiConformanceFixtures,
@@ -17,7 +16,6 @@ import {
   collectProjectionStateValidationIssues,
   collectRuntimeCapabilityManifestValidationIssues,
   collectRuntimeEventValidationIssues,
-  collectRuntimeResumeContractValidationIssues,
   createRuntimeSequenceVerifier,
   getAgentUiFixture,
   isLegacyRuntimeTurnTerminalEventClass,
@@ -32,7 +30,6 @@ import {
   validateProjectionState,
   validateRuntimeCapabilityManifest,
   validateRuntimeEvent,
-  validateRuntimeResumeContract,
   verifyRuntimeEventSequence,
 } from "../dist/index.js";
 
@@ -57,7 +54,6 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
       "AGENT_UI_FIXTURE_SCHEMA_VERSION",
       "AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA",
       "AGENT_RUNTIME_EVENT_SCHEMA",
-      "AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA",
       "AGENT_RUNTIME_STATE_DELTA_SCHEMA",
       "AGENT_UI_PROJECTION_STATE_SCHEMA",
       "AgentUiContractValidationError",
@@ -67,7 +63,6 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
       "collectProjectionStateValidationIssues",
       "collectRuntimeCapabilityManifestValidationIssues",
       "collectRuntimeEventValidationIssues",
-      "collectRuntimeResumeContractValidationIssues",
       "collectThreadReadModelValidationIssues",
       "createRuntimeSequenceVerifier",
       "getAgentUiFixture",
@@ -86,7 +81,6 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
       "validateProjectionState",
       "validateRuntimeCapabilityManifest",
       "validateRuntimeEvent",
-      "validateRuntimeResumeContract",
       "validateThreadReadModel",
       "verifyRuntimeEventSequence",
     ].sort(),
@@ -133,7 +127,6 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
     typeDeclarations,
     /export interface AgentRuntimeCapabilityManifest/,
   );
-  assert.match(typeDeclarations, /export interface AgentRuntimeResumeContract/);
   assert.match(typeDeclarations, /export type AgentUiEventClass/);
   assert.match(typeDeclarations, /export interface AgentUiProjectionEvent/);
   assert.match(typeDeclarations, /export interface AgentRuntimeExecutionEvent/);
@@ -145,10 +138,6 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
   assert.match(
     typeDeclarations,
     /export declare const AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA/,
-  );
-  assert.match(
-    typeDeclarations,
-    /export declare const AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA/,
   );
   assert.match(
     typeDeclarations,
@@ -281,16 +270,8 @@ test("agent ui contracts expose JSON schemas for cross-language validation", () 
     "lime-runtime-capability-manifest/v0.1",
   );
   assert.equal(
-    AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA.properties.schemaVersion.const,
-    "lime-runtime-resume-contract/v0.1",
-  );
-  assert.equal(
     agentUiJsonSchemas.runtimeCapabilityManifest,
     AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA,
-  );
-  assert.equal(
-    agentUiJsonSchemas.runtimeResumeContract,
-    AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA,
   );
 });
 
@@ -300,10 +281,6 @@ test("checked-in JSON schema files match exported schema constants", async () =>
     [
       "agent-runtime-capability-manifest.v0.1.schema.json",
       AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA,
-    ],
-    [
-      "agent-runtime-resume-contract.v0.1.schema.json",
-      AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA,
     ],
     [
       "agent-runtime-state-delta.v0.1.schema.json",
@@ -1266,13 +1243,6 @@ test("runtime capability manifest validation fixes provider capability contract"
         scope: "runtime",
         title: "App Server JSON-RPC",
       },
-      {
-        id: "hitl.resume",
-        status: "experimental",
-        scope: "session",
-        title: "Resume open actions",
-        metadata: { requiresExplicitCoverage: true },
-      },
     ],
   };
 
@@ -1287,38 +1257,5 @@ test("runtime capability manifest validation fixes provider capability contract"
       (issue) => issue.path,
     ),
     ["$.capabilities[0].scope", "$.capabilities[0].title"],
-  );
-});
-
-test("runtime resume contract validation requires selected actions to cover open actions", () => {
-  const contract = {
-    schemaVersion: "lime-runtime-resume-contract/v0.1",
-    runtimeId: "runtime-main",
-    sessionId: "session-1",
-    turnId: "turn-1",
-    resumeMode: "all-open-actions",
-    openActionIds: ["action-a", "action-b"],
-    decisions: [
-      { actionId: "action-a", decision: "approved" },
-      { actionId: "action-b", decision: "answered", response: "继续" },
-    ],
-    createdAt: "2026-06-12T00:00:00.000Z",
-  };
-
-  assert.equal(validateRuntimeResumeContract(contract), contract);
-
-  const missingDecision = {
-    ...contract,
-    decisions: [{ actionId: "action-a", decision: "approved" }],
-  };
-  assert.deepEqual(
-    collectRuntimeResumeContractValidationIssues(missingDecision).map(
-      (issue) => [issue.path, issue.message],
-    ),
-    [["$.decisions", "Resume contract must cover open actions: action-b."]],
-  );
-  assert.throws(
-    () => validateRuntimeResumeContract(missingDecision),
-    AgentUiContractValidationError,
   );
 });

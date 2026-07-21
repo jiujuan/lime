@@ -4,9 +4,9 @@ use super::super::*;
 use app_server_protocol::CapabilityDescriptor;
 use app_server_protocol::ClientCapabilities;
 use app_server_protocol::RequestId;
-use app_server_protocol::METHOD_AGENT_SESSION_START;
 use app_server_protocol::METHOD_INITIALIZE;
 use app_server_protocol::METHOD_INITIALIZED;
+use app_server_protocol::METHOD_THREAD_START;
 use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED;
 use serde_json::json;
 
@@ -21,7 +21,7 @@ impl crate::CapabilitySource for ScopedCapabilitySource {
             id: format!("scoped.{}", context.app_id.as_deref().unwrap_or("unscoped")),
             title: "Scoped Capability".to_string(),
             description: context.workspace_id.clone(),
-            methods: vec![METHOD_AGENT_SESSION_START.to_string()],
+            methods: vec![METHOD_THREAD_START.to_string()],
         }]
     }
 }

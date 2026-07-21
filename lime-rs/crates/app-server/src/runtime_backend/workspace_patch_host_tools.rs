@@ -39,7 +39,7 @@ pub(super) fn workspace_patch_host_tool_turn_context(
     .unwrap_or_default();
     insert_agent_turn_metadata(&mut context, "web_search_enabled", json!(true));
     insert_agent_turn_metadata(&mut context, "webSearchEnabled", json!(true));
-    set_agent_turn_user_visible_input_text(&mut context, Some(request.input.text.clone()));
+    set_agent_turn_user_visible_input_text(&mut context, Some(request.input.concat_text()));
     context
 }
 

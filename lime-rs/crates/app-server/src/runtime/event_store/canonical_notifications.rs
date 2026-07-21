@@ -50,7 +50,7 @@ pub(super) fn notification_events_with_canonical_entities(
                         event.event_id, event.event_type
                     ))
                 })?;
-                let turn = entities
+                let mut turn = entities
                     .turn
                     .filter(|turn| turn.turn_id.as_str() == turn_id)
                     .ok_or_else(|| {
@@ -59,6 +59,8 @@ pub(super) fn notification_events_with_canonical_entities(
                             event.event_id, event.event_type
                         ))
                     })?;
+                turn.items = materializer.items_for_turn(turn_id);
+                turn.items_view = agent_protocol::TurnItemsView::Full;
                 payload.insert(
                     "turn".to_string(),
                     serde_json::to_value(turn).map_err(|error| {
@@ -145,9 +147,14 @@ fn canonical_notification_target(event: &AgentEvent) -> Option<CanonicalNotifica
 
 #[cfg(test)]
 mod tests {
-    use super::{canonical_notification_target, CanonicalNotificationTarget};
-    use app_server_protocol::AgentEvent;
+    use super::{
+        canonical_notification_target, notification_events_with_canonical_entities,
+        CanonicalNotificationTarget,
+    };
+    use crate::runtime::StoredSession;
+    use app_server_protocol::{AgentEvent, AgentSession, AgentSessionStatus};
     use serde_json::json;
+    use std::collections::HashMap;
 
     fn event(event_type: &str) -> AgentEvent {
         AgentEvent {
@@ -159,6 +166,26 @@ mod tests {
             event_type: event_type.to_string(),
             timestamp: "2026-07-13T00:00:00Z".to_string(),
             payload: json!({}),
+        }
+    }
+
+    fn stored_session() -> StoredSession {
+        StoredSession {
+            session: AgentSession {
+                session_id: "session-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                app_id: "agent-runtime".to_string(),
+                workspace_id: None,
+                business_object_ref: None,
+                status: AgentSessionStatus::Running,
+                created_at: "2026-07-13T00:00:00Z".to_string(),
+                updated_at: "2026-07-13T00:00:00Z".to_string(),
+            },
+            turns: Vec::new(),
+            turn_inputs: HashMap::new(),
+            turn_runtime_options: HashMap::new(),
+            events: Vec::new(),
+            output_blobs: HashMap::new(),
         }
     }
 
@@ -183,5 +210,60 @@ mod tests {
                 Some(CanonicalNotificationTarget::Item)
             ));
         }
+    }
+
+    #[test]
+    fn terminal_turn_notification_includes_current_canonical_items() {
+        let events = vec![
+            AgentEvent {
+                event_id: "event-item-started".to_string(),
+                sequence: 1,
+                session_id: "session-1".to_string(),
+                thread_id: Some("thread-1".to_string()),
+                turn_id: Some("turn-1".to_string()),
+                event_type: "item.started".to_string(),
+                timestamp: "2026-07-13T00:00:01Z".to_string(),
+                payload: json!({
+                    "itemType": "agent_message",
+                    "itemId": "message-1",
+                    "status": "in_progress"
+                }),
+            },
+            AgentEvent {
+                event_id: "event-message-delta".to_string(),
+                sequence: 2,
+                session_id: "session-1".to_string(),
+                thread_id: Some("thread-1".to_string()),
+                turn_id: Some("turn-1".to_string()),
+                event_type: "message.delta".to_string(),
+                timestamp: "2026-07-13T00:00:02Z".to_string(),
+                payload: json!({
+                    "itemId": "message-1",
+                    "phase": "final_answer",
+                    "text": "final answer"
+                }),
+            },
+            AgentEvent {
+                event_id: "event-turn-completed".to_string(),
+                sequence: 3,
+                session_id: "session-1".to_string(),
+                thread_id: Some("thread-1".to_string()),
+                turn_id: Some("turn-1".to_string()),
+                event_type: "turn.completed".to_string(),
+                timestamp: "2026-07-13T00:00:03Z".to_string(),
+                payload: json!({"status": "completed"}),
+            },
+        ];
+
+        let notifications = notification_events_with_canonical_entities(&stored_session(), &events)
+            .expect("canonical notification entities");
+        let turn = notifications
+            .last()
+            .and_then(|event| event.payload.get("turn"))
+            .expect("terminal turn entity");
+
+        assert_eq!(turn["items"][0]["payload"]["type"], "agentMessage");
+        assert_eq!(turn["items"][0]["payload"]["phase"], "final_answer");
+        assert_eq!(turn["items"][0]["payload"]["text"], "final answer");
     }
 }

@@ -275,7 +275,7 @@ async function waitForImportedReadModel(page, options, sessionId) {
   while (Date.now() - startedAt < options.timeoutMs) {
     latest = await invokeAppServerFromPage(
       page,
-      "agentSession/read",
+      "thread/read",
       {
         sessionId,
         historyLimit: 100,
@@ -770,7 +770,7 @@ async function run() {
     assert(sessionId, "backend ledger 未记录导入 sessionId");
     summary.sessionId = sessionId;
     appServerRequests.push({
-      method: "agentSession/read",
+      method: "thread/read",
       source: "script-probe",
       sessionId,
     });

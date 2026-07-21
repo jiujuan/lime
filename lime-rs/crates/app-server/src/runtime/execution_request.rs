@@ -1,11 +1,12 @@
 use super::RuntimeHostContext;
+use agent_runtime::reply_input::RuntimeReplyInput;
 
 #[derive(Debug, Clone)]
 pub struct ExecutionRequest {
     pub host: RuntimeHostContext,
     pub session: app_server_protocol::AgentSession,
     pub turn: app_server_protocol::AgentTurn,
-    pub input: app_server_protocol::AgentInput,
+    pub input: RuntimeReplyInput,
     pub runtime_options: Option<app_server_protocol::RuntimeOptions>,
     pub expected_output: Option<serde_json::Value>,
     pub structured_output: Option<app_server_protocol::StructuredOutputContract>,

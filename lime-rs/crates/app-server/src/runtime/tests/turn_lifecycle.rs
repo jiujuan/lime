@@ -135,6 +135,69 @@ fn capability_list_with_unknown_session_id_returns_session_not_found() {
 }
 
 #[tokio::test]
+async fn steer_without_active_turn_fails_closed_without_creating_turn() {
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_steer_without_active".to_string()),
+            thread_id: Some("thread_steer_without_active".to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let error = core
+        .steer_turn(
+            &session.thread_id,
+            "turn_missing",
+            vec![agent_protocol::AgentInput::text("追加约束")],
+            Some("client-steer-1".to_string()),
+        )
+        .await
+        .expect_err("steer without active turn must fail");
+    assert!(
+        matches!(error, RuntimeCoreError::InvalidRequest(message) if message == "no active turn to steer")
+    );
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: session.session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    assert!(read.turns.is_empty(), "steer must not create a new turn");
+}
+
+#[tokio::test]
+async fn steer_rejects_empty_input_before_touching_runtime_state() {
+    let core = RuntimeCore::default();
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_empty_steer".to_string()),
+            thread_id: Some("thread_empty_steer".to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let error = core
+        .steer_turn(&session.thread_id, "turn_empty", Vec::new(), None)
+        .await
+        .expect_err("empty steer input must fail");
+    assert!(
+        matches!(error, RuntimeCoreError::InvalidRequest(message) if message.contains("must not be empty"))
+    );
+}
+
+#[tokio::test]
 async fn mock_backend_emits_public_runtime_event() {
     let core = RuntimeCore::default();
     let session = core
@@ -180,7 +243,7 @@ async fn mock_backend_emits_public_runtime_event() {
     assert_eq!(events[0].payload["item"]["status"], "inProgress");
     assert_eq!(events[1].event_type, "message.created");
     assert_eq!(events[1].payload["role"], "user");
-    assert_eq!(events[1].payload["input"]["text"], "hello");
+    assert_eq!(events[1].payload["content"]["text"], "hello");
     assert_eq!(events[2].event_type, "item.completed");
     assert_eq!(events[2].payload["item"]["kind"], "userMessage");
     assert_eq!(events[2].payload["item"]["status"], "completed");
@@ -195,6 +258,55 @@ async fn mock_backend_emits_public_runtime_event() {
     assert_eq!(events[3].event_type, "turn.accepted");
     assert_eq!(events[3].payload["backend"], "mock");
     assert_eq!(events[3].payload["clientName"], "test-client");
+}
+
+#[tokio::test]
+async fn turn_input_projects_client_user_message_id_as_user_message_client_id() {
+    let core = RuntimeCore::default();
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_client_message_identity".to_string()),
+            thread_id: Some("thread_client_message_identity".to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: session.session_id.clone(),
+            turn_id: Some("turn_client_message_identity".to_string()),
+            input: AgentInput {
+                text: "fast answer".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: Some(runtime_options_with_metadata(json!({
+                "clientUserMessageId": "client-message-fast",
+            }))),
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let events = core
+        .events_for_session(&session.session_id)
+        .expect("runtime events");
+    assert_eq!(
+        events[0].payload["item"]["payload"]["client_id"], "client-message-fast",
+        "events={events:#?}"
+    );
+    assert_eq!(events[1].payload["clientId"], "client-message-fast");
+    assert_eq!(
+        events[2].payload["item"]["payload"]["client_id"],
+        "client-message-fast"
+    );
+    assert_ne!(events[0].payload["item"]["itemId"], "client-message-fast");
 }
 
 #[tokio::test]
@@ -260,7 +372,7 @@ async fn streaming_turn_start_emits_lifecycle_before_backend_progress() {
 }
 
 #[tokio::test]
-async fn streaming_agent_message_notification_includes_canonical_item() {
+async fn streaming_agent_message_notification_is_direct_v2() {
     let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
     let session = core
         .start_session(AgentSessionStartParams {
@@ -296,19 +408,26 @@ async fn streaming_agent_message_notification_includes_canonical_item() {
         .iter()
         .find(|event| event.event_type == "message.delta")
         .expect("message delta notification");
-    let params = app_server_protocol::AgentSessionEventParams::from_event(message_event.clone());
-    let app_server_protocol::CanonicalThreadEventNotification::ItemUpdated(item) = params
-        .canonical_event
-        .expect("message delta canonical item notification")
-    else {
-        panic!("message delta must project canonical item notification");
+    let mut projector = crate::processor::v2_notifications::V2NotificationProjector::default();
+    let mut messages = crate::processor::project_event_notifications_jsonrpc(
+        &mut projector,
+        message_event.clone(),
+    )
+    .expect("message delta notification");
+    assert_eq!(messages.len(), 1);
+    let app_server_protocol::JsonRpcMessage::Notification(notification) = messages.remove(0) else {
+        panic!("message delta must produce a notification");
     };
-
-    assert!(matches!(
-        item.payload,
-        agent_protocol::ThreadItemPayload::AgentMessage { ref text, .. }
-            if text == "你好！有什么可以帮你的吗？"
-    ));
+    assert_eq!(notification.method, "item/agentMessage/delta");
+    let params = notification.params.expect("params");
+    assert_eq!(params["threadId"], session.thread_id);
+    assert_eq!(params["turnId"], output.response.turn.turn_id);
+    assert_eq!(params["delta"], "你好！有什么可以帮你的吗？");
+    assert!(params["itemId"]
+        .as_str()
+        .is_some_and(|item_id| !item_id.is_empty()));
+    assert!(params.get("typedEvent").is_none());
+    assert!(params.get("canonicalEvent").is_none());
 }
 
 #[tokio::test]
@@ -439,7 +558,20 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
                     text: "hello".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: None,
+                runtime_options: Some(RuntimeOptions {
+                    runtime_request: Some(app_server_protocol::RuntimeRequest {
+                        collaboration_mode: Some(agent_protocol::CollaborationMode {
+                            mode: agent_protocol::ModeKind::Plan,
+                            settings: agent_protocol::CollaborationModeSettings {
+                                model: "goal-accounting-plan-model".to_string(),
+                                reasoning_effort: None,
+                                developer_instructions: None,
+                            },
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -482,7 +614,7 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
     assert_eq!(records[0].event.payload["item"]["kind"], "userMessage");
     assert_eq!(records[0].event.payload["item"]["status"], "inProgress");
     assert_eq!(records[1].event.event_type, "message.created");
-    assert_eq!(records[1].event.payload["input"]["text"], "hello");
+    assert_eq!(records[1].event.payload["content"]["text"], "hello");
     assert!(records[1].event.payload.get("item").is_none());
     assert_eq!(records[2].event.event_type, "item.completed");
     assert_eq!(records[2].event.payload["item"]["status"], "completed");
@@ -496,6 +628,7 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
     );
     assert_eq!(records[3].event.event_type, "turn.accepted");
     assert!(records[3].event.payload.get("turn").is_none());
+    assert_eq!(records[3].event.payload["goalAccountingMode"], "plan");
 
     let stored = core
         .events_for_session("sess_jsonl")
@@ -504,6 +637,7 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
     assert_eq!(stored[2].event_type, "item.completed");
     assert_eq!(stored[3].event_type, "turn.accepted");
     assert!(stored[3].payload.get("turn").is_none());
+    assert_eq!(stored[3].payload["goalAccountingMode"], "plan");
 
     let projected = projection_store
         .read_session("sess_jsonl")
@@ -1182,6 +1316,165 @@ async fn cancel_turn_returns_canceled_without_waiting_for_backend_cancel() {
 }
 
 #[tokio::test]
+async fn cancel_turn_rejects_terminal_turn_without_appending_events() {
+    let core = RuntimeCore::with_backend(Arc::new(HangingCancelBackend {
+        cancel_count: AtomicUsize::new(0),
+    }));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_cancel_terminal".to_string()),
+            thread_id: Some("thread_cancel_terminal".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_cancel_terminal".to_string()),
+                input: AgentInput {
+                    text: "complete before cancel".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn")
+        .response
+        .turn;
+
+    core.append_external_runtime_events(
+        &session.session_id,
+        Some(&turn.turn_id),
+        vec![RuntimeEvent::new("turn.completed", json!({}))],
+    )
+    .expect("complete turn");
+
+    let preflight_error = core
+        .ensure_turn_interruptible(&session.session_id, &turn.turn_id)
+        .expect_err("terminal turn must fail interrupt preflight");
+    assert!(matches!(
+        preflight_error,
+        RuntimeCoreError::TurnNotActive(_)
+    ));
+
+    let error = core
+        .cancel_turn(
+            AgentSessionTurnCancelParams {
+                session_id: session.session_id,
+                turn_id: turn.turn_id,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("terminal turn must reject interrupt");
+    assert!(matches!(error, RuntimeCoreError::TurnNotActive(_)));
+}
+
+#[tokio::test]
+async fn cancel_waiting_action_persists_action_canceled_before_turn_terminal() {
+    let core = RuntimeCore::with_backend(Arc::new(HangingCancelBackend {
+        cancel_count: AtomicUsize::new(0),
+    }));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_cancel_waiting_action".to_string()),
+            thread_id: Some("thread_cancel_waiting_action".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_cancel_waiting_action".to_string()),
+                input: AgentInput {
+                    text: "wait for approval".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn")
+        .response
+        .turn;
+    core.append_external_runtime_events(
+        &session.session_id,
+        Some(&turn.turn_id),
+        vec![
+            canonical_tool_started_event(
+                &session.session_id,
+                &session.thread_id,
+                &turn.turn_id,
+                "tool-cancel-waiting",
+                "Bash",
+            ),
+            RuntimeEvent::new(
+                "action.required",
+                json!({
+                    "requestId": "approval-cancel-waiting",
+                    "actionType": "tool_confirmation",
+                    "toolCallId": "tool-cancel-waiting",
+                    "prompt": "Allow?",
+                    "availableDecisions": ["allow_once", "decline", "cancel"],
+                }),
+            ),
+        ],
+    )
+    .expect("persist pending action");
+
+    let output = core
+        .cancel_turn(
+            AgentSessionTurnCancelParams {
+                session_id: session.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("cancel waiting action");
+    let event_types = output
+        .events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec!["action.canceled", "item.completed", "turn.canceled"]
+    );
+    assert_eq!(
+        output.events[0].payload["requestId"],
+        "approval-cancel-waiting"
+    );
+    assert_eq!(output.events[1].payload["item"]["status"], "cancelled");
+
+    let replay = core
+        .replay_action(AgentSessionActionReplayParams {
+            session_id: session.session_id,
+            request_id: "approval-cancel-waiting".to_string(),
+        })
+        .await
+        .expect("replay canceled action");
+    assert!(replay.response.action.is_none());
+}
+
+#[tokio::test]
 async fn cancel_turn_writes_open_workflow_cancel_events_to_workflow_audit_jsonl() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
@@ -1308,7 +1601,7 @@ async fn cancel_turn_writes_open_workflow_cancel_events_to_workflow_audit_jsonl(
     assert_eq!(canceled_step.payload["status"], "canceled");
     assert_eq!(
         canceled_step.payload["cancellation"]["source"],
-        "agentSession/turn/cancel"
+        "turn/interrupt"
     );
     assert_eq!(
         canceled_step.payload["cancellation"]["reasonCode"],
@@ -1460,7 +1753,7 @@ async fn start_turn_allows_visible_capability_id() {
                 id: "content.draft.generate".to_string(),
                 title: "Generate Draft".to_string(),
                 description: None,
-                methods: vec!["agentSession/turn/start".to_string()],
+                methods: vec!["turn/start".to_string()],
             })
             .for_apps(["content-studio"]),
         ])),
@@ -1511,7 +1804,7 @@ async fn start_turn_allows_session_scoped_capability_id() {
                 id: "session.draft.write".to_string(),
                 title: "Session Draft Write".to_string(),
                 description: None,
-                methods: vec![METHOD_AGENT_SESSION_TURN_START.to_string()],
+                methods: vec![METHOD_TURN_START.to_string()],
             })
             .for_apps(["content-studio"])
             .for_workspaces(["workspace-main"])
@@ -1562,7 +1855,7 @@ async fn start_turn_rejects_hidden_capability_id_without_persisting_turn() {
                 id: "content.draft.generate".to_string(),
                 title: "Generate Draft".to_string(),
                 description: None,
-                methods: vec!["agentSession/turn/start".to_string()],
+                methods: vec!["turn/start".to_string()],
             })
             .for_apps(["other-app"]),
         ])),

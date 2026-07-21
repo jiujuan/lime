@@ -210,7 +210,7 @@ describe("safeInvoke", () => {
           lines: [
             JSON.stringify({
               id: 1,
-              method: "agentSession/list",
+              method: "thread/list",
               params: { limit: 10 },
             }),
           ],
@@ -228,7 +228,7 @@ describe("safeInvoke", () => {
           lines: [
             JSON.stringify({
               id: 1,
-              method: "agentSession/list",
+              method: "thread/list",
               params: { limit: 10 },
             }),
           ],

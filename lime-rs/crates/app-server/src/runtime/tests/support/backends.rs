@@ -249,6 +249,38 @@ impl ExecutionBackend for PartialFailureBackend {
     }
 }
 
+pub(in crate::runtime::tests) struct UsageLimitFailureBackend;
+
+#[async_trait]
+impl ExecutionBackend for UsageLimitFailureBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        Err(RuntimeCoreError::UsageLimitExceeded(
+            "provider quota exhausted".to_string(),
+        ))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 pub(in crate::runtime::tests) struct FailBeforeEmitBackend {
     pub(in crate::runtime::tests) start_count: AtomicUsize,
 }

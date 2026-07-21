@@ -155,9 +155,6 @@ export interface WorkspaceConversationMessageListRuntime {
   submittedActionsInFlight: NonNullable<
     ConversationScenePresentationParams["messageList"]["submittedActionsInFlight"]
   >;
-  queuedTurns: NonNullable<
-    ConversationScenePresentationParams["messageList"]["queuedTurns"]
-  >;
   canonicalChildren?: NonNullable<
     ConversationScenePresentationParams["messageList"]["canonicalChildren"]
   >;
@@ -165,9 +162,7 @@ export interface WorkspaceConversationMessageListRuntime {
   onLoadFullHistory?: ConversationScenePresentationParams["messageList"]["onLoadFullHistory"];
   isSending: ConversationScenePresentationParams["messageList"]["isSending"];
   onInterruptCurrentTurn: ConversationScenePresentationParams["messageList"]["onInterruptCurrentTurn"];
-  onResumeThread: ConversationScenePresentationParams["messageList"]["onResumeThread"];
   onReplayPendingRequest: ConversationScenePresentationParams["messageList"]["onReplayPendingRequest"];
-  onPromoteQueuedTurn: ConversationScenePresentationParams["messageList"]["onPromoteQueuedTurn"];
   onDeleteMessage: ConversationScenePresentationParams["messageList"]["onDeleteMessage"];
   onEditMessage: ConversationScenePresentationParams["messageList"]["onEditMessage"];
   onA2UISubmit: ConversationScenePresentationParams["messageList"]["onA2UISubmit"];
@@ -238,9 +233,6 @@ const EMPTY_PROJECTED_PENDING_ACTIONS: NonNullable<
 > = [];
 const EMPTY_PROJECTED_SUBMITTED_ACTIONS: NonNullable<
   ConversationScenePresentationParams["messageList"]["submittedActionsInFlight"]
-> = [];
-const EMPTY_PROJECTED_QUEUED_TURNS: NonNullable<
-  ConversationScenePresentationParams["messageList"]["queuedTurns"]
 > = [];
 interface UseWorkspaceConversationSceneRuntimeParams {
   threadHeader?: WorkspaceConversationSceneProps["threadHeader"];
@@ -382,14 +374,11 @@ export function useWorkspaceConversationSceneRuntime({
     executionRuntime,
     pendingActions = EMPTY_PROJECTED_PENDING_ACTIONS,
     submittedActionsInFlight = EMPTY_PROJECTED_SUBMITTED_ACTIONS,
-    queuedTurns = EMPTY_PROJECTED_QUEUED_TURNS,
     sessionHistoryWindow = null,
     onLoadFullHistory,
     isSending,
     onInterruptCurrentTurn,
-    onResumeThread,
     onReplayPendingRequest,
-    onPromoteQueuedTurn,
     onDeleteMessage,
     onEditMessage,
     onA2UISubmit,
@@ -421,7 +410,6 @@ export function useWorkspaceConversationSceneRuntime({
     threadRead,
     pendingActions,
     submittedActionsInFlight,
-    queuedTurns,
     isRestoringSession,
     isSending: Boolean(isSending),
     focusedTimelineItemId,
@@ -434,7 +422,6 @@ export function useWorkspaceConversationSceneRuntime({
   const projectedPendingActions = projectedRuntime.pendingActions;
   const projectedSubmittedActionsInFlight =
     projectedRuntime.submittedActionsInFlight;
-  const projectedQueuedTurns = projectedRuntime.queuedTurns;
   const handleQuoteMessage = (content: string) => {
     const quotedText = buildQuotedReplyText({
       content,
@@ -464,11 +451,11 @@ export function useWorkspaceConversationSceneRuntime({
         t,
         locale,
         turns: projectedTurns,
+        threadItems: projectedThreadItems,
         currentTurnId: projectedCurrentTurnId,
         threadRead: projectedThreadRead,
         pendingActions: projectedPendingActions,
         submittedActionsInFlight: projectedSubmittedActionsInFlight,
-        queuedTurns: projectedQueuedTurns,
         isSending,
         focusedTimelineItemId,
         onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
@@ -501,7 +488,6 @@ export function useWorkspaceConversationSceneRuntime({
       locale,
       projectedCurrentTurnId,
       projectedPendingActions,
-      projectedQueuedTurns,
       projectedSubmittedActionsInFlight,
       projectedThreadRead,
       projectedTurns,
@@ -519,7 +505,6 @@ export function useWorkspaceConversationSceneRuntime({
       threadRead: projectedThreadRead,
       pendingActions: projectedPendingActions,
       submittedActionsInFlight: projectedSubmittedActionsInFlight,
-      queuedTurns: projectedQueuedTurns,
       canonicalChildren,
       isSending,
       sessionId,
@@ -648,16 +633,13 @@ export function useWorkspaceConversationSceneRuntime({
       threadRead: projectedThreadRead,
       pendingActions: projectedPendingActions,
       submittedActionsInFlight: projectedSubmittedActionsInFlight,
-      queuedTurns: projectedQueuedTurns,
       canonicalChildren,
       sessionHistoryWindow,
       onLoadFullHistory,
       isRestoringSession,
       isSending,
       onInterruptCurrentTurn,
-      onResumeThread,
       onReplayPendingRequest,
-      onPromoteQueuedTurn,
       onDeleteMessage,
       onEditMessage,
       onQuoteMessage: handleQuoteMessage,

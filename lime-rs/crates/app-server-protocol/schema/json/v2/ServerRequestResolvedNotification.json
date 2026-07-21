@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "RequestId": {
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Emitted after a server-initiated request reaches a terminal state.",
+  "properties": {
+    "requestId": {
+      "$ref": "#/$defs/RequestId"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "requestId",
+    "threadId"
+  ],
+  "title": "ServerRequestResolvedNotification",
+  "type": "object"
+}

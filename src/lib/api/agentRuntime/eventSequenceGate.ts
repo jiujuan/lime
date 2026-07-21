@@ -8,6 +8,7 @@ import {
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
 import { providerTraceStageFromEventType } from "./appServerEventPayloadUtils";
+import { readAppServerV2NotificationRoute } from "./appServerV2Notification";
 
 type GateResult =
   | { kind: "accepted"; notifications: AppServerJsonRpcNotification[] }
@@ -87,20 +88,48 @@ function processNotification(
   mode: AgentRuntimeSequenceVerifierMode,
   gateScope: string,
 ): GateResult {
+  const directRoute = readAppServerV2NotificationRoute(notification);
+  if (directRoute) {
+    if (
+      notification.method === "item/agentMessage/delta" ||
+      notification.method === "thread/tokenUsage/updated"
+    ) {
+      return { kind: "accepted", notifications: [notification] };
+    }
+    return processDirectLifecycleNotification(
+      eventName,
+      notification,
+      directRoute.threadId,
+      mode,
+      gateScope,
+    );
+  }
   const event = readAppServerAgentEvent(notification.params);
   if (!event) {
     return { kind: "ignored" };
   }
-  if (
-    !hasCanonicalEvent(notification) &&
-    isCurrentNonThreadSideChannelEvent(event.type)
-  ) {
+  if (isCurrentNonThreadSideChannelEvent(event.type)) {
     return { kind: "accepted", notifications: [notification] };
   }
-  const gate = gateFor(gateScope, eventName, event.sessionId, mode);
-  const result = gate.processSync(
-    notification as unknown as SequenceGateNotification,
-  );
+  return { kind: "ignored" };
+}
+
+function processDirectLifecycleNotification(
+  eventName: string,
+  notification: AppServerJsonRpcNotification,
+  threadId: string,
+  mode: AgentRuntimeSequenceVerifierMode,
+  gateScope: string,
+): GateResult {
+  const gate = gateFor(gateScope, eventName, threadId, mode);
+  let result: ReturnType<AgentRuntimeEventPipeline["processSync"]>;
+  try {
+    result = gate.processSync(
+      notification as unknown as SequenceGateNotification,
+    );
+  } catch {
+    return { kind: "blocked", codes: ["invalid_lifecycle_notification"] };
+  }
   if (result.accepted) {
     return {
       kind: "accepted",
@@ -109,28 +138,11 @@ function processNotification(
     };
   }
   if (result.reason === "dropped") {
-    if (isCanonicalResolvedApproval(notification)) {
-      return { kind: "accepted", notifications: [notification] };
-    }
     return { kind: "ignored" };
-  }
-  const violations = gate.getViolations();
-  if (
-    violations.length > 0 &&
-    violations.every(
-      (violation) => violation.code === "action_resolved_without_request",
-    )
-  ) {
-    return {
-      kind: "accepted",
-      notifications: result.notification
-        ? [result.notification as unknown as AppServerJsonRpcNotification]
-        : [notification],
-    };
   }
   return {
     kind: "blocked",
-    codes: violations.map((violation) => violation.code),
+    codes: gate.getViolations().map((violation) => violation.code),
   };
 }
 
@@ -144,30 +156,6 @@ function isCurrentNonThreadSideChannelEvent(eventType: string): boolean {
     eventType === "image_task_parameters_required" ||
     eventType === "media.read.chunk" ||
     eventType === "media.read.completed"
-  );
-}
-
-function hasCanonicalEvent(
-  notification: AppServerJsonRpcNotification,
-): boolean {
-  return normalizeRecord(notification.params)?.canonicalEvent != null;
-}
-
-function isCanonicalResolvedApproval(
-  notification: AppServerJsonRpcNotification,
-): boolean {
-  const params = normalizeRecord(notification.params);
-  const event = normalizeRecord(params?.event);
-  const canonicalEvent = normalizeRecord(params?.canonicalEvent);
-  const item = normalizeRecord(canonicalEvent?.params);
-  const payload = normalizeRecord(item?.payload);
-  return (
-    readString(event ?? {}, "type") === "action.resolved" &&
-    readString(canonicalEvent ?? {}, "method") === "item/updated" &&
-    readString(payload ?? {}, "type") === "approval" &&
-    ["completed", "failed", "interrupted", "cancelled"].includes(
-      readString(item ?? {}, "status") ?? "",
-    )
   );
 }
 

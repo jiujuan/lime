@@ -9,6 +9,7 @@ export type DevBridgeCommandTimeoutProfile =
   | "app-server-turn-start"
   | "app-server-import"
   | "app-server-long-running"
+  | "app-server-provider-network"
   | "app-server-read"
   | "agent-runtime"
   | "plugin-installed-write"
@@ -113,8 +114,8 @@ const devBridgeStartupTruthCommands = new Set([
 
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
-const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
-const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
+const APP_SERVER_THREAD_LIST_METHOD = "thread/list";
+const APP_SERVER_TURN_START_METHOD = "turn/start";
 const APP_SERVER_CONVERSATION_IMPORT_METHODS = new Set([
   "conversationImport/job/read",
   "conversationImport/source/scan",
@@ -127,6 +128,33 @@ const APP_SERVER_LONG_RUNNING_METHODS = new Set(["automationJob/runNow"]);
 const APP_SERVER_PLUGIN_INSTALLED_WRITE_METHODS = new Set([
   "pluginInstalled/save",
 ]);
+const APP_SERVER_PROVIDER_NETWORK_METHODS = new Set([
+  "modelProvider/testConnection",
+  "modelProvider/testChat",
+  "modelProvider/fetchModels",
+]);
+const APP_SERVER_MODEL_CONTROL_METHODS = new Set([
+  "modelProvider/list",
+  "modelProvider/catalog/list",
+  "modelProvider/read",
+  "modelProvider/create",
+  "modelProvider/update",
+  "modelProvider/delete",
+  "modelProvider/sortOrders/update",
+  "modelProviderConfig/export",
+  "modelProviderConfig/import",
+  ...APP_SERVER_PROVIDER_NETWORK_METHODS,
+  "modelProviderKey/create",
+  "modelProviderKey/update",
+  "modelProviderKey/delete",
+  "modelProviderKey/next",
+  "modelProviderKey/usage/record",
+  "modelProviderKey/error/record",
+  "modelProviderUiState/read",
+  "modelProviderUiState/write",
+  "modelProviderAlias/read",
+  "modelProviderAlias/list",
+]);
 const APP_SERVER_CURRENT_METHODS = new Set([
   "capability/list",
   "artifact/read",
@@ -136,14 +164,15 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "fileSystem/createDirectory",
   "fileSystem/renameFile",
   "fileSystem/deleteFile",
-  "agentSession/start",
-  "agentSession/read",
+  "thread/start",
+  "thread/read",
   "workflow/read",
   "workflow/cancel",
   "workflow/retry",
   "workflow/respond",
   "agentSession/update",
-  "agentSession/archiveMany",
+  "thread/archive",
+  "thread/unarchive",
   "skill/list",
   "skill/read",
   "skillManagement/list",
@@ -215,10 +244,7 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "model/list",
   "modelPreferences/list",
   "modelSyncState/read",
-  "modelProvider/list",
-  "modelProvider/catalog/list",
-  "modelProviderAlias/read",
-  "modelProviderAlias/list",
+  ...APP_SERVER_MODEL_CONTROL_METHODS,
   "mcpServer/list",
   "mcpServerStatus/list",
   "mcpServer/create",
@@ -342,7 +368,7 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (devBridgeStartupTruthCommands.has(command)) {
     return "startup-truth";
   }
-  if (isAppServerAgentTurnStartCommand(command, args)) {
+  if (isAppServerTurnStartCommand(command, args)) {
     return "app-server-turn-start";
   }
   if (isAppServerConversationImportCommand(command, args)) {
@@ -354,7 +380,7 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerLongRunningCommand(command, args)) {
     return "app-server-long-running";
   }
-  if (isAppServerAgentSessionListCommand(command, args)) {
+  if (isAppServerThreadListCommand(command, args)) {
     return "agent-session-list";
   }
   if (isAppServerStartupTruthCommand(command, args)) {
@@ -368,6 +394,9 @@ export function resolveDevBridgeCommandTimeoutProfile(
   }
   if (isAppServerPluginInstalledWriteCommand(command, args)) {
     return "plugin-installed-write";
+  }
+  if (isAppServerProviderNetworkCommand(command, args)) {
+    return "app-server-provider-network";
   }
   if (isAppServerCurrentMethodCommand(command, args)) {
     return "app-server-read";
@@ -399,27 +428,21 @@ export function resolveDevBridgeCommandTimeoutProfile(
   return "default";
 }
 
-function isAppServerAgentSessionListCommand(
-  command: string,
-  args: unknown,
-): boolean {
+function isAppServerThreadListCommand(command: string, args: unknown): boolean {
   if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
     return false;
   }
   return extractAppServerJsonLines(args).some((line) =>
-    jsonRpcLineHasMethod(line, APP_SERVER_AGENT_SESSION_LIST_METHOD),
+    jsonRpcLineHasMethod(line, APP_SERVER_THREAD_LIST_METHOD),
   );
 }
 
-function isAppServerAgentTurnStartCommand(
-  command: string,
-  args: unknown,
-): boolean {
+function isAppServerTurnStartCommand(command: string, args: unknown): boolean {
   if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
     return false;
   }
   return extractAppServerJsonLines(args).some((line) =>
-    jsonRpcLineHasMethod(line, APP_SERVER_AGENT_TURN_START_METHOD),
+    jsonRpcLineHasMethod(line, APP_SERVER_TURN_START_METHOD),
   );
 }
 
@@ -518,6 +541,18 @@ function isAppServerPluginInstalledWriteCommand(
   }
   return extractAppServerJsonLines(args).some((line) =>
     jsonRpcLineHasAnyMethod(line, APP_SERVER_PLUGIN_INSTALLED_WRITE_METHODS),
+  );
+}
+
+function isAppServerProviderNetworkCommand(
+  command: string,
+  args: unknown,
+): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasAnyMethod(line, APP_SERVER_PROVIDER_NETWORK_METHODS),
   );
 }
 

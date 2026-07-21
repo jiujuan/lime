@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Client-declared capabilities negotiated during the v2 initialize\nhandshake. Notification opt-out is connection-scoped, never global.",
+  "properties": {
+    "experimentalApi": {
+      "default": false,
+      "type": "boolean"
+    },
+    "mcpServerOpenaiFormElicitation": {
+      "type": "boolean"
+    },
+    "optOutNotificationMethods": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "requestAttestation": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "title": "InitializeCapabilities",
+  "type": "object"
+}

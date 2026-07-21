@@ -13,6 +13,42 @@ use thread_store::{
 const ERROR_NEXT_ACTION: &str = "This agent's turn failed. If you still need this agent, use the available collaboration tools to give it another task.";
 const ERROR_TEXT_MAX_CHARS: usize = 4_000;
 
+pub(in crate::runtime) struct RuntimeSessionTerminalActivity {
+    pub recipient_session_id: String,
+    pub input: agent_runtime::session_loop::RuntimeSessionInterAgentInput,
+}
+
+pub(in crate::runtime) fn publish_terminal_agent_activities(
+    session_loops: &agent_runtime::session_loop::RuntimeSessionRegistry,
+    activities: Vec<RuntimeSessionTerminalActivity>,
+) {
+    if activities.is_empty() {
+        return;
+    }
+    let session_loops = session_loops.clone();
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        tracing::debug!(
+            activity_count = activities.len(),
+            "terminal mailbox activity remains durable until a session boundary observes it"
+        );
+        return;
+    };
+    runtime.spawn(async move {
+        for activity in activities {
+            if let Err(error) = session_loops
+                .notify_inter_agent_communication(&activity.recipient_session_id, activity.input)
+                .await
+            {
+                tracing::warn!(
+                    session_id = activity.recipient_session_id,
+                    error = %error,
+                    "failed to publish durable terminal mailbox activity"
+                );
+            }
+        }
+    });
+}
+
 impl ProjectionStore {
     pub(in crate::runtime) fn terminal_agent_result_required_sync(
         &self,
@@ -31,19 +67,19 @@ impl ProjectionStore {
         &self,
         child_thread_id: &ThreadId,
         events: &[app_server_protocol::AgentEvent],
-    ) -> Result<(), String> {
+    ) -> Result<Vec<RuntimeSessionTerminalActivity>, String> {
         let turn_ids = terminal_result_turn_ids(events);
         if turn_ids.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
         let Some(parent) = self
             .read_thread_spawn_parent_sync(child_thread_id.clone())
             .map_err(|error| error.to_string())?
         else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         if parent.status != ThreadSpawnEdgeStatus::Open {
-            return Ok(());
+            return Ok(Vec::new());
         }
         let child_identity = self
             .read_agent_identity_sync(child_thread_id.clone())
@@ -63,6 +99,19 @@ impl ProjectionStore {
                 "agent terminal result parent and child root identity mismatch".to_string(),
             );
         }
+        let parent_thread = self
+            .read_thread_sync(ReadThreadParams {
+                thread_id: parent.parent_thread_id.clone(),
+                include_archived: true,
+                turns_view: ThreadTurnsView::NotLoaded,
+            })
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| {
+                format!(
+                    "spawned child {child_thread_id} parent {} has no canonical Thread",
+                    parent.parent_thread_id
+                )
+            })?;
         let child_thread = self
             .read_thread_sync(ReadThreadParams {
                 thread_id: child_thread_id.clone(),
@@ -72,6 +121,7 @@ impl ProjectionStore {
             .map_err(|error| error.to_string())?
             .ok_or_else(|| format!("spawned child {child_thread_id} has no canonical Thread"))?;
 
+        let mut activities = Vec::new();
         for turn_id in turn_ids {
             let turn = child_thread
                 .turns
@@ -90,30 +140,37 @@ impl ProjectionStore {
                 "Message Type: FINAL_ANSWER\nTask name: {}\nSender: {}\nPayload:\n{}",
                 parent_identity.agent_path, child_identity.agent_path, payload
             );
-            self.append_agent_mailbox_message_sync(AppendAgentMailboxMessageParams {
-                message: AgentMailboxMessage {
-                    message_id: terminal_result_message_id(
-                        &child_identity.root_thread_id,
-                        child_thread_id,
-                        &turn.turn_id,
-                        result_status,
-                    ),
-                    root_thread_id: child_identity.root_thread_id.clone(),
-                    sender_thread_id: child_thread_id.clone(),
-                    recipient_thread_id: parent.parent_thread_id.clone(),
-                    content,
-                    kind: AgentMailboxMessageKind::Result,
-                    source_turn_id: Some(turn.turn_id.clone()),
-                    result_status: Some(result_status),
-                    delivery_mode: AgentMailboxDeliveryMode::QueueOnly,
-                    delivery_status: AgentMailboxDeliveryStatus::Pending,
-                    created_at_ms,
-                    delivered_at_ms: None,
-                },
-            })
-            .map_err(|error| error.to_string())?;
+            let message = self
+                .append_agent_mailbox_message_sync(AppendAgentMailboxMessageParams {
+                    message: AgentMailboxMessage {
+                        message_id: terminal_result_message_id(
+                            &child_identity.root_thread_id,
+                            child_thread_id,
+                            &turn.turn_id,
+                            result_status,
+                        ),
+                        root_thread_id: child_identity.root_thread_id.clone(),
+                        sender_thread_id: child_thread_id.clone(),
+                        recipient_thread_id: parent.parent_thread_id.clone(),
+                        content,
+                        kind: AgentMailboxMessageKind::Result,
+                        source_turn_id: Some(turn.turn_id.clone()),
+                        result_status: Some(result_status),
+                        delivery_mode: AgentMailboxDeliveryMode::QueueOnly,
+                        delivery_status: AgentMailboxDeliveryStatus::Pending,
+                        created_at_ms,
+                        delivered_at_ms: None,
+                    },
+                })
+                .map_err(|error| error.to_string())?;
+            if message.delivery_status == AgentMailboxDeliveryStatus::Pending {
+                activities.push(RuntimeSessionTerminalActivity {
+                    recipient_session_id: parent_thread.session_id.to_string(),
+                    input: super::inter_agent_input::from_mailbox_message(&message),
+                });
+            }
         }
-        Ok(())
+        Ok(activities)
     }
 }
 

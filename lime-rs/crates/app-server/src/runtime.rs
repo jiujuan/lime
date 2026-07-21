@@ -18,6 +18,7 @@ mod artifact_sidecar;
 mod automation;
 mod backend;
 mod browser_session;
+mod canonical_rollout;
 mod canonical_thread_store;
 #[cfg(test)]
 mod canonical_thread_store_tests;
@@ -40,8 +41,8 @@ mod file_checkpoint_projection;
 mod file_system;
 mod gateway;
 mod gateway_runner;
-mod imported_session_runtime;
 mod input_media;
+mod inter_agent_input;
 mod knowledge;
 mod load_context;
 mod mcp;
@@ -70,6 +71,7 @@ mod project_git;
 mod projection_item_events;
 mod projection_payload_summary;
 mod projection_protocol;
+mod projection_rebuild;
 mod projection_repair;
 #[cfg(test)]
 mod projection_repair_tests;
@@ -79,6 +81,7 @@ mod projection_store;
 #[cfg(test)]
 mod projection_store_tests;
 pub(crate) mod provider_history;
+mod queued_turn_intent;
 mod read_model;
 mod read_model_turn_usage;
 mod right_surface;
@@ -89,20 +92,27 @@ mod session_lifecycle;
 pub(crate) mod session_list_scope;
 mod session_media_reader;
 mod session_media_refs;
+mod session_operations;
+mod session_runtime_defaults;
+mod session_shell;
+mod session_submission;
 pub(crate) mod session_title;
 pub(crate) mod sidecar_store;
 mod skills;
 mod soul;
 mod status;
 mod storage_roots;
+mod thread_goal;
 mod thread_item_projection;
 mod thread_read;
+pub(crate) mod thread_usage;
 mod tool_item_projection;
 mod tool_lifecycle;
 mod trace;
 mod trace_store;
 mod turn_execution;
 mod turn_input_events;
+mod turn_start;
 mod usage_stats;
 mod value_fields;
 mod voice;
@@ -166,15 +176,17 @@ pub(crate) use trace_store::export_trace_events_from_store_to_path;
 pub(crate) use trace_store::summarize_trace_event_store;
 pub use trace_store::TraceEventWriter;
 pub(crate) use trace_store::TRACE_EVENT_MAX_FILES_PER_SESSION;
+pub use turn_start::TurnStartRequest;
 pub(super) use value_fields::event_request_id;
 
 use crate::CapabilityInventorySource;
 use crate::CapabilitySource;
 use crate::KnowledgeBuilderRuntimeExecutor;
 use crate::NativeKnowledgeBuilderRuntimeExecutor;
+use agent_protocol::AgentInput;
+use agent_runtime::session_loop::RuntimeSessionInputHandle;
 use app_server_protocol::error_codes;
 use app_server_protocol::AgentEvent;
-use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionScope;
 use app_server_protocol::AgentSessionActionType;
@@ -185,6 +197,7 @@ use app_server_protocol::ClientInfo;
 use app_server_protocol::EvidencePackSummary;
 use app_server_protocol::JsonRpcError;
 use app_server_protocol::ManagedObjectiveStatus;
+use app_server_protocol::RuntimeOptions;
 use async_trait::async_trait;
 use lime_browser_runtime::{BrowserProfileScope, BrowserRuntimeManager};
 use lime_infra::telemetry::RequestLog;
@@ -195,6 +208,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use value_fields::{
     json_string, metadata_string, new_id, optional_id_or_new, raw_string_field, string_array_field,
     string_field, timestamp, timestamp_seconds,
@@ -202,6 +217,8 @@ use value_fields::{
 
 #[derive(Debug, Error)]
 pub enum RuntimeCoreError {
+    #[error("invalid request: {0}")]
+    InvalidRequest(String),
     #[error("session not found: {0}")]
     SessionNotFound(String),
     #[error("turn not active: {0}")]
@@ -214,6 +231,23 @@ pub enum RuntimeCoreError {
     CapabilityDenied(String),
     #[error("request canceled")]
     RequestCanceled,
+    #[error("{0}")]
+    UsageLimitExceeded(String),
+    #[error("pending route for session {session_id}: {reason_code}")]
+    PendingRoute {
+        session_id: String,
+        provider: Option<String>,
+        model: Option<String>,
+        reason_code: String,
+    },
+    #[error("route rejected for session {session_id}: {reason_code}")]
+    RouteRejected {
+        session_id: String,
+        provider: Option<String>,
+        model: Option<String>,
+        category: app_server_protocol::RouteFailureCategory,
+        reason_code: String,
+    },
     #[error("execution backend error: {0}")]
     Backend(String),
     #[error("action response error ({code}): {request_id}")]
@@ -221,8 +255,50 @@ pub enum RuntimeCoreError {
 }
 
 impl RuntimeCoreError {
+    pub fn is_provider_selection_required(&self) -> bool {
+        matches!(self, Self::PendingRoute { .. })
+    }
+
+    pub fn pending_route_for_session(
+        session_id: impl Into<String>,
+        runtime_options: Option<&RuntimeOptions>,
+    ) -> Self {
+        let request = runtime_options.and_then(|options| options.runtime_request.as_ref());
+        let provider = request.and_then(|request| {
+            non_empty_route_hint(request.provider_preference.as_deref()).or_else(|| {
+                request.provider_config.as_ref().and_then(|config| {
+                    non_empty_route_hint(config.provider_id.as_deref())
+                        .or_else(|| non_empty_route_hint(config.provider_name.as_deref()))
+                })
+            })
+        });
+        let model = request.and_then(|request| {
+            non_empty_route_hint(request.model_preference.as_deref()).or_else(|| {
+                request
+                    .provider_config
+                    .as_ref()
+                    .and_then(|config| non_empty_route_hint(config.model_name.as_deref()))
+            })
+        });
+        let reason_code = match (provider.is_some(), model.is_some()) {
+            (false, false) => "provider_and_model_missing",
+            (false, true) => "provider_missing",
+            (true, false) => "model_missing",
+            (true, true) => "route_unavailable",
+        };
+        Self::PendingRoute {
+            session_id: session_id.into(),
+            provider,
+            model,
+            reason_code: reason_code.to_string(),
+        }
+    }
+
     pub fn into_jsonrpc_error(self) -> JsonRpcError {
         match self {
+            Self::InvalidRequest(message) => {
+                JsonRpcError::new(error_codes::INVALID_PARAMS, message)
+            }
             Self::SessionNotFound(session_id) => JsonRpcError::new(
                 error_codes::SESSION_NOT_FOUND,
                 format!("session not found: {session_id}"),
@@ -243,8 +319,47 @@ impl RuntimeCoreError {
                 error_codes::CAPABILITY_DENIED,
                 format!("capability denied: {capability_id}"),
             ),
+            Self::PendingRoute {
+                session_id,
+                provider,
+                model,
+                reason_code,
+            } => JsonRpcError {
+                code: error_codes::RUNTIME_ERROR,
+                message: "App Server runtime backend requires provider/model selection. Start or resume the canonical thread with a complete modelProvider/model route before starting a turn.".to_string(),
+                data: Some(serde_json::json!({
+                    "type": "PendingRoute",
+                    "sessionId": session_id,
+                    "provider": provider,
+                    "model": model,
+                    "reasonCode": reason_code,
+                    "retryable": true,
+                })),
+            },
+            Self::RouteRejected {
+                session_id,
+                provider,
+                model,
+                category,
+                reason_code,
+            } => JsonRpcError {
+                code: error_codes::RUNTIME_ERROR,
+                message: "runtime model route is not executable".to_string(),
+                data: Some(serde_json::json!({
+                    "type": "RouteRejected",
+                    "sessionId": session_id,
+                    "provider": provider,
+                    "model": model,
+                    "category": category,
+                    "reasonCode": reason_code,
+                    "retryable": false,
+                })),
+            },
             Self::RequestCanceled => {
                 JsonRpcError::new(error_codes::REQUEST_CANCELLED, "request canceled")
+            }
+            Self::UsageLimitExceeded(message) => {
+                JsonRpcError::new(error_codes::RUNTIME_ERROR, message)
             }
             Self::Backend(message) => JsonRpcError::new(error_codes::RUNTIME_ERROR, message),
             Self::ActionResponse { code, request_id } => JsonRpcError {
@@ -257,6 +372,20 @@ impl RuntimeCoreError {
             },
         }
     }
+
+    pub(crate) fn turn_failure_reason(&self) -> &'static str {
+        match self {
+            Self::UsageLimitExceeded(_) => "usage_limit_exceeded",
+            _ => "turn_error",
+        }
+    }
+}
+
+fn non_empty_route_hint(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -283,6 +412,38 @@ pub struct RuntimeEvent {
     pub payload: serde_json::Value,
 }
 
+/// Owned runtime event channel used by App Server's background projection pump.
+///
+/// RuntimeCore owns persistence; App Server owns transport projection. Keeping the
+/// receiver behind the hub lets a turn task publish after the request future has
+/// returned without capturing a borrowed request callback.
+#[derive(Clone)]
+pub struct RuntimeEventHub {
+    sender: mpsc::UnboundedSender<AgentEvent>,
+    receiver: Arc<Mutex<Option<mpsc::UnboundedReceiver<AgentEvent>>>>,
+}
+
+impl RuntimeEventHub {
+    pub fn new() -> Self {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        Self {
+            sender,
+            receiver: Arc::new(Mutex::new(Some(receiver))),
+        }
+    }
+
+    pub(crate) fn take_receiver(&self) -> Option<mpsc::UnboundedReceiver<AgentEvent>> {
+        self.receiver
+            .lock()
+            .expect("runtime event hub mutex poisoned")
+            .take()
+    }
+
+    pub(crate) fn publish(&self, event: AgentEvent) {
+        let _ = self.sender.send(event);
+    }
+}
+
 impl RuntimeEvent {
     pub fn new(event_type: impl Into<String>, payload: serde_json::Value) -> Self {
         Self {
@@ -294,6 +455,15 @@ impl RuntimeEvent {
 
 pub trait RuntimeEventSink: Send {
     fn emit(&mut self, event: RuntimeEvent) -> Result<(), RuntimeCoreError>;
+
+    /// Forward an event that was already persisted by an external runtime boundary.
+    ///
+    /// The default is intentionally a no-op for sinks that only collect backend events. The
+    /// app-server sink overrides this to notify the current request without writing a duplicate
+    /// event to the session log.
+    fn emit_preappended(&mut self, _event: AgentEvent) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
 }
 
 type RuntimeEventCallback<'a> = dyn FnMut(AgentEvent) -> Result<(), RuntimeCoreError> + Send + 'a;
@@ -382,6 +552,14 @@ pub struct ToolInventoryReadRequest {
 
 #[async_trait]
 pub trait ExecutionBackend: Send + Sync {
+    fn requires_provider_selection(&self) -> bool {
+        false
+    }
+
+    fn has_live_session_responses(&self) -> bool {
+        false
+    }
+
     fn set_app_data_source(
         &self,
         _app_data_source: Arc<dyn AppDataSource>,
@@ -397,6 +575,23 @@ pub trait ExecutionBackend: Send + Sync {
         request.runtime_options.clone()
     }
 
+    async fn preflight_turn(
+        &self,
+        _request: &ExecutionRequest,
+        _first_sampling_turn: bool,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn prepare_turn_runtime_options(
+        &self,
+        request: &ExecutionRequest,
+        first_sampling_turn: bool,
+    ) -> Result<Option<RuntimeOptions>, RuntimeCoreError> {
+        self.preflight_turn(request, first_sampling_turn).await?;
+        Ok(request.runtime_options.clone())
+    }
+
     async fn start_turn(
         &self,
         request: ExecutionRequest,
@@ -410,6 +605,18 @@ pub trait ExecutionBackend: Send + Sync {
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
         self.start_turn(request, sink).await
+    }
+
+    async fn start_turn_with_provider_history_and_session_input(
+        &self,
+        request: ExecutionRequest,
+        provider_history: Vec<CurrentProviderMessage>,
+        _pending_input: Option<RuntimeSessionInputHandle>,
+        _cancellation_token: Option<CancellationToken>,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.start_turn_with_provider_history(request, provider_history, sink)
+            .await
     }
 
     async fn cancel_turn(
@@ -461,6 +668,10 @@ pub trait ExecutionBackend: Send + Sync {
 #[derive(Clone)]
 pub struct RuntimeCore {
     pub(in crate::runtime) state: Arc<Mutex<RuntimeCoreState>>,
+    pub(in crate::runtime) session_loops: agent_runtime::session_loop::RuntimeSessionRegistry,
+    pub(in crate::runtime) turn_driver_completions: turn_execution::RuntimeTurnDriverCompletions,
+    mailbox_trigger_flights: agent_mailbox_delivery::MailboxTriggerFlights,
+    route_recovery: model_providers::RouteRecoveryCoordinator,
     backend: Arc<dyn ExecutionBackend>,
     capability_source: Arc<dyn CapabilitySource>,
     pub(in crate::runtime) artifact_content_provider: Arc<dyn ArtifactContentProvider>,
@@ -471,6 +682,7 @@ pub struct RuntimeCore {
     pub(in crate::runtime) trace_event_writer: Option<Arc<TraceEventWriter>>,
     pub(in crate::runtime) projection_store: Option<Arc<ProjectionStore>>,
     pub(in crate::runtime) telemetry_store: Option<Arc<TelemetryStore>>,
+    pub(in crate::runtime) event_hub: RuntimeEventHub,
     pub(in crate::runtime) browser_runtime: Arc<BrowserRuntimeManager>,
     evidence_export_provider: Arc<dyn EvidenceExportProvider>,
     knowledge_builder_runtime_executor: Arc<dyn KnowledgeBuilderRuntimeExecutor>,
@@ -487,6 +699,7 @@ pub struct RuntimeCoreEventAppender {
     event_log_writer: Option<Arc<EventLogWriter>>,
     trace_event_writer: Option<Arc<TraceEventWriter>>,
     projection_store: Option<Arc<ProjectionStore>>,
+    session_loops: agent_runtime::session_loop::RuntimeSessionRegistry,
 }
 
 #[derive(Debug, Default)]
@@ -504,7 +717,7 @@ pub(in crate::runtime) struct RuntimeCoreState {
 pub(in crate::runtime) struct StoredSession {
     pub(in crate::runtime) session: AgentSession,
     pub(in crate::runtime) turns: Vec<AgentTurn>,
-    pub(in crate::runtime) turn_inputs: HashMap<String, AgentInput>,
+    pub(in crate::runtime) turn_inputs: HashMap<String, Vec<AgentInput>>,
     pub(in crate::runtime) turn_runtime_options:
         HashMap<String, app_server_protocol::RuntimeOptions>,
     pub(in crate::runtime) events: Vec<AgentEvent>,
@@ -557,6 +770,10 @@ impl RuntimeCore {
     ) -> Self {
         Self {
             state: Arc::new(Mutex::new(RuntimeCoreState::default())),
+            session_loops: agent_runtime::session_loop::RuntimeSessionRegistry::default(),
+            turn_driver_completions: turn_execution::RuntimeTurnDriverCompletions::default(),
+            mailbox_trigger_flights: agent_mailbox_delivery::MailboxTriggerFlights::default(),
+            route_recovery: model_providers::RouteRecoveryCoordinator::default(),
             backend,
             capability_source,
             artifact_content_provider,
@@ -567,6 +784,7 @@ impl RuntimeCore {
             trace_event_writer: None,
             projection_store: None,
             telemetry_store: None,
+            event_hub: RuntimeEventHub::new(),
             browser_runtime: Arc::new(BrowserRuntimeManager::new()),
             evidence_export_provider,
             knowledge_builder_runtime_executor: Arc::new(
@@ -575,6 +793,10 @@ impl RuntimeCore {
             app_data_source: Arc::new(NoopAppDataSource),
             execution_process_server: None,
         }
+    }
+
+    pub(crate) fn take_event_receiver(&self) -> Option<mpsc::UnboundedReceiver<AgentEvent>> {
+        self.event_hub.take_receiver()
     }
 
     pub(crate) fn with_execution_process_server(
@@ -657,6 +879,7 @@ impl RuntimeCore {
             event_log_writer: self.event_log_writer.clone(),
             trace_event_writer: self.trace_event_writer.clone(),
             projection_store: self.projection_store.clone(),
+            session_loops: self.session_loops.clone(),
         }
     }
 }

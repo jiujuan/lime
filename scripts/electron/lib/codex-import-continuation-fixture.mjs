@@ -21,10 +21,10 @@ export const COMMAND_OUTPUT_MARKER = "CODEX_UNIFIED_EXEC_OK";
 export const REQUIRED_METHODS = [
   "initialize",
   "conversationImport/thread/commit",
-  "agentSession/read",
-  "agentSession/start",
+  "thread/read",
+  "thread/start",
   "agentSession/update",
-  "agentSession/turn/start",
+  "turn/start",
 ];
 
 function sleep(ms) {
@@ -451,7 +451,7 @@ export async function initializeAndCommitImport(
   const job = await waitForConversationImportJob(client, commit?.job, options);
   const sessionId = job.result?.session?.sessionId;
   assert(sessionId, "conversation import job result did not return sessionId");
-  const importedRead = await client.call("agentSession/read", {
+  const importedRead = await client.call("thread/read", {
     sessionId,
     historyLimit: 100,
   });
@@ -508,7 +508,7 @@ async function waitForTurnCompletion(
   const startedAt = Date.now();
   let latestRead = null;
   while (Date.now() - startedAt < timeoutMs) {
-    latestRead = await client.call("agentSession/read", {
+    latestRead = await client.call("thread/read", {
       sessionId,
       historyLimit: 100,
     });
@@ -546,7 +546,7 @@ async function startUnifiedExecTurn(
   client,
   { sessionId, turnId, text, provider, runtimeEnv },
 ) {
-  return await client.call("agentSession/turn/start", {
+  return await client.call("turn/start", {
     sessionId,
     turnId,
     input: { text, attachments: [] },
@@ -582,7 +582,7 @@ export async function runImportedAndNormalTurns(
   });
 
   const normalSessionId = `codex-normal-unified-exec-${Date.now()}-${process.pid}`;
-  const normalStart = await client.call("agentSession/start", {
+  const normalStart = await client.call("thread/start", {
     sessionId: normalSessionId,
     appId: "desktop",
     workspaceId: WORKSPACE_ID,
@@ -787,7 +787,7 @@ export function summarizeAndAssertFixture({
 
 export function summarizeAndAssertBridge(client) {
   const turnStartCount = client.requests.filter(
-    (request) => request.method === "agentSession/turn/start",
+    (request) => request.method === "turn/start",
   ).length;
   assert(client.bridgeFacts.length > 0, "未记录 Electron preload bridge facts");
   assert(

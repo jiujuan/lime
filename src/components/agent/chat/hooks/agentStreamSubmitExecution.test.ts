@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
-import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
+import type {
+  AgentThreadItem,
+  AgentThreadTurn,
+  AgentUserInputOp,
+} from "@/lib/api/agentProtocol";
 import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 import { MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX } from "@/lib/model/modelCapabilitySendGate";
 import { buildModelNativeToolPolicy } from "@/lib/model/modelNativeToolPolicy";
@@ -35,6 +38,15 @@ vi.mock("@/lib/api/modelRegistry", () => ({
 
 function noopDispatch<T>() {
   return vi.fn() as unknown as Dispatch<SetStateAction<T>>;
+}
+
+function idleTurnControl(threadId: string) {
+  return {
+    threadId,
+    updatedAtMs: Date.now(),
+    activeTurnId: null,
+    queuedTurnIds: [],
+  };
 }
 
 function modelFixture(
@@ -94,6 +106,9 @@ describe("agentStreamSubmitExecution", () => {
     const ensureSession = vi.fn(async () => "session-should-not-create");
     const runtime = {
       listenToTurnEvents: vi.fn(async () => vi.fn()),
+      getThreadTurnControl: vi.fn(async (threadId: string) =>
+        idleTurnControl(threadId),
+      ),
       submitOp,
     } as unknown as AgentRuntimeAdapter;
     const requestState: StreamRequestState = {
@@ -101,7 +116,6 @@ describe("agentStreamSubmitExecution", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await expect(
@@ -112,18 +126,18 @@ describe("agentStreamSubmitExecution", () => {
         refreshSessionReadModel: async () => true,
         sessionIdRef: { current: null } as MutableRefObject<string | null>,
         getWorkspaceIdForSubmit: () => "workspace-1",
+        getThreadIdForSubmit: () => "thread-1",
         getSyncedSessionExecutionStrategy: () => "react",
         getSyncedSessionRecentPreferences: () => null,
         effectiveAccessMode: "current",
         content: "只回答绿灯",
         images: [],
         skipUserMessage: false,
-        expectingQueue: false,
         effectiveProviderType: "lime-hub",
         effectiveModel: "",
         effectiveExecutionStrategy: "react",
         eventName: "event-missing-model",
-        requestTurnId: "turn-missing-model",
+        clientUserMessageId: "user-missing-model",
         requestState,
         assistantMsgId: "assistant-missing-model",
         pendingTurnKey: "pending-turn-missing-model",
@@ -139,10 +153,7 @@ describe("agentStreamSubmitExecution", () => {
           clearOptimisticItem: () => {},
           clearOptimisticTurn: () => {},
           disposeListener: () => {},
-          removeQueuedDraftMessages: () => {},
           clearActiveStreamIfMatch: () => false,
-          upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-          removeQueuedTurnsFromProjection: () => {},
           registerListener: vi.fn(),
         },
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -171,6 +182,9 @@ describe("agentStreamSubmitExecution", () => {
     const activateStream = vi.fn();
     const runtime = {
       listenToTurnEvents: vi.fn(async () => unlisten),
+      getThreadTurnControl: vi.fn(async (threadId: string) =>
+        idleTurnControl(threadId),
+      ),
       submitOp,
     } as unknown as AgentRuntimeAdapter;
     const requestState: StreamRequestState = {
@@ -178,7 +192,6 @@ describe("agentStreamSubmitExecution", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await executeAgentStreamSubmit({
@@ -188,6 +201,7 @@ describe("agentStreamSubmitExecution", () => {
       refreshSessionReadModel: async () => true,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
       getWorkspaceIdForSubmit: () => "workspace-1",
+      getThreadIdForSubmit: () => "thread-1",
       getSyncedSessionExecutionStrategy: () => "react",
       getSyncedSessionRecentPreferences: () => ({
         webSearch: true,
@@ -199,7 +213,6 @@ describe("agentStreamSubmitExecution", () => {
       content: "继续生成提纲",
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
@@ -207,7 +220,6 @@ describe("agentStreamSubmitExecution", () => {
       thinking: true,
       skipSessionRestore: true,
       skipSessionStartHooks: true,
-      skipPreSubmitResume: true,
       requestMetadata: {
         harness: {
           managed_objective: {
@@ -224,7 +236,7 @@ describe("agentStreamSubmitExecution", () => {
         },
       },
       eventName: "event-1",
-      requestTurnId: "turn-1",
+      clientUserMessageId: "user-1",
       requestState,
       assistantMsgId: "assistant-1",
       pendingTurnKey: "pending-turn-1",
@@ -240,10 +252,7 @@ describe("agentStreamSubmitExecution", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
         registerListener,
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -265,18 +274,28 @@ describe("agentStreamSubmitExecution", () => {
     expect(submitOp).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "user_input",
-        sessionId: "session-1",
         eventName: "event-1",
-        workspaceId: "workspace-1",
-        turnId: "turn-1",
-        text: "继续生成提纲",
-        skipPreSubmitResume: true,
-        preferences: expect.objectContaining({
+        turn: expect.objectContaining({
+          threadId: "thread-1",
+          input: [{ type: "text", text: "继续生成提纲" }],
+          model: "gpt-5.4",
           approvalPolicy: "on-request",
           sandboxPolicy: "read-only",
         }),
       }),
     );
+    const submittedOp = submitOp.mock
+      .calls[0]?.[0] as unknown as AgentUserInputOp;
+    for (const field of [
+      "sessionId",
+      "workspaceId",
+      "turnId",
+      "text",
+      "preferences",
+      "metadata",
+    ]) {
+      expect(submittedOp).not.toHaveProperty(field);
+    }
     expect(ensureSession).toHaveBeenCalledWith({
       skipSessionRestore: true,
       skipSessionStartHooks: true,
@@ -291,15 +310,23 @@ describe("agentStreamSubmitExecution", () => {
     expect(requestState.requestLogId).toBeTruthy();
   });
 
-  it("queued submit accepted 后应释放 listener、刷新 read model 且不覆盖 active stream", async () => {
+  it("canonical thread 存在 active turn 时应提交 typed turn/steer", async () => {
     getModelRegistryMock.mockResolvedValueOnce([]);
     const unlisten = vi.fn();
     const submitOp = vi.fn(async () => {});
     const refreshSessionReadModel = vi.fn(async () => true);
     const disposeListener = vi.fn();
     const activateStream = vi.fn();
+    const steerTurn = vi.fn(async () => ({ turnId: "turn-active" }));
     const runtime = {
       listenToTurnEvents: vi.fn(async () => unlisten),
+      getThreadTurnControl: vi.fn(async () => ({
+        threadId: "thread-queued",
+        updatedAtMs: Date.now(),
+        activeTurnId: "turn-active",
+        queuedTurnIds: [],
+      })),
+      steerTurn,
       submitOp,
     } as unknown as AgentRuntimeAdapter;
     const requestState: StreamRequestState = {
@@ -307,7 +334,6 @@ describe("agentStreamSubmitExecution", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await executeAgentStreamSubmit({
@@ -319,18 +345,18 @@ describe("agentStreamSubmitExecution", () => {
         current: "session-queued",
       } as MutableRefObject<string | null>,
       getWorkspaceIdForSubmit: () => "workspace-1",
+      getThreadIdForSubmit: () => "thread-queued",
       getSyncedSessionExecutionStrategy: () => "react",
       getSyncedSessionRecentPreferences: () => null,
       effectiveAccessMode: "current",
       content: "排队处理",
       images: [],
       skipUserMessage: false,
-      expectingQueue: true,
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
       eventName: "event-queued",
-      requestTurnId: "turn-queued",
+      clientUserMessageId: "user-steer",
       requestState,
       assistantMsgId: "assistant-queued",
       pendingTurnKey: "pending-turn-queued",
@@ -346,10 +372,7 @@ describe("agentStreamSubmitExecution", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         registerListener: vi.fn(),
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -363,9 +386,16 @@ describe("agentStreamSubmitExecution", () => {
       setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
     });
 
-    expect(submitOp).toHaveBeenCalledTimes(1);
+    expect(steerTurn).toHaveBeenCalledWith({
+      threadId: "thread-queued",
+      expectedTurnId: "turn-active",
+      clientUserMessageId: "user-steer",
+      input: [{ type: "text", text: "排队处理" }],
+    });
+    expect(submitOp).not.toHaveBeenCalled();
+    expect(runtime.listenToTurnEvents).not.toHaveBeenCalled();
     expect(activateStream).not.toHaveBeenCalled();
-    expect(disposeListener).toHaveBeenCalledTimes(1);
+    expect(disposeListener).not.toHaveBeenCalled();
     expect(refreshSessionReadModel).toHaveBeenCalledWith("session-queued");
   });
 
@@ -377,6 +407,9 @@ describe("agentStreamSubmitExecution", () => {
     const activateStream = vi.fn();
     const runtime = {
       listenToTurnEvents: vi.fn(async () => unlisten),
+      getThreadTurnControl: vi.fn(async (threadId: string) =>
+        idleTurnControl(threadId),
+      ),
       submitOp,
     } as unknown as AgentRuntimeAdapter;
     const requestState: StreamRequestState = {
@@ -384,7 +417,6 @@ describe("agentStreamSubmitExecution", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await executeAgentStreamSubmit({
@@ -396,22 +428,29 @@ describe("agentStreamSubmitExecution", () => {
         current: "session-previous",
       } as MutableRefObject<string | null>,
       getWorkspaceIdForSubmit: () => "workspace-1",
+      getThreadIdForSubmit: () => "thread-materialized",
       getSyncedSessionExecutionStrategy: () => "react",
       getSyncedSessionRecentPreferences: () => null,
       effectiveAccessMode: "read-only",
       content: "从草稿进入正式会话",
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
+      requestMetadata: {
+        harness: { content_id: "draft-content" },
+      },
+      executionRuntime: {
+        session_id: "session-previous",
+        source: "runtime_snapshot",
+        recent_content_id: "draft-content",
+      },
       targetSessionId: "session-materialized",
       skipSessionRestore: true,
       skipSessionStartHooks: true,
-      skipPreSubmitResume: true,
       eventName: "event-materialized",
-      requestTurnId: "turn-materialized",
+      clientUserMessageId: "user-materialized",
       requestState,
       assistantMsgId: "assistant-materialized",
       pendingTurnKey: "pending-turn-materialized",
@@ -427,10 +466,7 @@ describe("agentStreamSubmitExecution", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
         registerListener,
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -455,16 +491,26 @@ describe("agentStreamSubmitExecution", () => {
     );
     expect(submitOp).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionId: "session-materialized",
+        type: "user_input",
         eventName: "event-materialized",
-        turnId: "turn-materialized",
-        text: "从草稿进入正式会话",
+        turn: expect.objectContaining({
+          threadId: "thread-materialized",
+          input: [{ type: "text", text: "从草稿进入正式会话" }],
+          model: "gpt-5.4",
+          approvalPolicy: "on-request",
+          sandboxPolicy: "read-only",
+        }),
       }),
     );
     expect(activateStream).toHaveBeenCalledWith(
       "session-materialized",
       expect.anything(),
+      "thread-materialized",
     );
+    const submittedOp = submitOp.mock.calls[0]?.[0] as AgentUserInputOp;
+    expect(
+      JSON.parse(submittedOp.turn.additionalContext?.metadata?.value ?? "null"),
+    ).toEqual({ harness: { content_id: "draft-content" } });
   });
 
   it("图片输入不满足 selected model input_modalities 时不应调用 runtime submitOp", async () => {
@@ -482,6 +528,9 @@ describe("agentStreamSubmitExecution", () => {
     const activateStream = vi.fn();
     const runtime = {
       listenToTurnEvents: vi.fn(async () => unlisten),
+      getThreadTurnControl: vi.fn(async (threadId: string) =>
+        idleTurnControl(threadId),
+      ),
       submitOp,
     } as unknown as AgentRuntimeAdapter;
     const requestState: StreamRequestState = {
@@ -489,7 +538,6 @@ describe("agentStreamSubmitExecution", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await expect(
@@ -500,6 +548,7 @@ describe("agentStreamSubmitExecution", () => {
         refreshSessionReadModel: async () => true,
         sessionIdRef: { current: null } as MutableRefObject<string | null>,
         getWorkspaceIdForSubmit: () => "workspace-1",
+        getThreadIdForSubmit: () => "thread-image-1",
         getSyncedSessionExecutionStrategy: () => "react",
         getSyncedSessionRecentPreferences: () => ({
           webSearch: false,
@@ -511,13 +560,11 @@ describe("agentStreamSubmitExecution", () => {
         content: "描述这张图",
         images: [{ data: "base64-image", mediaType: "image/png" }],
         skipUserMessage: false,
-        expectingQueue: false,
         effectiveProviderType: "openai",
         effectiveModel: "gpt-4.1-text",
         effectiveExecutionStrategy: "react",
         skipSessionRestore: true,
         skipSessionStartHooks: true,
-        skipPreSubmitResume: true,
         requestMetadata: {
           harness: {
             managed_objective: {
@@ -527,7 +574,7 @@ describe("agentStreamSubmitExecution", () => {
           },
         },
         eventName: "event-image-1",
-        requestTurnId: "turn-image-1",
+        clientUserMessageId: "user-image-1",
         requestState,
         assistantMsgId: "assistant-1",
         pendingTurnKey: "pending-turn-1",
@@ -543,10 +590,7 @@ describe("agentStreamSubmitExecution", () => {
           clearOptimisticItem: () => {},
           clearOptimisticTurn: () => {},
           disposeListener: () => {},
-          removeQueuedDraftMessages: () => {},
           clearActiveStreamIfMatch: () => false,
-          upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-          removeQueuedTurnsFromProjection: () => {},
           registerListener,
         },
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -567,7 +611,7 @@ describe("agentStreamSubmitExecution", () => {
     expect(submitOp).not.toHaveBeenCalled();
   });
 
-  it("图片输入满足 selected model input_modalities 时应把最终 gate 写入 submit metadata", async () => {
+  it("图片输入满足 selected model input_modalities 时应把最终 gate 写入 turn additionalContext", async () => {
     getModelRegistryMock.mockResolvedValueOnce([
       modelFixture({
         id: "gpt-4.1-vision",
@@ -607,6 +651,9 @@ describe("agentStreamSubmitExecution", () => {
     const activateStream = vi.fn();
     const runtime = {
       listenToTurnEvents: vi.fn(async () => unlisten),
+      getThreadTurnControl: vi.fn(async (threadId: string) =>
+        idleTurnControl(threadId),
+      ),
       submitOp,
     } as unknown as AgentRuntimeAdapter;
     const requestState: StreamRequestState = {
@@ -614,7 +661,6 @@ describe("agentStreamSubmitExecution", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await executeAgentStreamSubmit({
@@ -624,6 +670,7 @@ describe("agentStreamSubmitExecution", () => {
       refreshSessionReadModel: async () => true,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
       getWorkspaceIdForSubmit: () => "workspace-1",
+      getThreadIdForSubmit: () => "thread-image-allowed",
       getSyncedSessionExecutionStrategy: () => "react",
       getSyncedSessionRecentPreferences: () => ({
         webSearch: false,
@@ -635,13 +682,11 @@ describe("agentStreamSubmitExecution", () => {
       content: "描述这张图",
       images: [{ data: "base64-image", mediaType: "image/png" }],
       skipUserMessage: false,
-      expectingQueue: false,
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1-vision",
       effectiveExecutionStrategy: "react",
       skipSessionRestore: true,
       skipSessionStartHooks: true,
-      skipPreSubmitResume: true,
       requestMetadata: {
         source: "prepare",
         harness: {
@@ -653,7 +698,7 @@ describe("agentStreamSubmitExecution", () => {
         },
       },
       eventName: "event-image-allowed",
-      requestTurnId: "turn-image-allowed",
+      clientUserMessageId: "user-image-allowed",
       requestState,
       assistantMsgId: "assistant-1",
       pendingTurnKey: "pending-turn-1",
@@ -669,10 +714,7 @@ describe("agentStreamSubmitExecution", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
         registerListener,
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -688,48 +730,49 @@ describe("agentStreamSubmitExecution", () => {
 
     expect(submitOp).toHaveBeenCalledTimes(1);
     expect(getModelRegistryMock).toHaveBeenCalledWith({ forceRefresh: true });
-    expect(submitOp.mock.calls[0]?.[0]).toMatchObject({
+    const submittedOp = submitOp.mock
+      .calls[0]?.[0] as unknown as AgentUserInputOp;
+    expect(submittedOp).toMatchObject({
       type: "user_input",
-      metadata: {
-        source: "prepare",
-        harness: {
-          existing_signal: true,
-          model_input_capability_gate: {
-            status: "allowed",
-            requiredInputModalities: ["text", "image"],
-            supportedInputModalities: ["text", "image"],
-            missingInputModalities: [],
-            requiresMediaInput: true,
-            reason: null,
-          },
-          model_request_policy: {
-            source: "model_registry",
-            provider_id: "openai",
-            model_id: "gpt-4.1-vision",
-            responses_policy: {
-              request_mode: "responses_lite",
-              requires_responses_lite_header: true,
-            },
-            tool_call_policy: {
-              supports_parallel_tool_calls: true,
-              parallel_tool_calls: true,
-            },
-            truncation_policy: {
-              mode: "tokens",
-              limit: 4096,
-            },
-            native_tool_policy: {
-              preferred_shell_surface: "unified_exec",
-              apply_patch_tool_enabled: true,
-            },
-          },
+      eventName: "event-image-allowed",
+      turn: {
+        threadId: "thread-image-allowed",
+        input: [
+          { type: "text", text: "描述这张图" },
+          { type: "image", url: "data:image/png;base64,base64-image" },
+        ],
+        model: "gpt-4.1-vision",
+        approvalPolicy: "on-request",
+        sandboxPolicy: "read-only",
+      },
+    });
+    const metadataEntry = submittedOp.turn.additionalContext?.metadata;
+    expect(metadataEntry).toMatchObject({
+      kind: "application",
+      value: expect.any(String),
+    });
+    const submittedMetadata = JSON.parse(
+      (metadataEntry as { value: string }).value,
+    ) as Record<string, unknown>;
+    expect(submittedMetadata).toMatchObject({
+      source: "prepare",
+      harness: {
+        existing_signal: true,
+        model_input_capability_gate: {
+          status: "allowed",
+          requiredInputModalities: ["text", "image"],
+          supportedInputModalities: ["text", "image"],
+          missingInputModalities: [],
+          requiresMediaInput: true,
+          reason: null,
         },
       },
     });
+    expect(submittedOp).not.toHaveProperty("metadata");
     expect(setAgentRuntimeObjectiveMock).not.toHaveBeenCalled();
   });
 
-  it("当前模型只有最小 registry metadata 时也应覆盖旧 model_request_policy", async () => {
+  it("当前模型已与 session durable model 同步时不应重复写入 typed turn.model", async () => {
     getModelRegistryMock.mockResolvedValue([
       modelFixture({
         id: "gpt-5.2-pro",
@@ -762,6 +805,9 @@ describe("agentStreamSubmitExecution", () => {
     const submitOp = vi.fn(async () => {});
     const runtime = {
       listenToTurnEvents: vi.fn(async () => unlisten),
+      getThreadTurnControl: vi.fn(async (threadId: string) =>
+        idleTurnControl(threadId),
+      ),
       submitOp,
     } as unknown as AgentRuntimeAdapter;
     const requestState: StreamRequestState = {
@@ -769,7 +815,6 @@ describe("agentStreamSubmitExecution", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await executeAgentStreamSubmit({
@@ -781,6 +826,7 @@ describe("agentStreamSubmitExecution", () => {
         string | null
       >,
       getWorkspaceIdForSubmit: () => "workspace-1",
+      getThreadIdForSubmit: () => "thread-target",
       getSyncedSessionExecutionStrategy: () => "react",
       getSyncedSessionRecentPreferences: () => ({
         webSearch: false,
@@ -792,7 +838,6 @@ describe("agentStreamSubmitExecution", () => {
       content: "GateB gpt-5.4-mini reasoning dedupe",
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       effectiveProviderType: "lime-hub",
       effectiveModel: "gpt-5.4-mini",
       effectiveExecutionStrategy: "react",
@@ -819,7 +864,7 @@ describe("agentStreamSubmitExecution", () => {
         },
       },
       eventName: "event-target-model",
-      requestTurnId: "turn-target-model",
+      clientUserMessageId: "user-target-model",
       requestState,
       assistantMsgId: "assistant-target-model",
       pendingTurnKey: "pending-turn-target-model",
@@ -835,10 +880,7 @@ describe("agentStreamSubmitExecution", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
         registerListener: vi.fn(),
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -853,24 +895,26 @@ describe("agentStreamSubmitExecution", () => {
     });
 
     expect(submitOp).toHaveBeenCalledTimes(1);
-    expect(submitOp.mock.calls[0]?.[0]).toMatchObject({
+    const submittedOp = submitOp.mock
+      .calls[0]?.[0] as unknown as AgentUserInputOp;
+    expect(submittedOp).toMatchObject({
       type: "user_input",
-      preferences: {
-        providerPreference: undefined,
-        modelPreference: undefined,
-      },
-      metadata: {
-        source: "prepare",
-        harness: {
-          existing_signal: true,
-          model_request_policy: {
-            source: "model_registry",
-            provider_id: "lime-hub",
-            model_id: "gpt-5.4-mini",
+      eventName: "event-target-model",
+      turn: {
+        threadId: "thread-target",
+        input: [
+          {
+            type: "text",
+            text: "GateB gpt-5.4-mini reasoning dedupe",
           },
-        },
+        ],
+        approvalPolicy: "on-request",
+        sandboxPolicy: "workspace-write",
       },
     });
+    expect(submittedOp.turn).not.toHaveProperty("model");
+    expect(submittedOp).not.toHaveProperty("preferences");
+    expect(submittedOp).not.toHaveProperty("metadata");
   });
 
   it("追求目标写入失败不应阻断消息提交", async () => {
@@ -885,6 +929,9 @@ describe("agentStreamSubmitExecution", () => {
     );
     const runtime = {
       listenToTurnEvents: vi.fn(async () => unlisten),
+      getThreadTurnControl: vi.fn(async (threadId: string) =>
+        idleTurnControl(threadId),
+      ),
       submitOp,
     } as unknown as AgentRuntimeAdapter;
     const requestState: StreamRequestState = {
@@ -892,7 +939,6 @@ describe("agentStreamSubmitExecution", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await executeAgentStreamSubmit({
@@ -902,6 +948,7 @@ describe("agentStreamSubmitExecution", () => {
       refreshSessionReadModel: async () => true,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
       getWorkspaceIdForSubmit: () => "workspace-1",
+      getThreadIdForSubmit: () => "thread-1",
       getSyncedSessionExecutionStrategy: () => "react",
       getSyncedSessionRecentPreferences: () => ({
         webSearch: false,
@@ -913,7 +960,6 @@ describe("agentStreamSubmitExecution", () => {
       content: "继续生成提纲",
       images: [],
       skipUserMessage: false,
-      expectingQueue: false,
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
@@ -921,7 +967,6 @@ describe("agentStreamSubmitExecution", () => {
       thinking: false,
       skipSessionRestore: true,
       skipSessionStartHooks: true,
-      skipPreSubmitResume: true,
       requestMetadata: {
         harness: {
           managed_objective: {
@@ -931,7 +976,7 @@ describe("agentStreamSubmitExecution", () => {
         },
       },
       eventName: "event-1",
-      requestTurnId: "turn-1",
+      clientUserMessageId: "user-1",
       requestState,
       assistantMsgId: "assistant-1",
       pendingTurnKey: "pending-turn-1",
@@ -947,10 +992,7 @@ describe("agentStreamSubmitExecution", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
         registerListener,
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -972,7 +1014,14 @@ describe("agentStreamSubmitExecution", () => {
     expect(submitOp).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "user_input",
-        sessionId: "session-1",
+        eventName: "event-1",
+        turn: expect.objectContaining({
+          threadId: "thread-1",
+          input: [{ type: "text", text: "继续生成提纲" }],
+          model: "gpt-5.4",
+          approvalPolicy: "on-request",
+          sandboxPolicy: "read-only",
+        }),
       }),
     );
     expect(activateStream).toHaveBeenCalled();

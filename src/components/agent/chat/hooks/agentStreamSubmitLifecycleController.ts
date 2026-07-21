@@ -30,7 +30,6 @@ export interface RunAgentStreamSubmitLifecycleOptions {
   effectiveModel: string;
   effectiveProviderType: string;
   eventName: string;
-  expectingQueue: boolean;
   onSubmitAccepted?: () => void;
   requestState: StreamRequestState;
   submit: () => Promise<void>;
@@ -45,7 +44,6 @@ export async function runAgentStreamSubmitLifecycle(
     effectiveModel,
     effectiveProviderType,
     eventName,
-    expectingQueue,
     onSubmitAccepted,
     requestState,
     submit,
@@ -61,7 +59,6 @@ export async function runAgentStreamSubmitLifecycle(
     effectiveModel,
     effectiveProviderType,
     eventName,
-    expectingQueue,
     timing: {
       listenerBoundAt: requestState.listenerBoundAt,
       now: requestState.submissionDispatchedAt,

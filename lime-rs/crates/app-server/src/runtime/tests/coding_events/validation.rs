@@ -156,6 +156,7 @@ async fn start_turn_accepts_backend_emitted_coding_lifecycle() {
             "item.started",
             "message.created",
             "item.completed",
+            "turn.accepted",
             "file.changed",
             "patch.started",
             "patch.applied",

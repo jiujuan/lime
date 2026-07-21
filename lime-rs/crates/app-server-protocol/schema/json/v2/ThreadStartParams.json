@@ -1,0 +1,178 @@
+{
+  "$defs": {
+    "ThreadHistoryMode": {
+      "enum": [
+        "legacy",
+        "paginated"
+      ],
+      "type": "string"
+    },
+    "ThreadStartSource": {
+      "enum": [
+        "clear",
+        "startup"
+      ],
+      "type": "string"
+    },
+    "TurnEnvironmentParams": {
+      "description": "Environment override shared by `thread/start`, `turn/start`, and resume.",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "environmentId": {
+          "type": "string"
+        },
+        "runtimeWorkspaceRoots": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd",
+        "environmentId"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "allowProviderModelFallback": {
+      "type": "boolean"
+    },
+    "approvalPolicy": true,
+    "approvalsReviewer": true,
+    "baseInstructions": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "config": {
+      "additionalProperties": true,
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "cwd": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "developerInstructions": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "dynamicTools": {
+      "items": true,
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "environments": {
+      "items": {
+        "$ref": "#/$defs/TurnEnvironmentParams"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "ephemeral": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "experimentalRawEvents": {
+      "type": "boolean"
+    },
+    "historyMode": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThreadHistoryMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modelProvider": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "multiAgentMode": true,
+    "permissions": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "personality": true,
+    "runtimeWorkspaceRoots": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "sandbox": true,
+    "selectedCapabilityRoots": {
+      "items": true,
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "serviceName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "serviceTier": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionStartSource": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThreadStartSource"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "threadSource": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "ThreadStartParams",
+  "type": "object"
+}

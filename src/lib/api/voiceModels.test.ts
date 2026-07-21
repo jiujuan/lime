@@ -90,6 +90,7 @@ describe("voiceModels API", () => {
       .mockResolvedValueOnce(installState)
       .mockResolvedValueOnce({ state: installedState })
       .mockResolvedValueOnce(installState)
+      .mockResolvedValueOnce(installedState)
       .mockResolvedValueOnce(installedState);
     appServerMocks.setDefaultVoiceModel.mockResolvedValueOnce({
       result: {
@@ -154,6 +155,11 @@ describe("voiceModels API", () => {
       "voice_models_get_install_state",
       { modelId: "sensevoice-small-int8-2024-07-17" },
     );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      6,
+      "voice_models_get_install_state",
+      { modelId: "sensevoice-small-int8-2024-07-17" },
+    );
     expect(appServerMocks.setDefaultVoiceModel).toHaveBeenCalledWith({
       model_id: "sensevoice-small-int8-2024-07-17",
       install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
@@ -164,6 +170,7 @@ describe("voiceModels API", () => {
     );
     expect(appServerMocks.testTranscribeVoiceModelFile).toHaveBeenCalledWith({
       model_id: "sensevoice-small-int8-2024-07-17",
+      install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
       file_path: "/tmp/interview.wav",
     });
   });
@@ -223,10 +230,12 @@ describe("voiceModels API", () => {
 
   it("测试转写应固定走 App Server voiceModel/testTranscribeFile current 通道", async () => {
     vi.mocked(safeInvoke).mockResolvedValue({
-      diagnostic: {
-        source: "electron-host-diagnostic",
-        status: "degraded",
-      },
+      model_id: "sensevoice-small-int8-2024-07-17",
+      installed: true,
+      installing: false,
+      install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+      installed_bytes: 1024,
+      missing_files: [],
     });
     appServerMocks.testTranscribeVoiceModelFile.mockResolvedValueOnce({
       result: {
@@ -248,6 +257,7 @@ describe("voiceModels API", () => {
     );
     expect(appServerMocks.testTranscribeVoiceModelFile).toHaveBeenCalledWith({
       model_id: "sensevoice-small-int8-2024-07-17",
+      install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
       file_path: "/tmp/interview.wav",
     });
   });
@@ -255,7 +265,15 @@ describe("voiceModels API", () => {
   it("语音模型 side-effect 命令返回错误形态时不应吞成成功", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true });
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        model_id: "sensevoice-small-int8-2024-07-17",
+        installed: true,
+        installing: false,
+        install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+        installed_bytes: 1024,
+        missing_files: [],
+      });
     appServerMocks.testTranscribeVoiceModelFile.mockResolvedValueOnce({
       result: { success: true },
     });
@@ -438,10 +456,7 @@ describe("voiceModels API", () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(safeInvoke).toHaveBeenNthCalledWith(
-      1,
-      "voice_models_list_catalog",
-    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(1, "voice_models_list_catalog");
     expect(safeInvoke).toHaveBeenNthCalledWith(2, "voice_models_download", {
       modelId: "sensevoice-small-int8-2024-07-17",
     });

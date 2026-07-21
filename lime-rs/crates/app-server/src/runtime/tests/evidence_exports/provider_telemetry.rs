@@ -64,6 +64,149 @@ fn canonical_tool_event(event_type: &str, payload: Value) -> RuntimeEvent {
 }
 
 #[tokio::test]
+async fn basic_evidence_pack_exports_canonical_provenance() {
+    let mut request_log = lime_infra::telemetry::RequestLog::new(
+        "request-provenance-1".to_string(),
+        lime_core::ProviderType::OpenAI,
+        "gpt-4.1".to_string(),
+        true,
+    );
+    request_log.session_id = Some("sess_provenance".to_string());
+    request_log.thread_id = Some("thread_provenance".to_string());
+    request_log.turn_id = Some("turn_provenance".to_string());
+    request_log.set_credential_id("secret-credential-id".to_string());
+    request_log.set_tokens(Some(12), Some(8));
+    request_log.increment_retry();
+    request_log.mark_success(125, 200);
+
+    let evidence_pack = BasicEvidenceExportProvider
+        .export_evidence_pack(&EvidencePackRequest {
+            session: AgentSession {
+                session_id: "sess_provenance".to_string(),
+                thread_id: "thread_provenance".to_string(),
+                app_id: "agent-chat".to_string(),
+                workspace_id: None,
+                business_object_ref: None,
+                status: AgentSessionStatus::Idle,
+                created_at: "2026-07-19T00:00:00Z".to_string(),
+                updated_at: "2026-07-19T00:00:01Z".to_string(),
+            },
+            turns: Vec::new(),
+            events: vec![
+                AgentEvent {
+                    event_id: "event-item-1".to_string(),
+                    sequence: 1,
+                    session_id: "sess_provenance".to_string(),
+                    thread_id: Some("thread_provenance".to_string()),
+                    turn_id: Some("turn_provenance".to_string()),
+                    event_type: "item.completed".to_string(),
+                    timestamp: "2026-07-19T00:00:01Z".to_string(),
+                    payload: json!({
+                        "item": {
+                            "sessionId": "sess_provenance",
+                            "threadId": "thread_provenance",
+                            "turnId": "turn_provenance",
+                            "itemId": "item-provenance-1",
+                            "sequence": 1,
+                            "ordinal": 1,
+                            "createdAtMs": 1,
+                            "updatedAtMs": 2,
+                            "completedAtMs": 2,
+                            "kind": "agentMessage",
+                            "status": "completed",
+                            "payload": {
+                                "type": "agentMessage",
+                                "text": "canonical answer",
+                                "content_parts": []
+                            },
+                            "metadata": {"source": "runtime"}
+                        }
+                    }),
+                },
+                AgentEvent {
+                    event_id: "event-provider-1".to_string(),
+                    sequence: 2,
+                    session_id: "sess_provenance".to_string(),
+                    thread_id: Some("thread_provenance".to_string()),
+                    turn_id: Some("turn_provenance".to_string()),
+                    event_type: "provider.request.started".to_string(),
+                    timestamp: "2026-07-19T00:00:02Z".to_string(),
+                    payload: json!({
+                        "runtimeEvent": {
+                            "stage": "request_started",
+                            "provider": "openai",
+                            "model": "gpt-4.1",
+                            "attempt": 2,
+                            "status": "running",
+                            "runtime_provider_backend": "current",
+                            "runtime_provider_selector": "codex",
+                            "runtime_provider_protocol": "responses",
+                            "runtime_provider_active_model": "gpt-4.1"
+                        }
+                    }),
+                },
+            ],
+            artifacts: Vec::new(),
+            turn_runtime_metadata: [(
+                "resolvedRoute".to_string(),
+                json!({"protocol": "openai_responses", "source": "profile_slot"}),
+            )]
+            .into_iter()
+            .collect(),
+            request_logs: vec![request_log],
+            workflow_audit_events: Vec::new(),
+        })
+        .await
+        .expect("basic evidence provider")
+        .expect("evidence pack");
+
+    let provenance = evidence_pack
+        .observability_summary
+        .as_ref()
+        .and_then(|summary| summary.get("canonical_provenance"))
+        .expect("canonical provenance");
+    assert_eq!(provenance["schemaVersion"], "canonical-provenance.v1");
+    assert_eq!(provenance["canonicalItemCount"], 1);
+    assert_eq!(
+        provenance["canonicalItems"][0]["itemId"],
+        "item-provenance-1"
+    );
+    assert_eq!(
+        provenance["canonicalItems"][0]["item"]["payload"]["text"],
+        "canonical answer"
+    );
+    assert_eq!(provenance["sequence"]["monotonic"], true);
+    assert_eq!(
+        provenance["routeMetadata"]["resolvedRoute"]["protocol"],
+        "openai_responses"
+    );
+    assert!(provenance["replayDigest"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("sha256:")));
+
+    let attempts = provenance["providerAttempts"]
+        .as_array()
+        .expect("provider attempts");
+    assert!(attempts.iter().any(|attempt| {
+        attempt["source"] == "provider_trace"
+            && attempt["attempt"] == 2
+            && attempt["route"]["protocol"] == "responses"
+    }));
+    let request_attempt = attempts
+        .iter()
+        .find(|attempt| attempt["source"] == "request_log")
+        .expect("request log provenance");
+    assert_eq!(request_attempt["retryCount"], 1);
+    assert_eq!(request_attempt["inputTokens"], 12);
+    assert!(request_attempt["credentialFingerprint"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("sha256:")));
+    assert!(!serde_json::to_string(provenance)
+        .expect("serialize provenance")
+        .contains("secret-credential-id"));
+}
+
+#[tokio::test]
 async fn export_evidence_uses_injected_evidence_pack_provider() {
     let provider = Arc::new(TestEvidenceExportProvider::default());
     let core = RuntimeCore::with_backend_capability_source_artifact_content_provider_and_evidence_export_provider(

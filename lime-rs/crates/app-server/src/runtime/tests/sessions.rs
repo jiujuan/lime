@@ -958,7 +958,7 @@ async fn read_session_current_repairs_and_reads_jsonl_projection() {
         .read_session("sess_projection_read")
         .expect("read repaired projection")
         .expect("projection row");
-    assert_eq!(projected.last_event_sequence, 7);
+    assert_eq!(projected.last_event_sequence, 8);
 }
 
 #[tokio::test]
@@ -1059,10 +1059,10 @@ async fn read_session_current_uses_projection_summary_for_limited_history() {
         event_type: "message.created".to_string(),
         timestamp: timestamp(),
         payload: json!({
-            "input": {
-                "text": "current projection should support limited read",
-                "attachments": []
-            }
+            "input": [{
+                "type": "text",
+                "text": "current projection should support limited read"
+            }]
         }),
     };
     event_log_writer
@@ -1231,10 +1231,10 @@ async fn read_session_current_projection_summary_preserves_process_items() {
             event_type: "message.created".to_string(),
             timestamp: timestamp(),
             payload: json!({
-                "input": {
-                    "text": "打开历史时保留工具调用和思考",
-                    "attachments": []
-                },
+                "input": [{
+                    "type": "text",
+                    "text": "打开历史时保留工具调用和思考"
+                }],
                 "session": {
                     "workspaceId": "workspace-current",
                     "modelName": "fixture-model"

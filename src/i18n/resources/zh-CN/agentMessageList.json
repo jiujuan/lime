@@ -296,9 +296,6 @@
   "agentChat.messageList.artifact.sourceCount": "{{count}} 条来源",
   "agentChat.messageList.artifact.locateBlock": "定位到 {{label}}",
   "agentChat.messageList.artifact.documentSyncedPreview": "已同步到工作区，可继续在画布里阅读、编辑和定位到对应区块。",
-  "agentChat.messageList.artifactFrame.badge": "产物框",
-  "agentChat.messageList.artifactFrame.open": "打开编辑器",
-  "agentChat.messageList.artifactFrame.openAria": "打开产物编辑器：{{title}}",
   "agentChat.messageList.artifactFrame.streaming": "流式输出中",
   "agentChat.messageList.articleArtifact.documentCreatedPrefix": "已创建文档：",
   "agentChat.messageList.articleArtifact.documentCreatingPrefix": "正在创建文档：",
@@ -465,5 +462,7 @@
   "agentChat.toolCall.group.collapseSearch": "收起搜索批次",
   "agentChat.toolCall.group.expandSearch": "展开搜索批次",
   "agentChat.toolCall.group.hiddenSearchGroups": " 等 {{count}} 组",
-  "agentChat.toolCall.error.openExternalUnsupported": "当前环境不支持打开外部链接"
+  "agentChat.toolCall.error.openExternalUnsupported": "当前环境不支持打开外部链接",
+  "agentChat.inputbar.shellCommand.empty": "请输入要执行的命令",
+  "agentChat.inputbar.shellCommand.error": "命令提交失败：{{message}}"
 }

@@ -92,7 +92,7 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
             "command.started" | "command.output" | "command.exited" => {
                 upsert_command_item(stored, event, &mut command_items);
             }
-            "patch.started" | "patch.applied" | "patch.failed" => {
+            "patch.started" | "patch.applied" | "patch.failed" | "patch.declined" => {
                 upsert_patch_item(stored, event, &mut patch_items);
             }
             "action.required" | "action.resolved" | "action.cancelled" | "action.canceled"

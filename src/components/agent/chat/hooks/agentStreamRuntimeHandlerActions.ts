@@ -5,7 +5,6 @@ import type {
   AgentThreadItem,
   AgentThreadTurn,
 } from "@/lib/api/agentProtocol";
-import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { Message } from "../types";
 import { buildAgentTextDeltaContentPartMetadata } from "../utils/contentPartTimeline";
@@ -35,6 +34,10 @@ import {
   buildAgentStreamFailedTimelineTurnUpdate,
 } from "./agentStreamErrorController";
 import { recordAgentStreamPerformanceMetric } from "./agentStreamPerformanceMetrics";
+import {
+  buildAgentStreamFirstTextDeltaMetricContext,
+  shouldRecordAgentStreamFirstTextDelta,
+} from "./agentStreamRuntimeMetricsController";
 import type { AgentStreamRequestLogFinishPayload } from "./agentStreamRequestLogController";
 import { buildAgentStreamProcessBoundaryTextCommitPatch } from "./agentStreamProcessBoundaryCommit";
 import { isPersistedReasoningContentPart } from "./agentStreamReasoningContentSync";
@@ -53,12 +56,9 @@ import {
   upsertAgentStreamTextOverlay,
 } from "./agentStreamTextOverlayStore";
 import {
-  buildAgentStreamQueuedDraftCleanupTimerFirePlan,
-  buildAgentStreamQueuedDraftCleanupTimerSchedulePlan,
   buildAgentStreamTextRenderTimerSchedulePlan,
   buildAgentStreamTimerClearPlan,
 } from "./agentStreamTimerController";
-import { buildAgentStreamQueuedDraftStatePlan } from "./agentStreamQueueController";
 import { projectAgentStreamTimelineItem } from "./agentStreamTimelineItemProjector";
 import { mergeAssistantAgentMessageContentPartsFromThreadItems } from "./agentStreamAgentMessageContentSync";
 import { saveAgentSessionCachedMessagesSnapshot } from "./agentSessionScopedStorage";
@@ -73,6 +73,10 @@ import type {
   StreamRequestState,
 } from "./agentStreamRuntimeHandlerTypes";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import {
+  isAgentMessageCommentaryPhase,
+  isAgentMessageFinalAnswerPhase,
+} from "../utils/agentMessagePhase";
 
 export type AgentStreamRuntimeToolEvent = Extract<
   AgentEvent,
@@ -110,7 +114,6 @@ interface CreateAgentStreamRuntimeHandlerActionsOptions {
   assistantMsgId: string;
   callbacks: StreamLifecycleCallbacks;
   content: string;
-  effectiveExecutionStrategy: AgentExecutionStrategy;
   eventName: string;
   getThreadItems?: () => readonly AgentThreadItem[];
   observer?: StreamObserver;
@@ -133,7 +136,6 @@ export function createAgentStreamRuntimeHandlerActions({
   assistantMsgId,
   callbacks,
   content,
-  effectiveExecutionStrategy,
   eventName,
   getThreadItems,
   observer,
@@ -149,28 +151,14 @@ export function createAgentStreamRuntimeHandlerActions({
   surfaceThinkingDeltas,
   soulCopy,
 }: CreateAgentStreamRuntimeHandlerActionsOptions) {
-  const {
-    clearActiveStreamIfMatch,
-    disposeListener,
-    isStreamActivated,
-    removeQueuedDraftMessages,
-  } = callbacks;
+  const { clearActiveStreamIfMatch, disposeListener, isStreamActivated } =
+    callbacks;
 
   const shouldPreserveVisibleProcessForMessage = (message: Message): boolean =>
     surfaceThinkingDeltas ||
     requestState.shouldSurfaceVisibleProcessReasoning === true ||
     Boolean(message.imageWorkbenchPreview) ||
     isRetainedSkillProcessMessage(message);
-
-  const clearQueuedDraftCleanupTimer = () => {
-    const clearPlan = buildAgentStreamTimerClearPlan({
-      hasTimer: Boolean(requestState.queuedDraftCleanupTimerId),
-    });
-    if (clearPlan.shouldClearTimer && requestState.queuedDraftCleanupTimerId) {
-      clearTimeout(requestState.queuedDraftCleanupTimerId);
-    }
-    requestState.queuedDraftCleanupTimerId = clearPlan.nextTimerId;
-  };
 
   const clearPendingTextRenderTimer = () => {
     const clearPlan = buildAgentStreamTimerClearPlan({
@@ -180,6 +168,92 @@ export function createAgentStreamRuntimeHandlerActions({
       clearTimeout(requestState.pendingTextRenderTimerId);
     }
     requestState.pendingTextRenderTimerId = clearPlan.nextTimerId;
+  };
+
+  const scheduleFirstTextPaintMetric = (flushStartedAt: number) => {
+    const recordFirstTextPaint = () => {
+      const paintedAt = Date.now();
+      requestState.firstTextPaintAt = paintedAt;
+      const paintContext = buildAgentStreamFirstTextPaintContext({
+        activeSessionId,
+        eventName,
+        firstTextDeltaAt: requestState.firstTextDeltaAt,
+        flushStartedAt,
+        paintedAt,
+        rendererEventReceivedAt:
+          requestState.performanceTrace?.rendererEventReceivedAt,
+        requestStartedAt: requestState.requestStartedAt,
+        serverEventEmittedAt:
+          requestState.performanceTrace?.serverEventEmittedAt,
+      });
+      recordAgentStreamPerformanceMetric(
+        "agentStream.firstTextPaint",
+        requestState.performanceTrace,
+        paintContext,
+      );
+      logAgentDebug("AgentStream", "firstTextPaint", paintContext);
+    };
+
+    if (
+      typeof window !== "undefined" &&
+      typeof window.requestAnimationFrame === "function"
+    ) {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(recordFirstTextPaint);
+      });
+    } else {
+      setTimeout(recordFirstTextPaint, 0);
+    }
+  };
+
+  const recordAgentMessageSnapshotTextPaint = (item: AgentThreadItem) => {
+    if (
+      item.type !== "agent_message" ||
+      (!isAgentMessageCommentaryPhase(item.phase) &&
+        !isAgentMessageFinalAnswerPhase(item.phase)) ||
+      !item.text.trim()
+    ) {
+      return;
+    }
+
+    const firstTextAt = Date.now();
+    if (
+      shouldRecordAgentStreamFirstTextDelta({
+        firstTextDeltaAt: requestState.firstTextDeltaAt,
+      })
+    ) {
+      requestState.firstTextDeltaAt = firstTextAt;
+      const firstTextContext = {
+        ...buildAgentStreamFirstTextDeltaMetricContext({
+          activeSessionId,
+          deltaText: item.text,
+          eventName,
+          firstEventReceivedAt: requestState.firstEventReceivedAt,
+          firstRuntimeStatusAt: requestState.firstRuntimeStatusAt,
+          firstTextDeltaAt: firstTextAt,
+          rendererEventReceivedAt:
+            requestState.performanceTrace?.rendererEventReceivedAt,
+          requestStartedAt: requestState.requestStartedAt,
+          serverEventEmittedAt:
+            requestState.performanceTrace?.serverEventEmittedAt,
+        }),
+        source: "agent_message_snapshot",
+      };
+      recordAgentStreamPerformanceMetric(
+        "agentStream.firstTextDelta",
+        requestState.performanceTrace,
+        firstTextContext,
+      );
+      logAgentDebug("AgentStream", "firstTextDelta", firstTextContext);
+    }
+
+    if (
+      !requestState.firstTextPaintAt &&
+      !requestState.firstTextPaintScheduled
+    ) {
+      requestState.firstTextPaintScheduled = true;
+      scheduleFirstTextPaintMetric(firstTextAt);
+    }
   };
 
   const flushPendingTextRender = () => {
@@ -247,39 +321,7 @@ export function createAgentStreamRuntimeHandlerActions({
       updatedAt: flushStartedAt,
     });
     if (flushPlan.shouldScheduleFirstTextPaint) {
-      const recordFirstTextPaint = () => {
-        const paintedAt = Date.now();
-        requestState.firstTextPaintAt = paintedAt;
-        const paintContext = buildAgentStreamFirstTextPaintContext({
-          activeSessionId,
-          eventName,
-          firstTextDeltaAt: requestState.firstTextDeltaAt,
-          flushStartedAt,
-          paintedAt,
-          rendererEventReceivedAt:
-            requestState.performanceTrace?.rendererEventReceivedAt,
-          requestStartedAt: requestState.requestStartedAt,
-          serverEventEmittedAt:
-            requestState.performanceTrace?.serverEventEmittedAt,
-        });
-        recordAgentStreamPerformanceMetric(
-          "agentStream.firstTextPaint",
-          requestState.performanceTrace,
-          paintContext,
-        );
-        logAgentDebug("AgentStream", "firstTextPaint", paintContext);
-      };
-
-      if (
-        typeof window !== "undefined" &&
-        typeof window.requestAnimationFrame === "function"
-      ) {
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(recordFirstTextPaint);
-        });
-      } else {
-        setTimeout(recordFirstTextPaint, 0);
-      }
+      scheduleFirstTextPaintMetric(flushStartedAt);
     }
   };
 
@@ -433,36 +475,6 @@ export function createAgentStreamRuntimeHandlerActions({
     };
   };
 
-  const scheduleQueuedDraftCleanup = (shouldWatchCurrentRequest: boolean) => {
-    const cleanupSchedulePlan =
-      buildAgentStreamQueuedDraftCleanupTimerSchedulePlan({
-        shouldWatchCurrentRequest,
-        streamActivated: isStreamActivated(),
-      });
-    if (cleanupSchedulePlan.shouldClearExistingTimer) {
-      clearQueuedDraftCleanupTimer();
-    }
-    if (
-      !cleanupSchedulePlan.shouldScheduleTimer ||
-      !cleanupSchedulePlan.delayMs
-    ) {
-      return;
-    }
-
-    requestState.queuedDraftCleanupTimerId = setTimeout(() => {
-      requestState.queuedDraftCleanupTimerId = null;
-      const cleanupFirePlan = buildAgentStreamQueuedDraftCleanupTimerFirePlan({
-        requestFinished: requestState.requestFinished,
-        streamActivated: isStreamActivated(),
-      });
-      if (!cleanupFirePlan.shouldCleanup) {
-        return;
-      }
-      disposeListener();
-      removeQueuedDraftMessages();
-    }, cleanupSchedulePlan.delayMs);
-  };
-
   const markFailedTimelineState = (errorMessage: string) => {
     const failedTimelinePlan = buildAgentStreamFailedTimelineStatePlan({
       activeSessionId,
@@ -602,6 +614,7 @@ export function createAgentStreamRuntimeHandlerActions({
               message: msg,
               value: rawContent,
             });
+        const resolvedUsage = usage ?? msg.usage;
 
         return {
           ...updateMessageArtifactsStatus(msg, "complete"),
@@ -634,7 +647,7 @@ export function createAgentStreamRuntimeHandlerActions({
               shouldPreserveVisibleProcessForMessage(msg),
             thinkingContent: msg.thinkingContent,
             toolCalls: msg.toolCalls,
-            usage: usage ?? msg.usage,
+            usage: resolvedUsage,
           }),
         };
       });
@@ -694,37 +707,6 @@ export function createAgentStreamRuntimeHandlerActions({
     finalizeTerminalStreamState();
   };
 
-  const markQueuedDraftState = (queuedMessageText?: string | null) => {
-    const queuedDraftPlan = buildAgentStreamQueuedDraftStatePlan({
-      contentFallback: content,
-      executionStrategy: effectiveExecutionStrategy,
-      queuedMessageText,
-    });
-    if (queuedDraftPlan.shouldClearActiveStream) {
-      clearActiveStreamIfMatch(eventName);
-    }
-    if (queuedDraftPlan.shouldClearOptimisticItem) {
-      callbacks.clearOptimisticItem();
-    }
-    if (queuedDraftPlan.shouldClearOptimisticTurn) {
-      callbacks.clearOptimisticTurn();
-    }
-    if (queuedDraftPlan.shouldSetSendingFalse) {
-      setIsSending(false);
-    }
-
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === assistantMsgId
-          ? {
-              ...msg,
-              ...queuedDraftPlan.messagePatch,
-            }
-          : msg,
-      ),
-    );
-  };
-
   const completeCurrentStreamedReasoningSegment = (
     completedAt = new Date().toISOString(),
   ) => {
@@ -752,8 +734,7 @@ export function createAgentStreamRuntimeHandlerActions({
       typeof event.timestamp === "string" ? event.timestamp : undefined,
     );
     setThreadItems((prev) => {
-      const fallbackTurnId =
-        requestState.currentTurnId || requestState.queuedTurnId;
+      const fallbackTurnId = requestState.currentTurnId;
       const existingId =
         event.type === "tool_start" ||
         event.type === "tool_input_delta" ||
@@ -805,7 +786,7 @@ export function createAgentStreamRuntimeHandlerActions({
   ): boolean =>
     shouldLetLegacyToolEventUpdateMessageLayer({
       event,
-      fallbackTurnId: requestState.currentTurnId || requestState.queuedTurnId,
+      fallbackTurnId: requestState.currentTurnId,
       items:
         (getThreadItems?.() as
           | import("@/lib/api/agentProtocol").AgentThreadItem[]
@@ -815,7 +796,6 @@ export function createAgentStreamRuntimeHandlerActions({
   return {
     buildStreamingTextCommitPatch,
     clearPendingTextRenderTimer,
-    clearQueuedDraftCleanupTimer,
     clearStreamingTextOverlay,
     commitRenderedTextBeforeProcessPart,
     completeAssistantStreamMessageFromCompletionPlan,
@@ -825,9 +805,8 @@ export function createAgentStreamRuntimeHandlerActions({
     finalizeTerminalStreamState,
     flushPendingTextRender,
     markFailedTimelineState,
-    markQueuedDraftState,
     persistRetainedSkillProcessSnapshot,
-    scheduleQueuedDraftCleanup,
+    recordAgentMessageSnapshotTextPaint,
     scheduleTextRenderFlush,
     shouldUpdateLegacyToolMessageLayer,
     upsertFallbackTextOverlayIfSilent,

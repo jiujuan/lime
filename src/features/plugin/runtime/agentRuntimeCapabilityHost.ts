@@ -88,9 +88,14 @@ export interface AgentRuntimeSessionRequest {
   metadata?: Record<string, unknown>;
 }
 
+export interface AgentRuntimeThreadIdentity {
+  sessionId: string;
+  threadId: string;
+}
+
 export type AgentRuntimeSessionResolver = (
   request: AgentRuntimeSessionRequest,
-) => Promise<string>;
+) => Promise<AgentRuntimeThreadIdentity>;
 
 function createRuntimeTaskId(): string {
   return `plugin-task-${Date.now()}`;
@@ -240,7 +245,12 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   private async startRuntimeTask(
     entryKey: string,
     input: PluginTaskRequest,
-    retry?: { retryOfTaskId: string; retryAttempt: number; sessionId?: string },
+    retry?: {
+      retryOfTaskId: string;
+      retryAttempt: number;
+      sessionId?: string;
+      threadId?: string;
+    },
   ): Promise<PluginTaskRecord> {
     const runtimeRequest = readRuntimeRequest(input);
     const taskKind = normalizeString(runtimeRequest.taskKind) ?? "plugin.task";
@@ -253,7 +263,18 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     ]);
     const requestedSessionId =
       normalizeString(runtimeRequest.sessionId) ?? retry?.sessionId;
-    const resolvedWorkspaceId = requestedSessionId
+    const requestedThreadId =
+      normalizeString(runtimeRequest.threadId) ?? retry?.threadId;
+    if (Boolean(requestedSessionId) !== Boolean(requestedThreadId)) {
+      throw new Error(
+        "Plugin Agent task requires sessionId and threadId together when reusing a thread.",
+      );
+    }
+    const existingIdentity =
+      requestedSessionId && requestedThreadId
+        ? { sessionId: requestedSessionId, threadId: requestedThreadId }
+        : undefined;
+    const resolvedWorkspaceId = existingIdentity
       ? await this.resolveOptionalWorkspaceId(runtimeRequest)
       : await this.resolveWorkspaceId(runtimeRequest);
     const workspaceId = resolvedWorkspaceId ?? "";
@@ -279,8 +300,8 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     const taskId =
       normalizeString(runtimeRequest.taskId) ??
       (this.ensureSession ? createRuntimeTaskId() : undefined);
-    const sessionId =
-      requestedSessionId ??
+    const identity =
+      existingIdentity ??
       (this.ensureSession
         ? await this.ensureSession({
             appId: this.appId,
@@ -299,7 +320,8 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       appId: this.appId,
       entryKey,
       ...(resolvedWorkspaceId ? { workspaceId: resolvedWorkspaceId } : {}),
-      sessionId,
+      sessionId: identity?.sessionId,
+      threadId: identity?.threadId,
       taskId,
       taskKind,
       idempotencyKey: runtimeRequest.idempotencyKey,
@@ -508,6 +530,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
         retryOfTaskId: source.taskId,
         retryAttempt,
         sessionId: source.sessionId,
+        threadId: source.threadId,
       },
     );
   }

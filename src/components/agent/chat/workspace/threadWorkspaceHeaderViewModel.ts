@@ -18,7 +18,6 @@ interface BuildThreadWorkspaceHeaderViewModelParams {
   projectRootPath?: string | null;
   isSending?: boolean;
   pendingActionCount?: number;
-  queuedTurnCount?: number;
   untitledTaskLabel: string;
 }
 
@@ -31,21 +30,16 @@ function resolveThreadWorkspaceStatus({
   topicStatus,
   isSending,
   pendingActionCount,
-  queuedTurnCount,
 }: {
   topicStatus?: TaskStatus | null;
   isSending?: boolean;
   pendingActionCount?: number;
-  queuedTurnCount?: number;
 }): TaskStatus | null {
   if ((pendingActionCount ?? 0) > 0) {
     return "waiting";
   }
   if (isSending) {
     return "running";
-  }
-  if ((queuedTurnCount ?? 0) > 0) {
-    return "queued";
   }
   return topicStatus ?? null;
 }
@@ -60,7 +54,6 @@ export function buildThreadWorkspaceHeaderViewModel({
   projectRootPath,
   isSending,
   pendingActionCount,
-  queuedTurnCount,
   untitledTaskLabel,
 }: BuildThreadWorkspaceHeaderViewModelParams): ThreadWorkspaceHeaderViewModel | null {
   const normalizedSessionId = normalizeText(sessionId);
@@ -88,7 +81,6 @@ export function buildThreadWorkspaceHeaderViewModel({
       topicStatus: topic?.status,
       isSending,
       pendingActionCount,
-      queuedTurnCount,
     }),
     workingDirectory,
   };

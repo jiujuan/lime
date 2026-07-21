@@ -1,4 +1,3 @@
-import { normalizeQueuedTurnSnapshot } from "./queuedTurn";
 import { normalizeLegacyRuntimeStatusTitle } from "./agentTextNormalization";
 import type {
   AgentSessionExecutionRuntimeCostState,
@@ -11,6 +10,7 @@ import { normalizeExecutionStrategyToReact } from "./agentRuntime/executionStrat
 import type {
   AgentContextTraceStep,
   AgentMessage,
+  AgentTokenUsage,
 } from "./agentProtocolCoreTypes";
 import type {
   AgentEvent,
@@ -270,6 +270,15 @@ export function parseAgentRuntimeEvent(
         },
       };
     }
+    case "token_usage_updated":
+      return {
+        type: "token_usage_updated",
+        turn_id:
+          typeof event.turn_id === "string" && event.turn_id.trim()
+            ? event.turn_id.trim()
+            : undefined,
+        usage: event.usage as AgentTokenUsage,
+      };
     case "task_profile_resolved":
       return {
         type: "task_profile_resolved",
@@ -352,37 +361,6 @@ export function parseAgentRuntimeEvent(
         limit_event:
           (event.limit_event as AgentSessionExecutionRuntimeLimitEvent) ||
           (event.limitEvent as AgentSessionExecutionRuntimeLimitEvent),
-      };
-    case "queue_added": {
-      const queuedTurn = normalizeQueuedTurnSnapshot(event.queued_turn);
-      if (!queuedTurn) {
-        return null;
-      }
-      return {
-        type: "queue_added",
-        session_id: (event.session_id as string) || "",
-        queued_turn: queuedTurn,
-      };
-    }
-    case "queue_removed":
-      return {
-        type: "queue_removed",
-        session_id: (event.session_id as string) || "",
-        queued_turn_id: (event.queued_turn_id as string) || "",
-      };
-    case "queue_started":
-      return {
-        type: "queue_started",
-        session_id: (event.session_id as string) || "",
-        queued_turn_id: (event.queued_turn_id as string) || "",
-      };
-    case "queue_cleared":
-      return {
-        type: "queue_cleared",
-        session_id: (event.session_id as string) || "",
-        queued_turn_ids: Array.isArray(event.queued_turn_ids)
-          ? (event.queued_turn_ids as string[])
-          : [],
       };
     case "message":
       return {

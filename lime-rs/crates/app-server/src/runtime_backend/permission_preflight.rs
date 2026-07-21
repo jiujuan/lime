@@ -127,9 +127,7 @@ pub(super) fn browser_control_permission_event(
 mod tests {
     use super::*;
     use crate::runtime::{ExecutionRequest, RuntimeHostContext};
-    use app_server_protocol::{
-        AgentInput, AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus,
-    };
+    use app_server_protocol::{AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus};
 
     #[test]
     fn browser_control_preflight_cache_hint_returns_cached_outcome() {
@@ -175,10 +173,7 @@ mod tests {
                 started_at: None,
                 completed_at: None,
             },
-            input: AgentInput {
-                text: "打开浏览器".to_string(),
-                attachments: Vec::new(),
-            },
+            input: agent_runtime::reply_input::RuntimeReplyInput::text("打开浏览器"),
             runtime_options: None,
             expected_output: None,
             structured_output: None,

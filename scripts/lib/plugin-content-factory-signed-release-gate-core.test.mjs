@@ -254,6 +254,7 @@ const READY_GUI_EVIDENCE = {
   runtimeActionResponse: {
     actionId: "article-draft-review",
     confirmed: true,
+    method: "agentSession/action/respond",
     metadata: {
       workflowResume: {
         stepId: "draft",
@@ -262,36 +263,15 @@ const READY_GUI_EVIDENCE = {
       },
     },
   },
-  runtimeResumeContract: {
-    decisions: [
-      {
-        actionId: "article-draft-review",
-        decision: "approved",
-        metadata: {
-          workflowResume: {
-            stepId: "draft",
-            workflowKey: "content_article_workflow",
-            workflowRunId: "turn_prod:content-article",
-          },
-        },
-      },
-    ],
-    resumeMode: "selected-actions",
-    runtimeId: "content-factory-plugin",
-  },
   signatureVerificationStatus: "verified",
   status: "passed",
   trace: {
     appServerHandleJsonLinesSeen: true,
-    appServerMethodsSeen: [
-      "agentSession/turn/start",
-      "agentSession/read",
-      "evidence/export",
-    ],
+    appServerMethodsSeen: ["turn/start", "thread/read", "evidence/export"],
     turnStartTrace: {
       command: "app_server_handle_json_lines",
       matched: true,
-      method: "agentSession/turn/start",
+      method: "turn/start",
       sessionMatched: true,
       status: "success",
       transport: "electron-ipc",
@@ -563,7 +543,7 @@ describe("content factory signed release gate", () => {
         ready: true,
         workflowResumeLifecycle: {
           auditEventsPresent: true,
-          contractMetadataPresent: true,
+          actionMetadataPresent: true,
           workflowRunId: "turn_prod:content-article",
         },
       },
@@ -1048,7 +1028,7 @@ describe("content factory signed release gate", () => {
       },
       trace: {
         appServerHandleJsonLinesSeen: true,
-        appServerMethodsSeen: ["agentSession/turn/start"],
+        appServerMethodsSeen: ["turn/start"],
       },
     };
 
@@ -1130,11 +1110,8 @@ describe("content factory signed release gate", () => {
   });
 
   it("拒绝缺少真实 resume lifecycle metadata 的 production GUI evidence", () => {
-    const {
-      runtimeActionResponse,
-      runtimeResumeContract,
-      ...guiEvidenceWithoutLifecycleMetadata
-    } = READY_GUI_EVIDENCE;
+    const { runtimeActionResponse, ...guiEvidenceWithoutLifecycleMetadata } =
+      READY_GUI_EVIDENCE;
     const result = buildContentFactorySignedReleaseGate({
       bootstrap: READY_BOOTSTRAP,
       catalog: READY_CATALOG,
@@ -1161,7 +1138,7 @@ describe("content factory signed release gate", () => {
       guiEvidence: {
         workflowResumeLifecycle: {
           auditEventsPresent: false,
-          contractMetadataPresent: false,
+          actionMetadataPresent: false,
         },
       },
     });
@@ -1169,8 +1146,7 @@ describe("content factory signed release gate", () => {
 
   it("拒绝缺少右侧 workflow facts 隐藏显式证据的 production GUI evidence", () => {
     const {
-      contentFactoryArticleWorkspaceWorkflowFactsHidden:
-        _workflowFactsHidden,
+      contentFactoryArticleWorkspaceWorkflowFactsHidden: _workflowFactsHidden,
       ...assertionsWithoutWorkflowFactsHidden
     } = READY_GUI_EVIDENCE.assertions;
     const result = buildContentFactorySignedReleaseGate({
@@ -1230,14 +1206,12 @@ describe("content factory signed release gate", () => {
   });
 
   it("接受 runtime action response 的 workflowResume metadata 作为真实 lifecycle 证据", () => {
-    const { runtimeResumeContract, ...guiEvidenceWithActionResponse } =
-      READY_GUI_EVIDENCE;
     const result = buildContentFactorySignedReleaseGate({
       bootstrap: READY_BOOTSTRAP,
       catalog: READY_CATALOG,
       expectedVersion: "2.2.2",
       fetchCloud: READY_FETCH_CLOUD,
-      guiEvidence: guiEvidenceWithActionResponse,
+      guiEvidence: READY_GUI_EVIDENCE,
       preflight: READY_PREFLIGHT,
     });
 
@@ -1246,7 +1220,7 @@ describe("content factory signed release gate", () => {
       guiEvidence: {
         workflowResumeLifecycle: {
           auditEventsPresent: true,
-          contractMetadataPresent: true,
+          actionMetadataPresent: true,
           workflowRunId: "turn_prod:content-article",
         },
       },
@@ -1254,14 +1228,16 @@ describe("content factory signed release gate", () => {
     });
   });
 
-  it("多条 resume metadata 同时存在时选择匹配 audit 事件的 lifecycle", () => {
+  it("拒绝把 legacy runtime resume contract 当作 action metadata", () => {
+    const { runtimeActionResponse, ...guiEvidenceWithoutActionMetadata } =
+      READY_GUI_EVIDENCE;
     const result = buildContentFactorySignedReleaseGate({
       bootstrap: READY_BOOTSTRAP,
       catalog: READY_CATALOG,
       expectedVersion: "2.2.2",
       fetchCloud: READY_FETCH_CLOUD,
       guiEvidence: {
-        ...READY_GUI_EVIDENCE,
+        ...guiEvidenceWithoutActionMetadata,
         runtimeResumeContract: {
           decisions: [
             {
@@ -1282,17 +1258,18 @@ describe("content factory signed release gate", () => {
     });
 
     expect(result).toMatchObject({
-      ready: true,
+      ready: false,
+      status: "blocked",
       guiEvidence: {
         workflowResumeLifecycle: {
-          actionId: "article-draft-review",
-          auditEventsPresent: true,
-          contractMetadataPresent: true,
-          stepId: "draft",
-          workflowRunId: "turn_prod:content-article",
+          actionMetadataPresent: false,
         },
       },
-      missingRequirements: [],
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_workflow_resume_lifecycle_missing",
+        }),
+      ]),
     });
   });
 

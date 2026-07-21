@@ -183,6 +183,7 @@ function readyGuiEvidence() {
     runtimeActionResponse: {
       actionId: "approve-1",
       decision: "approved",
+      method: "agentSession/action/respond",
       metadata: {
         workflowResume: {
           stepId: "review",
@@ -215,15 +216,11 @@ function readyGuiEvidence() {
     ],
     trace: {
       appServerHandleJsonLinesSeen: true,
-      appServerMethodsSeen: [
-        "agentSession/turn/start",
-        "agentSession/read",
-        "evidence/export",
-      ],
+      appServerMethodsSeen: ["turn/start", "thread/read", "evidence/export"],
       turnStartTrace: {
         command: "app_server_handle_json_lines",
         matched: true,
-        method: "agentSession/turn/start",
+        method: "turn/start",
         sessionMatched: true,
         status: "success",
         transport: "electron-ipc",
@@ -490,6 +487,12 @@ describe("content factory production readiness report", () => {
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(JSON.parse(fs.readFileSync(output, "utf8"))).toMatchObject({
+      guiEvidence: {
+        workflowResumeLifecycle: {
+          actionMetadataPresent: true,
+          auditEventsPresent: true,
+        },
+      },
       ready: true,
       status: "ready",
       signedGate: {

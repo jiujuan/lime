@@ -12,16 +12,6 @@ describe("useWorkspaceConversationSceneRuntime coding workbench projection", () 
       projectRootPath: "/tmp/demo-project",
       workspacePathMissing: false,
       workspaceHealthError: false,
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-1",
-          message_preview: "继续处理",
-          message_text: "继续处理",
-          created_at: 1_712_650_000,
-          image_count: 0,
-          position: 1,
-        },
-      ],
       threadRead: {
         thread_id: "thread-1",
         active_turn_id: "turn-1",

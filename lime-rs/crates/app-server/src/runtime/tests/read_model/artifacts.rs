@@ -1246,7 +1246,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
                 runtime_request: Some(app_server_protocol::RuntimeRequest {
                     metadata: Some(json!({
                     "plugin": {
-                        "source": "right_surface_article_workspace",
+                        "source": "read_model_fixture",
                         "app_id": "content-factory-app",
                         "session_id": "sess_article_workspace",
                         "workspace_id": "workspace-main",

@@ -9,6 +9,7 @@ import {
 const {
   fakeConnection,
   lifecycleConfigs,
+  lifecycleInitializeParams,
   lifecycleOptions,
   enqueueFakeNotifications,
   recordedRequests,
@@ -24,8 +25,8 @@ const {
   const lifecycleConfigs: Array<{
     binaryPath: string;
     dataDir?: string;
-    productDbMigrationCleanup?: string;
   }> = [];
+  const lifecycleInitializeParams: unknown[] = [];
   const lifecycleOptions: Array<{
     env?: Record<string, string | undefined>;
   }> = [];
@@ -34,14 +35,8 @@ const {
   let systemProxyRules = "DIRECT";
   const resolveProxyMock = vi.fn(async () => systemProxyRules);
   let releaseDelayedStaleError: (() => void) | null = null;
-  let turnIdentityReadAttempts = 0;
   let turnStartRequestMode:
     | "resolve"
-    | "hang"
-    | "hang-non-admission"
-    | "hang-non-admission-read-invalid"
-    | "hang-mismatched-admission"
-    | "hang-non-admission-read-eventual"
     | "hang-request"
     | "throw-request-error"
     | "throw-stale-once"
@@ -62,99 +57,6 @@ const {
     });
   }
   const fakeConnection = {
-    requestUntilFirstNotificationOrResponse: vi.fn(
-      async (request: JsonRpcRequest) => {
-        if (turnStartRequestMode === "throw-stale-once") {
-          turnStartRequestMode = "resolve";
-          throw new Error("app-server sidecar stdin is closed");
-        }
-        if (turnStartRequestMode === "throw-exited-before-next-message") {
-          throw new Error(
-            "app-server exited before next message: signal=SIGTERM",
-          );
-        }
-        if (
-          turnStartRequestMode ===
-          "throw-exited-before-next-message-after-release"
-        ) {
-          await waitForDelayedStaleErrorRelease();
-          throw new Error(
-            "app-server exited before next message: signal=SIGTERM",
-          );
-        }
-        recordedRequests.push(request);
-        const hasCanonicalIdentity =
-          turnStartRequestMode !== "hang-non-admission" &&
-          turnStartRequestMode !== "hang-non-admission-read-invalid" &&
-          turnStartRequestMode !== "hang-non-admission-read-eventual";
-        const isMismatchedAdmission =
-          turnStartRequestMode === "hang-mismatched-admission";
-        const notification = {
-          method: "agentSession/event",
-          params: {
-            event: {
-              eventId: `evt-${request.id}`,
-              sequence: 1,
-              sessionId: isMismatchedAdmission ? "session-old" : "session-b",
-              ...(hasCanonicalIdentity
-                ? {
-                    threadId: isMismatchedAdmission ? "thread-old" : "thread-b",
-                  }
-                : {}),
-              turnId: isMismatchedAdmission ? "turn-old" : "turn-b",
-              type: "message.created",
-              timestamp: "2026-06-06T00:00:00.000Z",
-              payload: {},
-            },
-          },
-        };
-        if (request.method === "agentSession/turn/start") {
-          mirroredNotifications.push(notification);
-          if (
-            turnStartRequestMode === "hang" ||
-            turnStartRequestMode === "hang-non-admission" ||
-            turnStartRequestMode === "hang-non-admission-read-invalid" ||
-            turnStartRequestMode === "hang-mismatched-admission" ||
-            turnStartRequestMode === "hang-non-admission-read-eventual"
-          ) {
-            return {
-              id: request.id,
-              completed: false,
-              notifications: [notification],
-              messages: [notification],
-            };
-          }
-        }
-        return {
-          id: request.id,
-          completed: true,
-          result: {
-            ok: true,
-          },
-          response: {
-            id: request.id,
-            result: {
-              internalId: request.id,
-              method: request.method,
-            },
-          },
-          notifications:
-            request.method === "agentSession/turn/start" ? [notification] : [],
-          messages: [
-            ...(request.method === "agentSession/turn/start"
-              ? [notification]
-              : []),
-            {
-              id: request.id,
-              result: {
-                internalId: request.id,
-                method: request.method,
-              },
-            },
-          ],
-        };
-      },
-    ),
     request: vi.fn(async (request: JsonRpcRequest) => {
       if (turnStartRequestMode === "hang-request") {
         recordedRequests.push(request);
@@ -198,71 +100,26 @@ const {
       }
       recordedRequests.push(request);
       const notification = {
-        method: "agentSession/event",
+        method: "turn/started",
         params: {
-          event: {
-            eventId: `evt-${request.id}`,
-            sequence: 1,
-            sessionId: "session-b",
-            turnId: "turn-b",
-            type: "message.delta",
-            timestamp: "2026-06-06T00:00:00.000Z",
-            payload: { text: "第一段" },
+          threadId: "thread-b",
+          turn: {
+            id: "turn-b",
+            items: [],
+            status: "inProgress",
+            startedAt: Date.parse("2026-06-06T00:00:00.000Z") / 1000,
           },
         },
       };
-      if (request.method === "agentSession/turn/start") {
+      if (request.method === "turn/start") {
         mirroredNotifications.push(notification);
-        if (turnStartRequestMode === "hang") {
-          await new Promise(() => undefined);
-        }
-      }
-      if (
-        request.method === "agentSession/read" &&
-        (turnStartRequestMode === "hang-non-admission" ||
-          turnStartRequestMode === "hang-non-admission-read-invalid" ||
-          turnStartRequestMode === "hang-mismatched-admission" ||
-          turnStartRequestMode === "hang-non-admission-read-eventual")
-      ) {
-        const invalidIdentity =
-          turnStartRequestMode === "hang-non-admission-read-invalid";
-        const eventualIdentity =
-          turnStartRequestMode === "hang-non-admission-read-eventual";
-        const shouldReturnEventualInvalid =
-          eventualIdentity && turnIdentityReadAttempts++ === 0;
-        return {
-          result: {
-            session: {
-              sessionId: "session-b",
-              threadId:
-                invalidIdentity || shouldReturnEventualInvalid
-                  ? ""
-                  : "thread-b",
-              updatedAt: "2026-06-06T00:00:00.000Z",
-            },
-            turns:
-              invalidIdentity || shouldReturnEventualInvalid
-                ? []
-                : [
-                    {
-                      turnId: "turn-b",
-                      sessionId: "session-b",
-                      threadId: "thread-b",
-                      startedAt: "2026-06-06T00:00:00.000Z",
-                    },
-                  ],
-          },
-          messages: [],
-        };
       }
       return {
         result: {
           ok: true,
         },
         messages: [
-          ...(request.method === "agentSession/turn/start"
-            ? [notification]
-            : []),
+          ...(request.method === "turn/start" ? [notification] : []),
           {
             id: request.id,
             result: {
@@ -273,13 +130,6 @@ const {
         ],
       };
     }),
-    client: {
-      readSession: vi.fn((params: { sessionId: string }) => ({
-        id: "electron-host:session-read",
-        method: "agentSession/read",
-        params,
-      })),
-    },
     transport: {
       send: vi.fn(),
     },
@@ -326,12 +176,12 @@ const {
       config: {
         binaryPath: string;
         dataDir?: string;
-        productDbMigrationCleanup?: string;
       },
-      _initializeParams: unknown,
+      initializeParams: unknown,
       options: { env?: Record<string, string | undefined> } = {},
     ) {
       lifecycleConfigs.push(config);
+      lifecycleInitializeParams.push(initializeParams);
       lifecycleOptions.push(options);
     }
 
@@ -363,23 +213,22 @@ const {
   return {
     fakeConnection,
     lifecycleConfigs,
+    lifecycleInitializeParams,
     lifecycleOptions,
     enqueueFakeNotifications,
     recordedRequests,
     resetFakeConnection: () => {
       recordedRequests.length = 0;
       lifecycleConfigs.length = 0;
+      lifecycleInitializeParams.length = 0;
       lifecycleOptions.length = 0;
       mirroredNotifications.length = 0;
       delayedStaleErrorReadyResolvers.length = 0;
-      turnIdentityReadAttempts = 0;
       systemProxyRules = "DIRECT";
       resolveProxyMock.mockClear();
       releaseDelayedStaleError = null;
       turnStartRequestMode = "resolve";
       fakeConnection.request.mockClear();
-      fakeConnection.requestUntilFirstNotificationOrResponse.mockClear();
-      fakeConnection.client.readSession.mockClear();
       fakeConnection.transport.send.mockClear();
       fakeConnection.nextNotification.mockClear();
       fakeConnection.nextServerMessage.mockClear();
@@ -390,11 +239,6 @@ const {
     setTurnStartRequestMode: (
       mode:
         | "resolve"
-        | "hang"
-        | "hang-non-admission"
-        | "hang-non-admission-read-invalid"
-        | "hang-mismatched-admission"
-        | "hang-non-admission-read-eventual"
         | "hang-request"
         | "throw-request-error"
         | "throw-stale-once"
@@ -471,16 +315,10 @@ vi.mock("@limecloud/app-server-client", async (importOriginal) => {
     }),
     resolveSidecarFromReleaseManifest: vi.fn(() => null),
     stdioSidecar: vi.fn(
-      (
-        binaryPath: string,
-        appPolicyPath?: string,
-        dataDir?: string,
-        productDbMigrationCleanup?: string,
-      ) => ({
+      (binaryPath: string, appPolicyPath?: string, dataDir?: string) => ({
         binaryPath,
         ...(appPolicyPath ? { appPolicyPath } : {}),
         ...(dataDir ? { dataDir } : {}),
-        ...(productDbMigrationCleanup ? { productDbMigrationCleanup } : {}),
       }),
     ),
   };
@@ -510,7 +348,9 @@ function agentSessionEventMessage(options: {
 describe("ElectronAppServerHost", () => {
   beforeEach(() => {
     resetFakeConnection();
-    delete process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP;
+    delete process.env.LIME_AGENT_RUNTIME_ROOT;
+    delete process.env.LIME_ELECTRON_E2E;
+    delete process.env.ELECTRON_E2E_USER_DATA_DIR;
     for (const key of proxyEnvKeys) {
       delete process.env[key];
     }
@@ -521,6 +361,9 @@ describe("ElectronAppServerHost", () => {
 
   afterEach(() => {
     setProcessPlatform(originalPlatform);
+    delete process.env.LIME_AGENT_RUNTIME_ROOT;
+    delete process.env.LIME_ELECTRON_E2E;
+    delete process.env.ELECTRON_E2E_USER_DATA_DIR;
     for (const key of proxyEnvKeys) {
       delete process.env[key];
     }
@@ -538,8 +381,56 @@ describe("ElectronAppServerHost", () => {
     expect(lifecycleConfigs).toHaveLength(1);
     expect(lifecycleConfigs[0]).toMatchObject({
       dataDir: "/tmp/lime-electron-user-data/app-server",
-      productDbMigrationCleanup: "drop-tables",
     });
+    expect(lifecycleOptions[0]?.env?.LIME_AGENT_RUNTIME_ROOT).toBe(
+      "/tmp/lime-electron-user-data/app-server",
+    );
+    expect(lifecycleInitializeParams[0]).toMatchObject({
+      capabilities: {
+        eventMethods: expect.arrayContaining([
+          "thread/started",
+          "turn/started",
+          "turn/completed",
+          "item/started",
+          "item/completed",
+          "item/agentMessage/delta",
+          "thread/tokenUsage/updated",
+        ]),
+      },
+    });
+  });
+
+  it("显式 AgentRoot override 时 App Server 不再写默认 userData root", async () => {
+    process.env.LIME_AGENT_RUNTIME_ROOT = "/tmp/lime-agent-runtime";
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleConfigs[0]?.dataDir).toBe("/tmp/lime-agent-runtime");
+    expect(lifecycleOptions[0]?.env?.LIME_AGENT_RUNTIME_ROOT).toBe(
+      "/tmp/lime-agent-runtime",
+    );
+  });
+
+  it("Windows E2E 隔离 root 压过 ambient AgentRoot 和真实 LOCALAPPDATA", async () => {
+    setProcessPlatform("win32");
+    process.env.LIME_ELECTRON_E2E = "1";
+    process.env.ELECTRON_E2E_USER_DATA_DIR = "C:\\Temp\\lime-e2e-user-data";
+    process.env.LOCALAPPDATA = "C:\\Users\\test\\AppData\\Local";
+    process.env.LIME_AGENT_RUNTIME_ROOT =
+      "C:\\Users\\test\\AppData\\Local\\real-agent-root";
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleConfigs[0]?.dataDir).toBe(
+      "C:\\Temp\\lime-e2e-user-data\\app-server",
+    );
+    expect(lifecycleOptions[0]?.env?.LIME_AGENT_RUNTIME_ROOT).toBe(
+      "C:\\Temp\\lime-e2e-user-data\\app-server",
+    );
   });
 
   it("启动 App Server 时应把配置事实源收敛到 Electron userData config.yaml", async () => {
@@ -614,30 +505,6 @@ describe("ElectronAppServerHost", () => {
     expect(lifecycleOptions[0].env?.NO_PROXY).toContain("127.0.0.1");
   });
 
-  it("支持通过环境变量配置迁移后旧 Product DB 清理策略", async () => {
-    process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP = "delete-file";
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    const host = new ElectronAppServerHost();
-
-    await host.warmup();
-
-    expect(lifecycleConfigs).toHaveLength(1);
-    expect(lifecycleConfigs[0]).toMatchObject({
-      productDbMigrationCleanup: "delete-file",
-    });
-  });
-
-  it("旧 Product DB 清理策略配置非法时应 fail fast", async () => {
-    process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP = "truncate-all";
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    const host = new ElectronAppServerHost();
-
-    await expect(host.warmup()).rejects.toThrow(
-      "APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP must be one of retain, clear-rows, drop-tables, delete-file",
-    );
-    expect(lifecycleConfigs).toHaveLength(0);
-  });
-
   it("转发 JSON-RPC 时隔离并发前端 request id，并在返回前还原原 id", async () => {
     const { ElectronAppServerHost } = await import("./appServerHost");
     const host = new ElectronAppServerHost();
@@ -646,8 +513,8 @@ describe("ElectronAppServerHost", () => {
       lines: [
         encodeMessage({
           id: 1,
-          method: "agentSession/read",
-          params: { sessionId: "session-a" },
+          method: "thread/read",
+          params: { threadId: "thread-a" },
         }),
       ],
     });
@@ -655,8 +522,11 @@ describe("ElectronAppServerHost", () => {
       lines: [
         encodeMessage({
           id: 1,
-          method: "agentSession/turn/start",
-          params: { sessionId: "session-b" },
+          method: "turn/start",
+          params: {
+            threadId: "thread-b",
+            input: [{ type: "text", text: "并发 turn" }],
+          },
         }),
       ],
     });
@@ -677,14 +547,14 @@ describe("ElectronAppServerHost", () => {
       id: 1,
       result: {
         internalId: "electron-host:1",
-        method: "agentSession/read",
+        method: "thread/read",
       },
     });
     expect(secondMessage).toMatchObject({
       id: 1,
       result: {
         internalId: "electron-host:2",
-        method: "agentSession/turn/start",
+        method: "turn/start",
       },
     });
   });
@@ -726,8 +596,8 @@ describe("ElectronAppServerHost", () => {
       lines: [
         encodeMessage({
           id: 7,
-          method: "agentSession/read",
-          params: { sessionId: "session-cancel" },
+          method: "thread/read",
+          params: { threadId: "thread-cancel" },
         }),
       ],
     });
@@ -764,8 +634,8 @@ describe("ElectronAppServerHost", () => {
         lines: [
           encodeMessage({
             id: 1,
-            method: "agentSession/read",
-            params: { sessionId: "session-stale" },
+            method: "thread/read",
+            params: { threadId: "thread-stale" },
           }),
         ],
       });
@@ -776,14 +646,14 @@ describe("ElectronAppServerHost", () => {
       expect(recordedRequests).toHaveLength(1);
       expect(recordedRequests[0]).toMatchObject({
         id: "electron-host:1",
-        method: "agentSession/read",
+        method: "thread/read",
       });
       expect(messages).toEqual([
         {
           id: 1,
           result: {
             internalId: "electron-host:1",
-            method: "agentSession/read",
+            method: "thread/read",
           },
         },
       ]);
@@ -806,8 +676,8 @@ describe("ElectronAppServerHost", () => {
       lines: [
         encodeMessage({
           id: 1,
-          method: "agentSession/read",
-          params: { sessionId: "session-closing" },
+          method: "thread/read",
+          params: { threadId: "thread-closing" },
         }),
       ],
     });
@@ -821,7 +691,7 @@ describe("ElectronAppServerHost", () => {
     expect(recordedRequests).toHaveLength(0);
   });
 
-  it("drainEvents 应能读取被长 turn/start 请求镜像的流式 notification", async () => {
+  it("drainEvents 应能读取 turn/start 请求镜像的 direct notification", async () => {
     const { ElectronAppServerHost } = await import("./appServerHost");
     const host = new ElectronAppServerHost();
 
@@ -829,11 +699,10 @@ describe("ElectronAppServerHost", () => {
       lines: [
         encodeMessage({
           id: 1,
-          method: "agentSession/turn/start",
+          method: "turn/start",
           params: {
-            sessionId: "session-b",
-            turnId: "turn-b",
-            input: { text: "生成草稿" },
+            threadId: "thread-b",
+            input: [{ type: "text", text: "生成草稿" }],
           },
         }),
       ],
@@ -843,14 +712,12 @@ describe("ElectronAppServerHost", () => {
     const message = decodeMessage(drained.lines[0] ?? "");
 
     expect(message).toMatchObject({
-      method: "agentSession/event",
+      method: "turn/started",
       params: {
-        event: {
-          eventId: expect.stringMatching(/^evt-electron-host:\d+$/),
-          sessionId: "session-b",
-          turnId: "turn-b",
-          type: "message.created",
-          payload: {},
+        threadId: "thread-b",
+        turn: {
+          id: "turn-b",
+          status: "inProgress",
         },
       },
     });
@@ -865,7 +732,11 @@ describe("ElectronAppServerHost", () => {
         id: "app-server-request:7",
         method: "mcpServer/elicitation/request",
         params: {
-          server: "form-server",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          serverName: "form-server",
+          mode: "form",
+          _meta: null,
           message: "Choose a value",
           requestedSchema: {
             type: "object",
@@ -996,266 +867,6 @@ describe("ElectronAppServerHost", () => {
       "tool.started",
       "tool.result",
       "turn.completed",
-    ]);
-  });
-
-  it("长 turn/start 未返回时应先回 accepted，避免阻塞后续前端提交", async () => {
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    setTurnStartRequestMode("hang");
-    const host = new ElectronAppServerHost();
-
-    const result = await host.handleJsonLines({
-      lines: [
-        encodeMessage({
-          id: 1,
-          method: "agentSession/turn/start",
-          params: {
-            sessionId: "session-b",
-            turnId: "turn-b",
-            input: { text: "生成长内容" },
-          },
-        }),
-      ],
-    });
-    const messages = result.lines.map(decodeMessage);
-
-    expect(recordedRequests).toHaveLength(1);
-    expect(recordedRequests[0]).toMatchObject({
-      id: "electron-host:1",
-      method: "agentSession/turn/start",
-    });
-    expect(messages).toEqual([
-      {
-        id: 1,
-        result: {
-          turn: expect.objectContaining({
-            turnId: "turn-b",
-            sessionId: "session-b",
-            threadId: "thread-b",
-            status: "accepted",
-          }),
-        },
-      },
-    ]);
-
-    const drained = await host.drainEvents({ limit: 1 });
-    expect(decodeMessage(drained.lines[0] ?? "")).toMatchObject({
-      method: "agentSession/event",
-      params: {
-        event: {
-          sessionId: "session-b",
-          turnId: "turn-b",
-          type: "message.created",
-        },
-      },
-    });
-  });
-
-  it("首条 streaming 通知缺少 thread identity 时应从 App Server 读取精确 canonical turn", async () => {
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    setTurnStartRequestMode("hang-non-admission");
-    const host = new ElectronAppServerHost();
-
-    const result = await host.handleJsonLines({
-      lines: [
-        encodeMessage({
-          id: 1,
-          method: "agentSession/turn/start",
-          params: {
-            sessionId: "session-b",
-            turnId: "turn-b",
-            input: { text: "从 current owner 读取 threadId" },
-          },
-        }),
-      ],
-    });
-
-    expect(result.lines.map(decodeMessage)).toMatchObject([
-      {
-        id: 1,
-        result: {
-          turn: {
-            sessionId: "session-b",
-            threadId: "thread-b",
-            turnId: "turn-b",
-          },
-        },
-      },
-    ]);
-    expect(recordedRequests.map((request) => request.method)).toEqual([
-      "agentSession/turn/start",
-      "agentSession/read",
-    ]);
-    const requestCalls = fakeConnection.request.mock.calls as unknown as Array<
-      [JsonRpcRequest, string, { timeoutMs?: number }]
-    >;
-    expect(requestCalls[0]?.[1]).toBe("agentSession/read");
-    expect(requestCalls[0]?.[2].timeoutMs).toBeGreaterThanOrEqual(29_000);
-    expect(requestCalls[0]?.[2].timeoutMs).toBeLessThanOrEqual(30_000);
-  });
-
-  it("首条 streaming 通知属于旧 turn 时应丢弃该通知身份并读取 requested canonical turn", async () => {
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    setTurnStartRequestMode("hang-mismatched-admission");
-    const host = new ElectronAppServerHost();
-
-    const result = await host.handleJsonLines({
-      lines: [
-        encodeMessage({
-          id: 1,
-          method: "agentSession/turn/start",
-          params: {
-            sessionId: "session-b",
-            turnId: "turn-b",
-            input: { text: "忽略旧回合通知" },
-          },
-        }),
-      ],
-    });
-
-    expect(result.lines.map(decodeMessage)).toMatchObject([
-      {
-        id: 1,
-        result: {
-          turn: {
-            sessionId: "session-b",
-            threadId: "thread-b",
-            turnId: "turn-b",
-          },
-        },
-      },
-    ]);
-    expect(recordedRequests.map((request) => request.method)).toEqual([
-      "agentSession/turn/start",
-      "agentSession/read",
-    ]);
-  });
-
-  it("canonical Turn read model 稍晚落盘时应在有界窗口内重读而不是误报 identity 缺失", async () => {
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    setTurnStartRequestMode("hang-non-admission-read-eventual");
-    const host = new ElectronAppServerHost();
-
-    const result = await host.handleJsonLines({
-      lines: [
-        encodeMessage({
-          id: 1,
-          method: "agentSession/turn/start",
-          params: {
-            sessionId: "session-b",
-            turnId: "turn-b",
-            input: { text: "等待 canonical Turn 落盘" },
-          },
-        }),
-      ],
-    });
-
-    expect(result.lines.map(decodeMessage)).toMatchObject([
-      {
-        id: 1,
-        result: {
-          turn: {
-            sessionId: "session-b",
-            threadId: "thread-b",
-            turnId: "turn-b",
-          },
-        },
-      },
-    ]);
-    expect(recordedRequests.map((request) => request.method)).toEqual([
-      "agentSession/turn/start",
-      "agentSession/read",
-      "agentSession/read",
-    ]);
-  });
-
-  it("App Server 未返回精确 canonical turn 时应拒绝伪造回合身份", async () => {
-    vi.useFakeTimers();
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    setTurnStartRequestMode("hang-non-admission-read-invalid");
-    const host = new ElectronAppServerHost();
-
-    try {
-      const request = host.handleJsonLines({
-        lines: [
-          encodeMessage({
-            id: 1,
-            method: "agentSession/turn/start",
-            params: {
-              sessionId: "session-b",
-              turnId: "turn-b",
-              input: { text: "不允许伪造 threadId" },
-            },
-          }),
-        ],
-      });
-      const rejection = expect(request).rejects.toThrow(
-        "app-server turn/start did not resolve a canonical turn identity",
-      );
-
-      await vi.advanceTimersByTimeAsync(30_000);
-      await rejection;
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("长 turn/start 返回 accepted 后不应阻塞后续读模型请求", async () => {
-    const { ElectronAppServerHost } = await import("./appServerHost");
-    setTurnStartRequestMode("hang");
-    const host = new ElectronAppServerHost();
-
-    const turnResult = await host.handleJsonLines({
-      lines: [
-        encodeMessage({
-          id: 1,
-          method: "agentSession/turn/start",
-          params: {
-            sessionId: "session-b",
-            turnId: "turn-b",
-            input: { text: "生成长内容" },
-          },
-        }),
-      ],
-    });
-    const turnMessages = turnResult.lines.map(decodeMessage);
-    expect(turnMessages).toEqual([
-      {
-        id: 1,
-        result: {
-          turn: expect.objectContaining({
-            turnId: "turn-b",
-            sessionId: "session-b",
-            status: "accepted",
-          }),
-        },
-      },
-    ]);
-
-    setTurnStartRequestMode("resolve");
-    const listResult = await host.handleJsonLines({
-      lines: [
-        encodeMessage({
-          id: 2,
-          method: "agentSession/list",
-          params: { limit: 20 },
-        }),
-      ],
-    });
-    const listMessages = listResult.lines.map(decodeMessage);
-
-    expect(recordedRequests.map((request) => request.method)).toEqual([
-      "agentSession/turn/start",
-      "agentSession/list",
-    ]);
-    expect(listMessages).toEqual([
-      {
-        id: 2,
-        result: {
-          internalId: "electron-host:2",
-          method: "agentSession/list",
-        },
-      },
     ]);
   });
 

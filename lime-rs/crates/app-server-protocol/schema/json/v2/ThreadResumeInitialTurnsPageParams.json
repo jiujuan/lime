@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "SortDirection": {
+      "enum": [
+        "asc",
+        "desc"
+      ],
+      "type": "string"
+    },
+    "TurnItemsView": {
+      "enum": [
+        "full",
+        "notLoaded",
+        "summary"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "itemsView": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TurnItemsView"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "limit": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "sortDirection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SortDirection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "ThreadResumeInitialTurnsPageParams",
+  "type": "object"
+}

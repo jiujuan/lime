@@ -54,6 +54,18 @@ impl RuntimeEventSink for TestRuntimeEventSink {
     }
 }
 
+#[test]
+fn reply_attempt_usage_limit_maps_to_structured_runtime_error() {
+    let error = runtime_error_from_reply_attempt(
+        lime_agent::ReplyAttemptError::usage_limit_exceeded("provider quota exhausted", true),
+    );
+
+    assert!(matches!(
+        error,
+        RuntimeCoreError::UsageLimitExceeded(message) if message == "provider quota exhausted"
+    ));
+}
+
 pub(super) fn request_for_test(
     message: &str,
     runtime_request: Option<app_server_protocol::RuntimeRequest>,
@@ -91,10 +103,7 @@ pub(super) fn request_for_test(
             started_at: None,
             completed_at: None,
         },
-        input: AgentInput {
-            text: message.to_string(),
-            attachments: Vec::new(),
-        },
+        input: agent_runtime::reply_input::RuntimeReplyInput::text(message),
         runtime_options: Some(RuntimeOptions {
             stream: true,
             runtime_request,

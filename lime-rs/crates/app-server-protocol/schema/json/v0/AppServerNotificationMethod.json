@@ -4,7 +4,6 @@
     "agentSession/event",
     "configWarning",
     "initialized",
-    "serverRequest/resolved",
     "workspaceRightSurface/pendingChanged"
   ],
   "title": "AppServerNotificationMethod",

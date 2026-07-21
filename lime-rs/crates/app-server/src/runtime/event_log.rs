@@ -2,6 +2,8 @@ use app_server_protocol::AgentEvent;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+#[cfg(test)]
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -175,6 +177,112 @@ impl EventLogWriter {
             ));
         }
         Ok(scan.records)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn list_session_ids(&self) -> Result<Vec<String>, String> {
+        let sessions_dir = self.root.join("sessions");
+        let entries = match fs::read_dir(&sessions_dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => {
+                return Err(format!(
+                    "无法读取 event log session 目录 {}: {error}",
+                    sessions_dir.display()
+                ));
+            }
+        };
+        let mut session_ids = BTreeSet::new();
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                format!(
+                    "无法读取 event log session 目录项 {}: {error}",
+                    sessions_dir.display()
+                )
+            })?;
+            let path = entry.path();
+            let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if !path.is_file()
+                || !file_name.starts_with("session_")
+                || !file_name.ends_with(".jsonl")
+            {
+                continue;
+            }
+            let io_lock = self.io_lock_for(&path)?;
+            let _io_guard = io_lock
+                .lock()
+                .map_err(|_| "event log I/O lock poisoned".to_string())?;
+            let file = fs::File::open(&path)
+                .map_err(|error| format!("无法读取 event log {}: {error}", path.display()))?;
+            for line in BufReader::new(file).lines() {
+                let line = line
+                    .map_err(|error| format!("无法读取 event log {}: {error}", path.display()))?;
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let event = serde_json::from_str::<AgentEvent>(trimmed)
+                    .map_err(|error| format!("无法解析 event log {}: {error}", path.display()))?;
+                session_ids.insert(event.session_id);
+                break;
+            }
+        }
+        Ok(session_ids.into_iter().collect())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn list_queued_session_ids(&self) -> Result<Vec<String>, String> {
+        let mut queued_session_ids = Vec::new();
+        for session_id in self.list_session_ids()? {
+            let mut scan = self.scan_session_events(&session_id)?;
+            if scan
+                .issue
+                .as_ref()
+                .is_some_and(EventLogIssue::is_repairable_tail)
+            {
+                scan = self.repair_session_event_log(&session_id)?;
+            }
+            if let Some(issue) = scan.issue {
+                return Err(format!(
+                    "event log {} is not safely readable for queued work discovery: {issue:?}",
+                    scan.path.display()
+                ));
+            }
+            let mut queued_turn_ids = BTreeSet::new();
+            for record in scan.records {
+                let event = record.event;
+                match event.event_type.as_str() {
+                    "queue.added" => {
+                        if let Some(turn_id) = event.turn_id {
+                            queued_turn_ids.insert(turn_id);
+                        }
+                    }
+                    "queue.removed" => {
+                        if let Some(turn_id) = event
+                            .payload
+                            .get("queuedTurnId")
+                            .or_else(|| event.payload.get("queued_turn_id"))
+                            .and_then(Value::as_str)
+                        {
+                            queued_turn_ids.remove(turn_id);
+                        }
+                    }
+                    "turn.accepted" | "turn.started" | "turn.completed" | "turn.failed"
+                    | "turn.canceled" => {
+                        if let Some(turn_id) = event.turn_id {
+                            queued_turn_ids.remove(&turn_id);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if !queued_turn_ids.is_empty() {
+                queued_session_ids.push(session_id);
+            }
+        }
+        Ok(queued_session_ids)
     }
 
     /// Scan one session log and return only its contiguous valid prefix.

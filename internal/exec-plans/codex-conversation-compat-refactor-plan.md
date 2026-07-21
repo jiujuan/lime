@@ -1,9 +1,9 @@
 # Codex 对话兼容重构执行计划
 
-状态：active
+状态：ready-for-gate
 责任域：app-server-runtime / agent-ui
 开始日期：2026-07-15
-最近验证：2026-07-17
+最近验证：2026-07-21
 预算标签：high，重大架构重构
 
 ## 目标
@@ -156,10 +156,9 @@ model 与 GUI 单轨。
 - 重大架构变更：是。
 - 架构影响：Codex import 从 imported RuntimeEvent 第二事实源迁到 canonical Thread/Turn/Item。
 - 架构图章节：`internal/aiprompts/architecture.md` 第 7 节 Agent 产品主链。
-- 责任开发者：待 PR 填写。
-- 确认日期：待 PR 填写。
-
-责任开发者与日期未填写前，不进入 release evidence，不标记计划完成。
+- 责任开发者：root。
+- 确认日期：2026-07-21。
+- 确认内容：已核对 source adapter 只解析 Codex rollout，`history_builder` 直接 materialize canonical Thread/Turn/Item；导入后续聊仍经 current `turn/start -> RuntimeCore -> provider/tool-runtime`，没有 imported runtime、second read model 或 Electron job runner 回流。架构图第 7 节、Gate A contracts/Rust/governance 与 macOS Gate B Electron evidence 一致。Windows 真实 Electron 路径证据仍为平台 follow-up，不在本机标记完成。
 
 ## 退出条件
 

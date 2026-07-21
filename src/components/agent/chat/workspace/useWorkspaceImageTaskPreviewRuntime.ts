@@ -53,9 +53,7 @@ import {
   type RestoredImageTaskSnapshot,
   type TrackedImageTask,
 } from "./imageTaskPreviewRuntimeRecovery";
-import {
-  syncWorkspaceArticleInlineImageTaskMessageArtifacts,
-} from "./workspaceArticleInlineImageTaskSync";
+import { syncWorkspaceArticleInlineImageTaskMessageArtifacts } from "./workspaceArticleInlineImageTaskSync";
 import {
   buildPendingImageTaskRecordFromEvent,
   buildPendingImageTaskSnapshotFromEvent,
@@ -317,8 +315,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
     const hasRuntimeMarkers = hasDesktopHostRuntimeMarkers();
     const shouldProbeWorkspaceCatalog = shouldProbeWorkspaceImageTaskCatalog({
       messages: runtimeContextRef.current.messages,
-      imageWorkbenchState:
-        runtimeContextRef.current.currentImageWorkbenchState,
+      imageWorkbenchState: runtimeContextRef.current.currentImageWorkbenchState,
       canvasState: runtimeContextRef.current.canvasState,
       documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
     });
@@ -825,7 +822,9 @@ export function useWorkspaceImageTaskPreviewRuntime({
           listedTaskCount,
           matchedTaskCount,
           restoredSnapshotCount: restoredSnapshots.length,
-          selectedTaskIds: selectedSnapshots.map((item) => item.snapshot.taskId),
+          selectedTaskIds: selectedSnapshots.map(
+            (item) => item.snapshot.taskId,
+          ),
         },
         { level: "debug", throttleMs: 1000 },
       );

@@ -4,18 +4,22 @@ import {
   GENERATED_APP_SERVER_METHODS,
   GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES,
   METHOD_AGENT_SESSION_EVENT,
-  METHOD_AGENT_SESSION_TURN_START,
+  METHOD_TURN_INTERRUPT,
+  METHOD_TURN_START,
   METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
 } from "./generated/protocol-types.js";
 import type {
   AgentSessionMediaReadResponse as GeneratedAgentSessionMediaReadResponse,
-  CanonicalThreadEventNotification as GeneratedCanonicalThreadEventNotification,
   ConversationImportJobPhase as GeneratedConversationImportJobPhase,
   ConversationImportJobStatus as GeneratedConversationImportJobStatus,
   ConversationImportSourceClient as GeneratedConversationImportSourceClient,
   ConversationImportSourceStatus as GeneratedConversationImportSourceStatus,
   ConversationImportThreadStatus as GeneratedConversationImportThreadStatus,
   GeneratedAppServerRequestSerializationScope,
+  TurnInterruptParams as GeneratedTurnInterruptParams,
+  TurnInterruptResponse as GeneratedTurnInterruptResponse,
+  TurnStartParams as GeneratedTurnStartParams,
+  TurnStartResponse as GeneratedTurnStartResponse,
   WorkspaceRightSurfacePendingChangedParams as GeneratedWorkspaceRightSurfacePendingChangedParams,
 } from "./generated/protocol-types.js";
 export * from "./generated/protocol-types.js";
@@ -158,6 +162,7 @@ export type ClientInfo = {
 export type ClientCapabilities = {
   eventMethods?: string[];
   experimental?: boolean;
+  optOutNotificationMethods?: string[];
 };
 
 export type InitializeParams = {
@@ -690,23 +695,20 @@ export type StructuredOutputContract = {
   metadata?: unknown;
 };
 
-export type AgentSessionTurnStartParams = {
-  sessionId: string;
-  turnId?: string;
-  input: AgentInput;
-  runtimeOptions?: RuntimeOptions;
-  queueIfBusy?: boolean;
-  skipPreSubmitResume?: boolean;
-};
+/** v2 `turn/start` 是当前 runtime 主链唯一的 turn-start payload。 */
+export type AgentSessionTurnStartParams = GeneratedTurnStartParams;
 
 export type AgentSessionTurnStartRequest = JsonRpcRequest & {
-  method: typeof METHOD_AGENT_SESSION_TURN_START;
+  method: typeof METHOD_TURN_START;
   params: AgentSessionTurnStartParams;
 };
 
-export type AgentSessionTurnCancelParams = {
-  sessionId: string;
-  turnId: string;
+/** @deprecated 使用 TurnInterruptParams。 */
+export type AgentSessionTurnCancelParams = GeneratedTurnInterruptParams;
+
+export type AgentSessionTurnInterruptRequest = JsonRpcRequest & {
+  method: typeof METHOD_TURN_INTERRUPT;
+  params: GeneratedTurnInterruptParams;
 };
 
 export type AgentSessionActionType =
@@ -809,72 +811,6 @@ export type AgentEvent = {
   payload: unknown;
 };
 
-export type AgentSessionRuntimeEventBase = {
-  eventId: string;
-  sequence: number;
-  sessionId: string;
-  threadId?: string;
-  turnId?: string;
-  timestamp: string;
-};
-
-export type AgentSessionMessageCreatedNotification =
-  AgentSessionRuntimeEventBase & {
-    role?: string;
-    text?: string;
-    input?: AgentInput;
-  };
-
-export type AgentSessionTurnLifecycleNotification =
-  AgentSessionRuntimeEventBase & {
-    status: AgentTurnStatus;
-  };
-
-export type AgentSessionAgentMessageDeltaNotification =
-  AgentSessionRuntimeEventBase & {
-    itemId: string;
-    delta: string;
-    phase?: string;
-    source?: string;
-  };
-
-export type AgentSessionItemLifecycleNotification =
-  AgentSessionRuntimeEventBase & {
-    itemId: string;
-    itemType?: string;
-    status?: string;
-  };
-
-export type AgentSessionRuntimeEventNotification =
-  | {
-      method: "message/created";
-      params: AgentSessionMessageCreatedNotification;
-    }
-  | {
-      method: "turn/accepted";
-      params: AgentSessionTurnLifecycleNotification;
-    }
-  | {
-      method: "turn/started";
-      params: AgentSessionTurnLifecycleNotification;
-    }
-  | {
-      method: "turn/completed";
-      params: AgentSessionTurnLifecycleNotification;
-    }
-  | {
-      method: "item/agentMessage/delta";
-      params: AgentSessionAgentMessageDeltaNotification;
-    }
-  | {
-      method: "item/started";
-      params: AgentSessionItemLifecycleNotification;
-    }
-  | {
-      method: "item/completed";
-      params: AgentSessionItemLifecycleNotification;
-    };
-
 export type AgentSessionStartResponse = {
   session: AgentSession;
 };
@@ -905,7 +841,6 @@ export type AgentSessionListResponse = {
 export type AgentSessionUpdateParams = {
   sessionId: string;
   title?: string;
-  archived?: boolean;
   providerSelector?: string;
   providerName?: string;
   modelName?: string;
@@ -918,14 +853,6 @@ export type AgentSessionUpdateParams = {
 
 export type AgentSessionUpdateResponse = {
   session: AgentSessionOverview;
-};
-
-export type AgentSessionArchiveManyParams = {
-  sessionIds?: string[];
-};
-
-export type AgentSessionArchiveManyResponse = {
-  sessions: AgentSessionOverview[];
 };
 
 export type AgentSessionDeleteParams = {
@@ -1040,36 +967,6 @@ export type AgentSessionCompactResponse = {
   session: AgentSession;
   turns: AgentTurn[];
   compacted: boolean;
-};
-
-export type AgentSessionThreadResumeParams = {
-  sessionId: string;
-  resumeContract?: RuntimeResumeContract;
-};
-
-export type RuntimeResumeContract = {
-  schemaVersion: string;
-  runtimeId: string;
-  sessionId: string;
-  turnId: string;
-  resumeMode: string;
-  openActionIds: string[];
-  decisions: RuntimeResumeActionDecision[];
-  expiresAt?: string;
-  createdAt: string;
-};
-
-export type RuntimeResumeActionDecision = {
-  actionId: string;
-  decision: string;
-  response?: unknown;
-  metadata?: Record<string, unknown>;
-};
-
-export type AgentSessionThreadResumeResponse = {
-  session: AgentSession;
-  turns: AgentTurn[];
-  resumed: boolean;
 };
 
 export type AgentSessionQueuedTurnRemoveParams = {
@@ -2348,6 +2245,7 @@ export type VoiceModelDefaultSetResponse = {
 
 export type VoiceModelTestTranscribeFileParams = {
   model_id: string;
+  install_dir: string;
   file_path: string;
 };
 
@@ -2969,21 +2867,15 @@ export type AgentSessionReadResponse = {
   detail?: unknown;
 };
 
-export type AgentSessionTurnStartResponse = {
-  turn: AgentTurn;
-};
+export type AgentSessionTurnStartResponse = GeneratedTurnStartResponse;
 
-export type AgentSessionTurnCancelResponse = Record<string, never>;
+/** @deprecated 使用 TurnInterruptResponse。 */
+export type AgentSessionTurnCancelResponse = GeneratedTurnInterruptResponse;
 export type AgentSessionActionRespondResponse = Record<string, never>;
 
 export type AgentSessionEventParams = {
   event: AgentEvent;
-  typedEvent?: AgentSessionRuntimeEventNotification;
-  canonicalEvent?: GeneratedCanonicalThreadEventNotification;
 };
-
-export type CanonicalThreadEventNotification =
-  GeneratedCanonicalThreadEventNotification;
 
 export type AgentSessionEventNotification = JsonRpcNotification & {
   method: typeof METHOD_AGENT_SESSION_EVENT;
@@ -3305,7 +3197,7 @@ export type ConversationImportJobReadResponse = {
   job: ConversationImportJob;
 };
 
-export type ProtocolSchemaGroup = "jsonrpc" | "v0";
+export type ProtocolSchemaGroup = "jsonrpc" | "v0" | "v2";
 
 export type AppServerProtocolSchemaManifest = {
   protocolVersion: string;
@@ -3421,10 +3313,7 @@ export function isAgentSessionTurnStartRequest(
 export function agentSessionTurnStartRequest(
   message: JsonRpcMessage,
 ): AgentSessionTurnStartRequest | undefined {
-  if (
-    !isJsonRpcRequest(message) ||
-    message.method !== METHOD_AGENT_SESSION_TURN_START
-  ) {
+  if (!isJsonRpcRequest(message) || message.method !== METHOD_TURN_START) {
     return undefined;
   }
   const params = message.params as
@@ -3432,9 +3321,8 @@ export function agentSessionTurnStartRequest(
     | undefined;
   if (
     !params ||
-    typeof params.sessionId !== "string" ||
-    !params.input ||
-    typeof (params.input as Partial<AgentInput>).text !== "string"
+    typeof params.threadId !== "string" ||
+    !Array.isArray(params.input)
   ) {
     return undefined;
   }
@@ -3457,10 +3345,26 @@ export function agentSessionEventNotification(
     return undefined;
   }
   const params = message.params as Partial<AgentSessionEventParams> | undefined;
-  if (!params || !params.event) {
+  if (
+    !params ||
+    !params.event ||
+    !isAgentSessionRawSideChannelType(params.event.type)
+  ) {
     return undefined;
   }
   return message as AgentSessionEventNotification;
+}
+
+function isAgentSessionRawSideChannelType(type: string): boolean {
+  return (
+    type.startsWith("action.") ||
+    type.startsWith("approval.") ||
+    type.startsWith("provider.") ||
+    type.startsWith("image_task.") ||
+    type.startsWith("image_task_") ||
+    type.startsWith("media.") ||
+    type.startsWith("runtime.")
+  );
 }
 
 export function agentSessionMediaReadEventNotification(
@@ -3501,18 +3405,6 @@ export function agentSessionMediaReadEventNotification(
     return notification as AgentSessionMediaReadEventNotification;
   }
   return undefined;
-}
-
-export function agentSessionRuntimeEventNotification(
-  message: JsonRpcMessage,
-): AgentSessionRuntimeEventNotification | undefined {
-  return agentSessionEventNotification(message)?.params.typedEvent;
-}
-
-export function canonicalThreadEventNotification(
-  message: JsonRpcMessage,
-): CanonicalThreadEventNotification | undefined {
-  return agentSessionEventNotification(message)?.params.canonicalEvent;
 }
 
 export function isWorkspaceRightSurfacePendingChangedNotification(

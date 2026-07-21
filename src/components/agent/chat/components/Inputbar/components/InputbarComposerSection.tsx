@@ -3,7 +3,6 @@ import { FolderOpen } from "lucide-react";
 import type { ChatInputAdapter } from "@/components/input-kit/adapters/types";
 import type { Character } from "@/lib/api/projectMemory";
 import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { MessageImage, MessagePathReference } from "../../../types";
 import { CharacterMention } from "../../../skill-selection/CharacterMention";
 import { InputbarCore } from "./InputbarCore";
@@ -117,9 +116,6 @@ interface InputbarComposerSectionProps {
   setAccessMode?: (mode: AgentAccessMode) => void;
   showModelControls?: boolean;
   topExtra?: React.ReactNode;
-  queuedTurns: QueuedTurnSnapshot[];
-  onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
-  onRemoveQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   contextVariant?: "default" | "task-center";
   projectId?: string | null;
   sessionId?: string | null;
@@ -190,9 +186,6 @@ export const InputbarComposerSection: React.FC<
   setAccessMode,
   showModelControls = false,
   topExtra,
-  queuedTurns,
-  onPromoteQueuedTurn,
-  onRemoveQueuedTurn,
   contextVariant = "default",
   projectId = null,
   sessionId = null,
@@ -516,9 +509,6 @@ export const InputbarComposerSection: React.FC<
         connectedContextBar={false}
         topExtra={resolvedTopExtra}
         activeTheme={activeTheme}
-        queuedTurns={queuedTurns}
-        onPromoteQueuedTurn={onPromoteQueuedTurn}
-        onRemoveQueuedTurn={onRemoveQueuedTurn}
         leftExtra={leftExtra}
         trailingMeta={trailingMeta}
         showMetaTools={false}

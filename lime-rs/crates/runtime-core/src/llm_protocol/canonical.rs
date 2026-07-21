@@ -4,6 +4,7 @@
 //! provider adapter may lower these values to a native request, but neither
 //! the GUI nor the runtime history should carry that native shape.
 
+use agent_protocol::ImageDetail;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -51,6 +52,8 @@ pub enum ContentPart {
         media_type: String,
         /// A URI or sidecar reference. Inline bytes are intentionally absent.
         uri: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<ImageDetail>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         filename: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -103,6 +106,14 @@ impl ContentPart {
         uri: impl Into<String>,
         media_type: impl Into<String>,
     ) -> Result<Self, ContentPartError> {
+        Self::media_with_detail(uri, media_type, None)
+    }
+
+    pub fn media_with_detail(
+        uri: impl Into<String>,
+        media_type: impl Into<String>,
+        detail: Option<ImageDetail>,
+    ) -> Result<Self, ContentPartError> {
         let uri = uri.into();
         let media_type = media_type.into();
         if uri.trim().is_empty() {
@@ -117,6 +128,7 @@ impl ContentPart {
         Ok(Self::Media {
             media_type,
             uri,
+            detail,
             filename: None,
             byte_size: None,
             sha256: None,
@@ -394,8 +406,26 @@ mod tests {
         let value = serde_json::to_value(&part).expect("media serializes");
         assert_eq!(value["type"], json!("media"));
         assert_eq!(value["uri"], json!("sidecar://asset-1"));
+        assert!(value.get("detail").is_none());
         assert!(value.get("data").is_none());
         assert!(!part.is_inline_data_uri());
+    }
+
+    #[test]
+    fn media_part_preserves_typed_image_detail() {
+        let part = ContentPart::media_with_detail(
+            "sidecar://asset-1",
+            "image/png",
+            Some(ImageDetail::Original),
+        )
+        .expect("media");
+        let value = serde_json::to_value(&part).expect("media serializes");
+
+        assert_eq!(value["detail"], json!("original"));
+        assert_eq!(
+            serde_json::from_value::<ContentPart>(value).expect("media deserializes"),
+            part
+        );
     }
 
     #[test]

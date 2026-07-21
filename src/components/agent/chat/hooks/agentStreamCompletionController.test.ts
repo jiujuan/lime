@@ -471,13 +471,11 @@ describe("agentStreamCompletionController", () => {
       buildAgentStreamTerminalCompletionPlan({
         accumulatedContent:
           '<tool_result>{"output":"saved"}</tool_result>\n\n已保存。',
-        queuedTurnId: "queued-1",
         toolCallCount: 2,
       }),
     ).toEqual({
       type: "complete",
       finalContent: "已保存。",
-      queuedTurnIds: ["queued-1"],
       requestLogPayload: {
         eventType: "chat_request_complete",
         status: "success",
@@ -492,13 +490,11 @@ describe("agentStreamCompletionController", () => {
         accumulatedContent: "<tool_result>{}</tool_result>",
         fallbackContent: "",
         hasMeaningfulCompletionSignal: true,
-        queuedTurnId: "queued-empty-fallback",
         toolCallCount: 0,
       }),
     ).toMatchObject({
       type: "complete",
       finalContent: "",
-      queuedTurnIds: ["queued-empty-fallback"],
     });
   });
 
@@ -509,14 +505,12 @@ describe("agentStreamCompletionController", () => {
       buildAgentStreamTerminalCompletionPlan({
         accumulatedContent: "",
         hasMeaningfulCompletionSignal: false,
-        queuedTurnId: "queued-missing",
         toolCallCount: 0,
         usage,
       }),
     ).toEqual({
       type: "missing_final_reply_failure",
       errorMessage: AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
-      queuedTurnIds: ["queued-missing"],
       requestLogPayload: {
         eventType: "chat_request_error",
         status: "error",
@@ -533,13 +527,11 @@ describe("agentStreamCompletionController", () => {
         accumulatedContent: "我先联网核实信息。",
         hasFinalAnswerRequiredProcessBoundary: true,
         hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
-        queuedTurnId: "queued-search-no-final",
         toolCallCount: 1,
       }),
     ).toEqual({
       type: "missing_final_reply_failure",
       errorMessage: AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
-      queuedTurnIds: ["queued-search-no-final"],
       requestLogPayload: {
         eventType: "chat_request_error",
         status: "error",
@@ -555,13 +547,11 @@ describe("agentStreamCompletionController", () => {
         accumulatedContent: "我先联网核实信息。最终摘要。",
         hasFinalAnswerRequiredProcessBoundary: true,
         hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: true,
-        queuedTurnId: "queued-search-final",
         toolCallCount: 1,
       }),
     ).toEqual({
       type: "complete",
       finalContent: "我先联网核实信息。最终摘要。",
-      queuedTurnIds: ["queued-search-final"],
       requestLogPayload: {
         eventType: "chat_request_complete",
         status: "success",
@@ -574,12 +564,10 @@ describe("agentStreamCompletionController", () => {
     expect(
       buildAgentStreamMissingFinalReplyFailurePlan({
         errorMessage: "模型未输出最终答复：工具已完成",
-        queuedTurnId: "queued-1",
       }),
     ).toEqual({
       type: "missing_final_reply_failure",
       errorMessage: "模型未输出最终答复：工具已完成",
-      queuedTurnIds: ["queued-1"],
       requestLogPayload: {
         eventType: "chat_request_error",
         status: "error",
@@ -593,7 +581,6 @@ describe("agentStreamCompletionController", () => {
     const usage = { input_tokens: 10, output_tokens: 0 };
     const failurePlan = buildAgentStreamMissingFinalReplyFailurePlan({
       errorMessage: "模型未输出最终答复：工具已完成",
-      queuedTurnId: "queued-1",
       usage,
     });
 
@@ -602,7 +589,6 @@ describe("agentStreamCompletionController", () => {
     ).toEqual({
       errorMessage: "模型未输出最终答复：工具已完成",
       observerErrorMessage: "模型未输出最终答复：工具已完成",
-      queuedTurnIds: ["queued-1"],
       requestLogPayload: {
         eventType: "chat_request_error",
         status: "error",
@@ -627,7 +613,6 @@ describe("agentStreamCompletionController", () => {
     ).toEqual({
       type: "missing_final_reply_failure",
       errorMessage: "模型未输出最终答复：工具已完成",
-      queuedTurnIds: [],
       requestLogPayload: {
         eventType: "chat_request_error",
         status: "error",
@@ -641,12 +626,10 @@ describe("agentStreamCompletionController", () => {
         errorMessage: "模型未输出最终答复：工具已完成",
         accumulatedContent: "",
         hasMeaningfulCompletionSignal: true,
-        queuedTurnId: "queued-2",
       }),
     ).toEqual({
       type: "complete",
       finalContent: "本轮执行已完成，详细过程与产物已保留在当前对话中。",
-      queuedTurnIds: ["queued-2"],
       requestLogPayload: {
         eventType: "chat_request_complete",
         status: "success",
@@ -659,12 +642,10 @@ describe("agentStreamCompletionController", () => {
         errorMessage: "模型未输出最终答复：工具已完成",
         accumulatedContent: "已经输出的正文",
         hasMeaningfulCompletionSignal: false,
-        queuedTurnId: "queued-3",
       }),
     ).toEqual({
       type: "complete",
       finalContent: "已经输出的正文",
-      queuedTurnIds: ["queued-3"],
       requestLogPayload: {
         eventType: "chat_request_complete",
         status: "success",

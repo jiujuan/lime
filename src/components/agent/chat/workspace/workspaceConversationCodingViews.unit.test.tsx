@@ -14,7 +14,9 @@ vi.mock("@/lib/api/executionProcess", () => ({
 
 vi.mock("@limecloud/agent-runtime-projection", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@limecloud/agent-runtime-projection")>();
+    await importOriginal<
+      typeof import("@limecloud/agent-runtime-projection")
+    >();
   return {
     ...actual,
     projectCodingWorkbenchViewFromEvents: vi.fn(
@@ -95,7 +97,6 @@ describe("buildWorkspaceConversationCodingViews", () => {
       threadRead: null,
       pendingActions: [],
       submittedActionsInFlight: [],
-      queuedTurns: [],
       isSending: false,
     });
 
@@ -143,7 +144,6 @@ describe("buildWorkspaceConversationCodingViews", () => {
       },
       pendingActions: [],
       submittedActionsInFlight: [],
-      queuedTurns: [],
       onRefreshSessionReadModel,
     });
     const panel = views.outputView?.renderPanel();
@@ -208,7 +208,6 @@ describe("buildWorkspaceConversationCodingViews", () => {
       },
       pendingActions: [],
       submittedActionsInFlight: [],
-      queuedTurns: [],
       onRefreshSessionReadModel,
     });
     const panel = views.outputView?.renderPanel();

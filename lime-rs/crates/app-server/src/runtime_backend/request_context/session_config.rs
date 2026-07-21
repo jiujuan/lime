@@ -31,11 +31,14 @@ pub(in crate::runtime_backend) fn session_config_from_request(
     let metadata_values = super::super::skill_runtime_enable::request_metadata_values(request);
     let turn_tool_surface = super::turn_tool_surface_for_request(request);
     let runtime_metadata = request.runtime_metadata();
-    let system_prompt = if turn_tool_surface.uses_light_session_prompt() {
-        append_soul_context_to_system_prompt(
-            Some(request_system_prompt(request)),
-            config_metadata.as_ref(),
-            runtime_metadata,
+    let (system_prompt, skill_snapshot) = if turn_tool_surface.uses_light_session_prompt() {
+        (
+            append_soul_context_to_system_prompt(
+                Some(request_system_prompt(request)),
+                config_metadata.as_ref(),
+                runtime_metadata,
+            ),
+            None,
         )
     } else {
         let system_prompt = merge_system_prompt_with_runtime_agents_for_project(
@@ -43,17 +46,16 @@ pub(in crate::runtime_backend) fn session_config_from_request(
             workspace_scope.working_dir.as_deref(),
             workspace_scope.project_root.as_deref(),
         );
-        let system_prompt =
-            super::super::agent_skills_context::append_agent_skills_context_to_system_prompt(
-                system_prompt,
-                &request.input.text,
-                &metadata_values,
-                workspace_scope.working_dir.as_deref(),
-                workspace_scope.project_root.as_deref(),
-            );
+        let skills_context = super::super::agent_skills_context::agent_skills_context_for_turn(
+            system_prompt,
+            &request.input.concat_text(),
+            &metadata_values,
+            workspace_scope.working_dir.as_deref(),
+            workspace_scope.project_root.as_deref(),
+        );
         let system_prompt =
             super::super::plugin_activation_context::append_plugin_activation_context_to_system_prompt(
-                system_prompt,
+                skills_context.system_prompt,
                 &metadata_values,
             );
         let system_prompt =
@@ -67,10 +69,30 @@ pub(in crate::runtime_backend) fn session_config_from_request(
             config_metadata.as_ref(),
             runtime_metadata,
         );
-        merge_system_prompt_with_request_tool_policy(system_prompt, request_tool_policy)
+        (
+            merge_system_prompt_with_request_tool_policy(system_prompt, request_tool_policy),
+            skills_context.snapshot,
+        )
     };
     let mut turn_context =
         turn_context_from_request(request, host_request, scope, selection, config_metadata);
+    let structured_mentions = super::structured_control_mentions(request);
+    if !structured_mentions.is_empty() {
+        turn_context
+            .get_or_insert_with(Default::default)
+            .metadata
+            .insert(
+                super::INPUT_MENTIONS_TURN_METADATA_KEY.to_string(),
+                Value::Array(structured_mentions),
+            );
+    }
+    if let Some(skill_snapshot) = skill_snapshot {
+        let turn_context = turn_context.get_or_insert_with(Default::default);
+        turn_context.metadata.insert(
+            lime_skills::SKILL_SNAPSHOT_TURN_METADATA_KEY.to_string(),
+            serde_json::to_value(skill_snapshot).expect("skill snapshot must serialize"),
+        );
+    }
     if turn_tool_surface.is_harness_direct_answer() {
         let turn_context = turn_context.get_or_insert_with(Default::default);
         let runtime = turn_context

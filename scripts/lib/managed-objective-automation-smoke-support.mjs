@@ -7,7 +7,7 @@ import {
 
 const CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
 const COMPLETION_AUDIT_POLICY = "artifact_or_evidence_required";
-const CURRENT_AGENT_TURN_DISPATCH = "agentSession/turn/start";
+const CURRENT_AGENT_TURN_DISPATCH = "turn/start";
 const AUTOMATION_SMOKE_SKILL_TITLE =
   "Managed Objective Automation Smoke Report";
 const AUTOMATION_SMOKE_ARTIFACT_PATH =
@@ -429,7 +429,7 @@ function buildManagedObjectiveHarness(skillBinding) {
       objective:
         "Managed Objective automation smoke：通过离线 fixture 执行一次自动化任务，并导出 owner evidence。",
       success_criteria: [
-        "automation job 执行通过 agentSession/turn/start",
+        "automation job 执行通过 turn/start",
         "运行记录能按 runtime session 查询 automation owner",
         "evidence pack 能解释 automation owner 与 objective audit",
       ],

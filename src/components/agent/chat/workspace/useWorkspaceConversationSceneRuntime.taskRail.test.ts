@@ -214,16 +214,6 @@ describe("useWorkspaceConversationSceneRuntime task rail projection", () => {
           status: "pending",
         },
       ],
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-1",
-          message_preview: "继续下载图片",
-          message_text: "继续下载图片",
-          created_at: 1_712_650_000,
-          image_count: 0,
-          position: 1,
-        },
-      ],
       settledWorkbenchArtifacts: [{ id: "artifact-1" }],
       isSending: true,
       focusedTimelineItemId: "item-1",
@@ -234,8 +224,8 @@ describe("useWorkspaceConversationSceneRuntime task rail projection", () => {
 
     expect(sessionView?.title).toBe("任务进展");
     expect(sessionView?.tabLabel).toBe("进展");
-    expect(sessionView?.tabBadge).toBe("后续 1");
-    expect(sessionView?.tabBadgeTone).toBe("slate");
+    expect(sessionView?.tabBadge).toBe("处理中 1");
+    expect(sessionView?.tabBadgeTone).toBe("sky");
     expect(sessionView?.subtitle).toBe("正在处理：请抓取文章并整理成 markdown");
     expect(sessionView?.summaryStats).toEqual(
       expect.arrayContaining([
@@ -247,12 +237,12 @@ describe("useWorkspaceConversationSceneRuntime task rail projection", () => {
         expect.objectContaining({
           key: "session-generated-files",
           label: "生成内容",
-          value: "暂无产出",
+          value: "处理中 1",
         }),
         expect.objectContaining({
           key: "session-follow-up",
-          label: "后续输入",
-          value: "后续 1",
+          label: "需要你处理",
+          value: "待补充 1",
         }),
       ]),
     );
@@ -263,8 +253,8 @@ describe("useWorkspaceConversationSceneRuntime task rail projection", () => {
           label: "执行中",
         }),
         expect.objectContaining({
-          key: "session-queued-turns",
-          label: "后续 1",
+          key: "session-pending-actions",
+          label: "待补充 1",
         }),
       ]),
     );

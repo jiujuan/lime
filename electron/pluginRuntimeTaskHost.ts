@@ -1,20 +1,18 @@
 import {
-  AppServerRequestError,
-  ERROR_CODES,
   METHOD_PLUGIN_UI_RUNTIME_STATUS,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
-  METHOD_AGENT_SESSION_READ,
   METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
-  METHOD_AGENT_SESSION_START,
-  METHOD_AGENT_SESSION_TURN_CANCEL,
-  METHOD_AGENT_SESSION_TURN_START,
+  METHOD_THREAD_START,
+  METHOD_THREAD_READ,
+  METHOD_TURN_START,
+  METHOD_TURN_INTERRUPT,
   type PluginUiRuntimeStatusResponse,
   type AgentSessionActionRespondResponse,
-  type AgentSessionReadResponse,
   type AgentSessionRuntimeEventAppendResponse,
-  type AgentSessionStartResponse,
-  type AgentSessionTurnCancelResponse,
-  type AgentSessionTurnStartResponse,
+  type ThreadReadResponse,
+  type ThreadStartResponse,
+  type TurnInterruptResponse,
+  type TurnStartResponse,
 } from "@limecloud/app-server-client";
 import {
   buildPluginTaskWorkerFailureResult,
@@ -43,14 +41,8 @@ export class PluginRuntimeTaskHost {
     const nowMs = Date.now();
     const taskId = readString(request, "taskId") ?? `plugin-task-${nowMs}`;
     const traceId = `plugin-trace-${nowMs}`;
-    const sessionId =
-      readString(request, "sessionId") ?? `plugin-runtime-${nowMs}`;
-    const turnId = readString(request, "turnId") ?? `plugin-turn-${nowMs}`;
     const eventName =
       readString(request, "eventName") ?? `plugin_runtime:${appId}:${taskId}`;
-    const queueIfBusy = readBoolean(request, "queueIfBusy") ?? true;
-    const skipPreSubmitResume =
-      readBoolean(request, "skipPreSubmitResume") ?? false;
     const requestedPackageRootPath =
       readString(request, "packageRootPath") ??
       readString(request, "runtimePackageRoot") ??
@@ -79,32 +71,35 @@ export class PluginRuntimeTaskHost {
     });
     const shouldRunWorker = Boolean(workerConfig);
 
-    await this.#ensureSession({ sessionId, appId, workspaceId });
-    await this.#appServerRequest<AgentSessionTurnStartResponse>(
-      METHOD_AGENT_SESSION_TURN_START,
-      {
-        sessionId,
-        turnId,
-        input: {
-          text: message,
-          attachments: [],
-        },
-        runtimeOptions: {
-          stream: true,
-          eventName,
-          queuedTurnId,
-          runtimeRequest,
-        },
-        queueIfBusy,
-        skipPreSubmitResume,
-      },
+    const identity = await this.#resolveThreadIdentity({
+      request,
+      runtimeRequest,
+      taskKind,
+    });
+    const turnResponse = await this.#appServerRequest<TurnStartResponse>(
+      METHOD_TURN_START,
+      buildTurnStartParams({
+        threadId: identity.threadId,
+        message,
+        eventName,
+        queuedTurnId,
+        appId,
+        taskId,
+        taskKind,
+        workspaceId,
+        runtimeRequest,
+      }),
+    );
+    const turnId = readRequiredCanonicalId(
+      turnResponse.turn,
+      "turn/start turn",
     );
     const worker = shouldRunWorker
       ? await this.#runAndAppendWorker({
           appId,
           taskId,
           taskKind,
-          sessionId,
+          sessionId: identity.sessionId,
           turnId,
           packageRootPath: workerConfig?.packageRootPath,
           workerEntrypoint: workerConfig?.workerEntrypoint ?? null,
@@ -121,12 +116,14 @@ export class PluginRuntimeTaskHost {
       taskId,
       traceId,
       taskKind,
-      sessionId,
+      sessionId: identity.sessionId,
+      threadId: identity.threadId,
       turnId,
       eventName,
       status: "accepted",
       worker,
-      submittedAt: new Date().toISOString(),
+      submittedAt:
+        timestampToIso(turnResponse.turn.startedAt) ?? new Date().toISOString(),
     };
   }
 
@@ -134,19 +131,21 @@ export class PluginRuntimeTaskHost {
     const request = readRequest(args);
     const appId = readRequiredString(request, "appId");
     const taskId = readRequiredString(request, "taskId");
-    const sessionId = readRequiredString(request, "sessionId");
-    const response = await this.#appServerRequest<AgentSessionReadResponse>(
-      METHOD_AGENT_SESSION_READ,
-      { sessionId },
+    const threadId = readRequiredString(request, "threadId");
+    const response = await this.#appServerRequest<ThreadReadResponse>(
+      METHOD_THREAD_READ,
+      { threadId, includeTurns: true },
     );
+    const thread = requireCanonicalThread(response, threadId);
     return {
       appId,
       taskId,
-      sessionId,
+      sessionId: thread.sessionId,
+      threadId: thread.id,
       status: "thread_read_available",
-      taskStatus: sessionStatusToPluginTaskStatus(response.session.status),
+      taskStatus: sessionStatusToPluginTaskStatus(thread.status),
       taskEvents: [],
-      threadRead: response.detail ?? sessionReadToLegacy(response),
+      threadRead: thread,
     };
   }
 
@@ -154,32 +153,34 @@ export class PluginRuntimeTaskHost {
     const request = readRequest(args);
     const appId = readRequiredString(request, "appId");
     const taskId = readRequiredString(request, "taskId");
-    const sessionId = readRequiredString(request, "sessionId");
+    const threadId = readRequiredString(request, "threadId");
     let turnId = readString(request, "turnId");
-    if (!turnId) {
-      const response = await this.#appServerRequest<AgentSessionReadResponse>(
-        METHOD_AGENT_SESSION_READ,
-        { sessionId },
-      );
-      turnId = activeAgentSessionTurnId(response);
-    }
-    if (!turnId) {
+    const response = await this.#appServerRequest<ThreadReadResponse>(
+      METHOD_THREAD_READ,
+      { threadId, includeTurns: true },
+    );
+    const thread = requireCanonicalThread(response, threadId);
+    const activeTurnId = activeThreadTurnId(response);
+    if (!activeTurnId || (turnId && turnId !== activeTurnId)) {
       return {
         appId,
         taskId,
-        sessionId,
+        sessionId: thread.sessionId,
+        threadId,
         cancelled: false,
         status: "not_running",
       };
     }
-    await this.#appServerRequest<AgentSessionTurnCancelResponse>(
-      METHOD_AGENT_SESSION_TURN_CANCEL,
-      { sessionId, turnId },
-    );
+    turnId = activeTurnId;
+    await this.#appServerRequest<TurnInterruptResponse>(METHOD_TURN_INTERRUPT, {
+      threadId,
+      turnId,
+    });
     return {
       appId,
       taskId,
-      sessionId,
+      sessionId: thread.sessionId,
+      threadId,
       cancelled: true,
       status: "cancelled",
     };
@@ -224,22 +225,35 @@ export class PluginRuntimeTaskHost {
     };
   }
 
-  async #ensureSession(params: {
-    sessionId: string;
-    appId: string;
-    workspaceId: string;
-  }): Promise<void> {
-    try {
-      await this.#appServerRequest<AgentSessionStartResponse>(
-        METHOD_AGENT_SESSION_START,
-        params,
-      );
-    } catch (error) {
-      if (isAppServerSessionAlreadyExistsError(error)) {
-        return;
+  async #resolveThreadIdentity(params: {
+    request: Record<string, unknown>;
+    runtimeRequest: Record<string, unknown>;
+    taskKind: string;
+  }): Promise<{ sessionId: string; threadId: string }> {
+    const requestedThreadId = readString(params.request, "threadId");
+    const requestedSessionId = readString(params.request, "sessionId");
+    if (requestedThreadId) {
+      if (!requestedSessionId) {
+        throw new Error(
+          "Plugin runtime task requires sessionId with an existing threadId",
+        );
       }
-      throw error;
+      return {
+        sessionId: requestedSessionId,
+        threadId: requestedThreadId,
+      };
     }
+
+    const response = await this.#appServerRequest<ThreadStartResponse>(
+      METHOD_THREAD_START,
+      buildThreadStartParams(params.runtimeRequest, params.taskKind),
+    );
+    const threadId = readRequiredCanonicalId(
+      response.thread,
+      "thread/start thread",
+    );
+    const sessionId = readRequiredString(response.thread, "sessionId");
+    return { sessionId, threadId };
   }
 
   async #resolveWorkerConfig(params: {
@@ -418,6 +432,136 @@ function readStringParam(
   return next ? { [outputKey]: next } : {};
 }
 
+function buildThreadStartParams(
+  runtimeRequest: Record<string, unknown>,
+  taskKind: string,
+): AppServerParams {
+  const providerConfig = readRecord(runtimeRequest, "providerConfig");
+  const modelProvider =
+    readString(runtimeRequest, "providerPreference") ??
+    readString(providerConfig, "providerName");
+  const model =
+    readString(runtimeRequest, "modelPreference") ??
+    readString(providerConfig, "modelName");
+  const cwd = readRuntimeCwd(runtimeRequest);
+  const workspaceRoot = readString(runtimeRequest, "workspaceRoot");
+  const params: AppServerParams = {
+    historyMode: "paginated",
+    serviceName: taskKind,
+    threadSource: "plugin",
+  };
+  if (modelProvider) {
+    params.modelProvider = modelProvider;
+  }
+  if (model) {
+    params.model = model;
+  }
+  if (cwd) {
+    params.cwd = cwd;
+  }
+  if (workspaceRoot) {
+    params.runtimeWorkspaceRoots = [workspaceRoot];
+  }
+  return params;
+}
+
+function buildTurnStartParams(params: {
+  threadId: string;
+  message: string;
+  eventName: string;
+  queuedTurnId: string;
+  appId: string;
+  taskId: string;
+  taskKind: string;
+  workspaceId: string;
+  runtimeRequest: Record<string, unknown>;
+}): AppServerParams {
+  const providerConfig = readRecord(params.runtimeRequest, "providerConfig");
+  const model =
+    readString(params.runtimeRequest, "modelPreference") ??
+    readString(providerConfig, "modelName");
+  const effort = readString(params.runtimeRequest, "reasoningEffort");
+  const cwd = readRuntimeCwd(params.runtimeRequest);
+  const request: AppServerParams = {
+    threadId: params.threadId,
+    input: [{ type: "text", text: params.message }],
+    responsesapiClientMetadata: {
+      appId: params.appId,
+      eventName: params.eventName,
+      queuedTurnId: params.queuedTurnId,
+      taskId: params.taskId,
+      taskKind: params.taskKind,
+      workspaceId: params.workspaceId,
+    },
+  };
+  if (model) {
+    request.model = model;
+  }
+  if (effort) {
+    request.effort = effort;
+  }
+  if (cwd) {
+    request.cwd = cwd;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(
+      params.runtimeRequest,
+      "approvalPolicy",
+    )
+  ) {
+    request.approvalPolicy = params.runtimeRequest.approvalPolicy;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(params.runtimeRequest, "sandboxPolicy")
+  ) {
+    request.sandboxPolicy = params.runtimeRequest.sandboxPolicy;
+  }
+  return request;
+}
+
+function readRuntimeCwd(
+  runtimeRequest: Record<string, unknown>,
+): string | null {
+  return (
+    readString(runtimeRequest, "workingDir") ??
+    readString(runtimeRequest, "projectRoot") ??
+    readString(runtimeRequest, "workspaceRoot")
+  );
+}
+
+function readRequiredCanonicalId(value: unknown, label: string): string {
+  const id = readString(value, "id");
+  if (!id) {
+    throw new Error(`${label} did not include a canonical id`);
+  }
+  return id;
+}
+
+function requireCanonicalThread(
+  response: ThreadReadResponse,
+  expectedThreadId: string,
+): ThreadReadResponse["thread"] {
+  const threadId = readRequiredCanonicalId(
+    response.thread,
+    "thread/read thread",
+  );
+  if (threadId !== expectedThreadId) {
+    throw new Error(
+      `thread/read returned threadId ${threadId}, expected ${expectedThreadId}`,
+    );
+  }
+  readRequiredString(response.thread, "sessionId");
+  return response.thread;
+}
+
+function timestampToIso(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return null;
+  }
+  const millis = Math.abs(value) < 10_000_000_000 ? value * 1000 : value;
+  return new Date(millis).toISOString();
+}
+
 function buildPluginRuntimeTaskMessage(
   request: Record<string, unknown>,
 ): string {
@@ -460,42 +604,38 @@ function stringifyJsonField(
   }
 }
 
-function sessionStatusToPluginTaskStatus(status: string): string {
-  switch (status) {
-    case "completed":
-      return "completed";
-    case "failed":
-      return "failed";
-    case "canceled":
-    case "cancelled":
-      return "cancelled";
-    case "waitingAction":
-      return "blocked";
+function sessionStatusToPluginTaskStatus(status: unknown): string {
+  if (!status || typeof status !== "object") {
+    return "thread_read_available";
+  }
+  const type = (status as { type?: unknown }).type;
+  switch (type) {
     case "idle":
       return "idle";
-    case "running":
-      return "running";
+    case "systemError":
+      return "failed";
+    case "active": {
+      const activeFlags = (status as { activeFlags?: unknown }).activeFlags;
+      return Array.isArray(activeFlags) && activeFlags.length > 0
+        ? "blocked"
+        : "running";
+    }
+    case "notLoaded":
     default:
       return "thread_read_available";
   }
 }
 
-function activeAgentSessionTurnId(
-  response: AgentSessionReadResponse,
-): string | null {
-  for (let index = response.turns.length - 1; index >= 0; index -= 1) {
-    const turn = response.turns[index];
-    if (
-      turn &&
-      (turn.status === "accepted" ||
-        turn.status === "queued" ||
-        turn.status === "running" ||
-        turn.status === "waitingAction")
-    ) {
-      return turn.turnId;
-    }
+function activeThreadTurnId(response: ThreadReadResponse): string | null {
+  const activeTurnIds = (response.thread.turns ?? [])
+    .filter((turn) => turn.status === "inProgress")
+    .map((turn) => readRequiredCanonicalId(turn, "thread/read active turn"));
+  if (activeTurnIds.length > 1) {
+    throw new Error(
+      `thread/read returned multiple active turns for ${response.thread.id}`,
+    );
   }
-  return null;
+  return activeTurnIds[0] ?? null;
 }
 
 function normalizeAgentSessionActionScope(
@@ -516,56 +656,6 @@ function normalizeAgentSessionActionScope(
   return Object.keys(scope).length > 0
     ? (scope as Record<string, string>)
     : undefined;
-}
-
-function isAppServerSessionAlreadyExistsError(error: unknown): boolean {
-  return (
-    error instanceof AppServerRequestError &&
-    error.response.error.code === ERROR_CODES.sessionAlreadyExists
-  );
-}
-
-function sessionReadToLegacy(
-  response: AgentSessionReadResponse,
-): Record<string, unknown> {
-  const threadRead = threadReadFromAgentSessionRead(response);
-  return {
-    id: response.session.sessionId,
-    thread_id: response.session.threadId,
-    name: response.session.sessionId,
-    created_at: timestampMillis(response.session.createdAt),
-    updated_at: timestampMillis(response.session.updatedAt),
-    model: undefined,
-    workspace_id: response.session.workspaceId,
-    messages: [],
-    turns: response.turns,
-    items: [],
-    queued_turns: [],
-    thread_read: threadRead,
-    todo_items: [],
-  };
-}
-
-function threadReadFromAgentSessionRead(
-  response: AgentSessionReadResponse,
-): Record<string, unknown> | null {
-  const detail = toRecord(response.detail);
-  return toRecord(detail?.thread_read) ?? toRecord(detail?.threadRead);
-}
-
-function timestampMillis(value: string | undefined): number {
-  if (!value) {
-    return Date.now();
-  }
-  const parsed = Date.parse(value);
-  if (Number.isFinite(parsed)) {
-    return parsed;
-  }
-  const numeric = Number(value);
-  if (Number.isFinite(numeric)) {
-    return Math.abs(numeric) < 10_000_000_000 ? numeric * 1000 : numeric;
-  }
-  return Date.now();
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

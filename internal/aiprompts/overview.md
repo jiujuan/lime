@@ -21,12 +21,13 @@ React Renderer
 - App Server 是跨应用业务协议入口，负责 JSON-RPC、初始化、handler、read model、evidence/export 和领域接线。
 - `agent-runtime` 负责回合生命周期与状态机；`model-provider` 负责多模型 capability、canonical content 和 provider lowering；`tool-runtime` 负责工具权限、调度、MCP 与结果归一。
 - `thread-store` 与 ProjectionStore 承担可恢复的 Thread / Turn / Item 读取事实；UI 缓存和 stream buffer 不得反向成为真相。
+- Provider 网络只有 `model-provider` 一个 current owner；已删除的 `lime-providers` 属于 `dead / forbidden-to-restore`，只能出现在历史 evidence 或负向守卫。
 
 ## 参考与边界
 
 - Agent runtime、App Server、Thread / Turn / Item、工具生命周期、MCP、Skills、Multi-Agent、history hydrate、projection 与测试护栏对齐本地 Codex：`/Users/coso/Documents/dev/rust/codex`。
-- 多模型、多模态 content part、provider capability、provider options 与 lowering 对齐本地 OpenCode：`/Users/coso/Documents/dev/js/opencode`。
-- 运行时 owner 服从 Codex；provider wire 服从 OpenCode；两者都不能替代 Lime 的桌面产品、i18n 或交付边界。
+- 多模型控制平面的 model catalog、model switch、capability、provider readiness 与 retry/circuit breaker 以本地 grok-build：`/Users/coso/Documents/dev/rust/grok-build` 为主参考；provider wire 的多协议 endpoint、canonical content、媒体和 lowering 选择性参考本地 OpenCode：`/Users/coso/Documents/dev/js/opencode`。
+- 运行时 owner 服从 Codex；model control 服从 grok-build；provider wire 由 Lime `model-provider` 统一承接并吸收 OpenCode 的协议边界；这些参考都不能替代 Lime 的桌面产品、i18n 或交付边界。
 
 ## 继续阅读
 

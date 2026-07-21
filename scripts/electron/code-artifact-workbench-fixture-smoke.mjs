@@ -9,6 +9,15 @@ import { _electron as electron } from "playwright";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 import { withElectronFixtureSystemPath } from "../lib/electron-fixture-runtime-env.mjs";
+import {
+  FILE_CHANGE_BATCH_PROMPT_MARKER,
+  FILE_CHANGE_BATCH_SCENARIO,
+  clickFileChangeApprovalDecision,
+  renderFileChangeGateBBackendScript,
+  waitForFileChangeApprovalPending,
+  waitForFileChangeTerminalGui,
+  waitForFileChangeTerminalReadModel,
+} from "./lib/code-artifact-file-change-gate-b.mjs";
 
 const DEFAULTS = {
   appUrl: "",
@@ -31,19 +40,21 @@ const TEMP_CLEANUP_RETRY_COUNT = 8;
 const TEMP_CLEANUP_RETRY_DELAY_MS = 250;
 const FINAL_PAGE_OPERATION_TIMEOUT_MS = 15_000;
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
-const APP_SERVER_METHOD_SESSION_START = "agentSession/start";
-const APP_SERVER_METHOD_SESSION_UPDATE = "agentSession/update";
-const APP_SERVER_METHOD_SESSION_TURN_START = "agentSession/turn/start";
-const APP_SERVER_METHOD_SESSION_READ = "agentSession/read";
-const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
+const APP_SERVER_METHOD_THREAD_START = "thread/start";
+const APP_SERVER_METHOD_TURN_START = "turn/start";
+const APP_SERVER_METHOD_THREAD_READ = "thread/read";
+const APP_SERVER_METHOD_THREAD_LIST = "thread/list";
 const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
-const SESSION_ID = `code-artifact-workbench-electron-${Date.now()}-${process.pid}`;
-const THREAD_ID = `${SESSION_ID}-thread`;
-const TURN_ID = `${SESSION_ID}-turn`;
+let SESSION_ID = `pending-code-artifact-workbench-${Date.now()}-${process.pid}`;
+let THREAD_ID = "pending-code-artifact-workbench-thread";
+let TURN_ID = "pending-code-artifact-workbench-turn";
 const SESSION_TITLE = "代码产物工作台 Electron fixture";
 const USER_PROMPT = "生成一个 TypeScript greeting 代码产物，并打开工作台验证。";
 const GUI_CODING_PROMPT =
   "@代码 修复 coding-target.test.ts 中 codingWorkbenchSmoke 失败的问题，并补一个回归测试";
+const FILE_CHANGE_BATCH_DECLINE_PROMPT = `${FILE_CHANGE_BATCH_PROMPT_MARKER} Decline.`;
+const FILE_CHANGE_BATCH_CANCEL_PROMPT = `${FILE_CHANGE_BATCH_PROMPT_MARKER} Cancel.`;
+const CODING_RECOVERY_PROMPT_INTRO = "请继续修复本轮编程任务中的失败输出。";
 const ASSISTANT_ARTIFACT_TEXT = "已生成代码产物，可在工作台查看。";
 const FINAL_DONE_TEXT = "CODE_ARTIFACT_WORKBENCH_DONE";
 const ARTIFACT_ID = "code-artifact-workbench-electron:greeting";
@@ -55,10 +66,17 @@ const TOOL_OUTPUT_PREVIEW =
   "已获取 fixture 工具事实: https://example.com/lime-workbench-tool";
 const CODING_FILE_PATH =
   ".lime/qc/code-artifact-workbench-electron-fixture/src/coding-target.ts";
+const CODING_FILE_DISPLAY_PATH = "src/coding-target.ts";
+const CODING_ADDED_FILE_PATH =
+  ".lime/qc/code-artifact-workbench-electron-fixture/src/added.ts";
+const CODING_DELETED_FILE_PATH =
+  ".lime/qc/code-artifact-workbench-electron-fixture/src/deleted.ts";
+const CODING_MOVE_SOURCE_PATH =
+  ".lime/qc/code-artifact-workbench-electron-fixture/src/source.ts";
+const CODING_MOVE_DESTINATION_PATH =
+  ".lime/qc/code-artifact-workbench-electron-fixture/src/destination.ts";
 const CODING_ARTIFACT_ID = "code-artifact-workbench-electron:coding-target";
-const CODING_PATCH_ID = "code-artifact-workbench-electron:patch:coding-target";
 const CODING_COMMAND_ID = "code-artifact-workbench-electron:command:test";
-const CODING_TEST_RUN_ID = "code-artifact-workbench-electron:test:unit";
 const CODING_COMMAND_TEXT = "npm test -- coding-target";
 const CODING_COMMAND_FAILURE_PREVIEW =
   "FAIL coding-target.test.ts: expected codingWorkbenchSmoke to be true";
@@ -78,6 +96,9 @@ const ARTIFACT_CONTENT = [
 ].join("\n");
 
 function expectedUserPrompt(options) {
+  if (options.scenario === FILE_CHANGE_BATCH_SCENARIO) {
+    return FILE_CHANGE_BATCH_DECLINE_PROMPT;
+  }
   return options.scenario === "gui-coding-input"
     ? GUI_CODING_PROMPT
     : USER_PROMPT;
@@ -105,7 +126,7 @@ Code Artifact Workbench Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      direct-session | gui-coding-input，默认 direct-session
+  --scenario <name>      direct-session | gui-coding-input | file-change-batch，默认 direct-session
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -168,8 +189,16 @@ function parseArgs(argv) {
   if (!options.evidenceDir || !options.prefix) {
     throw new Error("--evidence-dir / --prefix 均不能为空");
   }
-  if (!["direct-session", "gui-coding-input"].includes(options.scenario)) {
-    throw new Error("--scenario 只能是 direct-session 或 gui-coding-input");
+  if (
+    ![
+      "direct-session",
+      "gui-coding-input",
+      FILE_CHANGE_BATCH_SCENARIO,
+    ].includes(options.scenario)
+  ) {
+    throw new Error(
+      "--scenario 只能是 direct-session、gui-coding-input 或 file-change-batch",
+    );
   }
   return options;
 }
@@ -357,50 +386,79 @@ import { appendFileSync, readFileSync } from "node:fs";
 
 const ledgerPath = process.argv[2];
 const input = JSON.parse(readFileSync(0, "utf8"));
+const request = input.request || {};
+const session = request.session || {};
+const turn = request.turn || {};
+const sessionId = String(session.sessionId || "");
+const threadId = String(session.threadId || "");
+const turnId = String(turn.turnId || "");
+const inputText = readRuntimeInputText(request);
+const providerPreference = request.providerPreference;
+const modelPreference = request.modelPreference;
+const requestMetadata = readApplicationMetadata(request.metadata);
+
+function readRuntimeInputText(request) {
+  const parts = Array.isArray(request?.input?.parts) ? request.input.parts : [];
+  return parts
+    .map((part) => (typeof part?.Text?.text === "string" ? part.Text.text : ""))
+    .join("");
+}
+
+function readApplicationMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+  const entry = metadata.additionalContext?.metadata;
+  if (
+    !entry ||
+    entry.kind !== "application" ||
+    typeof entry.value !== "string"
+  ) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(entry.value);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 if (ledgerPath) {
   appendFileSync(ledgerPath, JSON.stringify({
     kind: input.kind,
-    sessionId: input.request?.session?.sessionId,
-    turnId: input.request?.turn?.turnId,
-    inputText: input.request?.input?.text,
-    providerPreference: input.request?.providerPreference,
-    modelPreference: input.request?.modelPreference,
-    runtimeOptions: input.request?.runtimeOptions,
-    requestMetadata: input.request?.runtimeOptions?.runtimeRequest?.metadata,
+    sessionId,
+    threadId,
+    turnId,
+    inputText,
+    providerPreference,
+    modelPreference,
+    requestMetadata,
     recordedAt: new Date().toISOString()
   }) + "\\n");
 }
 
+${renderFileChangeGateBBackendScript()}
+
 if (input.kind === "turnStart") {
-  const requestMetadata = input.request?.runtimeOptions?.runtimeRequest?.metadata || {};
-  const isRecoveryTurn = requestMetadata.harness?.coding_workbench_recovery?.schemaVersion === "coding-workbench-recovery/v1";
-  const inputText = String(input.request?.input?.text || "");
+  const isRecoveryTurn =
+    inputText.includes(${JSON.stringify(CODING_RECOVERY_PROMPT_INTRO)}) &&
+    inputText.includes("${CODING_COMMAND_TEXT}") &&
+    inputText.includes("${CODING_COMMAND_FAILURE_PREVIEW}");
   const isCodingPrompt = inputText.includes("coding-target.test.ts") || isRecoveryTurn;
   const commandPreview = isCodingPrompt && !isRecoveryTurn
     ? "${CODING_COMMAND_FAILURE_PREVIEW}"
     : "${CODING_COMMAND_SUCCESS_PREVIEW}";
   const commandExitCode = isCodingPrompt && !isRecoveryTurn ? 1 : 0;
-  const testResult = isCodingPrompt && !isRecoveryTurn ? "failed" : "passed";
-  const testPassed = isCodingPrompt && !isRecoveryTurn ? 0 : 1;
-  const testFailed = isCodingPrompt && !isRecoveryTurn ? 1 : 0;
   const assistantText = isRecoveryTurn
     ? "已继续修复 coding-target，并通过 npm test -- coding-target。"
     : "${ASSISTANT_ARTIFACT_TEXT}";
-  const sessionId = String(input.request?.session?.sessionId || "");
-  const threadId = String(input.request?.session?.threadId || sessionId);
-  const turnId = String(input.request?.turn?.turnId || "");
   const turnScopedExecutionId = (baseId) =>
     isRecoveryTurn ? baseId + ":" + turnId : baseId;
+  const assistantItemId = turnScopedExecutionId("code-artifact-workbench-electron:assistant");
   const toolCallId = turnScopedExecutionId("${TOOL_CALL_ID}");
   const fileChangeItemId = turnScopedExecutionId("${CODING_ARTIFACT_ID}");
-  const patchId = turnScopedExecutionId("${CODING_PATCH_ID}");
   const commandId = turnScopedExecutionId("${CODING_COMMAND_ID}");
-  const testRunId = turnScopedExecutionId("${CODING_TEST_RUN_ID}");
-  const checkpointRef = turnScopedExecutionId("checkpoint://code-artifact-workbench/coding-target");
-  const contentRef = turnScopedExecutionId("content://code-artifact-workbench/coding-target");
-  const diffRef = turnScopedExecutionId("diff://code-artifact-workbench/coding-target");
-  const commandOutputRef = turnScopedExecutionId("output://code-artifact-workbench/coding-target-test");
   const toolStartedAtMs = Date.now();
   const canonicalToolItem = (status, sequence, output = null) => {
     const updatedAtMs = Date.now();
@@ -431,28 +489,130 @@ if (input.kind === "turnStart") {
       }
     };
   };
+  const canonicalCommandItem = (status, sequence) => {
+    const updatedAtMs = Date.now();
+    return {
+      sessionId,
+      threadId,
+      turnId,
+      itemId: commandId,
+      sequence,
+      ordinal: sequence,
+      createdAtMs: toolStartedAtMs,
+      updatedAtMs,
+      completedAtMs: status === "completed" || status === "failed" ? updatedAtMs : undefined,
+      kind: "command",
+      status,
+      payload: {
+        type: "command",
+        command: "${CODING_COMMAND_TEXT}",
+        cwd: ".",
+        output: commandPreview,
+        exit_code: commandExitCode
+      },
+      metadata: {
+        source: "code-artifact-workbench-electron-fixture"
+      }
+    };
+  };
+  const canonicalFileItem = (status, sequence) => {
+    const updatedAtMs = Date.now();
+    return {
+      sessionId,
+      threadId,
+      turnId,
+      itemId: fileChangeItemId,
+      sequence,
+      ordinal: sequence,
+      createdAtMs: toolStartedAtMs,
+      updatedAtMs,
+      completedAtMs: status === "completed" || status === "failed" ? updatedAtMs : undefined,
+      kind: "file",
+      status,
+      payload: {
+        type: "file",
+        changes: [
+          {
+            path: "${CODING_ADDED_FILE_PATH}",
+            kind: { type: "add" },
+            diff: "+export const added = true;"
+          },
+          {
+            path: "${CODING_DELETED_FILE_PATH}",
+            kind: { type: "delete" },
+            diff: "-export const deleted = true;"
+          },
+          {
+            path: "${CODING_FILE_PATH}",
+            kind: { type: "update" },
+            diff: "-export const codingWorkbenchSmoke = false;\\n+export const codingWorkbenchSmoke = true;"
+          },
+          {
+            path: "${CODING_MOVE_SOURCE_PATH}",
+            kind: {
+              type: "update",
+              move_path: "${CODING_MOVE_DESTINATION_PATH}"
+            },
+            diff: "-export const source = true;\\n+export const destination = true;"
+          }
+        ],
+        status: status === "completed" ? "applied" : "proposed"
+      },
+      metadata: {
+        source: "code-artifact-workbench-electron-fixture",
+        artifactId: "${CODING_ARTIFACT_ID}"
+      }
+    };
+  };
   const events = [
       {
         type: "message.delta",
         payload: {
-          text: assistantText
+          itemId: assistantItemId,
+          role: "assistant",
+          text: assistantText,
+          phase: "final_answer"
         }
       },
       {
         type: "item.started",
         payload: {
-          item: canonicalToolItem("inProgress", 1)
+          item: canonicalToolItem("inProgress", 2)
         }
       },
       {
         type: "item.completed",
         payload: {
-          item: canonicalToolItem("completed", 2, {
+          item: canonicalToolItem("completed", 3, {
             text: "${TOOL_OUTPUT_PREVIEW}",
             structuredContent: { source: "fixture" },
             durationMs: Math.max(0, Date.now() - toolStartedAtMs),
             truncated: false
           })
+        }
+      },
+      {
+        type: "item.started",
+        payload: {
+          item: canonicalFileItem("inProgress", 4)
+        }
+      },
+      {
+        type: "item.completed",
+        payload: {
+          item: canonicalFileItem("completed", 5)
+        }
+      },
+      {
+        type: "item.started",
+        payload: {
+          item: canonicalCommandItem("inProgress", 6)
+        }
+      },
+      {
+        type: "item.completed",
+        payload: {
+          item: canonicalCommandItem(commandExitCode === 0 ? "completed" : "failed", 7)
         }
       },
       {
@@ -475,85 +635,13 @@ if (input.kind === "turnStart") {
         }
       },
       {
-        type: "file.changed",
+        type: "message.completed",
         payload: {
-          itemId: fileChangeItemId,
-          path: "${CODING_FILE_PATH}",
-          artifactId: "${CODING_ARTIFACT_ID}",
-          artifactRefs: ["${CODING_ARTIFACT_ID}"],
-          changeKind: "modified",
-          checkpointRef,
-          contentRef,
-          diffRef,
-          preview: "${CODING_FILE_PREVIEW}",
-          change: {
-            diff: [
-              { kind: "context", value: "export const codingWorkbenchSmoke = false;" },
-              { kind: "remove", value: "export const codingWorkbenchSmoke = false;" },
-              { kind: "add", value: "${CODING_FILE_PREVIEW}" }
-            ]
-          }
-        }
-      },
-      {
-        type: "patch.started",
-        payload: {
-          patchId,
-          path: "${CODING_FILE_PATH}"
-        }
-      },
-      {
-        type: "patch.applied",
-        payload: {
-          patchId,
-          path: "${CODING_FILE_PATH}",
-          diffRef
-        }
-      },
-      {
-        type: "command.started",
-        payload: {
-          commandId,
-          command: "${CODING_COMMAND_TEXT}",
-          cwd: "."
-        }
-      },
-      {
-        type: "command.output",
-        payload: {
-          commandId,
-          outputRef: commandOutputRef,
-          preview: commandPreview
-        }
-      },
-      {
-        type: "command.exited",
-        payload: {
-          commandId,
-          command: "${CODING_COMMAND_TEXT}",
-          exitCode: commandExitCode,
-          outputRef: commandOutputRef,
-          preview: commandPreview
-        }
-      },
-      {
-        type: "test.started",
-        payload: {
-          testRunId,
-          commandId,
-          suite: "${CODING_TEST_SUITE}"
-        }
-      },
-      {
-        type: "test.completed",
-        payload: {
-          testRunId,
-          commandId,
-          suite: "${CODING_TEST_SUITE}",
-          result: testResult,
-          passed: testPassed,
-          failed: testFailed,
-          outputRef: commandOutputRef
+          itemId: assistantItemId,
+          role: "assistant",
+          text: assistantText,
+          phase: "final_answer",
+          status: "completed"
         }
       },
       {
@@ -567,14 +655,14 @@ if (input.kind === "turnStart") {
   if (ledgerPath) {
     appendFileSync(ledgerPath, JSON.stringify({
       kind: "backendEvents",
-      sessionId: input.request?.session?.sessionId,
-      turnId: input.request?.turn?.turnId,
+      sessionId,
+      threadId,
+      turnId,
       executionIds: {
+        assistantItemId,
         toolCallId,
         fileChangeItemId,
-        patchId,
-        commandId,
-        testRunId
+        commandId
       },
       eventTypes: events.map((event) => event.type),
       recordedAt: new Date().toISOString()
@@ -663,18 +751,62 @@ function collectTraceJsonRpcMessages(traceMessages) {
     );
 }
 
+function readApplicationContextValue(additionalContext, key) {
+  const entry = additionalContext?.[key];
+  if (
+    !entry ||
+    entry.kind !== "application" ||
+    typeof entry.value !== "string"
+  ) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(entry.value);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function readTurnStartApplicationMetadata(message) {
+  return (
+    readApplicationContextValue(
+      message?.params?.additionalContext,
+      "metadata",
+    ) || {}
+  );
+}
+
+function readTurnStartInputText(message) {
+  const input = message?.params?.input;
+  if (!Array.isArray(input)) {
+    return "";
+  }
+  return input
+    .filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("");
+}
+
+function isCodingRecoveryPromptText(value) {
+  const text = String(value || "");
+  return (
+    text.includes(CODING_RECOVERY_PROMPT_INTRO) &&
+    text.includes(CODING_COMMAND_TEXT) &&
+    text.includes(CODING_COMMAND_FAILURE_PREVIEW)
+  );
+}
+
 function findCodingRecoveryTurnStart(messages) {
   return messages
-    .filter(
-      (message) => message?.method === APP_SERVER_METHOD_SESSION_TURN_START,
-    )
+    .filter((message) => message?.method === APP_SERVER_METHOD_TURN_START)
     .find((message) => {
-      const metadata =
-        message?.params?.runtimeOptions?.runtimeRequest?.metadata || {};
+      const metadata = readTurnStartApplicationMetadata(message);
       const harness = metadata.harness || {};
       return (
+        isCodingRecoveryPromptText(readTurnStartInputText(message)) &&
         harness.coding_workbench_recovery?.schemaVersion ===
-        "coding-workbench-recovery/v1"
+          "coding-workbench-recovery/v1"
       );
     });
 }
@@ -687,6 +819,12 @@ function collectArtifactSummaries(readResult) {
       ? detail.thread_read.artifacts
       : []),
   ];
+  for (const item of readThreadItems(readResult)) {
+    if (item?.type !== "fileChange") continue;
+    for (const change of Array.isArray(item.changes) ? item.changes : []) {
+      candidates.push({ id: item.id, path: change?.path });
+    }
+  }
   return candidates.filter(
     (artifact) => artifact && typeof artifact === "object",
   );
@@ -703,10 +841,66 @@ function collectToolCalls(readResult) {
     ...(Array.isArray(detail?.thread_read?.toolCalls)
       ? detail.thread_read.toolCalls
       : []),
+    ...readThreadItems(readResult)
+      .filter((item) => item?.type === "dynamicToolCall")
+      .map((item) => ({
+        ...item,
+        name: item.tool,
+        output: JSON.stringify(item.contentItems || []),
+      })),
   ];
   return candidates.filter((toolCall) => {
     return toolCall && typeof toolCall === "object";
   });
+}
+
+function readThreadItems(readResult) {
+  return (
+    Array.isArray(readResult?.thread?.turns) ? readResult.thread.turns : []
+  ).flatMap((turn) => (Array.isArray(turn?.items) ? turn.items : []));
+}
+
+function summarizeFileChangeBatches(readResult) {
+  return readThreadItems(readResult)
+    .filter((item) => item?.type === "fileChange")
+    .map((item) => ({
+      id: item.id,
+      status: item.status,
+      changes: Array.isArray(item.changes) ? item.changes : [],
+    }));
+}
+
+function hasCodexFileChangeBatch(readResult) {
+  return summarizeFileChangeBatches(readResult).some((item) => {
+    const changes = item.changes;
+    return (
+      item.status === "completed" &&
+      changes.length === 4 &&
+      changes[0]?.path === CODING_ADDED_FILE_PATH &&
+      changes[0]?.kind?.type === "add" &&
+      changes[1]?.path === CODING_DELETED_FILE_PATH &&
+      changes[1]?.kind?.type === "delete" &&
+      changes[2]?.path === CODING_FILE_PATH &&
+      changes[2]?.kind?.type === "update" &&
+      changes[3]?.path === CODING_MOVE_SOURCE_PATH &&
+      changes[3]?.kind?.type === "update" &&
+      changes[3]?.kind?.move_path === CODING_MOVE_DESTINATION_PATH &&
+      changes.every((change) => typeof change?.diff === "string")
+    );
+  });
+}
+
+function readLatestThreadTurnId(readResult) {
+  const turn = readLatestThreadTurn(readResult);
+  const turnId = turn?.id;
+  return typeof turnId === "string" && turnId.trim() ? turnId.trim() : null;
+}
+
+function readLatestThreadTurn(readResult) {
+  const turns = Array.isArray(readResult?.thread?.turns)
+    ? readResult.thread.turns
+    : [];
+  return turns.at(-1) || null;
 }
 
 function findFixtureToolCall(readResult) {
@@ -732,7 +926,10 @@ function hasToolTimelineProjection(readResult) {
   }
   const status = String(toolCall.status || "").toLowerCase();
   const output = String(
-    toolCall.output_preview || toolCall.outputPreview || toolCall.output || "",
+    toolCall.output_preview ||
+      toolCall.outputPreview ||
+      toolCall.output ||
+      JSON.stringify(toolCall.contentItems || ""),
   );
   return status === "completed" && output.includes(TOOL_OUTPUT_PREVIEW);
 }
@@ -864,24 +1061,53 @@ function hasCodeArtifactProjection(readResult) {
     const artifactPath = String(
       artifact.path || artifact.filePath || artifact.file_path || "",
     );
-    return artifactId === ARTIFACT_ID && artifactPath === ARTIFACT_PATH;
+    return (
+      (artifactId === ARTIFACT_ID && artifactPath === ARTIFACT_PATH) ||
+      artifactPath === ARTIFACT_PATH
+    );
   });
 }
 
 function hasCodingProjection(readResult) {
-  const serialized = JSON.stringify(readResult || {});
+  const items = readThreadItems(readResult);
   return (
-    serialized.includes(CODING_FILE_PATH) &&
-    serialized.includes(CODING_COMMAND_ID) &&
-    serialized.includes(CODING_TEST_RUN_ID) &&
-    (serialized.includes(CODING_COMMAND_SUCCESS_PREVIEW) ||
-      serialized.includes(CODING_COMMAND_FAILURE_PREVIEW))
+    items.some(
+      (item) =>
+        item?.type === "fileChange" &&
+        item.status === "completed" &&
+        item.changes?.some((change) => change?.path === CODING_FILE_PATH),
+    ) &&
+    items.some(
+      (item) =>
+        item?.type === "commandExecution" &&
+        (item.status === "completed" || item.status === "failed") &&
+        String(item.command || "").includes(CODING_COMMAND_TEXT) &&
+        String(item.aggregatedOutput || "").includes("codingWorkbenchSmoke"),
+    )
   );
 }
 
 function hasCodingSuccessProjection(readResult) {
-  return JSON.stringify(readResult || {}).includes(
-    CODING_COMMAND_SUCCESS_PREVIEW,
+  const turn = readLatestThreadTurn(readResult);
+  const items = Array.isArray(turn?.items) ? turn.items : [];
+  return (
+    turn?.status === "completed" &&
+    items.some(
+      (item) =>
+        item?.type === "fileChange" &&
+        item.status === "completed" &&
+        item.changes?.some((change) => change?.path === CODING_FILE_PATH),
+    ) &&
+    items.some(
+      (item) =>
+        item?.type === "commandExecution" &&
+        item.status === "completed" &&
+        item.exitCode === 0 &&
+        String(item.command || "").includes(CODING_COMMAND_TEXT) &&
+        String(item.aggregatedOutput || "").includes(
+          CODING_COMMAND_SUCCESS_PREVIEW,
+        ),
+    )
   );
 }
 
@@ -1172,20 +1398,91 @@ async function sendPromptFromGui(page, options, prompt) {
   };
 }
 
+async function startFileChangeBatchTurnFromGui(
+  page,
+  options,
+  prompt,
+  decision,
+) {
+  const beforeLedgerCount = readJsonl(options.backendLedgerPath || "").length;
+  const guiInput = await sendPromptFromGui(page, options, prompt);
+  const startedAt = Date.now();
+  let pendingEntry = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const ledger = readJsonl(options.backendLedgerPath || "");
+    pendingEntry = ledger
+      .slice(beforeLedgerCount)
+      .find(
+        (entry) =>
+          entry?.kind === "fileChangeGateBEvents" && entry?.phase === "pending",
+      );
+    if (
+      pendingEntry?.turnId &&
+      pendingEntry?.itemId &&
+      pendingEntry?.requestId
+    ) {
+      break;
+    }
+    await sleep(options.intervalMs);
+  }
+  assert(
+    pendingEntry?.turnId && pendingEntry?.itemId && pendingEntry?.requestId,
+    `FileChange ${decision} 未到达 backend pending`,
+  );
+  const identity = {
+    threadId: pendingEntry.threadId,
+    turnId: pendingEntry.turnId,
+    itemId: pendingEntry.itemId,
+    requestId: pendingEntry.requestId,
+    prompt: "Apply the exact Add/Delete/Update/Move file batch?",
+  };
+  const pendingGui = await waitForFileChangeApprovalPending(
+    page,
+    options,
+    identity,
+  );
+  const click = await clickFileChangeApprovalDecision(
+    page,
+    options,
+    decision,
+    identity,
+  );
+  const terminal = await waitForFileChangeTerminalReadModel(page, options, {
+    ...identity,
+    decision,
+    invokeThreadRead: (targetPage, params) =>
+      invokeAppServerFromPage(
+        targetPage,
+        APP_SERVER_METHOD_THREAD_READ,
+        params,
+      ),
+  });
+  const terminalGui = await waitForFileChangeTerminalGui(page, options, {
+    status: decision === "cancel" ? "inProgress" : "declined",
+  });
+  return sanitizeJson({
+    prompt,
+    decision,
+    guiInput,
+    identity,
+    pendingGui,
+    click,
+    terminal,
+    terminalGui,
+  });
+}
+
 function summarizeListVisibility(listResult) {
-  const sessions = Array.isArray(listResult?.result?.sessions)
-    ? listResult.result.sessions
+  const threads = Array.isArray(listResult?.result?.data)
+    ? listResult.result.data
     : [];
-  const matchingSession = sessions.find(
-    (session) =>
-      session?.sessionId === SESSION_ID ||
-      session?.session_id === SESSION_ID ||
-      session?.id === SESSION_ID,
+  const matchingThread = threads.find(
+    (thread) => thread?.id === THREAD_ID && thread?.sessionId === SESSION_ID,
   );
   return {
-    count: sessions.length,
-    containsFixtureSession: Boolean(matchingSession),
-    fixtureSession: matchingSession ?? null,
+    count: threads.length,
+    containsFixtureSession: Boolean(matchingThread),
+    fixtureSession: matchingThread ?? null,
   };
 }
 
@@ -1356,13 +1653,11 @@ function summarizeCodeArtifactRead(readResult, requests = []) {
       ? readResult.detail.thread_read.tool_calls.length
       : null,
     codingProjectionPersisted: hasCodingProjection(readResult),
+    codexFileChangeBatchPersisted: hasCodexFileChangeBatch(readResult),
+    fileChangeBatches: summarizeFileChangeBatches(readResult),
     toolTimelineProjectionPersisted: hasToolTimelineProjection(readResult),
     fixtureToolCall: findFixtureToolCall(readResult) ?? null,
-    latestTurnStatus:
-      readResult?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
-      readResult?.detail?.thread_read?.status ??
-      readResult?.detail?.status ??
-      null,
+    latestTurnStatus: readLatestThreadTurn(readResult)?.status ?? null,
     artifactProjectionPersisted: hasCodeArtifactProjection(readResult),
     detailTextIncludesArtifact: JSON.stringify(readResult || {}).includes(
       ARTIFACT_ID,
@@ -1380,14 +1675,15 @@ async function waitForCodeArtifactReadModel(
   while (Date.now() - startedAt < timeoutMs) {
     let read = null;
     try {
-      requests.push({ method: APP_SERVER_METHOD_SESSION_READ, params: {} });
+      const params = {
+        threadId: THREAD_ID,
+        includeTurns: true,
+      };
+      requests.push({ method: APP_SERVER_METHOD_THREAD_READ, params });
       read = await invokeAppServerFromPage(
         page,
-        APP_SERVER_METHOD_SESSION_READ,
-        {
-          sessionId: SESSION_ID,
-          historyLimit: 100,
-        },
+        APP_SERVER_METHOD_THREAD_READ,
+        params,
       );
     } catch (error) {
       if (!isTransientPageEvaluationError(error)) {
@@ -1415,47 +1711,47 @@ async function waitForCodeArtifactReadModel(
 
   throw new Error(
     `代码产物会话未完成，或未持久化 artifact.snapshot / tool_calls / coding facts: ${JSON.stringify(
-      summarizeCodeArtifactRead(lastRead),
+      summarizeCodeArtifactRead(lastRead, requests),
     )}`,
   );
 }
 
-async function startCodeArtifactSession(page, workspaceId, requests) {
+async function startCodeArtifactSession(page, workspace, requests) {
   async function call(method, params = {}) {
     requests?.push({ method, params });
     return await invokeAppServerFromPage(page, method, params);
   }
 
-  const session = await call(APP_SERVER_METHOD_SESSION_START, {
+  const session = await call(APP_SERVER_METHOD_THREAD_START, {
+    model: "fixture-model",
+    modelProvider: "fixture-provider",
+    serviceName: SESSION_TITLE,
+    threadSource: "appServer",
+    historyMode: "paginated",
+    cwd: workspace.rootPath || undefined,
+    runtimeWorkspaceRoots: workspace.rootPath
+      ? [workspace.rootPath]
+      : undefined,
+  });
+  const thread = session.result?.thread;
+  const sessionId = String(thread?.sessionId || "").trim();
+  const threadId = String(thread?.id || "").trim();
+  assert(sessionId, "thread/start 未返回 canonical sessionId");
+  assert(threadId, "thread/start 未返回 canonical thread.id");
+  SESSION_ID = sessionId;
+  THREAD_ID = threadId;
+  TURN_ID = `pending-turn-${threadId}`;
+
+  await notifyAgentRuntimeSessionChanged(page, workspace.workspaceId);
+
+  return {
+    session: session.result,
     sessionId: SESSION_ID,
     threadId: THREAD_ID,
-    appId: "desktop",
-    workspaceId,
-    businessObjectRef: {
-      kind: "agent.session",
-      id: `agent-session:${workspaceId}:${SESSION_ID}`,
-      title: SESSION_TITLE,
-      metadata: {
-        title: SESSION_TITLE,
-        executionStrategy: "react",
-        runStartHooks: false,
-        harness: {
-          hiddenFromUserRecents: false,
-          source: "smoke:code-artifact-workbench-electron-fixture",
-        },
-      },
-    },
-  });
+  };
+}
 
-  await call(APP_SERVER_METHOD_SESSION_UPDATE, {
-    sessionId: SESSION_ID,
-    title: SESSION_TITLE,
-    providerSelector: "fixture-provider",
-    providerName: "fixture-provider",
-    modelName: "fixture-model",
-    executionStrategy: "react",
-  });
-
+async function notifyAgentRuntimeSessionChanged(page, workspaceId) {
   await page.evaluate(
     ({ sessionId, workspaceId }) => {
       window.dispatchEvent(
@@ -1467,58 +1763,45 @@ async function startCodeArtifactSession(page, workspaceId, requests) {
           },
         }),
       );
+      window.dispatchEvent(new Event("focus"));
     },
     { sessionId: SESSION_ID, workspaceId },
   );
-
-  return {
-    session: session.result,
-  };
 }
 
-async function createCodeArtifactSession(page, options, workspaceId) {
+async function createCodeArtifactSession(page, options, workspace) {
   const requests = [];
 
-  const session = await startCodeArtifactSession(page, workspaceId, requests);
+  const session = await startCodeArtifactSession(page, workspace, requests);
 
   async function call(method, params = {}) {
     requests.push({ method, params });
     return await invokeAppServerFromPage(page, method, params);
   }
 
-  const turn = await call(APP_SERVER_METHOD_SESSION_TURN_START, {
-    sessionId: SESSION_ID,
-    turnId: TURN_ID,
-    input: {
-      text: USER_PROMPT,
+  const turn = await call(APP_SERVER_METHOD_TURN_START, {
+    threadId: THREAD_ID,
+    clientUserMessageId: `code-artifact-workbench-${Date.now()}`,
+    input: [{ type: "text", text: USER_PROMPT }],
+    model: "fixture-model",
+    approvalPolicy: "never",
+    sandboxPolicy: "workspace-write",
+    responsesapiClientMetadata: {
+      source: "code-artifact-workbench-electron-fixture",
     },
-    runtimeOptions: {
-      stream: true,
-      eventName: `code_artifact_workbench_${TURN_ID}`,
-      runtimeRequest: {
-        providerPreference: "fixture-provider",
-        modelPreference: "fixture-model",
-        providerConfig: {
-          providerName: "fixture-provider",
-          modelName: "fixture-model",
-        },
-        approvalPolicy: "never",
-        sandboxPolicy: "workspace-write",
-        executionStrategy: "react",
-        metadata: {
-          source: "code-artifact-workbench-electron-fixture",
-        },
-      },
-    },
-    queueIfBusy: false,
-    skipPreSubmitResume: true,
   });
+  const turnId = String(turn.result?.turn?.id || "").trim();
+  assert(turnId, "turn/start 未返回 canonical turn.id");
+  TURN_ID = turnId;
 
   const read = await waitForCodeArtifactReadModel(page, options, { requests });
 
   return {
     session: session.session,
     turn: turn.result,
+    sessionId: SESSION_ID,
+    threadId: THREAD_ID,
+    turnId: TURN_ID,
     read,
     requests,
   };
@@ -1581,7 +1864,7 @@ async function waitForGuiSessionVisible(page, options) {
               const entries = JSON.parse(traceRaw || "[]");
               return Array.isArray(entries)
                 ? entries.filter((entry) =>
-                    JSON.stringify(entry).includes("agentSession/list"),
+                    JSON.stringify(entry).includes("thread/list"),
                   ).length
                 : 0;
             } catch {
@@ -2084,7 +2367,12 @@ async function collectCodingWorkbenchGuiEvidence(
     {
       key: "changes",
       panelTestId: "canvas-workbench-panel-changes",
-      expectedTexts: [CODING_FILE_PATH, CODING_FILE_PREVIEW],
+      expectedTexts: [
+        CODING_FILE_DISPLAY_PATH,
+        "src/added.ts",
+        "src/deleted.ts",
+        "src/source.ts -> src/destination.ts",
+      ],
     },
     {
       key: "outputs",
@@ -2094,7 +2382,11 @@ async function collectCodingWorkbenchGuiEvidence(
     {
       key: "logs",
       panelTestId: "canvas-workbench-panel-logs",
-      expectedTexts: [CODING_FILE_PATH, CODING_COMMAND_TEXT, CODING_TEST_SUITE],
+      expectedTexts: [
+        CODING_FILE_DISPLAY_PATH,
+        CODING_COMMAND_TEXT,
+        CODING_TEST_SUITE,
+      ],
     },
   ];
   const evidence = {};
@@ -2145,6 +2437,20 @@ async function collectCodingWorkbenchGuiEvidence(
         ).find(isVisible);
         if (tabButton instanceof HTMLElement) {
           tabButton.click();
+          if (key === "changes") {
+            const expandButton = Array.from(
+              document.querySelectorAll(
+                '[data-testid="file-changes-summary-toggle"]',
+              ),
+            ).find(
+              (candidate) =>
+                isVisible(candidate) &&
+                candidate.getAttribute("aria-expanded") !== "true",
+            );
+            if (expandButton instanceof HTMLElement) {
+              expandButton.click();
+            }
+          }
           return true;
         }
         return false;
@@ -2220,15 +2526,19 @@ async function collectCodingWorkbenchGuiEvidence(
           ).find(isVisible);
           const panelText = panel?.textContent || "";
           const bodyText = document.body?.innerText || "";
+          const evidenceText =
+            panelTestId === "canvas-workbench-panel-changes"
+              ? bodyText
+              : panelText;
           return {
             clicked: true,
             panelVisible: Boolean(panel),
             expectedTexts: expectedTexts.map((text) => ({
               text,
-              present: panelText.includes(text),
+              present: evidenceText.includes(text),
             })),
             expectedTextsPresent: expectedTexts.every((text) =>
-              panelText.includes(text),
+              evidenceText.includes(text),
             ),
             bodyText,
           };
@@ -2252,6 +2562,58 @@ async function collectCodingWorkbenchGuiEvidence(
   }
 
   return evidence;
+}
+
+async function waitForCodingRecoveryGuiTerminal(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ outputPreview }) => {
+        const bodyText = document.body?.innerText || "";
+        const outputPanel = document.querySelector(
+          '[data-testid="coding-workbench-output-projection"]',
+        );
+        const outputText = outputPanel?.textContent || "";
+        const generating =
+          bodyText.includes("正在生成回复") ||
+          bodyText.includes("Generating response");
+        return {
+          generating,
+          hasSuccessPreview:
+            outputText.includes(outputPreview) ||
+            bodyText.includes(outputPreview),
+          hasRecoveryAssistantText: bodyText.includes(
+            "已继续修复 coding-target，并通过 npm test -- coding-target。",
+          ),
+          outputPanelVisible: Boolean(outputPanel),
+          bodyText,
+        };
+      },
+      { outputPreview: CODING_COMMAND_SUCCESS_PREVIEW },
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      !snapshot.generating &&
+      snapshot.hasSuccessPreview &&
+      snapshot.hasRecoveryAssistantText
+    ) {
+      return snapshot;
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `恢复回合已在 App Server 完成，但 GUI 未收口到成功终态: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
 }
 
 async function clickCodingWorkbenchRecovery(page, options) {
@@ -2421,7 +2783,7 @@ async function clickCodingWorkbenchRecovery(page, options) {
     );
     const traceMessages = readTraceMessages(traceRaw);
     const turnStartMessages = collectTraceJsonRpcMessages(traceMessages).filter(
-      (message) => message.method === APP_SERVER_METHOD_SESSION_TURN_START,
+      (message) => message.method === APP_SERVER_METHOD_TURN_START,
     );
     const recoveryTurnStart = findCodingRecoveryTurnStart(turnStartMessages);
     lastTrace = {
@@ -2430,14 +2792,12 @@ async function clickCodingWorkbenchRecovery(page, options) {
       recoveryTurnStart: recoveryTurnStart || null,
     };
     if (recoveryTurnStart) {
-      const metadata =
-        recoveryTurnStart.params?.runtimeOptions?.runtimeRequest?.metadata ||
-        {};
+      const metadata = readTurnStartApplicationMetadata(recoveryTurnStart);
       const recovery = metadata.harness?.coding_workbench_recovery || null;
       return sanitizeJson({
         clicked: true,
         panel: lastSnapshot,
-        inputText: recoveryTurnStart.params?.input?.text || null,
+        inputText: readTurnStartInputText(recoveryTurnStart) || null,
         recovery,
       });
     }
@@ -2554,6 +2914,7 @@ async function run() {
           runtimeEnv.backendLedgerPath,
         ]),
         APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
+        CODE_ARTIFACT_WORKBENCH_FIXTURE_SCENARIO: options.scenario,
         ELECTRON_E2E_USER_DATA_DIR: runtimeEnv.electronUserDataDir,
         LIME_ELECTRON_E2E: "1",
         LIME_ELECTRON_BRAND_DEV_APP: "0",
@@ -2598,17 +2959,23 @@ async function run() {
 
     let sessionCreation = null;
 
-    if (options.scenario === "gui-coding-input") {
+    if (
+      options.scenario === "gui-coding-input" ||
+      options.scenario === FILE_CHANGE_BATCH_SCENARIO
+    ) {
       logStage("start-empty-code-artifact-session");
       const requests = [];
       const startedSession = await startCodeArtifactSession(
         page,
-        workspace.workspaceId,
+        workspace,
         requests,
       );
       sessionCreation = {
         session: startedSession.session,
         turn: null,
+        sessionId: startedSession.sessionId,
+        threadId: startedSession.threadId,
+        turnId: null,
         read: null,
         requests,
       };
@@ -2617,9 +2984,12 @@ async function run() {
       sessionCreation = await createCodeArtifactSession(
         page,
         options,
-        workspace.workspaceId,
+        workspace,
       );
     }
+    summary.sessionId = SESSION_ID;
+    summary.threadId = THREAD_ID;
+    summary.turnId = TURN_ID;
 
     logStage("bind-gui-workspace");
     summary.guiWorkspaceBinding = sanitizeJson(
@@ -2629,18 +2999,18 @@ async function run() {
     logStage("verify-session-list");
     const unscopedList = await invokeAppServerFromPage(
       page,
-      APP_SERVER_METHOD_SESSION_LIST,
+      APP_SERVER_METHOD_THREAD_LIST,
       {
-        includeArchived: true,
+        archived: false,
         limit: 20,
       },
     );
     const workspaceList = await invokeAppServerFromPage(
       page,
-      APP_SERVER_METHOD_SESSION_LIST,
+      APP_SERVER_METHOD_THREAD_LIST,
       {
-        includeArchived: true,
-        workspaceId: workspace.workspaceId,
+        archived: false,
+        cwd: workspace.rootPath,
         limit: 20,
       },
     );
@@ -2677,7 +3047,49 @@ async function run() {
       await clearInvokeBuffers(page),
     );
 
-    if (options.scenario === "gui-coding-input") {
+    if (options.scenario === FILE_CHANGE_BATCH_SCENARIO) {
+      summary.fileChangeBatchLifecycleTraceEnabled = sanitizeJson(
+        await page.evaluate(() => {
+          window.localStorage.setItem("lime:debug:claw-trace-enabled:v1", "on");
+          window.localStorage.removeItem(
+            "lime:debug:app-server-server-request-lifecycle:v1",
+          );
+          return {
+            enabled:
+              window.localStorage.getItem(
+                "lime:debug:claw-trace-enabled:v1",
+              ) === "on",
+            lifecycleCleared: true,
+          };
+        }),
+      );
+      const fileChangeOptions = {
+        ...options,
+        backendLedgerPath: runtimeEnv.backendLedgerPath,
+      };
+      logStage("file-change-batch-decline");
+      summary.fileChangeBatchDecline = await startFileChangeBatchTurnFromGui(
+        page,
+        fileChangeOptions,
+        FILE_CHANGE_BATCH_DECLINE_PROMPT,
+        "decline",
+      );
+      logStage("file-change-batch-cancel");
+      summary.fileChangeBatchCancel = await startFileChangeBatchTurnFromGui(
+        page,
+        fileChangeOptions,
+        FILE_CHANGE_BATCH_CANCEL_PROMPT,
+        "cancel",
+      );
+      const finalRead = await invokeAppServerFromPage(
+        page,
+        APP_SERVER_METHOD_THREAD_READ,
+        { threadId: THREAD_ID, includeTurns: true },
+      );
+      sessionCreation.read = finalRead.result;
+      sessionCreation.turnId = summary.fileChangeBatchDecline.identity.turnId;
+      summary.fileChangeBatchFinalRead = sanitizeJson(finalRead.result);
+    } else if (options.scenario === "gui-coding-input") {
       logStage("send-coding-prompt-from-gui");
       summary.guiCodingInput = sanitizeJson(
         await sendPromptFromGui(page, options, GUI_CODING_PROMPT),
@@ -2688,30 +3100,164 @@ async function run() {
         timeoutMs: options.timeoutMs,
       });
       logStage("open-session-after-gui-coding-input");
+      summary.guiSessionOpenAfterInputClick = sanitizeJson(
+        await openFixtureSessionFromSidebar(page, options),
+      );
       summary.guiSessionOpenAfterInput = sanitizeJson(
         await waitForFixtureSessionOpenedFromSidebar(page, options),
       );
     }
 
+    const canonicalTurnId =
+      sessionCreation.turnId || readLatestThreadTurnId(sessionCreation.read);
+    if (canonicalTurnId) {
+      TURN_ID = canonicalTurnId;
+    }
     summary.sessionCreation = sanitizeJson({
       ...summarizeCodeArtifactRead(
         sessionCreation.read,
         sessionCreation.requests,
       ),
-      sessionId:
-        sessionCreation.session?.session?.sessionId ??
-        sessionCreation.session?.session_id ??
-        SESSION_ID,
-      turnId:
-        sessionCreation.turn?.turn?.turnId ??
-        sessionCreation.turn?.turn?.turn_id ??
-        null,
+      sessionId: sessionCreation.sessionId,
+      threadId: sessionCreation.threadId,
+      turnId: canonicalTurnId,
       guiPromptSubmitted:
         options.scenario === "gui-coding-input"
           ? summary.guiCodingInput?.clicked?.clicked === true &&
             summary.guiCodingInput?.afterFill?.promptVisibleInTextarea === true
           : null,
     });
+
+    if (options.scenario === FILE_CHANGE_BATCH_SCENARIO) {
+      const declineValidation =
+        summary.fileChangeBatchDecline?.terminal?.validation;
+      const cancelValidation =
+        summary.fileChangeBatchCancel?.terminal?.validation;
+      const lifecycleEntries = await page.evaluate(() => {
+        try {
+          const parsed = JSON.parse(
+            window.localStorage.getItem(
+              "lime:debug:app-server-server-request-lifecycle:v1",
+            ) || "[]",
+          );
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      });
+      const traceRaw = await page.evaluate(() =>
+        window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+      );
+      const errorRaw = await page.evaluate(() =>
+        window.localStorage.getItem("lime_invoke_error_buffer_v1"),
+      );
+      const traceMessages = readTraceMessages(traceRaw);
+      const fileChangeLifecycle = [
+        summary.fileChangeBatchDecline,
+        summary.fileChangeBatchCancel,
+      ].map((entry) => {
+        const request = lifecycleEntries.find(
+          (candidate) =>
+            candidate?.kind === "request" &&
+            candidate?.method === "item/fileChange/requestApproval" &&
+            candidate?.threadId === entry?.identity?.threadId &&
+            candidate?.turnId === entry?.identity?.turnId &&
+            candidate?.itemId === entry?.identity?.itemId,
+        );
+        const response = lifecycleEntries.find(
+          (candidate) =>
+            candidate?.kind === "response" && candidate?.id === request?.id,
+        );
+        const resolved = lifecycleEntries.find(
+          (candidate) =>
+            candidate?.kind === "resolved" && candidate?.id === request?.id,
+        );
+        return { request, response, resolved };
+      });
+      const backendLedger = readJsonl(runtimeEnv.backendLedgerPath);
+      const backendDecisions = backendLedger
+        .filter(
+          (entry) =>
+            entry?.kind === "fileChangeGateBEvents" &&
+            ["decline", "cancel"].includes(entry?.decision),
+        )
+        .map((entry) => entry.decision);
+      const cancelBackendEntry = backendLedger.find(
+        (entry) =>
+          entry?.kind === "fileChangeGateBEvents" &&
+          entry?.decision === "cancel",
+      );
+      const electronIpcTrace = traceMessages.filter(
+        (entry) =>
+          entry?.command === APP_SERVER_HANDLE_JSON_LINES_COMMAND &&
+          entry?.transport === "electron-ipc",
+      );
+      summary.fileChangeBatchServerRequestLifecycle =
+        sanitizeJson(fileChangeLifecycle);
+      summary.fileChangeBatchBackendDecisions = backendDecisions;
+      summary.fileChangeBatchTraceMethods =
+        collectTraceRequestMethods(traceMessages);
+      summary.assertions = {
+        electronPreloadBridge: rendererSnapshot.electron === true,
+        electronIpcAppServerBridge: electronIpcTrace.length > 0,
+        typedFileChangeServerRequests: fileChangeLifecycle.every(
+          ({ request, response, resolved }, index) =>
+            request?.method === "item/fileChange/requestApproval" &&
+            response?.decision === (index === 0 ? "decline" : "cancel") &&
+            resolved?.id === request.id,
+        ),
+        backendDecisionsReceived:
+          backendDecisions.includes("decline") &&
+          backendDecisions.includes("cancel"),
+        declineExactBatch: declineValidation?.valid === true,
+        declineTurnCompleted:
+          summary.fileChangeBatchDecline?.terminal?.turnStatus === "completed",
+        declineFileStatus:
+          summary.fileChangeBatchDecline?.terminal?.expectedStatus ===
+          "declined",
+        cancelExactBatch: cancelValidation?.valid === true,
+        cancelTurnInterrupted:
+          summary.fileChangeBatchCancel?.terminal?.turnStatus === "interrupted",
+        cancelFileStatus:
+          summary.fileChangeBatchCancel?.terminal?.expectedStatus ===
+          "inProgress",
+        cancelDoesNotSynthesizeFileTerminal:
+          !cancelBackendEntry?.eventTypes?.some((eventType) =>
+            ["patch.applied", "patch.declined", "patch.failed"].includes(
+              eventType,
+            ),
+          ),
+        terminalGuiExactBatch:
+          summary.fileChangeBatchDecline?.terminalGui?.rowCount === 4 &&
+          summary.fileChangeBatchDecline?.terminalGui?.status === "declined" &&
+          summary.fileChangeBatchCancel?.terminalGui?.rowCount === 4 &&
+          summary.fileChangeBatchCancel?.terminalGui?.status === "inProgress",
+        pendingCleared:
+          summary.fileChangeBatchDecline?.terminal?.unexpectedPendingItemIds
+            ?.length === 0 &&
+          summary.fileChangeBatchCancel?.terminal?.unexpectedPendingItemIds
+            ?.length === 0,
+        noInvokeErrors: !errorRaw,
+      };
+      for (const [key, passed] of Object.entries(summary.assertions)) {
+        assert(passed, `断言失败: ${key}`);
+      }
+      summary.consoleErrors = consoleErrors;
+      summary.pageErrors = pageErrors;
+      assertNoRendererErrors(consoleErrors, pageErrors);
+      summary.ok = true;
+      summary.completedAt = new Date().toISOString();
+      await withTimeout(
+        page.screenshot({ path: screenshotPath, fullPage: true }),
+        FINAL_PAGE_OPERATION_TIMEOUT_MS,
+        "保存 FileChange Gate B 截图",
+      );
+      summary.screenshot = screenshotPath;
+      writeJsonFile(summaryPath, summary);
+      console.log(`${LOG_PREFIX} summary=${summaryPath}`);
+      console.log(`${LOG_PREFIX} pass session=${SESSION_ID}`);
+      return;
+    }
 
     logStage("wait-session-hydrated");
     const sessionHydrated = await waitForSessionHydrated(page, options);
@@ -2749,10 +3295,11 @@ async function run() {
           requireCodingSuccess: true,
         }),
       );
-      logStage("open-session-after-recovery");
-      summary.guiSessionOpenAfterRecoveryClick = sanitizeJson(
-        await openFixtureSessionFromSidebar(page, options),
+      logStage("wait-gui-recovery-terminal");
+      summary.guiRecoveryTerminal = sanitizeJson(
+        await waitForCodingRecoveryGuiTerminal(page, options),
       );
+      logStage("verify-session-after-recovery");
       summary.guiSessionOpenAfterRecovery = sanitizeJson(
         await waitForFixtureSessionOpenedFromSidebar(page, options),
       );
@@ -2809,8 +3356,7 @@ async function run() {
     const backendRecoveryTurnStart = backendLedger.find(
       (entry) =>
         entry.kind === "turnStart" &&
-        entry.requestMetadata?.harness?.coding_workbench_recovery
-          ?.schemaVersion === "coding-workbench-recovery/v1",
+        isCodingRecoveryPromptText(entry.inputText),
     );
     const backendRecoveryEvents = backendLedger.find(
       (entry) =>
@@ -2823,13 +3369,21 @@ async function run() {
     const traceRecoveryTurnStart = findCodingRecoveryTurnStart(
       collectTraceJsonRpcMessages(traceMessages),
     );
-    const traceRecoveryMetadata =
-      traceRecoveryTurnStart?.params?.runtimeOptions?.runtimeRequest
-        ?.metadata || {};
+    const traceRecoveryMetadata = readTurnStartApplicationMetadata(
+      traceRecoveryTurnStart,
+    );
     const traceRecoveryContext =
       traceRecoveryMetadata.harness?.coding_workbench_recovery || null;
-    const capturedRecoveryContext =
-      summary.codingRecoveryEvidence?.recovery || null;
+    const guiRecoveryContext = summary.codingRecoveryEvidence?.recovery || null;
+    const guiRecoveryCommandId = String(
+      guiRecoveryContext?.sourceIds?.commandId || "",
+    ).trim();
+    const guiRecoveryTestRunId = String(
+      guiRecoveryContext?.sourceIds?.testRunId || "",
+    ).trim();
+    const traceRecoveryThreadId = String(
+      traceRecoveryTurnStart?.params?.threadId || "",
+    ).trim();
     const backendTurnStartObserved = backendLedger.some(
       (entry) => entry.kind === "turnStart",
     );
@@ -2844,11 +3398,8 @@ async function run() {
       ),
     );
     const appServerJsonRpcObserved =
-      appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) ||
-      backendTurnStartObserved ||
-      capturedRecoveryContext?.schemaVersion ===
-        "coding-workbench-recovery/v1" ||
-      traceRecoveryContext?.schemaVersion === "coding-workbench-recovery/v1";
+      appServerRequestMethods.includes(APP_SERVER_METHOD_TURN_START) ||
+      backendTurnStartObserved;
     const historicalOperationalDetailsHidden =
       hasHistoricalOperationalDetailsHidden(summary.timelineProcessEvidence);
     const codingOutputsSnapshot =
@@ -2863,17 +3414,41 @@ async function run() {
       options.scenario === "gui-coding-input" &&
       codingOutputsBodyText.includes(CODING_FILE_PATH) &&
       codingOutputsBodyText.includes(CODING_FILE_PREVIEW);
+    const recoveryTurns = Array.isArray(summary.recoveryRead?.thread?.turns)
+      ? summary.recoveryRead.thread.turns
+      : [];
+    const canonicalItemLifecycleClean =
+      recoveryTurns.length >= 2 &&
+      recoveryTurns.every((turn) => {
+        const items = Array.isArray(turn?.items) ? turn.items : [];
+        const itemIds = items
+          .map((item) => String(item?.id || "").trim())
+          .filter(Boolean);
+        return (
+          turn?.status === "completed" &&
+          items.filter((item) => item?.type === "agentMessage").length === 1 &&
+          new Set(itemIds).size === itemIds.length &&
+          items.every((item) => item?.status !== "inProgress")
+        );
+      });
     const assertions = {
       electronPreloadBridge: rendererSnapshot.electron === true,
       appServerJsonRpcUsed: appServerJsonRpcObserved,
       externalFixtureBackendUsed: backendTurnStartObserved,
+      canonicalSessionIdentity:
+        summary.sessionCreation?.sessionId === SESSION_ID &&
+        summary.sessionCreation?.threadId === THREAD_ID &&
+        typeof summary.sessionCreation?.turnId === "string" &&
+        summary.sessionCreation.turnId.length > 0,
       liveProviderNotUsed: backendLedger.every(
         (entry) =>
           entry.kind !== "turnStart" ||
+          entry.requestMetadata?.harness?.coding_workbench_recovery
+            ?.schemaVersion === "coding-workbench-recovery/v1" ||
           ((!entry.providerPreference ||
             entry.providerPreference === "fixture-provider") &&
             (!entry.modelPreference ||
-              entry.modelPreference === "fixture-model")),
+              entry.modelPreference.trim().length > 0)),
       ),
       artifactPersisted:
         summary.sessionCreation?.artifactProjectionPersisted === true,
@@ -2881,6 +3456,8 @@ async function run() {
         summary.sessionCreation?.toolTimelineProjectionPersisted === true,
       codingProjectionPersisted:
         summary.sessionCreation?.codingProjectionPersisted === true,
+      codexFileChangeBatchPersisted:
+        summary.sessionCreation?.codexFileChangeBatchPersisted === true,
       guiHydratedSession: hasHydratedSessionSnapshot(summary.sessionHydrated),
       workbenchOpened:
         summary.workbench?.snapshot?.hasWorkbenchSidebar === true ||
@@ -2900,46 +3477,73 @@ async function run() {
         summary.codingWorkbenchGuiEvidence?.changes?.expectedTextsPresent ===
           true,
       codingOutputsEvidencePresent:
-        codingOutputsVisibleEvidence || codingOutputsRecoveredBodyEvidence,
+        options.scenario === "direct-session"
+          ? summary.sessionCreation?.codingProjectionPersisted === true &&
+            historicalOperationalDetailsHidden
+          : codingOutputsVisibleEvidence || codingOutputsRecoveredBodyEvidence,
       codingLogsEvidencePresent:
-        summary.codingWorkbenchGuiEvidence?.logs?.panelVisible === true &&
-        summary.codingWorkbenchGuiEvidence?.logs?.expectedTextsPresent === true,
+        options.scenario === "direct-session"
+          ? historicalOperationalDetailsHidden
+          : summary.codingWorkbenchGuiEvidence?.logs?.panelVisible === true &&
+            summary.codingWorkbenchGuiEvidence?.logs?.expectedTextsPresent ===
+              true,
       codingRecoveryGuiSubmitted:
         options.scenario !== "gui-coding-input" ||
         (summary.codingRecoveryEvidence?.clicked === true &&
-          summary.codingRecoveryEvidence?.recovery?.schemaVersion ===
+          guiRecoveryContext?.schemaVersion ===
             "coding-workbench-recovery/v1" &&
-          summary.codingRecoveryEvidence?.recovery?.sourceIds?.commandId ===
-            CODING_COMMAND_ID &&
-          summary.codingRecoveryEvidence?.recovery?.sourceIds?.testRunId ===
-            CODING_TEST_RUN_ID),
+          guiRecoveryCommandId.length > 0 &&
+          guiRecoveryTestRunId.length > 0),
       codingRecoveryReachedBackend:
         options.scenario !== "gui-coding-input" ||
-        (backendRecoveryTurnStart?.requestMetadata?.harness
-          ?.coding_workbench_recovery?.schemaVersion ===
-          "coding-workbench-recovery/v1" &&
+        (isCodingRecoveryPromptText(backendRecoveryTurnStart?.inputText) &&
+          backendRecoveryTurnStart?.requestMetadata?.harness
+            ?.coding_workbench_recovery?.schemaVersion ===
+            "coding-workbench-recovery/v1" &&
           backendRecoveryTurnStart?.requestMetadata?.harness
             ?.coding_workbench_recovery?.sourceIds?.commandId ===
-            CODING_COMMAND_ID &&
+            guiRecoveryCommandId &&
           backendRecoveryTurnStart?.requestMetadata?.harness
             ?.coding_workbench_recovery?.sourceIds?.testRunId ===
-            CODING_TEST_RUN_ID) ||
-        (capturedRecoveryContext?.schemaVersion ===
-          "coding-workbench-recovery/v1" &&
-          capturedRecoveryContext?.sourceIds?.commandId === CODING_COMMAND_ID &&
-          capturedRecoveryContext?.sourceIds?.testRunId ===
-            CODING_TEST_RUN_ID) ||
-        (traceRecoveryContext?.schemaVersion ===
-          "coding-workbench-recovery/v1" &&
-          traceRecoveryContext?.sourceIds?.commandId === CODING_COMMAND_ID &&
-          traceRecoveryContext?.sourceIds?.testRunId === CODING_TEST_RUN_ID),
+            guiRecoveryTestRunId),
+      codingRecoveryTraceWire:
+        options.scenario !== "gui-coding-input" ||
+        (isCodingRecoveryPromptText(
+          readTurnStartInputText(traceRecoveryTurnStart),
+        ) &&
+          traceRecoveryContext?.schemaVersion ===
+            "coding-workbench-recovery/v1" &&
+          traceRecoveryContext?.sourceIds?.commandId === guiRecoveryCommandId &&
+          traceRecoveryContext?.sourceIds?.testRunId === guiRecoveryTestRunId),
+      codingRecoveryReadCompleted:
+        options.scenario !== "gui-coding-input" ||
+        (hasCodingSuccessProjection(summary.recoveryRead) &&
+          readLatestThreadTurnId(summary.recoveryRead) ===
+            backendRecoveryTurnStart?.turnId &&
+          readLatestThreadTurnId(summary.recoveryRead) !==
+            summary.sessionCreation?.turnId),
+      codingRecoveryCanonicalIdentity:
+        options.scenario !== "gui-coding-input" ||
+        (backendRecoveryTurnStart?.sessionId === SESSION_ID &&
+          backendRecoveryTurnStart?.threadId === THREAD_ID &&
+          typeof backendRecoveryTurnStart?.turnId === "string" &&
+          backendRecoveryTurnStart.turnId.length > 0 &&
+          backendRecoveryEvents?.sessionId === SESSION_ID &&
+          backendRecoveryEvents?.threadId === THREAD_ID &&
+          backendRecoveryEvents?.turnId === backendRecoveryTurnStart.turnId),
+      codingRecoveryTraceThreadIdentity:
+        options.scenario !== "gui-coding-input" ||
+        traceRecoveryThreadId === THREAD_ID,
+      canonicalItemLifecycleClean:
+        options.scenario !== "gui-coding-input" || canonicalItemLifecycleClean,
       recoveryExecutionIdsTurnScoped:
-        typeof backendRecoveryTurnStart?.turnId === "string" &&
-        backendRecoveryTurnStart.turnId.length > 0 &&
-        recoveryExecutionIds.length === 5 &&
-        recoveryExecutionIds.every((executionId) =>
-          executionId.endsWith(`:${backendRecoveryTurnStart.turnId}`),
-        ),
+        options.scenario !== "gui-coding-input" ||
+        (typeof backendRecoveryTurnStart?.turnId === "string" &&
+          backendRecoveryTurnStart.turnId.length > 0 &&
+          recoveryExecutionIds.length === 4 &&
+          recoveryExecutionIds.every((executionId) =>
+            executionId.endsWith(`:${backendRecoveryTurnStart.turnId}`),
+          )),
       guiPromptSubmitted:
         options.scenario !== "gui-coding-input" ||
         summary.sessionCreation?.guiPromptSubmitted === true,

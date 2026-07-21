@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import { buildInputbarRuntimeStatusLineModel } from "../utils/inputbarRuntimeStatusLine";
 import {
@@ -43,7 +42,6 @@ interface UseMessageListTimelineStateOptions {
   pendingActions: readonly ActionRequired[];
   persistedHiddenHistoryCount: number;
   progressiveInitialRenderCount: number;
-  queuedTurns: readonly QueuedTurnSnapshot[];
   renderedAssistantMessageCount: number;
   renderedMessageCount: number;
   renderedMessages: Message[];
@@ -64,7 +62,6 @@ export function useMessageListTimelineState({
   pendingActions,
   persistedHiddenHistoryCount,
   progressiveInitialRenderCount,
-  queuedTurns,
   renderedAssistantMessageCount,
   renderedMessageCount,
   renderedMessages,
@@ -182,7 +179,6 @@ export function useMessageListTimelineState({
     !isSending &&
     !activeCurrentTurnId &&
     pendingActions.length === 0 &&
-    queuedTurns.length === 0 &&
     (threadRead?.pending_requests?.length ?? 0) === 0;
   const shouldDeferThreadItemsScan =
     !activeCurrentTurnId &&
@@ -233,7 +229,6 @@ export function useMessageListTimelineState({
     isSending ||
     Boolean(activeCurrentTurnId) ||
     pendingActions.length > 0 ||
-    queuedTurns.length > 0 ||
     (threadRead?.pending_requests?.length ?? 0) > 0 ||
     Boolean(activePendingA2UISource);
   const hasRuntimeStatusLineEvidence =
@@ -254,7 +249,6 @@ export function useMessageListTimelineState({
       threadRead,
       pendingActions,
       submittedActionsInFlight,
-      queuedTurns,
       canonicalChildren,
       isSending,
     });
@@ -264,7 +258,6 @@ export function useMessageListTimelineState({
     hasRuntimeStatusLineEvidence,
     isSending,
     pendingActions,
-    queuedTurns,
     renderedMessages,
     renderedThreadItems,
     renderedTurns,

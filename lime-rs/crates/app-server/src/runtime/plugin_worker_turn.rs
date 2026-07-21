@@ -1,4 +1,4 @@
-use super::plugin_task_runtime::{build_plugin_task_runtime_contract, resolve_plugin_runtime_dir};
+use super::plugin_task_runtime::build_plugin_task_runtime_contract;
 use super::plugin_worker_orchestration::hook_refs_for_scope;
 #[cfg(test)]
 use super::plugin_worker_output_contract::{
@@ -107,6 +107,20 @@ struct PaneActionWorkerRejection {
 }
 
 impl RuntimeCore {
+    pub(in crate::runtime) async fn plugin_worker_turn_bypasses_backend_preflight(
+        &self,
+        request: &ExecutionRequest,
+    ) -> Result<bool, RuntimeCoreError> {
+        match PaneActionWorkerTurn::resolve_from_execution_request(request) {
+            PaneActionWorkerTurnResolution::Run(worker_turn) => Ok(self
+                .find_plugin_installed_state_for_worker(worker_turn.app_id.as_str())
+                .await?
+                .is_some()),
+            PaneActionWorkerTurnResolution::Reject(_) => Ok(true),
+            PaneActionWorkerTurnResolution::Ignore => Ok(false),
+        }
+    }
+
     pub(in crate::runtime) fn should_materialize_plugin_activation_turn(
         &self,
         request: &ExecutionRequest,
@@ -127,7 +141,22 @@ impl RuntimeCore {
             .find_plugin_installed_state_for_worker(worker_turn.app_id.as_str())
             .await?
         else {
-            return Ok(false);
+            let failure = classify_worker_failure("plugin worker package is not installed");
+            sink.emit(RuntimeEvent::new(
+                "turn.accepted",
+                json!({
+                    "backend": "plugin_worker",
+                    "appId": &worker_turn.app_id,
+                    "taskKind": &worker_turn.task_kind,
+                    "source": &worker_turn.source,
+                    "status": "rejected",
+                }),
+            ))?;
+            let payload =
+                worker_turn.failure_payload(request.turn.turn_id.as_str(), &failure, "failed");
+            sink.emit(RuntimeEvent::new("runtime.error", payload.clone()))?;
+            sink.emit(RuntimeEvent::new("turn.failed", payload))?;
+            return Ok(true);
         };
 
         if let Err(error) =
@@ -136,7 +165,7 @@ impl RuntimeCore {
             return Err(RuntimeCoreError::Backend(error.to_string()));
         }
 
-        let package_root = resolve_plugin_runtime_dir(&installed_state)?;
+        let package_root = self.installed_plugin_runtime_dir(&installed_state)?;
         let workflow_context = worker_turn.workflow_context(request, &installed_state);
         if let Some(context) = workflow_context.as_ref() {
             self.append_workflow_audit_runtime_events(request, workflow_started_events(context))?;
@@ -259,7 +288,22 @@ impl RuntimeCore {
             .find_plugin_installed_state_for_worker(worker_turn.app_id.as_str())
             .await?
         else {
-            return Ok(false);
+            let failure = classify_worker_failure("plugin worker package is not installed");
+            sink.emit(RuntimeEvent::new(
+                "turn.accepted",
+                json!({
+                    "backend": "plugin_worker",
+                    "appId": &worker_turn.app_id,
+                    "taskKind": &worker_turn.task_kind,
+                    "source": &worker_turn.source,
+                    "status": "rejected",
+                }),
+            ))?;
+            let payload =
+                worker_turn.failure_payload(request.turn.turn_id.as_str(), &failure, "failed");
+            sink.emit(RuntimeEvent::new("runtime.error", payload.clone()))?;
+            sink.emit(RuntimeEvent::new("turn.failed", payload))?;
+            return Ok(true);
         };
 
         sink.emit(RuntimeEvent::new(
@@ -286,7 +330,7 @@ impl RuntimeCore {
             return Ok(true);
         }
 
-        let package_root = resolve_plugin_runtime_dir(&installed_state)?;
+        let package_root = self.installed_plugin_runtime_dir(&installed_state)?;
         let workflow_context = worker_turn.workflow_context(request, &installed_state);
         if let Some(context) = workflow_context.as_ref() {
             self.append_workflow_audit_runtime_events(request, workflow_started_events(context))?;
@@ -440,7 +484,7 @@ impl RuntimeCore {
         workflow_context: Option<&PluginWorkerWorkflowContext>,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {
-        let package_root = resolve_plugin_runtime_dir(&installed_state)?;
+        let package_root = self.installed_plugin_runtime_dir(&installed_state)?;
         let task_runtime =
             build_plugin_task_runtime_contract(&installed_state, Some(&package_root));
         validate_worker_turn_runtime_contract(worker_turn, &task_runtime)?;

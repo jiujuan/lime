@@ -10,16 +10,14 @@ use lime_core::api_host_utils::normalize_openai_compatible_api_host;
 use lime_core::config::ConfigManager;
 use lime_core::database::dao::api_key_provider::{ApiKeyProvider, ApiKeyProviderDao};
 use lime_core::models::openai::{ImageData, ImageGenerationRequest, ImageGenerationResponse};
-use lime_providers::providers::codex::CodexProvider;
+use model_provider::current_client::responses_endpoint;
 use reqwest::{header::CONTENT_TYPE, Client};
 use serde_json::{json, Value};
 
 use self::gemini_image::{request_gemini_interactions_image, resolve_gemini_image_model};
 use self::provider_routing::{
-    is_gemini_image_provider, resolve_compatible_image_model,
-    resolve_configured_image_provider_kind, resolve_fal_model,
+    resolve_compatible_image_model, resolve_configured_image_provider_kind, resolve_fal_model,
     resolve_openai_responses_image_orchestration_model, should_prefer_openai_responses_image_api,
-    supports_openai_compatible_image_provider,
 };
 use crate::AppState;
 
@@ -1106,7 +1104,7 @@ async fn request_openai_responses_images(
     image_model: &str,
     request_size: &str,
 ) -> Result<ImageGenerationResponse, OpenAiImageEndpointError> {
-    let endpoint = CodexProvider::build_responses_url(api_host);
+    let endpoint = responses_endpoint(api_host);
     let orchestration_model =
         resolve_openai_responses_image_orchestration_model(provider, image_model);
     let expected_count = request.n.max(1) as usize;
@@ -1978,11 +1976,14 @@ fn preview_text(text: &str, max_len: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::provider_routing::{
+        is_gemini_image_provider, supports_openai_compatible_image_provider,
+    };
     use super::{
         build_fal_payload, build_openai_image_request_payload, build_openai_images_url,
         build_openai_responses_image_input, build_openai_responses_image_request_payload,
         build_zhipu_image_request_payload, build_zhipu_images_url, collect_image_urls,
-        is_gemini_image_provider, load_image_provider_routing, normalize_fal_api_host,
+        load_image_provider_routing, normalize_fal_api_host,
         normalize_openai_compatible_image_response, normalize_openai_responses_image_payload,
         normalize_openai_responses_image_sse, normalize_openai_responses_image_tool_model,
         request_fal_queue_images_with_options, request_openai_responses_images,
@@ -1990,8 +1991,8 @@ mod tests {
         resolve_configured_image_provider_kind, resolve_fal_model,
         resolve_openai_responses_image_orchestration_model, resolve_zhipu_image_model,
         should_prefer_openai_responses_image_api, size_to_aspect_ratio,
-        supports_openai_compatible_image_provider, try_extract_partial_openai_responses_images,
-        ConfiguredImageProviderKind, ImageProviderRoutingConfig,
+        try_extract_partial_openai_responses_images, ConfiguredImageProviderKind,
+        ImageProviderRoutingConfig,
     };
     use async_stream::stream;
     use axum::{

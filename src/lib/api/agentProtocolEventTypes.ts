@@ -1,4 +1,3 @@
-import type { QueuedTurnSnapshot } from "./queuedTurn";
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntimeCostState,
@@ -75,6 +74,12 @@ export interface AgentEventTurnCompleted {
   turn: AgentThreadTurn;
   text?: string;
   usage?: AgentTokenUsage;
+}
+
+export interface AgentEventTokenUsageUpdated {
+  type: "token_usage_updated";
+  turn_id?: string;
+  usage: AgentTokenUsage;
 }
 
 export interface AgentEventTurnFailed {
@@ -481,30 +486,6 @@ export interface AgentEventQuotaBlocked {
   limit_event: AgentSessionExecutionRuntimeLimitEvent;
 }
 
-export interface AgentEventQueueAdded {
-  type: "queue_added";
-  session_id: string;
-  queued_turn: QueuedTurnSnapshot;
-}
-
-export interface AgentEventQueueRemoved {
-  type: "queue_removed";
-  session_id: string;
-  queued_turn_id: string;
-}
-
-export interface AgentEventQueueStarted {
-  type: "queue_started";
-  session_id: string;
-  queued_turn_id: string;
-}
-
-export interface AgentEventQueueCleared {
-  type: "queue_cleared";
-  session_id: string;
-  queued_turn_ids: string[];
-}
-
 export interface AgentEventMessage {
   type: "message";
   message: AgentMessage;
@@ -542,6 +523,7 @@ export type AgentEvent = (
   | AgentEventItemUpdated
   | AgentEventItemCompleted
   | AgentEventTurnCompleted
+  | AgentEventTokenUsageUpdated
   | AgentEventTurnFailed
   | AgentEventTurnCanceled
   | AgentEventTextDelta
@@ -582,10 +564,6 @@ export type AgentEvent = (
   | AgentEventRateLimitHit
   | AgentEventQuotaLow
   | AgentEventQuotaBlocked
-  | AgentEventQueueAdded
-  | AgentEventQueueRemoved
-  | AgentEventQueueStarted
-  | AgentEventQueueCleared
   | AgentEventMessage
   | AgentEventWarning
   | AgentEventError

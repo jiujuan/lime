@@ -19,6 +19,7 @@ import {
   type AgentRuntimeAdapter,
 } from "./agentRuntimeAdapter";
 import { createAgentChatSendMessage } from "./agentChatSendMessage";
+import { runAgentChatShellCommand } from "./agentChatShellCommand";
 import { useAgentChatStateSnapshotDebug } from "./useAgentChatStateSnapshotDebug";
 import { useAgentContext } from "./useAgentContext";
 import { useAgentRuntimeSyncEffects } from "./useAgentRuntimeSyncEffects";
@@ -41,6 +42,7 @@ import {
   shouldGenerateAutoTitle,
 } from "./agentChatAutoTitleViewModel";
 import { hasActiveRuntimeTurn } from "./agentSessionState";
+import { resolveAgentChatCopy } from "@/i18n/agentChatCopy";
 
 export type { Topic } from "./agentChatShared";
 
@@ -393,7 +395,6 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
   resetPendingActionsRef.current = () => tools.setPendingActions([]);
 
   const threadBusy = hasActiveRuntimeTurn({
-    queuedTurnsCount: session.queuedTurns.length,
     threadRead: session.threadRead,
     threadReadStatus: session.threadRead?.status,
     turns: session.threadTurns,
@@ -424,6 +425,7 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     currentStreamingEventNameRef,
     warnedKeysRef: tools.warnedKeysRef,
     getWorkspaceIdForSubmit: context.getWorkspaceIdForSubmit,
+    getThreadIdForSubmit: session.getThreadIdForSubmit,
     setWorkspacePathMissing: context.setWorkspacePathMissing,
     getMessages: () => session.messages,
     setMessages: session.setMessages,
@@ -436,8 +438,6 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     currentTurnId: session.currentTurnId,
     threadRead: session.threadRead,
     threadTurns: session.threadTurns,
-    queuedTurns: session.queuedTurns,
-    setQueuedTurns: session.setQueuedTurns,
     setPendingActions: tools.setPendingActions,
     refreshSessionReadModel: session.refreshSessionReadModel,
     onRestoreInterruptedInput,
@@ -455,7 +455,7 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
   const createFreshSession = session.createFreshSession;
   const currentTurnId = session.currentTurnId;
   const activeSessionId = session.sessionId;
-  const queuedTurnsCount = session.queuedTurns.length;
+  const queuedTurnsCount = session.queuedTurnCount;
   const rawSendMessage = stream.sendMessage;
   const compactCurrentSession = stream.compactSession;
   const isStreamSending = stream.isSending;
@@ -491,6 +491,25 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     [setChatMessages],
   );
 
+  const runUserShellCommand = useCallback(
+    (command: string) =>
+      runAgentChatShellCommand({
+        command,
+        ensureSession: session.ensureSession,
+        getThreadId: session.getThreadIdForSubmit,
+        refreshSessionDetail: session.refreshSessionDetail,
+        refreshSessionReadModel: session.refreshSessionReadModel,
+        runtime,
+      }),
+    [
+      runtime,
+      session.ensureSession,
+      session.getThreadIdForSubmit,
+      session.refreshSessionDetail,
+      session.refreshSessionReadModel,
+    ],
+  );
+
   const sendMessage = useCallback<SendMessageFn>(
     async (...args) => {
       const hasCompleteModelSelection = Boolean(
@@ -519,6 +538,20 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
         appendAssistantMessage: appendLocalAssistantMessage,
         notifyInfo: (message) => toast.info(message),
         notifySuccess: (message) => toast.success(message),
+        notifyError: (message) => toast.error(message),
+        shellCommandHelp: resolveAgentChatCopy(
+          "inputbar.shellCommand.empty",
+          "请输入要执行的命令",
+        ),
+        shellCommandError: (message) =>
+          resolveAgentChatCopy(
+            "inputbar.shellCommand.error",
+            "命令提交失败：{{message}}",
+            {
+              message,
+            },
+          ),
+        runUserShellCommand,
         onOpenSubagents,
       });
       await send(...args);
@@ -537,6 +570,7 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
       onOpenSubagents,
       queuedTurnsCount,
       rawSendMessage,
+      runUserShellCommand,
       warmupRuntime,
     ],
   );
@@ -571,7 +605,7 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     isSending: stream.isSending,
     threadRead: session.threadRead,
     threadReadStatus: session.threadRead?.status,
-    queuedTurnCount: session.queuedTurns.length,
+    queuedTurnCount: session.queuedTurnCount,
     threadTurns: session.threadTurns,
     refreshSessionDetail: session.refreshSessionDetail,
     refreshSessionReadModel: session.refreshSessionReadModel,
@@ -587,7 +621,7 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     messages: session.messages,
     isSending: stream.isSending,
     pendingActionCount: tools.pendingActions.length,
-    queuedTurnCount: session.queuedTurns.length,
+    queuedTurnCount: session.queuedTurnCount,
     threadStatus: session.threadRead?.status ?? null,
     workspaceId,
     workspacePathMissing: Boolean(context.workspacePathMissing),
@@ -718,7 +752,6 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     isSending: stream.isSending,
     messagesCount: session.messages.length,
     pendingActionsCount: tools.pendingActions.length,
-    queuedTurnsCount: session.queuedTurns.length,
     sessionId: session.sessionId ?? null,
     threadTurnsCount: session.threadTurns.length,
     topicsCount: session.topics.length,
@@ -798,7 +831,7 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     turns: session.threadTurns,
     threadItems: session.threadItems,
     todoItems: session.todoItems,
-    queuedTurns: session.queuedTurns,
+    queuedTurnCount: session.queuedTurnCount,
     threadRead: session.threadRead,
     executionRuntime: session.executionRuntime,
     sessionWorkingDir: session.sessionWorkingDir,
@@ -807,10 +840,7 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     sendMessage,
     compactSession: stream.compactSession,
     stopSending: stream.stopSending,
-    resumeThread: stream.resumeThread,
     replayPendingAction: tools.replayPendingAction,
-    promoteQueuedTurn: stream.promoteQueuedTurn,
-    removeQueuedTurn: stream.removeQueuedTurn,
     clearMessages: session.clearMessages,
     deleteMessage: session.deleteMessage,
     editMessage: session.editMessage,

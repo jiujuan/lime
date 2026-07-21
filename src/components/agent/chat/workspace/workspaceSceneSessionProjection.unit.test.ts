@@ -17,7 +17,6 @@ function baseInput(
     executionRuntime: { id: "runtime-1" },
     planComposerPendingActions: ["pending-action-1"],
     submittedActionsInFlight: ["submitted-action-1"],
-    queuedTurns: ["queued-turn-1"],
     isPreparingSend: false,
     isTaskCenterDraftSendPending: false,
     isSending: true,
@@ -45,7 +44,6 @@ describe("resolveWorkspaceSceneSessionProjection", () => {
       sceneExecutionRuntime: null,
       scenePendingActions: [],
       sceneSubmittedActionsInFlight: [],
-      sceneQueuedTurns: [],
       sceneIsPreparingSend: false,
       sceneIsSending: false,
     });
@@ -69,7 +67,6 @@ describe("resolveWorkspaceSceneSessionProjection", () => {
       sceneExecutionRuntime: null,
       scenePendingActions: [],
       sceneSubmittedActionsInFlight: [],
-      sceneQueuedTurns: [],
       sceneIsPreparingSend: true,
       sceneIsSending: false,
     });

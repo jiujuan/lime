@@ -1447,20 +1447,14 @@ describe("Inputbar", () => {
     expectInputbarSend(onSend, {
       textOverride: "继续执行当前任务",
       sendOptions: {
+        collaborationMode: "plan",
         displayContent: "继续执行当前任务",
         requestMetadata: {
           harness: {
-            task_mode_enabled: true,
             goal_mode_enabled: true,
             preferences: {
-              task: true,
-              task_mode: true,
               objective: true,
               goal: true,
-            },
-            collaboration_mode: {
-              mode: "plan",
-              source: "inputbar",
             },
             thread_goal: {
               enabled: true,

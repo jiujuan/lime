@@ -13,7 +13,7 @@
 - runtime facts 摘要：sources、tools、pending actions、artifacts、evidence、tasks。
 - Agent 工作台任务视图模型：当前任务、状态、事实计数、检查点和运行面板开关。
 - Agent 工作台 runtime facts 判断：是否存在可展示的事实面。
-- `lime.agent` / `agentSession/turn/start` payload 拼装。
+- `turn/start` payload 拼装。
 
 这个包不负责：
 

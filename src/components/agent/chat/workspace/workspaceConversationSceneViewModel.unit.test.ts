@@ -163,13 +163,12 @@ describe("workspaceConversationSceneViewModel", () => {
     const counters = buildSessionRuntimeCountersFromCodingProjection({
       codingView,
       fileCheckpointSummary: createCheckpointSummary({ count: 1 }),
-      queuedTurns: [],
+      pendingActionCount: 1,
     });
     const labels = {
       inProgressItemCountLabel: "1",
       generatedFileCountLabel: "1",
       pendingActionCountLabel: "1",
-      queuedTurnCountLabel: "0",
     };
     const sessionView = buildSessionHeaderViewModel({
       t,
@@ -180,7 +179,6 @@ describe("workspaceConversationSceneViewModel", () => {
       counters,
       labels,
       pendingActionCount: 1,
-      queuedTurnCount: 0,
     });
     const outputView = buildOutputHeaderViewModel({
       t,
@@ -394,7 +392,7 @@ describe("workspaceConversationSceneViewModel", () => {
       buildSessionRuntimeCountersFromCodingProjection({
         codingView,
         fileCheckpointSummary: null,
-        queuedTurns: [],
+        pendingActionCount: 1,
       }),
     ).toEqual({
       outputItemCount: 3,

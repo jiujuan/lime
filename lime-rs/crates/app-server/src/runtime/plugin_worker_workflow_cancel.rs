@@ -115,7 +115,7 @@ fn canceled_payload(mut payload: Value) -> Value {
         object.insert(
             "cancellation".to_string(),
             json!({
-                "source": "agentSession/turn/cancel",
+                "source": "turn/interrupt",
                 "reasonCode": "turn_canceled",
                 "canceledAt": canceled_at,
             }),

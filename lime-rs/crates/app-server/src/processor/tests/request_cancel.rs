@@ -10,9 +10,10 @@ use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::RequestId;
 use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
-use app_server_protocol::METHOD_AGENT_SESSION_LIST;
 use app_server_protocol::METHOD_AGENT_SESSION_MEDIA_READ;
 use app_server_protocol::METHOD_CANCEL_REQUEST;
+use app_server_protocol::METHOD_THREAD_LIST;
+use app_server_protocol::METHOD_THREAD_RESUME;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -29,7 +30,7 @@ async fn cancel_request_notification_fails_matching_request_id_closed() {
     let messages = processor
         .handle_request(JsonRpcRequest::new(
             RequestId::Integer(7),
-            METHOD_AGENT_SESSION_LIST,
+            METHOD_THREAD_LIST,
             Some(json!({})),
         ))
         .await
@@ -41,6 +42,61 @@ async fn cancel_request_notification_fails_matching_request_id_closed() {
     assert_eq!(error.id, RequestId::Integer(7));
     assert_eq!(error.error.code, error_codes::REQUEST_CANCELLED);
     assert_eq!(error.error.message, "request canceled");
+}
+
+#[tokio::test]
+async fn canceled_v2_thread_resume_wins_over_initialization_and_clears_state() {
+    let processor = RequestProcessor::new(RuntimeCore::default());
+    let request_id = RequestId::Integer(8);
+
+    processor.handle_notification(JsonRpcNotification::new(
+        METHOD_CANCEL_REQUEST,
+        Some(json!({ "id": 8 })),
+    ));
+
+    let messages = processor
+        .handle_request(JsonRpcRequest::new(
+            request_id.clone(),
+            METHOD_THREAD_RESUME,
+            Some(json!({ "threadId": "thread-resume" })),
+        ))
+        .await
+        .expect("canceled resume request");
+    let [JsonRpcMessage::Error(error)] = messages.as_slice() else {
+        panic!("expected canceled resume error, got {messages:?}");
+    };
+    assert_eq!(error.error.code, error_codes::REQUEST_CANCELLED);
+
+    let messages = processor
+        .handle_request(JsonRpcRequest::new(
+            request_id,
+            METHOD_THREAD_RESUME,
+            Some(json!({ "threadId": "thread-resume" })),
+        ))
+        .await
+        .expect("resume request after cancel cleanup");
+    let [JsonRpcMessage::Error(error)] = messages.as_slice() else {
+        panic!("expected not initialized resume error, got {messages:?}");
+    };
+    assert_eq!(error.error.code, error_codes::NOT_INITIALIZED);
+}
+
+#[tokio::test]
+async fn v2_thread_resume_requires_initialization_before_runtime_lookup() {
+    let processor = RequestProcessor::new(RuntimeCore::default());
+
+    let messages = processor
+        .handle_request(JsonRpcRequest::new(
+            RequestId::Integer(9),
+            METHOD_THREAD_RESUME,
+            Some(json!({ "threadId": "thread-resume" })),
+        ))
+        .await
+        .expect("uninitialized resume request");
+    let [JsonRpcMessage::Error(error)] = messages.as_slice() else {
+        panic!("expected not initialized resume error, got {messages:?}");
+    };
+    assert_eq!(error.error.code, error_codes::NOT_INITIALIZED);
 }
 
 #[tokio::test]

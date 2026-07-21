@@ -274,7 +274,7 @@ mod tests {
             event_with_payload(
                 1,
                 "message.created",
-                json!({"role": "user", "input": {"text": "inspect"}}),
+                json!({"role": "user", "input": [{"type": "text", "text": "inspect"}]}),
             ),
             event_with_payload(2, "reasoning.started", json!({"status": "in_progress"})),
             event_with_payload(

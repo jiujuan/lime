@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import type { MessagePathReference } from "../../types";
 import type { Character } from "@/lib/api/projectMemory";
 import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { InputbarComposerSection } from "./components/InputbarComposerSection";
 import type { InputbarOpenedProject } from "./components/InputbarProjectContextBar";
 import { HintRoutePopup } from "./components/HintRoutePopup";
@@ -96,9 +95,6 @@ interface InputbarProps extends SkillSelectionSourceProps {
   onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
-  queuedTurns?: QueuedTurnSnapshot[];
-  onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
-  onRemoveQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   contextVariant?: "default" | "task-center";
   projectId?: string | null;
   openedProjects?: InputbarOpenedProject[];
@@ -169,9 +165,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
   onToggleKnowledgeCompanionPack,
   onStartKnowledgeOrganize,
   onManageKnowledgePacks,
-  queuedTurns = [],
-  onPromoteQueuedTurn,
-  onRemoveQueuedTurn,
   contextVariant = "default",
   projectId = null,
   sessionId = null,
@@ -380,9 +373,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
         setAccessMode={setAccessMode}
         showModelControls={showModelControls}
         topExtra={topExtra}
-        queuedTurns={queuedTurns}
-        onPromoteQueuedTurn={onPromoteQueuedTurn}
-        onRemoveQueuedTurn={onRemoveQueuedTurn}
         contextVariant={contextVariant}
         inputCompletionEnabled={inputCompletionEnabled}
         copy={inputbarComposerCopy}

@@ -1,0 +1,789 @@
+use super::*;
+use schemars::schema_for;
+use serde_json::json;
+
+#[test]
+fn thread_start_uses_v2_camel_case_fields() {
+    let params = ThreadStartParams {
+        model: Some("gpt-5.4".to_string()),
+        model_provider: Some("openai".to_string()),
+        runtime_workspace_roots: Some(vec!["/workspace".to_string()]),
+        session_start_source: Some(ThreadStartSource::Startup),
+        ..ThreadStartParams::default()
+    };
+
+    assert_eq!(
+        serde_json::to_value(params).expect("serialize thread/start params"),
+        json!({
+            "model": "gpt-5.4",
+            "modelProvider": "openai",
+            "runtimeWorkspaceRoots": ["/workspace"],
+            "sessionStartSource": "startup"
+        })
+    );
+}
+
+#[test]
+fn thread_resume_round_trips_exclude_turns_and_initial_page() {
+    let value = json!({
+        "threadId": "thread_1",
+        "modelProvider": "openai",
+        "excludeTurns": true,
+        "initialTurnsPage": {
+            "limit": 20,
+            "sortDirection": "desc",
+            "itemsView": "summary"
+        }
+    });
+
+    let params: ThreadResumeParams =
+        serde_json::from_value(value.clone()).expect("deserialize thread/resume params");
+    assert!(params.exclude_turns);
+    assert_eq!(params.thread_id, "thread_1");
+    assert_eq!(
+        serde_json::to_value(params).expect("serialize thread/resume params"),
+        value
+    );
+}
+
+#[test]
+fn thread_token_usage_notification_round_trips_codex_shape() {
+    let expected = json!({
+        "method": "thread/tokenUsage/updated",
+        "params": {
+            "threadId": "thread_1",
+            "turnId": "turn_2",
+            "tokenUsage": {
+                "total": {
+                    "totalTokens": 120,
+                    "inputTokens": 90,
+                    "cachedInputTokens": 30,
+                    "outputTokens": 30,
+                    "reasoningOutputTokens": 10
+                },
+                "last": {
+                    "totalTokens": 60,
+                    "inputTokens": 45,
+                    "cachedInputTokens": 15,
+                    "outputTokens": 15,
+                    "reasoningOutputTokens": 5
+                },
+                "modelContextWindow": 128000
+            }
+        }
+    });
+
+    let notification: ServerNotification =
+        serde_json::from_value(expected.clone()).expect("decode token usage notification");
+    assert_eq!(notification.method(), "thread/tokenUsage/updated");
+    let jsonrpc_notification: crate::JsonRpcNotification = notification.clone().into();
+    assert_eq!(jsonrpc_notification.method, "thread/tokenUsage/updated");
+    assert_eq!(
+        ServerNotification::try_from(jsonrpc_notification)
+            .expect("decode JSON-RPC token usage notification"),
+        notification
+    );
+    assert_eq!(
+        serde_json::to_value(notification).expect("encode token usage notification"),
+        expected
+    );
+}
+
+#[test]
+fn server_request_resolved_notification_round_trips_codex_shape() {
+    let notification =
+        ServerNotification::ServerRequestResolved(ServerRequestResolvedNotification {
+            thread_id: "thread-1".to_string(),
+            request_id: crate::RequestId::String("app-server-request:boot:7".to_string()),
+        });
+
+    let raw: crate::JsonRpcNotification = notification.clone().into();
+    assert_eq!(raw.method, METHOD_SERVER_REQUEST_RESOLVED);
+    assert_eq!(
+        raw.params.as_ref(),
+        Some(&json!({
+            "threadId": "thread-1",
+            "requestId": "app-server-request:boot:7"
+        }))
+    );
+    assert_eq!(
+        ServerNotification::try_from(raw).expect("decode resolved notification"),
+        notification
+    );
+}
+
+#[test]
+fn patch_change_kind_uses_codex_tagged_wire_shape() {
+    assert_eq!(
+        serde_json::to_value(PatchChangeKind::Add).expect("serialize add"),
+        json!({"type": "add"})
+    );
+    assert_eq!(
+        serde_json::to_value(PatchChangeKind::Update {
+            move_path: Some("target.txt".to_string()),
+        })
+        .expect("serialize move update"),
+        json!({"type": "update", "move_path": "target.txt"})
+    );
+}
+
+#[test]
+fn thread_goal_set_preserves_nullable_patch_fields() {
+    let omitted: ThreadGoalSetParams = serde_json::from_value(json!({
+        "threadId": "thread_1"
+    }))
+    .expect("decode omitted goal patch");
+    assert_eq!(omitted.objective, None);
+    assert_eq!(omitted.status, None);
+    assert_eq!(omitted.token_budget, None);
+
+    let cleared: ThreadGoalSetParams = serde_json::from_value(json!({
+        "threadId": "thread_1",
+        "objective": null,
+        "status": null,
+        "tokenBudget": null
+    }))
+    .expect("decode cleared goal patch");
+    assert_eq!(cleared.objective, None);
+    assert_eq!(cleared.status, None);
+    assert_eq!(cleared.token_budget, Some(None));
+
+    let selected: ThreadGoalSetParams = serde_json::from_value(json!({
+        "threadId": "thread_1",
+        "objective": "ship it",
+        "status": "active",
+        "tokenBudget": 100
+    }))
+    .expect("decode selected goal patch");
+    assert_eq!(selected.objective.as_deref(), Some("ship it"));
+    assert_eq!(selected.status, Some(ThreadGoalStatus::Active));
+    assert_eq!(selected.token_budget, Some(Some(100)));
+}
+
+#[test]
+fn thread_goal_methods_and_notifications_round_trip() {
+    let set: ClientRequest = serde_json::from_value(json!({
+        "id": 1,
+        "method": "thread/goal/set",
+        "params": {"threadId": "thread_1", "objective": "ship it"}
+    }))
+    .expect("decode goal set");
+    assert_eq!(set.method(), Method::ThreadGoalSet);
+
+    let get: ClientRequest = serde_json::from_value(json!({
+        "id": 2,
+        "method": "thread/goal/get",
+        "params": {"threadId": "thread_1"}
+    }))
+    .expect("decode goal get");
+    assert_eq!(get.method(), Method::ThreadGoalGet);
+
+    let clear: ClientRequest = serde_json::from_value(json!({
+        "id": 3,
+        "method": "thread/goal/clear",
+        "params": {"threadId": "thread_1"}
+    }))
+    .expect("decode goal clear");
+    assert_eq!(clear.method(), Method::ThreadGoalClear);
+
+    let updated = json!({
+        "method": "thread/goal/updated",
+        "params": {
+            "threadId": "thread_1",
+            "turnId": null,
+            "goal": {
+                "threadId": "thread_1",
+                "objective": "ship it",
+                "status": "active",
+                "tokenBudget": null,
+                "tokensUsed": 0,
+                "timeUsedSeconds": 0,
+                "createdAt": 1,
+                "updatedAt": 1
+            }
+        }
+    });
+    let notification: ServerNotification =
+        serde_json::from_value(updated.clone()).expect("decode goal update");
+    assert_eq!(notification.method(), "thread/goal/updated");
+    assert_eq!(
+        serde_json::to_value(notification).expect("encode goal update"),
+        updated
+    );
+
+    let cleared = json!({
+        "method": "thread/goal/cleared",
+        "params": {"threadId": "thread_1"}
+    });
+    let notification: ServerNotification =
+        serde_json::from_value(cleared.clone()).expect("decode goal clear notification");
+    assert_eq!(notification.method(), "thread/goal/cleared");
+    assert_eq!(
+        serde_json::to_value(notification).expect("encode goal clear"),
+        cleared
+    );
+}
+
+#[test]
+fn thread_archive_contract_matches_v2_shapes() {
+    let archive: ClientRequest = serde_json::from_value(json!({
+        "id": 7,
+        "method": "thread/archive",
+        "params": {"threadId": "thread_1"}
+    }))
+    .expect("deserialize thread/archive request");
+    assert_eq!(archive.method(), Method::ThreadArchive);
+    assert_eq!(
+        serde_json::to_value(ThreadArchiveResponse {}).expect("serialize archive response"),
+        json!({})
+    );
+
+    let unarchive: ClientRequest = serde_json::from_value(json!({
+        "id": 8,
+        "method": "thread/unarchive",
+        "params": {"threadId": "thread_1"}
+    }))
+    .expect("deserialize thread/unarchive request");
+    assert_eq!(unarchive.method(), Method::ThreadUnarchive);
+
+    for expected in [
+        json!({
+            "method": "thread/archived",
+            "params": {"threadId": "thread_1"}
+        }),
+        json!({
+            "method": "thread/unarchived",
+            "params": {"threadId": "thread_1"}
+        }),
+    ] {
+        let notification: ServerNotification = serde_json::from_value(expected.clone())
+            .expect("deserialize archive lifecycle notification");
+        assert_eq!(notification.method(), expected["method"]);
+        assert_eq!(
+            serde_json::to_value(notification).expect("serialize archive lifecycle notification"),
+            expected
+        );
+    }
+}
+
+#[test]
+fn turn_start_and_steer_preserve_canonical_metadata_fields() {
+    let start = TurnStartParams {
+        thread_id: "thread_1".to_string(),
+        client_user_message_id: Some("msg_1".to_string()),
+        input: vec![UserInput::Text {
+            text: "hello".to_string(),
+            text_elements: vec![],
+        }],
+        responsesapi_client_metadata: Some([(String::from("source"), String::from("gui"))].into()),
+        additional_context: Some(
+            [(
+                String::from("doc"),
+                AdditionalContextEntry {
+                    value: "untrusted excerpt".to_string(),
+                    kind: AdditionalContextKind::Untrusted,
+                },
+            )]
+            .into(),
+        ),
+        ..TurnStartParams::default()
+    };
+    let value = serde_json::to_value(start).expect("serialize turn/start params");
+    assert_eq!(value["threadId"], "thread_1");
+    assert_eq!(value["clientUserMessageId"], "msg_1");
+    assert_eq!(value["responsesapiClientMetadata"]["source"], "gui");
+    assert_eq!(value["additionalContext"]["doc"]["kind"], "untrusted");
+
+    let steer: TurnSteerParams = serde_json::from_value(json!({
+        "threadId": "thread_1",
+        "input": [{"type": "text", "text": "continue"}],
+        "expectedTurnId": "turn_1"
+    }))
+    .expect("deserialize turn/steer params");
+    assert_eq!(steer.expected_turn_id, "turn_1");
+}
+
+#[test]
+fn turn_interrupt_wire_shape_is_canonical() {
+    let value = serde_json::to_value(TurnInterruptParams {
+        thread_id: "thread_1".to_string(),
+        turn_id: "turn_1".to_string(),
+    })
+    .expect("serialize turn/interrupt params");
+
+    assert_eq!(value, json!({"threadId": "thread_1", "turnId": "turn_1"}));
+}
+
+#[test]
+fn v2_method_registry_round_trips_wire_names() {
+    for method in METHODS {
+        let parsed = Method::parse(method).expect("registered method");
+        assert_eq!(parsed.as_str(), *method);
+        let wire = serde_json::to_value(parsed).expect("serialize method");
+        assert_eq!(wire, json!(method));
+    }
+    assert_eq!(
+        SERVER_REQUEST_METHODS,
+        &[
+            METHOD_MCP_SERVER_ELICITATION_REQUEST,
+            METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+            METHOD_ITEM_FILE_CHANGE_REQUEST_APPROVAL,
+            METHOD_ITEM_TOOL_REQUEST_USER_INPUT,
+        ]
+    );
+    assert_eq!(Method::parse("agentSession/turn/start"), None);
+}
+
+#[test]
+fn typed_thread_items_round_trip_v2_variant_tags() {
+    let cases = [
+        json!({
+            "type": "userMessage",
+            "id": "item_user",
+            "content": [{"type": "text", "text": "hello"}]
+        }),
+        json!({
+            "type": "hookPrompt",
+            "id": "item_hook",
+            "fragments": [{"text": "policy", "hookRunId": "hook_1"}]
+        }),
+        json!({
+            "type": "commandExecution",
+            "id": "item_command",
+            "command": "ls",
+            "cwd": "/workspace",
+            "source": "unifiedExecStartup",
+            "status": "completed",
+            "commandActions": [{"type": "unknown", "command": "ls"}],
+            "exitCode": 0,
+            "durationMs": 4
+        }),
+        json!({
+            "type": "dynamicToolCall",
+            "id": "item_dynamic",
+            "tool": "search",
+            "arguments": {"query": "runtime"},
+            "status": "completed",
+            "success": true
+        }),
+        json!({
+            "type": "contextCompaction",
+            "id": "item_compaction"
+        }),
+    ];
+
+    for value in cases {
+        let item: ThreadItem = serde_json::from_value(value.clone()).expect("typed item");
+        assert_eq!(serde_json::to_value(item).expect("serialized item"), value);
+    }
+}
+
+#[test]
+fn initialize_capabilities_preserve_connection_notification_opt_out() {
+    let value = serde_json::to_value(InitializeCapabilities {
+        experimental_api: true,
+        request_attestation: true,
+        mcp_server_openai_form_elicitation: true,
+        opt_out_notification_methods: Some(vec![
+            "thread/started".to_string(),
+            "item/agentMessage/delta".to_string(),
+        ]),
+    })
+    .expect("serialize initialize capabilities");
+
+    assert_eq!(
+        value,
+        json!({
+            "experimentalApi": true,
+            "requestAttestation": true,
+            "mcpServerOpenaiFormElicitation": true,
+            "optOutNotificationMethods": [
+                "thread/started",
+                "item/agentMessage/delta"
+            ]
+        })
+    );
+}
+
+#[test]
+fn typed_v2_request_and_standard_response_round_trip() {
+    let request = ClientRequest::TurnSteer {
+        id: crate::RequestId::String("req_1".to_string()),
+        params: TurnSteerParams {
+            thread_id: "thread_1".to_string(),
+            input: vec![UserInput::Text {
+                text: "continue".to_string(),
+                text_elements: vec![],
+            }],
+            expected_turn_id: "turn_1".to_string(),
+            ..TurnSteerParams::default()
+        },
+    };
+    let request_value = serde_json::to_value(&request).expect("serialize typed request");
+    assert_eq!(request_value["method"], "turn/steer");
+    assert_eq!(request_value["id"], "req_1");
+    let decoded_request: ClientRequest =
+        serde_json::from_value(request_value).expect("deserialize typed request");
+    assert_eq!(decoded_request.method(), Method::TurnSteer);
+
+    let response = ClientResponsePayload::TurnSteer(TurnSteerResponse {
+        turn_id: "turn_1".to_string(),
+    })
+    .into_response(crate::RequestId::String("req_1".to_string()))
+    .expect("lower typed response");
+    let response_value = serde_json::to_value(&response).expect("serialize JSON-RPC response");
+    assert_eq!(
+        response_value,
+        json!({"id": "req_1", "result": {"turnId": "turn_1"}})
+    );
+    let decoded_response: ClientResponse =
+        serde_json::from_value(response_value).expect("deserialize typed response");
+    assert_eq!(
+        decoded_response.id,
+        crate::RequestId::String("req_1".to_string())
+    );
+    assert_eq!(decoded_response.result["turnId"], "turn_1");
+}
+
+#[test]
+fn typed_v2_server_envelopes_fail_closed_for_unknown_methods() {
+    let request_value = json!({
+        "id": 7,
+        "method": "mcpServer/elicitation/request",
+        "params": {
+            "threadId": "thread_1",
+            "turnId": "turn_1",
+            "serverName": "form-server",
+            "mode": "form",
+            "_meta": null,
+            "message": "Choose a value",
+            "requestedSchema": {
+                "type": "object",
+                "properties": {"confirmed": {"type": "boolean"}},
+                "required": ["confirmed"]
+            }
+        }
+    });
+    let request: ServerRequest =
+        serde_json::from_value(request_value.clone()).expect("decode typed server request");
+    assert_eq!(request.method(), METHOD_MCP_SERVER_ELICITATION_REQUEST);
+    let jsonrpc_request: crate::JsonRpcRequest = request.clone().into();
+    assert_eq!(
+        ServerRequest::try_from(jsonrpc_request).expect("decode JSON-RPC server request"),
+        request
+    );
+    assert_eq!(
+        serde_json::to_value(request).expect("encode typed server request"),
+        request_value
+    );
+    let approval_value = json!({
+        "id": "approval-1",
+        "method": "item/commandExecution/requestApproval",
+        "params": {
+            "threadId": "thread_1",
+            "turnId": "turn_1",
+            "itemId": "item_command",
+            "startedAtMs": 1783860000000_i64,
+            "approvalId": "approval-1",
+            "command": "npm test",
+            "availableDecisions": ["accept", "acceptForSession", "decline", "cancel"]
+        }
+    });
+    let approval: ServerRequest =
+        serde_json::from_value(approval_value.clone()).expect("decode approval request");
+    assert_eq!(
+        approval.method(),
+        METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL
+    );
+    assert_eq!(
+        serde_json::to_value(approval.clone()).expect("encode approval request"),
+        approval_value
+    );
+    let approval_jsonrpc: crate::JsonRpcRequest = approval.clone().into();
+    assert_eq!(
+        ServerRequest::try_from(approval_jsonrpc).expect("round trip approval request"),
+        approval
+    );
+
+    let file_approval_value = json!({
+        "id": "file-approval-1",
+        "method": "item/fileChange/requestApproval",
+        "params": {
+            "threadId": "thread_1",
+            "turnId": "turn_1",
+            "itemId": "item_file_change",
+            "startedAtMs": 1783860000000_i64,
+            "reason": "需要修改文件",
+            "grantRoot": "/workspace"
+        }
+    });
+    let file_approval: ServerRequest =
+        serde_json::from_value(file_approval_value.clone()).expect("decode file approval request");
+    assert_eq!(
+        file_approval.method(),
+        METHOD_ITEM_FILE_CHANGE_REQUEST_APPROVAL
+    );
+    assert_eq!(
+        serde_json::to_value(file_approval.clone()).expect("encode file approval request"),
+        file_approval_value
+    );
+    assert_eq!(
+        ServerRequest::try_from(crate::JsonRpcRequest::from(file_approval.clone()))
+            .expect("round trip file approval request"),
+        file_approval
+    );
+
+    let user_input_value = json!({
+        "id": 8,
+        "method": "item/tool/requestUserInput",
+        "params": {
+            "threadId": "thread_1",
+            "turnId": "turn_1",
+            "itemId": "item_request_user_input",
+            "questions": [{
+                "id": "mode",
+                "header": "模式",
+                "question": "请选择执行模式",
+                "isOther": false,
+                "isSecret": false,
+                "options": [
+                    {"label": "自动执行", "description": "直接继续"},
+                    {"label": "确认后执行", "description": "再次确认"}
+                ]
+            }],
+            "autoResolutionMs": null
+        }
+    });
+    let user_input: ServerRequest =
+        serde_json::from_value(user_input_value.clone()).expect("decode user input request");
+    assert_eq!(user_input.method(), METHOD_ITEM_TOOL_REQUEST_USER_INPUT);
+    assert_eq!(
+        serde_json::to_value(user_input.clone()).expect("encode user input request"),
+        user_input_value
+    );
+    assert_eq!(
+        ServerRequest::try_from(crate::JsonRpcRequest::from(user_input.clone()))
+            .expect("round trip user input request"),
+        user_input
+    );
+
+    let notification = ServerNotification::TurnCompleted(TurnCompletedNotification {
+        thread_id: "thread_1".to_string(),
+        turn: Turn {
+            id: "turn_1".to_string(),
+            items: vec![],
+            items_view: TurnItemsView::Full,
+            status: TurnStatus::Completed,
+            error: None,
+            started_at: None,
+            completed_at: None,
+            duration_ms: None,
+        },
+    });
+    let notification_value = serde_json::to_value(&notification).expect("encode notification");
+    assert_eq!(notification_value["method"], "turn/completed");
+    let jsonrpc_notification: crate::JsonRpcNotification = notification.clone().into();
+    assert_eq!(jsonrpc_notification.method, "turn/completed");
+    assert_eq!(
+        ServerNotification::try_from(jsonrpc_notification).expect("decode JSON-RPC notification"),
+        notification
+    );
+    let decoded_notification: ServerNotification =
+        serde_json::from_value(notification_value).expect("decode notification");
+    assert_eq!(decoded_notification.method(), "turn/completed");
+
+    assert!(serde_json::from_value::<ServerNotification>(json!({
+        "method": "future/notification",
+        "params": {}
+    }))
+    .is_err());
+}
+
+#[test]
+fn lifecycle_notifications_round_trip_only_the_v2_shapes() {
+    let thread = json!({
+        "id": "thread_1",
+        "sessionId": "session_1",
+        "preview": "",
+        "ephemeral": false,
+        "historyMode": "legacy",
+        "modelProvider": "openai",
+        "createdAt": 10,
+        "updatedAt": 11,
+        "cwd": "/workspace",
+        "cliVersion": "1.0.0",
+        "source": "appServer",
+        "turns": []
+    });
+    let turn = json!({
+        "id": "turn_1",
+        "items": [],
+        "itemsView": "full",
+        "status": "inProgress"
+    });
+    let item = json!({
+        "type": "agentMessage",
+        "id": "item_1",
+        "text": "hello"
+    });
+    let cases = [
+        json!({
+            "method": "thread/started",
+            "params": {"thread": thread}
+        }),
+        json!({
+            "method": "thread/archived",
+            "params": {"threadId": "thread_1"}
+        }),
+        json!({
+            "method": "thread/unarchived",
+            "params": {"threadId": "thread_1"}
+        }),
+        json!({
+            "method": "turn/started",
+            "params": {"threadId": "thread_1", "turn": turn}
+        }),
+        json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread_1",
+                "turn": {
+                    "id": "turn_1",
+                    "items": [],
+                    "itemsView": "full",
+                    "status": "completed"
+                }
+            }
+        }),
+        json!({
+            "method": "item/started",
+            "params": {
+                "item": item,
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "startedAtMs": 12
+            }
+        }),
+        json!({
+            "method": "item/completed",
+            "params": {
+                "item": {
+                    "type": "agentMessage",
+                    "id": "item_1",
+                    "text": "hello"
+                },
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "completedAtMs": 13
+            }
+        }),
+        json!({
+            "method": "item/agentMessage/delta",
+            "params": {
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "itemId": "item_1",
+                "delta": "hello"
+            }
+        }),
+    ];
+
+    for expected in cases {
+        let notification: ServerNotification =
+            serde_json::from_value(expected.clone()).expect("decode v2 lifecycle notification");
+        assert_eq!(notification.method(), expected["method"]);
+        assert_eq!(
+            serde_json::to_value(notification).expect("encode v2 lifecycle notification"),
+            expected
+        );
+    }
+
+    for retired in [
+        json!({
+            "method": "turn/started",
+            "params": {
+                "sessionId": "session_1",
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "status": "running"
+            }
+        }),
+        json!({
+            "method": "item/started",
+            "params": {
+                "sessionId": "session_1",
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "itemId": "item_1",
+                "status": "running"
+            }
+        }),
+    ] {
+        assert!(
+            serde_json::from_value::<ServerNotification>(retired).is_err(),
+            "retired agentSession lifecycle payload must fail closed"
+        );
+    }
+}
+
+#[test]
+fn typed_v2_envelope_schema_names_are_stable() {
+    let schemas = [
+        (
+            "ClientRequest",
+            serde_json::to_value(schema_for!(ClientRequest)).unwrap(),
+        ),
+        (
+            "ClientResponse",
+            serde_json::to_value(schema_for!(ClientResponse)).unwrap(),
+        ),
+        (
+            "ServerRequest",
+            serde_json::to_value(schema_for!(ServerRequest)).unwrap(),
+        ),
+        (
+            "ServerNotification",
+            serde_json::to_value(schema_for!(ServerNotification)).unwrap(),
+        ),
+    ];
+
+    for (name, schema) in schemas {
+        assert_eq!(schema["title"], name);
+        assert!(V2_ENVELOPE_SCHEMA_TYPE_NAMES.contains(&name));
+        assert!(V2_SCHEMA_TYPE_NAMES.contains(&name));
+    }
+
+    let response_schema = serde_json::to_value(schema_for!(ClientResponse)).unwrap();
+    assert_eq!(
+        response_schema["properties"]["id"]["$ref"],
+        "#/$defs/RequestId"
+    );
+    assert!(response_schema["properties"].get("result").is_some());
+    assert!(response_schema["properties"].get("method").is_none());
+
+    let notification_schema = serde_json::to_value(schema_for!(ServerNotification)).unwrap();
+    let methods = notification_schema["oneOf"]
+        .as_array()
+        .expect("server notification variants")
+        .iter()
+        .filter_map(|variant| variant["properties"]["method"]["const"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        methods,
+        [
+            "thread/started",
+            "thread/archived",
+            "thread/unarchived",
+            "turn/started",
+            "turn/completed",
+            "item/started",
+            "item/completed",
+            "item/agentMessage/delta",
+            "thread/settings/updated",
+            "thread/tokenUsage/updated",
+            "thread/goal/updated",
+            "thread/goal/cleared",
+            "serverRequest/resolved",
+        ]
+    );
+}

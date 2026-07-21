@@ -60,16 +60,6 @@ function createBaseProps(overrides: Partial<HookProps> = {}): HookProps {
       },
     ],
     submittedActionsInFlight: [],
-    queuedTurns: [
-      {
-        queued_turn_id: "queued-1",
-        message_preview: "继续处理",
-        message_text: "继续处理",
-        created_at: 1_781_610_000,
-        image_count: 0,
-        position: 1,
-      },
-    ],
     isRestoringSession: true,
     isSending: false,
     focusedTimelineItemId: null,
@@ -144,7 +134,6 @@ describe("useSessionRuntimeProjectionDeferral", () => {
     expect(getValue().threadItems).toEqual([]);
     expect(getValue().currentTurnId).toBeNull();
     expect(getValue().pendingActions).toEqual([]);
-    expect(getValue().queuedTurns).toEqual([]);
 
     act(() => {
       vi.advanceTimersByTime(700);
@@ -154,7 +143,6 @@ describe("useSessionRuntimeProjectionDeferral", () => {
     expect(getValue().threadItems).toHaveLength(24);
     expect(getValue().currentTurnId).toBe("restore-turn-5");
     expect(getValue().pendingActions).toHaveLength(1);
-    expect(getValue().queuedTurns).toHaveLength(1);
   });
 
   it("发送中或聚焦运行轨迹时不应延迟投影", () => {

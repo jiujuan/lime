@@ -171,6 +171,31 @@ describe("FileChangesSummaryCard", () => {
     expect(calls[0]?.[1]).not.toContain("agentChat.toolCall.diffReview");
   });
 
+  it("Move 变更应同时展示源路径和目标路径", () => {
+    const aggregate = createAggregate();
+    aggregate.files[0] = {
+      ...aggregate.files[0]!,
+      path: "src/source.ts",
+      movePath: "src/destination.ts",
+      fileStatus: "declined",
+    };
+    const { container } = renderCard({ aggregate });
+    const row = container.querySelector(
+      '[data-testid="file-changes-summary-file-row"]',
+    );
+
+    expect(row?.textContent).toContain("src/source.ts -> src/destination.ts");
+    expect(row?.getAttribute("title")).toBe(
+      "src/source.ts -> src/destination.ts",
+    );
+    expect(row?.getAttribute("data-file-status")).toBe("declined");
+    expect(
+      container
+        .querySelector('[data-testid="file-changes-summary-card"]')
+        ?.getAttribute("data-file-status"),
+    ).toBe("declined");
+  });
+
   it("传入 onOpenFile 时应显示打开文件入口且不生成 diff 审阅内容", () => {
     const onOpenFile = vi.fn();
     const onFileClick = vi.fn();

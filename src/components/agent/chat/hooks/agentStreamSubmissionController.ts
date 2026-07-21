@@ -14,13 +14,11 @@ export function buildAgentStreamSubmitDispatchedContext(params: {
   effectiveModel: string;
   effectiveProviderType: string;
   eventName: string;
-  expectingQueue: boolean;
   timing: AgentStreamSubmissionTimingState;
 }): Record<string, unknown> {
   return {
     elapsedMs: params.timing.now - params.timing.requestStartedAt,
     eventName: params.eventName,
-    expectingQueue: params.expectingQueue,
     listenerBoundDeltaMs: params.timing.listenerBoundAt
       ? params.timing.now - params.timing.listenerBoundAt
       : null,

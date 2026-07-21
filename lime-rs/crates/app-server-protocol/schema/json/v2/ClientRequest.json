@@ -1,0 +1,1504 @@
+{
+  "$defs": {
+    "AdditionalContextEntry": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/AdditionalContextKind"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "type": "object"
+    },
+    "AdditionalContextKind": {
+      "enum": [
+        "application",
+        "untrusted"
+      ],
+      "type": "string"
+    },
+    "ByteRange": {
+      "properties": {
+        "end": {
+          "description": "Exclusive byte offset in the UTF-8 text buffer.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start": {
+          "description": "Inclusive byte offset in the UTF-8 text buffer.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "end",
+        "start"
+      ],
+      "type": "object"
+    },
+    "CollaborationMode": {
+      "description": "Collaboration mode for a session or turn.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/ModeKind"
+        },
+        "settings": {
+          "$ref": "#/$defs/CollaborationModeSettings"
+        }
+      },
+      "required": [
+        "mode",
+        "settings"
+      ],
+      "type": "object"
+    },
+    "CollaborationModeSettings": {
+      "description": "Collaboration mode settings copied from the Codex protocol shape.",
+      "properties": {
+        "developer_instructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "type": "object"
+    },
+    "ImageDetail": {
+      "enum": [
+        "auto",
+        "high",
+        "low",
+        "original"
+      ],
+      "type": "string"
+    },
+    "ModeKind": {
+      "description": "Initial collaboration mode for a turn or session.",
+      "enum": [
+        "default",
+        "plan"
+      ],
+      "type": "string"
+    },
+    "RequestId": {
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "SortDirection": {
+      "enum": [
+        "asc",
+        "desc"
+      ],
+      "type": "string"
+    },
+    "TextElement": {
+      "properties": {
+        "byteRange": {
+          "$ref": "#/$defs/ByteRange"
+        },
+        "placeholder": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "byteRange"
+      ],
+      "type": "object"
+    },
+    "ThreadArchiveParams": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadGoalClearParams": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadGoalGetParams": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadGoalSetParams": {
+      "properties": {
+        "objective": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThreadGoalStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "tokenBudget": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadGoalStatus": {
+      "enum": [
+        "active",
+        "blocked",
+        "budgetLimited",
+        "complete",
+        "paused",
+        "usageLimited"
+      ],
+      "type": "string"
+    },
+    "ThreadHistoryMode": {
+      "enum": [
+        "legacy",
+        "paginated"
+      ],
+      "type": "string"
+    },
+    "ThreadItemsListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sortDirection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SortDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadListCwdFilter": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "ThreadListParams": {
+      "properties": {
+        "ancestorThreadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "archived": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "cwd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThreadListCwdFilter"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modelProviders": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "parentThreadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "searchTerm": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sortDirection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SortDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sortKey": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThreadSortKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceKinds": {
+          "items": {
+            "$ref": "#/$defs/ThreadSourceKind"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "useStateDbOnly": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "ThreadMemoryMode": {
+      "enum": [
+        "disabled",
+        "enabled"
+      ],
+      "type": "string"
+    },
+    "ThreadMemoryModeSetParams": {
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/ThreadMemoryMode"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadReadParams": {
+      "properties": {
+        "includeTurns": {
+          "type": "boolean"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadResumeInitialTurnsPageParams": {
+      "properties": {
+        "itemsView": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnItemsView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sortDirection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SortDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ThreadResumeParams": {
+      "properties": {
+        "approvalPolicy": true,
+        "approvalsReviewer": true,
+        "baseInstructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "config": {
+          "additionalProperties": true,
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "developerInstructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "excludeTurns": {
+          "type": "boolean"
+        },
+        "history": {
+          "items": true,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "initialTurnsPage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThreadResumeInitialTurnsPageParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modelProvider": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "permissions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "personality": true,
+        "runtimeWorkspaceRoots": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sandbox": true,
+        "serviceTier": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadSettingsUpdateParams": {
+      "properties": {
+        "approvalPolicy": true,
+        "approvalsReviewer": true,
+        "collaborationMode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CollaborationMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cwd": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "effort": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "permissions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "personality": true,
+        "sandboxPolicy": true,
+        "serviceTier": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "summary": true,
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadShellCommandParams": {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadSortKey": {
+      "enum": [
+        "created_at",
+        "recency_at",
+        "updated_at"
+      ],
+      "type": "string"
+    },
+    "ThreadSourceKind": {
+      "enum": [
+        "appServer",
+        "cli",
+        "exec",
+        "subAgent",
+        "subAgentCompact",
+        "subAgentOther",
+        "subAgentReview",
+        "subAgentThreadSpawn",
+        "unknown",
+        "vscode"
+      ],
+      "type": "string"
+    },
+    "ThreadStartParams": {
+      "properties": {
+        "allowProviderModelFallback": {
+          "type": "boolean"
+        },
+        "approvalPolicy": true,
+        "approvalsReviewer": true,
+        "baseInstructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "config": {
+          "additionalProperties": true,
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "developerInstructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "dynamicTools": {
+          "items": true,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "environments": {
+          "items": {
+            "$ref": "#/$defs/TurnEnvironmentParams"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "ephemeral": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "experimentalRawEvents": {
+          "type": "boolean"
+        },
+        "historyMode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThreadHistoryMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modelProvider": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "multiAgentMode": true,
+        "permissions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "personality": true,
+        "runtimeWorkspaceRoots": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sandbox": true,
+        "selectedCapabilityRoots": {
+          "items": true,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "serviceName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "serviceTier": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionStartSource": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThreadStartSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "threadSource": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ThreadStartSource": {
+      "enum": [
+        "clear",
+        "startup"
+      ],
+      "type": "string"
+    },
+    "ThreadTurnsListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "itemsView": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnItemsView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sortDirection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SortDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadUnarchiveParams": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "TurnEnvironmentParams": {
+      "description": "Environment override shared by `thread/start`, `turn/start`, and resume.",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "environmentId": {
+          "type": "string"
+        },
+        "runtimeWorkspaceRoots": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd",
+        "environmentId"
+      ],
+      "type": "object"
+    },
+    "TurnInterruptParams": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
+    },
+    "TurnItemsView": {
+      "enum": [
+        "full",
+        "notLoaded",
+        "summary"
+      ],
+      "type": "string"
+    },
+    "TurnStartParams": {
+      "properties": {
+        "additionalContext": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AdditionalContextEntry"
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "approvalPolicy": true,
+        "approvalsReviewer": true,
+        "clientUserMessageId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "collaborationMode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CollaborationMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cwd": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "effort": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "environments": {
+          "items": {
+            "$ref": "#/$defs/TurnEnvironmentParams"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "input": {
+          "items": {
+            "$ref": "#/$defs/UserInput"
+          },
+          "type": "array"
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "multiAgentMode": true,
+        "outputSchema": true,
+        "permissions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "personality": true,
+        "responsesapiClientMetadata": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "runtimeWorkspaceRoots": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sandboxPolicy": true,
+        "serviceTier": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "summary": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "input",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "TurnSteerParams": {
+      "properties": {
+        "additionalContext": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AdditionalContextEntry"
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "clientUserMessageId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "expectedTurnId": {
+          "type": "string"
+        },
+        "input": {
+          "items": {
+            "$ref": "#/$defs/UserInput"
+          },
+          "type": "array"
+        },
+        "responsesapiClientMetadata": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedTurnId",
+        "input",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "UserInput": {
+      "description": "User input parts accepted by the v2 turn contract.",
+      "oneOf": [
+        {
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "text_elements": {
+              "items": {
+                "$ref": "#/$defs/TextElement"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ImageDetail"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "image",
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ImageDetail"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "localImage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "skill",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "path",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "mention",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "path",
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Requests sent by a v2 client. Unknown methods fail closed during decode.",
+  "oneOf": [
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/start",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadStartParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/resume",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadResumeParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/read",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/list",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/archive",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadArchiveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/unarchive",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadUnarchiveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/turns/list",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadTurnsListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/items/list",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadItemsListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/settings/update",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadSettingsUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/memoryMode/set",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadMemoryModeSetParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/shellCommand",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadShellCommandParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/goal/set",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadGoalSetParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/goal/get",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadGoalGetParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/goal/clear",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadGoalClearParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "turn/start",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/TurnStartParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "turn/steer",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/TurnSteerParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "turn/interrupt",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/TurnInterruptParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "ClientRequest"
+}

@@ -24,10 +24,6 @@
     },
     {
       "kind": "request",
-      "method": "agentSession/archiveMany"
-    },
-    {
-      "kind": "request",
       "method": "agentSession/compact"
     },
     {
@@ -57,10 +53,6 @@
     {
       "kind": "request",
       "method": "agentSession/handoffBundle/export"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/list"
     },
     {
       "kind": "request",
@@ -100,10 +92,6 @@
     },
     {
       "kind": "request",
-      "method": "agentSession/read"
-    },
-    {
-      "kind": "request",
       "method": "agentSession/replayCase/export"
     },
     {
@@ -120,23 +108,7 @@
     },
     {
       "kind": "request",
-      "method": "agentSession/start"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/thread/resume"
-    },
-    {
-      "kind": "request",
       "method": "agentSession/toolInventory/read"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/turn/cancel"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/turn/start"
     },
     {
       "kind": "request",
@@ -437,6 +409,30 @@
     {
       "kind": "notification",
       "method": "initialized"
+    },
+    {
+      "kind": "notification",
+      "method": "item/agentMessage/delta"
+    },
+    {
+      "kind": "serverRequest",
+      "method": "item/commandExecution/requestApproval"
+    },
+    {
+      "kind": "notification",
+      "method": "item/completed"
+    },
+    {
+      "kind": "serverRequest",
+      "method": "item/fileChange/requestApproval"
+    },
+    {
+      "kind": "notification",
+      "method": "item/started"
+    },
+    {
+      "kind": "serverRequest",
+      "method": "item/tool/requestUserInput"
     },
     {
       "kind": "request",
@@ -1024,6 +1020,34 @@
     },
     {
       "kind": "request",
+      "method": "thread/archive"
+    },
+    {
+      "kind": "notification",
+      "method": "thread/archived"
+    },
+    {
+      "kind": "request",
+      "method": "thread/goal/clear"
+    },
+    {
+      "kind": "notification",
+      "method": "thread/goal/cleared"
+    },
+    {
+      "kind": "request",
+      "method": "thread/goal/get"
+    },
+    {
+      "kind": "request",
+      "method": "thread/goal/set"
+    },
+    {
+      "kind": "notification",
+      "method": "thread/goal/updated"
+    },
+    {
+      "kind": "request",
       "method": "thread/items/list"
     },
     {
@@ -1032,11 +1056,71 @@
     },
     {
       "kind": "request",
+      "method": "thread/memoryMode/set"
+    },
+    {
+      "kind": "request",
       "method": "thread/read"
     },
     {
       "kind": "request",
+      "method": "thread/resume"
+    },
+    {
+      "kind": "request",
+      "method": "thread/settings/update"
+    },
+    {
+      "kind": "notification",
+      "method": "thread/settings/updated"
+    },
+    {
+      "kind": "request",
+      "method": "thread/shellCommand"
+    },
+    {
+      "kind": "request",
+      "method": "thread/start"
+    },
+    {
+      "kind": "notification",
+      "method": "thread/started"
+    },
+    {
+      "kind": "notification",
+      "method": "thread/tokenUsage/updated"
+    },
+    {
+      "kind": "request",
       "method": "thread/turns/list"
+    },
+    {
+      "kind": "request",
+      "method": "thread/unarchive"
+    },
+    {
+      "kind": "notification",
+      "method": "thread/unarchived"
+    },
+    {
+      "kind": "notification",
+      "method": "turn/completed"
+    },
+    {
+      "kind": "request",
+      "method": "turn/interrupt"
+    },
+    {
+      "kind": "request",
+      "method": "turn/start"
+    },
+    {
+      "kind": "notification",
+      "method": "turn/started"
+    },
+    {
+      "kind": "request",
+      "method": "turn/steer"
     },
     {
       "kind": "request",
@@ -1226,18 +1310,6 @@
       "scope": "thread"
     },
     {
-      "method": "agentSession/thread/resume",
-      "scope": "thread"
-    },
-    {
-      "method": "agentSession/turn/cancel",
-      "scope": "thread"
-    },
-    {
-      "method": "agentSession/turn/start",
-      "scope": "thread"
-    },
-    {
       "method": "browserSession/action/execute",
       "scope": "browserSession"
     },
@@ -1314,7 +1386,27 @@
       "scope": "projectShellSession"
     },
     {
+      "method": "thread/archive",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/goal/clear",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/goal/get",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/goal/set",
+      "scope": "thread"
+    },
+    {
       "method": "thread/items/list",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/memoryMode/set",
       "scope": "thread"
     },
     {
@@ -1322,7 +1414,35 @@
       "scope": "thread"
     },
     {
+      "method": "thread/resume",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/settings/update",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/shellCommand",
+      "scope": "thread"
+    },
+    {
       "method": "thread/turns/list",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/unarchive",
+      "scope": "thread"
+    },
+    {
+      "method": "turn/interrupt",
+      "scope": "thread"
+    },
+    {
+      "method": "turn/start",
+      "scope": "thread"
+    },
+    {
+      "method": "turn/steer",
       "scope": "thread"
     }
   ],
@@ -1347,11 +1467,8 @@
       "AgentSessionActionRespondResponse",
       "AgentSessionActionScope",
       "AgentSessionActionType",
-      "AgentSessionAgentMessageDeltaNotification",
       "AgentSessionAnalysisHandoffExportParams",
       "AgentSessionAnalysisHandoffExportResponse",
-      "AgentSessionArchiveManyParams",
-      "AgentSessionArchiveManyResponse",
       "AgentSessionCompactParams",
       "AgentSessionCompactResponse",
       "AgentSessionDeleteParams",
@@ -1370,12 +1487,10 @@
       "AgentSessionHandoffArtifact",
       "AgentSessionHandoffBundleExportParams",
       "AgentSessionHandoffBundleExportResponse",
-      "AgentSessionItemLifecycleNotification",
       "AgentSessionListParams",
       "AgentSessionListResponse",
       "AgentSessionMediaReadParams",
       "AgentSessionMediaReadResponse",
-      "AgentSessionMessageCreatedNotification",
       "AgentSessionObjectiveAuditParams",
       "AgentSessionObjectiveAuditResponse",
       "AgentSessionObjectiveClearParams",
@@ -1405,17 +1520,13 @@
       "AgentSessionRuntimeEventAppendParams",
       "AgentSessionRuntimeEventAppendResponse",
       "AgentSessionRuntimeEventInput",
-      "AgentSessionRuntimeEventNotification",
       "AgentSessionStartParams",
       "AgentSessionStartResponse",
       "AgentSessionStatus",
-      "AgentSessionThreadResumeParams",
-      "AgentSessionThreadResumeResponse",
       "AgentSessionToolInventoryReadParams",
       "AgentSessionToolInventoryReadResponse",
       "AgentSessionTurnCancelParams",
       "AgentSessionTurnCancelResponse",
-      "AgentSessionTurnLifecycleNotification",
       "AgentSessionTurnStartParams",
       "AgentSessionTurnStartResponse",
       "AgentSessionUpdateParams",
@@ -1474,7 +1585,6 @@
       "BrowserSessionTargetListParams",
       "BrowserSessionTargetListResponse",
       "BusinessObjectRef",
-      "CanonicalThreadEventNotification",
       "CapabilityDescriptor",
       "CapabilityListParams",
       "CapabilityListResponse",
@@ -1630,9 +1740,6 @@
       "McpResourceUnsubscribeParams",
       "McpServerCreateParams",
       "McpServerDeleteParams",
-      "McpServerElicitationAction",
-      "McpServerElicitationRequestParams",
-      "McpServerElicitationResponse",
       "McpServerEnabledSetParams",
       "McpServerImportFromAppParams",
       "McpServerImportFromAppResponse",
@@ -1822,15 +1929,12 @@
       "RuntimeOptions",
       "RuntimeProviderConfig",
       "RuntimeRequest",
-      "RuntimeResumeActionDecision",
-      "RuntimeResumeContract",
       "RuntimeSearchMode",
       "RuntimeToolCallStrategy",
       "ServerCapabilities",
       "ServerDiagnosticsResponse",
       "ServerInfo",
       "ServerNotification",
-      "ServerRequestResolvedNotification",
       "SessionFileEntry",
       "SessionFileEntryResponse",
       "SessionFileGetOrCreateParams",
@@ -1909,14 +2013,6 @@
       "SupportBundleTraceExportSelection",
       "TextPosition",
       "TextRange",
-      "ThreadItemsListParams",
-      "ThreadItemsListResponse",
-      "ThreadListParams",
-      "ThreadListResponse",
-      "ThreadReadParams",
-      "ThreadReadResponse",
-      "ThreadTurnsListParams",
-      "ThreadTurnsListResponse",
       "TransportKind",
       "UsageStatsDailyTrendsListResponse",
       "UsageStatsDailyUsage",
@@ -2002,6 +2098,124 @@
       "WorkspaceSkillBindingsListResponse",
       "WorkspaceUpdateParams",
       "WorkspaceUpdateResponse"
+    ],
+    "v2": [
+      "AdditionalContextEntry",
+      "AdditionalContextKind",
+      "AgentMessageDeltaNotification",
+      "ClientRequest",
+      "ClientResponse",
+      "CollabAgentState",
+      "CollabAgentStatus",
+      "CollabAgentTool",
+      "CollabAgentToolCallStatus",
+      "CommandAction",
+      "CommandExecutionApprovalDecision",
+      "CommandExecutionRequestApprovalParams",
+      "CommandExecutionRequestApprovalResponse",
+      "CommandExecutionSource",
+      "CommandExecutionStatus",
+      "DynamicToolCallOutputContentItem",
+      "DynamicToolCallStatus",
+      "FileChangeApprovalDecision",
+      "FileChangeRequestApprovalParams",
+      "FileChangeRequestApprovalResponse",
+      "FileUpdateChange",
+      "GitInfo",
+      "HookPromptFragment",
+      "ImageGenerationItem",
+      "InitializeCapabilities",
+      "ItemCompletedNotification",
+      "ItemStartedNotification",
+      "McpServerElicitationAction",
+      "McpServerElicitationRequestParams",
+      "McpServerElicitationRequestResponse",
+      "McpToolCallAppContext",
+      "McpToolCallStatus",
+      "MemoryCitation",
+      "MemoryCitationEntry",
+      "Method",
+      "PatchApplyStatus",
+      "PatchChangeKind",
+      "ServerNotification",
+      "ServerRequest",
+      "ServerRequestResolvedNotification",
+      "SleepItem",
+      "SortDirection",
+      "SubAgentActivityKind",
+      "Thread",
+      "ThreadActiveFlag",
+      "ThreadArchiveParams",
+      "ThreadArchiveResponse",
+      "ThreadArchivedNotification",
+      "ThreadGoal",
+      "ThreadGoalClearParams",
+      "ThreadGoalClearResponse",
+      "ThreadGoalClearedNotification",
+      "ThreadGoalGetParams",
+      "ThreadGoalGetResponse",
+      "ThreadGoalSetParams",
+      "ThreadGoalSetResponse",
+      "ThreadGoalStatus",
+      "ThreadGoalUpdatedNotification",
+      "ThreadHistoryMode",
+      "ThreadItem",
+      "ThreadItemEntry",
+      "ThreadItemsListParams",
+      "ThreadItemsListResponse",
+      "ThreadListCwdFilter",
+      "ThreadListParams",
+      "ThreadListResponse",
+      "ThreadMemoryMode",
+      "ThreadMemoryModeSetParams",
+      "ThreadMemoryModeSetResponse",
+      "ThreadReadParams",
+      "ThreadReadResponse",
+      "ThreadResumeInitialTurnsPageParams",
+      "ThreadResumeParams",
+      "ThreadResumeResponse",
+      "ThreadSettings",
+      "ThreadSettingsUpdateParams",
+      "ThreadSettingsUpdateResponse",
+      "ThreadSettingsUpdatedNotification",
+      "ThreadShellCommandParams",
+      "ThreadShellCommandResponse",
+      "ThreadSortKey",
+      "ThreadSourceKind",
+      "ThreadStartParams",
+      "ThreadStartResponse",
+      "ThreadStartSource",
+      "ThreadStartedNotification",
+      "ThreadStatus",
+      "ThreadTokenUsage",
+      "ThreadTokenUsageUpdatedNotification",
+      "ThreadTurnsListParams",
+      "ThreadTurnsListResponse",
+      "ThreadUnarchiveParams",
+      "ThreadUnarchiveResponse",
+      "ThreadUnarchivedNotification",
+      "TokenUsageBreakdown",
+      "ToolRequestUserInputAnswer",
+      "ToolRequestUserInputOption",
+      "ToolRequestUserInputParams",
+      "ToolRequestUserInputQuestion",
+      "ToolRequestUserInputResponse",
+      "Turn",
+      "TurnCompletedNotification",
+      "TurnEnvironmentParams",
+      "TurnError",
+      "TurnInterruptParams",
+      "TurnInterruptResponse",
+      "TurnItemsView",
+      "TurnStartParams",
+      "TurnStartResponse",
+      "TurnStartedNotification",
+      "TurnStatus",
+      "TurnSteerParams",
+      "TurnSteerResponse",
+      "TurnsPage",
+      "UserInput",
+      "WebSearchItem"
     ]
   }
 }

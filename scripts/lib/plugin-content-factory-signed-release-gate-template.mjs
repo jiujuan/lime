@@ -248,6 +248,7 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
     runtimeActionResponse: {
       actionId: "article-draft-review",
       confirmed: true,
+      method: "agentSession/action/respond",
       metadata: {
         workflowResume: {
           stepId: "draft",
@@ -285,36 +286,15 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
       hostManagedGenerationOutputIds: ["article-draft-document"],
       hostManagedGenerationStatus: "completed",
     },
-    runtimeResumeContract: {
-      decisions: [
-        {
-          actionId: "article-draft-review",
-          decision: "approved",
-          metadata: {
-            workflowResume: {
-              stepId: "draft",
-              workflowKey: "content_article_workflow",
-              workflowRunId: "turn_<id>:content-article",
-            },
-          },
-        },
-      ],
-      resumeMode: "selected-actions",
-      runtimeId: "content-factory-plugin",
-    },
     signatureVerificationStatus: "verified",
     status: "passed",
     trace: {
       appServerHandleJsonLinesSeen: true,
-      appServerMethodsSeen: [
-        "agentSession/turn/start",
-        "agentSession/read",
-        "evidence/export",
-      ],
+      appServerMethodsSeen: ["turn/start", "thread/read", "evidence/export"],
       turnStartTrace: {
         command: "app_server_handle_json_lines",
         matched: true,
-        method: "agentSession/turn/start",
+        method: "turn/start",
         sessionMatched: true,
         status: "success",
         transport: "electron-ipc",

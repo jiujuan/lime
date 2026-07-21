@@ -1,16 +1,11 @@
 import {
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_START,
-  APP_SERVER_METHOD_SESSION_UPDATE,
-  EXPERT_SKILLS_RUNTIME_SESSION_ID,
   EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-  EXPERT_SKILLS_RUNTIME_THREAD_ID,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
   NEWS_PROMPT,
-  SESSION_ID,
   SESSION_TITLE,
-  THREAD_ID,
   buildExpertSkillsRuntimeCatalog,
   buildExpertSkillsRuntimeMetadata,
 } from "./claw-chat-current-fixture-constants.mjs";
@@ -40,48 +35,17 @@ export async function createFixtureSession(
     page,
     APP_SERVER_METHOD_SESSION_START,
     {
-      sessionId: SESSION_ID,
-      threadId: THREAD_ID,
-      appId: "desktop",
-      workspaceId,
-      workingDir: rootPath,
-      businessObjectRef: {
-        kind: "agent.session",
-        id: `agent-session:${workspaceId}:${SESSION_ID}`,
-        title: SESSION_TITLE,
-        metadata: {
-          title: SESSION_TITLE,
-          workingDir: rootPath,
-          working_dir: rootPath,
-          executionStrategy: "react",
-          runStartHooks: false,
-          harness: {
-            hiddenFromUserRecents: false,
-            source: "smoke:claw-chat-current-fixture",
-          },
-        },
-      },
+      cwd: rootPath,
+      historyMode: "paginated",
+      model,
+      modelProvider: provider,
+      runtimeWorkspaceRoots: [rootPath],
+      serviceName: SESSION_TITLE,
+      threadSource: "appServer",
     },
     requestLog,
   );
-
-  const update = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_SESSION_UPDATE,
-    {
-      sessionId: SESSION_ID,
-      title: SESSION_TITLE,
-      providerSelector: provider,
-      providerName: provider,
-      modelName: model,
-      executionStrategy: "react",
-      recentAccessMode: "full-access",
-      recentPreferences: {
-        searchMode: "auto",
-      },
-    },
-    requestLog,
-  );
+  const identity = readThreadStartIdentity(session.result);
 
   await page.evaluate(
     ({ sessionId, workspaceId }) => {
@@ -95,13 +59,28 @@ export async function createFixtureSession(
         }),
       );
     },
-    { sessionId: SESSION_ID, workspaceId },
+    { sessionId: identity.sessionId, workspaceId },
   );
 
   return {
+    identity,
     session: session.result,
-    update: update.result,
+    update: null,
   };
+}
+
+function readThreadStartIdentity(result) {
+  const thread = result?.thread;
+  const sessionId =
+    typeof thread?.sessionId === "string" ? thread.sessionId.trim() : "";
+  const threadId = typeof thread?.id === "string" ? thread.id.trim() : "";
+  assert(
+    sessionId && threadId,
+    `thread/start 未返回 canonical identity: ${JSON.stringify(
+      sanitizeJson(result),
+    )}`,
+  );
+  return { sessionId, threadId };
 }
 
 export async function createExpertSkillsRuntimeSession(
@@ -116,45 +95,17 @@ export async function createExpertSkillsRuntimeSession(
     page,
     APP_SERVER_METHOD_SESSION_START,
     {
-      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
-      threadId: EXPERT_SKILLS_RUNTIME_THREAD_ID,
-      appId: "desktop",
-      workspaceId,
-      workingDir: rootPath,
-      businessObjectRef: {
-        kind: "agent.session",
-        id: `agent-session:${workspaceId}:${EXPERT_SKILLS_RUNTIME_SESSION_ID}`,
-        title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-        metadata: {
-          title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-          workingDir: rootPath,
-          working_dir: rootPath,
-          executionStrategy: "react",
-          runStartHooks: false,
-          ...expertMetadata,
-        },
-      },
+      cwd: rootPath,
+      historyMode: "paginated",
+      model: FIXTURE_MODEL,
+      modelProvider: FIXTURE_PROVIDER,
+      runtimeWorkspaceRoots: [rootPath],
+      serviceName: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
+      threadSource: "appServer",
     },
     requestLog,
   );
-  const update = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_SESSION_UPDATE,
-    {
-      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
-      title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-      providerSelector: FIXTURE_PROVIDER,
-      providerName: FIXTURE_PROVIDER,
-      modelName: FIXTURE_MODEL,
-      executionStrategy: "react",
-      recentAccessMode: "full-access",
-      recentPreferences: {
-        searchMode: "auto",
-      },
-    },
-    requestLog,
-  );
-
+  const identity = readThreadStartIdentity(session.result);
   await page.evaluate(
     ({ sessionId, workspaceId }) => {
       window.dispatchEvent(
@@ -168,14 +119,15 @@ export async function createExpertSkillsRuntimeSession(
       );
     },
     {
-      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+      sessionId: identity.sessionId,
       workspaceId,
     },
   );
 
   return {
+    identity,
     session: session.result,
-    update: update.result,
+    update: null,
     expertMetadata,
   };
 }
@@ -484,8 +436,13 @@ export async function waitForGuiSessionVisible(
 }
 
 export async function openFixtureSessionFromSidebar(page, options, requestLog) {
+  const sessionId = options.sessionId?.trim();
+  const threadId = options.threadId?.trim();
+  assert(sessionId, "Claw fixture 缺少 canonical sessionId");
+  assert(threadId, "Claw fixture 缺少 canonical threadId");
   return await openSessionFromSidebar(page, options, requestLog, {
-    sessionId: SESSION_ID,
+    sessionId,
+    threadId,
     title: SESSION_TITLE,
   });
 }
@@ -494,8 +451,9 @@ export async function openSessionFromSidebar(
   page,
   options,
   requestLog,
-  { sessionId, title, allowPlanDecision = false },
+  { sessionId, threadId = options.threadId, title, allowPlanDecision = false },
 ) {
+  assert(threadId, `会话 ${title} 缺少 canonical threadId`);
   const startedAt = Date.now();
   let lastSnapshot = null;
   let lastClick = null;
@@ -561,8 +519,8 @@ export async function openSessionFromSidebar(
         page,
         APP_SERVER_METHOD_SESSION_READ,
         {
-          sessionId,
-          historyLimit: 1,
+          threadId,
+          includeTurns: true,
         },
         requestLog,
       ).catch((error) => ({
@@ -643,24 +601,17 @@ export async function openSessionFromSidebar(
         clicked: lastClick,
         inputReady: sanitizeJson(inputReady),
         readModel: sanitizeJson({
-          hasDetail: Boolean(readModel?.result?.detail),
-          sessionId:
-            readModel?.result?.session?.sessionId ??
-            readModel?.result?.session?.session_id ??
-            readModel?.result?.detail?.session?.sessionId ??
-            readModel?.result?.detail?.session?.session_id ??
-            null,
+          hasThread: Boolean(readModel?.result?.thread),
+          sessionId: readModel?.result?.thread?.sessionId ?? null,
+          threadId: readModel?.result?.thread?.id ?? null,
           error: readModel?.error ?? null,
         }),
       };
-      const readModelSessionId =
-        readModel?.result?.session?.sessionId ??
-        readModel?.result?.session?.session_id ??
-        readModel?.result?.detail?.session?.sessionId ??
-        readModel?.result?.detail?.session?.session_id ??
-        null;
+      const readModelSessionId = readModel?.result?.thread?.sessionId ?? null;
+      const readModelThreadId = readModel?.result?.thread?.id ?? null;
       const openedCurrentSession =
         readModelSessionId === sessionId &&
+        readModelThreadId === threadId &&
         !inputReady?.hasConversationMenu &&
         !inputReady?.hasRecentConversationsShell &&
         !inputReady?.isRestoringSessionShell &&

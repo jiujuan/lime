@@ -155,7 +155,6 @@ export const shouldCompactCompletedSessionHistory = (
   const hasActiveItem = (detail.items || []).some(
     (item) => item.status === "in_progress",
   );
-  const hasQueuedTurn = (detail.queued_turns || []).length > 0;
 
-  return !hasActiveTurn && !hasActiveItem && !hasQueuedTurn;
+  return !hasActiveTurn && !hasActiveItem;
 };

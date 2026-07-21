@@ -38,10 +38,10 @@ const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_INTERVAL_MS = 1_000;
 const LOG_PREFIX = "[smoke:code-runtime-fixture]";
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
-const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
+const APP_SERVER_METHOD_THREAD_START = "thread/start";
 const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
-const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_TURN_START = "turn/start";
+const APP_SERVER_METHOD_THREAD_READ = "thread/read";
 const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =
   "agentSession/fileCheckpoint/list";
 const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =
@@ -482,7 +482,7 @@ function appServerThreadReadFromSessionRead(readResult) {
   const latestTurn = turns.at(-1) || null;
   const latestTurnStatus = latestTurn?.status || null;
   return {
-    source: APP_SERVER_METHOD_AGENT_SESSION_READ,
+    source: APP_SERVER_METHOD_THREAD_READ,
     session_id: detail.session_id || "",
     active_turn_id: activeTurn?.id || activeTurn?.turnId || null,
     status: activeTurn ? "running" : "idle",
@@ -561,7 +561,7 @@ async function waitForRuntimeCompletion(
   while (Date.now() - startedAt < options.timeoutMs) {
     const sessionReadResponse = await invokeAppServer(
       options,
-      APP_SERVER_METHOD_AGENT_SESSION_READ,
+      APP_SERVER_METHOD_THREAD_READ,
       {
         sessionId,
         historyLimit: 50,
@@ -654,7 +654,7 @@ async function runSmoke(options) {
     const requestedSessionId = `code-runtime-fixture-${Date.now()}-${process.pid}`;
     const sessionResult = await invokeAppServer(
       options,
-      APP_SERVER_METHOD_AGENT_SESSION_START,
+      APP_SERVER_METHOD_THREAD_START,
       {
         sessionId: requestedSessionId,
         appId: "desktop",
@@ -677,7 +677,7 @@ async function runSmoke(options) {
       30_000,
     );
     const sessionId = sessionResult.result?.session?.sessionId;
-    assertSmoke(sessionId, "agentSession/start 未返回 sessionId");
+    assertSmoke(sessionId, "thread/start 未返回 sessionId");
 
     await invokeAppServer(
       options,
@@ -703,7 +703,7 @@ async function runSmoke(options) {
     });
     const turnResult = await invokeAppServer(
       options,
-      APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+      APP_SERVER_METHOD_TURN_START,
       {
         sessionId,
         turnId,
@@ -721,7 +721,7 @@ async function runSmoke(options) {
     );
     assertSmoke(
       turnResult.result?.turn?.turnId === turnId,
-      "agentSession/turn/start 未返回同一 turnId",
+      "turn/start 未返回同一 turnId",
     );
 
     console.log(`${LOG_PREFIX} stage=wait-runtime`);

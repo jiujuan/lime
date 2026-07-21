@@ -329,7 +329,7 @@ async fn image_command_turn_start_creates_task_from_jsonrpc_metadata() {
     request(
         &app.server,
         2,
-        METHOD_AGENT_SESSION_START,
+        METHOD_THREAD_START,
         json!({
             "sessionId": "sess-image-command-jsonrpc",
             "threadId": "thread-image-command-jsonrpc",
@@ -342,7 +342,7 @@ async fn image_command_turn_start_creates_task_from_jsonrpc_metadata() {
     let messages = request_with_notifications(
         &app.server,
         3,
-        METHOD_AGENT_SESSION_TURN_START,
+        METHOD_TURN_START,
         json!({
             "sessionId": "sess-image-command-jsonrpc",
             "turnId": "turn-image-command-jsonrpc",
@@ -442,7 +442,7 @@ async fn image_command_turn_start_rejects_missing_explicit_provider_before_task_
     request(
         &app.server,
         2,
-        METHOD_AGENT_SESSION_START,
+        METHOD_THREAD_START,
         json!({
             "sessionId": "sess-image-command-stale-provider",
             "threadId": "thread-image-command-stale-provider",
@@ -464,7 +464,7 @@ async fn image_command_turn_start_rejects_missing_explicit_provider_before_task_
     let messages = request_with_notifications(
         &app.server,
         3,
-        METHOD_AGENT_SESSION_TURN_START,
+        METHOD_TURN_START,
         json!({
             "sessionId": "sess-image-command-stale-provider",
             "turnId": "turn-image-command-stale-provider",

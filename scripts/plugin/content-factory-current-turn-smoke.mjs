@@ -951,7 +951,6 @@ async function runSmoke(options) {
       {
         ...stdioSidecar(binaryPath, undefined, runtimeEnv.appServerDataDir),
         backendMode,
-        productDbMigrationCleanup: "drop-tables",
       },
       {
         clientInfo: {
@@ -1311,8 +1310,8 @@ async function runSmoke(options) {
         : null,
       notes: [
         cloudRelease
-          ? "This smoke proves a fixture-signed cloud_release installed state can enter App Server current agentSession/turn/start after the package cache is materialized."
-          : "This smoke proves the external local_folder package enters App Server current agentSession/turn/start.",
+          ? "This smoke proves a fixture-signed cloud_release installed state can enter App Server current turn/start after the package cache is materialized."
+          : "This smoke proves the external local_folder package enters App Server current turn/start.",
         hostGenerationFixture
           ? "hostGenerationFixture uses a local OpenAI-compatible SSE provider to prove hostManagedGeneration completed without real provider credentials."
           : liveHostGeneration

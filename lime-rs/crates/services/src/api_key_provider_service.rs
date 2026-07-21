@@ -11,22 +11,26 @@ use crate::provider_type_mapping::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
-use lime_core::api_host_utils::{
-    is_openai_responses_compatible_host, normalize_openai_compatible_api_host,
-};
+use futures::StreamExt;
+use lime_core::api_host_utils::is_openai_responses_compatible_host;
 use lime_core::database::dao::api_key_provider::{
     infer_managed_provider_type, ApiKeyEntry, ApiKeyProvider, ApiKeyProviderDao,
     ApiProviderPromptCacheMode, ApiProviderType, ProviderGroup, ProviderWithKeys,
 };
+use lime_core::database::dao::route_state::RouteStateDao;
 use lime_core::database::system_providers::{get_system_providers, to_api_key_provider};
 use lime_core::database::DbConnection;
 use lime_core::models::runtime_provider_model::{
-    runtime_api_key_credential_uuid, ProviderPromptCacheMode, RuntimeCredentialData,
-    RuntimeProviderCredential, RuntimeProviderType,
+    runtime_api_key_credential_uuid, runtime_api_key_id_from_credential_uuid,
+    ProviderPromptCacheMode, RuntimeCredentialData, RuntimeProviderCredential, RuntimeProviderType,
 };
 use lime_core::provider_prompt_cache_support::is_known_automatic_anthropic_compatible_host;
+use model_provider::current_client::{
+    CanonicalLlmEvent, CurrentProviderClient, CurrentProviderContent, CurrentProviderMessage,
+    CurrentProviderRequest,
+};
+use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -35,7 +39,6 @@ use std::sync::RwLock;
 const SENSENOVA_OLD_OPENAI_COMPATIBLE_API_HOST: &str =
     "https://api.sensenova.cn/compatible-mode/v1";
 const SENSENOVA_OPENAI_COMPATIBLE_API_HOST: &str = "https://api.sensenova.cn/compatible-mode/v2";
-const OPENAI_RESPONSES_IMAGE_TEST_OUTER_MODEL: &str = "gpt-5.5";
 
 // ============================================================================
 // 连接测试结果
@@ -66,7 +69,9 @@ mod tests {
     use lime_core::database::dao::api_key_provider::{
         ApiKeyEntry, ApiKeyProviderDao, ApiProviderPromptCacheMode,
     };
+    use lime_core::database::dao::route_state::RouteStateDao;
     use lime_core::database::{init_database, migration, schema, DbConnection};
+    use lime_core::models::{runtime_api_key_credential_uuid, RuntimeCredentialData};
     use rusqlite::Connection;
     use rusqlite::OptionalExtension;
     use std::sync::{Arc, Mutex};
@@ -123,6 +128,11 @@ mod tests {
         Arc::new(Mutex::new(conn))
     }
 
+    fn route_generation(db: &DbConnection) -> u64 {
+        let conn = db.lock().expect("获取数据库锁失败");
+        RouteStateDao::read_generation(&conn).expect("读取路由 generation 失败")
+    }
+
     fn resolve_real_codex_provider_id(
         db: &lime_core::database::DbConnection,
     ) -> Result<String, String> {
@@ -153,113 +163,6 @@ mod tests {
         .optional()
         .map_err(|e| format!("查询本地 CLI Provider 失败: {e}"))?
         .ok_or_else(|| "未找到可用的本地 CLI Provider，请先在设置中配置并启用".to_string())
-    }
-
-    #[test]
-    fn test_build_codex_responses_request_input_list() {
-        let req = ApiKeyProviderService::build_codex_responses_request("gpt-5", "hello");
-        assert!(req.get("input").is_some());
-        let input = req["input"].as_array().expect("input should be array");
-        assert_eq!(input.len(), 1);
-        assert_eq!(input[0]["role"].as_str(), Some("user"));
-        assert_eq!(input[0]["content"][0]["type"].as_str(), Some("input_text"));
-        assert_eq!(input[0]["content"][0]["text"].as_str(), Some("hello"));
-    }
-
-    #[test]
-    fn test_parse_codex_responses_sse_content_delta() {
-        let body = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n\
-data: {\"type\":\"response.output_text.delta\",\"delta\":\"!\"}\n\n\
-data: [DONE]\n";
-        let content = ApiKeyProviderService::parse_codex_responses_sse_content(body);
-        assert_eq!(content, "hi!");
-    }
-
-    #[test]
-    fn test_uses_anthropic_protocol() {
-        assert!(ApiKeyProviderService::uses_anthropic_protocol(
-            ApiProviderType::Anthropic
-        ));
-        assert!(ApiKeyProviderService::uses_anthropic_protocol(
-            ApiProviderType::AnthropicCompatible
-        ));
-        assert!(!ApiKeyProviderService::uses_anthropic_protocol(
-            ApiProviderType::Openai
-        ));
-    }
-
-    #[test]
-    fn test_format_anthropic_http_api_error_uses_protocol_level_guidance() {
-        let body = r#"{"type":"error","error":{"type":"authentication_error","message":"login fail: Please carry the API secret key in the 'Authorization' field of the request header"}}"#;
-
-        let formatted = ApiKeyProviderService::format_anthropic_http_api_error(
-            reqwest::StatusCode::UNAUTHORIZED,
-            body,
-            "https://example.com/anthropic",
-            ApiProviderType::AnthropicCompatible,
-            "k-cp-looks-truncated",
-        );
-
-        assert!(formatted.contains("Lime 已按 Anthropic 协议发送兼容鉴权"));
-        assert!(formatted.contains("核对 API Key 是否完整"));
-        assert!(!formatted.contains("MiniMax"));
-    }
-
-    #[test]
-    fn test_format_anthropic_http_api_error_keeps_base_message_for_non_anthropic_protocol() {
-        let body = r#"{"type":"error","error":{"type":"authentication_error","message":"Please carry the API secret key in the 'Authorization' field of the request header"}}"#;
-
-        let formatted = ApiKeyProviderService::format_anthropic_http_api_error(
-            reqwest::StatusCode::UNAUTHORIZED,
-            body,
-            "https://example.com/compatible",
-            ApiProviderType::Openai,
-            "k-cp-looks-truncated",
-        );
-
-        assert_eq!(
-            formatted,
-            "API 返回错误: 401 Unauthorized - Please carry the API secret key in the 'Authorization' field of the request header"
-        );
-    }
-
-    #[test]
-    fn test_format_anthropic_http_api_error_marks_upstream_overload() {
-        let body = r#"{"type":"error","error":{"type":"overloaded_error","message":"overloaded_error (529)"}}"#;
-
-        let formatted = ApiKeyProviderService::format_anthropic_http_api_error(
-            reqwest::StatusCode::from_u16(529).expect("status"),
-            body,
-            "https://example.com/anthropic",
-            ApiProviderType::AnthropicCompatible,
-            "test-key",
-        );
-
-        assert!(formatted.contains("上游 Anthropic 兼容接口当前暂时过载或限流"));
-        assert!(formatted.contains("overloaded_error (529)"));
-        assert!(formatted.contains("这通常不是 Base URL、鉴权头或模型配置错误"));
-    }
-
-    #[test]
-    fn test_is_transient_anthropic_upstream_error_supports_json_and_status_detection() {
-        assert!(
-            ApiKeyProviderService::is_transient_anthropic_upstream_error(
-                reqwest::StatusCode::from_u16(529).expect("status"),
-                r#"{"type":"error","error":{"type":"overloaded_error","message":"overloaded_error (529)"}}"#,
-            )
-        );
-        assert!(
-            ApiKeyProviderService::is_transient_anthropic_upstream_error(
-                reqwest::StatusCode::TOO_MANY_REQUESTS,
-                r#"{"error":{"message":"rate_limit exceeded"}}"#,
-            )
-        );
-        assert!(
-            !ApiKeyProviderService::is_transient_anthropic_upstream_error(
-                reqwest::StatusCode::UNAUTHORIZED,
-                r#"{"error":{"message":"invalid api key"}}"#,
-            )
-        );
     }
 
     #[test]
@@ -352,93 +255,6 @@ data: [DONE]\n";
     }
 
     #[test]
-    fn test_openai_image_connection_test_detection_prefers_explicit_or_image_only_providers() {
-        assert!(
-            ApiKeyProviderService::should_use_openai_image_connection_test(
-                Some("gpt-images-2"),
-                &[],
-                &[]
-            )
-        );
-        assert!(
-            ApiKeyProviderService::should_use_openai_image_connection_test(
-                None,
-                &["gpt-images-2".to_string()],
-                &[]
-            )
-        );
-        assert!(
-            !ApiKeyProviderService::should_use_openai_image_connection_test(
-                None,
-                &["gpt-images-2".to_string(), "gpt-5.2".to_string()],
-                &[]
-            )
-        );
-        assert!(
-            !ApiKeyProviderService::should_use_openai_image_connection_test(
-                Some("gpt-5.2"),
-                &["gpt-images-2".to_string()],
-                &[]
-            )
-        );
-    }
-
-    #[test]
-    fn test_pick_openai_image_test_model_prefers_image_candidates() {
-        assert_eq!(
-            ApiKeyProviderService::pick_openai_image_test_model(
-                Some("gpt-images-2".to_string()),
-                &[],
-                &[],
-            )
-            .as_deref(),
-            Some("gpt-images-2")
-        );
-        assert_eq!(
-            ApiKeyProviderService::pick_openai_image_test_model(
-                None,
-                &["gpt-images-2".to_string(), "gpt-5.2".to_string()],
-                &[],
-            )
-            .as_deref(),
-            Some("gpt-images-2")
-        );
-        assert_eq!(
-            ApiKeyProviderService::pick_openai_image_test_model(
-                None,
-                &[],
-                &["dall-e-3".to_string(), "gpt-4.1".to_string()],
-            )
-            .as_deref(),
-            Some("dall-e-3")
-        );
-        assert!(ApiKeyProviderService::pick_openai_image_test_model(
-            Some("gpt-5.2".to_string()),
-            &["gpt-5.2".to_string()],
-            &[],
-        )
-        .is_none());
-    }
-
-    #[test]
-    fn test_build_openai_images_url_reuses_existing_v1_path() {
-        assert_eq!(
-            ApiKeyProviderService::build_openai_images_url("https://airgate.k8ray.com/v1"),
-            "https://airgate.k8ray.com/v1/images/generations"
-        );
-        assert_eq!(
-            ApiKeyProviderService::build_openai_images_url("https://api.openai.com"),
-            "https://api.openai.com/v1/images/generations"
-        );
-        assert_eq!(
-            ApiKeyProviderService::build_openai_images_url(
-                "https://gateway.example.com/proxy/responses"
-            ),
-            "https://gateway.example.com/proxy/v1/images/generations"
-        );
-    }
-
-    #[test]
     fn test_prefers_openai_responses_endpoint_detects_codex_base_path() {
         assert!(ApiKeyProviderService::prefers_openai_responses_endpoint(
             "https://gateway.example.com/codex"
@@ -449,80 +265,6 @@ data: [DONE]\n";
         assert!(!ApiKeyProviderService::prefers_openai_responses_endpoint(
             "https://api.openai.com/v1"
         ));
-    }
-
-    #[test]
-    fn test_openai_responses_image_generation_request_uses_image_generation_tool() {
-        let payload = ApiKeyProviderService::build_openai_responses_image_generation_request(
-            "gpt-images-2",
-            "生成测试图片",
-            false,
-        );
-
-        assert_eq!(
-            payload.get("model").and_then(serde_json::Value::as_str),
-            Some("gpt-5.5")
-        );
-        assert_eq!(
-            payload.get("stream").and_then(serde_json::Value::as_bool),
-            Some(true)
-        );
-        assert_eq!(
-            payload
-                .pointer("/tools/0/type")
-                .and_then(serde_json::Value::as_str),
-            Some("image_generation")
-        );
-        assert_eq!(
-            payload
-                .pointer("/tools/0/model")
-                .and_then(serde_json::Value::as_str),
-            Some("gpt-image-2")
-        );
-        assert_eq!(
-            payload.get("input").and_then(serde_json::Value::as_str),
-            Some("生成测试图片")
-        );
-
-        let retry_payload = ApiKeyProviderService::build_openai_responses_image_generation_request(
-            "gpt-image-2",
-            "生成测试图片",
-            true,
-        );
-        assert_eq!(
-            retry_payload
-                .pointer("/input/0/content/0/type")
-                .and_then(serde_json::Value::as_str),
-            Some("input_text")
-        );
-    }
-
-    #[test]
-    fn test_openai_responses_image_body_has_result_reads_output_item_done() {
-        let sse = concat!(
-            "event: response.output_item.done\n",
-            "data: {\"item\":{\"type\":\"image_generation_call\",\"result\":\"dGVzdA==\"}}\n\n",
-            "event: response.completed\n",
-            "data: {\"response\":{\"id\":\"resp_1\"}}\n\n"
-        );
-
-        assert!(ApiKeyProviderService::openai_responses_image_body_has_result(sse));
-    }
-
-    #[test]
-    fn test_openai_responses_image_retry_detection_matches_gateway_error() {
-        assert!(
-            ApiKeyProviderService::should_retry_openai_responses_image_generation_with_input_list(
-                reqwest::StatusCode::BAD_REQUEST,
-                r#"{"error":{"message":"Input must be a list"}}"#,
-            )
-        );
-        assert!(
-            !ApiKeyProviderService::should_retry_openai_responses_image_generation_with_input_list(
-                reqwest::StatusCode::UNAUTHORIZED,
-                r#"{"error":{"message":"Input must be a list"}}"#,
-            )
-        );
     }
 
     #[test]
@@ -719,39 +461,138 @@ data: [DONE]\n";
     }
 
     #[test]
-    fn test_parse_openai_responses_content_prefers_output_text() {
-        let body = serde_json::json!({
-            "id": "resp_test",
-            "output_text": "hello from responses",
-            "output": [{
-                "type": "message",
-                "content": [{"type": "output_text", "text": "fallback text"}]
-            }]
-        })
-        .to_string();
+    fn test_provider_and_key_readiness_mutations_advance_route_generation() {
+        let db = init_test_database();
+        let service = ApiKeyProviderService::new();
 
-        let content = ApiKeyProviderService::parse_openai_responses_content(&body)
-            .expect("应解析 output_text");
-        assert_eq!(content, "hello from responses");
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Route Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://api.example.com/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("创建 Provider 失败");
+        assert_eq!(route_generation(&db), 1);
+
+        service
+            .update_provider(
+                &db,
+                &provider.id,
+                Some("Renamed Route Provider".to_string()),
+                None,
+                None,
+                None,
+                Some(10),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("更新非路由字段失败");
+        assert_eq!(route_generation(&db), 1);
+
+        service
+            .update_provider(
+                &db,
+                &provider.id,
+                None,
+                None,
+                Some("https://api.example.com/v2".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("更新路由字段失败");
+        assert_eq!(route_generation(&db), 2);
+
+        let key = service
+            .add_api_key(&db, &provider.id, "sk-route", None, false)
+            .expect("添加 API Key 失败");
+        assert_eq!(route_generation(&db), 3);
+
+        service
+            .update_api_key_alias(&db, &key.id, Some("alias-only".to_string()))
+            .expect("更新 API Key 别名失败");
+        service
+            .toggle_api_key(&db, &key.id, true)
+            .expect("重复启用 API Key 失败");
+        assert_eq!(route_generation(&db), 3);
+
+        service
+            .toggle_api_key(&db, &key.id, false)
+            .expect("禁用 API Key 失败");
+        assert_eq!(route_generation(&db), 4);
+        assert!(service
+            .delete_api_key(&db, &key.id)
+            .expect("删除 API Key 失败"));
+        assert_eq!(route_generation(&db), 5);
+        assert!(service
+            .delete_custom_provider(&db, &provider.id)
+            .expect("删除 Provider 失败"));
+        assert_eq!(route_generation(&db), 6);
     }
 
     #[test]
-    fn test_parse_openai_responses_content_reads_output_blocks() {
-        let body = serde_json::json!({
-            "id": "resp_test",
-            "output": [{
-                "type": "message",
-                "content": [
-                    {"type": "output_text", "text": "hello"},
-                    {"type": "output_text", "text": " world"}
-                ]
-            }]
-        })
-        .to_string();
+    fn test_system_initialization_and_import_only_advance_for_actual_writes() {
+        let db = init_test_database();
+        let service = ApiKeyProviderService::new();
 
-        let content = ApiKeyProviderService::parse_openai_responses_content(&body)
-            .expect("应解析 output.content");
-        assert_eq!(content, "hello world");
+        assert!(
+            service
+                .initialize_system_providers(&db)
+                .expect("初始化系统 Provider 失败")
+                > 0
+        );
+        assert_eq!(route_generation(&db), 1);
+        assert_eq!(
+            service
+                .initialize_system_providers(&db)
+                .expect("重复初始化系统 Provider 失败"),
+            0
+        );
+        assert_eq!(route_generation(&db), 1);
+
+        let source_db = init_test_database();
+        let imported_provider = service
+            .add_custom_provider(
+                &source_db,
+                "Imported Route Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://import.example.com/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("创建导入 fixture 失败");
+        let config = serde_json::json!({ "providers": [imported_provider] }).to_string();
+
+        let import_result = service
+            .import_config(&db, &config)
+            .expect("导入 Provider 失败");
+        assert_eq!(import_result.imported_providers, 1);
+        assert_eq!(route_generation(&db), 2);
+
+        let skipped_result = service
+            .import_config(&db, &config)
+            .expect("重复导入 Provider 失败");
+        assert_eq!(skipped_result.imported_providers, 0);
+        assert_eq!(skipped_result.skipped_providers, 1);
+        assert_eq!(route_generation(&db), 2);
     }
 
     #[test]
@@ -880,6 +721,120 @@ data: [DONE]\n";
             .expect("读取当前 Key 失败")
             .expect("应返回当前 Key");
         assert_eq!(active_key, "sk-first-key");
+    }
+
+    #[test]
+    fn exact_runtime_credential_ref_requires_enabled_key_owned_by_provider() {
+        let db = init_test_database();
+        let service = ApiKeyProviderService::new();
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Exact Credential Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://provider.example/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create exact credential provider");
+        let key = service
+            .add_api_key(&db, &provider.id, "sk-exact-provider-key", None, false)
+            .expect("add exact credential key");
+        let credential_ref = runtime_api_key_credential_uuid(&key.id);
+
+        let selected = service
+            .select_runtime_credential_by_ref(&db, &provider.id, &credential_ref)
+            .expect("select exact credential")
+            .expect("exact credential");
+        assert_eq!(selected.uuid, credential_ref);
+        assert!(matches!(
+            selected.credential,
+            RuntimeCredentialData::OpenAIKey { ref api_key, .. }
+                if api_key == "sk-exact-provider-key"
+        ));
+        assert!(service
+            .round_robin_index
+            .read()
+            .expect("round-robin index")
+            .is_empty());
+
+        let other_provider = service
+            .add_custom_provider(
+                &db,
+                "Other Credential Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://other.example/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create other provider");
+        assert!(service
+            .select_runtime_credential_by_ref(&db, &other_provider.id, &credential_ref)
+            .expect("reject foreign credential")
+            .is_none());
+
+        service
+            .update_provider(
+                &db,
+                &provider.id,
+                None,
+                None,
+                None,
+                Some(false),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("disable exact credential provider");
+        assert!(service
+            .select_runtime_credential_by_ref(&db, &provider.id, &credential_ref)
+            .expect("reject credential from disabled provider")
+            .is_none());
+        service
+            .update_provider(
+                &db,
+                &provider.id,
+                None,
+                None,
+                None,
+                Some(true),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("re-enable exact credential provider");
+        service
+            .toggle_api_key(&db, &key.id, false)
+            .expect("disable exact credential");
+        assert!(service
+            .select_runtime_credential_by_ref(&db, &provider.id, &credential_ref)
+            .expect("reject disabled credential")
+            .is_none());
+    }
+
+    #[test]
+    fn exact_runtime_credential_ref_rejects_non_runtime_reference() {
+        let db = init_test_database();
+        let service = ApiKeyProviderService::new();
+
+        assert!(service
+            .select_runtime_credential_by_ref(&db, "provider", "raw-key-id")
+            .expect("reject raw key id")
+            .is_none());
     }
 
     async fn spawn_single_response_server(
@@ -1324,6 +1279,21 @@ impl ApiKeyProviderService {
         infer_managed_provider_type(provider_type, api_host)
     }
 
+    fn provider_route_readiness_changed(
+        previous: &ApiKeyProvider,
+        current: &ApiKeyProvider,
+    ) -> bool {
+        previous.provider_type != current.provider_type
+            || previous.api_host != current.api_host
+            || previous.enabled != current.enabled
+            || previous.api_version != current.api_version
+            || previous.project != current.project
+            || previous.location != current.location
+            || previous.region != current.region
+            || previous.custom_models != current.custom_models
+            || previous.prompt_cache_mode != current.prompt_cache_mode
+    }
+
     fn to_credential_prompt_cache_mode(
         mode: ApiProviderPromptCacheMode,
     ) -> ProviderPromptCacheMode {
@@ -1728,108 +1698,78 @@ impl ApiKeyProviderService {
                 || normalized.contains("dalle"))
     }
 
-    fn should_use_openai_image_connection_test(
-        model_name: Option<&str>,
-        custom_models: &[String],
-        fallback_models: &[String],
-    ) -> bool {
-        if let Some(explicit_model) = model_name.map(str::trim).filter(|model| !model.is_empty()) {
-            return Self::looks_like_openai_image_model(explicit_model);
+    fn current_provider_protocol(
+        provider_type: ApiProviderType,
+        api_host: &str,
+    ) -> Result<RuntimeProviderProtocol, String> {
+        match provider_type {
+            ApiProviderType::Anthropic | ApiProviderType::AnthropicCompatible => {
+                Ok(RuntimeProviderProtocol::AnthropicMessages)
+            }
+            ApiProviderType::Codex | ApiProviderType::OpenaiResponse => {
+                Ok(RuntimeProviderProtocol::Responses)
+            }
+            ApiProviderType::Openai if !Self::prefers_openai_responses_endpoint(api_host) => {
+                Ok(RuntimeProviderProtocol::ChatCompletions)
+            }
+            ApiProviderType::Openai => Ok(RuntimeProviderProtocol::Responses),
+            unsupported => Err(format!(
+                "当前 model-provider 不支持 provider 协议: {unsupported}"
+            )),
         }
-
-        let normalized_custom_models: Vec<&str> = custom_models
-            .iter()
-            .map(|model| model.trim())
-            .filter(|model| !model.is_empty())
-            .collect();
-        if !normalized_custom_models.is_empty() {
-            return normalized_custom_models
-                .iter()
-                .all(|model| Self::looks_like_openai_image_model(model));
-        }
-
-        let normalized_fallback_models: Vec<&str> = fallback_models
-            .iter()
-            .map(|model| model.trim())
-            .filter(|model| !model.is_empty())
-            .collect();
-
-        !normalized_fallback_models.is_empty()
-            && normalized_fallback_models
-                .iter()
-                .all(|model| Self::looks_like_openai_image_model(model))
     }
 
-    fn pick_openai_image_test_model(
-        model_name: Option<String>,
-        custom_models: &[String],
-        fallback_models: &[String],
-    ) -> Option<String> {
-        let explicit_model = model_name.and_then(|model| {
-            let normalized = model.trim();
-            (Self::looks_like_openai_image_model(normalized)).then(|| normalized.to_string())
+    async fn stream_current_provider(
+        &self,
+        api_key: &str,
+        api_host: &str,
+        model: &str,
+        prompt: &str,
+        provider_type: ApiProviderType,
+    ) -> Result<(String, String), String> {
+        let protocol = Self::current_provider_protocol(provider_type, api_host)?;
+        let client = CurrentProviderClient::new(RuntimeProviderConfig {
+            provider_name: match protocol {
+                RuntimeProviderProtocol::AnthropicMessages => "anthropic",
+                _ => "openai",
+            }
+            .to_string(),
+            provider_selector: Some(provider_type.to_string()),
+            model_name: model.to_string(),
+            api_key: Some(api_key.to_string()),
+            base_url: Some(api_host.to_string()),
+            credential_uuid: format!("api-key-provider:{provider_type}"),
+            reasoning_effort: None,
+            protocol: Some(protocol),
+            supports_websockets: false,
+            toolshim: false,
+            toolshim_model: None,
+        })
+        .map_err(|error| error.to_string())?;
+        let request = CurrentProviderRequest::new(vec![CurrentProviderMessage::user(vec![
+            CurrentProviderContent::Text(prompt.to_string()),
+        ])])
+        .with_generation(model_provider::current_client::GenerationOptions {
+            max_tokens: Some(64),
+            temperature: Some(0.2),
+            ..Default::default()
         });
-        if explicit_model.is_some() {
-            return explicit_model;
+
+        let mut stream = client
+            .stream(request)
+            .await
+            .map_err(|error| error.to_string())?;
+        let mut content = String::new();
+        while let Some(event) = stream.next().await {
+            match event.map_err(|error| error.to_string())? {
+                CanonicalLlmEvent::TextDelta { text, .. } => content.push_str(&text),
+                CanonicalLlmEvent::ProviderError { message, .. } => return Err(message),
+                CanonicalLlmEvent::Finish { .. } | CanonicalLlmEvent::StepFinish { .. } => break,
+                _ => {}
+            }
         }
 
-        let fallback_model_set: HashSet<String> = fallback_models
-            .iter()
-            .map(|model| model.trim().to_lowercase())
-            .filter(|model| !model.is_empty())
-            .collect();
-
-        let matching_custom_model = custom_models.iter().find_map(|model| {
-            let normalized = model.trim();
-            (!normalized.is_empty()
-                && Self::looks_like_openai_image_model(normalized)
-                && fallback_model_set.contains(&normalized.to_lowercase()))
-            .then(|| normalized.to_string())
-        });
-
-        matching_custom_model
-            .or_else(|| {
-                fallback_models.iter().find_map(|model| {
-                    let normalized = model.trim();
-                    (!normalized.is_empty() && Self::looks_like_openai_image_model(normalized))
-                        .then(|| normalized.to_string())
-                })
-            })
-            .or_else(|| {
-                custom_models.iter().find_map(|model| {
-                    let normalized = model.trim();
-                    (!normalized.is_empty() && Self::looks_like_openai_image_model(normalized))
-                        .then(|| normalized.to_string())
-                })
-            })
-    }
-
-    fn build_openai_images_url(api_host: &str) -> String {
-        let normalized_host = normalize_openai_compatible_api_host(api_host);
-        let trimmed = normalized_host.trim().trim_end_matches('/');
-        let normalized = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            trimmed.to_string()
-        } else if trimmed.is_empty() {
-            "https://api.openai.com".to_string()
-        } else {
-            format!("https://{trimmed}")
-        };
-
-        let has_version = normalized
-            .rsplit('/')
-            .next()
-            .map(|segment| {
-                segment.starts_with('v')
-                    && segment.len() >= 2
-                    && segment[1..].chars().all(|char| char.is_ascii_digit())
-            })
-            .unwrap_or(false);
-
-        if has_version {
-            format!("{normalized}/images/generations")
-        } else {
-            format!("{normalized}/v1/images/generations")
-        }
+        Ok((content.clone(), content))
     }
 
     async fn test_openai_chat_once(
@@ -1840,81 +1780,8 @@ impl ApiKeyProviderService {
         prompt: &str,
         provider_type: ApiProviderType,
     ) -> Result<(String, String), String> {
-        use lime_core::models::openai::{ChatCompletionRequest, ChatMessage, MessageContent};
-        use lime_providers::providers::openai_custom::OpenAICustomProvider;
-
-        let provider =
-            OpenAICustomProvider::with_config(api_key.to_string(), Some(api_host.to_string()));
-
-        let request = ChatCompletionRequest {
-            model: model.to_string(),
-            messages: vec![ChatMessage {
-                role: "user".to_string(),
-                content: Some(MessageContent::Text(prompt.to_string())),
-                tool_calls: None,
-                tool_call_id: None,
-                reasoning_content: None,
-            }],
-            temperature: Some(0.2),
-            max_tokens: Some(64),
-            top_p: None,
-            stream: false,
-            tools: None,
-            tool_choice: None,
-            reasoning_effort: None,
-        };
-
-        let resp = provider
-            .call_api(&request)
+        self.stream_current_provider(api_key, api_host, model, prompt, provider_type)
             .await
-            .map_err(|e| format!("API 调用失败: {e}"))?;
-
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-
-        if status.is_success() {
-            let parsed: serde_json::Value =
-                serde_json::from_str(&body).map_err(|e| format!("解析响应失败: {e} - {body}"))?;
-
-            let content = parsed["choices"]
-                .as_array()
-                .and_then(|arr| arr.first())
-                .and_then(|c| c["message"]["content"].as_str())
-                .unwrap_or("")
-                .to_string();
-
-            return Ok((content, body));
-        }
-
-        // 部分上游（如某些 relay）强制要求 stream=true
-        if status.as_u16() == 400 && body.contains("Stream must be set to true") {
-            let mut request2 = request.clone();
-            request2.stream = true;
-
-            let resp2 = provider
-                .call_api(&request2)
-                .await
-                .map_err(|e| format!("API 调用失败: {e}"))?;
-
-            let status2 = resp2.status();
-            let body2 = resp2.text().await.unwrap_or_default();
-
-            if !status2.is_success() {
-                return Err(Self::format_http_api_error(status2, &body2));
-            }
-
-            let content = Self::parse_chat_completions_sse_content(&body2);
-            return Ok((content, body2));
-        }
-
-        // 部分上游（如 Codex relay）不支持 messages 参数，需要走 /responses 端点
-        if status.as_u16() == 400 && body.contains("Unsupported parameter: messages") {
-            return self
-                .test_codex_responses_endpoint(api_key, api_host, model, prompt, provider_type)
-                .await;
-        }
-
-        Err(Self::format_http_api_error(status, &body))
     }
 
     async fn test_anthropic_chat_once(
@@ -1923,238 +1790,11 @@ impl ApiKeyProviderService {
         api_host: &str,
         model: &str,
         prompt: &str,
-        enable_automatic_prompt_cache: bool,
+        _enable_automatic_prompt_cache: bool,
         provider_type: ApiProviderType,
     ) -> Result<(String, String), String> {
-        use lime_providers::providers::claude_custom::{ClaudeCustomProvider, PromptCacheMode};
-
-        let prompt_cache_mode = if enable_automatic_prompt_cache {
-            PromptCacheMode::Automatic
-        } else {
-            PromptCacheMode::ExplicitOnly
-        };
-        let provider = ClaudeCustomProvider::with_provider_type_and_prompt_cache_mode(
-            api_key.to_string(),
-            Some(api_host.to_string()),
-            provider_type,
-            prompt_cache_mode,
-        );
-
-        let request = serde_json::json!({
-            "model": model,
-            "max_tokens": 64,
-            "messages": [{"role": "user", "content": prompt}]
-        });
-
-        let (status, body) = Self::execute_anthropic_test_request_with_retries(|| async {
-            provider
-                .messages(&request)
-                .await
-                .map_err(|e| format!("API 调用失败: {e}"))
-        })
-        .await?;
-
-        if !status.is_success() {
-            return Err(Self::format_anthropic_http_api_error(
-                status,
-                &body,
-                api_host,
-                provider_type,
-                api_key,
-            ));
-        }
-
-        let parsed: serde_json::Value =
-            serde_json::from_str(&body).map_err(|e| format!("解析响应失败: {e} - {body}"))?;
-
-        let content = parsed["content"]
-            .as_array()
-            .map(|blocks| {
-                blocks
-                    .iter()
-                    .filter_map(|block| block["text"].as_str())
-                    .collect::<String>()
-            })
-            .unwrap_or_default();
-
-        Ok((content, body))
-    }
-
-    fn parse_chat_completions_sse_content(body: &str) -> String {
-        let mut out = String::new();
-
-        for line in body.lines() {
-            let line = line.trim();
-            if !line.starts_with("data:") {
-                continue;
-            }
-            let data = line.trim_start_matches("data:").trim();
-            if data.is_empty() || data == "[DONE]" {
-                continue;
-            }
-
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
-                if let Some(s) = v["choices"][0]["delta"]["content"].as_str() {
-                    out.push_str(s);
-                } else if let Some(s) = v["choices"][0]["message"]["content"].as_str() {
-                    out.push_str(s);
-                }
-            }
-        }
-
-        out
-    }
-
-    fn build_openai_responses_request(
-        model: &str,
-        prompt: &str,
-        stream: bool,
-    ) -> serde_json::Value {
-        serde_json::json!({
-            "model": model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": prompt
-                        }
-                    ]
-                }
-            ],
-            "stream": stream,
-            "max_output_tokens": 64
-        })
-    }
-
-    fn parse_openai_responses_content(body: &str) -> Result<String, String> {
-        let parsed: serde_json::Value =
-            serde_json::from_str(body).map_err(|e| format!("解析响应失败: {e} - {body}"))?;
-
-        if let Some(output_text) = parsed["output_text"].as_str() {
-            return Ok(output_text.to_string());
-        }
-
-        let mut content = String::new();
-        if let Some(output) = parsed["output"].as_array() {
-            for output_item in output {
-                if output_item["type"].as_str() != Some("message") {
-                    continue;
-                }
-
-                if let Some(content_items) = output_item["content"].as_array() {
-                    for item in content_items {
-                        let item_type = item["type"].as_str().unwrap_or_default();
-                        if matches!(item_type, "output_text" | "text") {
-                            if let Some(text) = item["text"].as_str() {
-                                content.push_str(text);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(content)
-    }
-
-    fn extract_json_error_message(body: &str) -> Option<String> {
-        let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
-        let error = parsed.get("error")?;
-
-        if let Some(message) = error.get("message").and_then(|value| value.as_str()) {
-            return Some(message.to_string());
-        }
-
-        error.as_str().map(|value| value.to_string())
-    }
-
-    fn format_http_api_error(status: reqwest::StatusCode, body: &str) -> String {
-        match Self::extract_json_error_message(body) {
-            Some(message) if body.contains("insufficient_quota") => {
-                format!("API 返回错误: {status} - OpenAI 账户配额不足或未开通计费：{message}")
-            }
-            Some(message) => format!("API 返回错误: {status} - {message}"),
-            None => format!("API 返回错误: {status} - {body}"),
-        }
-    }
-
-    fn is_transient_anthropic_upstream_error(status: reqwest::StatusCode, body: &str) -> bool {
-        if matches!(status.as_u16(), 429 | 503 | 529) {
-            return true;
-        }
-
-        let message = Self::extract_json_error_message(body)
-            .unwrap_or_else(|| body.to_string())
-            .to_ascii_lowercase();
-
-        message.contains("overloaded_error")
-            || message.contains("rate_limit")
-            || message.contains("rate limit")
-    }
-
-    async fn execute_anthropic_test_request_with_retries<F, Fut>(
-        mut send_request: F,
-    ) -> Result<(reqwest::StatusCode, String), String>
-    where
-        F: FnMut() -> Fut,
-        Fut: std::future::Future<Output = Result<reqwest::Response, String>>,
-    {
-        const RETRY_DELAYS_MS: [u64; 5] = [0, 400, 1200, 2500, 5000];
-
-        for (attempt_index, delay_ms) in RETRY_DELAYS_MS.iter().enumerate() {
-            if attempt_index > 0 {
-                tokio::time::sleep(std::time::Duration::from_millis(*delay_ms)).await;
-            }
-
-            let response = send_request().await?;
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-
-            if !Self::is_transient_anthropic_upstream_error(status, &body)
-                || attempt_index + 1 == RETRY_DELAYS_MS.len()
-            {
-                return Ok((status, body));
-            }
-        }
-
-        unreachable!("Anthropic 重试循环必须在最后一次尝试返回结果");
-    }
-
-    fn format_anthropic_http_api_error(
-        status: reqwest::StatusCode,
-        body: &str,
-        _api_host: &str,
-        provider_type: ApiProviderType,
-        _api_key: &str,
-    ) -> String {
-        let base = Self::format_http_api_error(status, body);
-        let uses_anthropic_protocol = Self::uses_anthropic_protocol(provider_type);
-        let looks_like_misleading_auth_error = body.contains(
-            "Please carry the API secret key in the 'Authorization' field of the request header",
-        );
-
-        if uses_anthropic_protocol && Self::is_transient_anthropic_upstream_error(status, body) {
-            return format!(
-                "{base}。上游 Anthropic 兼容接口当前暂时过载或限流，请稍后重试；这通常不是 Base URL、鉴权头或模型配置错误。"
-            );
-        }
-
-        if status == reqwest::StatusCode::UNAUTHORIZED
-            && uses_anthropic_protocol
-            && looks_like_misleading_auth_error
-        {
-            return format!(
-                "{base}。Lime 已按 Anthropic 协议发送兼容鉴权；若仍返回此错误，请优先核对 API Key 是否完整、未被截断，并确认该 Key 已开通当前 Base URL / 模型对应的接口权限。"
-            );
-        }
-
-        base
-    }
-
-    fn build_codex_responses_request(model: &str, prompt: &str) -> serde_json::Value {
-        Self::build_openai_responses_request(model, prompt, true)
+        self.stream_current_provider(api_key, api_host, model, prompt, provider_type)
+            .await
     }
 
     async fn test_openai_responses_once(
@@ -2164,52 +1804,14 @@ impl ApiKeyProviderService {
         model: &str,
         prompt: &str,
     ) -> Result<(String, String), String> {
-        use lime_providers::providers::codex::CodexProvider;
-
-        let url = CodexProvider::build_responses_url(api_host);
-        let request_body = Self::build_openai_responses_request(model, prompt, false);
-
-        let client = reqwest::Client::new();
-        let resp = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {api_key}"))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| format!("API 调用失败: {e}"))?;
-
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-
-        if status.is_success() {
-            let content = Self::parse_openai_responses_content(&body)?;
-            return Ok((content, body));
-        }
-
-        if status.as_u16() == 400 && body.contains("Stream must be set to true") {
-            let streaming_request = Self::build_openai_responses_request(model, prompt, true);
-            let resp2 = client
-                .post(&url)
-                .header("Authorization", format!("Bearer {api_key}"))
-                .header("Content-Type", "application/json")
-                .header("Accept", "text/event-stream")
-                .json(&streaming_request)
-                .send()
-                .await
-                .map_err(|e| format!("API 调用失败: {e}"))?;
-
-            let status2 = resp2.status();
-            let body2 = resp2.text().await.unwrap_or_default();
-            if !status2.is_success() {
-                return Err(Self::format_http_api_error(status2, &body2));
-            }
-
-            let content = Self::parse_codex_responses_sse_content(&body2);
-            return Ok((content, body2));
-        }
-
-        Err(Self::format_http_api_error(status, &body))
+        self.stream_current_provider(
+            api_key,
+            api_host,
+            model,
+            prompt,
+            ApiProviderType::OpenaiResponse,
+        )
+        .await
     }
 
     /// 测试 Codex /responses 端点（用于不支持 messages 参数的上游）
@@ -2221,79 +1823,8 @@ impl ApiKeyProviderService {
         prompt: &str,
         provider_type: ApiProviderType,
     ) -> Result<(String, String), String> {
-        use lime_providers::providers::codex::CodexProvider;
-
-        let url = CodexProvider::build_responses_url(api_host);
-
-        // Codex Responses 格式请求体（input 必须是列表）
-        let request_body = Self::build_codex_responses_request(model, prompt);
-
-        let client = reqwest::Client::new();
-        let resp = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {api_key}"))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
+        self.stream_current_provider(api_key, api_host, model, prompt, provider_type)
             .await
-            .map_err(|e| format!("API 调用失败: {e}"))?;
-
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-
-        if !status.is_success() {
-            return Err(Self::format_anthropic_http_api_error(
-                status,
-                &body,
-                api_host,
-                provider_type,
-                api_key,
-            ));
-        }
-
-        // 解析 Codex SSE 响应
-        let content = Self::parse_codex_responses_sse_content(&body);
-        Ok((content, body))
-    }
-
-    fn parse_codex_responses_sse_content(body: &str) -> String {
-        let mut out = String::new();
-
-        for line in body.lines() {
-            let line = line.trim();
-            if !line.starts_with("data:") {
-                continue;
-            }
-            let data = line.trim_start_matches("data:").trim();
-            if data.is_empty() || data == "[DONE]" {
-                continue;
-            }
-
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
-                // Codex responses 格式: {"type": "response.output_text.delta", "delta": "..."}
-                if let Some(s) = v["delta"].as_str() {
-                    out.push_str(s);
-                }
-                // 或者完整响应格式
-                if let Some(arr) = v["output"].as_array() {
-                    for item in arr {
-                        if item["type"].as_str() == Some("message") {
-                            if let Some(content_arr) = item["content"].as_array() {
-                                for c in content_arr {
-                                    if c["type"].as_str() == Some("output_text") {
-                                        if let Some(text) = c["text"].as_str() {
-                                            out.push_str(text);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        out
     }
 
     // ==================== Provider 操作 ====================
@@ -2302,7 +1833,10 @@ impl ApiKeyProviderService {
     /// 检查数据库中是否存在系统 Provider，如果不存在则插入
     /// **Validates: Requirements 9.3**
     pub fn initialize_system_providers(&self, db: &DbConnection) -> Result<usize, String> {
-        let conn = lime_core::database::lock_db(db)?;
+        let mut conn = lime_core::database::lock_db(db)?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始事务失败: {e}"))?;
         let system_providers = get_system_providers();
         let mut inserted_count = 0;
         let mut updated_count = 0;
@@ -2310,7 +1844,7 @@ impl ApiKeyProviderService {
         for def in &system_providers {
             // 检查是否已存在
             let existing =
-                ApiKeyProviderDao::get_provider_by_id(&conn, def.id).map_err(|e| e.to_string())?;
+                ApiKeyProviderDao::get_provider_by_id(&tx, def.id).map_err(|e| e.to_string())?;
 
             match existing {
                 Some(mut provider) => {
@@ -2330,7 +1864,7 @@ impl ApiKeyProviderService {
                     }
                     if should_update {
                         provider.updated_at = Utc::now();
-                        ApiKeyProviderDao::update_provider(&conn, &provider)
+                        ApiKeyProviderDao::update_provider(&tx, &provider)
                             .map_err(|e| e.to_string())?;
                         updated_count += 1;
                     }
@@ -2338,12 +1872,17 @@ impl ApiKeyProviderService {
                 None => {
                     // 插入新的系统 Provider
                     let provider = to_api_key_provider(def);
-                    ApiKeyProviderDao::insert_provider(&conn, &provider)
+                    ApiKeyProviderDao::insert_provider(&tx, &provider)
                         .map_err(|e| e.to_string())?;
                     inserted_count += 1;
                 }
             }
         }
+
+        if inserted_count > 0 || updated_count > 0 {
+            RouteStateDao::advance_generation(&tx).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
 
         if inserted_count > 0 {
             tracing::info!("初始化了 {} 个系统 Provider", inserted_count);
@@ -2453,8 +1992,13 @@ impl ApiKeyProviderService {
             updated_at: now,
         };
 
-        let conn = lime_core::database::lock_db(db)?;
-        ApiKeyProviderDao::insert_provider(&conn, &provider).map_err(|e| e.to_string())?;
+        let mut conn = lime_core::database::lock_db(db)?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始事务失败: {e}"))?;
+        ApiKeyProviderDao::insert_provider(&tx, &provider).map_err(|e| e.to_string())?;
+        RouteStateDao::advance_generation(&tx).map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
 
         Ok(provider)
     }
@@ -2476,10 +2020,14 @@ impl ApiKeyProviderService {
         prompt_cache_mode: Option<ApiProviderPromptCacheMode>,
         custom_models: Option<Vec<String>>,
     ) -> Result<ApiKeyProvider, String> {
-        let conn = lime_core::database::lock_db(db)?;
-        let mut provider = ApiKeyProviderDao::get_provider_by_id(&conn, id)
+        let mut conn = lime_core::database::lock_db(db)?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始事务失败: {e}"))?;
+        let mut provider = ApiKeyProviderDao::get_provider_by_id(&tx, id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("Provider 不存在: {id}"))?;
+        let previous_provider = provider.clone();
 
         // 更新字段
         if let Some(n) = name {
@@ -2521,7 +2069,11 @@ impl ApiKeyProviderService {
         );
         provider.updated_at = Utc::now();
 
-        ApiKeyProviderDao::update_provider(&conn, &provider).map_err(|e| e.to_string())?;
+        ApiKeyProviderDao::update_provider(&tx, &provider).map_err(|e| e.to_string())?;
+        if Self::provider_route_readiness_changed(&previous_provider, &provider) {
+            RouteStateDao::advance_generation(&tx).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
 
         Ok(provider)
     }
@@ -2529,10 +2081,13 @@ impl ApiKeyProviderService {
     /// 删除自定义 Provider
     /// 系统 Provider 不允许删除
     pub fn delete_custom_provider(&self, db: &DbConnection, id: &str) -> Result<bool, String> {
-        let conn = lime_core::database::lock_db(db)?;
+        let mut conn = lime_core::database::lock_db(db)?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始事务失败: {e}"))?;
 
         // 检查是否为系统 Provider
-        let provider = ApiKeyProviderDao::get_provider_by_id(&conn, id)
+        let provider = ApiKeyProviderDao::get_provider_by_id(&tx, id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("Provider 不存在: {id}"))?;
 
@@ -2540,7 +2095,12 @@ impl ApiKeyProviderService {
             return Err("不允许删除系统 Provider".to_string());
         }
 
-        ApiKeyProviderDao::delete_provider(&conn, id).map_err(|e| e.to_string())
+        let deleted = ApiKeyProviderDao::delete_provider(&tx, id).map_err(|e| e.to_string())?;
+        if deleted {
+            RouteStateDao::advance_generation(&tx).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
+        Ok(deleted)
     }
 
     // ==================== API Key 操作 ====================
@@ -2623,6 +2183,13 @@ impl ApiKeyProviderService {
                     .map_err(|e| e.to_string())?;
             }
 
+            let route_readiness_changed = !existing_key.enabled
+                || existing_keys.iter().any(|key| key.id != replacement_key.id)
+                || !provider.enabled;
+            if route_readiness_changed {
+                RouteStateDao::advance_generation(&tx).map_err(|e| e.to_string())?;
+            }
+
             tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
             tracing::info!(
                 "[ApiKeyProviderService] 已将已有 API Key 设为唯一启用 Key: provider={}, key_id={}",
@@ -2678,6 +2245,8 @@ impl ApiKeyProviderService {
             );
         }
 
+        RouteStateDao::advance_generation(&tx).map_err(|e| e.to_string())?;
+
         // 提交事务
         tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
 
@@ -2692,8 +2261,16 @@ impl ApiKeyProviderService {
 
     /// 删除 API Key
     pub fn delete_api_key(&self, db: &DbConnection, key_id: &str) -> Result<bool, String> {
-        let conn = lime_core::database::lock_db(db)?;
-        ApiKeyProviderDao::delete_api_key(&conn, key_id).map_err(|e| e.to_string())
+        let mut conn = lime_core::database::lock_db(db)?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始事务失败: {e}"))?;
+        let deleted = ApiKeyProviderDao::delete_api_key(&tx, key_id).map_err(|e| e.to_string())?;
+        if deleted {
+            RouteStateDao::advance_generation(&tx).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
+        Ok(deleted)
     }
 
     /// 切换 API Key 启用状态
@@ -2703,13 +2280,22 @@ impl ApiKeyProviderService {
         key_id: &str,
         enabled: bool,
     ) -> Result<ApiKeyEntry, String> {
-        let conn = lime_core::database::lock_db(db)?;
-        let mut key = ApiKeyProviderDao::get_api_key_by_id(&conn, key_id)
+        let mut conn = lime_core::database::lock_db(db)?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始事务失败: {e}"))?;
+        let mut key = ApiKeyProviderDao::get_api_key_by_id(&tx, key_id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("API Key not found: {key_id}"))?;
 
+        if key.enabled == enabled {
+            return Ok(key);
+        }
+
         key.enabled = enabled;
-        ApiKeyProviderDao::update_api_key(&conn, &key).map_err(|e| e.to_string())?;
+        ApiKeyProviderDao::update_api_key(&tx, &key).map_err(|e| e.to_string())?;
+        RouteStateDao::advance_generation(&tx).map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| format!("提交事务失败: {e}"))?;
 
         Ok(key)
     }
@@ -2987,7 +2573,7 @@ impl ApiKeyProviderService {
             .as_array()
             .ok_or_else(|| "配置格式错误: 缺少 providers 数组".to_string())?;
 
-        let conn = lime_core::database::lock_db(db)?;
+        let mut conn = lime_core::database::lock_db(db)?;
         let mut imported_providers = 0;
         let mut skipped_providers = 0;
         let mut errors = Vec::new();
@@ -3016,8 +2602,16 @@ impl ApiKeyProviderService {
             let provider: ApiKeyProvider = serde_json::from_value(provider_data.clone())
                 .map_err(|e| format!("Provider 解析失败: {e}"))?;
 
-            // 插入 Provider
-            if let Err(e) = ApiKeyProviderDao::insert_provider(&conn, &provider) {
+            let tx = conn
+                .transaction()
+                .map_err(|e| format!("开始事务失败: {e}"))?;
+            let insert_result = ApiKeyProviderDao::insert_provider(&tx, &provider)
+                .and_then(|_| RouteStateDao::advance_generation(&tx).map(|_| ()));
+            if let Err(e) = insert_result {
+                errors.push(format!("导入 Provider {id} 失败: {e}"));
+                continue;
+            }
+            if let Err(e) = tx.commit() {
                 errors.push(format!("导入 Provider {id} 失败: {e}"));
                 continue;
             }
@@ -3035,6 +2629,42 @@ impl ApiKeyProviderService {
     }
 
     // ==================== 运行时凭证选择 ====================
+
+    /// 按 durable runtime credential ref 精确读取可执行凭证。
+    ///
+    /// 精确恢复不参与 round-robin；只有 ref 指向指定且已启用 Provider 下的已启用 Key
+    /// 时才返回凭证。API Key 的读取、迁移和解密仍由本 service 独占。
+    pub fn select_runtime_credential_by_ref(
+        &self,
+        db: &DbConnection,
+        provider_id: &str,
+        credential_ref: &str,
+    ) -> Result<Option<RuntimeProviderCredential>, String> {
+        let Some(key_id) = runtime_api_key_id_from_credential_uuid(credential_ref.trim()) else {
+            return Ok(None);
+        };
+        let conn = lime_core::database::lock_db(db)?;
+        let Some(provider) = ApiKeyProviderDao::get_provider_by_id(&conn, provider_id)
+            .map_err(|error| error.to_string())?
+        else {
+            return Ok(None);
+        };
+        if !provider.enabled {
+            return Ok(None);
+        }
+        let Some(key) = ApiKeyProviderDao::get_api_key_by_id(&conn, key_id)
+            .map_err(|error| error.to_string())?
+        else {
+            return Ok(None);
+        };
+        if !key.enabled || key.provider_id != provider.id {
+            return Ok(None);
+        }
+
+        let api_key = self.decrypt_api_key_entry_with_migration(&conn, &key)?;
+        self.convert_provider_to_credential(&provider, &key.id, &api_key)
+            .map(Some)
+    }
 
     /// 从 API Key Provider 主路径选择凭证。
     ///
@@ -3561,11 +3191,7 @@ impl ApiKeyProviderService {
                     Err(e) => Err(e),
                 }
             }
-            ApiProviderType::Gemini => {
-                // Gemini 使用 /models 端点
-                self.test_gemini_connection(&api_key, &provider.api_host)
-                    .await
-            }
+            ApiProviderType::Gemini => Err("当前 model-provider 不支持 Gemini 协议".to_string()),
             ApiProviderType::Codex => {
                 let test_model = Self::pick_test_model(
                     model_name.clone(),
@@ -3575,12 +3201,7 @@ impl ApiKeyProviderService {
                 .ok_or_else(|| "缺少模型名称：请在自定义模型中填写一个模型名".to_string())?;
 
                 if Self::looks_like_openai_image_model(&test_model) {
-                    self.test_openai_responses_image_generation_endpoint(
-                        &api_key,
-                        &provider.api_host,
-                        &test_model,
-                    )
-                    .await
+                    Err("当前 model-provider 不支持图片连接探测".to_string())
                 } else {
                     self.test_codex_responses_endpoint(
                         &api_key,
@@ -3605,12 +3226,7 @@ impl ApiKeyProviderService {
 
                 if let Some(test_model) = test_model {
                     if Self::looks_like_openai_image_model(&test_model) {
-                        self.test_openai_responses_image_generation_endpoint(
-                            &api_key,
-                            &provider.api_host,
-                            &test_model,
-                        )
-                        .await
+                        Err("当前 model-provider 不支持图片连接探测".to_string())
                     } else {
                         self.test_openai_responses_once(
                             &api_key,
@@ -3622,8 +3238,7 @@ impl ApiKeyProviderService {
                         .map(|_| vec![test_model])
                     }
                 } else if Self::uses_openai_responses_protocol(provider_type) {
-                    self.test_openai_models_endpoint(&api_key, &provider.api_host)
-                        .await
+                    Err("当前 model-provider 需要显式模型名，未注册 /models 探测".to_string())
                 } else {
                     Err(
                         "当前 API Host 指向 Responses 兼容入口，请先在自定义模型中填写一个模型名。"
@@ -3632,7 +3247,7 @@ impl ApiKeyProviderService {
                 }
             }
             _ => {
-                // OpenAI 兼容类型，优先使用 /models 端点
+                // Current provider 只接受显式模型，不再通过旧 /models provider 探测。
                 tracing::debug!("[TEST_CONNECTION] model_name param: {model_name:?}");
                 tracing::debug!(
                     "[TEST_CONNECTION] provider.custom_models: {:?}",
@@ -3643,63 +3258,27 @@ impl ApiKeyProviderService {
                     fallback_models.len()
                 );
 
-                if Self::should_use_openai_image_connection_test(
-                    model_name.as_deref(),
+                let test_model = Self::pick_test_model(
+                    model_name.clone(),
                     &provider.custom_models,
                     &fallback_models,
-                ) {
-                    let image_test_model = Self::pick_openai_image_test_model(
-                        model_name.clone(),
-                        &provider.custom_models,
-                        &fallback_models,
-                    )
-                    .unwrap_or_else(|| "gpt-images-2".to_string());
-
-                    let image_result = self
-                        .test_openai_image_generation_endpoint(
+                );
+                match test_model {
+                    Some(test_model) if Self::looks_like_openai_image_model(&test_model) => {
+                        Err("当前 model-provider 不支持图片连接探测".to_string())
+                    }
+                    Some(test_model) => self
+                        .test_openai_chat_once(
                             &api_key,
                             &provider.api_host,
-                            &image_test_model,
+                            &test_model,
+                            "hi",
+                            effective_provider_type,
                         )
-                        .await;
-                    tracing::debug!("[TEST_CONNECTION] image_generation result: {image_result:?}");
-                    image_result
-                } else {
-                    let models_result = self
-                        .test_openai_models_endpoint(&api_key, &provider.api_host)
-                        .await;
-
-                    tracing::debug!("[TEST_CONNECTION] models_result: {models_result:?}");
-
-                    // 如果 /models 端点失败：
-                    // 1) 优先用传入的 model_name
-                    // 2) 否则使用 Provider 配置的 custom_models
-                    if models_result.is_err() {
-                        let test_model = Self::pick_test_model(
-                            model_name.clone(),
-                            &provider.custom_models,
-                            &fallback_models,
-                        );
-
-                        tracing::debug!("[TEST_CONNECTION] fallback test_model: {test_model:?}");
-
-                        if let Some(test_model) = test_model {
-                            let chat_result = self
-                                .test_openai_chat_completion(
-                                    &api_key,
-                                    &provider.api_host,
-                                    &test_model,
-                                )
-                                .await;
-                            tracing::debug!(
-                                "[TEST_CONNECTION] chat_completion result: {chat_result:?}"
-                            );
-                            chat_result
-                        } else {
-                            models_result
-                        }
-                    } else {
-                        models_result
+                        .await
+                        .map(|_| vec![test_model]),
+                    None => {
+                        Err("当前 model-provider 需要显式模型名，未注册 /models 探测".to_string())
                     }
                 }
             }
@@ -3723,317 +3302,28 @@ impl ApiKeyProviderService {
         }
     }
 
-    /// 测试 OpenAI 兼容的 /models 端点
-    async fn test_openai_models_endpoint(
-        &self,
-        api_key: &str,
-        api_host: &str,
-    ) -> Result<Vec<String>, String> {
-        use lime_providers::providers::openai_custom::OpenAICustomProvider;
-
-        let provider =
-            OpenAICustomProvider::with_config(api_key.to_string(), Some(api_host.to_string()));
-
-        let response = provider
-            .list_models()
-            .await
-            .map_err(|e| format!("获取模型列表失败: {e}"))?;
-
-        // 解析模型列表
-        let models: Vec<String> = response["data"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        if models.is_empty() {
-            Err("未获取到任何模型".to_string())
-        } else {
-            Ok(models)
-        }
-    }
-
-    /// 测试 OpenAI 兼容的 chat/completions 端点
-    async fn test_openai_chat_completion(
-        &self,
-        api_key: &str,
-        api_host: &str,
-        model: &str,
-    ) -> Result<Vec<String>, String> {
-        self.test_openai_chat_once(api_key, api_host, model, "hi", ApiProviderType::Openai)
-            .await
-            .map(|_| vec![model.to_string()])
-    }
-
-    fn normalize_openai_responses_image_tool_model(model: &str) -> String {
-        let trimmed = model.trim();
-        if let Some(version) = trimmed.strip_prefix("gpt-images-") {
-            return format!("gpt-image-{version}");
-        }
-
-        trimmed.to_string()
-    }
-
-    fn build_openai_responses_image_generation_input(prompt: &str, use_input_list: bool) -> Value {
-        if use_input_list {
-            return serde_json::json!([
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": prompt,
-                        }
-                    ],
-                }
-            ]);
-        }
-
-        serde_json::json!(prompt)
-    }
-
-    fn build_openai_responses_image_generation_request(
-        image_model: &str,
-        prompt: &str,
-        use_input_list: bool,
-    ) -> Value {
-        serde_json::json!({
-            "model": OPENAI_RESPONSES_IMAGE_TEST_OUTER_MODEL,
-            "input": Self::build_openai_responses_image_generation_input(prompt, use_input_list),
-            "tools": [
-                {
-                    "type": "image_generation",
-                    "model": Self::normalize_openai_responses_image_tool_model(image_model),
-                }
-            ],
-            "stream": true,
-        })
-    }
-
-    fn openai_responses_image_item_has_result(item: &Value) -> bool {
-        item.get("type").and_then(Value::as_str) == Some("image_generation_call")
-            && item
-                .get("result")
-                .or_else(|| item.get("partial_image_b64"))
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .is_some_and(|value| !value.is_empty())
-    }
-
-    fn openai_responses_image_value_has_result(value: &Value) -> bool {
-        if let Some(item) = value.get("item") {
-            if Self::openai_responses_image_item_has_result(item) {
-                return true;
-            }
-        }
-
-        value
-            .get("output")
-            .and_then(Value::as_array)
-            .is_some_and(|items| {
-                items
-                    .iter()
-                    .any(Self::openai_responses_image_item_has_result)
-            })
-    }
-
-    fn openai_responses_image_body_has_result(body: &str) -> bool {
-        if let Ok(value) = serde_json::from_str::<Value>(body) {
-            if Self::openai_responses_image_value_has_result(&value) {
-                return true;
-            }
-        }
-
-        body.lines()
-            .filter_map(|line| line.trim().strip_prefix("data:"))
-            .map(str::trim)
-            .filter(|data| !data.is_empty() && *data != "[DONE]")
-            .filter_map(|data| serde_json::from_str::<Value>(data).ok())
-            .any(|value| Self::openai_responses_image_value_has_result(&value))
-    }
-
-    fn should_retry_openai_responses_image_generation_with_input_list(
-        status: reqwest::StatusCode,
-        body: &str,
-    ) -> bool {
-        status == reqwest::StatusCode::BAD_REQUEST
-            && body.to_ascii_lowercase().contains("input must be a list")
-    }
-
-    async fn send_openai_responses_image_generation_test(
-        &self,
-        api_key: &str,
-        api_host: &str,
-        model: &str,
-        use_input_list: bool,
-    ) -> Result<(reqwest::StatusCode, String), String> {
-        use lime_providers::providers::codex::CodexProvider;
-
-        let url = CodexProvider::build_responses_url(api_host);
-        let request = Self::build_openai_responses_image_generation_request(
-            model,
-            "生成一个简单的蓝色渐变方块测试图",
-            use_input_list,
-        );
-
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(240))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
-        let resp = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {api_key}"))
-            .header("Content-Type", "application/json")
-            .header("Accept", "text/event-stream")
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| format!("Responses 图片生成接口调用失败: {e}"))?;
-
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        Ok((status, body))
-    }
-
-    async fn test_openai_responses_image_generation_endpoint(
-        &self,
-        api_key: &str,
-        api_host: &str,
-        model: &str,
-    ) -> Result<Vec<String>, String> {
-        let (mut status, mut body) = self
-            .send_openai_responses_image_generation_test(api_key, api_host, model, false)
-            .await?;
-
-        if Self::should_retry_openai_responses_image_generation_with_input_list(status, &body) {
-            (status, body) = self
-                .send_openai_responses_image_generation_test(api_key, api_host, model, true)
-                .await?;
-        }
-
-        if !status.is_success() {
-            return Err(format!(
-                "Responses 图片生成接口返回错误: {}",
-                Self::format_http_api_error(status, &body)
-            ));
-        }
-
-        if !Self::openai_responses_image_body_has_result(&body) {
-            return Err(
-                "Responses 图片生成接口调用成功，但未返回 image_generation_call.result".to_string(),
-            );
-        }
-
-        Ok(vec![model.to_string()])
-    }
-
-    async fn test_openai_image_generation_endpoint(
-        &self,
-        api_key: &str,
-        api_host: &str,
-        model: &str,
-    ) -> Result<Vec<String>, String> {
-        let url = Self::build_openai_images_url(api_host);
-        let request = serde_json::json!({
-            "model": model,
-            "prompt": "生成一个简单的蓝色渐变方块测试图",
-            "n": 1,
-            "size": "1024x1024",
-            "response_format": "b64_json"
-        });
-
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(240))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
-        let resp = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {api_key}"))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| format!("图片生成接口调用失败: {e}"))?;
-
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        if !status.is_success() {
-            return Err(format!(
-                "图片生成接口返回错误: {}",
-                Self::format_http_api_error(status, &body)
-            ));
-        }
-
-        let parsed: serde_json::Value =
-            serde_json::from_str(&body).map_err(|e| format!("解析响应失败: {e} - {body}"))?;
-        let has_image = parsed["data"].as_array().is_some_and(|items| {
-            items.iter().any(|item| {
-                item.get("url")
-                    .and_then(|value| value.as_str())
-                    .map(|value| !value.trim().is_empty())
-                    .unwrap_or(false)
-                    || item
-                        .get("b64_json")
-                        .and_then(|value| value.as_str())
-                        .map(|value| !value.trim().is_empty())
-                        .unwrap_or(false)
-            })
-        });
-
-        if !has_image {
-            return Err("图片生成接口调用成功，但未返回可解析图片数据".to_string());
-        }
-
-        Ok(vec![model.to_string()])
-    }
-
     /// 测试 Claude Key 的客户端兼容性
     async fn test_claude_key_compatibility(
         &self,
         api_key: &str,
         api_host: &str,
-        enable_automatic_prompt_cache: bool,
+        _enable_automatic_prompt_cache: bool,
     ) -> Result<(), String> {
-        use lime_providers::providers::claude_custom::{ClaudeCustomProvider, PromptCacheMode};
-
-        let prompt_cache_mode = if enable_automatic_prompt_cache {
-            PromptCacheMode::Automatic
-        } else {
-            PromptCacheMode::ExplicitOnly
-        };
-        let provider = ClaudeCustomProvider::with_prompt_cache_mode(
-            api_key.to_string(),
-            Some(api_host.to_string()),
-            prompt_cache_mode,
-        );
-
-        // 发送一个最小的测试请求
-        let request = serde_json::json!({
-            "model": "claude-3-haiku-20240307",
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "hi"}]
-        });
-
-        let response = provider
-            .messages(&request)
+        match self
+            .stream_current_provider(
+                api_key,
+                api_host,
+                "claude-3-haiku-20240307",
+                "hi",
+                ApiProviderType::Anthropic,
+            )
             .await
-            .map_err(|e| format!("API 调用失败: {e}"))?;
-
-        if response.status().is_success() {
-            Ok(())
-        } else {
-            let body = response.text().await.unwrap_or_default();
-
-            // 检查是否是 Claude Code 专用凭证限制错误
-            if body.contains("only authorized for use with Claude Code") {
-                return Err("CLAUDE_CODE_ONLY".to_string());
+        {
+            Ok(_) => Ok(()),
+            Err(error) if error.contains("only authorized for use with Claude Code") => {
+                Err("CLAUDE_CODE_ONLY".to_string())
             }
-
-            // 其他错误不影响兼容性判断
-            Ok(())
+            Err(_) => Ok(()),
         }
     }
 
@@ -4043,105 +3333,18 @@ impl ApiKeyProviderService {
         api_key: &str,
         api_host: &str,
         model: &str,
-        enable_automatic_prompt_cache: bool,
+        _enable_automatic_prompt_cache: bool,
         provider_type: ApiProviderType,
     ) -> Result<Vec<String>, String> {
-        use lime_providers::providers::claude_custom::{ClaudeCustomProvider, PromptCacheMode};
-
-        let prompt_cache_mode = if enable_automatic_prompt_cache {
-            PromptCacheMode::Automatic
-        } else {
-            PromptCacheMode::ExplicitOnly
-        };
-        let provider = ClaudeCustomProvider::with_provider_type_and_prompt_cache_mode(
-            api_key.to_string(),
-            Some(api_host.to_string()),
-            provider_type,
-            prompt_cache_mode,
-        );
-
-        // 发送一个简单的测试请求
-        let request = serde_json::json!({
-            "model": model,
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "hi"}]
-        });
-
-        let (status, body) = Self::execute_anthropic_test_request_with_retries(|| async {
-            provider
-                .messages(&request)
-                .await
-                .map_err(|e| format!("API 调用失败: {e}"))
-        })
-        .await?;
-
-        if status.is_success() {
-            Ok(vec![model.to_string()])
-        } else {
-            // 检查是否是 Claude Code 专用凭证限制错误
-            if body.contains("only authorized for use with Claude Code") {
-                return Err("CLAUDE_CODE_ONLY".to_string());
+        match self
+            .stream_current_provider(api_key, api_host, model, "hi", provider_type)
+            .await
+        {
+            Ok(_) => Ok(vec![model.to_string()]),
+            Err(error) if error.contains("only authorized for use with Claude Code") => {
+                Err("CLAUDE_CODE_ONLY".to_string())
             }
-
-            Err(Self::format_anthropic_http_api_error(
-                status,
-                &body,
-                api_host,
-                provider_type,
-                api_key,
-            ))
-        }
-    }
-
-    /// 测试 Gemini 连接
-    async fn test_gemini_connection(
-        &self,
-        api_key: &str,
-        api_host: &str,
-    ) -> Result<Vec<String>, String> {
-        use reqwest::Client;
-        use std::time::Duration;
-
-        let client = Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
-
-        // Gemini API 的模型列表端点
-        let base = api_host.trim_end_matches('/');
-        let url = format!("{base}/v1beta/models?key={api_key}");
-
-        let response = client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("请求失败: {e}"))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("API 返回错误: {status} - {body}"));
-        }
-
-        let data: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("解析响应失败: {e}"))?;
-
-        let models: Vec<String> = data["models"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        if models.is_empty() {
-            Err("未获取到任何模型".to_string())
-        } else {
-            Ok(models)
+            Err(error) => Err(error),
         }
     }
 }

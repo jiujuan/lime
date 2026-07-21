@@ -75,6 +75,15 @@ function webToolsSnapshotFromDom({
       processRunning: group.getAttribute("data-process-running") || "",
     };
   });
+  const historicalTimelinePreviews = Array.from(
+    document.querySelectorAll(
+      '[data-testid^="message-list-historical-timeline-preview:"]',
+    ),
+  ).map((preview) => ({
+    testId: preview.getAttribute("data-testid") || "",
+    text: preview.textContent || "",
+  }));
+  const historicalTimelinePreview = historicalTimelinePreviews.at(-1);
   const webProcessGroup = processGroups.find(
     (group) =>
       group.buttonText.includes(completedTitle) ||
@@ -243,7 +252,8 @@ function webToolsSnapshotFromDom({
     reasoningIndex: midThinkingIndex,
     finalAnswerIndex: finalIndex,
     hasReasoningBeforeFinalAnswer:
-      midThinkingIndex >= 0 && (finalIndex < 0 || midThinkingIndex < finalIndex),
+      midThinkingIndex >= 0 &&
+      (finalIndex < 0 || midThinkingIndex < finalIndex),
     hasReasoningVisibleBeforeFinalAnswer:
       midThinkingIndex >= 0 &&
       finalIndex < 0 &&
@@ -264,6 +274,9 @@ function webToolsSnapshotFromDom({
     webProcessGroupRunning: webProcessGroup?.processRunning === "yes",
     webProcessGroupKind: webProcessGroup?.processKind || "",
     webProcessGroupText: processText,
+    historicalTimelinePreviewVisible: Boolean(historicalTimelinePreview),
+    historicalTimelinePreviewCount: historicalTimelinePreviews.length,
+    historicalTimelinePreviewText: historicalTimelinePreview?.text || "",
     latestAssistantMessageContentPartTypes:
       latestAssistantBubble?.messageContentPartTypes || "",
     latestAssistantRendererContentPartTypes:
@@ -374,30 +387,6 @@ export async function waitForGuiWebToolsRenderingInProgress(page, options) {
         webToolsLiveRunningStateCaptured: true,
       });
     }
-    if (
-      snapshot.hasPrompt &&
-      snapshot.hasIntroText &&
-      (snapshot.hasAssistantSummary || snapshot.hasDoneText) &&
-      snapshot.hasProcessTitle &&
-      snapshot.webProcessGroupExpanded === false &&
-      snapshot.hasIntroBeforeProcess === true &&
-      snapshot.hasFinalTextAfterProcess === true &&
-      snapshot.latestAssistantRendererContentPartTypes.includes(
-        "tool:WebSearch",
-      ) &&
-      snapshot.latestAssistantRendererContentPartTypes.includes("thinking") &&
-      snapshot.latestAssistantRendererContentPartTypes.includes(
-        "tool:WebFetch",
-      ) &&
-      snapshot.processGroupExcludesFinalMarkdown === true &&
-      snapshot.rawJsonEnvelopeVisible === false &&
-      snapshot.searchNoiseVisible === false
-    ) {
-      return sanitizeJson({
-        ...snapshot,
-        fastCompletedBeforeLiveCapture: true,
-      });
-    }
     await sleep(options.intervalMs);
   }
   throw new Error(
@@ -419,8 +408,12 @@ export async function waitForGuiWebToolsRenderingCompleted(page, options) {
     lastSnapshot = snapshot;
     if (
       snapshot.hasPrompt &&
-      (snapshot.hasAssistantSummary || snapshot.hasDoneText) &&
-      snapshot.hasProcessTitle &&
+      snapshot.hasAssistantSummary &&
+      snapshot.hasDoneText &&
+      snapshot.historicalTimelinePreviewVisible === true &&
+      snapshot.historicalTimelinePreviewCount >= 1 &&
+      snapshot.hasProcessTitle === false &&
+      snapshot.processGroupCount === 0 &&
       snapshot.webProcessGroupExpanded === false &&
       snapshot.hasSearchSourceSection === false &&
       snapshot.hasFetchPageSection === false &&
@@ -430,8 +423,21 @@ export async function waitForGuiWebToolsRenderingCompleted(page, options) {
       snapshot.hasFullSearchUrlVisible === false &&
       snapshot.hasFetchPageUrl === false &&
       snapshot.hasFetchMarkdownHidden &&
-      snapshot.hasIntroBeforeProcess &&
-      snapshot.hasFinalTextAfterProcess &&
+      snapshot.latestAssistantMessageContentPartTypes.includes(
+        "tool:WebSearch",
+      ) &&
+      snapshot.latestAssistantMessageContentPartTypes.includes("thinking") &&
+      snapshot.latestAssistantMessageContentPartTypes.includes(
+        "tool:WebFetch",
+      ) &&
+      snapshot.latestAssistantRendererContentPartTypes.includes(
+        "tool:WebSearch",
+      ) === false &&
+      snapshot.latestAssistantRendererContentPartTypes.includes("thinking") ===
+        false &&
+      snapshot.latestAssistantRendererContentPartTypes.includes(
+        "tool:WebFetch",
+      ) === false &&
       snapshot.hasTimelineOrderPreserved === false &&
       snapshot.processGroupExcludesFinalMarkdown &&
       snapshot.rawJsonEnvelopeVisible === false &&
@@ -444,65 +450,13 @@ export async function waitForGuiWebToolsRenderingCompleted(page, options) {
       snapshot.textareaDisabled === false &&
       snapshot.stopButtonVisible === false
     ) {
-      const expandedSnapshot = await expandAndInspectGuiWebToolsProcess(page, {
-        ...options,
-        defaultSnapshot: snapshot,
-      });
-      return sanitizeJson({
-        ...snapshot,
-        expandedDetails: expandedSnapshot,
-      });
+      return sanitizeJson(snapshot);
     }
     await sleep(options.intervalMs);
   }
   throw new Error(
     `Claw GUI 未完成网页搜索渲染验收: ${JSON.stringify(
       sanitizeJson(lastSnapshot),
-    )}`,
-  );
-}
-
-export async function expandAndInspectGuiWebToolsProcess(page, options) {
-  await page.evaluate(() => {
-    const groups = Array.from(
-      document.querySelectorAll('[data-testid="streaming-process-group"]'),
-    );
-    const targetGroup = groups.find((group) =>
-      (group.textContent || "").includes("已搜索网页 1 次，读取网页 1 次"),
-    );
-    const button = targetGroup?.querySelector("button");
-    if (button instanceof HTMLButtonElement) {
-      button.click();
-    }
-  });
-
-  const startedAt = Date.now();
-  let lastSnapshot = null;
-  while (Date.now() - startedAt < Math.min(options.timeoutMs, 30000)) {
-    const snapshot = await evaluateWebToolsSnapshot(page);
-    lastSnapshot = snapshot;
-    if (
-      snapshot?.webProcessGroupExpanded &&
-      snapshot.hasSearchSourceSection &&
-      snapshot.hasFetchPageSection &&
-      snapshot.hasSearchTitle &&
-      snapshot.hasMidThinkingText &&
-      snapshot.hasSearchSourceLabel &&
-      snapshot.hasFullSearchUrlVisible === false &&
-      snapshot.hasFetchPageUrl &&
-      snapshot.hasTimelineOrderPreserved &&
-      snapshot.hasFetchMarkdownHidden &&
-      snapshot.processGroupExcludesFinalMarkdown &&
-      snapshot.rawJsonEnvelopeVisible === false &&
-      snapshot.searchNoiseVisible === false
-    ) {
-      return sanitizeJson(snapshot);
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error(
-    `Claw GUI 网页搜索过程展开验收失败: ${JSON.stringify(
-      sanitizeJson({ defaultSnapshot: options.defaultSnapshot, lastSnapshot }),
     )}`,
   );
 }

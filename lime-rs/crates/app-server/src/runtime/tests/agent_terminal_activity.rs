@@ -13,6 +13,8 @@ use thread_store::{
     AgentMailboxResultStatus, AgentMailboxStore, ReadThreadParams, ThreadSpawnEdgeStatus,
     ThreadStore,
 };
+use tokio::sync::{oneshot, Mutex};
+use tokio::time::{timeout, Duration};
 use tool_runtime::agent_control::{
     AgentControlCaller, AgentControlCommand, AgentControlGatewayRequest,
 };
@@ -262,6 +264,49 @@ async fn complete_child(core: &RuntimeCore) -> AgentTurn {
         .expect("child turn")
         .response
         .turn
+}
+
+#[tokio::test]
+async fn terminal_result_notifies_an_existing_parent_session_actor() {
+    let (_temp, core, _store, root, _root_turn) = setup(ChildOutcome::Completed).await;
+    let session = core.session_loops.get_or_create(&root.session_id).await;
+    let (ready_tx, ready_rx) = oneshot::channel();
+    let ready_tx = Arc::new(Mutex::new(Some(ready_tx)));
+    let (activity_tx, activity_rx) = oneshot::channel();
+    let activity_tx = Arc::new(Mutex::new(Some(activity_tx)));
+    let task = agent_runtime::session_loop::RuntimeSessionClosureTask::new(
+        "parent-terminal-activity-observer",
+        Vec::new(),
+        move |context, _input, _cancel| {
+            let ready_tx = Arc::clone(&ready_tx);
+            let activity_tx = Arc::clone(&activity_tx);
+            Box::pin(async move {
+                if let Some(sender) = ready_tx.lock().await.take() {
+                    let _ = sender.send(());
+                }
+                context.wait_for_pending_input().await;
+                if let Some(sender) = activity_tx.lock().await.take() {
+                    let _ = sender.send(());
+                }
+                Ok(())
+            })
+        },
+    );
+    let submission = session
+        .submit(Arc::new(task), false)
+        .await
+        .expect("activity observer submission");
+    ready_rx.await.expect("activity observer ready");
+
+    complete_child(&core).await;
+    timeout(Duration::from_secs(2), activity_rx)
+        .await
+        .expect("terminal activity notification timeout")
+        .expect("terminal activity notification");
+    assert_eq!(
+        submission.completion.await.expect("observer completion"),
+        Ok(agent_runtime::session_loop::RuntimeSessionTaskOutcome::Completed)
+    );
 }
 
 async fn wait_for_recovered_child_result(

@@ -1,20 +1,19 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it
-} from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   captureTurnStream,
   completedTurn,
+  createDeferred,
   flushEffects,
   flushRuntimeDetailRefresh,
   getAgentStreamTextOverlay,
   mockGetAgentRuntimeSession,
+  mockGetAgentRuntimeThreadRead,
+  mockReadAgentRuntimeThread,
   mockSubmitAgentRuntimeTurn,
   mockToast,
   mountHook,
-  seedSession
+  seedSession,
 } from "../useAgentChat.testUtils";
 
 describe("useAgentChat runtime routing", () => {
@@ -48,11 +47,11 @@ describe("useAgentChat runtime routing", () => {
           runtimeOptions: expect.objectContaining({
             runtimeRequest: expect.any(Object),
           }),
-          queueIfBusy: true,
         }),
       );
       expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest?.searchMode,
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.searchMode,
       ).toBeUndefined();
     } finally {
       harness.unmount();
@@ -159,6 +158,155 @@ describe("useAgentChat runtime routing", () => {
         ),
       ).toBe(true);
       expect(getAgentStreamTextOverlay(assistantMessage?.id)).toBeNull();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("并发详情请求晚返回时不应把已完成的连续 delta 截回首段", async () => {
+    const workspaceId = "ws-runtime-detail-stale-prefix";
+    const sessionId = "session-runtime-detail-stale-prefix";
+    const turnId = "turn-runtime-detail-stale-prefix";
+    const firstText = "以下是今日国际新闻简要整理：";
+    const secondText =
+      "全球市场继续关注能源与供应链变化，国际组织呼吁加强协调。CLAW_NEWS_FIXTURE_DONE";
+    seedSession(workspaceId, sessionId);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      thread_id: "thread-runtime-detail-stale-prefix",
+      created_at: 1,
+      updated_at: 1,
+      messages: [],
+    });
+    mockGetAgentRuntimeThreadRead.mockResolvedValue({
+      thread_id: "thread-runtime-detail-stale-prefix",
+      status: "idle",
+      pending_requests: [],
+      incidents: [],
+      queued_turns: [],
+    });
+    mockReadAgentRuntimeThread.mockResolvedValue({
+      thread: {
+        cliVersion: "test",
+        createdAt: 0.001,
+        cwd: "/tmp/runtime-detail-stale-prefix",
+        ephemeral: false,
+        id: "thread-runtime-detail-stale-prefix",
+        modelProvider: "fixture-provider",
+        preview: "",
+        sessionId,
+        status: { type: "idle" },
+        source: "appServer",
+        turns: [],
+        updatedAt: 0.001,
+      },
+    });
+    const harness = mountHook(workspaceId);
+    const stream = captureTurnStream();
+    const deferredDetail =
+      createDeferred<Awaited<ReturnType<typeof mockGetAgentRuntimeSession>>>();
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("整理今天的国际新闻", [], false, false, false, "react");
+      });
+
+      mockGetAgentRuntimeSession.mockImplementationOnce(
+        () => deferredDetail.promise,
+      );
+      act(() => {
+        stream.emit({
+          type: "warning",
+          message: "触发运行态详情同步",
+        });
+      });
+      await flushRuntimeDetailRefresh();
+
+      act(() => {
+        stream.emit({
+          type: "text_delta",
+          itemId: `agent-message-final-${turnId}`,
+          text: firstText,
+        });
+        stream.emit({
+          type: "text_delta",
+          itemId: `agent-message-final-${turnId}`,
+          text: secondText,
+        });
+        stream.emit({
+          type: "turn_completed",
+          turn: completedTurn(turnId),
+        });
+      });
+
+      expect(
+        [...harness.getValue().messages]
+          .reverse()
+          .find((message) => message.role === "assistant")?.content,
+      ).toBe(`${firstText}${secondText}`);
+
+      deferredDetail.resolve({
+        id: sessionId,
+        thread_id: "thread-runtime-detail-stale-prefix",
+        created_at: 1,
+        updated_at: 2,
+        messages: [
+          {
+            id: `${turnId}:user`,
+            role: "user",
+            timestamp: 1,
+            content: [{ type: "text", text: "整理今天的国际新闻" }],
+          },
+          {
+            id: `${turnId}:assistant`,
+            role: "assistant",
+            timestamp: 2,
+            content: [{ type: "text", text: firstText }],
+          },
+        ],
+        turns: [
+          {
+            ...completedTurn(turnId),
+            thread_id: "thread-runtime-detail-stale-prefix",
+          },
+        ],
+        items: [
+          {
+            id: `agent-message-final-${turnId}`,
+            thread_id: "thread-runtime-detail-stale-prefix",
+            turn_id: turnId,
+            sequence: 1,
+            type: "agent_message",
+            text: firstText,
+            phase: "final_answer",
+            status: "completed",
+            started_at: "2026-07-19T20:57:30.149Z",
+            completed_at: "2026-07-19T20:57:30.425Z",
+            updated_at: "2026-07-19T20:57:30.425Z",
+          },
+        ],
+        thread_read: {
+          thread_id: "thread-runtime-detail-stale-prefix",
+          status: "completed",
+          active_turn_id: turnId,
+        },
+      });
+      await flushEffects();
+
+      const assistantMessage = [...harness.getValue().messages]
+        .reverse()
+        .find((message) => message.role === "assistant");
+      expect(assistantMessage?.content).toBe(`${firstText}${secondText}`);
+      expect(
+        assistantMessage?.contentParts
+          ?.filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join(""),
+      ).toBe(`${firstText}${secondText}`);
     } finally {
       harness.unmount();
     }

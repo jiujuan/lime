@@ -35,7 +35,7 @@ function traceRaw() {
       error: "EISDIR: illegal operation on a directory",
     },
     { command: "save_config", transport: "electron-ipc", status: "success" },
-    appServerEntry("agentSession/list"),
+    appServerEntry("thread/list"),
   ]);
 }
 
@@ -115,7 +115,7 @@ describe("Settings Execution Policy Gate B evidence", () => {
       }),
     ).toMatchObject({
       appServerIpcHitCount: 1,
-      methods: ["agentSession/list"],
+      methods: ["thread/list"],
       hostSuccessCommands: ["get_config", "save_config"],
       missingHostSuccessCommands: [],
       successfulSaveCount: 2,

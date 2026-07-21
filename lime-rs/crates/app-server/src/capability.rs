@@ -1,10 +1,10 @@
 use app_server_protocol::CapabilityDescriptor;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::RuntimeOptions;
-use app_server_protocol::METHOD_AGENT_SESSION_READ;
-use app_server_protocol::METHOD_AGENT_SESSION_START;
-use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
-use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
+use app_server_protocol::METHOD_THREAD_READ;
+use app_server_protocol::METHOD_THREAD_START;
+use app_server_protocol::METHOD_TURN_INTERRUPT;
+use app_server_protocol::METHOD_TURN_START;
 use lime_agent::agent_tools::catalog::{
     tool_catalog_entries_for_surface, ToolLifecycle, WorkspaceToolSurface,
 };
@@ -70,7 +70,7 @@ impl CapabilityInventoryRecord {
             id: id.into(),
             title: title.into(),
             description,
-            methods: vec![METHOD_AGENT_SESSION_TURN_START.to_string()],
+            methods: vec![METHOD_TURN_START.to_string()],
         })
     }
 
@@ -106,7 +106,7 @@ pub fn capability_descriptor_allows_agent_turn_start(descriptor: &CapabilityDesc
     descriptor
         .methods
         .iter()
-        .any(|method| method == METHOD_AGENT_SESSION_TURN_START)
+        .any(|method| method == METHOD_TURN_START)
 }
 
 #[derive(Debug, Clone)]
@@ -255,10 +255,10 @@ fn agent_session_descriptor() -> CapabilityDescriptor {
         title: "Agent Session".to_string(),
         description: Some("Start, read, and cancel App Server agent sessions.".to_string()),
         methods: vec![
-            METHOD_AGENT_SESSION_START.to_string(),
-            METHOD_AGENT_SESSION_READ.to_string(),
-            METHOD_AGENT_SESSION_TURN_START.to_string(),
-            METHOD_AGENT_SESSION_TURN_CANCEL.to_string(),
+            METHOD_THREAD_START.to_string(),
+            METHOD_THREAD_READ.to_string(),
+            METHOD_TURN_START.to_string(),
+            METHOD_TURN_INTERRUPT.to_string(),
         ],
     }
 }
@@ -299,7 +299,7 @@ mod tests {
         );
         assert_eq!(
             record.descriptor.methods,
-            vec![METHOD_AGENT_SESSION_TURN_START.to_string()]
+            vec![METHOD_TURN_START.to_string()]
         );
         assert!(capability_descriptor_allows_agent_turn_start(
             &record.descriptor
@@ -327,10 +327,7 @@ mod tests {
             .find(|capability| capability.id == "tool.WebSearch")
             .expect("WebSearch capability");
         assert_eq!(web_search.title, "WebSearch");
-        assert_eq!(
-            web_search.methods,
-            vec![METHOD_AGENT_SESSION_TURN_START.to_string()]
-        );
+        assert_eq!(web_search.methods, vec![METHOD_TURN_START.to_string()]);
     }
 
     #[test]
@@ -396,7 +393,7 @@ mod tests {
                 id: "session.allowed".to_string(),
                 title: "Session Allowed".to_string(),
                 description: None,
-                methods: vec!["agentSession/turn/start".to_string()],
+                methods: vec!["turn/start".to_string()],
             })
             .for_sessions(["sess_allowed"]),
             CapabilityInventoryRecord::new(CapabilityDescriptor {
@@ -475,7 +472,7 @@ mod tests {
         assert_eq!(session_scoped[0].title, "Report Executable");
         assert_eq!(
             session_scoped[0].methods,
-            vec![METHOD_AGENT_SESSION_TURN_START.to_string()]
+            vec![METHOD_TURN_START.to_string()]
         );
     }
 
@@ -488,7 +485,7 @@ mod tests {
                   "id": "content.draft.generate",
                   "title": "Generate Draft",
                   "description": "Generate a content draft.",
-                  "methods": ["agentSession/turn/start"],
+                  "methods": ["turn/start"],
                   "appIds": ["content-studio"],
                   "workspaceIds": ["workspace-main"],
                   "sessionIds": ["sess_allowed"]
@@ -516,10 +513,7 @@ mod tests {
             matched[0].description.as_deref(),
             Some("Generate a content draft.")
         );
-        assert_eq!(
-            matched[0].methods,
-            vec![METHOD_AGENT_SESSION_TURN_START.to_string()]
-        );
+        assert_eq!(matched[0].methods, vec![METHOD_TURN_START.to_string()]);
         assert!(unmatched.is_empty());
     }
 

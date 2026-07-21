@@ -9,7 +9,6 @@ export interface SessionDetailFetchDetailLike {
   messages: readonly unknown[];
   items?: readonly unknown[] | null;
   turns?: readonly unknown[] | null;
-  queued_turns?: readonly unknown[] | null;
 }
 
 export interface SessionDetailFetchEvent {
@@ -38,7 +37,6 @@ function buildSessionDetailFetchMetricContext<
     itemsCount: params.detail.items?.length ?? 0,
     messagesCount: params.detail.messages.length,
     mode: params.mode,
-    queuedTurnsCount: params.detail.queued_turns?.length ?? 0,
     requestDurationMs: params.requestDurationMs,
     ...(params.resumeSessionStartHooks !== undefined
       ? { resumeSessionStartHooks: params.resumeSessionStartHooks }

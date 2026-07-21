@@ -2,7 +2,6 @@ import {
   INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
   INPUTBAR_PENDING_STEER_SECOND_PROMPT,
   INPUTBAR_RICH_RESTORE_PROMPT,
-  SESSION_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { waitForInputReady } from "./claw-chat-current-fixture-gui-actions.mjs";
 import {
@@ -107,7 +106,7 @@ async function clickPendingSteerDeferButton(
     },
     {
       labels: DEFER_BUTTON_LABELS,
-      sessionId: SESSION_ID,
+      sessionId: beforeClick.textareaSessionId,
     },
   );
   assert(
@@ -139,12 +138,8 @@ export async function clickRichRestoreDeferButton(page, options) {
 }
 
 export async function deferSecondPlainPendingSteer(page, options) {
-  await waitForInputReady(page, options, {
-    expectedSessionId: SESSION_ID,
-  });
-  const textarea = page.locator(
-    `textarea[name="agent-chat-message"][data-session-id="${SESSION_ID}"]`,
-  );
+  await waitForInputReady(page, options);
+  const textarea = page.locator('textarea[name="agent-chat-message"]').first();
   await textarea.fill(INPUTBAR_PENDING_STEER_SECOND_PROMPT);
   return await clickPendingSteerDeferButton(page, options, {
     prompt: INPUTBAR_PENDING_STEER_SECOND_PROMPT,
@@ -265,7 +260,7 @@ async function evaluateInputbarQueuedTurnsPanel(page) {
       activeOutputText: INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
       richPrompt: INPUTBAR_RICH_RESTORE_PROMPT,
       secondPrompt: INPUTBAR_PENDING_STEER_SECOND_PROMPT,
-      sessionId: SESSION_ID,
+      sessionId: null,
     },
   );
 }
@@ -368,7 +363,7 @@ export async function clickQueuedTurnPromoteButtonForPrompt(
         actionAvailable: button.dataset.actionAvailable || null,
       };
     },
-    { targetPrompt: prompt, sessionId: SESSION_ID },
+    { targetPrompt: prompt, sessionId: null },
   );
   assert(
     clicked?.clicked === true,
@@ -389,9 +384,7 @@ export async function reloadAndWaitForPendingSteerQueuedHydrate(
 ) {
   const reload = await reloadRendererDocument(page, options);
   await waitForRendererReady(page, options);
-  await waitForInputReady(page, options, {
-    expectedSessionId: SESSION_ID,
-  });
+  await waitForInputReady(page, options);
   const queuedPanel = await waitForInputbarQueuedTurnsPanel(
     page,
     options,

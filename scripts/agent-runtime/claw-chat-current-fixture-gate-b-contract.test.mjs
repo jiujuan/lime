@@ -34,7 +34,7 @@ describe("claw chat Gate B contract evidence", () => {
                 JSON.stringify({
                   jsonrpc: "2.0",
                   id: 1,
-                  method: "agentSession/turn/start",
+                  method: "turn/start",
                   params: {
                     sessionId: "session-1",
                     threadId: "thread-1",
@@ -57,7 +57,7 @@ describe("claw chat Gate B contract evidence", () => {
       },
       appServerRequests: [
         {
-          method: "agentSession/turn/start",
+          method: "turn/start",
           response: {
             sessionId: "session-1",
             threadId: "thread-1",
@@ -66,7 +66,7 @@ describe("claw chat Gate B contract evidence", () => {
           },
         },
         {
-          method: "agentSession/read",
+          method: "thread/read",
           response: {
             sessionId: "session-1",
             threadId: "thread-1",
@@ -106,7 +106,7 @@ describe("claw chat Gate B contract evidence", () => {
       url: RENDERER.url,
     });
     expect(evidence.appServerIpcHitCount).toBe(1);
-    expect(evidence.appServerIpcMethods).toEqual(["agentSession/turn/start"]);
+    expect(evidence.appServerIpcMethods).toEqual(["turn/start"]);
     expect(JSON.stringify(evidence)).not.toContain("private prompt");
     expect(evidence.legacyCommandHitCount).toBe(0);
     expect(evidence.mockFallbackHitCount).toBe(0);
@@ -121,6 +121,33 @@ describe("claw chat Gate B contract evidence", () => {
     expect(Object.values(buildGateBContractAssertions(evidence))).not.toContain(
       false,
     );
+  });
+
+  it("does not infer Electron IPC usage from preload support and request logs", () => {
+    vi.spyOn(fs, "existsSync").mockReturnValue(true);
+    const evidence = buildGateBContractEvidence({
+      rendererSnapshot: RENDERER,
+      traceMessages: [],
+      pageErrors: [],
+      pageLifecycleEvents: [],
+      runId: "candidate-without-ipc-trace",
+      artifacts: {
+        summary: "/tmp/candidate-without-ipc-trace/scenario-summary.json",
+        backendLedger: "/tmp/candidate-without-ipc-trace/scenario-ledger.json",
+        screenshot: "/tmp/candidate-without-ipc-trace/scenario.png",
+      },
+      appServerRequests: [{ method: "thread/read", response: {} }],
+      backendLedger: [],
+      guiEvidence: {},
+      expectedIdentity: {},
+    });
+
+    expect(evidence.appServerRequestCount).toBe(1);
+    expect(buildGateBContractAssertions(evidence)).toMatchObject({
+      electronPreloadInvokeAvailable: true,
+      appServerCommandSupported: true,
+      electronIpcAppServerBridgeUsed: false,
+    });
   });
 
   it("counts retired commands, mock fallback, page errors, and crashes", () => {
@@ -143,14 +170,14 @@ describe("claw chat Gate B contract evidence", () => {
       },
       appServerRequests: [
         {
-          method: "agentSession/turn/start",
+          method: "turn/start",
           response: {
             sessionId: "server-session",
             turnId: "server-turn",
           },
         },
         {
-          method: "agentSession/read",
+          method: "thread/read",
           response: {
             sessionId: "read-session",
             latestTurnStatus: "running",
@@ -208,7 +235,7 @@ describe("claw chat Gate B contract evidence", () => {
                 JSON.stringify({
                   jsonrpc: "2.0",
                   id: 1,
-                  method: "agentSession/turn/start",
+                  method: "turn/start",
                   params: { sessionId: "session-1", turnId: "turn-1" },
                 }),
               ],
@@ -226,7 +253,7 @@ describe("claw chat Gate B contract evidence", () => {
       },
       appServerRequests: [
         {
-          method: "agentSession/turn/start",
+          method: "turn/start",
           response: {
             sessionId: "session-1",
             turnId: "turn-1",
@@ -234,7 +261,7 @@ describe("claw chat Gate B contract evidence", () => {
           },
         },
         {
-          method: "agentSession/read",
+          method: "thread/read",
           response: {
             sessionId: "session-1",
             latestTurnStatus: "in_progress",
@@ -278,7 +305,7 @@ describe("claw chat Gate B contract evidence", () => {
             JSON.stringify({
               jsonrpc: "2.0",
               id: turnId,
-              method: "agentSession/turn/start",
+              method: "turn/start",
               params: { sessionId: "session-1", turnId },
             }),
           ],
@@ -298,7 +325,7 @@ describe("claw chat Gate B contract evidence", () => {
       },
       appServerRequests: [
         {
-          method: "agentSession/turn/start",
+          method: "turn/start",
           response: {
             sessionId: "session-1",
             threadId: "thread-1",
@@ -307,7 +334,7 @@ describe("claw chat Gate B contract evidence", () => {
           },
         },
         {
-          method: "agentSession/read",
+          method: "thread/read",
           response: {
             sessionId: "session-1",
             threadId: "thread-1",

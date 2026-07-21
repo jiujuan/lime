@@ -1,7 +1,7 @@
 # Current Runtime 收敛进度
 
 > 状态：进行中
-> 更新时间：2026-07-12
+> 更新时间：2026-07-20
 > 主线收益：删除已失效的 runtime/compat 事实源，避免运行时和文档重新长出双轨路径。
 
 ## Current owner
@@ -16,6 +16,35 @@ Electron Desktop Host
 ```
 
 Codex 是 Agent runtime、状态机、工具与 GUI 护栏的参考原点；opencode 只用于 provider、capability、media part 与 lowering。已删除的 compat crate、vendor/workspace crate、迁移目录与旧 Tauri 路径均为 `dead / deleted / forbidden-to-restore`。
+
+## 2026-07-19 v2 快速骨架
+
+目标：先让 `thread/start` 具备 Codex v2 的最小公开形态，再由 RuntimeCore canonical owner 补齐 route、持久化和 direct lifecycle 细节。
+
+- [x] `thread/start` 返回 `{ thread, model, modelProvider, ... }`，不再返回旧 `{ session }`。
+- [x] `thread/start` 同一请求发出 `thread/started`，notification 与 response 使用同一 thread identity。
+- [x] handler 从通用 `processor/mod.rs` 收回 `processor/thread.rs`，Thread read/list/turns/items/start 的边界集中到同一领域模块。
+- [x] `agentSession/start` production method 保持 `METHOD_NOT_FOUND`，不恢复 compat 包装。
+- [x] App Server 公共 JSON-RPC 集成测试 `thread_v2_jsonrpc` 2/2；`npm run test:contracts` 与 `npm run governance:legacy-report` 通过。
+- [ ] 新增 RuntimeCore canonical `start_thread` owner：同一原子操作创建 ThreadStore row 与 live runtime cache；handler 删除本地 Thread 构造和 v0 `start_session` 调用。
+- [ ] 删除 `unknown` model/provider；未接入 config/route resolver 前必须 fail closed，接入后由统一 route owner 返回 effective facts。
+- [ ] 将 `turn/started`、`turn/completed`、`item/started`、`item/completed`、`item/agentMessage/delta` 切为 direct v2 production notification，再删除 `agentSession/event` Thread lifecycle bridge。
+- [ ] schema/export 必须解决 v0/v2 同名 `$defs` 和悬空引用；当前隔壁进程持有该写集，本轮不夹写。
+
+本轮写集：`lime-rs/crates/app-server/src/processor/{mod,thread}.rs`、`lime-rs/crates/app-server/tests/thread_v2_jsonrpc.rs`。避让：`internal/refactor/v1/**`、`app-server-protocol/**`、Electron Host 与 Workspace 热区。
+
+Current fixture 已通过历史恢复 31、流式终态 32、Electron fixture guards 75；后续 Electron host rebuild 被并行 v2 字段迁移的 16 个 typecheck 诊断阻塞，未冒充 Gate B 完成。
+
+## 2026-07-20 ThreadGoal usage accounting 骨架
+
+- [x] canonical ThreadGoal 已由 `turn.accepted` 绑定 exact goal、Plan/default mode、累计 usage baseline 和 source watermark；terminal 事件在同一 SQLite 事务推进 usage、预算状态与 durable outbox。
+- [x] provider 中间 usage 收敛到独立 `provider.usage` current event；同 attempt 按最新 snapshot 替换，不同 attempt 累加，`provider.step` 不再作为 canonical usage source；正常 `turn.completed` 不与中间 usage 双计。
+- [x] per-thread listener 按 outbox id FIFO 发送 `thread/goal/updated`，resume 先捕获 outbox watermark，再发 goal snapshot，成功后只确认 captured watermark；新增顺序和并发 watermark 低层回归。
+- [x] RuntimeCore failed reason 已结构化贯通 session loop 与 EventLog：普通 `turn_error` 把 Active goal 转为 `blocked`，provider `usage_limit_exceeded` 把 Active/BudgetLimited goal 转为 `usage_limited`；Plan turn、cancel 和零事件 rejection 不误改 goal。
+- [x] Turn 中途首次创建 Active Goal 时，RuntimeCore 在 state 锁内提取当前 active Turn、Plan mode、canonical cumulative usage 与 source watermark，并与 Goal 写入同一 SQLite Immediate 事务完成 late-bind；accepted replay 和重复 set 不重置 baseline，创建前 token 不计入新 Goal。
+- [x] 已有 Goal external mutation 在 RuntimeCore state 锁和同一 SQLite Immediate 事务内完成旧增量 flush、set/clear 与 baseline reset/rebind；active patch 返回已计 usage，pause/resume 排除 paused 区间，clear/recreate 改绑新 goal id，mutation 不生成陈旧 outbox，同 sequence 可推进 mutation wall time，过期或 terminal rebind fail closed。
+- [x] 验证：`cargo check -p app-server --tests`、scoped diff check、agent-runtime provider turn 19/19、session loop 37/37、lime-agent 21/21、thread usage 8/8、tool event lowering 15/15、goal projection 8/8、goal accounting 10/10、RuntimeCore Goal mutation 3/3、GoalStore 2/2、thread listener 7/7、failed/read-model 7/7、turn lifecycle 27/27 与治理 0/0/0 通过。
+- [ ] 当前仍不是完整 Codex v1 对齐：provider/tool-finish/abort 完整 usage flush、idle time、自动 continuation、启动期 outbox drain 与 GUI structured owner 保持 `OPEN_REF`。current fixture 前置 31/31、32/32、76/76 通过，真实 Electron 热路径完成 backend、GUI/read model 与 Gate B trace，但性能 trace 未捕获 pre-turn `turnStartAt`，在 `homeHotpathPreTurnTraceWindowAvailable` 退出 1；console/invoke/page error 为 0，本轮未夹写共享 GUI harness。
 
 ## 已完成
 

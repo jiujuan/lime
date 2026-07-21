@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, SetStateAction } from "react";
 import {
-  APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+  type AppServerAgentEvent,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
 import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
-import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/appServerEventPayloadProjection";
+import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/appServerEventStream";
 import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { StreamRequestState } from "./agentStreamSubmissionLifecycle";
@@ -17,39 +16,20 @@ function noopDispatch<T>() {
   return vi.fn() as unknown as Dispatch<SetStateAction<T>>;
 }
 
-function projectEvent(event: AppServerJsonRpcNotification["params"]["event"]) {
+function projectEvent(event: AppServerAgentEvent) {
   const eventPayload =
     event.payload && typeof event.payload === "object"
       ? (event.payload as Record<string, unknown>)
       : {};
-  const updatedAtMs = Date.parse(event.timestamp);
   const projected = projectAppServerAgentEventPayload({
-    method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+    method: "item/agentMessage/delta",
     params: {
-      event,
-      canonicalEvent: {
-        method: "item/updated",
-        params: {
-          sessionId: event.sessionId,
-          threadId: event.threadId,
-          turnId: event.turnId,
-          itemId: `agent-message-${event.eventId}`,
-          sequence: event.sequence,
-          ordinal: event.sequence,
-          kind: "agentMessage",
-          status: "inProgress",
-          createdAtMs: updatedAtMs,
-          updatedAtMs,
-          payload: {
-            type: "agentMessage",
-            text:
-              typeof eventPayload.text === "string" ? eventPayload.text : "",
-            phase: "final_answer",
-          },
-        },
-      },
+      threadId: event.threadId,
+      turnId: event.turnId,
+      itemId: `agent-message-${event.eventId}`,
+      delta: typeof eventPayload.text === "string" ? eventPayload.text : "",
     },
-  });
+  } satisfies AppServerJsonRpcNotification);
   if (!projected) {
     throw new Error("expected App Server notification to project");
   }
@@ -91,7 +71,6 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -104,7 +83,6 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       effectiveModel: "fixture-model",
       effectiveExecutionStrategy: "react",
       content: "继续输出",
-      expectingQueue: false,
       activeSessionId: "session-tail-recovery",
       resolvedWorkspaceId: "workspace-tail-recovery",
       assistantMsgId: "assistant-tail-recovery",
@@ -128,10 +106,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: noopDispatch<Message[]>(),
@@ -201,7 +176,6 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -214,7 +188,6 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       effectiveModel: "fixture-model",
       effectiveExecutionStrategy: "react",
       content: "继续输出",
-      expectingQueue: false,
       activeSessionId: "session-tail-recovery-rearm",
       resolvedWorkspaceId: "workspace-tail-recovery-rearm",
       assistantMsgId: "assistant-tail-recovery-rearm",
@@ -238,10 +211,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: noopDispatch<Message[]>(),

@@ -96,7 +96,7 @@ describe("AppServerConfigWarningToastBridge", () => {
           },
         ],
         {
-          method: "agentSession/turn/start",
+          method: "turn/start",
           phase: "response",
           requestId: 2,
         },
@@ -128,7 +128,7 @@ describe("AppServerConfigWarningToastBridge", () => {
         requestId: 3,
       });
       publishAppServerConfigWarnings([warning], {
-        method: "agentSession/turn/start",
+        method: "turn/start",
         phase: "response",
         requestId: 4,
       });

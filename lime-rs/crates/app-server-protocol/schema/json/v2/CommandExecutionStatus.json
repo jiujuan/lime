@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "completed",
+    "declined",
+    "failed",
+    "inProgress"
+  ],
+  "title": "CommandExecutionStatus",
+  "type": "string"
+}

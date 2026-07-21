@@ -196,7 +196,6 @@ export function buildSessionSwitchSuccessMetricContext(params: {
   itemsCount: number;
   messagesCount: number;
   modelPreferenceSource: SessionModelPreferenceSource | null;
-  queuedTurnsCount: number;
   topicId: string;
   turnsCount: number;
   workspaceId?: string | null;
@@ -208,7 +207,6 @@ export function buildSessionSwitchSuccessMetricContext(params: {
     itemsCount: params.itemsCount,
     messagesCount: params.messagesCount,
     modelPreferenceSource: params.modelPreferenceSource,
-    queuedTurnsCount: params.queuedTurnsCount,
     sessionId: params.topicId,
     topicId: params.topicId,
     turnsCount: params.turnsCount,
@@ -227,7 +225,6 @@ export function buildSessionFinalizeLocalStatePlan(params: {
     | "modelPreferenceSource"
     | "shouldPersistAccessMode"
   >;
-  queuedTurnsCount: number;
   runtimeExecutionStrategy?: AgentExecutionStrategy | null;
   shadowExecutionStrategyFallback?: AgentExecutionStrategy | null;
   topicExecutionStrategy?: AgentExecutionStrategy | null;
@@ -253,7 +250,6 @@ export function buildSessionFinalizeLocalStatePlan(params: {
       itemsCount: params.itemsCount,
       messagesCount: params.messagesCount,
       modelPreferenceSource: params.metadataSyncPlan.modelPreferenceSource,
-      queuedTurnsCount: params.queuedTurnsCount,
       topicId: params.topicId,
       turnsCount: params.turnsCount,
       workspaceId: params.workspaceId,
@@ -287,10 +283,10 @@ export function applyFallbackExecutionStrategyToTopics<
 
   return topics.map((topic) =>
     topic.id === params.topicId
-      ? {
+      ? ({
           ...topic,
           executionStrategy: params.executionStrategyToApplyToTopic,
-        } as TTopic
+        } as TTopic)
       : topic,
   );
 }

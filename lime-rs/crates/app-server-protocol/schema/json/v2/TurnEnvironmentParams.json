@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Environment override shared by `thread/start`, `turn/start`, and resume.",
+  "properties": {
+    "cwd": {
+      "type": "string"
+    },
+    "environmentId": {
+      "type": "string"
+    },
+    "runtimeWorkspaceRoots": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "cwd",
+    "environmentId"
+  ],
+  "title": "TurnEnvironmentParams",
+  "type": "object"
+}

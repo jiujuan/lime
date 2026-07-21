@@ -212,7 +212,7 @@ describe("agentChatHistory timeline fallback", () => {
     ]);
   });
 
-  it("历史 timeline agent_message 只有 media contentParts 时仍应恢复引用", () => {
+  it("历史 timeline 应把 canonical imageView media item 恢复为引用", () => {
     const detail: AgentSessionDetail = {
       id: "session-timeline-media-final",
       created_at: 1,
@@ -244,27 +244,28 @@ describe("agentChatHistory timeline fallback", () => {
           updated_at: "2026-05-06T10:00:00.000Z",
         } as never,
         {
-          id: "item-assistant-media",
+          id: "item-assistant-text",
           thread_id: "session-timeline-media-final",
           turn_id: "turn-media-final",
           sequence: 2,
           type: "agent_message",
-          text: "",
+          text: "图片已生成",
           phase: "final_answer",
-          contentParts: [
-            {
-              type: "media",
-              kind: "image",
-              caption: "结果图",
-              reference: {
-                uri: "sidecar://media/image-1",
-                mime_type: "image/png",
-                title: "image-1.png",
-              },
-            },
-          ],
           status: "completed",
           started_at: "2026-05-06T10:00:02.000Z",
+          completed_at: "2026-05-06T10:00:03.000Z",
+          updated_at: "2026-05-06T10:00:03.000Z",
+        } as never,
+        {
+          id: "item-image-view",
+          thread_id: "session-timeline-media-final",
+          turn_id: "turn-media-final",
+          sequence: 3,
+          type: "media",
+          uri: "/tmp/lime-media/image-1.png",
+          mime_type: "image/png",
+          status: "completed",
+          started_at: "2026-05-06T10:00:02.500Z",
           completed_at: "2026-05-06T10:00:03.000Z",
           updated_at: "2026-05-06T10:00:03.000Z",
         } as never,
@@ -277,21 +278,27 @@ describe("agentChatHistory timeline fallback", () => {
     );
 
     expect(messages[1]).toMatchObject({
-      id: "session-timeline-media-final-timeline-item-assistant-media",
+      id: "session-timeline-media-final-timeline-item-assistant-text",
       role: "assistant",
-      content: "结果图",
+      content: "图片已生成",
     });
     expect(messages[1]?.contentParts).toEqual([
       expect.objectContaining({
+        type: "text",
+        text: "图片已生成",
+      }),
+      expect.objectContaining({
         type: "media_reference",
         reference: expect.objectContaining({
-          caption: "结果图",
-          uri: "sidecar://media/image-1",
+          title: "image-1.png",
+          uri: "/tmp/lime-media/image-1.png",
           mimeType: "image/png",
+          sourcePath: "/tmp/lime-media/image-1.png",
         }),
         metadata: expect.objectContaining({
           source: "agent_media_reference",
-          referenceUri: "sidecar://media/image-1",
+          threadItemId: "item-image-view",
+          referenceUri: "/tmp/lime-media/image-1.png",
           mimeType: "image/png",
         }),
       }),

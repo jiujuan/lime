@@ -4,7 +4,6 @@ use super::{is_true_setting, mark_true_setting};
 
 const API_KEYS_TO_POOL_MIGRATED_KEY: &str = "migrated_api_keys_to_pool";
 const PROVIDER_IDS_MIGRATED_KEY: &str = "migrated_provider_ids_v1";
-const LEGACY_API_KEY_CREDENTIALS_CLEANED_KEY: &str = "cleaned_legacy_api_key_credentials";
 
 /// 将 api_keys 表中的数据迁移到 provider_pool_credentials 表
 ///
@@ -239,78 +238,6 @@ pub fn migrate_provider_ids(conn: &Connection) -> Result<usize, String> {
     Ok(migrated_count)
 }
 
-/// 清理旧的 API Key 凭证（OpenAIKey 和 ClaudeKey 类型）
-///
-/// 这些凭证是通过旧的 UI 添加的，现在已经被新的 API Key Provider 系统取代。
-/// 此函数会删除 provider_pool_credentials 表中的 openai_key 和 claude_key 类型凭证。
-pub fn cleanup_legacy_api_key_credentials(conn: &Connection) -> Result<usize, String> {
-    if is_true_setting(conn, LEGACY_API_KEY_CREDENTIALS_CLEANED_KEY) {
-        tracing::debug!("[清理] 旧 API Key 凭证已清理过，跳过");
-        return Ok(0);
-    }
-
-    tracing::info!("[清理] 开始清理旧的 API Key 凭证（openai_key, claude_key 类型）");
-
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM provider_pool_credentials
-             WHERE credential_data LIKE '%\"type\":\"openai_key\"%'
-                OR credential_data LIKE '%\"type\":\"claude_key\"%'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if count == 0 {
-        tracing::info!("[清理] 没有需要清理的旧 API Key 凭证");
-        mark_true_setting(conn, LEGACY_API_KEY_CREDENTIALS_CLEANED_KEY)?;
-        return Ok(0);
-    }
-
-    let mut stmt = conn
-        .prepare(
-            "SELECT uuid, name, provider_type
-             FROM provider_pool_credentials
-             WHERE credential_data LIKE '%\"type\":\"openai_key\"%'
-                OR credential_data LIKE '%\"type\":\"claude_key\"%'",
-        )
-        .map_err(|e| format!("准备查询语句失败: {e}"))?;
-
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, Option<String>>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })
-        .map_err(|e| format!("查询旧凭证失败: {e}"))?;
-
-    for (uuid, name, provider_type) in rows.into_iter().filter_map(Result::ok) {
-        tracing::info!(
-            "[清理] 将删除旧凭证: {} (name: {}, type: {})",
-            uuid,
-            name.as_deref().unwrap_or("未命名"),
-            provider_type
-        );
-    }
-
-    let deleted = conn
-        .execute(
-            "DELETE FROM provider_pool_credentials
-             WHERE credential_data LIKE '%\"type\":\"openai_key\"%'
-                OR credential_data LIKE '%\"type\":\"claude_key\"%'",
-            [],
-        )
-        .map_err(|e| format!("删除旧凭证失败: {e}"))?;
-
-    mark_true_setting(conn, LEGACY_API_KEY_CREDENTIALS_CLEANED_KEY)?;
-
-    tracing::info!("[清理] 旧 API Key 凭证清理完成，共删除 {} 条记录", deleted);
-
-    Ok(deleted)
-}
-
 fn map_api_key_credential(row: &ApiKeyMigrationRow) -> (&'static str, serde_json::Value) {
     match row.provider_type.to_lowercase().as_str() {
         "anthropic" => (
@@ -448,28 +375,6 @@ mod tests {
         conn
     }
 
-    fn insert_pool_credential(conn: &Connection, uuid: &str, credential_type: &str) {
-        conn.execute(
-            "INSERT INTO provider_pool_credentials
-             (uuid, provider_type, credential_data, name, is_healthy, is_disabled,
-              check_health, check_model_name, not_supported_models, usage_count, error_count,
-              last_used, last_error_time, last_error_message, last_health_check_time,
-              last_health_check_model, created_at, updated_at, source, proxy_url)
-             VALUES (?1, ?2, ?3, ?4, 1, 0, 1, NULL, '[]', 0, 0, NULL, NULL, NULL, NULL, NULL, 0, 0, 'imported', NULL)",
-            params![
-                uuid,
-                "openai",
-                serde_json::json!({
-                    "type": credential_type,
-                    "api_key": format!("key-{uuid}")
-                })
-                .to_string(),
-                format!("cred-{uuid}")
-            ],
-        )
-        .unwrap();
-    }
-
     #[test]
     fn migrate_api_keys_to_pool_is_idempotent() {
         let conn = setup_api_key_migration_db();
@@ -557,29 +462,5 @@ mod tests {
             )
             .unwrap();
         assert!(!old_exists);
-    }
-
-    #[test]
-    fn cleanup_legacy_api_key_credentials_only_removes_legacy_types() {
-        let conn = setup_api_key_migration_db();
-
-        insert_pool_credential(&conn, "legacy-openai", "openai_key");
-        insert_pool_credential(&conn, "legacy-claude", "claude_key");
-        insert_pool_credential(&conn, "new-gemini", "gemini_api_key");
-
-        let deleted = cleanup_legacy_api_key_credentials(&conn).unwrap();
-        assert_eq!(deleted, 2);
-
-        let remaining: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM provider_pool_credentials",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(remaining, 1);
-
-        let deleted_again = cleanup_legacy_api_key_credentials(&conn).unwrap();
-        assert_eq!(deleted_again, 0);
     }
 }

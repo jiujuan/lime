@@ -4,12 +4,16 @@
     "file_path": {
       "type": "string"
     },
+    "install_dir": {
+      "type": "string"
+    },
     "model_id": {
       "type": "string"
     }
   },
   "required": [
     "file_path",
+    "install_dir",
     "model_id"
   ],
   "title": "VoiceModelTestTranscribeFileParams",

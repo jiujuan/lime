@@ -562,6 +562,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     );
     const toolPreferencesOverride =
       buildInputbarToolPreferencesOverride(inputbarModeState);
+    const collaborationMode = inputbarModeState.planEnabled
+      ? ("plan" as const)
+      : undefined;
     const effectiveInput = inputOverride.trim()
       ? inputOverride
       : hasPathReferences
@@ -579,6 +582,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       capabilityDispatch.capabilityRoute ||
       capabilityDispatch.displayContent ||
       requestMetadata ||
+      toolPreferencesOverride ||
+      collaborationMode ||
       shouldAttachInputRestoreDraft
         ? {
             ...(capabilityDispatch.capabilityRoute
@@ -590,6 +595,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               : {}),
             ...(requestMetadata ? { requestMetadata } : {}),
             ...(toolPreferencesOverride ? { toolPreferencesOverride } : {}),
+            ...(collaborationMode ? { collaborationMode } : {}),
           }
         : undefined;
 

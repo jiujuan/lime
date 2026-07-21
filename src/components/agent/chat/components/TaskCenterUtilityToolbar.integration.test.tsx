@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { TaskCenterUtilityToolbar } from "./TaskCenterUtilityToolbar";
 import { TaskCenterShellPanel } from "./TaskCenterShellPanel";
 
@@ -134,6 +135,10 @@ vi.mock("react-i18next", () => {
     );
   };
   return {
+    initReactI18next: {
+      type: "3rdParty",
+      init: () => undefined,
+    },
     useTranslation: () => ({ t }),
   };
 });
@@ -223,8 +228,9 @@ interface MountedHarness {
 
 const mountedRoots: MountedHarness[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.useRealTimers();
+  await changeLimeLocale("zh-CN");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -263,7 +269,7 @@ beforeEach(() => {
   mockXtermTerminalOptions.length = 0;
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -273,6 +279,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 });
 
 function mount(node: React.ReactNode) {

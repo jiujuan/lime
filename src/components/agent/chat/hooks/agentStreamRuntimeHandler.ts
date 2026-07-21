@@ -52,10 +52,6 @@ import {
   buildAgentStreamWarningToastAction,
   applyAgentStreamWarningToastAction,
 } from "./agentStreamWarningController";
-import {
-  shouldWatchAgentStreamQueuedDraftCleanup,
-  shouldWatchAgentStreamQueuedDraftCleanupForCleared,
-} from "./agentStreamQueueController";
 import { buildAgentStreamToolEndPreApplyPlan } from "./agentStreamToolEventController";
 import { buildAgentStreamPlanThreadItem } from "./agentStreamPlanEventController";
 import {
@@ -89,7 +85,6 @@ import { normalizeActionType } from "./agentChatCoreUtils";
 import { createAgentStreamRuntimeHandlerActions } from "./agentStreamRuntimeHandlerActions";
 import {
   handleAgentStreamMessageSnapshotEvent,
-  handleAgentStreamQueueEvent,
   handleAgentStreamThreadItemLifecycleEvent,
   handleAgentStreamTurnCanceledEvent,
   handleAgentStreamTurnCompletedEvent,
@@ -202,8 +197,6 @@ export function handleTurnStreamEvent({
     activateStream,
     clearOptimisticItem,
     clearOptimisticTurn,
-    upsertQueuedTurn,
-    removeQueuedTurnsFromProjection,
     appendThinkingToParts,
   } = callbacks;
   const preservedAssistantContent = preserveAssistantContent?.trim() || null;
@@ -238,7 +231,6 @@ export function handleTurnStreamEvent({
 
   const {
     buildStreamingTextCommitPatch,
-    clearQueuedDraftCleanupTimer,
     clearStreamingTextOverlay,
     commitRenderedTextBeforeProcessPart,
     completeAssistantStreamMessageFromCompletionPlan,
@@ -247,9 +239,8 @@ export function handleTurnStreamEvent({
     finalizeTerminalStreamState,
     flushPendingTextRender,
     markFailedTimelineState,
-    markQueuedDraftState,
     persistRetainedSkillProcessSnapshot,
-    scheduleQueuedDraftCleanup,
+    recordAgentMessageSnapshotTextPaint,
     scheduleTextRenderFlush,
     shouldUpdateLegacyToolMessageLayer,
     upsertFallbackTextOverlayIfSilent,
@@ -260,7 +251,6 @@ export function handleTurnStreamEvent({
     assistantMsgId,
     callbacks,
     content,
-    effectiveExecutionStrategy,
     eventName,
     getThreadItems,
     observer,
@@ -426,8 +416,7 @@ export function handleTurnStreamEvent({
       normalizeOptionalText(event.event_id);
     const turnId =
       normalizeOptionalText(event.turn_id) ||
-      normalizeOptionalText(requestState.currentTurnId) ||
-      normalizeOptionalText(requestState.queuedTurnId);
+      normalizeOptionalText(requestState.currentTurnId);
     if (!itemId || !turnId) {
       return true;
     }
@@ -516,7 +505,6 @@ export function handleTurnStreamEvent({
     const shouldApply = shouldApplyAgentStreamTerminalEvent({
       activeTextSegmentTurnId: requestState.activeTextSegmentTurnId,
       currentTurnId: requestState.currentTurnId,
-      queuedTurnId: requestState.queuedTurnId,
       terminalTurnId,
     });
     if (!shouldApply) {
@@ -527,7 +515,6 @@ export function handleTurnStreamEvent({
           activeTextSegmentTurnId: requestState.activeTextSegmentTurnId ?? null,
           currentTurnId: requestState.currentTurnId ?? null,
           eventName,
-          queuedTurnId: requestState.queuedTurnId ?? null,
           sessionId: activeSessionId,
           terminalTurnId: terminalTurnId ?? null,
           terminalType,
@@ -541,6 +528,71 @@ export function handleTurnStreamEvent({
   };
 
   switch (data.type) {
+    case "token_usage_updated": {
+      activateStream();
+      const requestUsageTurnId =
+        data.turn_id?.trim() ||
+        requestState.currentTurnId?.trim() ||
+        requestState.activeTextSegmentTurnId?.trim() ||
+        null;
+      setMessages((prev) => {
+        let targetMessageFound = false;
+        let usageTurnId = requestUsageTurnId;
+        let matchedMessageTurnId: string | null = null;
+        const directlyMatchedMessage =
+          prev.find((message) => message.id === assistantMsgId) ??
+          prev.find(
+            (message) =>
+              Boolean(usageTurnId) &&
+              message.role === "assistant" &&
+              message.runtimeTurnId === usageTurnId &&
+              Boolean(message.imageWorkbenchPreview),
+          );
+        const matchedImageTaskId =
+          directlyMatchedMessage?.imageWorkbenchPreview?.taskId?.trim() || null;
+        const nextMessages = prev.map((message) => {
+          const isTargetMessage =
+            message.id === assistantMsgId ||
+            (Boolean(usageTurnId) &&
+              message.role === "assistant" &&
+              message.runtimeTurnId === usageTurnId &&
+              Boolean(message.imageWorkbenchPreview)) ||
+            (Boolean(matchedImageTaskId) &&
+              message.role === "assistant" &&
+              message.imageWorkbenchPreview?.taskId === matchedImageTaskId);
+          if (isTargetMessage) {
+            targetMessageFound = true;
+            matchedMessageTurnId ||= message.runtimeTurnId?.trim() || null;
+            usageTurnId ||= matchedMessageTurnId;
+          }
+          return isTargetMessage
+            ? {
+                ...message,
+                runtimeTurnId:
+                  message.runtimeTurnId || usageTurnId || undefined,
+                usage: data.usage,
+              }
+            : message;
+        });
+        logAgentDebug("AgentStream", "tokenUsageUpdated", {
+          assistantMsgId,
+          activeTextSegmentTurnId:
+            requestState.activeTextSegmentTurnId?.trim() || null,
+          currentTurnId: requestState.currentTurnId?.trim() || null,
+          eventTurnId: data.turn_id?.trim() || null,
+          eventName,
+          foundTargetMessage: targetMessageFound,
+          inputTokens: data.usage?.input_tokens ?? null,
+          matchedMessageTurnId,
+          outputTokens: data.usage?.output_tokens ?? null,
+          sessionId: data.session_id ?? activeSessionId,
+          turnId: usageTurnId,
+        });
+        return nextMessages;
+      });
+      break;
+    }
+
     case "message":
       // 后端会先发送完整 message 快照，再发送细粒度 delta；这里仅确认流已进入已知事件路径，避免误报未知事件。
       activateStream();
@@ -557,26 +609,7 @@ export function handleTurnStreamEvent({
     case "thread_started":
       break;
 
-    case "queue_added":
-    case "queue_removed":
-    case "queue_started":
-    case "queue_cleared":
-      handleAgentStreamQueueEvent({
-        activateStream,
-        clearQueuedDraftCleanupTimer,
-        event: data,
-        markQueuedDraftState,
-        removeQueuedTurnsFromProjection,
-        requestState,
-        scheduleQueuedDraftCleanup,
-        shouldWatchAgentStreamQueuedDraftCleanup,
-        shouldWatchAgentStreamQueuedDraftCleanupForCleared,
-        upsertQueuedTurn,
-      });
-      break;
-
     case "turn_started":
-      clearQueuedDraftCleanupTimer();
       activateStream();
       handleAgentStreamTurnStartedEvent({
         assistantMsgId,
@@ -605,8 +638,10 @@ export function handleTurnStreamEvent({
         event: data,
         pendingItemKey,
         requestState,
+        shouldPreserveAssistantContent,
         setters: runtimeStateSetters,
       });
+      recordAgentMessageSnapshotTextPaint(data.item);
       break;
 
     case "item_updated":
@@ -620,24 +655,21 @@ export function handleTurnStreamEvent({
         noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
         noteFinalAnswerRequiredProcessBoundary(data.item.sequence);
       }
-      if (
-        handleAgentStreamThreadItemLifecycleEvent({
-          assistantMsgId,
-          event: data,
-          pendingItemKey,
-          requestState,
-          setters: runtimeStateSetters,
-        }) === "deferred"
-      ) {
-        break;
-      }
+      handleAgentStreamThreadItemLifecycleEvent({
+        assistantMsgId,
+        event: data,
+        pendingItemKey,
+        requestState,
+        shouldPreserveAssistantContent,
+        setters: runtimeStateSetters,
+      });
+      recordAgentMessageSnapshotTextPaint(data.item);
       break;
 
     case "turn_completed": {
       if (!shouldApplyTerminalEvent(data.type, data.turn.id)) {
         break;
       }
-      clearQueuedDraftCleanupTimer();
       flushPendingTextRender();
       clearOptimisticItem();
       clearOptimisticTurn();
@@ -660,7 +692,6 @@ export function handleTurnStreamEvent({
       if (!shouldApplyTerminalEvent(data.type, data.turn.id)) {
         break;
       }
-      clearQueuedDraftCleanupTimer();
       flushPendingTextRender();
       clearOptimisticItem();
       clearOptimisticTurn();
@@ -678,7 +709,6 @@ export function handleTurnStreamEvent({
       if (!shouldApplyTerminalEvent(data.type, data.turn.id)) {
         break;
       }
-      clearQueuedDraftCleanupTimer();
       activateStream();
       flushPendingTextRender();
       clearOptimisticItem();
@@ -974,7 +1004,7 @@ export function handleTurnStreamEvent({
       const planItem = buildAgentStreamPlanThreadItem({
         activeSessionId,
         event: data,
-        fallbackTurnId: requestState.currentTurnId || requestState.queuedTurnId,
+        fallbackTurnId: requestState.currentTurnId,
         now,
         pendingItemKey,
         sequence: sequenceFromAgentEvent(data),
@@ -1426,7 +1456,6 @@ export function handleTurnStreamEvent({
       break;
 
     case "error": {
-      clearQueuedDraftCleanupTimer();
       flushPendingTextRender();
       if (isRuntimePermissionConfirmationWaitMessage(data.message)) {
         clearOptimisticItem();
@@ -1461,7 +1490,6 @@ export function handleTurnStreamEvent({
           fallbackContent: assistantFallbackContent,
           hasMeaningfulCompletionSignal:
             requestState.hasMeaningfulCompletionSignal,
-          queuedTurnId: requestState.queuedTurnId,
         });
         if (emptyFinalErrorPlan.type === "missing_final_reply_failure") {
           finalizeMissingFinalReplyFailure(emptyFinalErrorPlan);
@@ -1505,7 +1533,6 @@ export function handleTurnStreamEvent({
 
       const errorFailurePlan = buildAgentStreamErrorFailurePlan({
         errorMessage: data.message,
-        queuedTurnId: requestState.queuedTurnId,
       });
       markFailedTimelineState(errorFailurePlan.errorMessage);
       finishRequestLog(requestState, errorFailurePlan.requestLogPayload);

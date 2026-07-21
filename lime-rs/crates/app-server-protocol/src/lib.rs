@@ -17,4 +17,6 @@ pub use schema_fixtures::read_fixture_tree;
 pub use schema_fixtures::write_fixture_tree;
 
 pub use jsonrpc_lite::*;
+pub use protocol::app_server_method_catalog;
 pub use protocol::v0::*;
+pub use protocol::v2::{METHOD_THREAD_RESUME, V2_SCHEMA_TYPE_NAMES};

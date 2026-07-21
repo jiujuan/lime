@@ -85,13 +85,6 @@ pub(super) fn known_media_sidecar_refs(stored: &StoredSession) -> Vec<KnownMedia
     for event in &stored.events {
         collect_media_sidecar_refs_from_value(&event.payload, &mut refs);
     }
-    for input in stored.turn_inputs.values() {
-        for attachment in &input.attachments {
-            if let Some(metadata) = attachment.metadata.as_ref() {
-                collect_media_sidecar_refs_from_value(metadata, &mut refs);
-            }
-        }
-    }
     refs
 }
 

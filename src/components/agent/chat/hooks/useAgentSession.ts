@@ -18,7 +18,6 @@ import type {
   AgentRuntimeThreadReadModel,
   AgentTodoItem,
 } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
@@ -112,6 +111,7 @@ import {
 import {
   refreshAgentSessionDetailState,
   refreshAgentSessionReadModelState,
+  hydrateFreshAgentSessionReadModel,
   type AgentSessionDetailRefreshRequest,
 } from "./agentSessionRefresh";
 import { reuseStableAgentSessionSnapshotReferences } from "./agentSessionSnapshotStability";
@@ -160,6 +160,8 @@ import {
   buildCachedTopicSnapshotViewModel,
 } from "./agentSessionRestoreViewModel";
 import { hasActiveStreamingTimeline } from "./agentSessionStreamingGuards";
+import { preserveAssistantMessageUsage } from "./agentMessageUsageMerge";
+import { useAgentSessionTokenUsage } from "./useAgentSessionTokenUsage";
 
 const INITIAL_TOPICS_IDLE_TIMEOUT_MS = 1_500;
 const INITIAL_TOPICS_SESSION_REQUEST_LIMIT = 21;
@@ -463,7 +465,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       ? null
       : loadTransient<string | null>(scopedKeys.currentTurnKey, null),
   );
-  const [queuedTurns, setQueuedTurns] = useState<QueuedTurnSnapshot[]>([]);
   const [threadRead, setThreadRead] =
     useState<AgentRuntimeThreadReadModel | null>(null);
   const [executionRuntime, setExecutionRuntime] =
@@ -506,8 +507,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     workspaceId?.trim() || "",
   );
   const messagesRef = useRef<Message[]>(messages);
+  const assistantUsageByRuntimeTurnIdRef = useRef<
+    Map<string, NonNullable<Message["usage"]>>
+  >(new Map());
   const threadTurnsRef = useRef<AgentThreadTurn[]>(threadTurns);
   const threadItemsRef = useRef<AgentThreadItem[]>(threadItems);
+  const threadReadRef = useRef<AgentRuntimeThreadReadModel | null>(threadRead);
   const sessionHistoryWindowRef = useRef<AgentSessionHistoryWindow | null>(
     sessionHistoryWindow,
   );
@@ -556,15 +561,31 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   ]);
   const setMessagesState = useCallback<Dispatch<SetStateAction<Message[]>>>(
     (value) => {
-      const nextMessages =
+      const resolvedMessages =
         typeof value === "function"
           ? (value as (previous: Message[]) => Message[])(messagesRef.current)
           : value;
+      const nextMessages = preserveAssistantMessageUsage(
+        messagesRef.current,
+        resolvedMessages,
+        assistantUsageByRuntimeTurnIdRef.current,
+      );
       messagesRef.current = nextMessages;
       setMessages(nextMessages);
     },
     [],
   );
+
+  useAgentSessionTokenUsage({
+    sessionId,
+    sessionIdRef,
+    messagesRef,
+    threadReadRef,
+    threadTurnsRef,
+    usageByRuntimeTurnIdRef: assistantUsageByRuntimeTurnIdRef,
+    setMessages: setMessagesState,
+  });
+
   const setThreadTurnsState = useCallback<
     Dispatch<SetStateAction<AgentThreadTurn[]>>
   >((value) => {
@@ -689,20 +710,34 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           threadTurns: threadTurnsRef.current,
         },
       );
+      const previousSessionId = sessionIdRef.current;
+      const snapshotMessages = preserveAssistantMessageUsage(
+        messagesRef.current,
+        stableSnapshot.messages,
+        assistantUsageByRuntimeTurnIdRef.current,
+      );
+      const preservesCanonicalThreadRead =
+        !stableSnapshot.threadRead &&
+        stableSnapshot.sessionId &&
+        stableSnapshot.sessionId === previousSessionId &&
+        threadReadRef.current;
+      const resolvedThreadRead =
+        stableSnapshot.threadRead ??
+        (preservesCanonicalThreadRead ? threadReadRef.current : null);
       sessionIdRef.current = stableSnapshot.sessionId;
-      messagesRef.current = stableSnapshot.messages;
+      messagesRef.current = snapshotMessages;
       threadTurnsRef.current = stableSnapshot.threadTurns;
       threadItemsRef.current = stableSnapshot.threadItems;
+      threadReadRef.current = resolvedThreadRead;
       executionRuntimeRef.current = stableSnapshot.executionRuntime;
       sessionWorkingDirRef.current = stableSnapshot.workingDir;
       setSessionId(stableSnapshot.sessionId);
       setSessionWorkingDir(stableSnapshot.workingDir);
-      setMessages(stableSnapshot.messages);
+      setMessages(snapshotMessages);
       setThreadTurns(stableSnapshot.threadTurns);
       setThreadItems(stableSnapshot.threadItems);
       setCurrentTurnId(stableSnapshot.currentTurnId);
-      setQueuedTurns(stableSnapshot.queuedTurns);
-      setThreadRead(stableSnapshot.threadRead);
+      setThreadRead(resolvedThreadRead);
       setExecutionRuntime(stableSnapshot.executionRuntime);
       setTodoItems(stableSnapshot.todoItems);
     },
@@ -710,16 +745,17 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
 
   const applyReadModelSnapshot = useCallback(
-    (snapshot: {
-      queuedTurns: QueuedTurnSnapshot[];
-      threadRead: AgentRuntimeThreadReadModel | null;
-    }) => {
+    (snapshot: { threadRead: AgentRuntimeThreadReadModel | null }) => {
       if (!snapshot.threadRead) {
         return;
       }
-      setQueuedTurns(snapshot.queuedTurns);
+      threadReadRef.current = snapshot.threadRead;
       setThreadRead(snapshot.threadRead);
     },
+    [],
+  );
+  const getThreadIdForSubmit = useCallback(
+    () => threadReadRef.current?.thread_id,
     [],
   );
 
@@ -1292,6 +1328,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
               ),
             },
           );
+          const freshThreadRead = await hydrateFreshAgentSessionReadModel(
+            runtime,
+            newSessionId,
+          );
           appServerConfirmedSessionIdsRef.current.add(newSessionId);
 
           const now = new Date();
@@ -1312,6 +1352,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
               createOptions?.preserveCurrentSnapshot === true
                 ? threadItemsRef.current
                 : [],
+            threadRead: freshThreadRead,
           });
           setSessionHistoryWindow(null);
           setIsAutoRestoringSession(false);
@@ -1908,7 +1949,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         itemsCount: detail.items?.length ?? 0,
         messagesCount: detail.messages.length,
         metadataSyncPlan,
-        queuedTurnsCount: detail.queued_turns?.length ?? 0,
         runtimeExecutionStrategy,
         shadowExecutionStrategyFallback,
         topicExecutionStrategy,
@@ -2536,7 +2576,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           threadTurns: mergePlan.mergedThreadTurns,
           threadItems: mergePlan.mergedThreadItems,
           currentTurnId: mergePlan.currentTurnId,
-          queuedTurns,
           threadRead,
           executionRuntime: executionRuntimeRef.current,
           todoItems,
@@ -2604,7 +2643,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [
     applySessionSnapshot,
     currentTurnId,
-    queuedTurns,
     runtime,
     sessionIdRef,
     threadRead,
@@ -3069,7 +3107,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       messages.length > 0 ||
       hasSessionHydrationActivity({
         currentTurnId,
-        queuedTurnsCount: queuedTurns.length,
         threadItemsCount: threadItems.length,
         threadTurnsCount: threadTurns.length,
       });
@@ -3081,7 +3118,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const missingSessionAction = resolveMissingSessionFromTopicsAction({
       currentTurnId,
       detachedSessionId: detachedSessionIdRef.current,
-      queuedTurnsCount: queuedTurns.length,
       remoteConfirmed: appServerConfirmedSessionIdsRef.current.has(sessionId),
       restoreCandidateMayLagTopics,
       sessionId,
@@ -3202,7 +3238,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         currentTurnId,
         hydratedSessionId: hydratedSessionRef.current,
         messagesCount: messages.length,
-        queuedTurnsCount: queuedTurns.length,
         selectedTopic,
         sessionId,
         threadReadStatus: threadRead?.status,
@@ -3262,7 +3297,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     preserveRestoredMessages,
     persistSessionRestoreCandidate,
     isSessionHydrating,
-    queuedTurns.length,
     runtime,
     sessionId,
     sessionIdRef,
@@ -3283,7 +3317,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       {
         currentTurnId: currentTurnId ?? null,
         messagesCount: messages.length,
-        queuedTurnsCount: queuedTurns.length,
         sessionId: sessionId ?? null,
         threadItemsCount: threadItems.length,
         threadTurnsCount: threadTurns.length,
@@ -3295,7 +3328,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         dedupeKey: JSON.stringify({
           currentTurnId: currentTurnId ?? null,
           messagesCount: messages.length,
-          queuedTurnsCount: queuedTurns.length,
           sessionId: sessionId ?? null,
           threadItemsCount: threadItems.length,
           threadTurnsCount: threadTurns.length,
@@ -3309,7 +3341,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [
     currentTurnId,
     messages.length,
-    queuedTurns.length,
     sessionId,
     threadItems.length,
     threadTurns.length,
@@ -3408,6 +3439,25 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     [],
   );
 
+  const queuedTurnCount = useMemo(() => {
+    const topicCount =
+      topics.find((topic) => topic.id === sessionId)?.queuedTurnCount ?? 0;
+    const status = threadRead?.status?.trim().toLowerCase();
+    if (status === "queued") {
+      return Math.max(topicCount, 1);
+    }
+    if (
+      status === "completed" ||
+      status === "failed" ||
+      status === "canceled" ||
+      status === "cancelled" ||
+      status === "aborted"
+    ) {
+      return 0;
+    }
+    return topicCount;
+  }, [sessionId, threadRead?.status, topics]);
+
   return {
     sessionId,
     setSessionId,
@@ -3421,12 +3471,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     currentTurnId,
     setCurrentTurnId,
     todoItems,
-    queuedTurns,
+    queuedTurnCount,
     threadRead,
+    getThreadIdForSubmit,
     executionRuntime,
     sessionWorkingDir,
     setExecutionRuntime,
-    setQueuedTurns,
     topics,
     setTopics,
     topicsReady,

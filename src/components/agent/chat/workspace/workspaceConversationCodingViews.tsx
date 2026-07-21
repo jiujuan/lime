@@ -4,7 +4,6 @@ import type {
   AgentRuntimeFileCheckpointThreadSummary,
   AgentRuntimeThreadReadModel,
 } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import {
   drainExecutionProcessOutput,
   interruptExecutionProcess,
@@ -21,6 +20,7 @@ import type {
 import type { CanvasWorkbenchChangeView } from "../components/canvas-workbench";
 import type {
   ActionRequired,
+  AgentThreadItem,
   AgentThreadTurn,
   ConfirmResponse,
 } from "../types";
@@ -43,11 +43,11 @@ interface WorkspaceConversationCodingViewsParams {
   t: AgentTranslate;
   locale: string;
   turns: readonly AgentThreadTurn[];
+  threadItems?: readonly AgentThreadItem[];
   currentTurnId?: string | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
   pendingActions: readonly ActionRequired[];
   submittedActionsInFlight: readonly ActionRequired[];
-  queuedTurns: readonly QueuedTurnSnapshot[];
   isSending?: boolean;
   focusedTimelineItemId?: string | null;
   onOpenFile?: (path: string) => void | Promise<void>;
@@ -86,11 +86,11 @@ export function buildWorkspaceConversationCodingViews({
   t,
   locale,
   turns,
+  threadItems = [],
   currentTurnId,
   threadRead,
   pendingActions,
   submittedActionsInFlight,
-  queuedTurns,
   isSending,
   focusedTimelineItemId,
   onOpenFile,
@@ -103,8 +103,7 @@ export function buildWorkspaceConversationCodingViews({
   const hasCodingWorkbenchEvidence =
     Boolean(threadRead) ||
     pendingActions.length > 0 ||
-    submittedActionsInFlight.length > 0 ||
-    queuedTurns.length > 0;
+    submittedActionsInFlight.length > 0;
   if (!hasCodingWorkbenchEvidence) {
     return {
       currentSessionTurn,
@@ -124,6 +123,7 @@ export function buildWorkspaceConversationCodingViews({
   const fileCheckpointSummary = threadRead?.file_checkpoint_summary || null;
   const codingView = projectCodingWorkbenchViewFromEvents({
     executionEvents: [],
+    threadItems,
     codingReadModel: threadRead,
   });
   const formatCount = (count: number) =>
@@ -161,7 +161,7 @@ export function buildWorkspaceConversationCodingViews({
   const counters = buildSessionRuntimeCountersFromCodingProjection({
     codingView,
     fileCheckpointSummary,
-    queuedTurns,
+    pendingActionCount: pendingActions.length,
   });
   const labels = {
     inProgressItemCountLabel: formatNumber(counters.inProgressItemCount, {
@@ -170,10 +170,9 @@ export function buildWorkspaceConversationCodingViews({
     generatedFileCountLabel: formatNumber(counters.generatedFileCount, {
       locale,
     }),
-    pendingActionCountLabel: formatNumber(codingView.actions.length, {
+    pendingActionCountLabel: formatNumber(pendingActions.length, {
       locale,
     }),
-    queuedTurnCountLabel: formatNumber(queuedTurns.length, { locale }),
   };
   const sessionHeaderView = buildSessionHeaderViewModel({
     t,
@@ -181,8 +180,7 @@ export function buildWorkspaceConversationCodingViews({
     currentSessionStatus,
     counters,
     labels,
-    pendingActionCount: codingView.actions.length,
-    queuedTurnCount: queuedTurns.length,
+    pendingActionCount: pendingActions.length,
   });
   const sessionView: CanvasWorkbenchSessionView | null = sessionHeaderView
     ? {
@@ -193,7 +191,6 @@ export function buildWorkspaceConversationCodingViews({
             activityItems={sessionOverviewActivities}
             currentTurnId={currentTurnId}
             pendingActions={pendingActions}
-            queuedTurns={queuedTurns}
             isSending={isSending}
             focusedItemId={focusedTimelineItemId}
           />

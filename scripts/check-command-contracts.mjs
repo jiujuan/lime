@@ -208,10 +208,7 @@ const currentPluginRuntimeDesktopHostCommands = new Set([
 const currentTrayDesktopHostShellCommands = new Set([
   "sync_tray_model_shortcuts",
 ]);
-const currentHotkeyDesktopHostShellCommands = new Set([
-  "get_voice_shortcut_runtime_status",
-  "validate_shortcut",
-]);
+const currentHotkeyDesktopHostShellCommands = new Set([]);
 const currentVoiceModelDesktopHostReadCommands = new Set([
   "voice_models_get_install_state",
   "voice_models_list_catalog",

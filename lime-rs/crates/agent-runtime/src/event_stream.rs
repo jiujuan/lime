@@ -1,7 +1,7 @@
 //! Runtime event stream materialization contract.
 //!
-//! Codex 的 current 主链把内部执行事件 materialize 成 Turn / Item 事件后再给
-//! App Server / GUI / Evidence 消费；这里先固定 Lime current projector 契约，
+//! 当前主链把内部执行事件 materialize 成 Turn / Item 事件后再给 App Server /
+//! GUI / Evidence 消费；这里先固定 projector 契约，
 //! 具体 Agent event 转换只能留在 compat adapter。
 
 pub trait EventProjector<SourceEvent, RuntimeEvent> {

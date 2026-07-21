@@ -1,4 +1,3 @@
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   formatAgentUiProjectionEventDetail,
@@ -408,7 +407,6 @@ export function buildReliabilityDiagnosticText(params: {
     bullet(t, "metrics.activeIncidents", {
       count: view.activeIncidentCount,
     }),
-    bullet(t, "metrics.queuedTurns", { count: view.queuedTurnCount }),
     "",
     tr(t, "sections.routing"),
     ...buildRuntimeRoutingEvidenceLines(
@@ -535,18 +533,6 @@ export function buildReliabilityDiagnosticText(params: {
     );
   } else {
     sections.push(bullet(t, "outcome.noneStable"));
-  }
-
-  sections.push("", tr(t, "sections.nextQueuedTurn"));
-  if (view.nextQueuedTurn) {
-    sections.push(
-      `- ${joinDiagnosticValues(
-        [view.nextQueuedTurn.title, view.nextQueuedTurn.positionLabel],
-        pipe,
-      )}`,
-    );
-  } else {
-    sections.push(bullet(t, "value.none"));
   }
 
   sections.push("", tr(t, "sections.recommendations"));
@@ -936,7 +922,6 @@ export function buildReliabilityRawPayload(params: {
   currentTurnId?: string | null;
   pendingActions: ActionRequired[];
   submittedActionsInFlight: ActionRequired[];
-  queuedTurns: QueuedTurnSnapshot[];
   view: ReturnType<typeof buildThreadReliabilityView>;
   harnessState?: HarnessSessionState | null;
   messages: Message[];
@@ -959,7 +944,6 @@ export function buildReliabilityRawPayload(params: {
     thread_items: params.threadItems,
     pending_actions: params.pendingActions,
     submitted_actions_in_flight: params.submittedActionsInFlight,
-    queued_turns: params.queuedTurns,
     harness_state: summarizeHarnessState(params.harnessState),
     recent_messages: summarizeRecentMessages(params.messages),
     thread_item_signals: summarizeThreadItemSignals(params.threadItems),

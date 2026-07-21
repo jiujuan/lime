@@ -1,5 +1,6 @@
 use super::support::*;
 use super::*;
+use crate::runtime::session_control::QueuedTurnResume;
 
 async fn create_resume_audit_core(
     session_id: &str,
@@ -64,7 +65,72 @@ fn complete_running_turn(core: &RuntimeCore, session_id: &str) {
 }
 
 #[tokio::test]
-async fn resume_queued_turn_does_not_write_workflow_resume_audit_without_worker_lifecycle() {
+async fn queued_resume_helper_reports_idle_boundary_without_workflow_audit() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let core = create_resume_audit_core(
+        "sess_queue_resume_helper",
+        "thread_queue_resume_helper",
+        event_log_writer,
+    )
+    .await;
+
+    assert!(matches!(
+        core.resume_next_queued_turn_if_idle(
+            "sess_queue_resume_helper",
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("blocked queued resume"),
+        QueuedTurnResume::Blocked
+    ));
+
+    complete_running_turn(&core, "sess_queue_resume_helper");
+    let started = core
+        .resume_next_queued_turn_if_idle("sess_queue_resume_helper", RuntimeHostContext::default())
+        .await
+        .expect("start queued resume");
+    match started {
+        QueuedTurnResume::Started {
+            queued_turn_id,
+            events,
+        } => {
+            assert_eq!(queued_turn_id, "turn_queued");
+            assert!(events
+                .iter()
+                .any(|event| event.event_type == "turn.accepted"));
+        }
+        QueuedTurnResume::Empty | QueuedTurnResume::Blocked => {
+            panic!("queued resume helper did not start the queued turn")
+        }
+    }
+
+    let empty_core = RuntimeCore::with_backend(Arc::new(RecordingBackend::default()));
+    empty_core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_queue_resume_empty".to_string()),
+            thread_id: Some("thread_queue_resume_empty".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("workspace-current".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("empty session");
+    assert!(matches!(
+        empty_core
+            .resume_next_queued_turn_if_idle(
+                "sess_queue_resume_empty",
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("empty queued resume"),
+        QueuedTurnResume::Empty
+    ));
+}
+
+#[tokio::test]
+async fn queued_turn_helper_does_not_forge_workflow_resume_audit() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
@@ -116,21 +182,13 @@ async fn resume_queued_turn_does_not_write_workflow_resume_audit_without_worker_
     complete_running_turn(&core, "sess_queue_resume_audit");
 
     let resumed = core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_queue_resume_audit".to_string(),
-                resume_contract: None,
-            },
-            RuntimeHostContext::default(),
-        )
+        .resume_next_queued_turn_if_idle("sess_queue_resume_audit", RuntimeHostContext::default())
         .await
         .expect("resume queued");
-    assert!(resumed.response.resumed);
-    assert!(resumed
-        .response
-        .turns
-        .iter()
-        .any(|turn| turn.turn_id == "turn_queued" && turn.status == AgentTurnStatus::Accepted));
+    assert!(matches!(
+        resumed,
+        QueuedTurnResume::Started { queued_turn_id, .. } if queued_turn_id == "turn_queued"
+    ));
 
     let regular_records = event_log_writer
         .read_session_events("sess_queue_resume_audit")
@@ -156,113 +214,83 @@ async fn resume_queued_turn_does_not_write_workflow_resume_audit_without_worker_
         audit_records
             .iter()
             .all(|record| !record.event.event_type.contains("resum")),
-        "agentSession/thread/resume must not forge plugin worker resume audit events"
+        "queued turn helper must not forge plugin worker resume audit events"
     );
 }
 
 #[tokio::test]
-async fn resume_queued_turn_writes_workflow_resume_audit_with_worker_lifecycle_metadata() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
-    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
-    let core = create_resume_audit_core(
-        "sess_queue_resume_lifecycle",
-        "thread_queue_resume_lifecycle",
-        event_log_writer.clone(),
-    )
-    .await;
-    complete_running_turn(&core, "sess_queue_resume_lifecycle");
-
-    let resumed = core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_queue_resume_lifecycle".to_string(),
-                resume_contract: Some(RuntimeResumeContract {
-                    schema_version: RUNTIME_RESUME_CONTRACT_SCHEMA_VERSION.to_string(),
-                    runtime_id: "content-factory-plugin".to_string(),
-                    session_id: "sess_queue_resume_lifecycle".to_string(),
-                    turn_id: "turn_queued".to_string(),
-                    resume_mode: "selected-actions".to_string(),
-                    open_action_ids: vec!["article-draft-review".to_string()],
-                    decisions: vec![RuntimeResumeActionDecision {
-                        action_id: "article-draft-review".to_string(),
-                        decision: "approved".to_string(),
-                        response: Some(json!({
-                            "text": "raw reviewer response must not be written to workflow audit"
-                        })),
-                        metadata: Some(json!({
-                            "workflowResume": {
-                                "workflowRunId": "turn_queued:content-article",
-                                "workflowKey": "content_article_workflow",
-                                "stepId": "draft"
-                            }
-                        })),
-                    }],
-                    expires_at: None,
-                    created_at: "2026-07-05T00:00:00.000Z".to_string(),
-                }),
+async fn pending_work_recovery_scans_in_memory_queued_turns() {
+    let backend = Arc::new(RecordingBackend::default());
+    let core = RuntimeCore::with_backend(backend.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_pending_work_memory".to_string()),
+        thread_id: Some("thread_pending_work_memory".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: None,
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_pending_work_memory".to_string(),
+            turn_id: Some("turn_pending_work_active".to_string()),
+            input: AgentInput {
+                text: "active".to_string(),
+                attachments: Vec::new(),
             },
-            RuntimeHostContext::default(),
-        )
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("active turn");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_pending_work_memory".to_string(),
+            turn_id: Some("turn_pending_work_queued".to_string()),
+            input: AgentInput {
+                text: "queued recovery input".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: true,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("queued turn");
+    core.append_external_runtime_events(
+        "sess_pending_work_memory",
+        Some("turn_pending_work_active"),
+        vec![RuntimeEvent::new("turn.completed", json!({}))],
+    )
+    .expect("complete active turn");
+
+    core.recover_agent_control_spawns(RuntimeHostContext::default(), None)
         .await
-        .expect("resume queued");
-    assert!(resumed.response.resumed);
-    assert!(resumed
-        .response
-        .turns
-        .iter()
-        .any(|turn| turn.turn_id == "turn_queued" && turn.status == AgentTurnStatus::Accepted));
+        .expect("recover pending work");
 
-    let regular_records = event_log_writer
-        .read_session_events("sess_queue_resume_lifecycle")
-        .expect("regular records");
-    assert!(
-        regular_records
-            .iter()
-            .all(|record| !record.event.event_type.starts_with("workflow.")),
-        "workflow resume audit events must stay out of regular session JSONL"
-    );
-
-    let audit_records = event_log_writer
-        .read_session_workflow_audit_events("sess_queue_resume_lifecycle")
-        .expect("workflow audit records");
-    let event_types = audit_records
+    let requests = backend
+        .requests
+        .lock()
+        .expect("backend requests")
         .iter()
-        .map(|record| record.event.event_type.as_str())
+        .map(|request| (request.turn.turn_id.clone(), request.input.concat_text()))
         .collect::<Vec<_>>();
     assert_eq!(
-        event_types,
-        vec!["workflow.step.resuming", "workflow.run.resuming"]
+        requests,
+        vec![
+            ("turn_pending_work_active".to_string(), "active".to_string()),
+            (
+                "turn_pending_work_queued".to_string(),
+                "queued recovery input".to_string()
+            ),
+        ]
     );
-
-    for record in audit_records {
-        assert_eq!(
-            record.event.payload["workflowRunId"],
-            json!("turn_queued:content-article")
-        );
-        assert_eq!(
-            record.event.payload["workflowKey"],
-            json!("content_article_workflow")
-        );
-        assert_eq!(record.event.payload["stepId"], json!("draft"));
-        assert_eq!(
-            record.event.payload["source"],
-            json!("agentSession/thread/resume")
-        );
-        assert_eq!(record.event.payload["status"], json!("resuming"));
-        assert_eq!(
-            record.event.payload["redaction"]["policy"],
-            json!("workflow_audit_metadata_only")
-        );
-        assert!(
-            !record
-                .event
-                .payload
-                .to_string()
-                .contains("raw reviewer response"),
-            "decision response must not be copied into workflow audit payload"
-        );
-    }
 }
 
 #[tokio::test]

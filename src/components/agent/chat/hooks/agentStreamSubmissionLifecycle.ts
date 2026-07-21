@@ -1,6 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { Message } from "../types";
 import type { InterruptedInputDraftSnapshot } from "./agentStreamInputRestoreTypes";
 import {
@@ -14,10 +13,6 @@ import {
   formatAgentRuntimeStatusSummary,
 } from "../utils/agentRuntimeStatus";
 import type { AgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
-import {
-  removeQueuedTurnSnapshots,
-  upsertQueuedTurnSnapshot,
-} from "./agentQueuedTurnProjection";
 
 export interface ActiveStreamState {
   assistantMsgId: string;
@@ -52,9 +47,7 @@ export interface StreamRequestState {
   textDeltaFlushCount?: number;
   maxTextDeltaBacklogChars?: number;
   requestFinished: boolean;
-  queuedTurnId: string | null;
   currentTurnId?: string | null;
-  queuedDraftCleanupTimerId?: ReturnType<typeof setTimeout> | null;
   pendingTextRenderTimerId?: ReturnType<typeof setTimeout> | null;
   renderedContent?: string;
   preservedAssistantContentInitialized?: boolean;
@@ -116,13 +109,10 @@ interface CreateSubmissionLifecycleOptions {
   userMsgId: string | null;
   userMsg?: Message | null;
   content: string;
-  expectingQueue: boolean;
   submittedDraft?: InterruptedInputDraftSnapshot | null;
-  initialThreadId: string;
   listenerMapRef: MutableRefObject<Map<string, () => void>>;
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
   setMessages: Dispatch<SetStateAction<Message[]>>;
-  setQueuedTurns: Dispatch<SetStateAction<QueuedTurnSnapshot[]>>;
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
@@ -145,13 +135,10 @@ export function createAgentStreamSubmissionLifecycle(
     userMsgId,
     userMsg,
     content,
-    expectingQueue,
     submittedDraft,
-    initialThreadId,
     listenerMapRef,
     setActiveStream,
     setMessages,
-    setQueuedTurns,
     setThreadItems,
     setThreadTurns,
     setCurrentTurnId,
@@ -181,8 +168,6 @@ export function createAgentStreamSubmissionLifecycle(
     textDeltaFlushCount: 0,
     maxTextDeltaBacklogChars: 0,
     requestFinished: false,
-    queuedTurnId: null,
-    queuedDraftCleanupTimerId: null,
     pendingTextRenderTimerId: null,
     renderedContent: "",
     activeTextSegmentTurnId: null,
@@ -195,38 +180,23 @@ export function createAgentStreamSubmissionLifecycle(
   const optimisticStartedAt = assistantMsg.timestamp.toISOString();
   const pendingTurnKey = createPendingTurnKey();
   const pendingItemKey = createPendingItemKey(pendingTurnKey);
-  const requestTurnId = crypto.randomUUID();
-  const optimisticRuntimeTurnId = expectingQueue
-    ? requestTurnId
-    : pendingTurnKey;
   const eventName = `agent_stream_${assistantMsgId}`;
   const turnUserMsg = userMsg
     ? {
         ...userMsg,
-        runtimeTurnId: userMsg.runtimeTurnId || optimisticRuntimeTurnId,
+        runtimeTurnId: userMsg.runtimeTurnId || pendingTurnKey,
       }
     : null;
   const turnAssistantMsg = {
     ...assistantMsg,
-    runtimeTurnId: assistantMsg.runtimeTurnId || optimisticRuntimeTurnId,
+    runtimeTurnId: assistantMsg.runtimeTurnId || pendingTurnKey,
   };
   const toolLogIdByToolId = new Map<string, string>();
   const toolStartedAtByToolId = new Map<string, number>();
   const toolNameByToolId = new Map<string, string>();
   const actionLoggedKeys = new Set<string>();
 
-  const upsertQueuedTurn = (nextQueuedTurn: QueuedTurnSnapshot) => {
-    setQueuedTurns((prev) => upsertQueuedTurnSnapshot(prev, nextQueuedTurn));
-  };
-
-  const removeQueuedTurnsFromProjection = (queuedTurnIds: string[]) => {
-    if (queuedTurnIds.length === 0) {
-      return;
-    }
-    setQueuedTurns((prev) => removeQueuedTurnSnapshots(prev, queuedTurnIds));
-  };
-
-  const removeQueuedDraftMessages = () => {
+  const removeOptimisticMessages = () => {
     setMessages((prev) =>
       prev.filter(
         (msg) =>
@@ -237,25 +207,15 @@ export function createAgentStreamSubmissionLifecycle(
   };
 
   const clearOptimisticItem = () => {
-    if (expectingQueue) {
-      return;
-    }
     setThreadItems((prev) => removeThreadItemState(prev, pendingItemKey));
   };
 
   const clearOptimisticTurn = () => {
-    if (expectingQueue) {
-      return;
-    }
     setThreadTurns((prev) => removeThreadTurnState(prev, pendingTurnKey));
     setCurrentTurnId((prev) => (prev === pendingTurnKey ? null : prev));
   };
 
   const markOptimisticFailure = (errorMessage: string) => {
-    if (expectingQueue) {
-      return;
-    }
-
     const failedAt = new Date().toISOString();
     const failedRuntimeStatus = buildFailedAgentRuntimeStatus(errorMessage);
 
@@ -304,6 +264,7 @@ export function createAgentStreamSubmissionLifecycle(
   const activateStream = (
     activeSessionId: string,
     effectiveWaitingRuntimeStatus: NonNullable<Message["runtimeStatus"]>,
+    canonicalThreadId?: string,
   ) => {
     if (streamActivated) {
       return;
@@ -313,7 +274,6 @@ export function createAgentStreamSubmissionLifecycle(
       assistantMsgId,
       eventName,
       sessionId: activeSessionId,
-      turnId: requestTurnId,
       pendingTurnKey,
       pendingItemKey,
       submittedDraft: submittedDraft ?? null,
@@ -365,15 +325,11 @@ export function createAgentStreamSubmissionLifecycle(
       );
     });
 
-    if (expectingQueue) {
-      return;
-    }
-
     const updatedAt = new Date().toISOString();
     setThreadTurns((prev) =>
       upsertThreadTurnState(prev, {
         id: pendingTurnKey,
-        thread_id: activeSessionId,
+        thread_id: canonicalThreadId || activeSessionId,
         prompt_text: content,
         status: "running",
         started_at: optimisticStartedAt,
@@ -384,7 +340,7 @@ export function createAgentStreamSubmissionLifecycle(
     setThreadItems((prev) =>
       upsertThreadItemState(prev, {
         id: pendingItemKey,
-        thread_id: activeSessionId,
+        thread_id: canonicalThreadId || activeSessionId,
         turn_id: pendingTurnKey,
         sequence: 0,
         status: "in_progress",
@@ -394,6 +350,7 @@ export function createAgentStreamSubmissionLifecycle(
         text: formatAgentRuntimeStatusSummary(effectiveWaitingRuntimeStatus),
       }),
     );
+    setCurrentTurnId(pendingTurnKey);
   };
 
   const registerListener = (nextUnlisten: () => void) => {
@@ -401,53 +358,8 @@ export function createAgentStreamSubmissionLifecycle(
     listenerMapRef.current.set(eventName, nextUnlisten);
   };
 
-  setMessages((prev) =>
-    prev.map((msg) =>
-      msg.id === userMsgId && turnUserMsg
-        ? {
-            ...msg,
-            runtimeTurnId: msg.runtimeTurnId || optimisticRuntimeTurnId,
-          }
-        : msg.id === assistantMsgId
-          ? {
-              ...msg,
-              runtimeTurnId: msg.runtimeTurnId || optimisticRuntimeTurnId,
-            }
-          : msg,
-    ),
-  );
-
-  if (!expectingQueue) {
-    setThreadTurns((prev) =>
-      upsertThreadTurnState(prev, {
-        id: pendingTurnKey,
-        thread_id: initialThreadId,
-        prompt_text: content,
-        status: "running",
-        started_at: optimisticStartedAt,
-        created_at: optimisticStartedAt,
-        updated_at: optimisticStartedAt,
-      }),
-    );
-    setThreadItems((prev) =>
-      upsertThreadItemState(prev, {
-        id: pendingItemKey,
-        thread_id: initialThreadId,
-        turn_id: pendingTurnKey,
-        sequence: 0,
-        status: "in_progress",
-        started_at: optimisticStartedAt,
-        updated_at: optimisticStartedAt,
-        type: "turn_summary",
-        text: formatAgentRuntimeStatusSummary(assistantMsg.runtimeStatus),
-      }),
-    );
-    setCurrentTurnId(pendingTurnKey);
-  }
-
   return {
     eventName,
-    requestTurnId,
     requestState,
     pendingTurnKey,
     pendingItemKey,
@@ -459,9 +371,7 @@ export function createAgentStreamSubmissionLifecycle(
     clearOptimisticItem,
     clearOptimisticTurn,
     disposeListener,
-    upsertQueuedTurn,
-    removeQueuedTurnsFromProjection,
-    removeQueuedDraftMessages,
+    removeOptimisticMessages,
     markOptimisticFailure,
     registerListener,
     isStreamActivated: () => streamActivated,

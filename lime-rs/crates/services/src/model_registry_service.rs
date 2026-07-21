@@ -9,6 +9,7 @@ use lime_core::api_host_utils::{
     is_openai_responses_compatible_host, normalize_openai_model_discovery_host,
 };
 use lime_core::database::dao::api_key_provider::{infer_managed_runtime_spec, ApiProviderType};
+use lime_core::database::dao::route_state::RouteStateDao;
 use lime_core::database::DbConnection;
 use lime_core::image_generation_matcher::is_likely_image_generation_search_text;
 use lime_core::models::model_registry::{
@@ -18,7 +19,7 @@ use lime_core::models::model_registry::{
     ModelTaskFamily, ModelTier, ProviderAliasConfig, UserModelPreference,
 };
 use model_provider::canonical::{maybe_get_canonical_model, CanonicalModel};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -1743,6 +1744,35 @@ impl ModelRegistryService {
         }
     }
 
+    /// Runtime chat execution requires a repository credential unless the provider is
+    /// explicitly known to be keyless. Model discovery may be keyless for additional
+    /// local/custom providers, but that must not make execution silently unauthenticated.
+    pub fn requires_api_key_for_runtime(
+        provider_id: &str,
+        api_host: &str,
+        provider_type: ApiProviderType,
+    ) -> bool {
+        if matches!(provider_type, ApiProviderType::Ollama) {
+            return false;
+        }
+
+        let normalized_provider_id = provider_id.trim().to_ascii_lowercase();
+        if matches!(
+            normalized_provider_id.as_str(),
+            "ollama" | "lmstudio" | "gpustack" | "ovms"
+        ) {
+            return false;
+        }
+
+        if managed_model_fetch_access::is_lime_managed_api_host(api_host)
+            && Self::lime_tenant_id_from_api_host(api_host).is_some()
+        {
+            return false;
+        }
+
+        true
+    }
+
     fn is_fal_like_model_fetch(
         provider_id: &str,
         api_host: &str,
@@ -1819,7 +1849,7 @@ impl ModelRegistryService {
     ) -> Result<Option<FetchModelsResult>, String> {
         let cache_key = Self::provider_models_cache_key(provider_id, api_host, provider_type);
         let now = chrono::Utc::now().timestamp();
-        let conn = self.db.lock().map_err(|e| e.to_string())?;
+        let mut conn = self.db.lock().map_err(|e| e.to_string())?;
 
         let cached_value: Option<String> = conn
             .query_row(
@@ -1838,7 +1868,13 @@ impl ModelRegistryService {
             Ok(payload) => payload,
             Err(error) => {
                 tracing::warn!("[ModelRegistry] Provider 模型缓存解析失败，已忽略: {error}");
-                let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+                if let Err(delete_error) =
+                    Self::delete_provider_models_cache_entry(&mut conn, &cache_key)
+                {
+                    tracing::warn!(
+                        "[ModelRegistry] 删除损坏的 Provider 模型缓存失败: {delete_error}"
+                    );
+                }
                 return Ok(None);
             }
         };
@@ -1851,7 +1887,9 @@ impl ModelRegistryService {
                 payload.taxonomy_version,
                 PROVIDER_MODELS_CACHE_TAXONOMY_VERSION
             );
-            let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+            if let Err(error) = Self::delete_provider_models_cache_entry(&mut conn, &cache_key) {
+                tracing::warn!("[ModelRegistry] 删除过期分类的 Provider 模型缓存失败: {error}");
+            }
             return Ok(None);
         }
 
@@ -1861,7 +1899,9 @@ impl ModelRegistryService {
                 provider_id,
                 api_host
             );
-            let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+            if let Err(error) = Self::delete_provider_models_cache_entry(&mut conn, &cache_key) {
+                tracing::warn!("[ModelRegistry] 删除过期 Provider 模型缓存失败: {error}");
+            }
             return Ok(None);
         }
 
@@ -1876,12 +1916,17 @@ impl ModelRegistryService {
                     provider_id,
                     api_host
                 );
-                let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+                if let Err(error) = Self::delete_provider_models_cache_entry(&mut conn, &cache_key)
+                {
+                    tracing::warn!("[ModelRegistry] 删除无效 Fal 模型缓存失败: {error}");
+                }
             }
         }
 
         if models.is_empty() {
-            let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+            if let Err(error) = Self::delete_provider_models_cache_entry(&mut conn, &cache_key) {
+                tracing::warn!("[ModelRegistry] 删除空 Provider 模型缓存失败: {error}");
+            }
             return Ok(None);
         }
 
@@ -1931,23 +1976,72 @@ impl ModelRegistryService {
         let payload = serde_json::to_string(&payload)
             .map_err(|e| format!("序列化 Provider 模型缓存失败: {e}"))?;
 
-        let conn = self.db.lock().map_err(|e| e.to_string())?;
-        conn.execute(
+        let mut conn = self.db.lock().map_err(|e| e.to_string())?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始 Provider 模型缓存事务失败: {e}"))?;
+        let existing_payload: Option<String> = tx
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![cache_key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("读取 Provider 模型缓存失败: {e}"))?;
+
+        if existing_payload.as_deref() == Some(payload.as_str()) {
+            return Ok(());
+        }
+
+        tx.execute(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
             params![cache_key, payload],
         )
         .map_err(|e| format!("写入 Provider 模型缓存失败: {e}"))?;
+        RouteStateDao::advance_generation(&tx).map_err(|e| format!("推进模型路由代际失败: {e}"))?;
+        tx.commit()
+            .map_err(|e| format!("提交 Provider 模型缓存事务失败: {e}"))?;
 
         Ok(())
     }
 
+    fn delete_provider_models_cache_entry(
+        conn: &mut Connection,
+        cache_key: &str,
+    ) -> Result<bool, String> {
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始 Provider 模型缓存删除事务失败: {e}"))?;
+        let deleted = tx
+            .execute("DELETE FROM settings WHERE key = ?1", params![cache_key])
+            .map_err(|e| format!("删除 Provider 模型缓存失败: {e}"))?;
+        if deleted > 0 {
+            RouteStateDao::advance_generation(&tx)
+                .map_err(|e| format!("推进模型路由代际失败: {e}"))?;
+        }
+        tx.commit()
+            .map_err(|e| format!("提交 Provider 模型缓存删除事务失败: {e}"))?;
+        Ok(deleted > 0)
+    }
+
     fn clear_provider_models_cache(&self) -> Result<usize, String> {
-        let conn = self.db.lock().map_err(|e| e.to_string())?;
-        conn.execute(
-            "DELETE FROM settings WHERE key GLOB ?1",
-            params![format!("{PROVIDER_MODELS_CACHE_KEY_PREFIX}*")],
-        )
-        .map_err(|e| format!("清空 Provider 模型缓存失败: {e}"))
+        let mut conn = self.db.lock().map_err(|e| e.to_string())?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("开始 Provider 模型缓存清理事务失败: {e}"))?;
+        let deleted = tx
+            .execute(
+                "DELETE FROM settings WHERE key GLOB ?1",
+                params![format!("{PROVIDER_MODELS_CACHE_KEY_PREFIX}*")],
+            )
+            .map_err(|e| format!("清空 Provider 模型缓存失败: {e}"))?;
+        if deleted > 0 {
+            RouteStateDao::advance_generation(&tx)
+                .map_err(|e| format!("推进模型路由代际失败: {e}"))?;
+        }
+        tx.commit()
+            .map_err(|e| format!("提交 Provider 模型缓存清理事务失败: {e}"))?;
+        Ok(deleted)
     }
 
     /// 从 Provider API 获取模型列表
@@ -3483,6 +3577,7 @@ mod tests {
         ModelTaxonomyInput, LIME_TENANT_HEADER, PROVIDER_MODELS_CACHE_TTL_SECONDS,
     };
     use lime_core::database::dao::api_key_provider::ApiProviderType;
+    use lime_core::database::dao::route_state::RouteStateDao;
     use lime_core::database::DbConnection;
     use lime_core::models::model_registry::{
         EnhancedModelMetadata, ModelCapabilities, ModelModality, ModelReasoningEffortLevel,
@@ -3500,6 +3595,11 @@ mod tests {
         .unwrap();
         let db = Arc::new(Mutex::new(conn));
         (ModelRegistryService::new(Arc::clone(&db)), db)
+    }
+
+    fn route_generation(db: &DbConnection) -> u64 {
+        let conn = db.lock().unwrap();
+        RouteStateDao::read_generation(&conn).unwrap()
     }
 
     fn create_cached_model(id: &str) -> EnhancedModelMetadata {
@@ -4099,7 +4199,7 @@ mod tests {
 
     #[test]
     fn test_provider_models_cache_hits_within_ten_days() {
-        let (service, _db) = setup_cache_service();
+        let (service, db) = setup_cache_service();
         let now = chrono::Utc::now().timestamp();
         let request_url = "https://api.openai.com/v1/models".to_string();
 
@@ -4113,6 +4213,7 @@ mod tests {
                 now,
             )
             .expect("cache should be saved");
+        assert_eq!(route_generation(&db), 1);
 
         let cached = service
             .get_cached_provider_models(
@@ -4128,6 +4229,76 @@ mod tests {
         assert_eq!(cached.request_url.as_deref(), Some(request_url.as_str()));
         assert_eq!(cached.models.len(), 1);
         assert_eq!(cached.models[0].id, "gpt-5.1");
+        assert_eq!(route_generation(&db), 1);
+    }
+
+    #[test]
+    fn test_provider_models_cache_generation_advances_only_for_changed_payload() {
+        let (service, db) = setup_cache_service();
+        let now = chrono::Utc::now().timestamp();
+        let cached_model = create_cached_model("gpt-5.1");
+
+        service
+            .save_provider_models_cache(
+                "openai",
+                "https://api.openai.com/v1",
+                Some(ApiProviderType::Openai),
+                std::slice::from_ref(&cached_model),
+                None,
+                now,
+            )
+            .expect("new cache should be saved");
+        assert_eq!(route_generation(&db), 1);
+
+        service
+            .save_provider_models_cache(
+                "openai",
+                "https://api.openai.com/v1",
+                Some(ApiProviderType::Openai),
+                std::slice::from_ref(&cached_model),
+                None,
+                now,
+            )
+            .expect("identical cache should be ignored");
+        assert_eq!(route_generation(&db), 1);
+
+        service
+            .save_provider_models_cache(
+                "openai",
+                "https://api.openai.com/v1",
+                Some(ApiProviderType::Openai),
+                &[create_cached_model("gpt-5.2")],
+                None,
+                now,
+            )
+            .expect("changed cache should be saved");
+        assert_eq!(route_generation(&db), 2);
+    }
+
+    #[test]
+    fn test_clear_provider_models_cache_advances_only_when_rows_are_deleted() {
+        let (service, db) = setup_cache_service();
+        let now = chrono::Utc::now().timestamp();
+
+        assert_eq!(service.clear_provider_models_cache().unwrap(), 0);
+        assert_eq!(route_generation(&db), 0);
+
+        service
+            .save_provider_models_cache(
+                "openai",
+                "https://api.openai.com/v1",
+                Some(ApiProviderType::Openai),
+                &[create_cached_model("gpt-5.1")],
+                None,
+                now,
+            )
+            .expect("cache should be saved");
+        assert_eq!(route_generation(&db), 1);
+
+        assert_eq!(service.clear_provider_models_cache().unwrap(), 1);
+        assert_eq!(route_generation(&db), 2);
+        assert_eq!(service.clear_provider_models_cache().unwrap(), 0);
+        assert_eq!(route_generation(&db), 2);
     }
 
     #[test]
@@ -4200,6 +4371,7 @@ mod tests {
             .expect("cache read should not fail");
 
         assert!(cached.is_none());
+        assert_eq!(route_generation(&db), 2);
 
         let remaining: i64 = db
             .lock()

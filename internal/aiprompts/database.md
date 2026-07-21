@@ -109,7 +109,7 @@ impl ApiKeyProviderDao {
 
 ## 旧凭证池表边界
 
-`provider_pool_credentials` 分类为 `deprecated` 存储边界：schema、历史迁移和启动期清理可以引用；运行时服务、legacy adapter 命令、前端 API 和旁路统计不得再读取它做凭证选择。
+`provider_pool_credentials` 分类为 `deprecated/read-only migration source`：schema、历史盘点和独立 maintenance 迁移可以引用；正常启动不得删除表行或 `AppDataRoot/credentials` 文件，运行时服务、legacy adapter 命令、前端 API 和旁路统计也不得读取它做凭证选择。
 
 ## 数据库迁移
 

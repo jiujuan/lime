@@ -1,7 +1,6 @@
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 
 export interface AgentStreamReasoningTimelineState {
-  queuedTurnId: string | null;
   currentTurnId?: string | null;
   streamedReasoningItemId?: string | null;
   streamedReasoningText?: string;
@@ -40,11 +39,7 @@ export function appendTextWithOverlapFallback(
 export function resolveStreamedReasoningTurnId(
   requestState: AgentStreamReasoningTimelineState,
 ): string | null {
-  return (
-    requestState.currentTurnId?.trim() ||
-    requestState.queuedTurnId?.trim() ||
-    null
-  );
+  return requestState.currentTurnId?.trim() || null;
 }
 
 export function buildStreamedReasoningItem(params: {

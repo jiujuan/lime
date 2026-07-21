@@ -373,7 +373,8 @@ export function readPatchItemFromPayload(
       "tool_call_id",
       "id",
     ) ?? event.eventId;
-  const paths = readPatchPaths(payload);
+  const changes = readPatchChanges(payload);
+  const paths = readPatchPaths(payload, changes);
   const stdout = readString(payload, "stdout", "output", "summary");
   const stderr = readString(payload, "stderr", "error", "message", "reason");
   const metadata = normalizeRecord(payload.metadata);
@@ -389,6 +390,14 @@ export function readPatchItemFromPayload(
     completed_at: status === "in_progress" ? undefined : event.timestamp,
     updated_at: event.timestamp,
     type: "patch",
+    changes,
+    file_status:
+      readString(payload, "status", "state") ??
+      (status === "in_progress"
+        ? "inProgress"
+        : status === "completed"
+          ? "completed"
+          : "failed"),
     text:
       readString(payload, "text", "patch", "message") ??
       (paths.length > 0
@@ -410,18 +419,49 @@ export function readPatchItemFromPayload(
   };
 }
 
-function readPatchPaths(payload: Record<string, unknown>): string[] {
+function readPatchChanges(payload: Record<string, unknown>) {
+  if (!Array.isArray(payload.changes)) {
+    return [];
+  }
+  return payload.changes.flatMap((value) => {
+    const change = normalizeRecord(value);
+    const path = readString(change ?? {}, "path", "filePath", "file_path");
+    const kindRecord = normalizeRecord(change?.kind);
+    const kindType =
+      readString(kindRecord ?? {}, "type") ??
+      readString(change ?? {}, "kind", "changeKind", "change_kind");
+    if (
+      !path ||
+      (kindType !== "add" && kindType !== "delete" && kindType !== "update")
+    ) {
+      return [];
+    }
+    const movePath =
+      readString(kindRecord ?? {}, "move_path") ??
+      readString(change ?? {}, "movePath", "move_path");
+    return [
+      {
+        path,
+        kind:
+          kindType === "update" && movePath
+            ? { type: kindType, move_path: movePath }
+            : { type: kindType },
+        diff: readString(change ?? {}, "diff", "patch", "content") ?? "",
+      },
+    ];
+  });
+}
+
+function readPatchPaths(
+  payload: Record<string, unknown>,
+  changes: Array<{ path: string }>,
+): string[] {
   const directPaths =
     readStringArray(payload, "paths", "changedFiles", "changed_files") ?? [];
   if (directPaths.length > 0) {
     return directPaths;
   }
-
-  const changes = normalizeRecord(payload.changes);
-  if (!changes) {
-    return [];
-  }
-  return Object.keys(changes).filter(Boolean);
+  return changes.map((change) => change.path);
 }
 
 export function readFileReadItemFromPayload(
@@ -712,11 +752,7 @@ export function readAgentThreadItemFromPayload(
   fallbackStatus: "in_progress" | "completed" | "failed",
 ): Record<string, unknown> {
   const item = normalizeRecord(payload.item) ?? payload;
-  const canonicalToolItem = readCanonicalToolThreadItem(
-    item,
-    event,
-    fallbackStatus,
-  );
+  const canonicalToolItem = readCanonicalToolThreadItem(item, event);
   if (canonicalToolItem) {
     return canonicalToolItem;
   }

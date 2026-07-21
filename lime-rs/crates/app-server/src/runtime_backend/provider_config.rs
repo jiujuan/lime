@@ -130,10 +130,5 @@ pub(super) fn initialize_runtime_database(
             RuntimeCoreError::Backend(format!("failed to initialize database: {error}"))
         })?
     };
-    crate::agent_runtime_registry::initialize_agent_runtime(db.clone()).map_err(|error| {
-        RuntimeCoreError::Backend(format!(
-            "failed to initialize Agent runtime for App Server runtime backend: {error}"
-        ))
-    })?;
     Ok(db)
 }

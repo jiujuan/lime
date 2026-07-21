@@ -9,7 +9,9 @@ const INPUT_RESTORE_UI_OWNER_FILES = new Set([
 ]);
 
 const INPUT_RESTORE_REQUEST_PRODUCTION_FILES = new Set([
-  "src/components/agent/chat/AgentChatWorkspace.tsx",
+  "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+  "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+  "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
   "src/components/agent/chat/components/EmptyState.tsx",
   "src/components/agent/chat/components/EmptyState.types.ts",
   "src/components/agent/chat/components/Inputbar/hooks/useInputbarController.ts",

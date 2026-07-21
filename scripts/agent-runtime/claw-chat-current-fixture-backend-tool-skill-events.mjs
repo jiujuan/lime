@@ -16,8 +16,6 @@ import {
   WEB_TOOLS_FETCH_MARKDOWN,
   WEB_TOOLS_FETCH_TOOL_CALL_ID,
   WEB_TOOLS_MID_THINKING_TEXT,
-  WEB_TOOLS_REASONING_FINAL_ID,
-  WEB_TOOLS_REASONING_FINAL_SIGNATURE,
   WEB_TOOLS_REASONING_ITEM_ID,
   WEB_TOOLS_REASONING_ITEM_SIGNATURE,
   WEB_TOOLS_REASONING_NATIVE_ITEM_ID,
@@ -101,52 +99,47 @@ export function renderBackendToolAndSkillEventScript({
     ]);
     await sleep(80);
     const webToolsReasoningStartedAt = new Date().toISOString();
-    emitEvents([
-      {
-        type: "reasoning.final",
-        payload: {
-          reasoningId: "${WEB_TOOLS_REASONING_FINAL_ID}",
-          reasoning_id: "${WEB_TOOLS_REASONING_FINAL_ID}",
-          text: "${WEB_TOOLS_MID_THINKING_TEXT}",
-          providerMetadata: {
-            backend: "${WEB_TOOLS_REASONING_PROVIDER_BACKEND}",
-            signature: "${WEB_TOOLS_REASONING_FINAL_SIGNATURE}"
-          },
+    const buildWebToolsReasoningItem = ({ status, completedAt = null }) => ({
+      item: {
+        id: "${WEB_TOOLS_REASONING_ITEM_ID}",
+        thread_id: currentThreadId(),
+        threadId: currentThreadId(),
+        turn_id: currentTurnId(),
+        turnId: currentTurnId(),
+        type: "reasoning",
+        text: "${WEB_TOOLS_MID_THINKING_TEXT}",
+        sequence: 3,
+        status,
+        started_at: webToolsReasoningStartedAt,
+        startedAt: webToolsReasoningStartedAt,
+        updated_at: completedAt || webToolsReasoningStartedAt,
+        updatedAt: completedAt || webToolsReasoningStartedAt,
+        ...(completedAt
+          ? {
+              completed_at: completedAt,
+              completedAt
+            }
+          : {}),
+        metadata: {
+          native_reasoning_item_id: "${WEB_TOOLS_REASONING_NATIVE_ITEM_ID}",
           provider_metadata: {
             backend: "${WEB_TOOLS_REASONING_PROVIDER_BACKEND}",
-            signature: "${WEB_TOOLS_REASONING_FINAL_SIGNATURE}"
+            signature: "${WEB_TOOLS_REASONING_ITEM_SIGNATURE}"
           }
         }
+      }
+    });
+    emitEvents([
+      {
+        type: "item.started",
+        payload: buildWebToolsReasoningItem({ status: "in_progress" })
       }
     ]);
     await sleep(40);
     emitEvents([
       {
         type: "item.updated",
-        payload: {
-          item: {
-            id: "${WEB_TOOLS_REASONING_ITEM_ID}",
-            thread_id: currentThreadId(),
-            threadId: currentThreadId(),
-            turn_id: currentTurnId(),
-            turnId: currentTurnId(),
-            type: "reasoning",
-            text: "${WEB_TOOLS_MID_THINKING_TEXT}",
-            sequence: 3,
-            status: "in_progress",
-            started_at: webToolsReasoningStartedAt,
-            startedAt: webToolsReasoningStartedAt,
-            updated_at: webToolsReasoningStartedAt,
-            updatedAt: webToolsReasoningStartedAt,
-            metadata: {
-              native_reasoning_item_id: "${WEB_TOOLS_REASONING_NATIVE_ITEM_ID}",
-              provider_metadata: {
-                backend: "${WEB_TOOLS_REASONING_PROVIDER_BACKEND}",
-                signature: "${WEB_TOOLS_REASONING_ITEM_SIGNATURE}"
-              }
-            }
-          }
-        }
+        payload: buildWebToolsReasoningItem({ status: "in_progress" })
       }
     ]);
     await sleep(80);
@@ -198,35 +191,14 @@ export function renderBackendToolAndSkillEventScript({
       }
     ]);
     await sleep(80);
+    const webToolsReasoningCompletedAt = new Date().toISOString();
     emitEvents([
       {
         type: "item.completed",
-        payload: {
-          item: {
-            id: "${WEB_TOOLS_REASONING_ITEM_ID}",
-            thread_id: currentThreadId(),
-            threadId: currentThreadId(),
-            turn_id: currentTurnId(),
-            turnId: currentTurnId(),
-            type: "reasoning",
-            text: "${WEB_TOOLS_MID_THINKING_TEXT}",
-            sequence: 3,
-            status: "completed",
-            started_at: webToolsReasoningStartedAt,
-            startedAt: webToolsReasoningStartedAt,
-            completed_at: new Date().toISOString(),
-            completedAt: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            metadata: {
-              native_reasoning_item_id: "${WEB_TOOLS_REASONING_NATIVE_ITEM_ID}",
-              provider_metadata: {
-                backend: "${WEB_TOOLS_REASONING_PROVIDER_BACKEND}",
-                signature: "${WEB_TOOLS_REASONING_ITEM_SIGNATURE}"
-              }
-            }
-          }
-        }
+        payload: buildWebToolsReasoningItem({
+          status: "completed",
+          completedAt: webToolsReasoningCompletedAt
+        })
       }
     ]);
     await sleep(1800);

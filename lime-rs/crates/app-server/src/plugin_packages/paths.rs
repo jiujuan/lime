@@ -1,11 +1,10 @@
-use lime_core::app_paths;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const PLUGIN_DATA_DIR: &str = "plugins";
 
-pub(crate) fn plugin_data_dir() -> Result<PathBuf, String> {
-    Ok(app_paths::preferred_data_dir()?.join(PLUGIN_DATA_DIR))
+pub(crate) fn plugin_data_dir_for_agent_root(agent_root: &Path) -> PathBuf {
+    agent_root.join(PLUGIN_DATA_DIR)
 }
 
 pub(crate) fn safe_hash_path_segment(hash: &str) -> String {
@@ -29,4 +28,19 @@ pub(crate) fn read_json_string(value: &Value, path: &[&str]) -> Option<String> {
         current = current.get(*key)?;
     }
     current.as_str().map(str::to_string)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plugin_data_dir_is_scoped_to_agent_root() {
+        let agent_root = Path::new("agent-root");
+
+        assert_eq!(
+            plugin_data_dir_for_agent_root(agent_root),
+            agent_root.join("plugins")
+        );
+    }
 }

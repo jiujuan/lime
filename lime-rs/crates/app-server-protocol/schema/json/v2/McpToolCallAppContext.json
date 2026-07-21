@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "actionName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "appName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "connectorId": {
+      "type": "string"
+    },
+    "linkId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "resourceUri": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "templateId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "connectorId"
+  ],
+  "title": "McpToolCallAppContext",
+  "type": "object"
+}

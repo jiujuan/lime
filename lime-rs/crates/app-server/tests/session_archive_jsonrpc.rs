@@ -99,106 +99,6 @@ fn seed_projected_session(
 }
 
 #[tokio::test]
-async fn persisted_session_archive_and_unarchive_use_current_jsonrpc() {
-    let app = projection_app_server(&[(
-        SESSION_ID,
-        THREAD_ID,
-        "Persisted Session",
-        "2026-06-07T00:00:00.000Z",
-    )])
-    .await;
-    initialize_server(&app.server, 1, "session-archive-jsonrpc-test").await;
-
-    let archive = request(
-        &app.server,
-        2,
-        METHOD_AGENT_SESSION_UPDATE,
-        json!({
-            "sessionId": SESSION_ID,
-            "archived": true
-        }),
-    )
-    .await;
-    let archived_at = archive
-        .pointer("/result/session/archivedAt")
-        .and_then(Value::as_str)
-        .expect("archived persisted session should include archivedAt");
-    assert!(!archived_at.is_empty());
-
-    let recent = request(
-        &app.server,
-        3,
-        METHOD_AGENT_SESSION_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID
-        }),
-    )
-    .await;
-    assert_eq!(session_ids(&recent), Vec::<String>::new());
-
-    let archived = request(
-        &app.server,
-        4,
-        METHOD_AGENT_SESSION_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID,
-            "archivedOnly": true
-        }),
-    )
-    .await;
-    assert_eq!(session_ids(&archived), vec![SESSION_ID.to_string()]);
-
-    let archived_read = request(
-        &app.server,
-        5,
-        METHOD_AGENT_SESSION_READ,
-        json!({
-            "sessionId": SESSION_ID
-        }),
-    )
-    .await;
-    assert_eq!(
-        archived_read.pointer("/result/detail/archived_at"),
-        Some(&json!(archived_at)),
-    );
-
-    let unarchive = request(
-        &app.server,
-        104,
-        METHOD_AGENT_SESSION_UPDATE,
-        json!({
-            "sessionId": SESSION_ID,
-            "archived": false
-        }),
-    )
-    .await;
-    assert_eq!(unarchive.pointer("/result/session/archivedAt"), None);
-
-    let restored_recent = request(
-        &app.server,
-        201,
-        METHOD_AGENT_SESSION_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID
-        }),
-    )
-    .await;
-    assert_eq!(session_ids(&restored_recent), vec![SESSION_ID.to_string()]);
-
-    let restored_archived = request(
-        &app.server,
-        202,
-        METHOD_AGENT_SESSION_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID,
-            "archivedOnly": true
-        }),
-    )
-    .await;
-    assert_eq!(session_ids(&restored_archived), Vec::<String>::new());
-}
-
-#[tokio::test]
 async fn memory_store_reset_does_not_delete_persisted_session_history() {
     let app = projection_app_server(&[(
         SESSION_ID,
@@ -259,7 +159,7 @@ async fn memory_store_reset_does_not_delete_persisted_session_history() {
     let recent = request(
         &app.server,
         4,
-        METHOD_AGENT_SESSION_LIST,
+        METHOD_THREAD_LIST,
         json!({
             "workspaceId": WORKSPACE_ID
         }),
@@ -270,7 +170,7 @@ async fn memory_store_reset_does_not_delete_persisted_session_history() {
     let read = request(
         &app.server,
         5,
-        METHOD_AGENT_SESSION_READ,
+        METHOD_THREAD_READ,
         json!({
             "sessionId": SESSION_ID
         }),
@@ -288,117 +188,6 @@ async fn memory_store_reset_does_not_delete_persisted_session_history() {
             .len(),
         1
     );
-}
-
-#[tokio::test]
-async fn persisted_session_archive_many_uses_current_jsonrpc() {
-    let app = projection_app_server(&[
-        (
-            SESSION_ID,
-            THREAD_ID,
-            "Persisted Session",
-            "2026-06-07T00:00:00.000Z",
-        ),
-        (
-            SECOND_SESSION_ID,
-            "persisted-thread-second",
-            "Second Persisted Session",
-            "2026-06-07T00:00:02.000Z",
-        ),
-    ])
-    .await;
-    initialize_server(&app.server, 1, "session-archive-many-jsonrpc-test").await;
-
-    let archived = request(
-        &app.server,
-        2,
-        METHOD_AGENT_SESSION_ARCHIVE_MANY,
-        json!({
-            "sessionIds": [
-                format!(" {SESSION_ID} "),
-                "",
-                SECOND_SESSION_ID,
-                SESSION_ID
-            ]
-        }),
-    )
-    .await;
-    let mut archived_session_ids = session_ids(&archived);
-    archived_session_ids.sort();
-    assert_eq!(
-        archived_session_ids,
-        vec![SESSION_ID.to_string(), SECOND_SESSION_ID.to_string()]
-    );
-    assert!(
-        session_archived_at(&archived, SESSION_ID).is_some(),
-        "primary session should be archived"
-    );
-    assert!(
-        session_archived_at(&archived, SECOND_SESSION_ID).is_some(),
-        "second session should be archived"
-    );
-
-    let recent = request(
-        &app.server,
-        3,
-        METHOD_AGENT_SESSION_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID
-        }),
-    )
-    .await;
-    assert_eq!(session_ids(&recent), Vec::<String>::new());
-
-    let archived_only = request(
-        &app.server,
-        4,
-        METHOD_AGENT_SESSION_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID,
-            "archivedOnly": true
-        }),
-    )
-    .await;
-    let mut archived_only_session_ids = session_ids(&archived_only);
-    archived_only_session_ids.sort();
-    assert_eq!(
-        archived_only_session_ids,
-        vec![SESSION_ID.to_string(), SECOND_SESSION_ID.to_string()]
-    );
-}
-
-#[tokio::test]
-async fn persisted_session_archive_many_ignores_empty_request() {
-    let app = projection_app_server(&[(
-        SESSION_ID,
-        THREAD_ID,
-        "Persisted Session",
-        "2026-06-07T00:00:00.000Z",
-    )])
-    .await;
-    initialize_server(&app.server, 1, "session-archive-many-empty-test").await;
-
-    let archived = request(
-        &app.server,
-        2,
-        METHOD_AGENT_SESSION_ARCHIVE_MANY,
-        json!({
-            "sessionIds": ["", "   "]
-        }),
-    )
-    .await;
-    assert_eq!(session_ids(&archived), Vec::<String>::new());
-
-    let recent = request(
-        &app.server,
-        3,
-        METHOD_AGENT_SESSION_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID
-        }),
-    )
-    .await;
-    assert_eq!(session_ids(&recent), vec![SESSION_ID.to_string()]);
 }
 
 #[tokio::test]
@@ -437,7 +226,7 @@ async fn persisted_session_delete_clears_projection_and_event_log() {
     let recent = request(
         &app.server,
         3,
-        METHOD_AGENT_SESSION_LIST,
+        METHOD_THREAD_LIST,
         json!({
             "workspaceId": WORKSPACE_ID,
             "includeArchived": true
@@ -454,7 +243,7 @@ async fn persisted_session_delete_clears_projection_and_event_log() {
     let read_missing = request_error(
         &app.server,
         4,
-        METHOD_AGENT_SESSION_READ,
+        METHOD_THREAD_READ,
         json!({
             "sessionId": SESSION_ID
         }),
@@ -571,20 +360,4 @@ fn session_ids(response: &Value) -> Vec<String> {
                 .to_string()
         })
         .collect()
-}
-
-fn session_archived_at<'a>(response: &'a Value, expected_session_id: &str) -> Option<&'a str> {
-    response
-        .pointer("/result/sessions")
-        .and_then(Value::as_array)
-        .expect("result.sessions should be an array")
-        .iter()
-        .find(|session| {
-            session
-                .get("sessionId")
-                .and_then(Value::as_str)
-                .is_some_and(|session_id| session_id == expected_session_id)
-        })
-        .and_then(|session| session.get("archivedAt"))
-        .and_then(Value::as_str)
 }

@@ -32,9 +32,9 @@ const USER_TEXT = "请整理一条 Electron App Server messages fixture";
 const ASSISTANT_TEXT = "已整理 Electron App Server messages fixture。";
 const REQUIRED_METHODS = [
   "initialize",
-  "agentSession/start",
-  "agentSession/turn/start",
-  "agentSession/read",
+  "thread/start",
+  "turn/start",
+  "thread/read",
 ];
 
 function printHelp() {
@@ -44,7 +44,7 @@ Agent Session Messages Electron Fixture Smoke
 用途:
   启动真实 Electron Desktop Host，通过 preload bridge 调用
   app_server_handle_json_lines，并在一次性 external backend fixture 返回
-  message.delta 后，验证 agentSession/read.detail.messages / messages_count
+  message.delta 后，验证 thread/read.detail.messages / messages_count
   可经 Electron IPC -> App Server JSON-RPC current 主链读回。
 
 边界:
@@ -436,7 +436,7 @@ async function runSessionMessagesFixture(page, options) {
         const startedAt = Date.now();
         let latestRead = null;
         while (Date.now() - startedAt < timeoutMs) {
-          latestRead = await call("agentSession/read", {
+          latestRead = await call("thread/read", {
             sessionId,
             historyLimit: 50,
           });
@@ -467,7 +467,7 @@ async function runSessionMessagesFixture(page, options) {
           lines: [JSON.stringify({ jsonrpc: "2.0", method: "initialized" })],
         },
       });
-      const start = await call("agentSession/start", {
+      const start = await call("thread/start", {
         sessionId,
         threadId,
         appId: "desktop",
@@ -486,7 +486,7 @@ async function runSessionMessagesFixture(page, options) {
           },
         },
       });
-      const turn = await call("agentSession/turn/start", {
+      const turn = await call("turn/start", {
         sessionId,
         turnId,
         input: {
@@ -584,21 +584,21 @@ function assertFixtureResult(result, backendLedger) {
   );
   assert(
     summary.sessionId === SESSION_ID,
-    "agentSession/start sessionId 不正确",
+    "thread/start sessionId 不正确",
   );
-  assert(summary.turnId === TURN_ID, "agentSession/turn/start turnId 不正确");
+  assert(summary.turnId === TURN_ID, "turn/start turnId 不正确");
   assert(
     summary.readSessionId === SESSION_ID,
-    "agentSession/read sessionId 不正确",
+    "thread/read sessionId 不正确",
   );
   assert(summary.backendTurnStartSeen, "external backend 未收到 turnStart");
   assert(
     summary.detailMessagesCount === 2,
-    `agentSession/read.detail.messages_count 应为 2，实际为 ${summary.detailMessagesCount}`,
+    `thread/read.detail.messages_count 应为 2，实际为 ${summary.detailMessagesCount}`,
   );
   assert(
     summary.detailMessagesLength === 2,
-    `agentSession/read.detail.messages 应有 2 条，实际为 ${summary.detailMessagesLength}`,
+    `thread/read.detail.messages 应有 2 条，实际为 ${summary.detailMessagesLength}`,
   );
   assert(
     summary.userMessageText === USER_TEXT,

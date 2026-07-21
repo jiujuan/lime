@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "ToolRequestUserInputOption": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "label"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "header": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "isOther": {
+      "default": false,
+      "type": "boolean"
+    },
+    "isSecret": {
+      "default": false,
+      "type": "boolean"
+    },
+    "options": {
+      "items": {
+        "$ref": "#/$defs/ToolRequestUserInputOption"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "question": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "header",
+    "id",
+    "question"
+  ],
+  "title": "ToolRequestUserInputQuestion",
+  "type": "object"
+}

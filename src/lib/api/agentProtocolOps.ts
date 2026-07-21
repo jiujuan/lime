@@ -1,47 +1,15 @@
-import {
-  createRuntimeRequest,
-  type RuntimeSearchMode,
+import type {
+  AdditionalContextEntry,
+  TurnStartParams,
 } from "@limecloud/app-server-client";
-import type { AppServerAgentSessionTurnStartParams } from "./appServer";
-import type {
-  AgentApprovalPolicy,
-  AgentExecutionStrategy,
-  AgentSandboxPolicy,
-} from "./agentExecutionRuntime";
-import type {
-  AutoContinueRequestPayload,
-  ImageInput,
-  RuntimeProviderConfig,
-} from "./agentRuntime/sessionTypes";
 
-export interface AgentUserPreferences {
-  providerConfig?: RuntimeProviderConfig;
-  providerPreference?: string;
-  modelPreference?: string;
-  reasoningEffort?: string;
-  thinking?: boolean;
-  webSearch?: boolean;
-  searchMode?: RuntimeSearchMode;
-  approvalPolicy?: AgentApprovalPolicy;
-  sandboxPolicy?: AgentSandboxPolicy;
-  executionStrategy?: AgentExecutionStrategy;
-  autoContinue?: AutoContinueRequestPayload;
-}
+export const AGENT_RUNTIME_RENDERER_EVENT_NAME_CONTEXT_KEY =
+  "rendererEventName";
 
 export interface AgentUserInputOp {
   type: "user_input";
-  text: string;
-  sessionId: string;
   eventName: string;
-  workspaceId?: string;
-  turnId?: string;
-  images?: ImageInput[];
-  preferences?: AgentUserPreferences;
-  systemPrompt?: string;
-  metadata?: Record<string, unknown>;
-  queueIfBusy?: boolean;
-  queuedTurnId?: string;
-  skipPreSubmitResume?: boolean;
+  turn: TurnStartParams;
 }
 
 export interface AgentInterruptOp {
@@ -77,59 +45,44 @@ export type AgentOp =
 
 export function createAgentSessionTurnStartParamsFromUserInputOp(
   op: AgentUserInputOp,
-): AppServerAgentSessionTurnStartParams {
-  const preferences = op.preferences;
-
-  return omitUndefined({
-    sessionId: op.sessionId,
-    turnId: op.turnId,
-    input: omitUndefined({
-      text: op.text,
-      attachments: appServerAttachmentsFromImages(op.images),
-    }),
-    runtimeOptions: omitUndefined({
-      stream: true,
-      eventName: op.eventName,
-      queuedTurnId: op.queuedTurnId,
-      runtimeRequest: createRuntimeRequest({
-        providerConfig: preferences?.providerConfig,
-        providerPreference: preferences?.providerPreference,
-        modelPreference: preferences?.modelPreference,
-        reasoningEffort: preferences?.reasoningEffort?.trim(),
-        thinkingEnabled: preferences?.thinking,
-        approvalPolicy: preferences?.approvalPolicy,
-        sandboxPolicy: preferences?.sandboxPolicy,
-        workspaceId: op.workspaceId,
-        webSearch: preferences?.webSearch,
-        searchMode: preferences?.searchMode,
-        executionStrategy: preferences?.executionStrategy,
-        autoContinue: preferences?.autoContinue?.enabled,
-        systemPrompt: op.systemPrompt,
-        metadata: op.metadata,
-      }),
-    }),
-    queueIfBusy: op.queueIfBusy,
-    skipPreSubmitResume: op.skipPreSubmitResume,
-  });
-}
-
-function appServerAttachmentsFromImages(images?: ImageInput[]) {
-  if (!images?.length) {
-    return undefined;
+): TurnStartParams {
+  const threadId = op.turn.threadId.trim();
+  if (!threadId) {
+    throw new Error("threadId is required to start App Server turn");
   }
-
-  return images.map((image, index) => ({
-    kind: "image",
-    uri: image.data,
-    metadata: {
-      mediaType: image.media_type,
-      index,
-    },
-  }));
+  const rendererContext = createApplicationAdditionalContext({
+    [AGENT_RUNTIME_RENDERER_EVENT_NAME_CONTEXT_KEY]:
+      op.eventName.trim() || undefined,
+  });
+  const { additionalContext: turnContext, ...turn } = op.turn;
+  const additionalContext = {
+    ...(turnContext ?? {}),
+    ...rendererContext,
+  };
+  return {
+    ...turn,
+    threadId,
+    ...(Object.keys(additionalContext).length > 0 ? { additionalContext } : {}),
+  };
 }
 
-function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+export function createApplicationAdditionalContext(
+  values: Record<string, unknown>,
+): Record<string, AdditionalContextEntry> {
   return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as T;
+    Object.entries(values).flatMap(([key, value]) => {
+      if (value === undefined) {
+        return [];
+      }
+      return [
+        [
+          key,
+          {
+            kind: "application" as const,
+            value: typeof value === "string" ? value : JSON.stringify(value),
+          },
+        ],
+      ];
+    }),
+  );
 }

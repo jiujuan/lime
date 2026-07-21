@@ -195,7 +195,7 @@ describe("toolResultEnvelopeDisplay", () => {
     const rawResultText = JSON.stringify({
       request_metadata: {
         turnId: "turn-1",
-        route: "agentSession/turn/start",
+        route: "turn/start",
       },
       diagnostics: {
         source: "runtime",

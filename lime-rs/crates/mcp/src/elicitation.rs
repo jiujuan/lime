@@ -3,6 +3,7 @@
 //! Adapted from Codex `codex-rs/codex-mcp/src/elicitation.rs`
 //! at `5c19155cbd93bfa099016e7487259f61669823ff` (Apache-2.0).
 
+use crate::McpRuntimeOwner;
 use rmcp::model::{CreateElicitationRequestParam, ElicitationSchema, PrimitiveSchema};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -13,7 +14,6 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, OwnedMutexGuard};
 use tokio_util::sync::CancellationToken;
-use crate::McpRuntimeOwner;
 use tool_runtime::mcp_connection::McpCallScope;
 
 const REQUEST_BUFFER_CAPACITY: usize = 64;

@@ -100,7 +100,7 @@ describe("claw image live smoke guard", () => {
     expect(constantsContent).toContain("mediaTaskArtifact/list");
     expect(constantsContent).toContain("mediaTaskArtifact/get");
     expect(constantsContent).toContain("workflow/read");
-    expect(constantsContent).toContain("agentSession/read");
+    expect(constantsContent).toContain("thread/read");
     expect(content).toContain("summarizeTaskAuditLog");
     expect(content).toContain("path.join(workspace.rootPath, taskFileRef)");
     expect(content).toContain("taskAuditJsonlWritten");

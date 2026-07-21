@@ -10,6 +10,7 @@ use agent_runtime::provider_turn::{
     RuntimeToolStepSnapshot, RuntimeToolStepSnapshotFuture, RuntimeToolStepSnapshotSource,
     RuntimeToolStepSnapshotSourceHandle,
 };
+use agent_runtime::session_loop::RuntimeSessionInputHandle;
 use rmcp::model::CallToolResult;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -70,6 +71,7 @@ pub(super) fn current_tool_step_snapshot_source(
     session_id: String,
     thread_id: ThreadId,
     agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
+    pending_input: Option<RuntimeSessionInputHandle>,
 ) -> RuntimeToolStepSnapshotSourceHandle {
     let deferred_tools = DeferredToolSelections::default();
     RuntimeToolStepSnapshotSourceHandle::new(Arc::new(CurrentTurnToolStepSnapshotSource {
@@ -80,6 +82,7 @@ pub(super) fn current_tool_step_snapshot_source(
         session_id,
         thread_id,
         agent_control_gateway,
+        pending_input,
         deferred_tools,
     }))
 }
@@ -192,6 +195,7 @@ struct CurrentTurnToolStepSnapshotSource {
     thread_id: ThreadId,
     session_id: String,
     agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
+    pending_input: Option<RuntimeSessionInputHandle>,
     deferred_tools: DeferredToolSelections,
 }
 
@@ -221,6 +225,7 @@ impl RuntimeToolStepSnapshotSource for CurrentTurnToolStepSnapshotSource {
                 mcp_snapshot,
                 deferred_tools: self.deferred_tools.clone(),
                 agent_control_gateway: self.agent_control_gateway.clone(),
+                pending_input: self.pending_input.clone(),
             }));
             Ok(RuntimeToolStepSnapshot::new(definitions, executor))
         })

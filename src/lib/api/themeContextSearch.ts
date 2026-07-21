@@ -1,13 +1,9 @@
 import {
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   AppServerClient,
-  type AppServerAgentSessionReadResponse,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
-import { createRuntimeRequest } from "@limecloud/app-server-client";
-
-const CONTEXT_SEARCH_SESSION_PREFIX = "__lime_theme_context_search__";
-const DEFAULT_APP_ID = "desktop";
+import { createApplicationAdditionalContext } from "@/lib/api/agentProtocolOps";
 
 export type ThemeContextSearchMode = "web" | "social";
 
@@ -43,7 +39,7 @@ export interface ThemeContextSearchCommandResponse {
 
 type ThemeContextSearchAppServerClient = Pick<
   AppServerClient,
-  "startSession" | "startTurn" | "readSession"
+  "startSession" | "startTurn" | "readThread"
 >;
 
 function normalizeWhitespace(value: string): string {
@@ -87,22 +83,6 @@ function buildContextSearchSystemPrompt(): string {
   ].join("\n");
 }
 
-function randomIdSegment(): string {
-  const randomUUID = globalThis.crypto?.randomUUID?.();
-  if (randomUUID) {
-    return randomUUID;
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function buildAuxiliarySessionId(): string {
-  return `${CONTEXT_SEARCH_SESSION_PREFIX}-${randomIdSegment()}`;
-}
-
-function buildAuxiliaryTurnId(): string {
-  return `turn-theme-context-search-${randomIdSegment()}`;
-}
-
 function createSearchMetadata({
   mode,
   projectId,
@@ -138,8 +118,6 @@ export async function searchThemeContextWithAppServer(
     throw new Error("搜索词不能为空");
   }
 
-  const sessionId = buildAuxiliarySessionId();
-  const turnId = buildAuxiliaryTurnId();
   const prompt = buildContextSearchPrompt(query, options.mode);
   const systemPrompt = buildContextSearchSystemPrompt();
   const metadata = createSearchMetadata({
@@ -148,45 +126,35 @@ export async function searchThemeContextWithAppServer(
     query,
   });
 
-  await appServerClient.startSession({
-    sessionId,
-    appId: DEFAULT_APP_ID,
-    workspaceId,
-    businessObjectRef: {
-      kind: "agent.session",
-      id: `theme-context-search:${workspaceId}:${Date.now()}`,
-      title: "上下文搜索",
-      metadata: {
-        ...metadata,
-        title: "上下文搜索",
-        executionStrategy: "react",
-        providerSelector: providerType,
-        modelName: model,
-      },
-    },
+  const startResult = await appServerClient.startSession({
+    modelProvider: providerType,
+    model,
+    serviceName: "上下文搜索",
+    threadSource: "appServer",
+    historyMode: "paginated",
+    baseInstructions: systemPrompt,
   });
+  const thread = asRecord(asRecord(startResult.result)?.thread);
+  const threadId = readString(thread, "id");
+  if (!threadId) {
+    throw new Error("thread/start did not return a canonical thread id");
+  }
 
   const turnResult = await appServerClient.startTurn({
-    sessionId,
-    turnId,
-    input: {
-      text: prompt,
-    },
-    runtimeOptions: {
-      stream: true,
-      runtimeRequest: createRuntimeRequest({
-        workspaceId,
-        providerPreference: providerType,
-        modelPreference: model,
-        systemPrompt,
-        metadata,
-      }),
-    },
-    queueIfBusy: false,
-    skipPreSubmitResume: true,
+    threadId,
+    input: [{ type: "text", text: prompt }],
+    additionalContext: createApplicationAdditionalContext(metadata),
   });
+  const turn = asRecord(asRecord(turnResult.result)?.turn);
+  const turnId = readString(turn, "id");
+  if (!turnId) {
+    throw new Error("turn/start did not return a canonical turn id");
+  }
 
-  const readResult = await appServerClient.readSession({ sessionId });
+  const readResult = await appServerClient.readThread({
+    threadId,
+    includeTurns: true,
+  });
   const rawResponse =
     extractAssistantTextFromReadResponse(readResult.result, turnId) ||
     extractAssistantTextFromNotifications(turnResult.notifications, turnId);
@@ -202,23 +170,28 @@ export async function searchThemeContextWithAppServer(
 }
 
 function extractAssistantTextFromReadResponse(
-  response: AppServerAgentSessionReadResponse,
+  response: unknown,
   turnId: string,
 ): string {
-  const detail = asRecord(response.detail);
-  const messages = Array.isArray(detail?.messages) ? detail.messages : [];
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = asRecord(messages[index]);
-    if (!message || message.role !== "assistant") {
+  const thread = asRecord(asRecord(response)?.thread);
+  const turns = Array.isArray(thread?.turns) ? thread.turns : [];
+  for (let turnIndex = turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
+    const turn = asRecord(turns[turnIndex]);
+    if (!turn || turn.id !== turnId) {
       continue;
     }
-    const messageId = typeof message.id === "string" ? message.id : "";
-    if (messageId && !messageId.startsWith(turnId)) {
-      continue;
-    }
-    const text = normalizeWhitespace(readMessageText(message));
-    if (text) {
-      return text;
+    const items = Array.isArray(turn.items) ? turn.items : [];
+    for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
+      const item = asRecord(items[itemIndex]);
+      if (item?.type !== "agentMessage") {
+        continue;
+      }
+      const text = normalizeWhitespace(
+        typeof item.text === "string" ? item.text : "",
+      );
+      if (text) {
+        return text;
+      }
     }
   }
   return "";
@@ -273,25 +246,6 @@ function eventFromNotification(notification?: AppServerJsonRpcNotification) {
     turnId: readString(event, "turnId") || readString(event, "turn_id"),
     payload: event.payload,
   };
-}
-
-function readMessageText(message: Record<string, unknown>): string {
-  const content = message.content;
-  if (typeof content === "string") {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return "";
-  }
-  return content
-    .map((part) => {
-      const record = asRecord(part);
-      if (!record) {
-        return "";
-      }
-      return readString(record, "text") || readString(record, "content");
-    })
-    .join("");
 }
 
 function readPayloadText(payload: unknown): string {

@@ -93,6 +93,7 @@ pub(super) fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "turn_context" => "turn.context",
         "model_change" => "model.changed",
         "provider_trace" => "provider.trace",
+        "provider_usage" => "provider.usage",
         "provider_step" => "provider.step",
         "provider_stream_event" => "runtime.event",
         "context_trace" => "context.trace",
@@ -247,6 +248,27 @@ mod tests {
         assert_eq!(events[0].payload["tool_call_count"], 1);
         assert_eq!(events[0].payload["usage"]["input_tokens"], 120);
         assert_eq!(events[0].payload["runtimeEvent"]["type"], "provider_step");
+    }
+
+    #[test]
+    fn provider_usage_maps_attempt_snapshot_to_durable_runtime_event() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ProviderUsage {
+            attempt: 3,
+            usage: lime_agent::AgentTokenUsage {
+                input_tokens: 120,
+                output_tokens: 30,
+                cached_input_tokens: Some(20),
+                cache_creation_input_tokens: None,
+            },
+        })
+        .expect("provider usage should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "provider.usage");
+        assert_eq!(events[0].payload["backend"], "runtime");
+        assert_eq!(events[0].payload["attempt"], 3);
+        assert_eq!(events[0].payload["usage"]["input_tokens"], 120);
+        assert_eq!(events[0].payload["runtimeEvent"]["type"], "provider_usage");
     }
 
     #[test]

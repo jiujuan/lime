@@ -34,7 +34,6 @@ export interface AgentStreamRequestStartParams {
   effectiveModel: string;
   effectiveProviderType: string;
   eventName: string;
-  expectingQueue: boolean;
   requestState: StreamRequestState;
   resolvedWorkspaceId: string;
   skipUserMessage: boolean;
@@ -50,7 +49,6 @@ interface AgentStreamRequestStartPayloadParams {
   effectiveModel: string;
   effectiveProviderType: string;
   eventName: string;
-  expectingQueue: boolean;
   resolvedWorkspaceId: string;
   skipUserMessage: boolean;
   systemPrompt?: string;
@@ -66,7 +64,6 @@ export function buildAgentStreamRequestStartMetricContext(
   return {
     contentLength: resolveContentLength(params.content),
     eventName: params.eventName,
-    expectingQueue: params.expectingQueue,
     model: params.effectiveModel,
     provider: params.effectiveProviderType,
     sessionId: params.activeSessionId,
@@ -98,7 +95,6 @@ export function buildAgentStreamRequestStartActivityLog(
       autoContinue: params.autoContinue?.enabled
         ? params.autoContinue
         : undefined,
-      queuedSubmission: params.expectingQueue,
     },
   };
 }

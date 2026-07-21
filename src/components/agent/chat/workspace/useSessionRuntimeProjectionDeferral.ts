@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
@@ -21,7 +20,6 @@ const EMPTY_PROJECTED_TURNS: AgentThreadTurn[] = [];
 const EMPTY_PROJECTED_THREAD_ITEMS: AgentThreadItem[] = [];
 const EMPTY_PROJECTED_PENDING_ACTIONS: never[] = [];
 const EMPTY_PROJECTED_SUBMITTED_ACTIONS: never[] = [];
-const EMPTY_PROJECTED_QUEUED_TURNS: QueuedTurnSnapshot[] = [];
 
 export interface SessionRuntimeProjectionDeferralInput<
   PendingAction,
@@ -35,7 +33,6 @@ export interface SessionRuntimeProjectionDeferralInput<
   threadRead?: AgentRuntimeThreadReadModel | null;
   pendingActions: readonly PendingAction[];
   submittedActionsInFlight: readonly SubmittedAction[];
-  queuedTurns: readonly QueuedTurnSnapshot[];
   isRestoringSession: boolean;
   isSending: boolean;
   focusedTimelineItemId?: string | null;
@@ -52,7 +49,6 @@ export interface SessionRuntimeProjectionDeferralResult<
   threadRead: AgentRuntimeThreadReadModel | null;
   pendingActions: readonly PendingAction[];
   submittedActionsInFlight: readonly SubmittedAction[];
-  queuedTurns: readonly QueuedTurnSnapshot[];
 }
 
 export function useSessionRuntimeProjectionDeferral<
@@ -67,7 +63,6 @@ export function useSessionRuntimeProjectionDeferral<
   threadRead,
   pendingActions,
   submittedActionsInFlight,
-  queuedTurns,
   isRestoringSession,
   isSending,
   focusedTimelineItemId,
@@ -171,7 +166,6 @@ export function useSessionRuntimeProjectionDeferral<
       threadRead: threadRead ?? null,
       pendingActions,
       submittedActionsInFlight,
-      queuedTurns,
     };
   }
 
@@ -182,6 +176,5 @@ export function useSessionRuntimeProjectionDeferral<
     threadRead: null,
     pendingActions: EMPTY_PROJECTED_PENDING_ACTIONS,
     submittedActionsInFlight: EMPTY_PROJECTED_SUBMITTED_ACTIONS,
-    queuedTurns: EMPTY_PROJECTED_QUEUED_TURNS,
   };
 }

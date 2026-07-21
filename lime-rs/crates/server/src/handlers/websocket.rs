@@ -12,7 +12,6 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt as FuturesStreamExt};
-use lime_core::database::dao::api_key_provider::ApiProviderType;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -21,28 +20,12 @@ use crate::AppState;
 use lime_core::errors::GatewayErrorCode;
 use lime_core::models::anthropic::AnthropicMessagesRequest;
 use lime_core::models::openai::ChatCompletionRequest;
-use lime_core::models::{RuntimeCredentialData, RuntimeProviderCredential};
+use lime_core::models::RuntimeProviderCredential;
 use lime_core::websocket::WsErrorCode;
 use lime_processor::RequestContext;
-use lime_providers::converter::anthropic_to_openai::convert_anthropic_to_openai;
-use lime_providers::providers::{ClaudeCustomProvider, OpenAICustomProvider, PromptCacheMode};
 use lime_websocket::{
     WsApiRequest, WsApiResponse, WsEndpoint, WsError, WsMessage as WsProtoMessage,
 };
-
-fn extract_openai_usage_pair(response: &serde_json::Value) -> (u64, u64) {
-    let usage = response.get("usage").and_then(serde_json::Value::as_object);
-    let prompt_tokens = usage
-        .and_then(|usage| usage.get("prompt_tokens"))
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
-    let completion_tokens = usage
-        .and_then(|usage| usage.get("completion_tokens"))
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
-
-    (prompt_tokens, completion_tokens)
-}
 
 /// WebSocket 查询参数
 #[derive(Debug, Deserialize, Default)]
@@ -489,92 +472,17 @@ pub async fn call_provider_openai_for_ws(
     credential: &RuntimeProviderCredential,
     request: &ChatCompletionRequest,
 ) -> Result<serde_json::Value, String> {
-    match &credential.credential {
-        RuntimeCredentialData::OpenAIKey { api_key, base_url } => {
-            let provider = OpenAICustomProvider::with_config(api_key.clone(), base_url.clone());
-            let resp = match provider.call_api(request).await {
-                Ok(r) => r,
-                Err(e) => {
-                    if let Some(db) = &state.db {
-                        let _ = state.mark_credential_unhealthy(
-                            db,
-                            &credential.uuid,
-                            Some(&e.to_string()),
-                        );
-                    }
-                    return Err(e.to_string());
-                }
-            };
-            if resp.status().is_success() {
-                // 记录成功
-                if let Some(db) = &state.db {
-                    let _ =
-                        state.mark_credential_healthy(db, &credential.uuid, Some(&request.model));
-                    let _ = state.record_credential_usage(db, &credential.uuid);
-                }
-                resp.json::<serde_json::Value>()
-                    .await
-                    .map_err(|e| e.to_string())
-            } else {
-                let body = resp.text().await.unwrap_or_default();
-                if let Some(db) = &state.db {
-                    let _ = state.mark_credential_unhealthy(db, &credential.uuid, Some(&body));
-                }
-                Err(format!("Upstream error: {body}"))
-            }
-        }
-        RuntimeCredentialData::ClaudeKey { api_key, base_url } => {
-            // 打印 Claude 代理 URL 用于调试
-            let actual_base_url = base_url.as_deref().unwrap_or("https://api.anthropic.com");
-            tracing::info!(
-                "[CLAUDE] 使用 Claude API 代理: base_url={} credential_uuid={}",
-                actual_base_url,
-                &credential.uuid[..8]
-            );
-            let prompt_cache_mode = if matches!(
-                credential.effective_prompt_cache_mode(),
-                Some(lime_core::models::ProviderPromptCacheMode::Automatic)
-            ) {
-                PromptCacheMode::Automatic
-            } else {
-                PromptCacheMode::ExplicitOnly
-            };
-            let provider = ClaudeCustomProvider::with_provider_type_and_prompt_cache_mode(
-                api_key.clone(),
-                base_url.clone(),
-                ApiProviderType::AnthropicCompatible,
-                prompt_cache_mode,
-            );
-            match provider.call_openai_api(request).await {
-                Ok(result) => {
-                    // 记录成功
-                    if let Some(db) = &state.db {
-                        let _ = state.mark_credential_healthy(
-                            db,
-                            &credential.uuid,
-                            Some(&request.model),
-                        );
-                        let _ = state.record_credential_usage(db, &credential.uuid);
-                    }
-                    Ok(result)
-                }
-                Err(e) => {
-                    if let Some(db) = &state.db {
-                        let _ = state.mark_credential_unhealthy(
-                            db,
-                            &credential.uuid,
-                            Some(&e.to_string()),
-                        );
-                    }
-                    Err(e.to_string())
-                }
-            }
-        }
-        _ => Err(
-            "This credential type is not supported via WebSocket. Please use API Key Provider credentials."
-                .to_string(),
-        ),
+    let mut request = request.clone();
+    request.stream = false;
+    let response = super::call_provider_openai(state, credential, &request, None).await;
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), 16 * 1024 * 1024)
+        .await
+        .map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(String::from_utf8_lossy(&body).into_owned());
     }
+    serde_json::from_slice(&body).map_err(|error| error.to_string())
 }
 
 /// WebSocket 专用的 Anthropic 格式 Provider 调用
@@ -583,114 +491,15 @@ pub async fn call_provider_anthropic_for_ws(
     credential: &RuntimeProviderCredential,
     request: &AnthropicMessagesRequest,
 ) -> Result<serde_json::Value, String> {
-    match &credential.credential {
-        RuntimeCredentialData::ClaudeKey { api_key, base_url } => {
-            // 打印 Claude 代理 URL 用于调试
-            let actual_base_url = base_url.as_deref().unwrap_or("https://api.anthropic.com");
-            tracing::info!(
-                "[CLAUDE] 使用 Claude API 代理: base_url={} credential_uuid={}",
-                actual_base_url,
-                &credential.uuid[..8]
-            );
-            let prompt_cache_mode = if matches!(
-                credential.effective_prompt_cache_mode(),
-                Some(lime_core::models::ProviderPromptCacheMode::Automatic)
-            ) {
-                PromptCacheMode::Automatic
-            } else {
-                PromptCacheMode::ExplicitOnly
-            };
-            let provider = ClaudeCustomProvider::with_provider_type_and_prompt_cache_mode(
-                api_key.clone(),
-                base_url.clone(),
-                ApiProviderType::AnthropicCompatible,
-                prompt_cache_mode,
-            );
-            let resp = match provider.call_api(request).await {
-                Ok(r) => r,
-                Err(e) => {
-                    if let Some(db) = &state.db {
-                        let _ = state.mark_credential_unhealthy(
-                            db,
-                            &credential.uuid,
-                            Some(&e.to_string()),
-                        );
-                    }
-                    return Err(e.to_string());
-                }
-            };
-            if resp.status().is_success() {
-                // 记录成功
-                if let Some(db) = &state.db {
-                    let _ =
-                        state.mark_credential_healthy(db, &credential.uuid, Some(&request.model));
-                    let _ = state.record_credential_usage(db, &credential.uuid);
-                }
-                resp.json::<serde_json::Value>()
-                    .await
-                    .map_err(|e| e.to_string())
-            } else {
-                let body = resp.text().await.unwrap_or_default();
-                if let Some(db) = &state.db {
-                    let _ = state.mark_credential_unhealthy(db, &credential.uuid, Some(&body));
-                }
-                Err(format!("Upstream error: {body}"))
-            }
-        }
-        _ => {
-            // 转换为 OpenAI 格式并调用（健康状态更新在 call_provider_openai_for_ws 中处理）
-            let openai_request = convert_anthropic_to_openai(request);
-            let result = call_provider_openai_for_ws(state, credential, &openai_request).await?;
-            let (input_tokens, output_tokens) = extract_openai_usage_pair(&result);
-
-            // 转换响应为 Anthropic 格式
-            Ok(serde_json::json!({
-                "id": format!("msg_{}", uuid::Uuid::new_v4()),
-                "type": "message",
-                "role": "assistant",
-                "content": [{
-                    "type": "text",
-                    "text": result.get("choices")
-                        .and_then(|c| c.get(0))
-                        .and_then(|c| c.get("message"))
-                        .and_then(|m| m.get("content"))
-                        .and_then(|c| c.as_str())
-                        .unwrap_or("")
-                }],
-                "model": request.model,
-                "stop_reason": "end_turn",
-                "usage": {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens
-                }
-            }))
-        }
+    let mut request = request.clone();
+    request.stream = false;
+    let response = super::call_provider_anthropic(state, credential, &request, None).await;
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), 16 * 1024 * 1024)
+        .await
+        .map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(String::from_utf8_lossy(&body).into_owned());
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn extract_openai_usage_pair_should_read_prompt_and_completion_tokens() {
-        let response = serde_json::json!({
-            "usage": {
-                "prompt_tokens": 420,
-                "completion_tokens": 69,
-                "total_tokens": 489
-            }
-        });
-
-        assert_eq!(extract_openai_usage_pair(&response), (420, 69));
-    }
-
-    #[test]
-    fn extract_openai_usage_pair_should_default_to_zero_without_usage() {
-        let response = serde_json::json!({
-            "id": "chatcmpl-test"
-        });
-
-        assert_eq!(extract_openai_usage_pair(&response), (0, 0));
-    }
+    serde_json::from_slice(&body).map_err(|error| error.to_string())
 }

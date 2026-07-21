@@ -15,6 +15,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElectronHostCommands } from "./hostCommands";
 import type { ElectronAppServerHost } from "./appServerHost";
+import { SystemUtilityHost } from "./systemUtilityHost";
+import { VoiceModelHost } from "./voiceModelHost";
 
 const {
   pluginShellHostGetUiRuntimeStatusMock,
@@ -38,7 +40,6 @@ const {
   getPathMock,
   openExternalMock,
   openPathMock,
-  globalShortcutIsRegisteredMock,
   showDesktopNotificationMock,
   showOpenDialogMock,
   showItemInFolderMock,
@@ -57,10 +58,8 @@ const {
   systemUtilityHostGetChromeBridgeStatusMock,
   systemUtilityHostGetChromeProfileSessionsMock,
   systemUtilityHostGetEnvironmentPreviewMock,
-  systemUtilityHostGetVoiceShortcutRuntimeStatusMock,
   systemUtilityHostOpenExternalUrlMock,
   systemUtilityHostOpenSystemSettingsUrlMock,
-  systemUtilityHostValidateShortcutMock,
   voiceModelHostDeleteMock,
   voiceModelHostDownloadMock,
   voiceModelHostGetInstallStateMock,
@@ -140,7 +139,6 @@ const {
     fileShellHostRevealInFinderMock: vi.fn(),
     getFileIconMock: vi.fn(),
     getPathMock: vi.fn((_name: string) => os.tmpdir()),
-    globalShortcutIsRegisteredMock: vi.fn((_shortcut: string) => false),
     openExternalMock: vi.fn(),
     openPathMock: vi.fn(),
     showDesktopNotificationMock: vi.fn(() => ({ status: "sent" })),
@@ -161,10 +159,8 @@ const {
     systemUtilityHostGetChromeBridgeStatusMock: vi.fn(),
     systemUtilityHostGetChromeProfileSessionsMock: vi.fn(),
     systemUtilityHostGetEnvironmentPreviewMock: vi.fn(),
-    systemUtilityHostGetVoiceShortcutRuntimeStatusMock: vi.fn(),
     systemUtilityHostOpenExternalUrlMock: vi.fn(),
     systemUtilityHostOpenSystemSettingsUrlMock: vi.fn(),
-    systemUtilityHostValidateShortcutMock: vi.fn(),
     voiceModelHostDeleteMock: vi.fn(),
     voiceModelHostDownloadMock: vi.fn(),
     voiceModelHostGetInstallStateMock: vi.fn(),
@@ -203,9 +199,6 @@ vi.mock("./electronRuntime", () => ({
   }),
   dialog: {
     showOpenDialog: showOpenDialogMock,
-  },
-  globalShortcut: {
-    isRegistered: globalShortcutIsRegisteredMock,
   },
   shell: {
     openExternal: openExternalMock,
@@ -273,11 +266,8 @@ vi.mock("./systemUtilityHost", () => ({
     getChromeBridgeStatus: systemUtilityHostGetChromeBridgeStatusMock,
     getChromeProfileSessions: systemUtilityHostGetChromeProfileSessionsMock,
     getEnvironmentPreview: systemUtilityHostGetEnvironmentPreviewMock,
-    getVoiceShortcutRuntimeStatus:
-      systemUtilityHostGetVoiceShortcutRuntimeStatusMock,
     openExternalUrl: systemUtilityHostOpenExternalUrlMock,
     openSystemSettingsUrl: systemUtilityHostOpenSystemSettingsUrlMock,
-    validateShortcut: systemUtilityHostValidateShortcutMock,
   })),
 }));
 
@@ -304,11 +294,17 @@ function createHost(
   request: AppServerRequestMock = async () => {
     throw new Error("App Server should not be called");
   },
+  appDataRoot = userDataDir,
 ) {
   const appServerHost = {
     request,
   } as unknown as ElectronAppServerHost;
-  return new ElectronHostCommands(appServerHost, userDataDir, emit);
+  return new ElectronHostCommands(
+    appServerHost,
+    userDataDir,
+    emit,
+    appDataRoot,
+  );
 }
 
 async function createTempUserDataDir() {
@@ -378,7 +374,6 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.clearAllMocks();
   browserWindowGetAllWindowsMock.mockReturnValue([]);
-  globalShortcutIsRegisteredMock.mockReturnValue(false);
   getPathMock.mockImplementation(() => os.tmpdir());
   showDesktopNotificationMock.mockReturnValue({ status: "sent" });
   showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
@@ -1163,6 +1158,29 @@ describe("ElectronHostCommands local file shell facade", () => {
 });
 
 describe("ElectronHostCommands app config persistence", () => {
+  it("Host 配置保留 userData，机器资产显式接收 AppDataRoot", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const appDataRoot = path.join(userDataDir, "machine-data");
+
+    createHost(
+      userDataDir,
+      () => undefined,
+      async () => {
+        throw new Error("App Server should not be called");
+      },
+      appDataRoot,
+    );
+
+    expect(SystemUtilityHost).toHaveBeenCalledWith({
+      appDataRoot,
+      readConfig: expect.any(Function),
+    });
+    expect(VoiceModelHost).toHaveBeenCalledWith(
+      appDataRoot,
+      expect.any(Function),
+    );
+  });
+
   it("save_config 应只写入 App Server current config.yaml", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
@@ -1518,10 +1536,6 @@ describe("ElectronHostCommands system utilities", () => {
   it("系统工具命令应只分发到 SystemUtilityHost", async () => {
     systemUtilityHostOpenExternalUrlMock.mockResolvedValueOnce({});
     systemUtilityHostOpenSystemSettingsUrlMock.mockResolvedValueOnce({});
-    systemUtilityHostGetVoiceShortcutRuntimeStatusMock.mockResolvedValueOnce({
-      shortcut_registered: false,
-    });
-    systemUtilityHostValidateShortcutMock.mockReturnValueOnce(true);
     systemUtilityHostGetEnvironmentPreviewMock.mockResolvedValueOnce({
       entries: [],
     });
@@ -1557,15 +1571,6 @@ describe("ElectronHostCommands system utilities", () => {
       host.invoke("open_system_settings_url", settingsArgs),
     ).resolves.toEqual({});
 
-    await expect(
-      host.invoke("get_voice_shortcut_runtime_status"),
-    ).resolves.toEqual({ shortcut_registered: false });
-
-    const shortcutArgs = { shortcutStr: "CommandOrControl+Shift+V" };
-    await expect(host.invoke("validate_shortcut", shortcutArgs)).resolves.toBe(
-      true,
-    );
-
     await expect(host.invoke("get_environment_preview")).resolves.toEqual({
       entries: [],
     });
@@ -1596,12 +1601,6 @@ describe("ElectronHostCommands system utilities", () => {
     );
     expect(systemUtilityHostOpenSystemSettingsUrlMock).toHaveBeenCalledWith(
       settingsArgs,
-    );
-    expect(
-      systemUtilityHostGetVoiceShortcutRuntimeStatusMock,
-    ).toHaveBeenCalledOnce();
-    expect(systemUtilityHostValidateShortcutMock).toHaveBeenCalledWith(
-      shortcutArgs,
     );
     expect(systemUtilityHostGetEnvironmentPreviewMock).toHaveBeenCalledOnce();
     expect(

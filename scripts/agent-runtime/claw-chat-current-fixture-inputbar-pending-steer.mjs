@@ -41,8 +41,7 @@ async function startActivePendingSteerTurn({
       options,
       INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
       {
-        expectedSessionId: SESSION_ID,
-        requireTurnStart: true,
+        expectedSessionId: summary?.sessionId?.trim() || SESSION_ID,
       },
     ),
   );
@@ -202,7 +201,7 @@ export async function runInputbarPendingSteerRichRestoreScenario({
       page,
       options,
       appServerRequests,
-      sessionId,
+      summary.threadId,
     );
 
   summarizePendingSteerBackendBeforeCancel({ runtimeEnv, summary });
@@ -273,7 +272,7 @@ export async function runInputbarPendingSteerMultiQueueScenario({
       page,
       options,
       appServerRequests,
-      sessionId,
+      summary.threadId,
       { requireSecondQueued: true },
     );
 
@@ -314,7 +313,7 @@ export async function runInputbarPendingSteerPopFrontResumeScenario({
       page,
       options,
       appServerRequests,
-      sessionId,
+      summary.threadId,
       { requireSecondQueued: true },
     );
 
@@ -353,7 +352,7 @@ export async function runInputbarPendingSteerPopFrontResumeScenario({
       page,
       options,
       appServerRequests,
-      sessionId,
+      summary.threadId,
     );
 
   summary.inputbarPendingSteerPopFrontGuiHydrated =

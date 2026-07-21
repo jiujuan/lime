@@ -57,9 +57,9 @@ const MAX_MODEL_AVAILABILITY_CANDIDATES = 12;
 const FAST_RESPONSE_MODE_STORAGE_KEY = "lime:agent-fast-response-mode";
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
-const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
+const APP_SERVER_METHOD_THREAD_READ = "thread/read";
+const APP_SERVER_METHOD_TURN_START = "turn/start";
+const APP_SERVER_METHOD_TURN_INTERRUPT = "turn/interrupt";
 const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event";
 const APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
 const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
@@ -579,7 +579,7 @@ function appServerSessionReadAfterEventEvidence(
   );
   const readRecords = appServerMethodRecords(
     invokes,
-    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    APP_SERVER_METHOD_THREAD_READ,
     { direction: "request" },
   ).filter((record) => {
     const params = record.params || {};
@@ -617,7 +617,7 @@ function appServerSessionReadAfterEventEvidence(
 function appServerSessionReadTurnEvidence(invokes, { sessionId, turnId }) {
   const readRecords = appServerMethodRecords(
     invokes,
-    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    APP_SERVER_METHOD_THREAD_READ,
     { direction: "request" },
   ).filter((record) => {
     const params = record.params || {};
@@ -741,7 +741,7 @@ function appServerThreadReadFromSessionRead(readResult) {
   const latestTurnStatus = latestTurn?.status || null;
   return {
     ...currentThreadRead,
-    source: APP_SERVER_METHOD_AGENT_SESSION_READ,
+    source: APP_SERVER_METHOD_THREAD_READ,
     session_id: detail.session_id || "",
     active_turn_id: activeTurn?.id || null,
     status: currentThreadRead.status || (activeTurn ? "running" : "idle"),
@@ -771,7 +771,7 @@ function appServerThreadReadFromSessionRead(readResult) {
 async function readAppServerSession(options, sessionId, timeoutMs = 20_000) {
   const response = await appServerRpc(
     options,
-    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    APP_SERVER_METHOD_THREAD_READ,
     { sessionId },
     timeoutMs,
   );
@@ -781,7 +781,7 @@ async function readAppServerSession(options, sessionId, timeoutMs = 20_000) {
 async function readAppServerThreadRead(options, sessionId, timeoutMs = 20_000) {
   const response = await appServerRpc(
     options,
-    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    APP_SERVER_METHOD_THREAD_READ,
     { sessionId },
     timeoutMs,
   );
@@ -799,7 +799,7 @@ async function cancelAppServerTurn(
   }
   await appServerRpc(
     options,
-    APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+    APP_SERVER_METHOD_TURN_INTERRUPT,
     { sessionId, turnId },
     timeoutMs,
   );
@@ -2181,7 +2181,7 @@ async function main() {
       () =>
         findAppServerMethodRecord(
           invokes.slice(longSubmitStart),
-          APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+          APP_SERVER_METHOD_TURN_START,
           (record) =>
             appServerTurnInputText(record.params).includes("E2E 中断测试"),
           { direction: "request" },
@@ -2339,7 +2339,7 @@ async function main() {
         () =>
           findAppServerMethodRecord(
             invokes.slice(interruptStart),
-            APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+            APP_SERVER_METHOD_TURN_INTERRUPT,
             (record) => appServerParamSessionId(record.params) === sessionId,
             { direction: "request" },
           ),
@@ -2450,7 +2450,7 @@ async function main() {
       () =>
         findAppServerMethodRecord(
           invokes.slice(followSubmitStart),
-          APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+          APP_SERVER_METHOD_TURN_START,
           (record) =>
             appServerTurnInputText(record.params).includes("停止后恢复测试"),
           { direction: "request" },
@@ -2607,7 +2607,7 @@ async function main() {
       () =>
         findAppServerMethodRecord(
           invokes.slice(liveWebSubmitStart),
-          APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+          APP_SERVER_METHOD_TURN_START,
           (record) =>
             appServerTurnInputText(record.params).includes("@搜索") &&
             appServerTurnInputText(record.params).includes("联网工具验证"),
@@ -2931,17 +2931,17 @@ async function main() {
     summary.appServerEvidence = {
       turnStartCount: appServerMethodRecords(
         invokes,
-        APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+        APP_SERVER_METHOD_TURN_START,
         { direction: "request" },
       ).length,
       turnCancelCount: appServerMethodRecords(
         invokes,
-        APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+        APP_SERVER_METHOD_TURN_INTERRUPT,
         { direction: "request" },
       ).length,
       sessionReadCount: appServerMethodRecords(
         invokes,
-        APP_SERVER_METHOD_AGENT_SESSION_READ,
+        APP_SERVER_METHOD_THREAD_READ,
         { direction: "request" },
       ).length,
       eventNotificationCount: appServerMethodRecords(
@@ -2968,7 +2968,7 @@ async function main() {
       Boolean(firstDelta?.stopVisible) &&
       appServerMethodSeen(
         invokes,
-        APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+        APP_SERVER_METHOD_TURN_INTERRUPT,
         {
           direction: "request",
         },
@@ -2992,19 +2992,19 @@ async function main() {
       longTurnCanBeInterrupted,
       appServerTurnStartSeen: appServerMethodSeen(
         invokes,
-        APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+        APP_SERVER_METHOD_TURN_START,
         { direction: "request" },
       ),
       appServerTurnCancelSeen: longTurnFastCompleteAccepted
         ? false
         : appServerMethodSeen(
             invokes,
-            APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+            APP_SERVER_METHOD_TURN_INTERRUPT,
             { direction: "request" },
           ),
       appServerSessionReadSeen: appServerMethodSeen(
         invokes,
-        APP_SERVER_METHOD_AGENT_SESSION_READ,
+        APP_SERVER_METHOD_THREAD_READ,
         { direction: "request" },
       ),
       appServerEventSeen:

@@ -17,11 +17,11 @@ const { mockCreateAgentRuntimeClient, mockRuntimeClient } = vi.hoisted(() => {
     getRuntimeProviderSelection: vi.fn(),
     interruptAgentRuntimeTurn: vi.fn(),
     listAgentRuntimeSessions: vi.fn(),
-    promoteAgentRuntimeQueuedTurn: vi.fn(),
     replayAgentRuntimeRequest: vi.fn(),
-    removeAgentRuntimeQueuedTurn: vi.fn(),
-    resumeAgentRuntimeThread: vi.fn(),
+    resumeThread: vi.fn(),
     respondAgentRuntimeAction: vi.fn(),
+    runUserShellCommand: vi.fn(),
+    steerAgentRuntimeTurn: vi.fn(),
     submitAgentRuntimeTurn: vi.fn(),
     updateAgentRuntimeSession: vi.fn(),
   };
@@ -92,6 +92,25 @@ describe("defaultAgentRuntimeAdapter", () => {
     );
   });
 
+  it("runUserShellCommand 应透传 canonical thread identity 与 event route", async () => {
+    const client = {
+      ...mockRuntimeClient,
+      runUserShellCommand: vi.fn().mockResolvedValue(undefined),
+    };
+    const adapter = createAgentRuntimeAdapter({ client });
+
+    await adapter.runUserShellCommand(
+      "thread-9",
+      "printf ready",
+      "agentSession/event/session-9",
+    );
+
+    expect(client.runUserShellCommand).toHaveBeenCalledWith(
+      { threadId: "thread-9", command: "printf ready" },
+      "agentSession/event/session-9",
+    );
+  });
+
   it("listSessions 应透传筛选参数给 runtime client", async () => {
     const client = {
       ...mockRuntimeClient,
@@ -112,35 +131,56 @@ describe("defaultAgentRuntimeAdapter", () => {
     });
   });
 
-  it("getThreadQueueControl 应透传 canonical threadId 并返回窄投影", async () => {
+  it("getSessionReadModel 应先从 session detail 解析 canonical thread_id", async () => {
+    const client = {
+      ...mockRuntimeClient,
+      getAgentRuntimeSession: vi.fn().mockResolvedValue({
+        id: "session-9",
+        thread_id: "thread-9",
+        created_at: 1,
+        updated_at: 2,
+        messages: [],
+        thread_read: null,
+      }),
+      getAgentRuntimeThreadRead: vi.fn().mockResolvedValue({
+        thread_id: "thread-9",
+        queued_turns: [],
+      }),
+    };
+    const adapter = createAgentRuntimeAdapter({ client });
+
+    await expect(adapter.getSessionReadModel("session-9")).resolves.toEqual({
+      thread_id: "thread-9",
+      queued_turns: [],
+    });
+    expect(client.getAgentRuntimeSession).toHaveBeenCalledWith("session-9");
+    expect(client.getAgentRuntimeThreadRead).toHaveBeenCalledWith("thread-9");
+  });
+
+  it("getThreadTurnControl 应透传 canonical threadId 并返回窄投影", async () => {
     const client = {
       ...mockRuntimeClient,
       readAgentRuntimeThread: vi.fn().mockResolvedValue({
         thread: {
           archived: false,
-          createdAtMs: 100,
+          createdAt: 0.1,
+          id: "thread-9",
           sessionId: "session-9",
           status: { type: "active" },
-          threadId: "thread-9",
-          turnsView: "full",
           turns: [
             {
-              createdAtMs: 100,
-              sessionId: "session-9",
+              id: "turn-active",
+              items: [],
               status: "inProgress",
-              threadId: "thread-9",
-              turnId: "turn-active",
-              updatedAtMs: 200,
-              queue: { state: "running" },
             },
           ],
-          updatedAtMs: 200,
+          updatedAt: 0.2,
         },
       }),
     };
     const adapter = createAgentRuntimeAdapter({ client });
 
-    await expect(adapter.getThreadQueueControl("thread-9")).resolves.toEqual({
+    await expect(adapter.getThreadTurnControl("thread-9")).resolves.toEqual({
       threadId: "thread-9",
       updatedAtMs: 200,
       activeTurnId: "turn-active",
@@ -149,49 +189,105 @@ describe("defaultAgentRuntimeAdapter", () => {
     expect(client.readAgentRuntimeThread).toHaveBeenCalledWith("thread-9");
   });
 
-  it("getThreadQueueControl 应拒绝非 full canonical read", async () => {
+  it("getThreadTurnControl 应拒绝非 full canonical read", async () => {
     const client = {
       ...mockRuntimeClient,
       readAgentRuntimeThread: vi.fn().mockResolvedValue({
         thread: {
           archived: false,
-          createdAtMs: 100,
+          createdAt: 0.1,
+          id: "thread-9",
           sessionId: "session-9",
           status: { type: "active" },
-          threadId: "thread-9",
-          turnsView: "summary",
-          updatedAtMs: 200,
+          updatedAt: 0.2,
         },
       }),
     };
     const adapter = createAgentRuntimeAdapter({ client });
 
-    await expect(adapter.getThreadQueueControl("thread-9")).rejects.toThrow(
-      "canonical queue-control projection rejected",
+    await expect(adapter.getThreadTurnControl("thread-9")).rejects.toThrow(
+      "canonical turn-control projection rejected",
     );
   });
 
-  it("getThreadQueueControl 应拒绝返回其他 thread identity", async () => {
+  it("getThreadTurnControl 应拒绝返回其他 thread identity", async () => {
     const client = {
       ...mockRuntimeClient,
       readAgentRuntimeThread: vi.fn().mockResolvedValue({
         thread: {
           archived: false,
-          createdAtMs: 100,
+          createdAt: 0.1,
+          id: "thread-other",
           sessionId: "session-9",
           status: { type: "idle" },
-          threadId: "thread-other",
           turns: [],
-          turnsView: "full",
-          updatedAtMs: 200,
+          updatedAt: 0.2,
         },
       }),
     };
     const adapter = createAgentRuntimeAdapter({ client });
 
-    await expect(adapter.getThreadQueueControl("thread-9")).rejects.toThrow(
-      "canonical queue-control thread identity mismatch",
+    await expect(adapter.getThreadTurnControl("thread-9")).rejects.toThrow(
+      "canonical turn-control thread identity mismatch",
     );
+  });
+
+  it("submitOp 应只委托 typed turn/start", async () => {
+    const client = {
+      ...mockRuntimeClient,
+      submitAgentRuntimeTurn: vi.fn().mockResolvedValue(undefined),
+    };
+    const adapter = createAgentRuntimeAdapter({ client });
+
+    await adapter.submitOp({
+      type: "user_input",
+      eventName: "event-start",
+      turn: {
+        threadId: "thread-9",
+        clientUserMessageId: "user-9",
+        input: [{ type: "text", text: "开始" }],
+        approvalPolicy: "on-request",
+        sandboxPolicy: "workspace-write",
+      },
+    });
+
+    expect(client.submitAgentRuntimeTurn).toHaveBeenCalledWith({
+      threadId: "thread-9",
+      clientUserMessageId: "user-9",
+      input: [{ type: "text", text: "开始" }],
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      additionalContext: {
+        rendererEventName: {
+          kind: "application",
+          value: "event-start",
+        },
+      },
+    });
+    expect(client.steerAgentRuntimeTurn).not.toHaveBeenCalled();
+  });
+
+  it("steerTurn 应只委托 typed turn/steer 并返回原 turn identity", async () => {
+    const client = {
+      ...mockRuntimeClient,
+      steerAgentRuntimeTurn: vi.fn().mockResolvedValue({
+        result: { turnId: "turn-active" },
+        notifications: [],
+      }),
+    };
+    const adapter = createAgentRuntimeAdapter({ client });
+    const request = {
+      threadId: "thread-9",
+      expectedTurnId: "turn-active",
+      clientUserMessageId: "user-steer",
+      input: [{ type: "text" as const, text: "补充约束" }],
+    };
+
+    await expect(adapter.steerTurn(request)).resolves.toEqual({
+      turnId: "turn-active",
+    });
+    expect(client.steerAgentRuntimeTurn).toHaveBeenCalledWith(request);
+    expect(client.submitAgentRuntimeTurn).not.toHaveBeenCalled();
   });
 
   it("getSession 应合并同一会话同一请求形状的并发读取", async () => {

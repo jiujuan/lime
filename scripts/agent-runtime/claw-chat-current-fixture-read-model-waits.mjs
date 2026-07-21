@@ -1,7 +1,7 @@
 import {
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
+  APP_SERVER_METHOD_SESSION_LIST,
   APP_SERVER_METHOD_SESSION_READ,
-  APP_SERVER_METHOD_SESSION_THREAD_RESUME,
   APP_SERVER_METHOD_SESSION_TURN_START,
   ASSISTANT_DONE_TEXT,
   EVENT_READ_PROBE_DONE_TEXT,
@@ -10,7 +10,6 @@ import {
   EVENT_READ_PROBE_TOOL_CALL_ID,
   EVENT_READ_PROBE_TOOL_NAME,
   EVENT_READ_PROBE_TOOL_OUTPUT,
-  EVENT_READ_PROBE_TURN_ID,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
   MCP_STRUCTURED_CONTENT_ANSWER,
@@ -23,45 +22,86 @@ import {
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
-  SESSION_ID,
   SKILLS_RUNTIME_SCENARIO,
-  THREAD_ID,
   summarizeSkillsRuntimeEvidenceExport,
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
-  collectAgentSessionEvents,
+  collectRuntimeEvents,
   drainAppServerEventsFromPage,
   invokeAppServerFromPage,
-  mergeAgentSessionEvents,
-  summarizeAgentSessionEvents,
+  mergeRuntimeEvents,
+  summarizeRuntimeEvents,
 } from "./claw-chat-current-fixture-rpc.mjs";
 import {
   collectReadModelToolCalls,
-  findReadModelQueuedTurnForPrompt,
-  findReadModelToolCall,
-  readModelQueuedTurnId,
-  readModelQueuedTurnText,
-  summarizeReadModelQueueState,
   readModelLatestTurnStatus,
   summarizeSkillsRuntimeReadModel,
 } from "./claw-chat-current-fixture-read-model-core.mjs";
-import {
-  waitForBackendLedgerTurnStart,
-  waitForBackendLedgerTurnStartOrNull,
-} from "./claw-chat-current-fixture-backend-ledger.mjs";
 import { sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
+
+function requireThreadId(options, explicitThreadId) {
+  const threadId = explicitThreadId?.trim() || options.threadId?.trim();
+  if (!threadId) {
+    throw new Error("Claw fixture 缺少 canonical threadId");
+  }
+  return threadId;
+}
+
+export async function waitForCanonicalThreadIdBySessionId(
+  page,
+  options,
+  requestLog,
+  sessionId,
+) {
+  const normalizedSessionId = sessionId?.trim();
+  if (!normalizedSessionId) {
+    throw new Error("Claw fixture 缺少 canonical sessionId");
+  }
+
+  const startedAt = Date.now();
+  let lastList = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const list = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_LIST,
+      { archived: false, limit: 100 },
+      requestLog,
+    );
+    lastList = list.result;
+    const threads = Array.isArray(list.result?.data) ? list.result.data : [];
+    const root = threads.find(
+      (thread) =>
+        thread?.sessionId === normalizedSessionId && !thread?.parentThreadId,
+    );
+    const match =
+      root ??
+      threads.find((thread) => thread?.sessionId === normalizedSessionId);
+    const threadId = typeof match?.id === "string" ? match.id.trim() : "";
+    if (threadId) {
+      return threadId;
+    }
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `thread/list 未解析 sessionId 对应的 canonical threadId: ${JSON.stringify(
+      sanitizeJson(lastList),
+    )}`,
+  );
+}
 
 export async function waitForSessionReadCompleted(
   page,
   options,
   requestLog,
   {
-    sessionId = SESSION_ID,
+    threadId,
     prompt = NEWS_PROMPT,
     doneText = ASSISTANT_DONE_TEXT,
     summaryText = "今日国际新闻简要整理",
   } = {},
 ) {
+  const canonicalThreadId = requireThreadId(options, threadId);
   const startedAt = Date.now();
   let lastRead = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -69,8 +109,8 @@ export async function waitForSessionReadCompleted(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId,
-        historyLimit: 100,
+        threadId: canonicalThreadId,
+        includeTurns: true,
       },
       requestLog,
     );
@@ -95,8 +135,9 @@ export async function waitForSessionReadFailedAfterAnswer(
   page,
   options,
   requestLog,
-  { sessionId = SESSION_ID, prompt, partialText, failureText } = {},
+  { threadId, prompt, partialText, failureText } = {},
 ) {
+  const canonicalThreadId = requireThreadId(options, threadId);
   const startedAt = Date.now();
   let lastRead = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -104,8 +145,8 @@ export async function waitForSessionReadFailedAfterAnswer(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId,
-        historyLimit: 100,
+        threadId: canonicalThreadId,
+        includeTurns: true,
       },
       requestLog,
     );
@@ -133,8 +174,9 @@ export async function waitForSessionReadSkillsRuntimeCompleted(
   options,
   requestLog,
   scenario = SKILLS_RUNTIME_SCENARIO,
-  sessionId = SESSION_ID,
+  threadId = options.threadId,
 ) {
+  const canonicalThreadId = requireThreadId(options, threadId);
   const startedAt = Date.now();
   let lastRead = null;
   let lastSummary = null;
@@ -143,8 +185,8 @@ export async function waitForSessionReadSkillsRuntimeCompleted(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId,
-        historyLimit: 100,
+        threadId: canonicalThreadId,
+        includeTurns: true,
       },
       requestLog,
     );
@@ -175,111 +217,6 @@ export async function waitForSessionReadSkillsRuntimeCompleted(
   );
 }
 
-export async function resumeQueuedTurnForPromptIfNeeded(
-  page,
-  options,
-  requestLog,
-  sessionId,
-  prompt,
-) {
-  const startedAt = Date.now();
-  const timeoutMs = Math.min(options.timeoutMs, 30_000);
-  let lastRead = null;
-  let lastQueuedTurn = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    const read = await invokeAppServerFromPage(
-      page,
-      APP_SERVER_METHOD_SESSION_READ,
-      {
-        sessionId,
-        historyLimit: 100,
-      },
-      requestLog,
-    );
-    lastRead = read.result;
-    lastQueuedTurn = findReadModelQueuedTurnForPrompt(lastRead, prompt);
-    const queuedTurnId = lastQueuedTurn
-      ? readModelQueuedTurnId(lastQueuedTurn)
-      : null;
-    if (queuedTurnId) {
-      const resume = await invokeAppServerFromPage(
-        page,
-        APP_SERVER_METHOD_SESSION_THREAD_RESUME,
-        {
-          sessionId,
-        },
-        requestLog,
-      );
-      const resumed = resume.result?.resumed === true;
-      if (resumed) {
-        return sanitizeJson({
-          queuedTurnId,
-          queuedTurnText: readModelQueuedTurnText(lastQueuedTurn),
-          resumed,
-          turnCount: Array.isArray(resume.result?.turns)
-            ? resume.result.turns.length
-            : null,
-        });
-      }
-      lastQueuedTurn = {
-        queuedTurnId,
-        queuedTurnText: readModelQueuedTurnText(lastQueuedTurn),
-        resumed,
-        turnCount: Array.isArray(resume.result?.turns)
-          ? resume.result.turns.length
-          : null,
-      };
-    }
-    await sleep(options.intervalMs);
-  }
-  throw new Error(
-    `App Server read model 未出现可恢复 queued turn: ${JSON.stringify(
-      sanitizeJson({
-        prompt,
-        queuedTurn: lastQueuedTurn,
-        readModelSummary: summarizeReadModelQueueState(lastRead),
-      }),
-    )}`,
-  );
-}
-
-export async function waitForBackendTurnStartWithCurrentQueueResume(
-  page,
-  options,
-  requestLog,
-  ledgerPath,
-  sessionId,
-  prompt,
-) {
-  const immediate = await waitForBackendLedgerTurnStartOrNull(
-    ledgerPath,
-    prompt,
-    options,
-  );
-  if (immediate) {
-    return {
-      backendTurn: immediate,
-      queueResume: null,
-    };
-  }
-  const queueResume = await resumeQueuedTurnForPromptIfNeeded(
-    page,
-    options,
-    requestLog,
-    sessionId,
-    prompt,
-  );
-  const backendTurn = await waitForBackendLedgerTurnStart(
-    ledgerPath,
-    prompt,
-    options,
-  );
-  return {
-    backendTurn,
-    queueResume,
-  };
-}
-
 export async function waitForSessionReadMcpStructuredContentCompleted(
   page,
   options,
@@ -290,24 +227,19 @@ export async function waitForSessionReadMcpStructuredContentCompleted(
     options,
     requestLog,
     {
-      sessionId: SESSION_ID,
+      threadId: options.threadId,
       prompt: MCP_STRUCTURED_CONTENT_PROMPT,
       doneText: MCP_STRUCTURED_CONTENT_DONE_TEXT,
       summaryText: "MCP structuredContent 展示验证完成",
     },
   );
   const serialized = JSON.stringify(readModel || {});
-  const toolCall = findReadModelToolCall(
+  const toolCall = findReadModelToolCallWithStructuredContent(
     readModel,
     MCP_STRUCTURED_CONTENT_TOOL_CALL_ID,
     MCP_STRUCTURED_CONTENT_TOOL_NAME,
   );
-  const structuredContent =
-    toolCall?.structured_content ??
-    toolCall?.structuredContent ??
-    toolCall?.result?.structuredContent ??
-    toolCall?.result?.structured_content ??
-    null;
+  const structuredContent = readToolCallStructuredContent(toolCall);
   const structuredSerialized = JSON.stringify(structuredContent || {});
   const outputText = String(
     toolCall?.output_preview ??
@@ -323,11 +255,7 @@ export async function waitForSessionReadMcpStructuredContentCompleted(
         ? readModel.detail.items.length
         : null,
       toolCallCount: collectReadModelToolCalls(readModel).length,
-      latestTurnStatus:
-        readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
-        readModel?.detail?.thread_read?.status ??
-        readModel?.detail?.status ??
-        null,
+      latestTurnStatus: readModelLatestTurnStatus(readModel),
       includesPrompt: serialized.includes(MCP_STRUCTURED_CONTENT_PROMPT),
       includesAssistantDone: serialized.includes(
         MCP_STRUCTURED_CONTENT_DONE_TEXT,
@@ -353,11 +281,91 @@ export async function waitForSessionReadMcpStructuredContentCompleted(
   };
 }
 
+export function findReadModelToolCallWithStructuredContent(
+  readModel,
+  toolCallId,
+  toolName,
+) {
+  const matches = collectReadModelToolCalls(readModel).filter((toolCall) => {
+    const id = String(
+      toolCall.id ??
+        toolCall.tool_call_id ??
+        toolCall.toolCallId ??
+        toolCall.toolId ??
+        "",
+    );
+    const name = String(
+      toolCall.tool_name ??
+        toolCall.toolName ??
+        toolCall.tool ??
+        toolCall.name ??
+        "",
+    );
+    return id === toolCallId && name === toolName;
+  });
+  return (
+    matches.find((toolCall) => Boolean(readToolCallStructuredContent(toolCall))) ??
+    matches[0] ??
+    null
+  );
+}
+
+export function readToolCallStructuredContent(toolCall) {
+  const direct =
+    toolCall?.structured_content ??
+    toolCall?.structuredContent ??
+    toolCall?.result?.structuredContent ??
+    toolCall?.result?.structured_content ??
+    null;
+  if (direct) {
+    return direct;
+  }
+
+  const contentItems =
+    toolCall?.contentItems ??
+    toolCall?.content_items ??
+    (Array.isArray(toolCall?.output) ? toolCall.output : []);
+  for (const item of Array.isArray(contentItems) ? contentItems : []) {
+    const text =
+      typeof item === "string"
+        ? item
+        : typeof item?.text === "string"
+          ? item.text
+          : typeof item?.inputText?.text === "string"
+            ? item.inputText.text
+            : null;
+    if (!text) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(text);
+      const nested = parsed?.structuredContent ?? parsed?.structured_content;
+      if (nested) {
+        return nested;
+      }
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed) &&
+        !Object.hasOwn(parsed, "request_metadata") &&
+        !Object.hasOwn(parsed, "diagnostics")
+      ) {
+        // v2 DynamicToolCall stores the structured block itself as an inputText item.
+        return parsed;
+      }
+    } catch {
+      // Non-JSON content items are ordinary tool output.
+    }
+  }
+  return null;
+}
+
 export async function waitForSessionReadPlanCompleted(
   page,
   options,
   requestLog,
 ) {
+  const threadId = requireThreadId(options);
   const startedAt = Date.now();
   let lastRead = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -365,8 +373,8 @@ export async function waitForSessionReadPlanCompleted(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: SESSION_ID,
-        historyLimit: 100,
+        threadId,
+        includeTurns: true,
       },
       requestLog,
     );
@@ -396,6 +404,7 @@ export async function waitForSessionReadContainsTurn(
   turnId,
   expectedText,
 ) {
+  const threadId = requireThreadId(options);
   const startedAt = Date.now();
   let lastRead = null;
   const timeoutMs = Math.min(options.timeoutMs, 30_000);
@@ -404,8 +413,8 @@ export async function waitForSessionReadContainsTurn(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: SESSION_ID,
-        historyLimit: 100,
+        threadId,
+        includeTurns: true,
       },
       requestLog,
     );
@@ -427,13 +436,17 @@ export async function exportSkillsRuntimeEvidencePack(
   page,
   requestLog,
   scenario = SKILLS_RUNTIME_SCENARIO,
-  sessionId = SESSION_ID,
+  sessionId,
 ) {
+  const canonicalSessionId = sessionId?.trim();
+  if (!canonicalSessionId) {
+    throw new Error("Claw fixture 缺少 canonical sessionId");
+  }
   const exportResult = await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_EVIDENCE_EXPORT,
     {
-      sessionId,
+      sessionId: canonicalSessionId,
       includeEvents: true,
       includeArtifacts: true,
       includeEvidencePack: true,
@@ -448,7 +461,7 @@ export async function exportSkillsRuntimeEvidencePack(
   };
 }
 
-export async function waitForAgentSessionEventsForTurn(
+export async function waitForRuntimeEventsForTurn(
   page,
   options,
   turnId,
@@ -456,11 +469,11 @@ export async function waitForAgentSessionEventsForTurn(
 ) {
   const startedAt = Date.now();
   const timeoutMs = Math.min(options.timeoutMs, 30_000);
-  let events = collectAgentSessionEvents(initialMessages);
+  let events = collectRuntimeEvents(initialMessages);
   let drainAttempts = 0;
 
   while (Date.now() - startedAt < timeoutMs) {
-    const summary = summarizeAgentSessionEvents(events, turnId);
+    const summary = summarizeRuntimeEvents(events, turnId);
     if (
       summary.scopedEventCount > 0 &&
       summary.hasTextDelta &&
@@ -479,61 +492,55 @@ export async function waitForAgentSessionEventsForTurn(
 
     const drained = await drainAppServerEventsFromPage(page, 50);
     drainAttempts += 1;
-    events = mergeAgentSessionEvents(
-      events,
-      collectAgentSessionEvents(drained.messages),
-    );
+    events = mergeRuntimeEvents(events, collectRuntimeEvents(drained.messages));
     await sleep(options.intervalMs);
   }
 
   throw new Error(
-    `未观察到 agentSession/event 同 turn 终态: ${JSON.stringify(
-      summarizeAgentSessionEvents(events, turnId),
+    `未观察到 direct v2 notification 同 turn 终态: ${JSON.stringify(
+      summarizeRuntimeEvents(events, turnId),
     )}`,
   );
 }
 
 export async function runEventReadProbe(page, options, requestLog) {
-  const eventName = `agentSession/event/${SESSION_ID}`;
+  const threadId = requireThreadId(options);
+  const clientUserMessageId = `event-read-probe-${Date.now()}`;
   const turnStart = await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_SESSION_TURN_START,
     {
-      sessionId: SESSION_ID,
-      turnId: EVENT_READ_PROBE_TURN_ID,
-      input: {
-        text: EVENT_READ_PROBE_PROMPT,
+      threadId,
+      clientUserMessageId,
+      input: [{ type: "text", text: EVENT_READ_PROBE_PROMPT }],
+      model: FIXTURE_MODEL,
+      responsesapiClientMetadata: {
+        source: "smoke:claw-chat-current-fixture:event-read-probe",
+        provider: FIXTURE_PROVIDER,
       },
-      runtimeOptions: {
-        stream: true,
-        eventName,
-        runtimeRequest: {
-          providerPreference: FIXTURE_PROVIDER,
-          modelPreference: FIXTURE_MODEL,
-          metadata: {
-            harness: {
-              source: "smoke:claw-chat-current-fixture:event-read-probe",
-            },
-          },
-        },
-      },
-      queueIfBusy: false,
-      skipPreSubmitResume: true,
     },
     requestLog,
   );
+  const turnId = turnStart.result?.turn?.id;
+  if (typeof turnId !== "string" || !turnId.trim()) {
+    throw new Error(
+      `turn/start 未返回 canonical turnId: ${JSON.stringify(
+        sanitizeJson(turnStart.result),
+      )}`,
+    );
+  }
 
-  const eventObservation = await waitForAgentSessionEventsForTurn(
+  const eventObservation = await waitForRuntimeEventsForTurn(
     page,
     options,
-    EVENT_READ_PROBE_TURN_ID,
+    turnId,
     turnStart.messages,
   );
   const readModel = await waitForSessionReadContainsTurn(
     page,
     options,
     requestLog,
-    EVENT_READ_PROBE_TURN_ID,
+    turnId,
     EVENT_READ_PROBE_READ_TEXT,
   );
   const toolCall = findReadModelToolCall(
@@ -549,22 +556,17 @@ export async function runEventReadProbe(page, options, requestLog) {
   );
 
   return sanitizeJson({
-    turnId: EVENT_READ_PROBE_TURN_ID,
-    eventName,
+    turnId,
+    clientUserMessageId,
     turnStartResult: {
-      turnId:
-        turnStart.result?.turn?.turnId ??
-        turnStart.result?.turn?.turn_id ??
-        null,
+      turnId: turnStart.result?.turn?.id ?? null,
       status: turnStart.result?.turn?.status ?? null,
       messageCount: turnStart.messages.length,
-      notificationCount: collectAgentSessionEvents(turnStart.messages).length,
+      notificationCount: collectRuntimeEvents(turnStart.messages).length,
     },
     events: eventObservation.summary,
     readModel: {
-      containsTurnId: JSON.stringify(readModel || {}).includes(
-        EVENT_READ_PROBE_TURN_ID,
-      ),
+      containsTurnId: JSON.stringify(readModel || {}).includes(turnId),
       containsDoneText: JSON.stringify(readModel || {}).includes(
         EVENT_READ_PROBE_DONE_TEXT,
       ),
@@ -591,12 +593,13 @@ export async function waitForSessionReadCanceled(
   options,
   requestLog,
   {
-    sessionId = SESSION_ID,
+    threadId,
     prompt = NEWS_PROMPT,
     partialText = "",
     requireContent = true,
   } = {},
 ) {
+  const canonicalThreadId = requireThreadId(options, threadId);
   const startedAt = Date.now();
   let lastRead = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -604,15 +607,16 @@ export async function waitForSessionReadCanceled(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId,
-        historyLimit: 100,
+        threadId: canonicalThreadId,
+        includeTurns: true,
       },
       requestLog,
     );
     lastRead = read.result;
+    const latestTurnStatus = readModelLatestTurnStatus(read.result);
     const serialized = JSON.stringify(read.result || {});
     if (
-      serialized.includes("canceled") &&
+      latestTurnStatus === "interrupted" &&
       (!requireContent ||
         (serialized.includes(prompt) &&
           (!partialText || serialized.includes(partialText))))

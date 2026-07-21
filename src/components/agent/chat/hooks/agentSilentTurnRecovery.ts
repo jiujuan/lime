@@ -98,7 +98,7 @@ export function hasRecoverableTerminalTurnActivity(
 }
 
 export function hasRecoverableSilentTurnActivity(
-  detail: Pick<AgentSessionDetail, "turns" | "items" | "queued_turns">,
+  detail: Pick<AgentSessionDetail, "turns" | "items">,
   requestStartedAt: number,
   promptText: string,
 ): boolean {
@@ -142,22 +142,6 @@ export function hasRecoverableSilentTurnActivity(
     return true;
   }
 
-  const hasRecentMatchingQueuedTurn = (detail.queued_turns ?? []).some(
-    (queuedTurn) => {
-      const messageText =
-        normalizeText(queuedTurn.message_text) ||
-        normalizeText(queuedTurn.message_preview);
-      return (
-        normalizedPrompt.length > 0 &&
-        messageText === normalizedPrompt &&
-        normalizeTimestampMs(queuedTurn.created_at) >= recoveryThresholdMs
-      );
-    },
-  );
-  if (hasRecentMatchingQueuedTurn) {
-    return true;
-  }
-
   const hasRecentTurnActivity = (detail.turns ?? []).some((turn) => {
     return (
       maxTimestampMs(
@@ -182,8 +166,5 @@ export function hasRecoverableSilentTurnActivity(
     return true;
   }
 
-  return (detail.queued_turns ?? []).some(
-    (queuedTurn) =>
-      normalizeTimestampMs(queuedTurn.created_at) >= activityThresholdMs,
-  );
+  return false;
 }

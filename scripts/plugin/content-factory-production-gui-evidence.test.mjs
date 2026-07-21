@@ -28,12 +28,20 @@ describe("content factory production GUI evidence collector", () => {
     expect(content).toContain("window.__LIME_ELECTRON__ === true");
     expect(content).toContain('"app_server_handle_json_lines"');
     expect(content).toContain('"pluginInstalled/list"');
-    expect(content).toContain('"agentSession/read"');
+    expect(content).toContain('"thread/read"');
     expect(content).toContain('"evidence/export"');
     expect(content).toContain('"agentSession/action/respond"');
-    expect(content).toContain('"agentSession/thread/resume"');
+    expect(content).toContain('"workflow/respond"');
+    expect(content).not.toContain('"thread/resume"');
+    expect(content).toContain("--thread-id");
     expect(content).toContain("--turn-start-trace");
     expect(content).toContain("readProductionTurnStartTrace");
+    expect(content).toContain("threadId,");
+    expect(content).toContain("includeTurns: true");
+    expect(content).toContain("readResult?.thread?.sessionId");
+    expect(content).not.toContain(
+      'callAppServer(page, "thread/read", {\n      sessionId',
+    );
   });
 
   it("fails closed on production gate markers instead of inventing evidence", () => {
@@ -95,7 +103,7 @@ describe("content factory production GUI evidence collector", () => {
     });
   });
 
-  it("recognizes workflowResume metadata from action/respond and queued resume contracts", () => {
+  it("recognizes workflowResume metadata from action/respond", () => {
     const content = readScript();
 
     expect(content).toContain(
@@ -105,6 +113,8 @@ describe("content factory production GUI evidence collector", () => {
     expect(content).toContain("workflowResumeBindingsFromTrace");
     expect(content).toContain("workflowResumeEventBinding");
     expect(content).toContain("summarizeWorkflowResumeLifecycle");
+    expect(content).toContain("actionMetadataPresent");
+    expect(content).not.toContain("runtimeResumeContract");
     expect(content).toContain("summarizeEvidenceExport");
     expect(content).toContain("workflow_audit");
     expect(content).toContain("workflow_audit_metadata_only");

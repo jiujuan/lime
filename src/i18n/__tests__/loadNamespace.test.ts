@@ -278,18 +278,6 @@ describe("i18n namespace loader", () => {
         "agentChat.inputbar.dictation.feedback.recognitionFailed",
         "agentChat.inputbar.controller.toast.systemPathDropUnsupported",
         "agentChat.inputbar.controller.curatedTask.reviewSuggestionPrefillHint",
-        "agentChat.inputbar.queuedTurns.header.count",
-        "agentChat.inputbar.queuedTurns.header.sequenceHint",
-        "agentChat.inputbar.queuedTurns.emptyInput",
-        "agentChat.inputbar.queuedTurns.action.expand",
-        "agentChat.inputbar.queuedTurns.action.collapse",
-        "agentChat.inputbar.queuedTurns.meta.imageCount",
-        "agentChat.inputbar.queuedTurns.meta.textOnly",
-        "agentChat.inputbar.queuedTurns.action.promoteAria",
-        "agentChat.inputbar.queuedTurns.action.promoting",
-        "agentChat.inputbar.queuedTurns.action.promote",
-        "agentChat.inputbar.queuedTurns.action.remove",
-        "agentChat.inputbar.queuedTurns.action.removing",
         "agentChat.inputbar.composer.advancedSettings.label",
         "agentChat.inputbar.composer.advancedSettings.expand",
         "agentChat.inputbar.composer.advancedSettings.collapse",
@@ -453,12 +441,6 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].common).toHaveProperty(
         "common.updateNotification.version.new",
-      );
-      expect(resources[locale].common).toHaveProperty(
-        "common.shortcutSettings.label",
-      );
-      expect(resources[locale].common).toHaveProperty(
-        "common.shortcutSettings.error.invalid",
       );
       expect(resources[locale].common).toHaveProperty(
         "common.execution.latestRunStatus.status.success",
@@ -1082,12 +1064,6 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.home.current.title",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.hotkeys.title",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.hotkeys.catalog.scene.global.title",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.memory.title",

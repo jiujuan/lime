@@ -1,6 +1,5 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import {
   summarizeCanonicalChildThreads,
   type CanonicalChildThreadSummary,
@@ -63,7 +62,6 @@ export interface AgentTaskRuntimeCardModel {
   detail: string | null;
   supportingLines: string[];
   batchDescriptor: ToolBatchSummaryDescriptor | null;
-  queuedTurnCount: number;
   pendingRequestCount: number;
   subtaskStats: AgentTaskRuntimeSubtaskStats | null;
   usage?: AgentTokenUsage;
@@ -77,7 +75,6 @@ interface BuildAgentTaskRuntimeCardModelParams {
   threadRead?: AgentRuntimeThreadReadModel | null;
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
-  queuedTurns?: readonly QueuedTurnSnapshot[];
   canonicalChildren?: CanonicalChildThreadSummary[];
   isSending?: boolean;
 }
@@ -240,7 +237,6 @@ function resolveTaskStatus(params: {
   threadRead?: AgentRuntimeThreadReadModel | null;
   pendingActions: readonly ActionRequired[];
   submittedActionsInFlight: readonly ActionRequired[];
-  queuedTurnCount: number;
   isSending: boolean;
 }): AgentTaskRuntimeStatus | null {
   const {
@@ -250,7 +246,6 @@ function resolveTaskStatus(params: {
     threadRead,
     pendingActions,
     submittedActionsInFlight,
-    queuedTurnCount,
     isSending,
   } = params;
   const visiblePendingActions = resolveVisiblePendingActions(pendingActions);
@@ -290,8 +285,8 @@ function resolveTaskStatus(params: {
     return "waiting_input";
   }
 
-  if (threadRead?.status === "queued" || queuedTurnCount > 0) {
-    return latestTurn ? "queued" : queuedTurnCount > 0 ? "queued" : null;
+  if (threadRead?.status === "queued") {
+    return "queued";
   }
 
   if (
@@ -465,7 +460,6 @@ export function buildAgentTaskRuntimeCardModel({
   threadRead = null,
   pendingActions = [],
   submittedActionsInFlight = [],
-  queuedTurns = [],
   canonicalChildren = [],
   isSending = false,
 }: BuildAgentTaskRuntimeCardModelParams): AgentTaskRuntimeCardModel | null {
@@ -501,18 +495,11 @@ export function buildAgentTaskRuntimeCardModel({
     threadRead,
     pendingActions,
     submittedActionsInFlight,
-    queuedTurnCount: queuedTurns.length,
     isSending,
   });
   const visiblePendingActions = resolveVisiblePendingActions(pendingActions);
 
-  if (
-    !status &&
-    !latestTurn &&
-    !latestUser &&
-    canonicalChildren.length === 0 &&
-    queuedTurns.length === 0
-  ) {
+  if (!status && !latestTurn && !latestUser && canonicalChildren.length === 0) {
     return null;
   }
 
@@ -551,11 +538,6 @@ export function buildAgentTaskRuntimeCardModel({
       pendingActions,
       submittedActionsInFlight,
     );
-  } else if (status === "queued") {
-    detail =
-      queuedTurns.length > 0
-        ? `还有 ${queuedTurns.length} 条消息在排队，当前任务会在前一轮结束后继续。`
-        : "正在准备本轮执行。";
   } else if (phase === "tool_batch" && batchDescriptor) {
     detail = batchDescriptor.title;
     supportingLines.push(...batchDescriptor.supportingLines);
@@ -611,20 +593,15 @@ export function buildAgentTaskRuntimeCardModel({
     latestAssistant?.runtimeStatus?.title ||
     latestAssistant?.runtimeStatus?.detail,
   );
-  const hasBlockingOrQueue =
-    visiblePendingActions.length > 0 ||
-    visiblePendingRequestCount > 0 ||
-    queuedTurns.length > 0;
+  const hasBlocking =
+    visiblePendingActions.length > 0 || visiblePendingRequestCount > 0;
   const shouldDisplay =
     status === "waiting_input" ||
     status === "queued" ||
     status === "failed" ||
     status === "aborted" ||
     ((status === "running" || !status) &&
-      (hasProcessTrail ||
-        hasSubtasks ||
-        hasBlockingOrQueue ||
-        hasLiveRuntimeDetail));
+      (hasProcessTrail || hasSubtasks || hasBlocking || hasLiveRuntimeDetail));
 
   if (!shouldDisplay) {
     return null;
@@ -641,7 +618,6 @@ export function buildAgentTaskRuntimeCardModel({
     detail,
     supportingLines: dedupedSupportingLines,
     batchDescriptor,
-    queuedTurnCount: queuedTurns.length,
     pendingRequestCount:
       visiblePendingActions.length || visiblePendingRequestCount,
     subtaskStats,

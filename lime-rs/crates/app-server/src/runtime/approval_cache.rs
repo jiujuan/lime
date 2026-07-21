@@ -1,8 +1,5 @@
-use super::{string_field, AgentEvent, StoredSession};
-use app_server_protocol::{
-    AgentSessionActionScope, AgentSessionApprovalDecision, AgentSessionTurnStartParams,
-    RuntimeOptions,
-};
+use super::{string_field, AgentEvent, StoredSession, TurnStartRequest};
+use app_server_protocol::{AgentSessionActionScope, AgentSessionApprovalDecision, RuntimeOptions};
 use hex::encode as hex_encode;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -85,7 +82,7 @@ pub(super) fn remove_session(cache: &mut SessionApprovalCache, session_id: &str)
 
 pub(super) fn apply_hint_to_turn_start(
     cache: &SessionApprovalCache,
-    params: &mut AgentSessionTurnStartParams,
+    params: &mut TurnStartRequest,
     session_workspace_id: Option<&str>,
 ) -> Option<SessionApprovalCacheEntry> {
     let key = key_from_runtime_options(params.runtime_options.as_ref(), session_workspace_id)?;

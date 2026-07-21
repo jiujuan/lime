@@ -3,6 +3,7 @@ import type { ContentPart, MessageMediaReference } from "../types";
 import { buildAgentTextDeltaContentPartMetadata } from "../utils/contentPartTimeline";
 
 type AgentMessageItem = Extract<AgentThreadItem, { type: "agent_message" }>;
+type MediaItem = Extract<AgentThreadItem, { type: "media" }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -29,7 +30,7 @@ function normalizeNonInlineSourceReference(value: unknown): string | null {
 }
 
 function buildBaseMetadata(
-  item: AgentMessageItem,
+  item: AgentMessageItem | MediaItem,
   index: number,
 ): Record<string, unknown> {
   return {
@@ -38,7 +39,9 @@ function buildBaseMetadata(
     turnId: item.turn_id,
     sequence: item.sequence,
     contentPartIndex: index,
-    ...(item.phase ? { phase: item.phase } : {}),
+    ...(item.type === "agent_message" && item.phase
+      ? { phase: item.phase }
+      : {}),
   };
 }
 
@@ -48,6 +51,23 @@ function contentPartTextFallback(params: {
   uri: string;
 }): string {
   return params.caption ?? params.title ?? params.uri;
+}
+
+function mediaKindFromMimeType(mimeType: string | null): string {
+  const [kind] = mimeType?.toLowerCase().split("/", 1) ?? [];
+  return kind || "file";
+}
+
+function mediaTitleFromUri(uri: string): string {
+  const withoutQuery = uri.split(/[?#]/u, 1)[0] ?? uri;
+  const segments = withoutQuery.split(/[\\/]/u);
+  return segments.at(-1)?.trim() || uri;
+}
+
+function isAbsoluteLocalPath(uri: string): boolean {
+  return (
+    uri.startsWith("/") || /^[a-z]:[\\/]/iu.test(uri) || uri.startsWith("\\\\")
+  );
 }
 
 function buildMediaReference(params: {
@@ -71,7 +91,9 @@ function buildMediaReference(params: {
     ...(params.mimeType ? { mimeType: params.mimeType } : {}),
     ...(params.title ? { title: params.title } : {}),
     ...(params.caption ? { caption: params.caption } : {}),
-    ...(params.sidecarRef !== undefined ? { sidecarRef: params.sidecarRef } : {}),
+    ...(params.sidecarRef !== undefined
+      ? { sidecarRef: params.sidecarRef }
+      : {}),
     ...(params.sourceUri ? { sourceUri: params.sourceUri } : {}),
     ...(params.sourcePath ? { sourcePath: params.sourcePath } : {}),
     ...(params.previewUrl ? { previewUrl: params.previewUrl } : {}),
@@ -146,7 +168,7 @@ function buildMediaReferenceContentPart(
       : typeof sourceReference?.byteSize === "number" &&
           Number.isFinite(sourceReference.byteSize)
         ? sourceReference.byteSize
-      : undefined;
+        : undefined;
   const mediaKind = normalizeString(part.kind);
 
   const mediaReference = buildMediaReference({
@@ -211,4 +233,41 @@ export function messageContentPartsFromAgentThreadItem(
     }
     return [];
   });
+}
+
+export function mediaReferenceContentPartFromThreadItem(
+  item: MediaItem,
+): ContentPart | null {
+  const uri = normalizeString(item.uri);
+  if (!uri || isInlineMediaUri(uri)) {
+    return null;
+  }
+
+  const mimeType = normalizeString(item.mime_type);
+  const title = mediaTitleFromUri(uri);
+  const sourcePath = isAbsoluteLocalPath(uri) ? uri : null;
+  const mediaKind = mediaKindFromMimeType(mimeType);
+  return {
+    type: "media_reference",
+    reference: buildMediaReference({
+      caption: normalizeString(item.preview),
+      title,
+      uri,
+      refId: null,
+      mimeType,
+      mediaKind,
+      sourceUri: null,
+      sourcePath,
+      previewUrl: null,
+      sha256: null,
+    }),
+    metadata: {
+      ...buildBaseMetadata(item, 0),
+      source: "agent_media_reference",
+      referenceUri: uri,
+      mediaKind,
+      ...(mimeType ? { mimeType } : {}),
+      ...(sourcePath ? { sourcePath } : {}),
+    },
+  };
 }

@@ -50,7 +50,21 @@ fn setup_data_source() -> LocalAppDataSource {
     .expect("insert workspace");
     LocalAppDataSource {
         db: Arc::new(Mutex::new(conn)),
-        logs: Arc::new(tokio::sync::RwLock::new(lime_core::logger::LogStore::new())),
+        plugin_data_root: std::env::temp_dir()
+            .join("app-server-local-data-source-test")
+            .join("plugins"),
+        session_files_root: std::env::temp_dir()
+            .join("app-server-local-data-source-test")
+            .join("artifacts")
+            .join("sessions"),
+        connect_registry_cache_path: std::env::temp_dir()
+            .join("app-server-local-data-source-test")
+            .join("cache")
+            .join("connect")
+            .join("registry.json"),
+        logs: Arc::new(tokio::sync::RwLock::new(
+            lime_core::logger::LogStore::in_memory(),
+        )),
         api_key_provider_service: ApiKeyProviderService::new(),
         model_registry_service: ModelRegistryService::new(Arc::new(Mutex::new(
             Connection::open_in_memory().expect("open model db"),
@@ -68,6 +82,41 @@ fn setup_data_source() -> LocalAppDataSource {
         )),
         sidecar_store: None,
     }
+}
+
+#[tokio::test]
+async fn diagnostics_use_injected_agent_log_root() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let agent_root = temp.path().join("app-server");
+    let mut data_source = setup_data_source();
+    data_source.logs = Arc::new(tokio::sync::RwLock::new(
+        lime_core::logger::LogStore::new(&agent_root).expect("log store"),
+    ));
+    data_source
+        .logs
+        .write()
+        .await
+        .add("info", "injected log root");
+
+    let diagnostics = data_source
+        .read_log_storage_diagnostics()
+        .await
+        .expect("log storage diagnostics");
+    let listed = data_source.list_logs().await.expect("list logs");
+    let expected = agent_root
+        .join("observability")
+        .join("log")
+        .join("lime.log");
+    let expected = expected.to_string_lossy().to_string();
+
+    assert_eq!(
+        diagnostics.current_log_path.as_deref(),
+        Some(expected.as_str())
+    );
+    assert_eq!(diagnostics.in_memory_log_count, 1);
+    assert_eq!(listed.entries.len(), 1);
+    assert_eq!(listed.entries[0].message, "injected log root");
+    assert!(!agent_root.join("logs").exists());
 }
 
 #[tokio::test]

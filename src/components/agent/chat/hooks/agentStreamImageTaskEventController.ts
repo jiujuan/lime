@@ -169,6 +169,7 @@ function buildImageTaskCreatedAssistantMessage(params: {
   assistantMsgId: string;
   preview: NonNullable<Message["imageWorkbenchPreview"]>;
   assistantIntro: string;
+  runtimeTurnId?: string | null;
 }): Message {
   const assistantIntro = params.assistantIntro.trim();
   return {
@@ -177,6 +178,7 @@ function buildImageTaskCreatedAssistantMessage(params: {
     content: assistantIntro,
     timestamp: new Date(),
     isThinking: true,
+    runtimeTurnId: params.runtimeTurnId || undefined,
     contentParts: assistantIntro
       ? [
           {
@@ -561,6 +563,10 @@ export function applyAgentStreamImageTaskCreatedEvent(params: {
       return {
         ...message,
         content: nextContent,
+        runtimeTurnId:
+          message.runtimeTurnId ||
+          readImageTaskCreatedTurnId(params.event) ||
+          undefined,
         contentParts:
           shouldFillLead && assistantIntro
             ? upsertImageTaskAssistantLeadTextPart({
@@ -612,6 +618,7 @@ export function applyAgentStreamImageTaskCreatedEvent(params: {
         assistantMsgId: params.assistantMsgId,
         preview: previewForNewMessage,
         assistantIntro,
+        runtimeTurnId: readImageTaskCreatedTurnId(params.event),
       }),
     ];
   });

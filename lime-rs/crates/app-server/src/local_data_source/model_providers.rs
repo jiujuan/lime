@@ -48,6 +48,7 @@ use lime_core::database::dao::api_key_provider::ApiKeyProvider;
 use lime_core::database::dao::api_key_provider::ApiProviderPromptCacheMode;
 use lime_core::database::dao::api_key_provider::ApiProviderType;
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
+use lime_core::database::dao::route_state::RouteStateDao;
 use lime_core::database::system_providers::get_system_providers;
 use lime_core::database::system_providers::SystemProviderDef;
 use lime_core::database::DbConnection;
@@ -60,6 +61,11 @@ use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
 use std::collections::HashSet;
+
+pub(crate) fn read_model_route_generation(db: &DbConnection) -> Result<u64, RuntimeCoreError> {
+    let conn = lime_core::database::lock_db(db).map_err(data_error)?;
+    RouteStateDao::read_generation(&conn).map_err(data_error)
+}
 
 pub(crate) async fn list_models(
     db: &DbConnection,

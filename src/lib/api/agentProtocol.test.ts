@@ -1,157 +1,116 @@
-import { describe, expect, it } from "vitest";
+import type { TurnStartParams } from "@limecloud/app-server-client";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { AgentUserInputOp } from "./agentProtocol";
 import {
   createAgentSessionTurnStartParamsFromUserInputOp,
   parseAgentEvent,
 } from "./agentProtocol";
 
+const applicationContextEntry = (value: string) => ({
+  kind: "application" as const,
+  value,
+});
+
 describe("agentProtocol", () => {
-  it("应将 AgentOp.user_input 投影为 App Server current turn params", () => {
+  it("应透传 typed TurnStartParams 并合入 renderer event identity", () => {
+    const turn = {
+      threadId: "thread-1",
+      model: "gpt-5.4",
+      effort: "high",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      cwd: "/repo/lime",
+      summary: "concise",
+      input: [
+        { type: "text", text: "继续处理这段对话" },
+        { type: "image", url: "data:image/png;base64,aGVsbG8=" },
+      ],
+      additionalContext: {
+        productSurface: applicationContextEntry("claw-chat"),
+      },
+    } satisfies TurnStartParams;
+
     expect(
       createAgentSessionTurnStartParamsFromUserInputOp({
         type: "user_input",
-        text: "继续处理这段对话",
-        sessionId: "session-1",
         eventName: "agent_stream_session-1",
-        workspaceId: "workspace-1",
-        turnId: "turn-1",
-        preferences: {
-          providerPreference: "openai",
-          modelPreference: "gpt-5.4",
-          thinking: true,
-          webSearch: false,
-          approvalPolicy: "on-request",
-          sandboxPolicy: "workspace-write",
-          executionStrategy: "react",
-          autoContinue: {
-            enabled: true,
-            fast_mode_enabled: false,
-            continuation_length: 3,
-            sensitivity: 0.6,
-          },
-        },
-        systemPrompt: "保持简洁",
-        metadata: {
-          harness: {
-            theme: "general",
-          },
-        },
-        queueIfBusy: true,
-        queuedTurnId: "queued-1",
-        skipPreSubmitResume: true,
+        turn,
       }),
     ).toEqual({
-      sessionId: "session-1",
-      turnId: "turn-1",
-      input: {
-        text: "继续处理这段对话",
+      ...turn,
+      additionalContext: {
+        ...turn.additionalContext,
+        rendererEventName: applicationContextEntry("agent_stream_session-1"),
       },
-      runtimeOptions: {
-        stream: true,
-        eventName: "agent_stream_session-1",
-        queuedTurnId: "queued-1",
-        runtimeRequest: {
-          providerPreference: "openai",
-          modelPreference: "gpt-5.4",
-          thinkingEnabled: true,
-          approvalPolicy: "on-request",
-          sandboxPolicy: "workspace-write",
-          workspaceId: "workspace-1",
-          executionStrategy: "react",
-          webSearch: false,
-          autoContinue: true,
-          systemPrompt: "保持简洁",
-          metadata: {
-            harness: {
-              theme: "general",
-            },
-          },
-        },
+    });
+  });
+
+  it("应使用当前 op eventName 覆盖 turn 内过期的 renderer identity", () => {
+    const turn = {
+      threadId: "thread-2",
+      input: [{ type: "text", text: "继续" }],
+      additionalContext: {
+        rendererEventName: applicationContextEntry("agent_stream_stale"),
+        selectedApp: applicationContextEntry("general"),
       },
-      queueIfBusy: true,
-      skipPreSubmitResume: true,
-    });
-  });
+    } satisfies TurnStartParams;
 
-  it("应透传显式联网搜索模式而不是从文本关键词推断", () => {
     expect(
       createAgentSessionTurnStartParamsFromUserInputOp({
         type: "user_input",
-        text: "请搜索最新 AI 新闻",
-        sessionId: "session-search",
-        eventName: "agent_stream_session-search",
-        preferences: {
-          webSearch: true,
-          searchMode: "required",
-        },
-      }).runtimeOptions?.runtimeRequest,
-    ).toMatchObject({
-      webSearch: true,
-      searchMode: "required",
-    });
-  });
-
-  it("应把模型推理强度写入 RuntimeRequest", () => {
-    expect(
-      createAgentSessionTurnStartParamsFromUserInputOp({
-        type: "user_input",
-        text: "继续",
-        sessionId: "session-reasoning",
-        eventName: "agent_stream_reasoning",
-        preferences: {
-          reasoningEffort: "high",
-        },
-      }).runtimeOptions?.runtimeRequest,
-    ).toMatchObject({
-      reasoningEffort: "high",
-    });
-  });
-
-  it("应把编排 provider config 透传到 RuntimeRequest", () => {
-    expect(
-      createAgentSessionTurnStartParamsFromUserInputOp({
-        type: "user_input",
-        text: "@Nanobanana Pro 生成一张广州塔春天照片",
-        sessionId: "session-image-1",
-        eventName: "agent_stream_image",
-        preferences: {
-          providerConfig: {
-            provider_id: "deepseek",
-            provider_name: "deepseek",
-            model_name: "deepseek-v4-pro",
-          },
-        },
-      }).runtimeOptions?.runtimeRequest?.providerConfig,
+        eventName: "agent_stream_thread-2",
+        turn,
+      }).additionalContext,
     ).toEqual({
-      providerId: "deepseek",
-      providerName: "deepseek",
-      modelName: "deepseek-v4-pro",
+      selectedApp: applicationContextEntry("general"),
+      rendererEventName: applicationContextEntry("agent_stream_thread-2"),
     });
   });
 
-  it("缺少 workspaceId 时不应生成 runtime workspaceId", () => {
-    expect(
-      createAgentSessionTurnStartParamsFromUserInputOp({
-        type: "user_input",
-        text: "继续处理这段对话",
-        sessionId: "session-1",
-        eventName: "agent_stream_session-1",
-        preferences: {
-          webSearch: true,
-        },
-      }),
-    ).toEqual({
-      sessionId: "session-1",
-      input: {
-        text: "继续处理这段对话",
-      },
-      runtimeOptions: {
-        stream: true,
-        eventName: "agent_stream_session-1",
-        runtimeRequest: {
-          webSearch: true,
-        },
-      },
-    });
+  it("user_input op 与 typed turn 不应重新暴露已删除 submit 字段", () => {
+    type DeadUserInputField =
+      | "text"
+      | "sessionId"
+      | "threadId"
+      | "workspaceId"
+      | "turnId"
+      | "images"
+      | "preferences"
+      | "providerConfig"
+      | "providerPreference"
+      | "webSearch"
+      | "searchMode"
+      | "thinking"
+      | "executionStrategy"
+      | "autoContinue"
+      | "systemPrompt"
+      | "metadata"
+      | "queueIfBusy"
+      | "queuedTurnId"
+      | "skipPreSubmitResume";
+    type DeadTurnField =
+      | "runtimeOptions"
+      | "runtimeRequest"
+      | "providerConfig"
+      | "providerPreference"
+      | "webSearch"
+      | "searchMode"
+      | "queueIfBusy"
+      | "queuedTurnId"
+      | "skipPreSubmitResume"
+      | "systemPrompt";
+
+    expectTypeOf<AgentUserInputOp>().toEqualTypeOf<{
+      type: "user_input";
+      eventName: string;
+      turn: TurnStartParams;
+    }>();
+    expectTypeOf<
+      Extract<keyof AgentUserInputOp, DeadUserInputField>
+    >().toEqualTypeOf<never>();
+    expectTypeOf<
+      Extract<keyof AgentUserInputOp["turn"], DeadTurnField>
+    >().toEqualTypeOf<never>();
   });
 
   it("应沿用现有流式解析逻辑解析 AgentEvent", () => {
@@ -723,7 +682,7 @@ describe("agentProtocol", () => {
             key: "team.selection",
             repo_scope: "/repo/lime",
             updated_at: 1710000000,
-              source: "context",
+            source: "context",
           },
         ],
       },
@@ -1817,33 +1776,12 @@ describe("agentProtocol", () => {
     });
   });
 
-  it("应解析队列事件", () => {
-    expect(
-      parseAgentEvent({
-        type: "queue_added",
-        session_id: "session-1",
-        queued_turn: {
-          queued_turn_id: "queued-1",
-          message_preview: "继续写完提案",
-          message_text: "继续写完提案，补齐目录结构并输出一版正式稿",
-          created_at: 1700000000000,
-          image_count: 1,
-          position: 1,
-        },
-      }),
-    ).toEqual({
-      type: "queue_added",
-      session_id: "session-1",
-      queued_turn: {
-        queued_turn_id: "queued-1",
-        message_preview: "继续写完提案",
-        message_text: "继续写完提案，补齐目录结构并输出一版正式稿",
-        created_at: 1700000000000,
-        image_count: 1,
-        position: 1,
-      },
-    });
-  });
+  it.each(["queue_added", "queue_removed", "queue_started", "queue_cleared"])(
+    "应拒绝已退役的 raw user-turn queue 事件 %s",
+    (type) => {
+      expect(parseAgentEvent({ type, session_id: "session-1" })).toBeNull();
+    },
+  );
 
   it("应保留 context_compaction item 类型", () => {
     expect(
@@ -1877,34 +1815,6 @@ describe("agentProtocol", () => {
         stage: "started",
         trigger: "manual",
         detail: "Compacting session history",
-      },
-    });
-  });
-
-  it("应兼容 camelCase 的队列快照字段", () => {
-    expect(
-      parseAgentEvent({
-        type: "queue_added",
-        session_id: "session-2",
-        queued_turn: {
-          queuedTurnId: "queued-2",
-          messagePreview: "整理采访提纲",
-          messageText: "整理采访提纲，并补上关键追问问题",
-          createdAt: 1700000000001,
-          imageCount: 2,
-          position: 3,
-        },
-      }),
-    ).toEqual({
-      type: "queue_added",
-      session_id: "session-2",
-      queued_turn: {
-        queued_turn_id: "queued-2",
-        message_preview: "整理采访提纲",
-        message_text: "整理采访提纲，并补上关键追问问题",
-        created_at: 1700000000001,
-        image_count: 2,
-        position: 3,
       },
     });
   });

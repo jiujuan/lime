@@ -318,10 +318,6 @@ function resolveRefreshRequestForTurnEventPayload(
     case "action_required":
     case "action_resolved":
     case "artifact_snapshot":
-    case "queue_added":
-    case "queue_cleared":
-    case "queue_removed":
-    case "queue_started":
     case "runtime_status":
     case "warning":
       return RUNTIME_SYNC_REFRESH_REQUESTS.event;

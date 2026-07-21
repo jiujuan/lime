@@ -257,6 +257,7 @@ function createRuntimeAdapterFixture(): AgentRuntimeAdapter {
     getSession: (sessionId, options) =>
       mockGetAgentRuntimeSession(sessionId, options),
     getSessionReadModel: async () => null,
+    getThreadTurnControl: unsupported,
     replayRequest: async () => null,
     renameSession: async (sessionId, title) => {
       await mockUpdateAgentRuntimeSession({
@@ -299,11 +300,10 @@ function createRuntimeAdapterFixture(): AgentRuntimeAdapter {
     },
     generateSessionTitle: async () => "",
     submitOp: unsupported,
+    steerTurn: unsupported,
     compactSession: unsupported,
     interruptTurn: async () => false,
     resumeThread: async () => false,
-    promoteQueuedTurn: async () => false,
-    removeQueuedTurn: async () => false,
     respondToAction: unsupported,
     listenToTurnEvents: (eventName, handler) =>
       mockSafeListen(eventName, handler),

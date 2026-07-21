@@ -185,12 +185,15 @@ impl RequestUserInputQuestion {
 #[serde(rename_all = "camelCase")]
 pub struct RequestUserInputRequest {
     pub questions: Vec<RequestUserInputQuestion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_resolution_ms: Option<u64>,
 }
 
 impl RequestUserInputRequest {
     pub fn from_legacy(question: impl Into<String>, options: Vec<RequestUserInputOption>) -> Self {
         Self {
             questions: vec![RequestUserInputQuestion::with_options(question, options)],
+            auto_resolution_ms: None,
         }
     }
 
@@ -492,7 +495,6 @@ pub fn parse_request_user_input_tool_input(
         ))
     })?;
 
-    let _auto_resolution_ms = input.auto_resolution_ms;
     let questions = input.questions.ok_or_else(|| {
         RequestUserInputSurfaceError::invalid_params("Missing required parameter: questions")
     })?;
@@ -501,6 +503,7 @@ pub fn parse_request_user_input_tool_input(
             .into_iter()
             .map(RequestUserInputQuestion::try_from)
             .collect::<Result<Vec<_>, _>>()?,
+        auto_resolution_ms: input.auto_resolution_ms,
     };
 
     request.validate_current_surface()?;

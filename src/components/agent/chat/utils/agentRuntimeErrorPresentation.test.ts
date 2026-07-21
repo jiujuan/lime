@@ -161,7 +161,7 @@ describe("agentRuntimeErrorPresentation", () => {
 
     expect(
       resolveAgentRuntimeErrorPresentation(
-        "agentSession/turn/start failed: App Server runtime backend requires provider/model selection.",
+        "turn/start failed: App Server runtime backend requires provider/model selection.",
       ),
     ).toEqual({
       displayMessage:

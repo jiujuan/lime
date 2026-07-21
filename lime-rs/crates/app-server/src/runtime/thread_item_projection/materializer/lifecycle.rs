@@ -5,7 +5,10 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::{Map, Value};
 
 pub(super) fn item_status(event_type: &str, payload: &Value) -> ItemStatus {
-    if event_type == "message.created" || event_type == "plan.final" {
+    if matches!(
+        event_type,
+        "message.created" | "plan.final" | "artifact.snapshot"
+    ) {
         return ItemStatus::Completed;
     }
     if let Some(status) = value_string(payload, &["status", "state"]) {
@@ -23,6 +26,7 @@ pub(super) fn item_status(event_type: &str, payload: &Value) -> ItemStatus {
         || event_type.ends_with("result")
         || event_type.ends_with("exited")
         || event_type.ends_with("applied")
+        || event_type.ends_with("declined")
         || event_type.ends_with("resolved")
     {
         ItemStatus::Completed

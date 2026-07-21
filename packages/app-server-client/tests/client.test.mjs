@@ -45,10 +45,12 @@ const {
   AppServerRequestAbortedError,
   AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
+  agentSessionEventNotification,
   agentSessionMediaReadEventNotification,
   createAgentRuntimeClient,
   getAppServerRequestSerializationScope,
   isAppServerServerRequestMethod,
+  isAgentSessionEventNotification,
   METHOD_PLUGIN_INSTALLED_DISABLED_SET,
   METHOD_PLUGIN_INSTALLED_LIST,
   METHOD_PLUGIN_INSTALLED_SAVE,
@@ -64,7 +66,6 @@ const {
   METHOD_PLUGIN_UI_RUNTIME_STOP,
   METHOD_AGENT_SESSION_ACTION_REPLAY,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
-  METHOD_AGENT_SESSION_ARCHIVE_MANY,
   METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
   METHOD_AGENT_SESSION_COMPACT,
   METHOD_AGENT_SESSION_DELETE,
@@ -74,7 +75,6 @@ const {
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE,
   METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
-  METHOD_AGENT_SESSION_LIST,
   METHOD_AGENT_SESSION_MEDIA_READ,
   METHOD_CANCEL_REQUEST,
   METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
@@ -89,16 +89,19 @@ const {
   METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
   METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
-  METHOD_AGENT_SESSION_START,
-  METHOD_AGENT_SESSION_THREAD_RESUME,
+  METHOD_THREAD_START,
+  METHOD_THREAD_RESUME,
   METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
-  METHOD_AGENT_SESSION_TURN_CANCEL,
-  METHOD_AGENT_SESSION_TURN_START,
+  METHOD_TURN_INTERRUPT,
+  METHOD_TURN_STEER,
+  METHOD_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
   METHOD_THREAD_ITEMS_LIST,
+  METHOD_THREAD_ARCHIVE,
   METHOD_THREAD_LIST,
   METHOD_THREAD_READ,
   METHOD_THREAD_TURNS_LIST,
+  METHOD_THREAD_UNARCHIVE,
   METHOD_WORKFLOW_CANCEL,
   METHOD_WORKFLOW_READ,
   METHOD_WORKFLOW_RESPOND,
@@ -347,10 +350,8 @@ const {
   assertCompatibleProtocolSchemaManifest,
   assertSha256,
   assertSidecarFileSha256,
-  agentSessionRuntimeEventNotification,
-  agentSessionEventNotification,
+  agentRuntimeLifecycleNotification,
   agentSessionTurnStartRequest,
-  canonicalThreadEventNotification,
   connectAppServerSidecar,
   decodeMessage,
   defaultReleaseManifestPath,
@@ -361,7 +362,6 @@ const {
   platformKey,
   isAppServerNotificationMethod,
   isAppServerRequestMethod,
-  isAgentSessionEventNotification,
   isAgentSessionTurnStartRequest,
   isWorkspaceRightSurfacePendingChangedNotification,
   readReleaseManifest,
@@ -394,7 +394,7 @@ const repoRoot = join(
 );
 const SIDECAR_TEST_TIMEOUT_MS = 5_000;
 
-test("builds initialize and caller supplied session start requests", () => {
+test("builds initialize and caller supplied thread start requests", () => {
   const client = new AppServerClient();
 
   const initialize = client.initialize({
@@ -402,12 +402,17 @@ test("builds initialize and caller supplied session start requests", () => {
       name: "content_studio",
       version: "0.1.0",
     },
+    capabilities: {
+      optOutNotificationMethods: ["item/agentMessage/delta"],
+    },
   });
   const start = client.startSession({
-    sessionId: "sess_external",
-    threadId: "thread_external",
-    appId: "content-studio",
-    workspaceId: "default",
+    cwd: "/workspace",
+    modelProvider: "openai-compatible",
+    model: "gpt-5.4",
+    serviceName: "content-studio",
+    threadSource: "appServer",
+    historyMode: "paginated",
   });
   const workflow = client.readWorkflow({
     sessionId: "sess_external",
@@ -438,9 +443,19 @@ test("builds initialize and caller supplied session start requests", () => {
 
   assert.equal(initialize.id, 1);
   assert.equal(initialize.method, METHOD_INITIALIZE);
+  assert.deepEqual(initialize.params.capabilities.optOutNotificationMethods, [
+    "item/agentMessage/delta",
+  ]);
   assert.equal(start.id, 2);
-  assert.equal(start.method, METHOD_AGENT_SESSION_START);
-  assert.equal(start.params.sessionId, "sess_external");
+  assert.equal(start.method, METHOD_THREAD_START);
+  assert.deepEqual(start.params, {
+    cwd: "/workspace",
+    modelProvider: "openai-compatible",
+    model: "gpt-5.4",
+    serviceName: "content-studio",
+    threadSource: "appServer",
+    historyMode: "paginated",
+  });
   assert.equal(workflow.id, 3);
   assert.equal(workflow.method, METHOD_WORKFLOW_READ);
   assert.equal(mediaRead.id, 7);
@@ -497,16 +512,12 @@ test("builds workspace and skill read requests with current methods", () => {
   const updateSession = client.updateSession({
     sessionId: "session-main",
     title: "重命名后的会话",
-    archived: true,
     providerSelector: "custom-provider",
     providerName: "OpenAI Compatible",
     modelName: "gpt-5.4",
     executionStrategy: "react",
     recentAccessMode: "full-access",
     recentPreferences: { task: true, subagent: false },
-  });
-  const archiveManySessions = client.archiveManySessions({
-    sessionIds: ["session-main", "session-second"],
   });
   const deleteSession = client.deleteSession({
     sessionId: "session-main",
@@ -610,7 +621,7 @@ test("builds workspace and skill read requests with current methods", () => {
     workspaceRoot: "/workspace/project",
   });
 
-  assert.equal(sessions.method, METHOD_AGENT_SESSION_LIST);
+  assert.equal(sessions.method, METHOD_THREAD_LIST);
   assert.deepEqual(sessions.params, {
     includeArchived: true,
     workspaceId: "workspace-main",
@@ -620,17 +631,12 @@ test("builds workspace and skill read requests with current methods", () => {
   assert.deepEqual(updateSession.params, {
     sessionId: "session-main",
     title: "重命名后的会话",
-    archived: true,
     providerSelector: "custom-provider",
     providerName: "OpenAI Compatible",
     modelName: "gpt-5.4",
     executionStrategy: "react",
     recentAccessMode: "full-access",
     recentPreferences: { task: true, subagent: false },
-  });
-  assert.equal(archiveManySessions.method, METHOD_AGENT_SESSION_ARCHIVE_MANY);
-  assert.deepEqual(archiveManySessions.params, {
-    sessionIds: ["session-main", "session-second"],
   });
   assert.equal(deleteSession.method, METHOD_AGENT_SESSION_DELETE);
   assert.deepEqual(deleteSession.params, {
@@ -816,24 +822,29 @@ test("builds canonical thread read requests with opaque cursors and views", () =
 test("builds session archive and unarchive requests with current App Server methods", () => {
   const client = new AppServerClient();
 
-  const archivedSessions = client.listSessions({
-    archivedOnly: true,
+  const archivedThreads = client.listThreads({
+    archived: true,
     limit: 9,
   });
-  const unarchiveSession = client.updateSession({
-    sessionId: "session-main",
-    archived: false,
+  const archiveThread = client.archiveThread({
+    threadId: "thread-main",
+  });
+  const unarchiveThread = client.unarchiveThread({
+    threadId: "thread-main",
   });
 
-  assert.equal(archivedSessions.method, METHOD_AGENT_SESSION_LIST);
-  assert.deepEqual(archivedSessions.params, {
-    archivedOnly: true,
+  assert.equal(archivedThreads.method, METHOD_THREAD_LIST);
+  assert.deepEqual(archivedThreads.params, {
+    archived: true,
     limit: 9,
   });
-  assert.equal(unarchiveSession.method, METHOD_AGENT_SESSION_UPDATE);
-  assert.deepEqual(unarchiveSession.params, {
-    sessionId: "session-main",
-    archived: false,
+  assert.equal(archiveThread.method, METHOD_THREAD_ARCHIVE);
+  assert.deepEqual(archiveThread.params, {
+    threadId: "thread-main",
+  });
+  assert.equal(unarchiveThread.method, METHOD_THREAD_UNARCHIVE);
+  assert.deepEqual(unarchiveThread.params, {
+    threadId: "thread-main",
   });
   assert.equal(
     APP_SERVER_METHODS.some(
@@ -850,17 +861,13 @@ test("builds agent session file checkpoint requests with current App Server meth
     sessionId: "sess_1",
     eventName: "agentSession/event/sess_1",
   });
-  const resume = client.resumeAgentSessionThread({
-    sessionId: "sess_1",
-    resumeContract: {
-      schemaVersion: "lime-runtime-resume-contract/v0.1",
-      runtimeId: "app-server",
-      sessionId: "sess_1",
-      turnId: "thread",
-      resumeMode: "all-open-actions",
-      openActionIds: [],
-      decisions: [],
-      createdAt: "2026-06-12T00:00:00.000Z",
+  const resume = client.resumeThread({
+    threadId: "thread_1",
+    excludeTurns: true,
+    initialTurnsPage: {
+      limit: 25,
+      sortDirection: "desc",
+      itemsView: "summary",
     },
   });
   const remove = client.removeAgentSessionQueuedTurn({
@@ -879,18 +886,14 @@ test("builds agent session file checkpoint requests with current App Server meth
     eventName: "agentSession/event/sess_1",
   });
   assert.equal(resume.id, 2);
-  assert.equal(resume.method, METHOD_AGENT_SESSION_THREAD_RESUME);
+  assert.equal(resume.method, METHOD_THREAD_RESUME);
   assert.deepEqual(resume.params, {
-    sessionId: "sess_1",
-    resumeContract: {
-      schemaVersion: "lime-runtime-resume-contract/v0.1",
-      runtimeId: "app-server",
-      sessionId: "sess_1",
-      turnId: "thread",
-      resumeMode: "all-open-actions",
-      openActionIds: [],
-      decisions: [],
-      createdAt: "2026-06-12T00:00:00.000Z",
+    threadId: "thread_1",
+    excludeTurns: true,
+    initialTurnsPage: {
+      limit: 25,
+      sortDirection: "desc",
+      itemsView: "summary",
     },
   });
   assert.equal(remove.id, 3);
@@ -1433,6 +1436,7 @@ test("builds app data surface requests with current methods", () => {
   });
   const testedVoiceModelFile = client.testTranscribeVoiceModelFile({
     model_id: "sensevoice-small-int8-2024-07-17",
+    install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
     file_path: "/tmp/interview.wav",
   });
   const transcribedVoiceAudio = client.transcribeVoiceAudio({
@@ -1987,6 +1991,7 @@ test("builds app data surface requests with current methods", () => {
   );
   assert.deepEqual(testedVoiceModelFile.params, {
     model_id: "sensevoice-small-int8-2024-07-17",
+    install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
     file_path: "/tmp/interview.wav",
   });
   assert.equal(
@@ -2504,7 +2509,7 @@ test("exports app-server method catalog from checked-in Rust manifest", () => {
   );
   assert.equal(isAppServerRequestMethod(METHOD_INITIALIZE), true);
   assert.equal(isAppServerRequestMethod(METHOD_ARTIFACT_READ), true);
-  assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START), true);
+  assert.equal(isAppServerRequestMethod(METHOD_TURN_START), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED),
     false,
@@ -2512,10 +2517,7 @@ test("exports app-server method catalog from checked-in Rust manifest", () => {
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_EVENT), false);
   assert.equal(isAppServerNotificationMethod(METHOD_INITIALIZED), true);
   assert.equal(isAppServerNotificationMethod(METHOD_AGENT_SESSION_EVENT), true);
-  assert.equal(
-    isAppServerNotificationMethod(METHOD_AGENT_SESSION_START),
-    false,
-  );
+  assert.equal(isAppServerNotificationMethod(METHOD_THREAD_START), false);
   assert.equal(
     isAppServerServerRequestMethod(METHOD_MCP_SERVER_ELICITATION_REQUEST),
     true,
@@ -2529,7 +2531,7 @@ test("exports app-server method catalog from checked-in Rust manifest", () => {
     false,
   );
   assert.equal(
-    getAppServerRequestSerializationScope(METHOD_AGENT_SESSION_TURN_START),
+    getAppServerRequestSerializationScope(METHOD_TURN_START),
     "thread",
   );
   assert.equal(
@@ -2652,31 +2654,28 @@ test("builds action respond requests for host action resolution", () => {
   });
 });
 
-test("builds turn start requests with runtime queue flags", () => {
+test("builds typed v2 turn start requests", () => {
   const client = new AppServerClient();
 
   const turn = client.startTurn({
-    sessionId: "sess_external",
-    turnId: "turn_external",
-    input: {
-      text: "draft",
-    },
-    runtimeOptions: {
-      capabilityId: "draft.write",
-      stream: true,
-    },
-    queueIfBusy: true,
-    skipPreSubmitResume: true,
+    threadId: "thread_external",
+    clientUserMessageId: "msg-start-1",
+    input: [{ type: "text", text: "draft" }],
+    model: "gpt-5-codex",
+    cwd: "/tmp/project",
   });
 
   assert.equal(turn.id, 1);
-  assert.equal(turn.method, METHOD_AGENT_SESSION_TURN_START);
-  assert.equal(turn.params.turnId, "turn_external");
-  assert.equal(turn.params.queueIfBusy, true);
-  assert.equal(turn.params.skipPreSubmitResume, true);
-  assert.equal(turn.params.runtimeOptions.capabilityId, "draft.write");
+  assert.equal(turn.method, METHOD_TURN_START);
+  assert.equal(turn.params.threadId, "thread_external");
+  assert.equal(turn.params.clientUserMessageId, "msg-start-1");
+  assert.deepEqual(turn.params.input, [{ type: "text", text: "draft" }]);
+  assert.equal(turn.params.model, "gpt-5-codex");
   assert.equal(isAgentSessionTurnStartRequest(turn), true);
-  assert.equal(agentSessionTurnStartRequest(turn)?.params.input.text, "draft");
+  assert.equal(
+    agentSessionTurnStartRequest(turn)?.params.input[0].text,
+    "draft",
+  );
   assert.equal(
     agentSessionTurnStartRequest({
       id: 2,
@@ -2685,6 +2684,37 @@ test("builds turn start requests with runtime queue flags", () => {
     }),
     undefined,
   );
+});
+
+test("builds typed v2 turn steer requests", async () => {
+  const client = new AppServerClient();
+  const request = client.steerTurn({
+    threadId: "thread_external",
+    expectedTurnId: "turn_external",
+    clientUserMessageId: "msg-steer-1",
+    input: [{ type: "text", text: "补充约束" }],
+  });
+
+  assert.equal(request.method, METHOD_TURN_STEER);
+  assert.deepEqual(request.params, {
+    threadId: "thread_external",
+    expectedTurnId: "turn_external",
+    clientUserMessageId: "msg-steer-1",
+    input: [{ type: "text", text: "补充约束" }],
+  });
+
+  const sent = [];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      return { id: 1, result: { turnId: "turn_external" } };
+    },
+  });
+  const result = await connection.steerTurn(request.params);
+  assert.equal(sent[0].method, METHOD_TURN_STEER);
+  assert.equal(result.result.turnId, "turn_external");
 });
 
 test("connection wraps request response flow and keeps async notifications", async () => {
@@ -2709,10 +2739,8 @@ test("connection wraps request response flow and keeps async notifications", asy
       id: 1,
       result: {
         turn: {
-          turnId: "turn-1",
-          sessionId: "sess_external",
-          threadId: "thread_external",
-          status: "accepted",
+          id: "turn-1",
+          status: "inProgress",
         },
       },
     },
@@ -2731,16 +2759,14 @@ test("connection wraps request response flow and keeps async notifications", asy
   });
 
   const result = await connection.startTurn({
-    sessionId: "sess_external",
-    input: {
-      text: "draft",
-    },
-    queueIfBusy: true,
+    threadId: "thread_external",
+    input: [{ type: "text", text: "draft" }],
   });
 
-  assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
-  assert.equal(sent[0].params.queueIfBusy, true);
-  assert.equal(result.result.turn.turnId, "turn-1");
+  assert.equal(sent[0].method, METHOD_TURN_START);
+  assert.equal(sent[0].params.threadId, "thread_external");
+  assert.deepEqual(sent[0].params.input, [{ type: "text", text: "draft" }]);
+  assert.equal(result.result.turn.id, "turn-1");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].method, METHOD_AGENT_SESSION_EVENT);
   assert.equal(result.notifications[0].params.event.payload.text, "delta");
@@ -2790,11 +2816,8 @@ test("connection yields transport reads while one request is still pending", asy
   void connection
     .startTurn(
       {
-        sessionId: "sess_external",
-        input: {
-          text: "draft",
-        },
-        queueIfBusy: true,
+        threadId: "thread_external",
+        input: [{ type: "text", text: "draft" }],
       },
       { timeoutMs: 1_000 },
     )
@@ -2803,8 +2826,8 @@ test("connection yields transport reads while one request is still pending", asy
 
   const result = await connection.listSessions({}, { timeoutMs: 100 });
 
-  assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
-  assert.equal(sent[1].method, METHOD_AGENT_SESSION_LIST);
+  assert.equal(sent[0].method, METHOD_TURN_START);
+  assert.equal(sent[1].method, METHOD_THREAD_LIST);
   assert.equal(result.id, 2);
   assert.equal(result.result.sessions[0].sessionId, "sess_external");
 });
@@ -2830,10 +2853,8 @@ test("connection detaches streaming request after first notification and drops i
       id: 1,
       result: {
         turn: {
-          turnId: "turn_external",
-          sessionId: "sess_external",
-          threadId: "thread_external",
-          status: "accepted",
+          id: "turn_external",
+          status: "inProgress",
         },
       },
     },
@@ -2867,24 +2888,20 @@ test("connection detaches streaming request after first notification and drops i
   });
 
   const turnRequest = connection.client.startTurn({
-    sessionId: "sess_external",
-    turnId: "turn_external",
-    input: {
-      text: "draft",
-    },
-    queueIfBusy: true,
+    threadId: "thread_external",
+    input: [{ type: "text", text: "draft" }],
   });
   const start = await connection.requestUntilFirstNotificationOrResponse(
     turnRequest,
-    METHOD_AGENT_SESSION_TURN_START,
+    METHOD_TURN_START,
     { timeoutMs: 100 },
   );
   const list = await connection.listSessions({}, { timeoutMs: 100 });
 
   assert.equal(start.completed, false);
   assert.equal(start.notifications.length, 1);
-  assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
-  assert.equal(sent[1].method, METHOD_AGENT_SESSION_LIST);
+  assert.equal(sent[0].method, METHOD_TURN_START);
+  assert.equal(sent[1].method, METHOD_THREAD_LIST);
   assert.equal(list.id, 2);
   assert.equal(list.result.sessions[0].sessionId, "sess_external");
 });
@@ -3026,7 +3043,7 @@ test("connection can consume streamed media read chunk notifications", async () 
       .media.sha256,
     "sha256:demo",
   );
-  assert.equal(sent[1].method, METHOD_AGENT_SESSION_LIST);
+  assert.equal(sent[1].method, METHOD_THREAD_LIST);
   assert.equal(list.id, 2);
   assert.equal(list.result.sessions[0].sessionId, "sess_external");
 });
@@ -3063,7 +3080,7 @@ test("ordinary request timeout is not extended forever by streaming notification
     /timed out waiting for app-server message after 100ms/,
   );
 
-  assert.equal(sent[0].method, METHOD_AGENT_SESSION_LIST);
+  assert.equal(sent[0].method, METHOD_THREAD_LIST);
   assert.ok(sequence > 0);
 });
 
@@ -3105,7 +3122,7 @@ test("connection rejects already aborted requests before transport send", async 
     () => connection.listSessions({}, { signal: controller.signal }),
     (error) => {
       assert.equal(error instanceof AppServerRequestAbortedError, true);
-      assert.equal(error.method, METHOD_AGENT_SESSION_LIST);
+      assert.equal(error.method, METHOD_THREAD_LIST);
       assert.equal(error.id, 1);
       assert.equal(error.reason, "superseded");
       return true;
@@ -3141,7 +3158,7 @@ test("connection abort detaches pending request and drops its late response", as
 
   await assert.rejects(aborted, (error) => {
     assert.equal(error instanceof AppServerRequestAbortedError, true);
-    assert.equal(error.method, METHOD_AGENT_SESSION_LIST);
+    assert.equal(error.method, METHOD_THREAD_LIST);
     assert.equal(error.id, 1);
     assert.equal(error.reason, "preview superseded");
     return true;
@@ -3173,11 +3190,7 @@ test("connection abort detaches pending request and drops its late response", as
 
   assert.deepEqual(
     sent.map((message) => message.method),
-    [
-      METHOD_AGENT_SESSION_LIST,
-      METHOD_CANCEL_REQUEST,
-      METHOD_AGENT_SESSION_LIST,
-    ],
+    [METHOD_THREAD_LIST, METHOD_CANCEL_REQUEST, METHOD_THREAD_LIST],
   );
   assert.deepEqual(sent[1].params, { id: 1 });
   assert.equal(result.id, 2);
@@ -3216,10 +3229,8 @@ test("agent runtime client facade delegates to current App Server methods", asyn
       id: 1,
       result: {
         turn: {
-          turnId: "turn-1",
-          sessionId: "sess_external",
-          threadId: "thread_external",
-          status: "accepted",
+          id: "turn-1",
+          status: "inProgress",
         },
       },
     },
@@ -3240,7 +3251,9 @@ test("agent runtime client facade delegates to current App Server methods", asyn
     },
     {
       id: 3,
-      result: {},
+      result: {
+        turnId: "turn-1",
+      },
     },
     {
       id: 4,
@@ -3248,6 +3261,10 @@ test("agent runtime client facade delegates to current App Server methods", asyn
     },
     {
       id: 5,
+      result: {},
+    },
+    {
+      id: 6,
       result: {
         session: {
           sessionId: "sess_external",
@@ -3279,12 +3296,17 @@ test("agent runtime client facade delegates to current App Server methods", asyn
   const runtime = createAgentRuntimeClient(connection);
 
   const start = await runtime.startTurn({
-    sessionId: "sess_external",
-    input: { text: "写草稿" },
+    threadId: "thread_external",
+    input: [{ type: "text", text: "写草稿" }],
   });
   const read = await runtime.readThread({
     threadId: "thread_external",
     turnsView: "full",
+  });
+  const steer = await runtime.steerTurn({
+    threadId: "thread_external",
+    expectedTurnId: "turn-1",
+    input: [{ type: "text", text: "补充约束" }],
   });
   await runtime.respondAction({
     sessionId: "sess_external",
@@ -3294,7 +3316,7 @@ test("agent runtime client facade delegates to current App Server methods", asyn
     response: "继续",
   });
   await runtime.cancelTurn({
-    sessionId: "sess_external",
+    threadId: "thread_external",
     turnId: "turn-1",
   });
   const evidence = await runtime.exportEvidence({
@@ -3305,30 +3327,30 @@ test("agent runtime client facade delegates to current App Server methods", asyn
   assert.deepEqual(
     sent.map((message) => message.method),
     [
-      METHOD_AGENT_SESSION_TURN_START,
+      METHOD_TURN_START,
       METHOD_THREAD_READ,
+      METHOD_TURN_STEER,
       METHOD_AGENT_SESSION_ACTION_RESPOND,
-      METHOD_AGENT_SESSION_TURN_CANCEL,
+      METHOD_TURN_INTERRUPT,
       METHOD_EVIDENCE_EXPORT,
     ],
   );
-  assert.equal(start.result.turn.turnId, "turn-1");
+  assert.equal(start.result.turn.id, "turn-1");
   assert.equal(read.result.thread.sessionId, "sess_external");
+  assert.equal(steer.result.turnId, "turn-1");
   assert.equal(evidence.result.exportedAt, "2026-06-04T00:00:03Z");
 });
 
-test("agent runtime client facade subscribes to agent session event notifications", async () => {
+test("agent runtime client facade subscribes to direct lifecycle notifications", async () => {
   const notification = {
-    method: METHOD_AGENT_SESSION_EVENT,
+    method: "turn/started",
     params: {
-      event: {
-        eventId: "evt-1",
-        sequence: 1,
-        sessionId: "sess_external",
-        turnId: "turn-1",
-        type: "message.delta",
-        timestamp: "2026-06-04T00:00:00Z",
-        payload: { text: "delta" },
+      threadId: "thread_external",
+      turn: {
+        id: "turn-1",
+        items: [],
+        status: "inProgress",
+        startedAt: 1780531200,
       },
     },
   };
@@ -3341,7 +3363,7 @@ test("agent runtime client facade subscribes to agent session event notification
     }),
   );
   const received = [];
-  const subscription = runtime.subscribeEvents((event, message) => {
+  const subscription = runtime.subscribeLifecycleEvents((event, message) => {
     received.push({ event, message });
   });
 
@@ -3351,44 +3373,23 @@ test("agent runtime client facade subscribes to agent session event notification
   await runtime.dispatchEvent(notification);
 
   assert.equal(dispatched, true);
-  assert.equal(next.params.event.payload.text, "delta");
+  assert.equal(next.method, "turn/started");
   assert.equal(received.length, 2);
-  assert.equal(received[0].event.eventId, "evt-1");
-  assert.equal(received[0].message.method, METHOD_AGENT_SESSION_EVENT);
+  assert.equal(received[0].event.params.turn.id, "turn-1");
+  assert.equal(received[0].message.method, "turn/started");
 });
 
-test("agent runtime client facade subscribes to canonical thread item events", async () => {
+test("agent runtime client facade subscribes to direct item lifecycle", async () => {
   const notification = {
-    method: METHOD_AGENT_SESSION_EVENT,
+    method: "item/started",
     params: {
-      event: {
-        eventId: "evt-1",
-        sequence: 1,
-        sessionId: "sess_external",
-        threadId: "thread_external",
-        turnId: "turn_external",
-        type: "item.updated",
-        timestamp: "2026-06-04T00:00:00Z",
-        payload: {},
-      },
-      canonicalEvent: {
-        method: "item/updated",
-        params: {
-          sessionId: "sess_external",
-          threadId: "thread_external",
-          turnId: "turn_external",
-          itemId: "msg_1",
-          sequence: 1,
-          ordinal: 0,
-          createdAtMs: 100,
-          updatedAtMs: 120,
-          kind: "agentMessage",
-          status: "inProgress",
-          payload: {
-            type: "agentMessage",
-            text: "delta",
-          },
-        },
+      threadId: "thread_external",
+      turnId: "turn_external",
+      startedAtMs: 100,
+      item: {
+        id: "msg_1",
+        type: "agentMessage",
+        text: "delta",
       },
     },
   };
@@ -3401,7 +3402,7 @@ test("agent runtime client facade subscribes to canonical thread item events", a
     }),
   );
   const received = [];
-  const subscription = runtime.subscribeCanonicalEvents((event, message) => {
+  const subscription = runtime.subscribeLifecycleEvents((event, message) => {
     received.push({ event, message });
   });
 
@@ -3410,9 +3411,44 @@ test("agent runtime client facade subscribes to canonical thread item events", a
   await runtime.dispatchEvent(notification);
 
   assert.equal(received.length, 1);
-  assert.equal(received[0].event.method, "item/updated");
-  assert.equal(received[0].event.params.itemId, "msg_1");
-  assert.equal(received[0].message.method, METHOD_AGENT_SESSION_EVENT);
+  assert.equal(received[0].event.method, "item/started");
+  assert.equal(received[0].event.params.item.id, "msg_1");
+  assert.equal(received[0].message.method, "item/started");
+});
+
+test("agentSession event helper keeps side-channels and rejects wrapper lifecycle", () => {
+  const sideChannel = {
+    method: METHOD_AGENT_SESSION_EVENT,
+    params: {
+      event: {
+        eventId: "evt-provider",
+        sequence: 1,
+        sessionId: "sess_external",
+        type: "provider.first_event.received",
+        timestamp: "2026-06-04T00:00:00Z",
+        payload: { provider: "fixture" },
+      },
+    },
+  };
+  const wrapperLifecycle = {
+    method: METHOD_AGENT_SESSION_EVENT,
+    params: {
+      event: {
+        eventId: "evt-turn",
+        sequence: 2,
+        sessionId: "sess_external",
+        turnId: "turn_external",
+        type: "turn.started",
+        timestamp: "2026-06-04T00:00:01Z",
+        payload: { status: "running" },
+      },
+    },
+  };
+
+  assert.equal(agentSessionEventNotification(sideChannel), sideChannel);
+  assert.equal(isAgentSessionEventNotification(sideChannel), true);
+  assert.equal(agentSessionEventNotification(wrapperLifecycle), undefined);
+  assert.equal(isAgentSessionEventNotification(wrapperLifecycle), false);
 });
 
 test("connection request errors preserve streamed notifications and response context", async () => {
@@ -3473,15 +3509,12 @@ test("connection request errors preserve streamed notifications and response con
 
   await assert.rejects(
     connection.startTurn({
-      sessionId: "sess_external",
-      turnId: "turn_external",
-      input: {
-        text: "draft",
-      },
+      threadId: "thread_external",
+      input: [{ type: "text", text: "draft" }],
     }),
     (error) => {
       assert.equal(error instanceof AppServerRequestError, true);
-      assert.equal(error.method, METHOD_AGENT_SESSION_TURN_START);
+      assert.equal(error.method, METHOD_TURN_START);
       assert.equal(error.response.error.code, ERROR_CODES.runtimeError);
       assert.equal(error.notifications.length, 2);
       assert.equal(error.notifications[0].params.event.type, "message.delta");
@@ -3499,13 +3532,12 @@ test("connection request errors preserve streamed notifications and response con
     },
   );
 
-  assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
+  assert.equal(sent[0].method, METHOD_TURN_START);
 });
 
 test("connection keeps session archive failures fail-closed", async () => {
   const sent = [];
-  const archiveFailure =
-    "agentSession/update archived is only supported for persisted sessions";
+  const archiveFailure = "thread/archive could not move persisted rollout";
   const inbound = [
     {
       id: 1,
@@ -3529,13 +3561,12 @@ test("connection keeps session archive failures fail-closed", async () => {
   });
 
   await assert.rejects(
-    connection.updateSession({
-      sessionId: "sess_memory",
-      archived: true,
+    connection.archiveThread({
+      threadId: "thread-memory",
     }),
     (error) => {
       assert.equal(error instanceof AppServerRequestError, true);
-      assert.equal(error.method, METHOD_AGENT_SESSION_UPDATE);
+      assert.equal(error.method, METHOD_THREAD_ARCHIVE);
       assert.equal(error.response.id, 1);
       assert.equal(error.response.error.code, ERROR_CODES.runtimeError);
       assert.equal(error.response.error.message, archiveFailure);
@@ -3545,10 +3576,9 @@ test("connection keeps session archive failures fail-closed", async () => {
     },
   );
 
-  assert.equal(sent[0].method, METHOD_AGENT_SESSION_UPDATE);
+  assert.equal(sent[0].method, METHOD_THREAD_ARCHIVE);
   assert.deepEqual(sent[0].params, {
-    sessionId: "sess_memory",
-    archived: true,
+    threadId: "thread-memory",
   });
 });
 
@@ -3562,10 +3592,7 @@ test("connection wraps capability list response", async () => {
           {
             id: "agent.session",
             title: "Agent Session",
-            methods: [
-              METHOD_AGENT_SESSION_START,
-              METHOD_AGENT_SESSION_TURN_START,
-            ],
+            methods: [METHOD_THREAD_START, METHOD_TURN_START],
           },
         ],
         runtimeCapabilityManifest: {
@@ -3618,10 +3645,7 @@ test("connection wraps capability list response", async () => {
     result.result.runtimeCapabilityManifest.capabilities[0].id,
     "transport.jsonrpc",
   );
-  assert.equal(
-    result.result.capabilities[0].methods[0],
-    METHOD_AGENT_SESSION_START,
-  );
+  assert.equal(result.result.capabilities[0].methods[0], METHOD_THREAD_START);
   assert.equal(result.result.nextCursor, "1");
 });
 
@@ -4498,60 +4522,22 @@ test("connection wraps action replay response", async () => {
   assert.equal(result.result.action.actionType, "ask_user");
 });
 
-test("routes agent session event notifications for renderer projection", async () => {
-  const event = {
-    eventId: "evt-1",
-    sequence: 1,
-    sessionId: "sess_external",
-    threadId: "thread_external",
-    turnId: "turn_external",
-    type: "message.delta",
-    timestamp: "2026-06-04T00:00:00Z",
-    payload: {
-      text: "delta",
-    },
-  };
+test("routes direct lifecycle notifications without wrapper projection", async () => {
   const notification = {
-    method: METHOD_AGENT_SESSION_EVENT,
+    method: "item/completed",
     params: {
-      event,
-      typedEvent: {
-        method: "item/agentMessage/delta",
-        params: {
-          eventId: "evt-1",
-          sequence: 1,
-          sessionId: "sess_external",
-          threadId: "thread_external",
-          turnId: "turn_external",
-          timestamp: "2026-06-04T00:00:00Z",
-          itemId: "agent-message-final",
-          delta: "delta",
-          phase: "final_answer",
-        },
-      },
-      canonicalEvent: {
-        method: "item/updated",
-        params: {
-          sessionId: "sess_external",
-          threadId: "thread_external",
-          turnId: "turn_external",
-          itemId: "msg_1",
-          sequence: 1,
-          ordinal: 0,
-          createdAtMs: 100,
-          updatedAtMs: 120,
-          kind: "agentMessage",
-          status: "inProgress",
-          payload: {
-            type: "agentMessage",
-            text: "delta",
-          },
-        },
+      threadId: "thread_external",
+      turnId: "turn_external",
+      completedAtMs: 120,
+      item: {
+        id: "msg_1",
+        type: "agentMessage",
+        text: "delta",
       },
     },
   };
   const routed = [];
-  const canonicalRouted = [];
+  const lifecycleRouted = [];
   const router = new AppServerAgentEventRouter();
   const unsubscribe = router.subscribe((agentEvent, source) => {
     routed.push({
@@ -4559,35 +4545,23 @@ test("routes agent session event notifications for renderer projection", async (
       method: source.method,
     });
   });
-  const unsubscribeCanonical = router.subscribeCanonical(
-    (canonicalEvent, source) => {
-      canonicalRouted.push({
-        event: canonicalEvent,
+  const unsubscribeLifecycle = router.subscribeLifecycle(
+    (lifecycleEvent, source) => {
+      lifecycleRouted.push({
+        event: lifecycleEvent,
         method: source.method,
       });
     },
   );
 
-  assert.equal(isAgentSessionEventNotification(notification), true);
+  assert.equal(agentRuntimeLifecycleNotification(notification), notification);
   assert.equal(
-    agentSessionEventNotification(notification)?.params.event.payload.text,
-    "delta",
-  );
-  assert.equal(
-    agentSessionRuntimeEventNotification(notification)?.method,
-    "item/agentMessage/delta",
-  );
-  assert.equal(
-    agentSessionRuntimeEventNotification(notification)?.params.itemId,
-    "agent-message-final",
-  );
-  assert.equal(
-    canonicalThreadEventNotification(notification)?.params.itemId,
+    agentRuntimeLifecycleNotification(notification)?.params.item.id,
     "msg_1",
   );
   assert.equal(await router.dispatch(notification), true);
   unsubscribe();
-  unsubscribeCanonical();
+  unsubscribeLifecycle();
   assert.equal(await router.dispatch(notification), true);
   assert.equal(
     await router.dispatch({
@@ -4596,16 +4570,11 @@ test("routes agent session event notifications for renderer projection", async (
     }),
     false,
   );
-  assert.deepEqual(routed, [
+  assert.deepEqual(routed, []);
+  assert.deepEqual(lifecycleRouted, [
     {
-      event,
-      method: METHOD_AGENT_SESSION_EVENT,
-    },
-  ]);
-  assert.deepEqual(canonicalRouted, [
-    {
-      event: notification.params.canonicalEvent,
-      method: METHOD_AGENT_SESSION_EVENT,
+      event: notification,
+      method: "item/completed",
     },
   ]);
 });
@@ -4628,19 +4597,15 @@ test("connection buffers request responses read by idle notification loop", asyn
   await waitFor(() => waiters.length === 1);
 
   const resultPromise = connection.startTurn({
-    sessionId: "sess_external",
-    input: {
-      text: "draft",
-    },
+    threadId: "thread_external",
+    input: [{ type: "text", text: "draft" }],
   });
   waiters.shift()({
     id: 1,
     result: {
       turn: {
-        turnId: "turn-1",
-        sessionId: "sess_external",
-        threadId: "thread_external",
-        status: "accepted",
+        id: "turn-1",
+        status: "inProgress",
       },
     },
   });
@@ -4666,7 +4631,7 @@ test("connection buffers request responses read by idle notification loop", asyn
     resultPromise,
     notificationPromise,
   ]);
-  assert.equal(result.result.turn.turnId, "turn-1");
+  assert.equal(result.result.turn.id, "turn-1");
   assert.equal(notification.method, METHOD_AGENT_SESSION_EVENT);
 });
 
@@ -4700,7 +4665,11 @@ test("connection server-message drain does not steal client responses", async ()
     id: "app-server-request:7",
     method: METHOD_MCP_SERVER_ELICITATION_REQUEST,
     params: {
-      server: "form-server",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      serverName: "form-server",
+      mode: "form",
+      _meta: null,
       message: "Choose a value",
       requestedSchema: {
         type: "object",
@@ -4734,11 +4703,8 @@ test("connection mirrors long request notifications for event drain", async () =
 
   const turnPromise = connection.startTurn(
     {
-      sessionId: "sess_external",
-      turnId: "turn-1",
-      input: {
-        text: "draft",
-      },
+      threadId: "thread_external",
+      input: [{ type: "text", text: "draft" }],
     },
     { timeoutMs: 1_000 },
   );
@@ -4770,16 +4736,14 @@ test("connection mirrors long request notifications for event drain", async () =
     id: 1,
     result: {
       turn: {
-        turnId: "turn-1",
-        sessionId: "sess_external",
-        threadId: "thread_external",
-        status: "accepted",
+        id: "turn-1",
+        status: "inProgress",
       },
     },
   });
 
   const result = await turnPromise;
-  assert.equal(result.result.turn.turnId, "turn-1");
+  assert.equal(result.result.turn.id, "turn-1");
   assert.equal(result.notifications[0].params.event.eventId, "evt-early");
 });
 
@@ -4804,10 +4768,8 @@ test("connection resolves short concurrent request before long turn response", a
 
   const turnPromise = connection.startTurn(
     {
-      sessionId: "sess_external",
-      input: {
-        text: "draft",
-      },
+      threadId: "thread_external",
+      input: [{ type: "text", text: "draft" }],
     },
     { timeoutMs: 1_000 },
   );
@@ -4843,17 +4805,15 @@ test("connection resolves short concurrent request before long turn response", a
     id: 1,
     result: {
       turn: {
-        turnId: "turn-1",
-        sessionId: "sess_external",
-        threadId: "thread_external",
-        status: "accepted",
+        id: "turn-1",
+        status: "inProgress",
       },
     },
   });
 
   const turn = await turnPromise;
   assert.equal(turn.id, 1);
-  assert.equal(turn.result.turn.turnId, "turn-1");
+  assert.equal(turn.result.turn.id, "turn-1");
 });
 
 test("encodes one JSON-RPC message per line", () => {
@@ -4906,22 +4866,6 @@ test("uses agent-style stdio sidecar launch args", () => {
     "--data-dir",
     "/tmp/content-studio-app-server-data",
   ]);
-  const cleanupConfig = stdioSidecar(
-    "/tmp/app-server",
-    undefined,
-    "/tmp/content-studio-app-server-data",
-    "delete-file",
-  );
-  assert.equal(cleanupConfig.productDbMigrationCleanup, "delete-file");
-  assert.deepEqual(sidecarArgs(cleanupConfig), [
-    "--stdio",
-    "--backend",
-    "unavailable",
-    "--data-dir",
-    "/tmp/content-studio-app-server-data",
-    "--product-db-migration-cleanup",
-    "delete-file",
-  ]);
   assert.deepEqual(
     sidecarArgs({ binaryPath: "app-server", listenUrl: "stdio://" }),
     ["--stdio", "--backend", "unavailable"],
@@ -4929,21 +4873,6 @@ test("uses agent-style stdio sidecar launch args", () => {
   assert.deepEqual(
     sidecarArgs({ binaryPath: "app-server", listenUrl: "local://lime" }),
     ["--listen", "local://lime", "--backend", "unavailable"],
-  );
-  assert.deepEqual(
-    sidecarArgs({
-      binaryPath: "app-server",
-      listenUrl: "stdio://",
-      backendMode: "unavailable",
-      productDbMigrationCleanup: "drop-tables",
-    }),
-    [
-      "--stdio",
-      "--backend",
-      "unavailable",
-      "--product-db-migration-cleanup",
-      "drop-tables",
-    ],
   );
   assert.deepEqual(
     sidecarArgs({
@@ -5430,19 +5359,11 @@ test("verifies release artifact sha256 before sidecar launch", async () => {
   try {
     await writeFile(binaryPath, "sidecar-binary");
     const sha256 = sha256Hex("sidecar-binary");
-    const config = sidecarFromReleaseArtifact(
-      binaryPath,
-      {
-        platform: "darwin-arm64",
-        url: "https://example/app-server-darwin-arm64.tar.gz",
-        sha256,
-      },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      "drop-tables",
-    );
+    const config = sidecarFromReleaseArtifact(binaryPath, {
+      platform: "darwin-arm64",
+      url: "https://example/app-server-darwin-arm64.tar.gz",
+      sha256,
+    });
 
     assert.equal(config.expectedSha256, sha256);
     assert.equal(config.backendMode, DEFAULT_STANDALONE_BACKEND_MODE);
@@ -5450,8 +5371,6 @@ test("verifies release artifact sha256 before sidecar launch", async () => {
       "--stdio",
       "--backend",
       "unavailable",
-      "--product-db-migration-cleanup",
-      "drop-tables",
     ]);
     assert.doesNotThrow(() => assertSha256(sha256.toUpperCase(), sha256));
     await assert.doesNotReject(() => assertSidecarFileSha256(config));
@@ -5484,6 +5403,7 @@ test("reads and validates protocol schema manifest metadata", async () => {
         "AgentSessionHandoffBundleExportResponse",
         "RuntimeOptions",
       ],
+      v2: ["ThreadStartParams", "TurnStartParams"],
     },
   };
 
@@ -5499,6 +5419,10 @@ test("reads and validates protocol schema manifest metadata", async () => {
     assert.equal(
       protocolSchemaFilePath(schemaRoot, "v0", "AgentSessionTurnStartParams"),
       join(schemaRoot, "v0", "AgentSessionTurnStartParams.json"),
+    );
+    assert.equal(
+      protocolSchemaFilePath(schemaRoot, "v2", "ThreadStartParams"),
+      join(schemaRoot, "v2", "ThreadStartParams.json"),
     );
 
     const loaded = await readProtocolSchemaManifest(manifestPath);
@@ -5527,6 +5451,16 @@ test("reads and validates protocol schema manifest metadata", async () => {
         group: "v0",
         typeName: "RuntimeOptions",
         path: join(schemaRoot, "v0", "RuntimeOptions.json"),
+      },
+      {
+        group: "v2",
+        typeName: "ThreadStartParams",
+        path: join(schemaRoot, "v2", "ThreadStartParams.json"),
+      },
+      {
+        group: "v2",
+        typeName: "TurnStartParams",
+        path: join(schemaRoot, "v2", "TurnStartParams.json"),
       },
     ]);
 
@@ -5577,12 +5511,22 @@ test("consumes checked-in Rust protocol schema manifest", async () => {
   );
   assert.ok(manifest.schemas.v0.includes("AgentSessionHandoffArtifact"));
   assert.ok(manifest.schemas.jsonrpc.includes("JsonRpcRequest"));
+  assert.ok(manifest.schemas.v2.includes("ThreadStartParams"));
+  assert.ok(manifest.schemas.v2.includes("TurnStartParams"));
   assert.ok(
     listProtocolSchemaFiles(manifest, schemaRoot).some(
       (entry) =>
         entry.group === "v0" &&
         entry.typeName === "AgentSessionTurnStartParams" &&
         entry.path.endsWith(join("v0", "AgentSessionTurnStartParams.json")),
+    ),
+  );
+  assert.ok(
+    listProtocolSchemaFiles(manifest, schemaRoot).some(
+      (entry) =>
+        entry.group === "v2" &&
+        entry.typeName === "ThreadStartParams" &&
+        entry.path.endsWith(join("v2", "ThreadStartParams.json")),
     ),
   );
 });
@@ -5726,7 +5670,7 @@ test("connects sidecar with initialize and initialized handshake", async () => {
 
       connected.sidecar.send(
         connected.client.startSession({
-          appId: "content-studio",
+          serviceName: "content-studio",
         }),
       );
       const response = await connected.sidecar.nextMessage(
@@ -5734,7 +5678,7 @@ test("connects sidecar with initialize and initialized handshake", async () => {
       );
       assert.equal(response.id, 2);
       assert.deepEqual(response.result, {
-        method: "agentSession/start",
+        method: "thread/start",
       });
     } finally {
       await connected.sidecar.close();

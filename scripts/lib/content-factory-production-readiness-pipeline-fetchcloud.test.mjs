@@ -248,6 +248,7 @@ function guiEvidence() {
     runtimeActionResponse: {
       actionId: "article-draft-review",
       confirmed: true,
+      method: "agentSession/action/respond",
       metadata: {
         workflowResume: {
           stepId: "draft",
@@ -259,15 +260,11 @@ function guiEvidence() {
     status: "passed",
     trace: {
       appServerHandleJsonLinesSeen: true,
-      appServerMethodsSeen: [
-        "agentSession/turn/start",
-        "agentSession/read",
-        "evidence/export",
-      ],
+      appServerMethodsSeen: ["turn/start", "thread/read", "evidence/export"],
       turnStartTrace: {
         command: "app_server_handle_json_lines",
         matched: true,
-        method: "agentSession/turn/start",
+        method: "turn/start",
         sessionMatched: true,
         status: "success",
         transport: "electron-ipc",

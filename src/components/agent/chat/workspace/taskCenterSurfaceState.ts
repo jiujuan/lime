@@ -112,15 +112,21 @@ export function resolveTaskCenterDraftSurfaceState({
   isSending,
   queuedTurnCount,
 }: ResolveTaskCenterDraftSurfaceStateParams): TaskCenterDraftSurfaceState {
+  const activeTaskCenterDraftTab = activeDraftTabId
+    ? (draftTabs.find((tab) => tab.id === activeDraftTabId) ?? null)
+    : null;
+  const hasExplicitLocalDraftTakeover = Boolean(
+    activeTaskCenterDraftTab &&
+      draftSurfaceActive &&
+      !(sessionId?.trim() || null),
+  );
   const shouldPrioritizeInitialSessionRoute =
+    !hasExplicitLocalDraftTakeover &&
     shouldPrioritizeTaskCenterInitialSessionRoute({
       agentEntry,
       initialSessionId,
       sessionId,
     });
-  const activeTaskCenterDraftTab = activeDraftTabId
-    ? (draftTabs.find((tab) => tab.id === activeDraftTabId) ?? null)
-    : null;
   const isTaskCenterDraftTabActive = Boolean(
     isTaskCenterEntry &&
       activeTaskCenterDraftTab &&

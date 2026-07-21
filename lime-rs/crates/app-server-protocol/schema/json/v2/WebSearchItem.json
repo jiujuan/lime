@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "action": true,
+    "id": {
+      "type": "string"
+    },
+    "query": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "WebSearchItem",
+  "type": "object"
+}

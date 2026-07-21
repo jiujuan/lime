@@ -21,6 +21,7 @@ import {
   mockPreviewConversationImportThread,
   mockRevealPathInFinder,
   mockRecordAgentUiPerformanceMetric,
+  mockArchiveAgentRuntimeSession,
   mockScanConversationImportSource,
   mockScheduleMinimumDelayIdleTask,
   mockSelectPluginDirectory,
@@ -1702,9 +1703,7 @@ describe("AppSidebar conversations", () => {
   });
 
   it("首页发送热路径期间会话列表变更不应立即抢占 listSessions", async () => {
-    const dateNowSpy = vi
-      .spyOn(Date, "now")
-      .mockReturnValue(1_780_000_000_000);
+    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(1_780_000_000_000);
     const scheduledTasks: Array<{
       task: () => void;
       options?: { minimumDelayMs?: number; idleTimeoutMs?: number };
@@ -2258,7 +2257,7 @@ describe("AppSidebar conversations", () => {
     ).toBeNull();
   });
 
-  it("点击会话菜单归档动作时应走统一 session update 命令", async () => {
+  it("点击会话菜单归档动作时应走 thread/archive", async () => {
     mockListAgentRuntimeSessions.mockResolvedValue([
       {
         id: "session-recent",
@@ -2300,10 +2299,9 @@ describe("AppSidebar conversations", () => {
 
     await clickConversationMenuItem("app-sidebar-conversation-menu-archive");
 
-    expect(mockUpdateAgentRuntimeSession).toHaveBeenCalledWith({
-      session_id: "session-recent",
-      archived: true,
-    });
+    expect(mockArchiveAgentRuntimeSession).toHaveBeenCalledWith(
+      "session-recent",
+    );
   });
 
   it("项目上下文只展示项目会话，对话区保留新建入口", async () => {

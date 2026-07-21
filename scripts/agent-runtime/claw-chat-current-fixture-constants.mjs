@@ -86,17 +86,19 @@ export const APP_SERVER_HANDLE_JSON_LINES_COMMAND =
 export const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 export const APP_SERVER_METHOD_INITIALIZE = "initialize";
 export const APP_SERVER_METHOD_INITIALIZED = "initialized";
-export const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event";
-export const APP_SERVER_METHOD_SESSION_START = "agentSession/start";
+export const APP_SERVER_METHOD_SESSION_START = "thread/start";
 export const APP_SERVER_METHOD_SESSION_UPDATE = "agentSession/update";
-export const APP_SERVER_METHOD_SESSION_TURN_START = "agentSession/turn/start";
-export const APP_SERVER_METHOD_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
+export const APP_SERVER_METHOD_SESSION_TURN_START = "turn/start";
+export const APP_SERVER_METHOD_SESSION_TURN_CANCEL = "turn/interrupt";
+export const APP_SERVER_METHOD_THREAD_SHELL_COMMAND = "thread/shellCommand";
+export const USER_SHELL_INPUT = "!printf ready";
+export const USER_SHELL_COMMAND = "printf ready";
+export const USER_SHELL_OUTPUT = "ready";
 export const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
-export const APP_SERVER_METHOD_SESSION_READ = "agentSession/read";
-export const APP_SERVER_METHOD_SESSION_THREAD_RESUME =
-  "agentSession/thread/resume";
-export const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
+export const APP_SERVER_METHOD_SESSION_READ = "thread/read";
+export const APP_SERVER_METHOD_SESSION_THREAD_RESUME = "thread/resume";
+export const APP_SERVER_METHOD_SESSION_LIST = "thread/list";
 export const APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND =
   "agentSession/runtimeEvents/append";
 export const APP_SERVER_METHOD_WORKFLOW_READ = "workflow/read";
@@ -225,6 +227,8 @@ export const LIVE_TAIL_COMMIT_DONE_TEXT = "LIVE_TAIL_COMMIT_DONE";
 export const APPROVAL_REQUEST_RESUME_SCENARIO = "approval-request-resume";
 export const APPROVAL_REQUEST_DECLINE_SCENARIO = "approval-request-decline";
 export const APPROVAL_REQUEST_CANCEL_SCENARIO = "approval-request-cancel";
+export const APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO =
+  "approval-request-host-interrupt";
 export const APPROVAL_REQUEST_FULL_ACCESS_SCENARIO =
   "approval-request-full-access";
 export const APPROVAL_REQUEST_RESUME_PROMPT = "验证审批请求 hydrate 后允许继续";
@@ -285,8 +289,6 @@ export const TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT =
   "TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL: 正文已经先显示，取消终态不能覆盖或重复。";
 export const TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT =
   "TERMINAL_CANCELED_AFTER_ANSWER_CANCELED: user canceled after partial answer";
-export const WEB_TOOLS_REASONING_FINAL_SIGNATURE =
-  "web-tools-reasoning-final-signature";
 export const WEB_TOOLS_REASONING_ITEM_SIGNATURE =
   "web-tools-reasoning-item-signature";
 export const WEB_TOOLS_REASONING_NATIVE_ITEM_ID = "rs_web_tools_fixture";
@@ -360,7 +362,6 @@ export const CONTENT_FACTORY_INLINE_IMAGE_URL = pathToFileURL(
   CONTENT_FACTORY_INLINE_IMAGE_FILE_PATH,
 ).href;
 export const WEB_TOOLS_SEARCH_TOOL_CALL_ID = `${SESSION_ID}:tool:websearch-rendering`;
-export const WEB_TOOLS_REASONING_FINAL_ID = `${SESSION_ID}:reasoning:web-tools-rendering-final`;
 export const WEB_TOOLS_REASONING_ITEM_ID = `${SESSION_ID}:reasoning:web-tools-rendering`;
 export const WEB_TOOLS_FETCH_TOOL_CALL_ID = `${SESSION_ID}:tool:webfetch-rendering`;
 export const MCP_STRUCTURED_CONTENT_TOOL_CALL_ID = `${SESSION_ID}:tool:mcp-structured-content`;
@@ -408,7 +409,7 @@ export const EXPERT_SKILLS_RUNTIME_THREAD_ID = `${EXPERT_SKILLS_RUNTIME_SESSION_
 export const EXPERT_SKILLS_RUNTIME_SESSION_TITLE =
   "专家 Skills Runtime Fixture";
 export const EVENT_READ_PROBE_PROMPT =
-  "验证 agentSession/event 与 read model 同 turn 对齐。";
+  "验证 direct v2 notification 与 read model 同 turn 对齐。";
 export const EVENT_READ_PROBE_TURN_ID = `${SESSION_ID}-event-read-probe`;
 export const EVENT_READ_PROBE_READ_TEXT = "事件流 probe 已进入 RuntimeCore";
 export const EVENT_READ_PROBE_DONE_TEXT = "EVENT_READ_PROBE_DONE";
@@ -419,13 +420,15 @@ export const EVENT_READ_PROBE_TOOL_OUTPUT =
 export const WEB_TOOLS_RENDERING_ASSERTION_KEYS = [
   "webToolsRenderingPromptReachedBackend",
   "guiWebToolsRenderingInputSubmitted",
-  "guiWebSearchProcessDefaultCollapsed",
-  "guiWebSearchProcessShowsSourcesAfterExpand",
-  "guiWebFetchProcessShowsReadPagesAfterExpand",
-  "guiWebToolsTimelineOrderPreserved",
+  "guiWebToolsLiveRunningStateCaptured",
+  "guiWebToolsLiveNoLegacyTextAfterProcess",
+  "guiWebToolsLiveSourcesVisible",
+  "guiWebToolsLiveReadPagesVisible",
+  "guiWebToolsLiveTimelineOrderPreserved",
+  "guiWebToolsCompletedProcessCompacted",
   "guiWebSearchNoiseHidden",
   "guiMarkdownRendered",
-  "guiWebSearchFinalTextInterleaved",
+  "guiWebToolsFinalTextVisibleAfterCompletion",
   "guiWebFetchTransportEnvelopeHidden",
   "readModelWebToolsRenderingCompleted",
   "readModelWebToolsReasoningProviderMetadataPreserved",
@@ -472,6 +475,7 @@ export const APPROVAL_REQUEST_RESUME_ASSERTION_KEYS = [
   "readModelApprovalRequestResumePending",
   "approvalRequestResumeUsedCurrentActionRespond",
   "approvalRequestResumeRespondPayloadScoped",
+  "approvalRequestResumeServerRequestResolved",
   "approvalRequestResumeBackendActionRespondObserved",
   "approvalRequestResumePendingCleared",
   "guiApprovalRequestResumeCompleted",
@@ -492,6 +496,7 @@ export const APPROVAL_REQUEST_DECISION_ASSERTION_KEYS = [
   "readModelApprovalRequestDecisionPending",
   "approvalRequestDecisionUsedCurrentActionRespond",
   "approvalRequestDecisionRespondPayloadScoped",
+  "approvalRequestDecisionServerRequestResolved",
   "approvalRequestDecisionBackendActionRespondObserved",
   "approvalRequestDecisionPendingCleared",
   "approvalRequestDeclineNoToolExecuted",
@@ -501,6 +506,21 @@ export const APPROVAL_REQUEST_DECISION_ASSERTION_KEYS = [
   "guiApprovalRequestCancelCompleted",
   "readModelApprovalRequestCancelCanceled",
   "approvalRequestDecisionNoLegacyRuntimeRespond",
+];
+export const APPROVAL_REQUEST_HOST_INTERRUPT_ASSERTION_KEYS = [
+  "approvalRequestHostInterruptPromptReachedBackend",
+  "guiApprovalRequestHostInterruptInputSubmitted",
+  "guiApprovalRequestHostInterruptPendingVisible",
+  "readModelApprovalRequestHostInterruptPending",
+  "approvalRequestHostInterruptUsedCurrentMethod",
+  "approvalRequestHostInterruptPayloadScoped",
+  "approvalRequestHostInterruptServerRequestResolved",
+  "approvalRequestHostInterruptNoRendererResponse",
+  "approvalRequestHostInterruptNoBackendActionRespond",
+  "approvalRequestHostInterruptPendingCleared",
+  "guiApprovalRequestHostInterruptCanceled",
+  "readModelApprovalRequestHostInterruptCanceled",
+  "approvalRequestHostInterruptCanonicalEventOrder",
 ];
 export const APPROVAL_REQUEST_FULL_ACCESS_ASSERTION_KEYS = [
   "approvalRequestFullAccessPromptReachedBackend",

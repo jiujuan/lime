@@ -18,6 +18,10 @@ import {
   evaluatePageSnapshot,
   invokeAppServerFromPage,
 } from "./claw-chat-current-fixture-rpc.mjs";
+import {
+  collectReadModelItems,
+  readModelLatestTurnStatus,
+} from "./claw-chat-current-fixture-read-model-core.mjs";
 import { ensureUserVisibleCapabilityReportSkill } from "./claw-chat-current-fixture-skills-workspace.mjs";
 import {
   assert,
@@ -35,6 +39,7 @@ const DEFER_BUTTON_LABELS = [
   "あとで処理",
   "나중에 처리",
 ];
+let richRestoreSessionId = SESSION_ID;
 
 export function summarizeBackendTurnStart(turnStart) {
   const entry = turnStart?.entry ?? {};
@@ -266,7 +271,7 @@ async function evaluateRichRestoreSnapshot(page) {
       forbiddenAssistantText: INPUTBAR_RICH_RESTORE_FORBIDDEN_ASSISTANT_TEXT,
       pathName: INPUTBAR_RICH_RESTORE_PATH_NAME,
       prompt: INPUTBAR_RICH_RESTORE_PROMPT,
-      sessionId: SESSION_ID,
+      sessionId: richRestoreSessionId,
       skillName: INPUTBAR_RICH_RESTORE_SKILL_NAME,
     },
   );
@@ -274,7 +279,7 @@ async function evaluateRichRestoreSnapshot(page) {
 
 async function fillRichRestorePrompt(page, options) {
   const textarea = page.locator(
-    `textarea[name="agent-chat-message"][data-session-id="${SESSION_ID}"]`,
+    `textarea[name="agent-chat-message"][data-session-id="${richRestoreSessionId}"]`,
   );
   await textarea.fill(INPUTBAR_RICH_RESTORE_PROMPT);
   return await waitForRichRestoreSnapshot(
@@ -354,7 +359,7 @@ async function dropPathReference(page, options) {
       mime: PATH_REFERENCE_DRAG_MIME,
       pathName: INPUTBAR_RICH_RESTORE_PATH_NAME,
       pathValue: INPUTBAR_RICH_RESTORE_PATH,
-      sessionId: SESSION_ID,
+      sessionId: richRestoreSessionId,
     },
   );
   assert(
@@ -386,7 +391,7 @@ async function clickRichRestoreSendButton(page, options) {
   );
   const sendLocator = page
     .locator(
-      `textarea[name="agent-chat-message"][data-session-id="${SESSION_ID}"]`,
+      `textarea[name="agent-chat-message"][data-session-id="${richRestoreSessionId}"]`,
     )
     .locator(
       'xpath=ancestor::*[@data-testid="inputbar-core-container"][1]//*[@data-testid="send-btn"]',
@@ -410,7 +415,7 @@ async function clickRichRestoreSendButton(page, options) {
 
 async function selectCapabilityReportSkill(page, options) {
   const textarea = page.locator(
-    `textarea[name="agent-chat-message"][data-session-id="${SESSION_ID}"]`,
+    `textarea[name="agent-chat-message"][data-session-id="${richRestoreSessionId}"]`,
   );
   await textarea.fill("/capability-report");
   const selected = await waitForRichRestoreSnapshot(
@@ -498,10 +503,11 @@ export async function prepareRichDraft(
   summary,
   { submitAction = "send" } = {},
 ) {
+  richRestoreSessionId = summary?.sessionId?.trim() || SESSION_ID;
   const skill = ensureUserVisibleCapabilityReportSkill(runtimeEnv);
   recordRichRestoreStep(summary, "workspace-skill-ready", skill);
   const inputReady = await waitForInputReady(page, options, {
-    expectedSessionId: SESSION_ID,
+    expectedSessionId: richRestoreSessionId,
   });
   recordRichRestoreStep(summary, "input-ready", inputReady);
   const skillBadge = await selectCapabilityReportSkill(page, options);
@@ -553,7 +559,7 @@ async function waitForInputbarRichRestoreReadModelCanceled(
   page,
   options,
   requestLog,
-  sessionId,
+  threadId,
 ) {
   const startedAt = Date.now();
   let lastRead = null;
@@ -563,27 +569,24 @@ async function waitForInputbarRichRestoreReadModelCanceled(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId,
-        historyLimit: 100,
+        threadId,
+        includeTurns: true,
       },
       requestLog,
     );
     lastRead = read.result;
     const serialized = JSON.stringify(read.result || {});
+    const latestTurnStatus = readModelLatestTurnStatus(read.result);
     lastSummary = sanitizeJson({
       includesPrompt: serialized.includes(INPUTBAR_RICH_RESTORE_PROMPT),
-      includesCanceled: serialized.includes("canceled"),
+      includesCanceled: ["interrupted", "canceled", "cancelled"].includes(
+        String(latestTurnStatus ?? "").toLowerCase(),
+      ),
       forbiddenAssistantOutput:
         serialized.includes(INPUTBAR_RICH_RESTORE_FORBIDDEN_ASSISTANT_TEXT) ||
         serialized.includes("今日国际新闻简要整理"),
-      detailItemCount: Array.isArray(read.result?.detail?.items)
-        ? read.result.detail.items.length
-        : null,
-      latestTurnStatus:
-        read.result?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
-        read.result?.detail?.thread_read?.status ??
-        read.result?.detail?.status ??
-        null,
+      detailItemCount: collectReadModelItems(read.result).length,
+      latestTurnStatus,
     });
     if (
       lastSummary.includesPrompt === true &&
@@ -611,6 +614,7 @@ export async function runInputbarRichRestoreScenario({
   appServerRequests,
   runtimeEnv,
 }) {
+  richRestoreSessionId = summary?.sessionId?.trim() || SESSION_ID;
   summary.inputbarRichRestoreDraftPrepared = await prepareRichDraft(
     page,
     options,
@@ -631,6 +635,7 @@ export async function runInputbarRichRestoreScenario({
     options,
   );
   const sessionId = backendTurnStart.entry.sessionId ?? SESSION_ID;
+  const threadId = summary?.threadId;
   summary.inputbarRichRestoreBackendTurnStart =
     summarizeBackendTurnStart(backendTurnStart);
 
@@ -672,7 +677,7 @@ export async function runInputbarRichRestoreScenario({
       page,
       options,
       appServerRequests,
-      sessionId,
+      threadId,
     );
 
   return sanitizeJson({

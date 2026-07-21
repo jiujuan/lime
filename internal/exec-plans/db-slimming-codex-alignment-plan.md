@@ -1,10 +1,12 @@
 # Lime DB 瘦身与 Codex-aligned 存储执行计划
 
+> **存储契约已被替代（2026-07-19）**：本文件中的 `userData/app-server`、flat EventLog + Projection DB current truth、默认 `drop-tables` 和启动期 source cleanup 口径已由 [Codex / Lime 存储对齐执行计划](./codex-lime-storage-alignment-plan.md) 替代。相关段落只保留为历史实施证据，不得继续指导新 writer、迁移或清理；当前逐路径账本见 [03-one-to-one-storage-alignment-plan.md](../refactor/data/03-one-to-one-storage-alignment-plan.md)。
+
 > 状态：进行中  
 > 更新时间：2026-06-16
 > 关联路线图：`internal/roadmap/db/README.md`  
 > 关联 PRD：`internal/roadmap/db/prd.md`  
-> 当前阶段：S4 旧 DAO / schema / `current_timeline` bridge 收口；JSONL Event Log + Projection DB 是 runtime/history current truth，`agent_messages` 与 `agent_thread_*` 只允许 migration/export/compat/test fixture，真实用户库 destructive drop 需单独确认
+> 当前阶段：旧 DAO / schema 的历史收口记录仍可参考；runtime/history current truth 和数据根以新存储计划为准，真实用户库 destructive 操作仍需单独确认
 
 ## 1. 主目标
 
@@ -20,9 +22,13 @@
 
 ## 2. 当前事实源声明
 
-后续新增 Agent runtime 存储能力只允许向：
+> 本节为 2026-06 历史声明，已经 superseded。当前事实源是日期化 canonical rollout + 有边界的 state/read-model SQLite；不得再把 flat EventLog + Projection DB 当完成态。
+
+历史实现链（已 superseded，仅作 evidence）：
 
 `App Server JSON-RPC -> RuntimeCore -> Agent durable log -> Projection writer -> Projection DB`
+
+当前新增能力必须遵循 `App Server JSON-RPC -> RuntimeCore -> ThreadStore canonical rollout -> state/read-model projection -> GUI`，具体路径与清理边界见新存储计划。
 
 收敛。`agent_messages` 只作为 migration/backfill/export 输入，不保留长期兼容读取；`agent_thread_turns`、`agent_thread_items` 只能作为迁移期 projection，不得继续承接新 runtime transcript truth。
 
@@ -135,7 +141,7 @@
 - `lime-rs/crates/infra/src/telemetry/logger.rs`：request log 仍写 `app_paths::resolve_request_logs_dir()` 文件目录。
 - `lime-rs/crates/app-server/src/main.rs`：App Server 支持 `--data-dir` 和 `APP_SERVER_DATA_DIR`，Electron 托管时由 Host 显式传入 `app.getPath("userData")/app-server`。
 - `lime-rs/crates/core/src/app_paths.rs`：显式 `app-server` data-dir 初始化时，优先从同一 Electron `userData/lime.db` 迁移 Product DB；旧库选择信号已覆盖 settings、Provider UI 状态、非系统 Provider、providers、api_keys 等产品设置数据。
-- `lime-rs/crates/core/src/product_db_migration_cleanup.rs`：Product DB migration cleanup 独立模块，支持 `retain / clear-rows / drop-tables / delete-file`；默认 `drop-tables` 只清迁移源旧 `userData/lime.db` 的用户 schema/table/data，保留空 DB 文件。
+- `lime-rs/crates/core/src/product_db_migration_cleanup.rs`：旧 Product DB cleanup policy 已从 production API 退役；`retain / clear-rows / drop-tables / delete-file` 仅保留 core `#[cfg(test)]` 历史证据，production 只复用“回滚本次新建 target/staging 文件”的内部 sidecar helper，不清迁移 source。
 - `packages/app-server-client/src/index.ts`：`SidecarLaunchConfig.dataDir` 会组装为 `--data-dir <path>`，统一 env/dev/packaged sidecar 启动参数。
 - Agent / Claw 会话列表归属已按 Codex app-server `ThreadListParams.cwd` 口径重排：App Server `agentSession/list` 的 current 过滤事实源是 `cwd` / `working_dir` / 项目 `rootPath` 精确匹配；`workspace_id` / `workspaceId` 只作为 legacy 入参别名或返回兼容投影，不再作为会话归属外键。
 
@@ -145,7 +151,7 @@
 - Electron Desktop Host 已把 `app.getPath("userData")/app-server` 显式传给 App Server `--data-dir`；后续 runtime store 必须继续复用该 root，不能在领域模块重新发现平台目录。
 - 如果用户已启动过一次空 `app-server/lime.db`，迁移判定必须允许“当前库有 schema 但没有用户信号、父级 `userData/lime.db` 有 settings / Provider / api_keys 信号”时自动恢复；不得只凭迁移 marker 或 schema 存在判定完成。
 - `lime-rs/crates/core/src/database/schema.rs` 已超过 1000 行；后续实现不应继续往中心 schema 文件追加 runtime 表，应拆 product/projection schema 边界。
-- `lime-rs/crates/core/src/app_paths.rs` 已超过 1000 行；本轮只允许保留路径解析 / 迁移来源发现的薄入口，迁移后清理逻辑必须继续放在 `product_db_migration_cleanup.rs` 等独立模块。
+- `lime-rs/crates/core/src/app_paths.rs` 已超过 1000 行；路径解析 / 迁移来源发现保留在该 owner，数据库 source/target、integrity、staging 和 fingerprint 逻辑归 `database_path_migration.rs`，manifest serialization/digest 归 `migration_manifest.rs`，旧 cleanup 证据继续隔离在 `product_db_migration_cleanup.rs`。
 - `current_timeline` 仍是 compat bridge；它只允许保障旧 GUI projection 过渡，不应继续决定骨架优先级。
 - `agent_thread_items.payload_json` 已完成写入侧 bounded projection 收口；剩余风险是旧行兼容读取、`current_timeline` bridge 和 S4 历史表结构退场。
 - `request_logs/` 文件目录已经降为 `compat / migration-source`；P4-b 只补真实 request telemetry 的生产写入证据，不允许把 runtime event summary 伪造成 provider request log。
@@ -199,10 +205,10 @@
 - 补迁移回归：`resolve_database_path_for_explicit_data_dir_prefers_parent_product_db` 覆盖父级 Product DB 优先级；`initialize_database_migrates_previous_product_settings_from_user_data_root` 覆盖 `userData/lime.db -> userData/app-server/lime.db` 的 settings + custom Provider 迁移。
 - 补编译阻塞：`TrackedTool` 测试构造体补 `command_facts: None`，恢复 App Server 定向测试编译。
 - 验证：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --all` 通过；`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core app_paths` 通过（28 tests）；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server initialize_database` 通过（2 tests）；`npm run smoke:claw-chat-current-fixture` 通过，summary 见 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`，关键断言包括 `electronPreloadBridge=true`、`appServerJsonRpcUsed=true`、`usedCurrentSessionStart/read/list=true`、`guiUserMessageVisible=true`、`guiAssistantOutputVisible=true`、`guiInputRemainsReady=true`、`noConsoleErrors=true`。
-- S3 产品迁移闭环补齐：新增 Product DB migration cleanup 策略，独立于 `LegacyMessageCleanupPolicy`。App Server 新增 `--product-db-migration-cleanup retain|clear-rows|drop-tables|delete-file` 和 `APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP`；Electron sidecar 默认显式传 `drop-tables`，可用 env 覆盖为 `retain` 或 `delete-file`，非法值 fail fast；`packages/app-server-client` 同步 `SidecarLaunchConfig.productDbMigrationCleanup` 和 sidecar args。清理只在 current `<userData>/app-server/lime.db` 初始化成功后执行，避免迁移失败时清掉唯一旧源。
-- Product DB cleanup 策略边界：`drop-tables` 是默认策略，迁移成功后删除旧 `userData/lime.db` 内用户 schema objects，保留空 DB 文件；`clear-rows` 仅清行；`delete-file` 删除旧 `lime.db` 以及 `-wal/-shm`；`retain` 只迁移不清理。此策略只用于迁移源 Product DB，不用于 `agent_messages` backfill 后的 legacy message cleanup。
+- S3 历史实现曾新增 Product DB migration cleanup 启动策略。该 surface 已于 2026-07-19 判为 `dead` 并从 Electron、App Server client、App Server CLI 与 active smoke 移除；此条只保留为历史 evidence，不得恢复。当前启动迁移固定保留 source，真实 cleanup 等待版本化 manifest 和独立 maintenance。
+- Product DB cleanup 策略边界已撤销：`drop-tables / clear-rows / delete-file` 属于 `dead / test-only evidence`，不得回到 Electron、App Server CLI/client 或 startup。current 启动迁移固定 retain source；未来 cleanup 只能由独立 maintenance 在 manifest、dry-run、授权和用户确认之后执行。
 - 设置页迁移 Electron fixture 落地：新增 `scripts/electron/settings-provider-migration-fixture-smoke.mjs` 和静态 guard，临时旧 `electron-user-data/lime.db` 预置 custom Provider / API Key / Provider UI state，经真实 Electron preload bridge 和 App Server JSON-RPC 迁移到 `electron-user-data/app-server/lime.db`，并断言设置页 `AI 服务商` 可见自定义 Provider、旧 Provider facade 未被调用、旧 Product DB 用户 schema 已清空。summary 见 `.lime/qc/gui-evidence/settings-provider-migration-fixture/settings-provider-migration-fixture-summary.json`。
-- 定向验证通过：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --all`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core app_paths`（28 tests）；`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core product_db_migration_cleanup`（4 tests）；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server initialize_database`（3 tests）；`npx vitest run "electron/appServerHost.test.ts" "packages/app-server-client/tests/client.test.mjs" "scripts/electron/settings-provider-migration-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept`（58 tests）；`npm run smoke:settings-provider-migration-electron-fixture` 通过，关键证据包括 `productDbMigrationCleanupPolicy=drop-tables`、`providerVisibleInGui=true`、`oldProductDbUserSchemaObjectCount=0`、`legacyProviderCommandsSeen=[]`、`consoleErrors=[]`。
+- 历史定向验证（已 superseded）曾覆盖默认 `drop-tables` 和旧源 schema 清空；这些结果只证明已删除实现的旧行为，不是 current storage evidence。current 验证以新存储计划中的 source retained、versioned manifest、no-clobber target 和负向回流守卫为准。
 - 历史会话 smoke 通过：`npx vitest run "scripts/electron/session-history-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept`（4 tests）通过；`npm run smoke:agent-session-history-electron-fixture` 通过，关键证据包括 `ok=true`、`sidecarRestartReadback=true`、`archiveReopen.requestMethods=["initialize","agentSession/list","agentSession/read"]`、`unarchiveReopen.requestMethods=["initialize","agentSession/list","agentSession/read"]`、`consoleErrors=[]`。
 - S3 默认清理策略推进：`LegacyMessageCleanupPolicy::default()` 和 Electron Host 默认值从 `clear-rows` 调整为 `drop-empty-tables`；App Server CLI 现在也读取 `APP_SERVER_LEGACY_MESSAGE_CLEANUP`，因此直跑 App Server、Electron sidecar 和 client args 的删除策略一致。`retain` / `clear-rows` 仍可显式覆盖，`drop-empty-tables` 在旧表仍有残留行时 fail closed，不会误 drop 未迁完数据。
 - 定向验证通过：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --all`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server parse_args`（15 tests）；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server legacy_agent_message`（4 tests）；`npx vitest run "electron/appServerHost.test.ts" "packages/app-server-client/tests/client.test.mjs" "scripts/electron/session-history-fixture-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept`（61 tests）；`npm run smoke:agent-session-history-electron-fixture` 在新默认策略下通过，证据继续写入 `.lime/qc/gui-evidence/agent-session-history-electron-fixture/agent-session-history-electron-fixture-summary.json`，关键字段 `ok=true`、`sidecarRestartReadback=true`、`consoleErrors=[]`。

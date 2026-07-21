@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "const": "read",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "name",
+        "path",
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "type": {
+          "const": "listFiles",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "query": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "type": {
+          "const": "search",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "type": {
+          "const": "unknown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "type"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "CommandAction"
+}

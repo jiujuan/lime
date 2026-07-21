@@ -7,6 +7,10 @@ use serde_json::json;
 
 #[async_trait]
 pub trait ModelProviderAppDataSource: Send + Sync {
+    async fn read_model_route_generation(&self) -> Result<u64, RuntimeCoreError> {
+        Err(unavailable("modelProvider/routeGeneration/read"))
+    }
+
     async fn list_models(
         &self,
         _params: ModelListParams,

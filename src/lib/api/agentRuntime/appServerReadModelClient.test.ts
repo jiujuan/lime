@@ -4,25 +4,26 @@ import type { AppServerSessionReadClient } from "./appServerReadModelClient";
 
 function appServerClientMock(): AppServerSessionReadClient {
   return {
-    readSession: vi.fn().mockResolvedValue({
+    readThread: vi.fn().mockResolvedValue({
       id: 1,
       result: {
-        session: {
+        thread: {
+          id: "thread-1",
           sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "agent-chat",
-          status: "running",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:02.000Z",
+          cwd: "/tmp/workspace",
+          modelProvider: "openai",
+          status: { type: "active", activeFlags: [] },
+          createdAt: Date.parse("2026-06-06T00:00:00.000Z") / 1000,
+          updatedAt: Date.parse("2026-06-06T00:00:02.000Z") / 1000,
+          turns: [
+            {
+              id: "turn-1",
+              status: "inProgress",
+              startedAt: Date.parse("2026-06-06T00:00:01.000Z") / 1000,
+              items: [],
+            },
+          ],
         },
-        turns: [
-          {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "running",
-          },
-        ],
       },
       response: {
         id: 1,
@@ -35,7 +36,7 @@ function appServerClientMock(): AppServerSessionReadClient {
 }
 
 describe("appServerReadModelClient", () => {
-  it("应通过 agentSession/read 读取并投影 thread read model", async () => {
+  it("应通过 thread/read 读取并投影 thread read model", async () => {
     const appServerClient = appServerClientMock();
     const client = createAppServerReadModelClient({ appServerClient });
 
@@ -52,31 +53,30 @@ describe("appServerReadModelClient", () => {
         },
       ],
     });
-    expect(readModel.active_turn_id).toBeUndefined();
+    expect(readModel.active_turn_id).toBe("turn-1");
 
-    expect(appServerClient.readSession).toHaveBeenLastCalledWith({
-      sessionId: "session-1",
+    expect(appServerClient.readThread).toHaveBeenLastCalledWith({
+      threadId: "session-1",
+      includeTurns: true,
     });
   });
 
-  it("缺少 sessionId 时应 fail closed", async () => {
+  it("缺少 threadId 时应 fail closed", async () => {
     const appServerClient = appServerClientMock();
     const client = createAppServerReadModelClient({ appServerClient });
 
     await expect(client.getAgentRuntimeThreadRead(" ")).rejects.toThrow(
-      "sessionId is required to read App Server session",
+      "threadId is required to read canonical App Server thread",
     );
 
-    expect(appServerClient.readSession).not.toHaveBeenCalled();
+    expect(appServerClient.readThread).not.toHaveBeenCalled();
   });
 
-  it("agentSession/read 返回假成功 envelope 时应 fail closed", async () => {
+  it("thread/read 返回假成功 envelope 时应 fail closed", async () => {
     const appServerClient = appServerClientMock();
-    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+    vi.mocked(appServerClient.readThread).mockResolvedValueOnce({
       id: 1,
-      result: {
-        success: true,
-      } as never,
+      result: { success: true } as never,
       response: {
         id: 1,
         result: {} as never,
@@ -86,32 +86,24 @@ describe("appServerReadModelClient", () => {
     });
     const client = createAppServerReadModelClient({ appServerClient });
 
-    await expect(
-      client.getAgentRuntimeThreadRead("session-1"),
-    ).rejects.toThrow("agentSession/read did not return session read model");
+    await expect(client.getAgentRuntimeThreadRead("session-1")).rejects.toThrow(
+      "thread/read did not return canonical thread read model",
+    );
   });
 
-  it("agentSession/read 返回错误 turn 状态时应 fail closed", async () => {
+  it("thread/read 返回错误 turn 状态时应 fail closed", async () => {
     const appServerClient = appServerClientMock();
-    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+    vi.mocked(appServerClient.readThread).mockResolvedValueOnce({
       id: 1,
       result: {
-        session: {
+        thread: {
+          id: "thread-1",
           sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "agent-chat",
-          status: "running",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:02.000Z",
+          createdAt: Date.parse("2026-06-06T00:00:00.000Z") / 1000,
+          updatedAt: Date.parse("2026-06-06T00:00:02.000Z") / 1000,
+          status: { type: "active", activeFlags: [] },
+          turns: [{ status: "almost_done" }],
         },
-        turns: [
-          {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "almost_done",
-          },
-        ],
       } as never,
       response: {
         id: 1,
@@ -122,8 +114,8 @@ describe("appServerReadModelClient", () => {
     });
     const client = createAppServerReadModelClient({ appServerClient });
 
-    await expect(
-      client.getAgentRuntimeThreadRead("session-1"),
-    ).rejects.toThrow("agentSession/read did not return session read model");
+    await expect(client.getAgentRuntimeThreadRead("session-1")).rejects.toThrow(
+      "thread/read did not return canonical thread read model",
+    );
   });
 });

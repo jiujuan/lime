@@ -3,11 +3,10 @@
 //! 管理语音输入配置、ASR 凭证与润色指令。
 //! 不依赖 Tauri，可被主 crate 以桥接方式复用。
 
-use lime_core::app_paths;
 use lime_core::config::{
     load_config, save_config, AsrCredentialEntry, AsrProviderType, BaiduConfig, OpenAIAsrConfig,
     SenseVoiceLocalConfig, VoiceInputConfig, VoiceInstruction, VoiceOutputMode, WhisperLocalConfig,
-    WhisperModelSize, XunfeiConfig,
+    XunfeiConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -476,40 +475,26 @@ fn test_sensevoice_local_credential(credential: &AsrCredentialEntry) -> AsrCrede
     }
 }
 
-fn resolve_whisper_model_path(config: &WhisperLocalConfig) -> Result<PathBuf, String> {
-    if let Some(model_path) = config.model_path.as_ref() {
-        let trimmed = model_path.trim();
-        if !trimmed.is_empty() {
-            return Ok(PathBuf::from(trimmed));
-        }
-    }
-
-    let file_name = match config.model {
-        WhisperModelSize::Tiny => "ggml-tiny.bin",
-        WhisperModelSize::Base => "ggml-base.bin",
-        WhisperModelSize::Small => "ggml-small.bin",
-        WhisperModelSize::Medium => "ggml-medium.bin",
-    };
-    let data_dir = dirs::data_dir().ok_or_else(|| "无法获取数据目录".to_string())?;
-    Ok(data_dir
-        .join("lime")
-        .join("models")
-        .join("whisper")
-        .join(file_name))
+pub(crate) fn resolve_whisper_model_path(config: &WhisperLocalConfig) -> Result<PathBuf, String> {
+    resolve_absolute_model_path(config.model_path.as_deref(), "Whisper model_path")
 }
 
-fn resolve_sensevoice_model_dir(config: &SenseVoiceLocalConfig) -> Result<PathBuf, String> {
-    if let Some(model_dir) = config.model_dir.as_ref() {
-        let trimmed = model_dir.trim();
-        if !trimmed.is_empty() {
-            return Ok(PathBuf::from(trimmed));
-        }
-    }
+pub(crate) fn resolve_sensevoice_model_dir(
+    config: &SenseVoiceLocalConfig,
+) -> Result<PathBuf, String> {
+    resolve_absolute_model_path(config.model_dir.as_deref(), "SenseVoice model_dir")
+}
 
-    Ok(app_paths::preferred_data_dir()?
-        .join("models")
-        .join("voice")
-        .join(&config.model_id))
+fn resolve_absolute_model_path(value: Option<&str>, field: &str) -> Result<PathBuf, String> {
+    let value = value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{field} 未配置，模型路径必须由 Desktop Host 或显式配置提供"))?;
+    let path = PathBuf::from(value);
+    if !path.is_absolute() {
+        return Err(format!("{field} 必须是绝对路径: {}", path.display()));
+    }
+    Ok(path)
 }
 
 fn ensure_required_files(model_dir: &Path, required_files: &[&str]) -> Result<(), String> {
@@ -526,5 +511,62 @@ fn ensure_required_files(model_dir: &Path, required_files: &[&str]) -> Result<()
             "本地模型文件不完整，请先在设置 -> 语音模型中下载；缺失文件: {}",
             missing_files.join(", ")
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_model_paths_require_explicit_absolute_config() {
+        let whisper = WhisperLocalConfig::default();
+        let sensevoice = SenseVoiceLocalConfig::default();
+
+        assert!(resolve_whisper_model_path(&whisper)
+            .expect_err("missing Whisper path must fail")
+            .contains("Whisper model_path 未配置"));
+        assert!(resolve_sensevoice_model_dir(&sensevoice)
+            .expect_err("missing SenseVoice path must fail")
+            .contains("SenseVoice model_dir 未配置"));
+
+        let whisper = WhisperLocalConfig {
+            model_path: Some("models/whisper/model.bin".to_string()),
+            ..WhisperLocalConfig::default()
+        };
+        let sensevoice = SenseVoiceLocalConfig {
+            model_dir: Some("models/voice/sensevoice".to_string()),
+            ..SenseVoiceLocalConfig::default()
+        };
+        assert!(resolve_whisper_model_path(&whisper)
+            .expect_err("relative Whisper path must fail")
+            .contains("必须是绝对路径"));
+        assert!(resolve_sensevoice_model_dir(&sensevoice)
+            .expect_err("relative SenseVoice path must fail")
+            .contains("必须是绝对路径"));
+    }
+
+    #[test]
+    fn local_model_paths_accept_explicit_absolute_config() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let whisper_path = temp.path().join("ggml-base.bin");
+        let sensevoice_dir = temp.path().join("sensevoice");
+        let whisper = WhisperLocalConfig {
+            model_path: Some(whisper_path.to_string_lossy().to_string()),
+            ..WhisperLocalConfig::default()
+        };
+        let sensevoice = SenseVoiceLocalConfig {
+            model_dir: Some(sensevoice_dir.to_string_lossy().to_string()),
+            ..SenseVoiceLocalConfig::default()
+        };
+
+        assert_eq!(
+            resolve_whisper_model_path(&whisper).expect("Whisper path"),
+            whisper_path
+        );
+        assert_eq!(
+            resolve_sensevoice_model_dir(&sensevoice).expect("SenseVoice path"),
+            sensevoice_dir
+        );
     }
 }

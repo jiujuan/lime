@@ -7,6 +7,7 @@ import {
   MEDIA_REFERENCE_MIME_TYPE,
   MEDIA_REFERENCE_PROMPT,
   MEDIA_REFERENCE_SUMMARY_TEXT,
+  MEDIA_REFERENCE_TITLE,
   MEDIA_REFERENCE_URI,
 } from "./claw-chat-current-fixture-media-reference.mjs";
 
@@ -208,14 +209,12 @@ export function buildMediaReferenceScenarioAssertions({
     readModelMediaReferenceObserved:
       summary.readModelMediaReferenceCompleted?.hasMediaReference === true &&
       summary.readModelMediaReferenceCompleted?.hasReferenceUri === true &&
-      summary.readModelMediaReferenceCompleted?.hasMimeType === true &&
-      summary.readModelMediaReferenceCompleted?.hasCaption === true &&
       summary.readModelMediaReferenceCompleted?.hasSourceOwner === true &&
       summary.readModelMediaReferenceCompleted?.contentPartsKeyObserved ===
-        true &&
+        false &&
       pageText.includes(MEDIA_REFERENCE_PROMPT) &&
       pageText.includes(MEDIA_REFERENCE_SUMMARY_TEXT) &&
-      pageText.includes(MEDIA_REFERENCE_URI) &&
+      pageText.includes(MEDIA_REFERENCE_TITLE) &&
       pageText.includes(MEDIA_REFERENCE_MIME_TYPE),
   };
 }

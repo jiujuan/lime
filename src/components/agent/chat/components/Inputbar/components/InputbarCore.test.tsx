@@ -262,11 +262,9 @@ describe("InputbarCore", () => {
         getTracks: () => [{ stop: vi.fn() }],
       })),
     };
-    let processor:
-      | {
-          onaudioprocess: ((event: AudioProcessingEvent) => void) | null;
-        }
-      | null = null;
+    let processor: {
+      onaudioprocess: ((event: AudioProcessingEvent) => void) | null;
+    } | null = null;
 
     class FakeMediaRecorder {
       static isTypeSupported() {
@@ -761,60 +759,6 @@ describe("InputbarCore", () => {
     });
 
     expect(onSend).not.toHaveBeenCalled();
-    expect(onStop).toHaveBeenCalledTimes(1);
-  });
-
-  it("生成中已有下一条草稿时应显示稍后处理与停止按钮，并渲染待处理列表", async () => {
-    const onSend = vi.fn();
-    const onStop = vi.fn();
-    const container = await renderInputbarCore({
-      text: "下一条需求",
-      onSend,
-      onStop,
-      isLoading: true,
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-1",
-          message_preview: "本周复盘摘要",
-          message_text: "这里是完整的排队输入内容，点击后应展开查看。",
-          created_at: 1700000000000,
-          image_count: 0,
-          position: 1,
-        },
-      ],
-    });
-
-    const queueButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("稍后处理"),
-    );
-    const stopButton = container.querySelector(
-      'button[aria-label="停止"]',
-    ) as HTMLButtonElement | null;
-
-    expect(queueButton).toBeTruthy();
-    expect(stopButton).toBeTruthy();
-    expect(container.textContent).toContain("稍后处理 1");
-    expect(container.textContent).not.toContain("这里是完整的排队输入内容");
-
-    const queueCard = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("本周复盘摘要"),
-    );
-    expect(queueCard).toBeTruthy();
-
-    act(() => {
-      queueCard?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(container.textContent).toContain("这里是完整的排队输入内容");
-
-    act(() => {
-      queueButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    act(() => {
-      stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 

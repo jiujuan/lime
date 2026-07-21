@@ -1,7 +1,6 @@
 use super::launch_gate::validate_worker_cloud_release_signature;
 use super::*;
 use crate::runtime::timestamp;
-use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionStatus;
 use app_server_protocol::AgentTurn;
@@ -123,7 +122,7 @@ fn workflow_worker_progress_without_context_fails_closed() {
 }
 
 #[tokio::test]
-async fn skips_worker_turn_when_content_factory_is_not_installed() {
+async fn rejects_worker_turn_when_content_factory_is_not_installed() {
     let request = execution_request(json!({
         "plugin": {
             "source": "right_surface_article_workspace",
@@ -146,8 +145,14 @@ async fn skips_worker_turn_when_content_factory_is_not_installed() {
         .await
         .expect("worker dispatch check");
 
-    assert!(!handled);
-    assert!(sink.events.is_empty());
+    assert!(handled);
+    assert_eq!(
+        sink.events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["turn.accepted", "runtime.error", "turn.failed"]
+    );
 }
 
 #[test]
@@ -737,10 +742,7 @@ fn execution_request(metadata: Value) -> ExecutionRequest {
             started_at: Some(timestamp()),
             completed_at: None,
         },
-        input: AgentInput {
-            text: "重新生成配图".to_string(),
-            attachments: Vec::new(),
-        },
+        input: agent_runtime::reply_input::RuntimeReplyInput::text("重新生成配图"),
         runtime_options: Some(app_server_protocol::RuntimeOptions {
             runtime_request: Some(app_server_protocol::RuntimeRequest {
                 metadata: Some(metadata),

@@ -45,7 +45,7 @@ describe("App Server config warning subscribers", () => {
 
     const client = new AppServerClient({ initialRequestId: 10 });
     const result = await client.request<{ ok: boolean }>(
-      "agentSession/turn/start",
+      "turn/start",
       {},
     );
 
@@ -59,7 +59,7 @@ describe("App Server config warning subscribers", () => {
         },
       ],
       {
-        method: "agentSession/turn/start",
+        method: "turn/start",
         phase: "response",
         requestId: 10,
       },
@@ -136,7 +136,7 @@ describe("App Server config warning subscribers", () => {
 
     const client = new AppServerClient({ initialRequestId: 12 });
     const result = await client.request<{ ok: boolean }>(
-      "agentSession/turn/start",
+      "turn/start",
       {},
     );
 

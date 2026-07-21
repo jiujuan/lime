@@ -1097,7 +1097,6 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
       undefined,
       expect.objectContaining({
         displayContent: "展示文本",
-        skipPreSubmitResume: true,
         skipSessionRestore: true,
         skipSessionStartHooks: true,
         skipWorkspaceCommandRouting: true,
@@ -1241,7 +1240,6 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
       undefined,
       undefined,
       expect.objectContaining({
-        skipPreSubmitResume: true,
         skipSessionRestore: true,
         skipSessionStartHooks: true,
         skipWorkspaceCommandRouting: true,
@@ -1356,7 +1354,6 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
       undefined,
       undefined,
       expect.objectContaining({
-        skipPreSubmitResume: true,
         skipSessionRestore: true,
         skipSessionStartHooks: true,
         skipWorkspaceCommandRouting: true,

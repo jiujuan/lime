@@ -6,10 +6,6 @@ import type {
   AgentRuntimeThreadReadModel,
   AgentTodoItem,
 } from "@/lib/api/agentRuntime/sessionTypes";
-import {
-  normalizeQueuedTurnSnapshots,
-  type QueuedTurnSnapshot,
-} from "@/lib/api/queuedTurn";
 import { resolveRestorableSessionId } from "@/lib/agentSessionRecovery";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import type { Topic } from "./agentChatShared";
@@ -59,7 +55,6 @@ export interface AgentSessionSnapshot {
   threadTurns: AgentThreadTurn[];
   threadItems: AgentThreadItem[];
   currentTurnId: string | null;
-  queuedTurns: QueuedTurnSnapshot[];
   threadRead: AgentRuntimeThreadReadModel | null;
   executionRuntime: AgentSessionExecutionRuntime | null;
   todoItems: AgentTodoItem[];
@@ -375,7 +370,6 @@ export function createEmptyAgentSessionSnapshot(options?: {
     threadTurns: [],
     threadItems: [],
     currentTurnId: null,
-    queuedTurns: [],
     threadRead: null,
     executionRuntime: options?.executionRuntime ?? null,
     todoItems: [],
@@ -427,13 +421,11 @@ export function hasSessionHydrationActivity(options: {
   currentTurnId: string | null;
   threadTurnsCount: number;
   threadItemsCount: number;
-  queuedTurnsCount: number;
 }) {
   return (
     options.currentTurnId !== null ||
     options.threadTurnsCount > 0 ||
-    options.threadItemsCount > 0 ||
-    options.queuedTurnsCount > 0
+    options.threadItemsCount > 0
   );
 }
 
@@ -463,15 +455,10 @@ export function shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitializ
 
 export function hasActiveRuntimeTurn(options: {
   currentTurnId?: string | null;
-  queuedTurnsCount: number;
   threadRead?: AgentRuntimeThreadReadModel | null;
   threadReadStatus?: string | null;
   turns: readonly AgentThreadTurn[];
 }): boolean {
-  if (options.queuedTurnsCount > 0) {
-    return true;
-  }
-
   const normalizedThreadReadStatus =
     options.threadReadStatus?.trim().toLowerCase() ?? null;
   const normalizedProfileStatus =
@@ -489,15 +476,13 @@ export function hasActiveRuntimeTurn(options: {
     const readModelReportsQueued =
       normalizedThreadReadStatus === "queued" ||
       normalizedProfileStatus === "queued";
-    const readModelQueuedTurnsCount =
-      options.threadRead.queued_turns?.length ?? 0;
     const hasAuthoritativeReadModelStatus = Boolean(
       normalizedThreadReadStatus || normalizedProfileStatus,
     );
     if (
       hasAuthoritativeReadModelStatus &&
       !readModelReportsRunning &&
-      !(readModelReportsQueued && readModelQueuedTurnsCount > 0)
+      !readModelReportsQueued
     ) {
       return false;
     }
@@ -508,13 +493,16 @@ export function hasActiveRuntimeTurn(options: {
     ) {
       return true;
     }
-    if (readModelReportsQueued && readModelQueuedTurnsCount > 0) {
+    if (readModelReportsQueued) {
       return true;
     }
     if (readModelReportsRunning) {
       return Boolean(options.threadRead.active_turn_id?.trim());
     }
-  } else if (normalizedThreadReadStatus === "running") {
+  } else if (
+    normalizedThreadReadStatus === "running" ||
+    normalizedThreadReadStatus === "queued"
+  ) {
     return true;
   }
 
@@ -565,7 +553,6 @@ export function shouldDeferSessionDetailHydration(options: {
       currentTurnId: cachedSnapshot.currentTurnId,
       threadTurnsCount: cachedSnapshot.threadTurns.length,
       threadItemsCount: cachedSnapshot.threadItems.length,
-      queuedTurnsCount: 0,
     })
   );
 }
@@ -575,7 +562,6 @@ export function shouldSkipAlreadyHydratedSession(options: {
   sessionId: string;
   currentTurnId: string | null;
   messagesCount: number;
-  queuedTurnsCount: number;
   threadReadStatus?: string | null;
   threadItemsCount: number;
   threadTurnsCount: number;
@@ -589,7 +575,6 @@ export function shouldSkipAlreadyHydratedSession(options: {
     options.messagesCount > 0 ||
     hasSessionHydrationActivity({
       currentTurnId: options.currentTurnId,
-      queuedTurnsCount: options.queuedTurnsCount,
       threadItemsCount: options.threadItemsCount,
       threadTurnsCount: options.threadTurnsCount,
     });
@@ -632,7 +617,6 @@ export type MissingSessionFromTopicsAction =
 export function resolveMissingSessionFromTopicsAction(options: {
   currentTurnId: string | null;
   detachedSessionId: string | null | undefined;
-  queuedTurnsCount: number;
   remoteConfirmed?: boolean;
   restoreCandidateMayLagTopics?: boolean;
   sessionId: string | null | undefined;
@@ -665,7 +649,6 @@ export function resolveMissingSessionFromTopicsAction(options: {
       currentTurnId: options.currentTurnId,
       threadTurnsCount: options.threadTurnsCount,
       threadItemsCount: options.threadItemsCount,
-      queuedTurnsCount: options.queuedTurnsCount,
     }) ||
     options.remoteConfirmed === true ||
     options.restoreCandidateMayLagTopics === true;
@@ -919,9 +902,6 @@ export function buildHydratedAgentSessionSnapshot(
       threadTurns: nextThreadTurns,
       threadItems: nextThreadItemsWithTerminalMarkers,
       currentTurnId: nextCurrentTurnId,
-      queuedTurns: normalizeQueuedTurnSnapshots(
-        detail.queued_turns ?? detail.thread_read?.queued_turns,
-      ),
       threadRead: detail.thread_read ?? null,
       executionRuntime:
         shouldPreserveExecutionRuntimeOnMissingDetail && !nextExecutionRuntime

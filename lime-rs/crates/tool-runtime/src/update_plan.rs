@@ -174,8 +174,8 @@ fn check_plan_mode(
     turn_context: Option<&RuntimeToolTurnContext>,
 ) -> Result<(), RuntimeToolExecutionError> {
     if turn_context
-        .and_then(|context| context.collaboration_mode.as_deref())
-        .is_some_and(|mode| matches!(mode.trim(), "plan" | "planning"))
+        .and_then(|context| context.collaboration_mode.as_ref())
+        .is_some_and(|mode| mode.mode == agent_protocol::ModeKind::Plan)
     {
         return Err(plan_update_error(
             "update_plan is a TODO/checklist tool and is not allowed in Plan mode",
@@ -271,7 +271,14 @@ mod tests {
     async fn plan_update_executor_rejects_plan_mode() {
         let runtime_context = context();
         let turn_context = TurnContextOverride {
-            collaboration_mode: Some("plan".to_string()),
+            collaboration_mode: Some(agent_protocol::CollaborationMode {
+                mode: agent_protocol::ModeKind::Plan,
+                settings: agent_protocol::CollaborationModeSettings {
+                    model: "gpt-5-codex".to_string(),
+                    reasoning_effort: None,
+                    developer_instructions: None,
+                },
+            }),
             ..TurnContextOverride::default()
         };
         let error = runtime_plan_update_executor_handle()

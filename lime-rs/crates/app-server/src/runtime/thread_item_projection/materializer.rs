@@ -70,6 +70,10 @@ impl<'a> IncrementalMaterializer<'a> {
     ) -> Result<MaterializedEventEntities, MaterializationError> {
         self.materializer.apply(event)
     }
+
+    pub(in crate::runtime) fn items_for_turn(&self, turn_id: &str) -> Vec<ThreadItem> {
+        self.materializer.accumulator.items_for_turn(turn_id)
+    }
 }
 
 struct Materializer<'a> {

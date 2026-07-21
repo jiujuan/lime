@@ -70,7 +70,7 @@ fn selected_agent_skill_names_from_request(request: &ExecutionRequest) -> Vec<St
     let workspace_scope =
         super::request_context::request_workspace_scope(request, host_request.as_ref());
     super::agent_skills_context::selected_agent_skill_names_for_turn(
-        &request.input.text,
+        &request.input.concat_text(),
         &request_metadata_values(request),
         workspace_scope.working_dir.as_deref(),
         workspace_scope.project_root.as_deref(),

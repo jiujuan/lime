@@ -97,7 +97,6 @@ export function registerSkillsRuntimeSmokeGuards({
       "SKILLS_RUNTIME_EXPLICIT_DONE_TEXT",
       "SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT",
       "SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT",
-      "expert-skills-runtime",
       "expert-plaza-skills-runtime",
       "expert-panel-skills-runtime",
       'options.scenario !== "expert-panel-skills-runtime"',
@@ -142,11 +141,8 @@ export function registerSkillsRuntimeSmokeGuards({
       "waitForBackendLedgerTurnStartContaining",
       "launchSkillsRuntimeFromWorkspacePanel",
       "createExpertSkillsRuntimeSession",
-      "send-expert-skills-runtime-prompt-from-gui",
-      "expertSkillsRuntimeInputSend",
-      "expectedSessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID",
-      "expertSkillsRuntimeQueueResume",
-      "waitForBackendTurnStartWithCurrentQueueResume",
+      "expertSkillsRuntimeTurnStart",
+      "expertPanelSkillsRuntimeTurnStart",
       "{ title }",
       "waitForBackendLedgerTurnStart",
       "manualEnableSkillsRuntimeSessionId",
@@ -731,10 +727,6 @@ export function registerSkillsRuntimeSmokeGuards({
       '"mcp-structured-content"',
       "claw-chat-current-fixture-mcp-structured-content-regression",
       "MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture",
-      "Claw Expert Skills Runtime declared + selected + invoked Electron fixture",
-      '"expert-skills-runtime"',
-      "claw-chat-current-fixture-expert-skills-runtime-regression",
-      "Expert Skills Runtime declared + selected + invoked Electron fixture",
       "Claw Expert Plaza Skills Runtime click-through Electron fixture",
       '"expert-plaza-skills-runtime"',
       "claw-chat-current-fixture-expert-plaza-skills-runtime-regression",
@@ -745,6 +737,11 @@ export function registerSkillsRuntimeSmokeGuards({
       "ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture",
       'LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0"',
       'LIME_REAL_API_TEST: "0"',
+    ]);
+    expectAllNotToContain(expect, content, [
+      "Claw Expert Skills Runtime declared + selected + invoked Electron fixture",
+      '"expert-skills-runtime"',
+      "claw-chat-current-fixture-expert-skills-runtime-regression",
     ]);
   });
 }

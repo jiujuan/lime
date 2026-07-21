@@ -37,8 +37,7 @@ fn call_scope() -> tool_runtime::mcp_connection::McpCallScope {
 }
 
 fn call_scope_for(turn_id: &str) -> tool_runtime::mcp_connection::McpCallScope {
-    tool_runtime::mcp_connection::McpCallScope::new(Some(turn_id))
-        .expect("MCP turn correlation")
+    tool_runtime::mcp_connection::McpCallScope::new(Some(turn_id)).expect("MCP turn correlation")
 }
 
 fn runtime_owner(session_id: &str, thread_id: &str) -> McpRuntimeOwner {
@@ -895,8 +894,8 @@ async fn cancel_all_resolves_each_pending_waiter_as_cancel() {
         let request_router = router.clone();
         tasks.push(tokio::spawn(async move {
             request_router
-            .request_for_test(
-                server.to_string(),
+                .request_for_test(
+                    server.to_string(),
                     call_scope(),
                     form_request(),
                     None,

@@ -1,44 +1,43 @@
-## Lime v1.107.0
+## Lime v1.108.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Added a resumable Electron update state machine for checking, downloading, completion, installation, and restart. Repeated actions now reuse the active session instead of duplicating downloads or restarts.
-- Added Windows Squirrel N-1 installer download, candidate install/upgrade smoke, and structured evidence upload to the release workflow.
-- Converged Browser Runtime settings on the current session API with remote-debugging port validation, target inspection, session open/close, and connection-state feedback.
-- Added the Dream Blossom home skin and local hero artwork, with skin assets, copy, and five-locale navigation/settings resources owned by the unified appearance path.
+- Upgraded the Agent product chain to the App Server v2 `Thread / Turn / Item` protocol, covering thread creation/resume/archive, turn start/interrupt/steer, item lifecycle, and token usage notifications.
+- Added thread goals, memory modes, thread settings, shell commands, paginated history/read models, and durable notifications with one canonical GUI identity.
+- Added a session loop for queued input, steering, interruption, approval responses, context compaction, sub-agent mailboxes, and durable cross-turn continuation.
 
 ### Fixes
 
-- Fixed duplicate Codex rollout discovery, canonical item detail boundaries, and stable item identity during imported-history reads.
-- Fixed ordering, filtering, and recovery state across historical/live messages, tool calls, file artifacts, reasoning, and web retrieval in the Agent timeline; narrow layouts no longer remount the message tree.
-- Fixed inconsistent loading, error, disconnect, close, and retry states in Settings and Browser Runtime, and removed the retired Chrome Relay guide path from the current product chain.
-- Fixed re-entry boundaries in Electron updater, App Server host, and Windows startup paths, with deterministic configuration for unsigned macOS development packaging.
-- Fixed a Windows Squirrel N-1 smoke navigation race that treated the preload-enabled startup page as the final renderer; packaged launches now also remove unsupported `NODE_OPTIONS` and the development-server URL.
-- Fixed Electron Release workflow builds when the Rust cache omits sherpa-onnx prebuilt libraries; shared runtime libraries are now prepared explicitly for each target before packaging.
-- Fixed Windows Git Bash drive-letter parsing while extracting sherpa-onnx archives by using the workspace directory and archive basename, allowing all platforms to reach packaging.
-- Fixed provider SSE termination after `finish_reason` without waiting for `[DONE]`, and stopped revised thinking snapshots from rendering twice in the UI.
+- Fixed duplicate messages, missing terminal states, identity drift, and error recovery across topic switches, history hydration, archive/unarchive, running-turn reopen, and long-thread pagination.
+- Fixed queued/steer/interrupt ordering across Electron IPC, App Server notifications, and the GUI input bar so interrupted or failed turns can continue on the same thread.
+- Fixed provider routing readiness, credential lookup, pending generation, stream terminals, and model error presentation while keeping unknown capabilities fail closed.
+- Fixed current bridge wiring for archived conversations, provider connection errors, voice models, and system capabilities in Settings while removing the retired hotkey settings surface and production mock fallback.
+- Fixed restart, cancellation, and permission-failure cleanup for plugin workers, automation, MCP elicitation, Browser Session, and system tools.
+- Fixed static session identity across Content Factory first open, draft editing, reload recovery, and workflow actions. Article Editor, artifacts, and the right workspace now consume server-issued canonical Thread/Turn identity and the durable v2 read model.
 
 ### Improvements and Refactors
 
-- Extracted canonical item conversion into a dedicated App Server current module covering Thread/Turn/Item payloads, metadata, tool output, approvals, media, sub-agents, and compaction.
-- Further converged Codex local-history import on canonical Thread/Turn/Item data, including large histories, archived paths, visual audits, and continuation.
-- Expanded managed tool execution, cold-restart, soak evidence, and Settings fixture harnesses while keeping script ownership and fail-closed governance on one path.
-- Removed the retired Chrome Relay guide, the ineffective `.skill` system-setting path, and test artifacts outside the build graph; required negative governance guards remain.
+- Converged App Server protocol, transport, processor, RuntimeCore, ThreadStore, and Renderer typed gateways on one v2 current path; retired `agentSession` session methods and schemas were removed.
+- Split Agent runtime ownership across the session loop, turn start, thread state/listener, goals/usage, history merge, route selection, and provider request modules.
+- Narrowed Electron Desktop Host to App Server forwarding and OS host capabilities, synchronizing Plugin, Voice, System Utility, and preload/IPC allowlists.
+- Reorganized Renderer canonical projection, event streams, workspace runtime, message lists, task rails, and right-side workbenches around one Thread/Turn/Item read model.
+- Unified user-data, cache, credential, and database-root migration while removing runtime queues, imported-session sidecars, duplicate repositories, and retired compatibility entries.
 
 ### Tests and Quality
 
-- Added Windows Squirrel RC, updater re-entry, Browser Runtime session, multi-page Settings, and Dream Blossom skin regressions.
-- Expanded Agent timeline, Codex import, canonical read model, provider stream, Electron host/preload/IPC, protocol catalog, and five-locale resource coverage.
-- Added managed-execution evidence, soak, cold-restart, and script-governance checks while keeping production mock fallback disabled.
+- Expanded unit and integration coverage for App Server v2 JSON-RPC, the session loop, ThreadStore history, provider routing, MCP, Multi-Agent, plugin workers, and Electron host boundaries.
+- Added Gate A browser-projection and Gate B Electron/current-fixture evidence for real preload/IPC, `app_server_handle_json_lines`, read-model, GUI terminal, and zero production mocks.
+- Added Content Factory Gate B coverage for Article Editor open/edit/reload recovery, artifacts/read model, and workflow controls, passing 70/70 assertions with zero console or page errors.
+- Updated protocol generation, command/catalog, storage-root, legacy-surface, and script-owner guards to prevent v0/compat regressions.
 
 ### Documentation
 
-- Updated global architecture, App Server release updater, Codex import roadmap, Refactor V2 test plan, Agent verification research, and project Gate A/B records with current ownership, Windows RC evidence, and remaining live/eval boundaries.
+- Updated architecture, database/persistence, provider, governance, Codex/OpenCode alignment, Writing v2, Agent Workbench, and project Gate A/B sources of truth.
 
 ### Other
 
-- Bumped version facts to `1.107.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and release notes.
+- Bumped version facts to `1.108.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and release notes.
 
-**Full changes**: `v1.106.0` -> `v1.107.0`
+**Full changes**: `v1.107.0` -> `v1.108.0`

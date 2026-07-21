@@ -44,6 +44,57 @@ export function isGuiCanceledSnapshotReady(
   return snapshot.hasStoppedCopy === true;
 }
 
+export function isGuiChatCompletedSnapshotReady(
+  snapshot,
+  {
+    requiredAssistantVisibleTexts = [],
+    expectedIdentity = null,
+  } = {},
+) {
+  const hasRequiredAssistantVisibleTexts = (
+    snapshot?.requiredVisibleTextHits || []
+  ).every((hit) => hit.occurrences > 0);
+  const scopedDedupeGuardHits =
+    snapshot?.assistantScopeDedupeGuardHits ||
+    snapshot?.dedupeGuardHits ||
+    [];
+  const scopedDisallowedVisibleTextHits =
+    snapshot?.disallowedVisibleTextHits || [];
+  const hasExpectedAssistantContent =
+    requiredAssistantVisibleTexts.length > 0
+      ? snapshot?.hasAssistantSummary && hasRequiredAssistantVisibleTexts
+      : snapshot?.hasAssistantSummary || snapshot?.hasDoneText;
+  const contentReady =
+    snapshot?.hasPrompt &&
+    hasExpectedAssistantContent &&
+    snapshot?.textareaVisible === true &&
+    snapshot?.textareaDisabled === false &&
+    snapshot?.stopButtonVisible === false &&
+    scopedDedupeGuardHits.every((hit) => hit.occurrences <= 1) &&
+    scopedDisallowedVisibleTextHits.every((hit) => hit.occurrences === 0);
+  if (!contentReady || !expectedIdentity) {
+    return contentReady;
+  }
+
+  const expectedSessionId = String(expectedIdentity.sessionId || "").trim();
+  const expectedTurnId = String(expectedIdentity.turnId || "").trim();
+  const runtimeTurnStatus = String(
+    snapshot.completionScope?.runtimeTurnStatus || "",
+  )
+    .trim()
+    .toLowerCase();
+  return (
+    expectedSessionId.length > 0 &&
+    expectedTurnId.length > 0 &&
+    snapshot.textareaSessionId === expectedSessionId &&
+    snapshot.completionScope?.runtimeTurnId === expectedTurnId &&
+    snapshot.completionScope?.assistantRuntimeTurnId === expectedTurnId &&
+    ["canceled", "cancelled", "completed", "failed", "interrupted"].includes(
+      runtimeTurnStatus,
+    )
+  );
+}
+
 export async function waitForGuiChatCompleted(
   page,
   options,
@@ -54,6 +105,7 @@ export async function waitForGuiChatCompleted(
     requiredVisibleTexts,
     dedupeGuardTexts = [],
     disallowedVisibleTexts = ["legacy_tool_event"],
+    expectedIdentity = null,
   } = {},
 ) {
   const startedAt = Date.now();
@@ -296,6 +348,8 @@ export async function waitForGuiChatCompleted(
             foundTurnGroup: Boolean(scopedTurnGroup),
             runtimeTurnId:
               scopedTurnGroup?.getAttribute("data-runtime-turn-id") || "",
+            runtimeTurnStatus:
+              scopedTurnGroup?.getAttribute("data-runtime-turn-status") || "",
             lastAssistantMessageId:
               scopedTurnGroup?.getAttribute("data-last-assistant-message-id") ||
               "",
@@ -311,6 +365,10 @@ export async function waitForGuiChatCompleted(
           textareaVisible,
           textareaDisabled:
             textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          textareaSessionId:
+            textarea instanceof HTMLTextAreaElement
+              ? textarea.dataset.sessionId || null
+              : null,
           textareaValue:
             textarea instanceof HTMLTextAreaElement ? textarea.value : null,
           stopButtonVisible,
@@ -366,26 +424,12 @@ export async function waitForGuiChatCompleted(
       continue;
     }
     lastSnapshot = snapshot;
-    const hasRequiredAssistantVisibleTexts = (
-      snapshot.requiredVisibleTextHits || []
-    ).every((hit) => hit.occurrences > 0);
-    const scopedDedupeGuardHits =
-      snapshot.assistantScopeDedupeGuardHits || snapshot.dedupeGuardHits || [];
-    const scopedDisallowedVisibleTextHits =
-      snapshot.disallowedVisibleTextHits || [];
-    const hasExpectedAssistantContent =
-      requiredAssistantVisibleTexts.length > 0
-        ? snapshot.hasAssistantSummary && hasRequiredAssistantVisibleTexts
-        : snapshot.hasAssistantSummary || snapshot.hasDoneText;
-    const completionReadyWithoutApprovalRecord =
-      snapshot.hasPrompt &&
-      hasExpectedAssistantContent &&
-      snapshot.textareaVisible &&
-      snapshot.textareaDisabled === false &&
-      snapshot.stopButtonVisible === false &&
-      scopedDedupeGuardHits.every((hit) => hit.occurrences <= 1) &&
-      scopedDisallowedVisibleTextHits.every((hit) => hit.occurrences === 0);
-    if (completionReadyWithoutApprovalRecord) {
+    if (
+      isGuiChatCompletedSnapshotReady(snapshot, {
+        requiredAssistantVisibleTexts,
+        expectedIdentity,
+      })
+    ) {
       return snapshot;
     }
     await sleep(options.intervalMs);
@@ -399,6 +443,7 @@ export async function waitForGuiSkillsRuntimeCompleted(
   page,
   options,
   scenario = SKILLS_RUNTIME_SCENARIO,
+  expectedIdentity = null,
 ) {
   return await waitForGuiChatCompleted(page, options, {
     prompt: scenario.prompt,
@@ -408,6 +453,7 @@ export async function waitForGuiSkillsRuntimeCompleted(
     disallowedVisibleTexts: scenario.disallowedVisibleTexts ?? [
       "legacy_tool_event",
     ],
+    expectedIdentity,
   });
 }
 

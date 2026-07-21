@@ -101,59 +101,22 @@ function workflowResumeCandidates(metadata) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return [];
   }
-  return [
-    metadata,
-    metadata.workflowResume,
-    metadata.workflow_resume,
-    metadata.workflowResumeLifecycle,
-    metadata.workflow_resume_lifecycle,
-    metadata.workerLifecycle,
-    metadata.worker_lifecycle,
-    metadata.pluginWorkflow,
-    metadata.plugin_workflow,
-  ].filter(
-    (value) => value && typeof value === "object" && !Array.isArray(value),
-  );
-}
-
-function workflowResumeContractBindingFromObject(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const actionId = stringField(value, ["actionId", "action_id"]);
-  const decision = stringField(value, ["decision"]);
-  if (!value.metadata || typeof value.metadata !== "object") {
-    return null;
-  }
-  for (const candidate of workflowResumeCandidates(value.metadata)) {
-    const workflowRunId = stringField(candidate, [
-      "workflowRunId",
-      "workflow_run_id",
-      "runId",
-      "run_id",
-    ]);
-    const workflowKey = stringField(candidate, [
-      "workflowKey",
-      "workflow_key",
-      "key",
-      "workflow",
-    ]);
-    const stepId = stringField(candidate, ["stepId", "step_id", "id"]);
-    if (workflowRunId && workflowKey && stepId) {
-      return {
-        actionId: actionId || null,
-        decision: decision || null,
-        stepId,
-        workflowKey,
-        workflowRunId,
-      };
-    }
-  }
-  return null;
+  const workflowResume = metadata.workflowResume;
+  return workflowResume &&
+    typeof workflowResume === "object" &&
+    !Array.isArray(workflowResume)
+    ? [workflowResume]
+    : [];
 }
 
 function workflowResumeActionResponseBindingFromObject(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const method = stringField(value, ["method"]);
+  if (
+    !new Set(["agentSession/action/respond", "workflow/respond"]).has(method)
+  ) {
     return null;
   }
   const actionId = stringField(value, [
@@ -272,39 +235,22 @@ function collectWorkflowResumeEventBindings(root) {
   return bindings;
 }
 
-function collectWorkflowResumeMetadataBindings(root) {
-  const bindings = [];
-  const seen = new Set();
-  function walk(value) {
-    if (!value || typeof value !== "object" || seen.has(value)) return;
-    seen.add(value);
-    for (const binding of [
-      workflowResumeContractBindingFromObject(value),
-      workflowResumeActionResponseBindingFromObject(value),
-    ]) {
-      if (binding?.actionId && binding?.decision) bindings.push(binding);
-    }
-    const values = Array.isArray(value) ? value : Object.values(value);
-    for (const item of values) {
-      walk(item);
-    }
-  }
-  walk(root);
-  return bindings;
+function collectWorkflowResumeActionMetadataBindings(guiEvidence) {
+  const binding = workflowResumeActionResponseBindingFromObject(
+    guiEvidence?.runtimeActionResponse,
+  );
+  return binding?.actionId && binding?.decision ? [binding] : [];
 }
 
-function workflowResumeEventBindingsForContract(
-  contractBinding,
-  eventBindings,
-) {
-  if (!contractBinding) return [];
+function workflowResumeEventBindingsForAction(actionBinding, eventBindings) {
+  if (!actionBinding) return [];
   return eventBindings.filter(
     (binding) =>
-      binding.actionId === contractBinding.actionId &&
-      binding.decision === contractBinding.decision &&
-      binding.stepId === contractBinding.stepId &&
-      binding.workflowKey === contractBinding.workflowKey &&
-      binding.workflowRunId === contractBinding.workflowRunId,
+      binding.actionId === actionBinding.actionId &&
+      binding.decision === actionBinding.decision &&
+      binding.stepId === actionBinding.stepId &&
+      binding.workflowKey === actionBinding.workflowKey &&
+      binding.workflowRunId === actionBinding.workflowRunId,
   );
 }
 
@@ -319,29 +265,30 @@ function workflowResumeAuditEventsPresent(bindings) {
 }
 
 function summarizeWorkflowResumeLifecycle(guiEvidence) {
-  const contractBindings = collectWorkflowResumeMetadataBindings(guiEvidence);
+  const actionBindings =
+    collectWorkflowResumeActionMetadataBindings(guiEvidence);
   const eventBindings = collectWorkflowResumeEventBindings(guiEvidence);
-  const matchedContractBinding =
-    contractBindings.find((binding) =>
+  const matchedActionBinding =
+    actionBindings.find((binding) =>
       workflowResumeAuditEventsPresent(
-        workflowResumeEventBindingsForContract(binding, eventBindings),
+        workflowResumeEventBindingsForAction(binding, eventBindings),
       ),
-    ) || contractBindings[0];
-  const matchingEventBindings = workflowResumeEventBindingsForContract(
-    matchedContractBinding,
+    ) || actionBindings[0];
+  const matchingEventBindings = workflowResumeEventBindingsForAction(
+    matchedActionBinding,
     eventBindings,
   );
   const auditEventsPresent = workflowResumeAuditEventsPresent(
     matchingEventBindings,
   );
   return {
-    actionId: matchedContractBinding?.actionId || null,
+    actionId: matchedActionBinding?.actionId || null,
+    actionMetadataPresent: actionBindings.length > 0,
     auditEventsPresent,
-    contractMetadataPresent: contractBindings.length > 0,
-    decision: matchedContractBinding?.decision || null,
-    stepId: matchedContractBinding?.stepId || null,
-    workflowKey: matchedContractBinding?.workflowKey || null,
-    workflowRunId: matchedContractBinding?.workflowRunId || null,
+    decision: matchedActionBinding?.decision || null,
+    stepId: matchedActionBinding?.stepId || null,
+    workflowKey: matchedActionBinding?.workflowKey || null,
+    workflowRunId: matchedActionBinding?.workflowRunId || null,
   };
 }
 
@@ -614,7 +561,7 @@ export function summarizeGuiEvidence(guiEvidence) {
     turnStartTrace?.command === "app_server_handle_json_lines" &&
     turnStartTrace?.transport === "electron-ipc" &&
     turnStartTrace?.status === "success" &&
-    turnStartTrace?.method === "agentSession/turn/start",
+    turnStartTrace?.method === "turn/start",
   );
   const appServerHandleJsonLinesSeen = firstBoolAtPaths(guiEvidence || {}, [
     ["trace", "appServerHandleJsonLinesSeen"],
@@ -625,9 +572,9 @@ export function summarizeGuiEvidence(guiEvidence) {
     ["assertions", "appServerMethodsSeen"],
   ]).filter((value) => typeof value === "string" && value.trim());
   const currentAppServerMethodsSeen =
-    appServerMethodsSeen.includes("agentSession/read") &&
+    appServerMethodsSeen.includes("thread/read") &&
     appServerMethodsSeen.includes("evidence/export") &&
-    appServerMethodsSeen.includes("agentSession/turn/start");
+    appServerMethodsSeen.includes("turn/start");
   const hostGenerationFixture = firstObjectAtPaths(guiEvidence || {}, [
     ["hostGenerationFixture"],
     ["host_generation_fixture"],
@@ -681,7 +628,7 @@ export function summarizeGuiEvidence(guiEvidence) {
       workflowFactsHidden &&
       workflowJsonlPresent &&
       workflowAuditExportReady &&
-      workflowResumeLifecycle.contractMetadataPresent &&
+      workflowResumeLifecycle.actionMetadataPresent &&
       workflowResumeLifecycle.auditEventsPresent &&
       liveProviderUsed &&
       turnStartViaElectronIpc &&
@@ -1029,13 +976,13 @@ export function appendGuiEvidenceRequirements(
     );
   }
   if (
-    !guiEvidence.workflowResumeLifecycle.contractMetadataPresent ||
+    !guiEvidence.workflowResumeLifecycle.actionMetadataPresent ||
     !guiEvidence.workflowResumeLifecycle.auditEventsPresent
   ) {
     pushRequirement(
       missingRequirements,
       "production_workflow_resume_lifecycle_missing",
-      "GUI evidence must prove runtime response/resume decision metadata with workflowResume and workflow.step/run.resuming audit events.",
+      "GUI evidence must prove typed action response metadata with workflowResume and workflow.step/run.resuming audit events.",
     );
   }
   if (!guiEvidence.workflowFactsHidden) {
@@ -1049,7 +996,7 @@ export function appendGuiEvidenceRequirements(
     pushRequirement(
       missingRequirements,
       "production_gui_turn_start_not_electron_ipc",
-      "GUI evidence must prove agentSession/turn/start went through Electron IPC.",
+      "GUI evidence must prove turn/start went through Electron IPC.",
     );
   }
   if (!guiEvidence.turnStartTraceMatched) {

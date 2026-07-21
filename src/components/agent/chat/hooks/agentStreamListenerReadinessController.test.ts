@@ -46,14 +46,12 @@ describe("agentStreamListenerReadinessController", () => {
       buildAgentStreamListenerBoundContext({
         activeSessionId: "session-a",
         eventName: "event-a",
-        expectingQueue: false,
         listenerBoundAt: 145,
         requestStartedAt: 100,
       }),
     ).toEqual({
       elapsedMs: 45,
       eventName: "event-a",
-      expectingQueue: false,
       sessionId: "session-a",
     });
 

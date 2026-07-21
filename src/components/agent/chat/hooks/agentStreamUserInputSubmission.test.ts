@@ -3,7 +3,6 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, Message } from "../types";
 import type { WorkspacePathMissingState } from "./agentChatShared";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
@@ -46,12 +45,17 @@ describe("agentStreamUserInputSubmission", () => {
       current: null,
     };
     let messages: Message[] = [assistantMsg];
-    let queuedTurns: QueuedTurnSnapshot[] = [];
     let threadItems: AgentThreadItem[] = [];
     let threadTurns: AgentThreadTurn[] = [];
     let currentTurnId: string | null = null;
     const runtime = {
       listenToTurnEvents: vi.fn(async () => vi.fn()),
+      getThreadTurnControl: vi.fn(async () => ({
+        threadId: "thread-1",
+        updatedAtMs: Date.now(),
+        activeTurnId: null,
+        queuedTurnIds: [],
+      })),
       submitOp: vi.fn(async () => {}),
     } as unknown as AgentRuntimeAdapter;
     const env: AgentStreamPreparedSendEnv = {
@@ -66,11 +70,9 @@ describe("agentStreamUserInputSubmission", () => {
       modelRef: { current: "gpt-5.4" } as MutableRefObject<string>,
       reasoningEffortRef: { current: "" } as MutableRefObject<string>,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
-      getQueuedTurnsCount: () => 0,
-      isThreadBusy: () => false,
-      hasPendingPreparedSubmit: () => false,
       runPreparedSubmit: async (task) => task(),
       getWorkspaceIdForSubmit: () => "workspace-1",
+      getThreadIdForSubmit: () => "thread-1",
       getSyncedSessionModelPreference: () => null,
       getSyncedSessionExecutionStrategy: () => "react",
       warnedKeysRef: { current: new Set<string>() },
@@ -107,12 +109,6 @@ describe("agentStreamUserInputSubmission", () => {
         },
       ),
       setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
-        },
-      ),
       setPendingActions: noopDispatch<ActionRequired[]>(),
       setWorkspacePathMissing: noopDispatch<WorkspacePathMissingState | null>(),
       setIsSending: noopDispatch<boolean>(),
@@ -127,7 +123,6 @@ describe("agentStreamUserInputSubmission", () => {
         content: "继续生成提纲",
         images: [],
         skipUserMessage: false,
-        expectingQueue: false,
         effectiveExecutionStrategy: "react",
         effectiveProviderType: "openai",
         effectiveModel: "gpt-5.4",
@@ -148,7 +143,9 @@ describe("agentStreamUserInputSubmission", () => {
     expect(runtime.submitOp).toHaveBeenCalledTimes(1);
     expect(runtime.submitOp).toHaveBeenCalledWith(
       expect.objectContaining({
-        preferences: expect.objectContaining({
+        turn: expect.objectContaining({
+          threadId: "thread-1",
+          input: [{ type: "text", text: "继续生成提纲" }],
           approvalPolicy: "on-request",
           sandboxPolicy: "workspace-write",
         }),

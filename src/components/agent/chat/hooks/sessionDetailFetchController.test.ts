@@ -12,7 +12,6 @@ function detail(
     })),
     items: [],
     turns: [],
-    queued_turns: [],
     ...overrides,
   };
 }

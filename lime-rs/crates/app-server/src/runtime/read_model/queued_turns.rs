@@ -1,6 +1,7 @@
 use super::super::status::agent_turn_status_label;
 use super::super::StoredSession;
 use super::messages;
+use agent_protocol::AgentInput;
 use app_server_protocol::{AgentTurn, AgentTurnStatus};
 use serde_json::{json, Value};
 
@@ -14,13 +15,27 @@ pub(super) fn queued_turn_snapshots(stored: &StoredSession) -> Vec<serde_json::V
         .collect::<Vec<_>>()
 }
 
-fn queued_turn_input_attachments(input: Option<&app_server_protocol::AgentInput>) -> Vec<Value> {
+fn queued_turn_input_attachments(input: Option<&[AgentInput]>) -> Vec<Value> {
     input
         .map(|input| {
             input
-                .attachments
                 .iter()
-                .filter_map(|attachment| serde_json::to_value(attachment).ok())
+                .filter_map(|part| match part {
+                    AgentInput::Image { uri, detail } => Some(json!({
+                        "kind": "image",
+                        "uri": uri,
+                        "detail": detail,
+                    })),
+                    AgentInput::LocalImage { path, detail } => Some(json!({
+                        "kind": "image",
+                        "uri": path,
+                        "detail": detail,
+                        "metadata": {"localPath": path},
+                    })),
+                    AgentInput::Text { .. }
+                    | AgentInput::Skill { .. }
+                    | AgentInput::Mention { .. } => None,
+                })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
@@ -123,7 +138,20 @@ fn queued_turn_snapshot(
         .and_then(app_server_protocol::RuntimeOptions::runtime_metadata);
     let message_text = input
         .as_ref()
-        .map(|input| input.text.trim().to_string())
+        .map(|input| {
+            input
+                .iter()
+                .filter_map(|part| match part {
+                    AgentInput::Text { text, .. } => Some(text.as_str()),
+                    AgentInput::Image { .. }
+                    | AgentInput::LocalImage { .. }
+                    | AgentInput::Skill { .. }
+                    | AgentInput::Mention { .. } => None,
+                })
+                .collect::<String>()
+                .trim()
+                .to_string()
+        })
         .filter(|text| !text.is_empty())
         .unwrap_or_default();
     let message_preview = if message_text.chars().count() > 80 {
@@ -136,13 +164,17 @@ fn queued_turn_snapshot(
         .as_ref()
         .map(|input| {
             input
-                .attachments
                 .iter()
-                .filter(|attachment| attachment.kind == "image")
+                .filter(|part| {
+                    matches!(
+                        part,
+                        AgentInput::Image { .. } | AgentInput::LocalImage { .. }
+                    )
+                })
                 .count()
         })
         .unwrap_or(0);
-    let attachments = queued_turn_input_attachments(input.as_ref());
+    let attachments = queued_turn_input_attachments(input.as_deref());
     let path_references = queued_turn_path_references(runtime_metadata);
     let text_elements = queued_turn_text_elements(runtime_metadata);
     let input_capability_route = queued_turn_input_capability_route(runtime_metadata);

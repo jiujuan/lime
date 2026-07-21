@@ -6,10 +6,37 @@ import {
 } from "./sessionClient";
 
 function appServerClientMock(): AppServerSessionRpcClient {
+  const canonicalThread = (sessionId: string, threadId: string) => ({
+    cliVersion: "0.1.0",
+    createdAt: 1_780_704_000,
+    cwd: "/tmp/workspace-1",
+    ephemeral: false,
+    id: threadId,
+    modelProvider: "openai-compatible",
+    preview: sessionId,
+    sessionId,
+    source: "appServer",
+    status: { type: "idle" },
+    turns: [],
+    updatedAt: 1_780_704_000,
+  });
   return {
     startSession: vi.fn(),
-    readSession: vi.fn(),
-    request: vi.fn(),
+    readThread: vi.fn(),
+    request: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        data: [
+          canonicalThread("session-recent", "thread-recent"),
+          canonicalThread("session-archived", "thread-archived"),
+          canonicalThread("session-bulk", "thread-bulk"),
+          canonicalThread("session-created", "thread-created"),
+        ],
+      },
+      response: { id: 1, result: {} },
+      notifications: [],
+      messages: [],
+    }),
     updateSession: vi.fn().mockResolvedValue({
       id: 1,
       result: {
@@ -24,23 +51,19 @@ function appServerClientMock(): AppServerSessionRpcClient {
       notifications: [],
       messages: [],
     }),
-    archiveManySessions: vi.fn().mockResolvedValue({
+    archiveThread: vi.fn().mockResolvedValue({
       id: 2,
-      result: {
-        sessions: [
-          {
-            sessionId: "session-bulk",
-            threadId: "thread-bulk",
-            title: "批量归档",
-            model: "gpt-5.4",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-            archivedAt: "2026-06-07T00:00:00.000Z",
-            messagesCount: 1,
-          },
-        ],
-      },
+      result: {},
       response: { id: 2, result: {} },
+      notifications: [],
+      messages: [],
+    }),
+    unarchiveThread: vi.fn().mockResolvedValue({
+      id: 3,
+      result: {
+        thread: canonicalThread("session-created", "thread-created"),
+      },
+      response: { id: 3, result: {} },
       notifications: [],
       messages: [],
     }),
@@ -58,7 +81,7 @@ function appServerClientMock(): AppServerSessionRpcClient {
 }
 
 describe("agentRuntime sessionClient current App Server boundary", () => {
-  it("session archive / restore use agentSession/update and delete uses agentSession/delete", async () => {
+  it("session metadata update 不再承载 archive 状态", async () => {
     const appServerClient = appServerClientMock();
     const client = createSessionClient({
       appServerClient,
@@ -67,57 +90,74 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
     await expect(
       client.updateAgentRuntimeSession({
         session_id: " session-recent ",
-        archived: true,
-      }),
-    ).resolves.toBeUndefined();
-    await expect(
-      client.updateAgentRuntimeSession({
-        session_id: "session-archived",
-        archived: false,
+        name: "重命名",
       }),
     ).resolves.toBeUndefined();
     await expect(
       client.deleteAgentRuntimeSession(" session-deleted "),
     ).resolves.toBeUndefined();
 
-    expect(appServerClient.updateSession).toHaveBeenNthCalledWith(1, {
+    expect(appServerClient.updateSession).toHaveBeenCalledWith({
       sessionId: "session-recent",
-      archived: true,
+      title: "重命名",
     });
-    expect(appServerClient.updateSession).toHaveBeenNthCalledWith(2, {
-      sessionId: "session-archived",
-      archived: false,
-    });
-    expect(appServerClient.updateSession).toHaveBeenCalledTimes(2);
+    expect(appServerClient.updateSession).toHaveBeenCalledTimes(1);
     expect(appServerClient.deleteSession).toHaveBeenCalledWith({
       sessionId: "session-deleted",
     });
     expect(appServerClient.request).not.toHaveBeenCalled();
   });
 
-  it("archiveMany projection must use agentSession/archiveMany instead of per-session update", async () => {
+  it("archive projection must use thread/archive instead of session update", async () => {
     const appServerClient = appServerClientMock();
     const client = createSessionClient({
       appServerClient,
     });
 
     await expect(
-      client.archiveManyAgentRuntimeSessions([
-        " session-bulk ",
-        "",
-        "session-bulk",
-      ]),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        id: "session-bulk",
-      }),
-    ]);
+      client.archiveAgentRuntimeSession(" session-bulk "),
+    ).resolves.toBeUndefined();
 
-    expect(appServerClient.archiveManySessions).toHaveBeenCalledWith({
-      sessionIds: ["session-bulk"],
+    expect(appServerClient.archiveThread).toHaveBeenCalledWith({
+      threadId: "thread-bulk",
     });
     expect(appServerClient.updateSession).not.toHaveBeenCalled();
-    expect(appServerClient.request).not.toHaveBeenCalled();
+  });
+
+  it("unarchive projection must use thread/unarchive", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.unarchiveThread).mockResolvedValueOnce({
+      id: 3,
+      result: {
+        thread: {
+          cliVersion: "0.1.0",
+          createdAt: 1_780_704_000,
+          cwd: "/tmp/workspace-1",
+          ephemeral: false,
+          id: "thread-archived",
+          modelProvider: "openai-compatible",
+          preview: "session-archived",
+          sessionId: "session-archived",
+          source: "appServer",
+          status: { type: "idle" },
+          turns: [],
+          updatedAt: 1_780_704_000,
+        },
+      },
+      response: { id: 3, result: {} },
+      notifications: [],
+      messages: [],
+    });
+    const client = createSessionClient({ appServerClient });
+
+    await expect(
+      client.unarchiveAgentRuntimeSession("session-archived"),
+    ).resolves.toBeUndefined();
+
+    expect(appServerClient.unarchiveThread).toHaveBeenCalledWith({
+      threadId: "thread-archived",
+    });
+    expect(appServerClient.updateSession).not.toHaveBeenCalled();
   });
 
   it("delete projection must use typed agentSession/delete helper", async () => {
@@ -140,14 +180,9 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
   it("session mutation should notify current GUI session-list subscribers", async () => {
     const appServerClient = appServerClientMock();
     const sessionStartResult = {
-      session: {
+      thread: {
+        id: "thread-created",
         sessionId: "session-created",
-        threadId: "thread-created",
-        appId: "desktop",
-        workspaceId: "workspace-1",
-        status: "idle" as const,
-        createdAt: "2026-06-07T00:00:00.000Z",
-        updatedAt: "2026-06-07T00:00:00.000Z",
       },
     };
     vi.mocked(appServerClient.startSession).mockResolvedValueOnce({
@@ -164,12 +199,23 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
     window.addEventListener(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, listener);
 
     try {
-      await client.createAgentRuntimeSession("workspace-1", "新会话");
+      await client.createAgentRuntimeSession(
+        "workspace-1",
+        "新会话",
+        undefined,
+        {
+          metadata: {
+            providerSelector: "fixture-provider",
+            modelName: "fixture-model",
+          },
+        },
+      );
       await client.updateAgentRuntimeSession({
         session_id: "session-created",
         name: "已更新",
       });
-      await client.archiveManyAgentRuntimeSessions(["session-created"]);
+      await client.archiveAgentRuntimeSession("session-created");
+      await client.unarchiveAgentRuntimeSession("session-created");
       await client.deleteAgentRuntimeSession("session-created");
     } finally {
       window.removeEventListener(
@@ -178,24 +224,20 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       );
     }
 
-    expect(listener).toHaveBeenCalledTimes(4);
+    expect(listener).toHaveBeenCalledTimes(5);
     expect(
       listener.mock.calls.map(([event]) =>
         event instanceof CustomEvent ? event.detail.reason : null,
       ),
-    ).toEqual(["created", "updated", "archived", "deleted"]);
+    ).toEqual(["created", "updated", "archived", "unarchived", "deleted"]);
   });
 
   it("cwd-only session create event must not publish an empty legacy workspaceId", async () => {
     const appServerClient = appServerClientMock();
     const sessionStartResult = {
-      session: {
+      thread: {
+        id: "thread-cwd",
         sessionId: "session-cwd",
-        threadId: "thread-cwd",
-        appId: "desktop",
-        status: "idle" as const,
-        createdAt: "2026-06-07T00:00:00.000Z",
-        updatedAt: "2026-06-07T00:00:00.000Z",
       },
     };
     vi.mocked(appServerClient.startSession).mockResolvedValueOnce({
@@ -214,6 +256,10 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
     try {
       await client.createAgentRuntimeSession(" ", "空项目对话", undefined, {
         workingDir: "/repo/skill-think",
+        metadata: {
+          providerSelector: "fixture-provider",
+          modelName: "fixture-model",
+        },
       });
     } finally {
       window.removeEventListener(

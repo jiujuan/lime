@@ -253,11 +253,11 @@ export interface SessionRuntimeCounters {
 export function buildSessionRuntimeCountersFromCodingProjection({
   codingView,
   fileCheckpointSummary,
-  queuedTurns,
+  pendingActionCount,
 }: {
   codingView: CodingWorkbenchView;
   fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
-  queuedTurns: readonly unknown[];
+  pendingActionCount: number;
 }): SessionRuntimeCounters {
   const outputItemCount =
     codingView.commands.length +
@@ -298,8 +298,7 @@ export function buildSessionRuntimeCountersFromCodingProjection({
     shouldUseRuntimeWorkbench,
     shouldExposeSessionProgress:
       inProgressItemCount > 0 ||
-      codingView.actions.length > 0 ||
-      queuedTurns.length > 0 ||
+      pendingActionCount > 0 ||
       codingView.mainObject.status === "running" ||
       codingView.mainObject.status === "blocked",
   };
@@ -309,7 +308,6 @@ export interface SessionRuntimeCountLabels {
   inProgressItemCountLabel: string;
   generatedFileCountLabel: string;
   pendingActionCountLabel: string;
-  queuedTurnCountLabel: string;
 }
 
 export function buildSessionSummaryStats({
@@ -318,14 +316,12 @@ export function buildSessionSummaryStats({
   counters,
   labels,
   pendingActionCount,
-  queuedTurnCount,
 }: {
   t: AgentTranslate;
   currentSessionStatus: SessionStatusBadge;
   counters: SessionRuntimeCounters;
   labels: SessionRuntimeCountLabels;
   pendingActionCount: number;
-  queuedTurnCount: number;
 }): CanvasWorkbenchSummaryStat[] {
   return [
     {
@@ -361,27 +357,17 @@ export function buildSessionSummaryStats({
       label:
         pendingActionCount > 0
           ? t("agentChat.workspaceSession.summary.next.label.pending")
-          : queuedTurnCount > 0
-            ? t("agentChat.workspaceSession.summary.next.label.queued")
-            : t("agentChat.workspaceSession.summary.next.label.idle"),
+          : t("agentChat.workspaceSession.summary.next.label.idle"),
       value:
         pendingActionCount > 0
           ? t("agentChat.workspaceSession.summary.next.value.pending", {
               countLabel: labels.pendingActionCountLabel,
             })
-          : queuedTurnCount > 0
-            ? t("agentChat.workspaceSession.summary.next.value.queued", {
-                countLabel: labels.queuedTurnCountLabel,
-              })
-            : t("agentChat.workspaceSession.summary.next.value.idle"),
+          : t("agentChat.workspaceSession.summary.next.value.idle"),
       detail:
         pendingActionCount > 0
           ? t("agentChat.workspaceSession.summary.next.detail.pending")
-          : queuedTurnCount > 0
-            ? t("agentChat.workspaceSession.summary.next.detail.queued", {
-                countLabel: labels.queuedTurnCountLabel,
-              })
-            : t("agentChat.workspaceSession.summary.next.detail.idle"),
+          : t("agentChat.workspaceSession.summary.next.detail.idle"),
       tone: pendingActionCount > 0 ? "accent" : "default",
     },
   ];
@@ -394,7 +380,6 @@ export function buildSessionHeaderViewModel({
   counters,
   labels,
   pendingActionCount,
-  queuedTurnCount,
 }: {
   t: AgentTranslate;
   currentSessionTurn: AgentThreadTurn | null;
@@ -402,7 +387,6 @@ export function buildSessionHeaderViewModel({
   counters: SessionRuntimeCounters;
   labels: SessionRuntimeCountLabels;
   pendingActionCount: number;
-  queuedTurnCount: number;
 }): Omit<CanvasWorkbenchSessionView, "renderPanel"> | null {
   if (!counters.shouldExposeSessionProgress) {
     return null;
@@ -417,11 +401,7 @@ export function buildSessionHeaderViewModel({
         ? t("agentChat.workspaceSession.badge.inProgress", {
             countLabel: labels.inProgressItemCountLabel,
           })
-        : queuedTurnCount > 0
-          ? t("agentChat.workspaceSession.badge.queued", {
-              countLabel: labels.queuedTurnCountLabel,
-            })
-          : undefined,
+        : undefined,
     tabBadgeTone: counters.inProgressItemCount > 0 ? "sky" : "slate",
     subtitle: currentSessionTurn
       ? t("agentChat.workspaceSession.subtitle.current", {
@@ -436,7 +416,6 @@ export function buildSessionHeaderViewModel({
       counters,
       labels,
       pendingActionCount,
-      queuedTurnCount,
     }),
     badges: [
       {
@@ -464,17 +443,6 @@ export function buildSessionHeaderViewModel({
                 countLabel: labels.pendingActionCountLabel,
               }),
               tone: "accent" as const,
-            },
-          ]
-        : []),
-      ...(queuedTurnCount > 0
-        ? [
-            {
-              key: "session-queued-turns",
-              label: t("agentChat.workspaceSession.badge.queued", {
-                countLabel: labels.queuedTurnCountLabel,
-              }),
-              tone: "default" as const,
             },
           ]
         : []),

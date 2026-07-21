@@ -8,7 +8,9 @@ import {
   type SoulInteractionCopy,
 } from "@/lib/soul/interactionCopy";
 
-function withChinesePreparingCopy(copy: SoulInteractionCopy): SoulInteractionCopy {
+function withChinesePreparingCopy(
+  copy: SoulInteractionCopy,
+): SoulInteractionCopy {
   return {
     ...copy,
     preparingTitle: "正在进入对话",

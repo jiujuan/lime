@@ -91,7 +91,6 @@ export function stdioSidecar(
   binaryPath: string,
   appPolicyPath?: string,
   dataDir?: string,
-  productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"],
 ): SidecarLaunchConfig {
   return {
     binaryPath,
@@ -99,7 +98,6 @@ export function stdioSidecar(
     backendMode: DEFAULT_STANDALONE_BACKEND_MODE,
     ...(appPolicyPath ? { appPolicyPath } : {}),
     ...(dataDir ? { dataDir } : {}),
-    ...(productDbMigrationCleanup ? { productDbMigrationCleanup } : {}),
   };
 }
 
@@ -110,7 +108,6 @@ export function sidecarFromReleaseArtifact(
   backendMode: SidecarLaunchConfig["backendMode"] = DEFAULT_STANDALONE_BACKEND_MODE,
   appPolicyPath?: string,
   dataDir?: string,
-  productDbMigrationCleanup?: SidecarLaunchConfig["productDbMigrationCleanup"],
 ): SidecarLaunchConfig {
   return {
     binaryPath,
@@ -118,7 +115,6 @@ export function sidecarFromReleaseArtifact(
     backendMode,
     ...(appPolicyPath ? { appPolicyPath } : {}),
     ...(dataDir ? { dataDir } : {}),
-    ...(productDbMigrationCleanup ? { productDbMigrationCleanup } : {}),
     expectedSha256: artifact.sha256,
     artifact,
   };
@@ -149,12 +145,6 @@ export function sidecarArgs(config: SidecarLaunchConfig): string[] {
   }
   if (config.dataDir) {
     args.push("--data-dir", config.dataDir);
-  }
-  if (config.productDbMigrationCleanup) {
-    args.push(
-      "--product-db-migration-cleanup",
-      config.productDbMigrationCleanup,
-    );
   }
   return args;
 }
@@ -222,9 +212,6 @@ export function resolveSidecarFromReleaseManifest(
         ? { appPolicyPath: options.appPolicyPath }
         : {}),
       ...(options.dataDir ? { dataDir: options.dataDir } : {}),
-      ...(options.productDbMigrationCleanup
-        ? { productDbMigrationCleanup: options.productDbMigrationCleanup }
-        : {}),
       expectedSha256:
         binaryPath.source === "resources" ? artifact.sha256 : undefined,
       artifact,
@@ -317,7 +304,7 @@ export function listProtocolSchemaFiles(
   manifest: AppServerProtocolSchemaManifest,
   schemaJsonRoot: string,
 ): ProtocolSchemaFile[] {
-  return (["jsonrpc", "v0"] as const).flatMap((group) =>
+  return (["jsonrpc", "v0", "v2"] as const).flatMap((group) =>
     (manifest.schemas[group] ?? []).map((typeName) => ({
       group,
       typeName,

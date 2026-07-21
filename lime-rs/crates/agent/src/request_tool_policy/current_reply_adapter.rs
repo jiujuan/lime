@@ -139,10 +139,7 @@ where
         None => state
             .provider_for_session(&session_id)
             .await
-            .ok_or_else(|| ReplyAttemptError {
-                message: "Provider is not configured".to_string(),
-                emitted_any: false,
-            })?,
+            .ok_or_else(|| ReplyAttemptError::new("Provider is not configured", false))?,
     };
     stream_current_provider_turn(
         state,
@@ -152,6 +149,7 @@ where
         working_directory,
         session_config,
         cancel_token,
+        None,
         policy,
         agent_control_gateway,
         on_event,

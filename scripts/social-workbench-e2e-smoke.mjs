@@ -15,7 +15,7 @@
 const BRIDGE_URL = "http://127.0.0.1:3030/invoke";
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const METHOD_DIAGNOSTICS_SERVER_READ = "diagnostics/server/read";
-const METHOD_AGENT_SESSION_READ = "agentSession/read";
+const METHOD_THREAD_READ = "thread/read";
 
 function printUsage() {
   console.log(`
@@ -328,11 +328,11 @@ function runItemFromTurn(session, turn) {
 }
 
 async function readAgentSession(sessionId) {
-  const result = await invokeAppServerJsonRpc(METHOD_AGENT_SESSION_READ, {
+  const result = await invokeAppServerJsonRpc(METHOD_THREAD_READ, {
     sessionId,
   });
-  assert(result?.session, "agentSession/read 未返回 session");
-  assert(Array.isArray(result.turns), "agentSession/read 未返回 turns 数组");
+  assert(result?.session, "thread/read 未返回 session");
+  assert(Array.isArray(result.turns), "thread/read 未返回 turns 数组");
   return result;
 }
 
@@ -543,7 +543,7 @@ async function main() {
 
   const sessionRead = await readAgentSession(args.sessionId);
   const runDetail = projectRunDetail(sessionRead, terminal.run_id);
-  assert(runDetail, "agentSession/read 未能投影运行详情");
+  assert(runDetail, "thread/read 未能投影运行详情");
 
   const metadata = parseRunMetadata(runDetail.metadata);
   assert(metadata, "运行 metadata 为空或不可解析");

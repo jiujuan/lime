@@ -534,6 +534,12 @@ function assertFixtureResult(result) {
     (file) => file?.name === FILE_NAME,
   );
   const resolvedPath = String(result.resolvedPath?.path ?? "");
+  const expectedStorageSegment = path.join(
+    "artifacts",
+    "sessions",
+    SESSION_ID,
+    "files",
+  );
 
   assert(missingMethods.length === 0, `缺少 current 方法: ${missingMethods}`);
   assert(
@@ -550,8 +556,9 @@ function assertFixtureResult(result) {
   assert(matchedAfterSave, "保存后 list 未返回目标文件");
   assert(result.read?.content === FILE_CONTENT, "读取内容与保存内容不一致");
   assert(
-    resolvedPath.includes(FILE_NAME.split("/").pop()),
-    `resolvePath 未返回目标文件路径: ${resolvedPath}`,
+    resolvedPath.includes(expectedStorageSegment) &&
+      resolvedPath.includes(FILE_NAME.split("/").pop()),
+    `resolvePath 未落到 AgentRoot/artifacts/sessions: ${resolvedPath}`,
   );
   assert(!matchedAfterDelete, "删除后 list 仍返回目标文件");
   assert(!result.errorRaw, `DevBridge error buffer 非空: ${result.errorRaw}`);
@@ -582,6 +589,7 @@ function assertFixtureResult(result) {
     listedAfterSaveCount: listedAfterSave.length,
     listedAfterDeleteCount: listedAfterDelete.length,
     resolvedPath,
+    storageContract: "AgentRoot/artifacts/sessions",
     traceCaptured: Boolean(result.traceRaw),
   };
 }

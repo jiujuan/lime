@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "properties": {
+        "type": {
+          "const": "add",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "delete",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "move_path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "type": {
+          "const": "update",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "PatchChangeKind"
+}

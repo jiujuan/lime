@@ -1,7 +1,7 @@
 use super::*;
 use crate::{ExecutionRequest, RuntimeHostContext};
 use app_server_protocol::{
-    AgentInput, AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
+    AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
     RuntimeProviderConfig, RuntimeRequest,
 };
 use serde_json::{json, Value};
@@ -42,10 +42,7 @@ fn request_for_presentation_test(
             started_at: None,
             completed_at: None,
         },
-        input: AgentInput {
-            text: "@配图 画一张深圳夏天的图".to_string(),
-            attachments: Vec::new(),
-        },
+        input: agent_runtime::reply_input::RuntimeReplyInput::text("@配图 画一张深圳夏天的图"),
         runtime_options: Some(RuntimeOptions {
             stream: true,
             runtime_request,

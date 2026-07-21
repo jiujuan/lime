@@ -1,6 +1,11 @@
 //! JSON-RPC method dispatch for the App Server processor.
 
-use super::{event_notification, JsonRpcError, RequestProcessor};
+mod v2_ingress;
+
+use super::{
+    event_notifications, v2_notifications::V2NotificationProjector, ConnectionRequestId,
+    JsonRpcError, RequestProcessor,
+};
 use crate::AppServerError;
 use app_server_protocol::error_codes;
 use app_server_protocol::JsonRpcErrorResponse;
@@ -15,20 +20,46 @@ impl RequestProcessor {
     pub(super) async fn handle_request_inner(
         &self,
         request: JsonRpcRequest,
+        connection_request_id: Option<ConnectionRequestId>,
         event_callback: Option<&mut (dyn FnMut(JsonRpcMessage) + Send)>,
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
-        let request_id = request.id.clone();
-        let request = match AppServerClientRequest::try_from(request) {
+        let v2_request = match v2_ingress::decode(&request) {
             Ok(request) => request,
             Err(error) => {
                 return Ok(vec![JsonRpcMessage::Error(JsonRpcErrorResponse {
-                    id: request_id,
-                    error: JsonRpcError::new(error_codes::METHOD_NOT_FOUND, error),
+                    id: request.id,
+                    error,
                 })]);
             }
         };
-        let (id, method, params) = request.into_jsonrpc_parts();
+        let request_id = request.id.clone();
+        let (id, method, params) = if let Some(v2_request) = v2_request {
+            match v2_ingress::into_parts(v2_request) {
+                Ok(parts) => parts,
+                Err(error) => {
+                    return Ok(vec![JsonRpcMessage::Error(JsonRpcErrorResponse {
+                        id: request_id,
+                        error,
+                    })]);
+                }
+            }
+        } else {
+            let request = match AppServerClientRequest::try_from(request) {
+                Ok(request) => request,
+                Err(error) => {
+                    return Ok(vec![JsonRpcMessage::Error(JsonRpcErrorResponse {
+                        id: request_id,
+                        error: JsonRpcError::new(error_codes::METHOD_NOT_FOUND, error),
+                    })]);
+                }
+            };
+            let (id, method, params) = request.into_jsonrpc_parts();
+            (id, method.as_str().to_string(), params)
+        };
         let method = method.as_str();
+        let is_transport_request = connection_request_id.is_some();
+        let thread_resume_request_id =
+            thread_resume_connection_request_id(method, connection_request_id.as_ref());
         if self.is_request_canceled(&id) {
             self.clear_request_cancel_state(&id);
             return Ok(vec![JsonRpcMessage::Error(JsonRpcErrorResponse {
@@ -37,6 +68,9 @@ impl RequestProcessor {
             })]);
         }
         let result = match method {
+            METHOD_INITIALIZE if is_transport_request => {
+                ready(self.handle_transport_initialize(params)).boxed()
+            }
             METHOD_INITIALIZE => ready(self.handle_initialize(params)).boxed(),
             METHOD_CAPABILITY_LIST => ready(self.handle_capability_list(params)).boxed(),
             METHOD_ARTIFACT_READ => ready(self.handle_artifact_read(params)).boxed(),
@@ -121,11 +155,7 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE => {
                 self.handle_review_decision_save(params).boxed()
             }
-            METHOD_AGENT_SESSION_LIST => self.handle_session_list_impl(params).boxed(),
             METHOD_AGENT_SESSION_UPDATE => self.handle_session_update_impl(params).boxed(),
-            METHOD_AGENT_SESSION_ARCHIVE_MANY => {
-                self.handle_session_archive_many_impl(params).boxed()
-            }
             METHOD_AGENT_SESSION_DELETE => self.handle_session_delete_impl(params).boxed(),
             METHOD_AGENT_SESSION_OBJECTIVE_READ => self.handle_objective_read_impl(params).boxed(),
             METHOD_AGENT_SESSION_OBJECTIVE_SET => self.handle_objective_set_impl(params).boxed(),
@@ -142,9 +172,9 @@ impl RequestProcessor {
                 self.handle_objective_audit_impl(params).boxed()
             }
             METHOD_AGENT_SESSION_COMPACT => self.handle_session_compact_impl(params).boxed(),
-            METHOD_AGENT_SESSION_THREAD_RESUME => {
-                self.handle_session_thread_resume_impl(params).boxed()
-            }
+            METHOD_THREAD_RESUME => self
+                .handle_thread_resume_v2(params, thread_resume_request_id)
+                .boxed(),
             METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE => {
                 self.handle_session_queued_turn_remove_impl(params).boxed()
             }
@@ -176,12 +206,35 @@ impl RequestProcessor {
             }
             METHOD_SESSION_FILE_DELETE => self.handle_session_file_delete_impl(params).boxed(),
             METHOD_SESSION_FILE_LIST => self.handle_session_file_list_impl(params).boxed(),
-            METHOD_AGENT_SESSION_START => ready(self.handle_session_start(params)).boxed(),
-            METHOD_AGENT_SESSION_READ => self.handle_session_read_impl(params).boxed(),
+            METHOD_THREAD_START => self.handle_thread_start_v2(params).boxed(),
             METHOD_THREAD_READ => self.handle_thread_read_impl(params).boxed(),
             METHOD_THREAD_LIST => self.handle_thread_list_impl(params).boxed(),
+            app_server_protocol::protocol::v2::METHOD_THREAD_ARCHIVE => {
+                self.handle_thread_archive_v2(params).boxed()
+            }
+            app_server_protocol::protocol::v2::METHOD_THREAD_UNARCHIVE => {
+                self.handle_thread_unarchive_v2(params).boxed()
+            }
             METHOD_THREAD_TURNS_LIST => self.handle_thread_turns_list_impl(params).boxed(),
             METHOD_THREAD_ITEMS_LIST => self.handle_thread_items_list_impl(params).boxed(),
+            app_server_protocol::protocol::v2::METHOD_THREAD_SETTINGS_UPDATE => {
+                self.handle_thread_settings_update_impl(params).boxed()
+            }
+            app_server_protocol::protocol::v2::METHOD_THREAD_MEMORY_MODE_SET => {
+                self.handle_thread_memory_mode_set_impl(params).boxed()
+            }
+            app_server_protocol::protocol::v2::METHOD_THREAD_SHELL_COMMAND => {
+                self.handle_thread_shell_command_impl(params).boxed()
+            }
+            app_server_protocol::protocol::v2::METHOD_THREAD_GOAL_SET => {
+                self.handle_thread_goal_set(params).boxed()
+            }
+            app_server_protocol::protocol::v2::METHOD_THREAD_GOAL_GET => {
+                self.handle_thread_goal_get(params).boxed()
+            }
+            app_server_protocol::protocol::v2::METHOD_THREAD_GOAL_CLEAR => {
+                self.handle_thread_goal_clear(params).boxed()
+            }
             METHOD_AGENT_SESSION_MEDIA_READ => self
                 .handle_session_media_read_impl(&id, params, event_callback)
                 .boxed(),
@@ -684,10 +737,13 @@ impl RequestProcessor {
             METHOD_CONVERSATION_IMPORT_JOB_READ => self
                 .handle_conversation_import_job_read_impl(params)
                 .boxed(),
-            METHOD_AGENT_SESSION_TURN_START => {
-                self.handle_turn_start(params, event_callback).boxed()
+            METHOD_TURN_START => self
+                .handle_turn_start_v2_impl(params, event_callback)
+                .boxed(),
+            app_server_protocol::protocol::v2::METHOD_TURN_STEER => {
+                self.handle_turn_steer_impl(params, event_callback).boxed()
             }
-            METHOD_AGENT_SESSION_TURN_CANCEL => self.handle_turn_cancel(params).boxed(),
+            METHOD_TURN_INTERRUPT => self.handle_turn_interrupt_v2_impl(params).boxed(),
             METHOD_AGENT_SESSION_ACTION_REPLAY => self.handle_action_replay(params).boxed(),
             METHOD_AGENT_SESSION_ACTION_RESPOND => self.handle_action_respond(params).boxed(),
             METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND => {
@@ -713,8 +769,9 @@ impl RequestProcessor {
                     id,
                     result: dispatch.result,
                 }));
+                let mut event_projector = V2NotificationProjector::default();
                 for event in dispatch.events {
-                    messages.push(event_notification(event)?);
+                    messages.extend(event_notifications(&mut event_projector, event)?);
                 }
                 for notification in dispatch.notifications {
                     messages.push(JsonRpcMessage::Notification(notification));
@@ -726,5 +783,52 @@ impl RequestProcessor {
                 error,
             })]),
         }
+    }
+}
+
+fn thread_resume_connection_request_id(
+    method: &str,
+    connection_request_id: Option<&ConnectionRequestId>,
+) -> Option<ConnectionRequestId> {
+    (method == METHOD_THREAD_RESUME)
+        .then(|| connection_request_id.cloned())
+        .flatten()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_server_protocol::RequestId;
+    use app_server_transport::ConnectionId;
+
+    #[test]
+    fn direct_request_has_no_thread_resume_connection_context() {
+        assert_eq!(
+            thread_resume_connection_request_id(METHOD_THREAD_RESUME, None),
+            None
+        );
+    }
+
+    #[test]
+    fn transport_thread_resume_keeps_exact_connection_and_request_ids() {
+        let context = ConnectionRequestId {
+            connection_id: ConnectionId(42),
+            request_id: RequestId::String("resume-7".to_string()),
+        };
+
+        assert_eq!(
+            thread_resume_connection_request_id(METHOD_THREAD_RESUME, Some(&context)),
+            Some(context)
+        );
+        assert_eq!(
+            thread_resume_connection_request_id(
+                METHOD_THREAD_READ,
+                Some(&ConnectionRequestId {
+                    connection_id: ConnectionId(42),
+                    request_id: RequestId::String("read-8".to_string()),
+                }),
+            ),
+            None
+        );
     }
 }

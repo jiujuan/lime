@@ -230,7 +230,7 @@ describe("ToolCallDisplay", () => {
         success: true,
         output: JSON.stringify({
           request_metadata: {
-            event: "agentSession/turn/start",
+            event: "turn/start",
             session_id: "session-1",
           },
           diagnostics: {
@@ -258,7 +258,7 @@ describe("ToolCallDisplay", () => {
     ).not.toBeNull();
     expect(container.textContent).toContain("已调用 MCP 工具");
     expect(container.textContent).not.toContain("request_metadata");
-    expect(container.textContent).not.toContain("agentSession/turn/start");
+    expect(container.textContent).not.toContain("turn/start");
     expect(container.textContent).not.toContain("tool_result_projection");
     expect(container.textContent).not.toContain("durationMs");
   });

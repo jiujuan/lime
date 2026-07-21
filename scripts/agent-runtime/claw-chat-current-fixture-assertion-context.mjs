@@ -3,12 +3,12 @@ import {
   APPROVAL_REQUEST_DECLINE_SCENARIO,
   APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
   APPROVAL_REQUEST_FULL_ACCESS_SCENARIO,
+  APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO,
   APPROVAL_REQUEST_RESUME_PROMPT,
   APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTINUE_PROMPT,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
   EXPERT_SKILLS_RUNTIME_PROMPT,
   EXPERT_SKILLS_RUNTIME_SKILL_REF,
@@ -119,10 +119,7 @@ function resolveScenarioTurnStart(summary, options) {
   if (options?.scenario === "expert-panel-skills-runtime") {
     return summary?.expertPanelSkillsRuntimeTurnStart ?? null;
   }
-  if (
-    options?.scenario === "expert-skills-runtime" ||
-    options?.scenario === "expert-plaza-skills-runtime"
-  ) {
+  if (options?.scenario === "expert-plaza-skills-runtime") {
     return summary?.expertSkillsRuntimeTurnStart ?? null;
   }
   if (
@@ -131,9 +128,11 @@ function resolveScenarioTurnStart(summary, options) {
       CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
   ) {
     const turnStart = summary?.contentFactoryArticleWorkspaceWorkerTurnStart;
+    const identity =
+      summary?.contentFactoryArticleWorkspaceSessionCreation?.identity;
     if (typeof turnStart?.turnId === "string" && turnStart.turnId.trim()) {
       return {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        sessionId: identity?.sessionId ?? null,
         turnId: turnStart.turnId,
         requireBackendTurn: false,
       };
@@ -157,34 +156,32 @@ function resolveTurnIdentity({
       entry?.sessionId === sessionId &&
       entry?.turnId === turnId,
   );
-  const matchingAppServerTurnStart = (
-    Array.isArray(appServerRequests) ? appServerRequests : []
-  ).find(
-    (request) =>
-      request?.method === "agentSession/turn/start" &&
-      request?.params?.sessionId === sessionId &&
-      request?.params?.turnId === turnId &&
-      request?.response?.sessionId === sessionId &&
-      request?.response?.turnId === turnId,
-  );
   const matchingSessionRead = (
     Array.isArray(appServerRequests) ? appServerRequests : []
   ).find(
     (request) =>
-      request?.method === "agentSession/read" &&
-      request?.params?.sessionId === sessionId &&
+      request?.method === "thread/read" &&
+      request?.params?.threadId === request?.response?.threadId &&
       request?.response?.sessionId === sessionId &&
       request?.response?.turns?.some((turn) => turn?.turnId === turnId) ===
         true &&
       typeof request?.response?.threadId === "string" &&
       request.response.threadId.trim().length > 0,
   );
+  const matchingAppServerTurnStart = (
+    Array.isArray(appServerRequests) ? appServerRequests : []
+  ).find(
+    (request) =>
+      request?.method === "turn/start" &&
+      request?.params?.threadId === matchingSessionRead?.response?.threadId &&
+      request?.response?.turnId === turnId,
+  );
   const turnStartObserved = requireBackendTurn
     ? Boolean(matchingBackendTurnStart)
     : Boolean(matchingBackendTurnStart || matchingAppServerTurnStart);
   if (!sessionId || !turnId || !turnStartObserved || !matchingSessionRead) {
     throw new Error(
-      "Gate B scenario identity requires matching backend turnStart and agentSession/read evidence for one session and turn",
+      "Gate B scenario identity requires matching backend turnStart and thread/read evidence for one session and turn",
     );
   }
 
@@ -211,7 +208,7 @@ export function buildAssertionContext({
     .filter((entry) => entry?.command === "app_server_handle_json_lines")
     .flatMap((entry) =>
       decodeJsonRpcLines(entry?.args_preview?.request?.lines)
-        .filter((message) => message?.method === "agentSession/turn/start")
+        .filter((message) => message?.method === "turn/start")
         .map((message) => ({
           transport: entry.transport ?? null,
           status: entry.status ?? null,
@@ -431,8 +428,11 @@ export function buildAssertionContext({
     options.scenario === APPROVAL_REQUEST_RESUME_SCENARIO;
   const isApprovalRequestDeclineScenario =
     options.scenario === APPROVAL_REQUEST_DECLINE_SCENARIO;
+  const isApprovalRequestHostInterruptScenario =
+    options.scenario === APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO;
   const isApprovalRequestCancelScenario =
-    options.scenario === APPROVAL_REQUEST_CANCEL_SCENARIO;
+    options.scenario === APPROVAL_REQUEST_CANCEL_SCENARIO ||
+    isApprovalRequestHostInterruptScenario;
   const isApprovalRequestFullAccessScenario =
     options.scenario === APPROVAL_REQUEST_FULL_ACCESS_SCENARIO;
   const isApprovalRequestDecisionScenario =
@@ -449,8 +449,6 @@ export function buildAssertionContext({
     options.scenario === MEDIA_REFERENCE_SCENARIO;
   const isSkillsRuntimeScenario = options.scenario === "skills-runtime";
   const isSoulStyleScenario = options.scenario === SOUL_STYLE_SCENARIO;
-  const isExpertSkillsRuntimeScenario =
-    options.scenario === "expert-skills-runtime";
   const isExpertPlazaSkillsRuntimeScenario =
     options.scenario === "expert-plaza-skills-runtime";
   const isExpertPanelSkillsRuntimeScenario =
@@ -464,7 +462,6 @@ export function buildAssertionContext({
     options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO ||
     isContentFactoryInlineImageArticleWorkspaceScenario;
   const isAnyExpertSkillsRuntimeScenario =
-    isExpertSkillsRuntimeScenario ||
     isExpertPlazaSkillsRuntimeScenario ||
     isExpertPanelSkillsRuntimeScenario;
   const expertRuntimeTurnStartForAssertions = isExpertPanelSkillsRuntimeScenario
@@ -540,15 +537,7 @@ export function buildAssertionContext({
   const expectedExpertHarnessSkillRef = isExpertPanelSkillsRuntimeScenario
     ? EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF
     : EXPERT_SKILLS_RUNTIME_SKILL_REF;
-  const collaborationMode =
-    runtimeRequest?.metadata?.harness?.collaboration_mode?.mode ??
-    runtimeRequest?.metadata?.harness?.collaborationMode?.mode ??
-    (isPlanScenario
-      ? (planTurnStart?.runtimeOptions?.metadata?.harness?.collaboration_mode
-          ?.mode ??
-        planTurnStart?.runtimeOptions?.metadata?.harness?.collaborationMode
-          ?.mode)
-      : null);
+  const collaborationMode = runtimeRequest?.collaborationMode?.mode ?? null;
   const guiTurnStartReachedBackend = isPlanScenario
     ? planTurnStart?.inputText === PLAN_PROMPT
     : isGoalScenario
@@ -685,6 +674,7 @@ export function buildAssertionContext({
     isElectronResizeReflowScenario,
     isApprovalRequestResumeScenario,
     isApprovalRequestDeclineScenario,
+    isApprovalRequestHostInterruptScenario,
     isApprovalRequestCancelScenario,
     isApprovalRequestFullAccessScenario,
     isApprovalRequestDecisionScenario,
@@ -695,7 +685,6 @@ export function buildAssertionContext({
     isMediaReferenceScenario,
     isSkillsRuntimeScenario,
     isSoulStyleScenario,
-    isExpertSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
     isRightSurfaceVisualMatrixScenario,

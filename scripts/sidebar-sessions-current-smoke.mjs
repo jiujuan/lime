@@ -25,7 +25,7 @@ const DEFAULTS = {
 };
 
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
-const REQUIRED_APP_SERVER_METHODS = ["agentSession/list"];
+const REQUIRED_APP_SERVER_METHODS = ["thread/list"];
 const LEGACY_SESSION_COMMANDS = ["agent_runtime_list_sessions"];
 const LAST_PROJECT_ID_KEY = "agent_last_project_id";
 const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
@@ -296,7 +296,7 @@ function summarizeInvokeEntries(entries, options = {}) {
     new Set(appServerRequests.map((request) => request.method)),
   ).sort();
   const agentSessionListRequests = appServerRequests.filter(
-    (request) => request.method === "agentSession/list",
+    (request) => request.method === "thread/list",
   );
   const seededWorkspaceId =
     typeof options.workspaceId === "string" ? options.workspaceId.trim() : "";
@@ -325,7 +325,7 @@ function summarizeInvokeEntries(entries, options = {}) {
   );
   const agentSessionListResponses = entries.flatMap((entry) =>
     entry.appServerRequests
-      .filter((request) => request.method === "agentSession/list")
+      .filter((request) => request.method === "thread/list")
       .map((request) => {
         const response = entry.responseMessages.find(
           (message) => message?.id === request.id,
@@ -640,20 +640,20 @@ async function run() {
     );
     assert(
       summary.agentSessionListRequestCount >= 2,
-      `agentSession/list 请求不足，期望最近和归档至少各一次，实际 ${summary.agentSessionListRequestCount}`,
+      `thread/list 请求不足，期望最近和归档至少各一次，实际 ${summary.agentSessionListRequestCount}`,
     );
     assert(summary.archivedOnlySeen, "未观察到归档列表 archivedOnly=true 请求");
     assert(
       summary.recentSessionListResponsesValid,
-      "未观察到最近对话 agentSession/list 的有效 sessions 数组响应",
+      "未观察到最近对话 thread/list 的有效 sessions 数组响应",
     );
     assert(
       summary.archivedSessionListResponsesValid,
-      "未观察到归档对话 agentSession/list 的有效 sessions 数组响应",
+      "未观察到归档对话 thread/list 的有效 sessions 数组响应",
     );
     assert(
       summary.seededWorkspaceFilterRequestCount === 0,
-      `观察到本地记忆项目污染 agentSession/list workspaceId: ${JSON.stringify(summary.seededWorkspaceFilterRequests)}`,
+      `观察到本地记忆项目污染 thread/list workspaceId: ${JSON.stringify(summary.seededWorkspaceFilterRequests)}`,
     );
     assert(
       summary.legacySessionCommandsSeen.length === 0,

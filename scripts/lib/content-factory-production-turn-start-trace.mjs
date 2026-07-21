@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
-const TURN_START_METHOD = "agentSession/turn/start";
+const TURN_START_METHOD = "turn/start";
 
 function isRecord(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -34,11 +34,7 @@ function requestFromMessage(message) {
   if (!isRecord(message) || typeof message.method !== "string") return null;
   return {
     method: message.method,
-    sessionId: readString(
-      message.params?.sessionId,
-      message.params?.session_id,
-    ),
-    turnId: readString(message.params?.turnId, message.params?.turn_id),
+    threadId: readString(message.params?.threadId),
   };
 }
 
@@ -48,18 +44,7 @@ function requestsFromTraceEntry(entry) {
     return entry.appServerRequests
       .map((request) => ({
         method: request?.method,
-        sessionId: readString(
-          request?.params?.sessionId,
-          request?.params?.session_id,
-          request?.sessionId,
-          request?.session_id,
-        ),
-        turnId: readString(
-          request?.params?.turnId,
-          request?.params?.turn_id,
-          request?.turnId,
-          request?.turn_id,
-        ),
+        threadId: readString(request?.params?.threadId, request?.threadId),
       }))
       .filter((request) => typeof request.method === "string");
   }
@@ -74,10 +59,9 @@ function candidateFromMatchingTurn(value) {
   return {
     command: readString(value.command),
     method,
-    sessionId: readString(value.sessionId, value.session_id),
     status: readString(value.status),
+    threadId: readString(value.threadId),
     transport: readString(value.transport),
-    turnId: readString(value.turnId, value.turn_id),
   };
 }
 
@@ -89,10 +73,9 @@ function candidatesFromEntry(entry) {
   return requestsFromTraceEntry(entry).map((request) => ({
     command,
     method: request.method,
-    sessionId: request.sessionId,
     status,
+    threadId: request.threadId,
     transport,
-    turnId: request.turnId,
   }));
 }
 
@@ -132,20 +115,20 @@ function isElectronTurnStart(candidate) {
     candidate.transport === "electron-ipc" &&
     candidate.status === "success" &&
     candidate.method === TURN_START_METHOD &&
-    Boolean(candidate.sessionId)
+    Boolean(candidate.threadId)
   );
 }
 
 export function summarizeProductionTurnStartTrace(
   trace,
-  { expectedSessionId = "" } = {},
+  { expectedThreadId = "" } = {},
 ) {
   const candidates = collectCandidates(trace);
   const turnStartCandidates = candidates.filter(isElectronTurnStart);
   const matched =
     turnStartCandidates.find(
       (candidate) =>
-        !expectedSessionId || candidate.sessionId === expectedSessionId,
+        !expectedThreadId || candidate.threadId === expectedThreadId,
     ) || null;
   const first = matched || turnStartCandidates[0] || null;
   return {
@@ -153,27 +136,25 @@ export function summarizeProductionTurnStartTrace(
     matched: Boolean(matched),
     method: first?.method || null,
     present: turnStartCandidates.length > 0,
-    sessionId: first?.sessionId || null,
-    sessionMatched: Boolean(
-      matched &&
-      (!expectedSessionId || matched.sessionId === expectedSessionId),
+    threadId: first?.threadId || null,
+    threadMatched: Boolean(
+      matched && (!expectedThreadId || matched.threadId === expectedThreadId),
     ),
     status: first?.status || null,
     transport: first?.transport || null,
-    turnId: first?.turnId || null,
   };
 }
 
 export function readProductionTurnStartTrace(
   filePath,
-  { expectedSessionId = "" } = {},
+  { expectedThreadId = "" } = {},
 ) {
   if (!filePath) {
     return {
       fileConfigured: false,
       matched: false,
       present: false,
-      sessionMatched: false,
+      threadMatched: false,
     };
   }
   const resolvedPath = path.resolve(process.cwd(), filePath);
@@ -183,13 +164,13 @@ export function readProductionTurnStartTrace(
       fileConfigured: true,
       matched: false,
       present: false,
-      sessionMatched: false,
+      threadMatched: false,
     };
   }
   const trace = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
   return {
     file: resolvedPath,
     fileConfigured: true,
-    ...summarizeProductionTurnStartTrace(trace, { expectedSessionId }),
+    ...summarizeProductionTurnStartTrace(trace, { expectedThreadId }),
   };
 }

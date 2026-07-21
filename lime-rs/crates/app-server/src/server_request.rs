@@ -1,8 +1,8 @@
 use app_server_protocol::error_codes;
+use app_server_protocol::protocol::v2::{ServerNotification, ServerRequestResolvedNotification};
 use app_server_protocol::JsonRpcError;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::RequestId;
-use app_server_protocol::ServerNotification;
 use app_server_transport::ConnectionId;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -20,7 +20,13 @@ use crate::JsonRpcMessage;
 
 const SERVER_REQUEST_ID_PREFIX: &str = "app-server-request";
 
-type ServerRequestResolution = Result<Value, JsonRpcError>;
+type ServerRequestResult = Result<Value, JsonRpcError>;
+
+struct ServerRequestResolution {
+    pub(crate) owner: Option<ServerRequestOwner>,
+    pub(crate) result: ServerRequestResult,
+    pub(crate) resolved_before_transition: bool,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ServerRequestOwner {
@@ -30,7 +36,11 @@ pub(crate) enum ServerRequestOwner {
 }
 
 struct PendingRoute {
-    owner: ServerRequestOwner,
+    owner: Option<ServerRequestOwner>,
+    request: JsonRpcRequest,
+    thread_id: Option<String>,
+    turn_id: Option<String>,
+    request_order: u64,
     sender: oneshot::Sender<ServerRequestResolution>,
 }
 
@@ -47,10 +57,15 @@ struct ServerRequestRouterInner {
 
 pub(crate) struct PendingServerRequest {
     id: RequestId,
-    owner: ServerRequestOwner,
     request: JsonRpcRequest,
     receiver: oneshot::Receiver<ServerRequestResolution>,
     router: ServerRequestRouter,
+}
+
+pub(crate) struct ServerRequestTerminal {
+    pub(crate) owner: Option<ServerRequestOwner>,
+    pub(crate) resolved_before_transition: bool,
+    pub(crate) result: Result<Value, ServerRequestError>,
 }
 
 #[derive(Debug, Error)]
@@ -95,23 +110,34 @@ impl ServerRequestRouter {
         method: impl Into<String>,
         params: Option<Value>,
     ) -> PendingServerRequest {
+        let request_order = self.inner.next_request_id.fetch_add(1, Ordering::Relaxed);
         let id = RequestId::String(format!(
             "{SERVER_REQUEST_ID_PREFIX}:{}:{}",
-            self.inner.boot_nonce,
-            self.inner.next_request_id.fetch_add(1, Ordering::Relaxed)
+            self.inner.boot_nonce, request_order
         ));
         let request = JsonRpcRequest::new(id.clone(), method, params);
+        let thread_id = request_scope_id(&request, "threadId");
+        let turn_id = request_scope_id(&request, "turnId");
         let (sender, receiver) = oneshot::channel();
         let replaced = self
             .inner
             .pending
             .lock()
             .expect("server request router mutex poisoned")
-            .insert(id.clone(), PendingRoute { owner, sender });
+            .insert(
+                id.clone(),
+                PendingRoute {
+                    owner: Some(owner),
+                    request: request.clone(),
+                    thread_id,
+                    turn_id,
+                    request_order,
+                    sender,
+                },
+            );
         debug_assert!(replaced.is_none(), "generated server request id collided");
         PendingServerRequest {
             id,
-            owner,
             request,
             receiver,
             router: self.clone(),
@@ -176,7 +202,11 @@ impl ServerRequestRouter {
             .collect::<Vec<_>>();
         let count = pending.len();
         for (_, route) in pending {
-            let _ = route.sender.send(Err(error.clone()));
+            let _ = route.sender.send(ServerRequestResolution {
+                owner: route.owner,
+                result: Err(error.clone()),
+                resolved_before_transition: false,
+            });
         }
         count
     }
@@ -194,8 +224,16 @@ impl ServerRequestRouter {
             .expect("server request router mutex poisoned");
         let request_ids = pending
             .iter()
-            .filter_map(|(request_id, route)| (route.owner == owner).then_some(request_id.clone()))
+            .filter_map(|(request_id, route)| {
+                (route.owner == Some(owner) && route.thread_id.is_none())
+                    .then_some(request_id.clone())
+            })
             .collect::<Vec<_>>();
+        for route in pending.values_mut() {
+            if route.owner == Some(owner) && route.thread_id.is_some() {
+                route.owner = None;
+            }
+        }
         let routes = request_ids
             .iter()
             .filter_map(|request_id| pending.remove(request_id))
@@ -203,16 +241,133 @@ impl ServerRequestRouter {
         drop(pending);
         let count = routes.len();
         for route in routes {
-            let _ = route.sender.send(Err(error.clone()));
+            let _ = route.sender.send(ServerRequestResolution {
+                owner: route.owner,
+                result: Err(error.clone()),
+                resolved_before_transition: false,
+            });
         }
         count
+    }
+
+    pub(crate) async fn abort_for_thread_turn(
+        &self,
+        bridge: &crate::AppServerEventBridge,
+        thread_id: &str,
+        turn_id: &str,
+        reason: impl Into<String>,
+    ) -> usize {
+        let error = JsonRpcError::new(error_codes::REQUEST_CANCELLED, reason);
+        let routes = {
+            let mut pending = self
+                .inner
+                .pending
+                .lock()
+                .expect("server request router mutex poisoned");
+            let request_ids = pending
+                .iter()
+                .filter_map(|(request_id, route)| {
+                    (route.thread_id.as_deref() == Some(thread_id)
+                        && route.turn_id.as_deref() == Some(turn_id))
+                    .then_some(request_id.clone())
+                })
+                .collect::<Vec<_>>();
+            request_ids
+                .iter()
+                .filter_map(|request_id| pending.remove(request_id))
+                .collect::<Vec<_>>()
+        };
+
+        let count = routes.len();
+        for route in routes {
+            if let Err(error) = publish_server_request_resolved(
+                bridge,
+                thread_id,
+                route.request.id.clone(),
+                route.owner,
+            )
+            .await
+            {
+                tracing::warn!(
+                    %thread_id,
+                    %turn_id,
+                    request_id = %route.request.id,
+                    %error,
+                    "failed to publish server-request resolution before turn transition"
+                );
+            }
+            let _ = route.sender.send(ServerRequestResolution {
+                owner: route.owner,
+                result: Err(error.clone()),
+                resolved_before_transition: true,
+            });
+        }
+        count
+    }
+
+    pub(crate) fn claim_owner_thread(
+        &self,
+        owner: ServerRequestOwner,
+        thread_id: &str,
+    ) -> Vec<JsonRpcRequest> {
+        let mut pending = self
+            .inner
+            .pending
+            .lock()
+            .expect("server request router mutex poisoned");
+        let mut requests = pending
+            .values_mut()
+            .filter_map(|route| {
+                (route.owner.is_none() && route.thread_id.as_deref() == Some(thread_id)).then(
+                    || {
+                        route.owner = Some(owner);
+                        (route.request_order, route.request.clone())
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        drop(pending);
+        requests.sort_by_key(|(request_order, _)| *request_order);
+        requests.into_iter().map(|(_, request)| request).collect()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn current_owner(&self, id: &RequestId) -> Option<ServerRequestOwner> {
+        self.inner
+            .pending
+            .lock()
+            .expect("server request router mutex poisoned")
+            .get(id)
+            .and_then(|route| route.owner)
+    }
+
+    pub(crate) fn snapshot_for_owner_thread(
+        &self,
+        owner: ServerRequestOwner,
+        thread_id: &str,
+    ) -> Vec<JsonRpcRequest> {
+        let pending = self
+            .inner
+            .pending
+            .lock()
+            .expect("server request router mutex poisoned");
+        let mut requests = pending
+            .values()
+            .filter_map(|route| {
+                (route.owner == Some(owner) && route.thread_id.as_deref() == Some(thread_id))
+                    .then_some((route.request_order, route.request.clone()))
+            })
+            .collect::<Vec<_>>();
+        drop(pending);
+        requests.sort_by_key(|(request_order, _)| *request_order);
+        requests.into_iter().map(|(_, request)| request).collect()
     }
 
     fn resolve(
         &self,
         owner: ServerRequestOwner,
         id: RequestId,
-        resolution: ServerRequestResolution,
+        resolution: ServerRequestResult,
     ) -> Result<(), ServerRequestError> {
         let mut pending = self
             .inner
@@ -222,7 +377,7 @@ impl ServerRequestRouter {
         let route = pending
             .get(&id)
             .ok_or_else(|| ServerRequestError::RequestNotFound { id: id.clone() })?;
-        if route.owner != owner {
+        if route.owner != Some(owner) {
             return Err(ServerRequestError::ClientMismatch { id });
         }
         let route = pending
@@ -231,16 +386,21 @@ impl ServerRequestRouter {
         drop(pending);
         route
             .sender
-            .send(resolution)
+            .send(ServerRequestResolution {
+                owner: Some(owner),
+                result: resolution,
+                resolved_before_transition: false,
+            })
             .map_err(|_| ServerRequestError::ResponseChannelClosed { id })
     }
 
-    fn cancel(&self, id: &RequestId) {
+    fn cancel(&self, id: &RequestId) -> Option<ServerRequestOwner> {
         self.inner
             .pending
             .lock()
             .expect("server request router mutex poisoned")
-            .remove(id);
+            .remove(id)
+            .and_then(|route| route.owner)
     }
 
     #[cfg(test)]
@@ -253,6 +413,52 @@ impl ServerRequestRouter {
     }
 }
 
+async fn publish_server_request_resolved(
+    bridge: &crate::AppServerEventBridge,
+    thread_id: &str,
+    request_id: RequestId,
+    owner: Option<ServerRequestOwner>,
+) -> Result<(), String> {
+    let Some(owner) = owner else {
+        return Ok(());
+    };
+    let origin_connection_id = match owner {
+        ServerRequestOwner::Transport(connection_id) => Some(connection_id),
+        #[cfg(test)]
+        ServerRequestOwner::Subscriber => None,
+    };
+    let notification =
+        ServerNotification::ServerRequestResolved(ServerRequestResolvedNotification {
+            thread_id: thread_id.to_string(),
+            request_id,
+        });
+    let (completion_tx, completion_rx) = oneshot::channel();
+    bridge
+        .send_thread_command(
+            agent_protocol::ThreadId::new(thread_id),
+            crate::thread_state::ThreadListenerCommand::PublishNotification {
+                notification: notification.into(),
+                origin_connection_id,
+                completion_tx: Some(completion_tx),
+            },
+        )
+        .await?;
+    completion_rx
+        .await
+        .map_err(|error| format!("server-request resolution completion channel closed: {error}"))?
+}
+
+fn request_scope_id(request: &JsonRpcRequest, field: &str) -> Option<String> {
+    request
+        .params
+        .as_ref()
+        .and_then(|params| params.get(field))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
 impl PendingServerRequest {
     pub(crate) fn id(&self) -> &RequestId {
         &self.id
@@ -262,21 +468,35 @@ impl PendingServerRequest {
         &self.request
     }
 
-    pub(crate) fn owner(&self) -> ServerRequestOwner {
-        self.owner
+    pub(crate) async fn wait(mut self) -> Result<Value, ServerRequestError> {
+        self.wait_terminal().await.result
     }
 
-    pub(crate) async fn wait(mut self) -> Result<Value, ServerRequestError> {
+    pub(crate) async fn wait_terminal(&mut self) -> ServerRequestTerminal {
         match (&mut self.receiver).await {
-            Ok(Ok(result)) => Ok(result),
-            Ok(Err(error)) => Err(ServerRequestError::ClientRejected {
-                id: self.id.clone(),
-                error,
-            }),
-            Err(_) => Err(ServerRequestError::ResponseChannelClosed {
-                id: self.id.clone(),
-            }),
+            Ok(resolution) => ServerRequestTerminal {
+                owner: resolution.owner,
+                resolved_before_transition: resolution.resolved_before_transition,
+                result: match resolution.result {
+                    Ok(result) => Ok(result),
+                    Err(error) => Err(ServerRequestError::ClientRejected {
+                        id: self.id.clone(),
+                        error,
+                    }),
+                },
+            },
+            Err(_) => ServerRequestTerminal {
+                owner: None,
+                resolved_before_transition: false,
+                result: Err(ServerRequestError::ResponseChannelClosed {
+                    id: self.id.clone(),
+                }),
+            },
         }
+    }
+
+    pub(crate) fn cancel_with_owner(&self) -> Option<ServerRequestOwner> {
+        self.router.cancel(&self.id)
     }
 }
 
@@ -391,6 +611,143 @@ mod tests {
             json!({ "accepted": 1 })
         );
         assert_eq!(router.pending_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn wait_terminal_preserves_claimed_owner_after_route_removal() {
+        let router = ServerRequestRouter::default();
+        let first_owner = ServerRequestOwner::Transport(ConnectionId(1));
+        let second_owner = ServerRequestOwner::Transport(ConnectionId(2));
+        let pending = router.register_for_owner(
+            first_owner,
+            "item/tool/requestUserInput",
+            Some(json!({ "threadId": "thread-1" })),
+        );
+
+        assert_eq!(router.cancel_owner(first_owner, "disconnected"), 0);
+        assert_eq!(router.current_owner(pending.id()), None);
+        assert_eq!(router.claim_owner_thread(second_owner, "thread-1").len(), 1);
+        assert!(matches!(
+            router.resolve_transport_response(
+                ConnectionId(1),
+                pending.id().clone(),
+                json!("stale"),
+            ),
+            Err(ServerRequestError::ClientMismatch { .. })
+        ));
+        router
+            .resolve_transport_response(
+                ConnectionId(2),
+                pending.id().clone(),
+                json!({ "answer": "yes" }),
+            )
+            .expect("claimed owner resolves request");
+
+        let mut pending = pending;
+        let terminal = pending.wait_terminal().await;
+        assert_eq!(terminal.owner, Some(second_owner));
+        assert_eq!(
+            terminal.result.expect("terminal result"),
+            json!({ "answer": "yes" })
+        );
+    }
+
+    #[test]
+    fn pending_request_snapshot_for_owner_thread_is_in_request_id_order() {
+        let router = ServerRequestRouter::with_boot_nonce(Uuid::from_u128(1));
+        let owner = ServerRequestOwner::Transport(ConnectionId(7));
+        let pending = (0..12)
+            .map(|index| {
+                router.register_for_owner(
+                    owner,
+                    "test/request",
+                    Some(json!({ "threadId": "thread-1", "index": index })),
+                )
+            })
+            .collect::<Vec<_>>();
+        let expected_requests = pending
+            .iter()
+            .map(|pending| pending.request().clone())
+            .collect::<Vec<_>>();
+
+        let snapshot = router.snapshot_for_owner_thread(owner, "thread-1");
+
+        assert_eq!(snapshot, expected_requests);
+    }
+
+    #[test]
+    fn pending_request_snapshot_isolated_by_owner_and_canonical_thread_id() {
+        let router = ServerRequestRouter::default();
+        let first_owner = ServerRequestOwner::Transport(ConnectionId(1));
+        let second_owner = ServerRequestOwner::Transport(ConnectionId(2));
+        let expected = router.register_for_owner(
+            first_owner,
+            "expected/request",
+            Some(json!({ "threadId": "thread-1" })),
+        );
+        let _other_thread = router.register_for_owner(
+            first_owner,
+            "other-thread/request",
+            Some(json!({ "threadId": "thread-2" })),
+        );
+        let _other_owner = router.register_for_owner(
+            second_owner,
+            "other-owner/request",
+            Some(json!({ "threadId": "thread-1" })),
+        );
+        let _session_only = router.register_for_owner(
+            first_owner,
+            "session-only/request",
+            Some(json!({ "sessionId": "thread-1" })),
+        );
+
+        let snapshot = router.snapshot_for_owner_thread(first_owner, "thread-1");
+
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].id, *expected.id());
+        assert_eq!(snapshot[0].method, "expected/request");
+    }
+
+    #[tokio::test]
+    async fn pending_request_snapshot_removes_resolved_and_dropped_routes() {
+        let router = ServerRequestRouter::default();
+        let owner = ServerRequestOwner::Transport(ConnectionId(1));
+        let resolved = router.register_for_owner(
+            owner,
+            "resolved/request",
+            Some(json!({ "threadId": "thread-1" })),
+        );
+        let dropped = router.register_for_owner(
+            owner,
+            "dropped/request",
+            Some(json!({ "threadId": "thread-1" })),
+        );
+
+        router
+            .resolve_transport_response(
+                ConnectionId(1),
+                resolved.id().clone(),
+                json!({ "ok": true }),
+            )
+            .expect("resolve exact pending route");
+        assert_eq!(
+            resolved.wait().await.expect("resolved result"),
+            json!({ "ok": true })
+        );
+        assert_eq!(
+            router
+                .snapshot_for_owner_thread(owner, "thread-1")
+                .iter()
+                .map(|request| &request.method)
+                .collect::<Vec<_>>(),
+            vec!["dropped/request"]
+        );
+
+        drop(dropped);
+
+        assert!(router
+            .snapshot_for_owner_thread(owner, "thread-1")
+            .is_empty());
     }
 
     #[tokio::test]
@@ -568,6 +925,196 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn turn_scoped_cancel_detaches_only_matching_reverse_request() {
+        let server = AppServer::new();
+        let router = &server.server_requests;
+        let mut outbound = server.subscribe_outbound_messages();
+        let owner = ServerRequestOwner::Transport(ConnectionId(1));
+        let mut matching = router.register_for_owner(
+            owner,
+            "item/commandExecution/requestApproval",
+            Some(json!({ "threadId": "thread-1", "turnId": "turn-1" })),
+        );
+        let matching_id = matching.id().clone();
+        let other_turn = router.register_for_owner(
+            owner,
+            "item/commandExecution/requestApproval",
+            Some(json!({ "threadId": "thread-1", "turnId": "turn-2" })),
+        );
+        let other_thread = router.register_for_owner(
+            owner,
+            "item/commandExecution/requestApproval",
+            Some(json!({ "threadId": "thread-2", "turnId": "turn-1" })),
+        );
+
+        assert_eq!(
+            router
+                .abort_for_thread_turn(
+                    &server.event_bridge(),
+                    "thread-1",
+                    "turn-1",
+                    "turn interrupted",
+                )
+                .await,
+            1
+        );
+        let resolved = tokio::time::timeout(Duration::from_secs(1), outbound.recv())
+            .await
+            .expect("resolved notification should arrive")
+            .expect("resolved notification channel should stay open");
+        let JsonRpcMessage::Notification(notification) = resolved else {
+            panic!("expected resolved notification");
+        };
+        let ServerNotification::ServerRequestResolved(resolved) =
+            ServerNotification::try_from(notification).expect("typed resolved notification")
+        else {
+            panic!("expected typed resolved notification");
+        };
+        assert_eq!(resolved.thread_id, "thread-1");
+        assert_eq!(resolved.request_id, matching_id.clone());
+        assert_eq!(router.pending_count(), 2);
+        assert!(matches!(
+            router.resolve_transport_response(ConnectionId(1), matching_id.clone(), json!(null)),
+            Err(ServerRequestError::RequestNotFound { id }) if id == matching_id
+        ));
+
+        let terminal = matching.wait_terminal().await;
+        assert_eq!(terminal.owner, Some(owner));
+        assert!(terminal.resolved_before_transition);
+        assert!(matches!(
+            terminal.result,
+            Err(ServerRequestError::ClientRejected { error, .. })
+                if error.code == error_codes::REQUEST_CANCELLED
+        ));
+
+        router
+            .resolve_transport_response(ConnectionId(1), other_turn.id().clone(), json!({}))
+            .expect("other turn stays routable");
+        router
+            .resolve_transport_response(ConnectionId(1), other_thread.id().clone(), json!({}))
+            .expect("other thread stays routable");
+        assert!(other_turn.wait().await.is_ok());
+        assert!(other_thread.wait().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn thread_scoped_routes_detach_on_disconnect_and_claim_on_resume() {
+        let router = ServerRequestRouter::default();
+        let first_owner = ServerRequestOwner::Transport(ConnectionId(1));
+        let second_owner = ServerRequestOwner::Transport(ConnectionId(2));
+        let first_thread_request = router.register_for_owner(
+            first_owner,
+            "thread/first",
+            Some(json!({ "threadId": "thread-1", "index": 1 })),
+        );
+        let second_thread_request = router.register_for_owner(
+            first_owner,
+            "thread/second",
+            Some(json!({ "threadId": "thread-1", "index": 2 })),
+        );
+        let other_thread_request = router.register_for_owner(
+            first_owner,
+            "thread/other",
+            Some(json!({ "threadId": "thread-2" })),
+        );
+        let unscoped_request = router.register_for_owner(first_owner, "unscoped", None);
+
+        assert_eq!(router.cancel_owner(first_owner, "first disconnected"), 1);
+        assert_eq!(router.pending_count(), 3);
+        assert_eq!(router.current_owner(first_thread_request.id()), None);
+        assert!(router
+            .snapshot_for_owner_thread(first_owner, "thread-1")
+            .is_empty());
+        assert!(matches!(
+            router.resolve_transport_response(
+                ConnectionId(1),
+                first_thread_request.id().clone(),
+                json!(null),
+            ),
+            Err(ServerRequestError::ClientMismatch { .. })
+        ));
+        assert!(matches!(
+            unscoped_request.wait().await,
+            Err(ServerRequestError::ClientRejected { error, .. })
+                if error.code == error_codes::REQUEST_CANCELLED
+        ));
+
+        let claimed = router.claim_owner_thread(second_owner, "thread-1");
+        assert_eq!(
+            claimed,
+            vec![
+                first_thread_request.request().clone(),
+                second_thread_request.request().clone()
+            ]
+        );
+        assert_eq!(
+            router.current_owner(first_thread_request.id()),
+            Some(second_owner)
+        );
+        assert_eq!(
+            router.snapshot_for_owner_thread(second_owner, "thread-1"),
+            claimed
+        );
+        assert!(router
+            .snapshot_for_owner_thread(second_owner, "thread-2")
+            .is_empty());
+
+        assert!(matches!(
+            router.resolve_transport_response(
+                ConnectionId(1),
+                first_thread_request.id().clone(),
+                json!("stale"),
+            ),
+            Err(ServerRequestError::ClientMismatch { .. })
+        ));
+        router
+            .resolve_transport_response(
+                ConnectionId(2),
+                first_thread_request.id().clone(),
+                json!({ "ok": 1 }),
+            )
+            .expect("claimed owner resolves first request");
+        router
+            .resolve_transport_response(
+                ConnectionId(2),
+                second_thread_request.id().clone(),
+                json!({ "ok": 2 }),
+            )
+            .expect("claimed owner resolves second request");
+        assert_eq!(
+            first_thread_request.wait().await.expect("first result"),
+            json!({ "ok": 1 })
+        );
+        assert_eq!(
+            second_thread_request.wait().await.expect("second result"),
+            json!({ "ok": 2 })
+        );
+        drop(other_thread_request);
+        assert_eq!(router.pending_count(), 0);
+    }
+
+    #[test]
+    fn claim_owner_thread_does_not_steal_an_active_route() {
+        let router = ServerRequestRouter::default();
+        let first_owner = ServerRequestOwner::Transport(ConnectionId(1));
+        let second_owner = ServerRequestOwner::Transport(ConnectionId(2));
+        let pending = router.register_for_owner(
+            first_owner,
+            "thread/request",
+            Some(json!({ "threadId": "thread-1" })),
+        );
+
+        assert!(router
+            .claim_owner_thread(second_owner, "thread-1")
+            .is_empty());
+        assert_eq!(router.current_owner(pending.id()), Some(first_owner));
+        assert_eq!(
+            router.snapshot_for_owner_thread(first_owner, "thread-1"),
+            vec![pending.request().clone()]
+        );
+    }
+
+    #[tokio::test]
     async fn resolved_notification_targets_only_the_captured_connection_owner() {
         let server = AppServer::new();
         let (first_tx, mut first_rx) = tokio::sync::mpsc::channel(1);
@@ -582,11 +1129,10 @@ mod tests {
         server
             .send_server_notification_to_owner(
                 ServerRequestOwner::Transport(ConnectionId(1)),
-                ServerNotification::ServerRequestResolved(
-                    app_server_protocol::ServerRequestResolvedNotification {
-                        request_id: request_id.clone(),
-                    },
-                ),
+                ServerNotification::ServerRequestResolved(ServerRequestResolvedNotification {
+                    thread_id: "thread-1".to_string(),
+                    request_id: request_id.clone(),
+                }),
             )
             .await
             .expect("send exact notification");
@@ -598,9 +1144,10 @@ mod tests {
         };
         assert_eq!(
             ServerNotification::try_from(notification).expect("typed notification"),
-            ServerNotification::ServerRequestResolved(
-                app_server_protocol::ServerRequestResolvedNotification { request_id }
-            )
+            ServerNotification::ServerRequestResolved(ServerRequestResolvedNotification {
+                thread_id: "thread-1".to_string(),
+                request_id,
+            })
         );
         assert!(matches!(
             second_rx.try_recv(),
@@ -632,6 +1179,54 @@ mod tests {
         .await
         .expect("transport should connect");
 
+        let mut lines = BufReader::new(client_read).lines();
+        client_write
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": crate::METHOD_INITIALIZE,
+                        "params": {
+                            "clientInfo": {
+                                "name": "server-request-jsonl-test",
+                                "version": "1.0.0"
+                            }
+                        }
+                    })
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("write initialize request");
+        let initialize_line = tokio::time::timeout(Duration::from_secs(2), lines.next_line())
+            .await
+            .expect("initialize response should arrive")
+            .expect("read initialize response")
+            .expect("initialize response line");
+        let JsonRpcMessage::Response(initialize_response) =
+            serde_json::from_str::<JsonRpcMessage>(&initialize_line)
+                .expect("decode initialize response")
+        else {
+            panic!("expected initialize response");
+        };
+        assert_eq!(initialize_response.id, RequestId::Integer(1));
+        client_write
+            .write_all(
+                format!(
+                    "{}\n",
+                    json!({
+                        "jsonrpc": "2.0",
+                        "method": crate::METHOD_INITIALIZED,
+                        "params": {}
+                    })
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("write initialized notification");
+
         let request_server = server.clone();
         let pending = tokio::spawn(async move {
             request_server
@@ -649,17 +1244,22 @@ mod tests {
                 .await
         });
 
-        let mut lines = BufReader::new(client_read).lines();
-        let line = tokio::time::timeout(Duration::from_secs(2), lines.next_line())
-            .await
-            .expect("server request should arrive")
-            .expect("read server request")
-            .expect("server request line");
-        let JsonRpcMessage::Request(request) =
-            serde_json::from_str::<JsonRpcMessage>(&line).expect("decode server request")
-        else {
-            panic!("expected server request");
-        };
+        let request = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let line = lines
+                    .next_line()
+                    .await
+                    .expect("read server request")
+                    .expect("server request line");
+                if let JsonRpcMessage::Request(request) =
+                    serde_json::from_str::<JsonRpcMessage>(&line).expect("decode server message")
+                {
+                    break request;
+                }
+            }
+        })
+        .await
+        .expect("server request should arrive");
         assert_eq!(request.method, "mcpServer/elicitation/request");
 
         let response = JsonRpcMessage::Response(

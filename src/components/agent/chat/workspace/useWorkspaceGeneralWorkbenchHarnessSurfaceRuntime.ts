@@ -48,14 +48,11 @@ interface UseWorkspaceGeneralWorkbenchHarnessSurfaceRuntimeParams {
   onOpenExecutionPolicySettings: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["onOpenExecutionPolicySettings"];
   onOpenFile: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["onOpenFile"];
   onOpenSubagentSession: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["onOpenSubagentSession"];
-  onPromoteQueuedTurn: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["onPromoteQueuedTurn"];
   onRespondToAction: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["onRespondToAction"];
-  onResumeThread: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["onResumeThread"];
   onSubmitCodeFixPrompt: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["onSubmitCodeFixPrompt"];
   pendingActions: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["pendingActions"];
   projectId?: string | null;
   providerType?: string | null;
-  queuedTurns: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["queuedTurns"];
   refreshSessionReadModel: (sessionId?: string) => unknown;
   replayPendingAction?: (
     requestId: string,
@@ -87,14 +84,11 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
   onOpenExecutionPolicySettings,
   onOpenFile,
   onOpenSubagentSession,
-  onPromoteQueuedTurn,
   onRespondToAction,
-  onResumeThread,
   onSubmitCodeFixPrompt,
   pendingActions,
   projectId,
   providerType,
-  queuedTurns,
   refreshSessionReadModel,
   replayPendingAction,
   sessionId,
@@ -115,16 +109,13 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
       pendingActions,
       submittedActionsInFlight,
       onRespondToAction,
-      queuedTurns,
       canInterrupt,
       onInterruptCurrentTurn,
-      onResumeThread,
       onReplayPendingRequest:
         latestAssistantMessageId && replayPendingAction
           ? (requestId: string) =>
               replayPendingAction(requestId, latestAssistantMessageId)
           : undefined,
-      onPromoteQueuedTurn,
       onObjectiveChanged: async () => {
         await refreshSessionReadModel(sessionId || undefined);
       },
@@ -181,14 +172,11 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
       onOpenExecutionPolicySettings,
       onOpenFile,
       onOpenSubagentSession,
-      onPromoteQueuedTurn,
       onRespondToAction,
-      onResumeThread,
       onSubmitCodeFixPrompt,
       pendingActions,
       projectId,
       providerType,
-      queuedTurns,
       refreshSessionReadModel,
       replayPendingAction,
       sessionId,

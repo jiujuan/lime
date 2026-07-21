@@ -891,120 +891,19 @@ describe("agentUiEventProjection", () => {
         artifactPaths: [".lime/artifacts/report.md"],
       },
     });
-
-    const queueEvents = buildAgentUiProjectionEvents(
-      {
-        type: "queue_added",
-        session_id: "session-1",
-        queued_turn: {
-          queued_turn_id: "queued-1",
-          message_preview: "下一轮",
-          message_text: "下一轮",
-          created_at: 0,
-          image_count: 0,
-          position: 1,
-        },
-      } as AgentEvent,
-      baseContext,
-    );
-
-    expect(queueEvents[0]).toMatchObject({
-      type: "queue.changed",
-      taskId: "queued-1",
-      owner: "task",
-      surface: "task_capsule",
-      control: "queue",
-      queuedTurnCount: 2,
-      payload: {
-        queuedTurnCount: 2,
-        position: 1,
-      },
-    });
-    expect(queueEvents[1]).toMatchObject({
-      type: "task.changed",
-      sourceType: "queue_added",
-      sequence: 11,
-      taskId: "queued-1",
-      owner: "task",
-      scope: "turn",
-      phase: "submitted",
-      surface: "task_capsule",
-      control: "steer",
-      queuedTurnCount: 2,
-      payload: {
-        taskEvent: "steer_intent",
-        intentKind: "queued_user_input",
-        queuedTurnId: "queued-1",
-        position: 1,
-        messagePreview: "下一轮",
-      },
-    });
-
-    const queueStartedEvents = buildAgentUiProjectionEvents(
-      {
-        type: "queue_started",
-        session_id: "session-1",
-        queued_turn_id: "queued-1",
-      },
-      baseContext,
-    );
-    expect(queueStartedEvents[1]).toMatchObject({
-      type: "task.changed",
-      sourceType: "queue_started",
-      sequence: 11,
-      taskId: "queued-1",
-      phase: "accepted",
-      control: "steer",
-      payload: {
-        taskEvent: "steer_started",
-        intentKind: "queued_user_input",
-        queueEvent: "queue_started",
-        queuedTurnId: "queued-1",
-      },
-    });
-
-    const queueRemovedEvents = buildAgentUiProjectionEvents(
-      {
-        type: "queue_removed",
-        session_id: "session-1",
-        queued_turn_id: "queued-1",
-      },
-      baseContext,
-    );
-    expect(queueRemovedEvents[1]).toMatchObject({
-      type: "task.changed",
-      sourceType: "queue_removed",
-      taskId: "queued-1",
-      phase: "cancelled",
-      control: "remove",
-      payload: {
-        taskEvent: "steer_removed",
-        queueEvent: "queue_removed",
-        queuedTurnId: "queued-1",
-      },
-    });
-
-    const queueClearedEvents = buildAgentUiProjectionEvents(
-      {
-        type: "queue_cleared",
-        session_id: "session-1",
-        queued_turn_ids: ["queued-1", "queued-2"],
-      },
-      baseContext,
-    );
-    expect(queueClearedEvents).toHaveLength(3);
-    expect(queueClearedEvents[1]).toMatchObject({
-      type: "task.changed",
-      taskId: "queued-1",
-      control: "remove",
-      payload: {
-        taskEvent: "steer_removed",
-        queueEvent: "queue_cleared",
-        clearedIndex: 0,
-        clearedCount: 2,
-      },
-    });
   });
+
+  it.each(["queue_added", "queue_removed", "queue_started", "queue_cleared"])(
+    "已退役的 raw user-turn queue 事件 %s 不应进入 Agent UI 投影",
+    (type) => {
+      expect(
+        buildAgentUiProjectionEvents(
+          { type } as unknown as AgentEvent,
+          baseContext,
+        ),
+      ).toEqual([]);
+    },
+  );
 
   it("已退役的 raw subagent status 不应进入 Agent UI 投影", () => {
     expect(

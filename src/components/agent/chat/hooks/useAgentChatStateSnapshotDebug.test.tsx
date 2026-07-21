@@ -31,7 +31,6 @@ async function mountHook(props?: Partial<HookProps>): Promise<HookHarness> {
     isSending: false,
     messagesCount: 1,
     pendingActionsCount: 0,
-    queuedTurnsCount: 0,
     sessionId: "session-1",
     threadTurnsCount: 1,
     topicsCount: 1,
@@ -130,7 +129,6 @@ describe("useAgentChatStateSnapshotDebug", () => {
 
       await harness.render({
         isSending: true,
-        queuedTurnsCount: 2,
       });
 
       expect(mockLogAgentDebug).toHaveBeenCalledTimes(2);
@@ -139,10 +137,9 @@ describe("useAgentChatStateSnapshotDebug", () => {
         "stateSnapshot",
         expect.objectContaining({
           isSending: true,
-          queuedTurnsCount: 2,
         }),
         expect.objectContaining({
-          dedupeKey: expect.stringContaining('"queuedTurnsCount":2'),
+          dedupeKey: expect.stringContaining('"isSending":true'),
         }),
       );
     } finally {

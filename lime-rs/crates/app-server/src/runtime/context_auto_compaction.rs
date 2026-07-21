@@ -3,8 +3,8 @@ use super::*;
 use app_server_protocol::{AgentEvent, RuntimeOptions};
 use serde_json::{json, Value};
 
-const AUTO_COMPACT_SOURCE: &str = "agentSession/turn/start";
-const AUTO_COMPACT_EVENT_NAME: &str = "agentSession/turn/start:autoCompact";
+const AUTO_COMPACT_SOURCE: &str = "turn/start";
+const AUTO_COMPACT_EVENT_NAME: &str = "turn/start:autoCompact";
 const AUTO_COMPACT_TRIGGER: &str = "auto_context_limit";
 const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT: u64 = 95;
 const AUTO_COMPACT_CONTEXT_WINDOW_RATIO_NUMERATOR: u64 = 9;

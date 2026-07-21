@@ -588,10 +588,7 @@
   "agentChat.threadReliability.panel.actions.replaying": "拉起中",
   "agentChat.threadReliability.panel.actions.replayRequest": "重新拉起请求",
   "agentChat.threadReliability.panel.actions.locatePendingRequest": "前往待处理请求",
-  "agentChat.threadReliability.panel.actions.resuming": "恢复中",
-  "agentChat.threadReliability.panel.actions.resumeThread": "恢复执行",
-  "agentChat.threadReliability.panel.actions.promoteQueuedWithPosition": "优先执行 {{position}}",
-  "agentChat.threadReliability.panel.actions.promoteQueued": "优先执行排队回合",
+  "agentChat.threadReliability.panel.actions.promotingQueued": "正在提升队列",
   "agentChat.threadReliability.panel.requests.title": "当前最需要处理的请求",
   "agentChat.threadReliability.panel.submitted.title": "已提交响应，等待线程继续执行",
   "agentChat.threadReliability.panel.toast.clipboardUnsupported": "当前环境不支持剪贴板复制",
@@ -835,7 +832,7 @@
   "agentChat.threadReliability.view.recommendation.failedIncident": "优先处理高优先级 incident",
   "agentChat.threadReliability.view.recommendation.approvalTimeout": "审批等待过久，建议尽快处理或停止当前执行",
   "agentChat.threadReliability.view.recommendation.userInputTimeout": "人工输入等待过久，建议补充输入后继续线程",
-  "agentChat.threadReliability.view.recommendation.turnStuck": "当前回合长时间无进展，建议停止后恢复执行",
+  "agentChat.threadReliability.view.recommendation.turnStuck": "当前回合长时间无进展，建议停止后重新提交",
   "agentChat.threadReliability.view.recommendation.providerError": "Provider 故障通常可重试，建议稍后恢复或重发回合",
   "agentChat.threadReliability.view.recommendation.toolFailed": "请先检查失败工具的参数或环境，再尝试重试",
   "agentChat.threadReliability.view.recommendation.interrupting": "正在停止当前执行，请等待运行时回填最终状态",
@@ -1196,5 +1193,8 @@
   "agentChat.toolCall.actionOverride.runScript.running": "执行脚本中",
   "agentChat.toolCall.actionOverride.getLog.failed": "获取日志失败",
   "agentChat.toolCall.actionOverride.getLog.completed": "已获取日志",
-  "agentChat.toolCall.actionOverride.getLog.running": "获取日志中"
+  "agentChat.toolCall.actionOverride.getLog.running": "获取日志中",
+  "agentChat.runtimeWarning.skillNotAvailable": "所选 Skill 当前不可用。",
+  "agentChat.runtimeWarning.skillLoadFailed": "所选 Skill 加载失败。",
+  "agentChat.runtimeWarning.mentionNotAvailable": "当前无法解析所选 Mention。"
 }

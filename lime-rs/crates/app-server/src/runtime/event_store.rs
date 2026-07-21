@@ -53,6 +53,7 @@ impl RuntimeCoreEventAppender {
             self.event_log_writer.as_deref(),
             self.trace_event_writer.as_deref(),
             self.projection_store.as_deref(),
+            Some(&self.session_loops),
             session_id,
             &thread_id,
             turn_id,
@@ -136,7 +137,7 @@ impl RuntimeCore {
                     "canonical mailbox Item recovery failed after EventLog append: {error}"
                 ))
             })?;
-        projection_store
+        let terminal_activities = projection_store
             .append_terminal_agent_results_sync(
                 &agent_protocol::ThreadId::new(stored.session.thread_id.clone()),
                 &replay,
@@ -146,6 +147,10 @@ impl RuntimeCore {
                     "durable child terminal activity recovery failed: {error}"
                 ))
             })?;
+        super::agent_terminal_activity::publish_terminal_agent_activities(
+            &self.session_loops,
+            terminal_activities,
+        );
         if let Err(error) = projection_store.apply_events(&replay) {
             tracing::warn!(
                 "[projection-store] failed to replay {} durable events for session {}: {}",
@@ -201,6 +206,7 @@ impl RuntimeCore {
             self.event_log_writer.as_deref(),
             self.trace_event_writer.as_deref(),
             self.projection_store.as_deref(),
+            Some(&self.session_loops),
             session_id,
             &thread_id,
             Some(turn_id),
@@ -275,6 +281,7 @@ pub(in crate::runtime) fn append_runtime_events_to_state(
     event_log_writer: Option<&EventLogWriter>,
     trace_event_writer: Option<&TraceEventWriter>,
     projection_store: Option<&ProjectionStore>,
+    session_loops: Option<&agent_runtime::session_loop::RuntimeSessionRegistry>,
     session_id: &str,
     thread_id: &str,
     turn_id: Option<&str>,
@@ -293,6 +300,7 @@ pub(in crate::runtime) fn append_runtime_events_to_state(
         event_log_writer,
         trace_event_writer,
         projection_store,
+        session_loops,
         session_id,
         thread_id,
         turn_id,
@@ -309,6 +317,7 @@ pub(in crate::runtime) fn append_runtime_events_to_state_with_message_lifecycle(
     event_log_writer: Option<&EventLogWriter>,
     trace_event_writer: Option<&TraceEventWriter>,
     projection_store: Option<&ProjectionStore>,
+    session_loops: Option<&agent_runtime::session_loop::RuntimeSessionRegistry>,
     session_id: &str,
     thread_id: &str,
     turn_id: &str,
@@ -328,6 +337,7 @@ pub(in crate::runtime) fn append_runtime_events_to_state_with_message_lifecycle(
         event_log_writer,
         trace_event_writer,
         projection_store,
+        session_loops,
         session_id,
         thread_id,
         Some(turn_id),
@@ -344,6 +354,7 @@ fn append_runtime_events_to_stored_session(
     event_log_writer: Option<&EventLogWriter>,
     trace_event_writer: Option<&TraceEventWriter>,
     projection_store: Option<&ProjectionStore>,
+    session_loops: Option<&agent_runtime::session_loop::RuntimeSessionRegistry>,
     session_id: &str,
     thread_id: &str,
     turn_id: Option<&str>,
@@ -487,8 +498,10 @@ fn append_runtime_events_to_stored_session(
             )?;
         }
         attach_session_projection_metadata(&mut event, stored);
+        attach_goal_accounting_mode(&mut event, stored);
         attach_canonical_item_entity(stored, &events, &mut event)
             .map_err(RuntimeCoreError::Backend)?;
+        super::thread_usage::canonicalize_runtime_usage_event(&mut event, &stored.events, &events);
         agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?;
         validation
             .validate_and_observe(
@@ -575,7 +588,7 @@ fn append_runtime_events_to_stored_session(
                 })?;
         }
         if terminal_result_required {
-            projection_store
+            let terminal_activities = projection_store
                 .append_terminal_agent_results_sync(
                     &agent_protocol::ThreadId::new(thread_id),
                     &appended_events,
@@ -585,6 +598,12 @@ fn append_runtime_events_to_stored_session(
                         "failed to persist durable child terminal activity: {error}"
                     ))
                 })?;
+            if let Some(session_loops) = session_loops {
+                super::agent_terminal_activity::publish_terminal_agent_activities(
+                    session_loops,
+                    terminal_activities,
+                );
+            }
         }
     }
     for event in appended_events.iter().cloned() {
@@ -655,7 +674,15 @@ fn runtime_events_with_turn_input(
     let Some(input) = stored.turn_inputs.get(turn_id) else {
         return runtime_events;
     };
-    let Some(input_event) = turn_input_events::runtime_event_for_turn_input(input) else {
+    let client_user_message_id = stored
+        .turn_runtime_options
+        .get(turn_id)
+        .and_then(|options| options.runtime_metadata())
+        .and_then(|metadata| super::session_submission::metadata(Some(metadata)).0);
+    let Some(input_event) = turn_input_events::runtime_event_for_turn_input_with_client_id(
+        input,
+        client_user_message_id.as_deref(),
+    ) else {
         return runtime_events;
     };
 
@@ -721,6 +748,23 @@ fn attach_session_projection_metadata(event: &mut AgentEvent, stored: &StoredSes
             .as_deref(),
     );
     insert_session_projection_metadata(session_payload, stored);
+}
+
+fn attach_goal_accounting_mode(event: &mut AgentEvent, stored: &StoredSession) {
+    if event.event_type != "turn.accepted" {
+        return;
+    }
+    let Some(turn_id) = event.turn_id.as_deref() else {
+        return;
+    };
+    let Some(payload) = event.payload.as_object_mut() else {
+        return;
+    };
+    let plan = super::thread_goal::turn_uses_plan_mode(stored.turn_runtime_options.get(turn_id));
+    payload.insert(
+        "goalAccountingMode".to_string(),
+        Value::String(if plan { "plan" } else { "default" }.to_string()),
+    );
 }
 
 fn insert_session_projection_string(

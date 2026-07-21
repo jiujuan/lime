@@ -28,10 +28,16 @@ const SCHEMA_MANIFEST_PATH = path.join(
   REPO_ROOT,
   "lime-rs/crates/app-server-protocol/schema/json/manifest.json",
 );
-const METHOD_NAMES_PATH = path.join(
-  REPO_ROOT,
-  "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
-);
+const METHOD_NAMES_PATHS = [
+  path.join(
+    REPO_ROOT,
+    "lime-rs/crates/app-server-protocol/src/protocol/v2/methods.rs",
+  ),
+  path.join(
+    REPO_ROOT,
+    "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
+  ),
+];
 const OUTPUT_DIR = path.join(
   REPO_ROOT,
   "packages/app-server-client/src/generated",
@@ -195,23 +201,25 @@ function generateTypes() {
   const bundle = JSON.parse(bundleRaw);
   const manifestRaw = fs.readFileSync(SCHEMA_MANIFEST_PATH, "utf8");
   const manifest = JSON.parse(manifestRaw);
+  assertNoHeterogeneousNestedSchemaCollisions(manifest);
   globalDefs = collectSchemaDefinitions(bundle);
 
   const defNames = Object.keys(globalDefs);
   console.log(`   找到 ${defNames.length} 个类型定义`);
 
-  // 只处理 v0 协议类型，跳过 JSON-RPC envelope 和 meta
-  const v0TypeNames = [];
+  // 处理当前协议类型，跳过 JSON-RPC envelope 和 meta。
+  // v0 仍承载非核心产品方法；Thread/Turn 的 current 类型来自 v2。
+  const protocolTypeNames = [];
   let skipped = 0;
   for (const name of defNames) {
     if (JSONRPC_TYPE_NAMES.has(name) || META_TYPE_NAMES.has(name)) {
       skipped++;
       continue;
     }
-    v0TypeNames.push(name);
+    protocolTypeNames.push(name);
   }
   console.log(
-    `   跳过 ${skipped} 个（JSON-RPC envelope + meta），保留 ${v0TypeNames.length} 个 v0 类型`,
+    `   跳过 ${skipped} 个（JSON-RPC envelope + meta），保留 ${protocolTypeNames.length} 个协议类型`,
   );
 
   // 生成 TS 类型定义
@@ -219,7 +227,7 @@ function generateTypes() {
   let generated = 0;
   let failed = 0;
 
-  for (const name of v0TypeNames) {
+  for (const name of protocolTypeNames) {
     try {
       const schema = globalDefs[name];
       const tsType = schemaToTs(schema, 0);
@@ -299,15 +307,89 @@ function assertCompositionSupport() {
   ) {
     throw new Error("root properties must survive oneOf/anyOf composition");
   }
+  assertNestedSchemaCollisionDetection();
+}
+
+function assertNestedSchemaCollisionDetection() {
+  const v0 = new Map([
+    ["Shared", new Set([stableSchemaSignature({ type: "string" })])],
+    ["Changed", new Set([stableSchemaSignature({ type: "string" })])],
+  ]);
+  const v2 = new Map([
+    ["Shared", new Set([stableSchemaSignature({ type: "string" })])],
+    ["Changed", new Set([stableSchemaSignature({ type: "number" })])],
+  ]);
+  const collisions = findHeterogeneousNestedSchemaCollisions(v0, v2);
+  if (collisions.length !== 1 || collisions[0] !== "Changed") {
+    throw new Error("nested schema collision detection must fail closed");
+  }
+}
+
+function assertNoHeterogeneousNestedSchemaCollisions(manifest) {
+  const v0 = collectNestedSchemaDefinitions("v0", manifest.schemas?.v0 ?? []);
+  const v2 = collectNestedSchemaDefinitions("v2", manifest.schemas?.v2 ?? []);
+  const collisions = findHeterogeneousNestedSchemaCollisions(v0, v2);
+  if (collisions.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      `heterogeneous v0/v2 nested schema collisions block flat protocol generation: ${collisions.join(", ")}`,
+      "Migrate production consumers and delete the v0 canonical DTOs before regenerating protocol-types.ts.",
+      "The flat collector cannot choose a version without corrupting one side of the contract.",
+    ].join(" "),
+  );
+}
+
+function collectNestedSchemaDefinitions(group, schemaNames) {
+  const definitions = new Map();
+  const schemaRoot = path.join(path.dirname(SCHEMA_BUNDLE_PATH), group);
+
+  for (const schemaName of schemaNames) {
+    const schemaPath = path.join(schemaRoot, `${schemaName}.json`);
+    const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
+    for (const [name, value] of Object.entries(schema.$defs ?? {})) {
+      const signatures = definitions.get(name) ?? new Set();
+      signatures.add(stableSchemaSignature(value));
+      definitions.set(name, signatures);
+    }
+  }
+
+  return definitions;
+}
+
+function findHeterogeneousNestedSchemaCollisions(v0, v2) {
+  return [...v0.keys()]
+    .filter((name) => v2.has(name))
+    .filter((name) => new Set([...v0.get(name), ...v2.get(name)]).size > 1)
+    .sort();
+}
+
+function stableSchemaSignature(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableSchemaSignature).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map(
+        (key) => `${JSON.stringify(key)}:${stableSchemaSignature(value[key])}`,
+      )
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function collectMethodConstants(methods) {
-  const source = fs.readFileSync(METHOD_NAMES_PATH, "utf8");
-  const entries = [
-    ...source.matchAll(
-      /pub const\s+(METHOD_[A-Z0-9_]+):\s*&str\s*=\s*"([^"]+)";/g,
-    ),
-  ].map((match) => [match[1], match[2]]);
+  const entries = METHOD_NAMES_PATHS.flatMap((methodNamesPath) => {
+    const source = fs.readFileSync(methodNamesPath, "utf8");
+    return [
+      ...source.matchAll(
+        /pub const\s+(METHOD_[A-Z0-9_]+):\s*&str\s*=\s*"([^"]+)";/g,
+      ),
+    ].map((match) => [match[1], match[2]]);
+  });
   const byMethod = new Map(entries.map(([name, value]) => [value, name]));
   const missing = methods
     .map(({ method }) => method)

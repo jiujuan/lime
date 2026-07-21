@@ -208,6 +208,7 @@ pub struct VoiceModelDefaultSetResponse {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct VoiceModelTestTranscribeFileParams {
     pub model_id: String,
+    pub install_dir: String,
     pub file_path: String,
 }
 

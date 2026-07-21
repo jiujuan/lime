@@ -434,7 +434,7 @@ function summarizeReadModel(readResult) {
 async function readImportedSession(page, options, sessionId) {
   const read = await invokeAppServerFromPage(
     page,
-    "agentSession/read",
+    "thread/read",
     {
       sessionId,
       historyLimit: 500,

@@ -195,7 +195,7 @@ async function expectStartTurnFailClosed(connection, sessionId) {
   }
 
   throw new Error(
-    "expected agentSession/turn/start to fail when backend is unavailable",
+    "expected turn/start to fail when backend is unavailable",
   );
 }
 

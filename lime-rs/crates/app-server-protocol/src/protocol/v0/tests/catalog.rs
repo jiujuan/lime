@@ -1,4 +1,10 @@
 use super::super::*;
+use crate::protocol::app_server_method_catalog;
+use crate::protocol::v2::{
+    METHODS as V2_METHODS, METHOD_MCP_SERVER_ELICITATION_REQUEST, METHOD_THREAD_RESUME,
+    NOTIFICATION_METHODS as V2_NOTIFICATION_METHODS,
+    SERVER_REQUEST_METHODS as V2_SERVER_REQUEST_METHODS,
+};
 
 #[test]
 fn app_server_method_catalog_keeps_all_method_kinds_together() {
@@ -9,7 +15,6 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
             METHOD_INITIALIZE,
             METHOD_INITIALIZED,
             METHOD_CONFIG_WARNING,
-            METHOD_SERVER_REQUEST_RESOLVED,
             METHOD_CAPABILITY_LIST,
             METHOD_ARTIFACT_READ,
             METHOD_FILE_SYSTEM_LIST_DIRECTORY,
@@ -41,13 +46,7 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
             METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
             METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
-            METHOD_AGENT_SESSION_LIST,
-            METHOD_THREAD_READ,
-            METHOD_THREAD_LIST,
-            METHOD_THREAD_TURNS_LIST,
-            METHOD_THREAD_ITEMS_LIST,
             METHOD_AGENT_SESSION_UPDATE,
-            METHOD_AGENT_SESSION_ARCHIVE_MANY,
             METHOD_AGENT_SESSION_DELETE,
             METHOD_AGENT_SESSION_OBJECTIVE_READ,
             METHOD_AGENT_SESSION_OBJECTIVE_SET,
@@ -56,7 +55,6 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
             METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
             METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
             METHOD_AGENT_SESSION_COMPACT,
-            METHOD_AGENT_SESSION_THREAD_RESUME,
             METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
             METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
             METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
@@ -224,7 +222,6 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
             METHOD_MCP_SERVER_OAUTH_LOGIN,
             METHOD_MCP_SERVER_START,
             METHOD_MCP_SERVER_STOP,
-            METHOD_MCP_SERVER_ELICITATION_REQUEST,
             METHOD_MCP_TOOL_LIST,
             METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
             METHOD_MCP_TOOL_SEARCH,
@@ -294,11 +291,7 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
             METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
             METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
             METHOD_CONVERSATION_IMPORT_JOB_READ,
-            METHOD_AGENT_SESSION_START,
-            METHOD_AGENT_SESSION_READ,
             METHOD_AGENT_SESSION_MEDIA_READ,
-            METHOD_AGENT_SESSION_TURN_START,
-            METHOD_AGENT_SESSION_TURN_CANCEL,
             METHOD_AGENT_SESSION_ACTION_REPLAY,
             METHOD_AGENT_SESSION_ACTION_RESPOND,
             METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
@@ -312,13 +305,25 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
 
     let unique_methods = methods.iter().collect::<std::collections::HashSet<_>>();
     assert_eq!(unique_methods.len(), methods.len());
-    assert_eq!(
-        APP_SERVER_METHODS
-            .iter()
-            .find(|spec| spec.method == METHOD_MCP_SERVER_ELICITATION_REQUEST)
-            .map(|spec| spec.kind),
-        Some(AppServerMethodKind::ServerRequest)
-    );
+    for method in V2_METHODS {
+        assert!(is_app_server_request_method(method));
+        assert!(AppServerRequestMethod::parse(method).is_none());
+        assert!(!methods.contains(method));
+    }
+    for method in V2_NOTIFICATION_METHODS {
+        assert!(is_app_server_notification_method(method));
+        assert!(!methods.contains(method));
+    }
+    for method in V2_SERVER_REQUEST_METHODS {
+        assert!(!methods.contains(method));
+        assert_eq!(
+            app_server_method_catalog()
+                .iter()
+                .find(|spec| spec.method == *method)
+                .map(|spec| spec.kind),
+            Some(AppServerMethodKind::ServerRequest)
+        );
+    }
     assert!(!is_app_server_request_method(
         METHOD_MCP_SERVER_ELICITATION_REQUEST
     ));
@@ -343,18 +348,14 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
         METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE
     ));
     assert!(is_app_server_request_method(METHOD_AGENT_SESSION_COMPACT));
-    assert!(is_app_server_request_method(
-        METHOD_AGENT_SESSION_THREAD_RESUME
-    ));
+    assert!(is_app_server_request_method(METHOD_THREAD_RESUME));
     assert!(is_app_server_request_method(
         METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE
     ));
     assert!(is_app_server_request_method(
         METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE
     ));
-    assert!(is_app_server_request_method(
-        METHOD_AGENT_SESSION_TURN_START
-    ));
+    assert!(is_app_server_request_method(METHOD_TURN_START));
     assert!(is_app_server_request_method(METHOD_WORKFLOW_READ));
     assert!(is_app_server_request_method(METHOD_WORKFLOW_CANCEL));
     assert!(is_app_server_request_method(METHOD_WORKFLOW_RETRY));
@@ -363,11 +364,11 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
     assert!(is_app_server_notification_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(METHOD_CONFIG_WARNING));
     assert!(is_app_server_notification_method(
-        METHOD_SERVER_REQUEST_RESOLVED
-    ));
-    assert!(is_app_server_notification_method(
         METHOD_AGENT_SESSION_EVENT
     ));
+    for method in crate::protocol::v2::NOTIFICATION_METHODS {
+        assert!(is_app_server_notification_method(method));
+    }
     assert!(is_app_server_notification_method(
         METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
     ));
@@ -392,9 +393,22 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
     assert!(!is_app_server_request_method(
         METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
     ));
-    assert!(!is_app_server_notification_method(
-        METHOD_AGENT_SESSION_START
-    ));
+    assert!(!is_app_server_notification_method(METHOD_THREAD_START));
+}
+
+#[test]
+fn legacy_core_agent_session_methods_are_rejected() {
+    for method in [
+        "agentSession/start",
+        "agentSession/read",
+        "agentSession/list",
+        "agentSession/thread/resume",
+        "agentSession/turn/start",
+        "agentSession/turn/cancel",
+    ] {
+        assert!(!is_app_server_request_method(method), "{method}");
+        assert!(AppServerRequestMethod::parse(method).is_none(), "{method}");
+    }
 }
 
 #[test]
@@ -413,15 +427,15 @@ fn app_server_request_serialization_scope_covers_high_risk_methods() {
     }
 
     assert_eq!(
-        app_server_request_serialization_scope(METHOD_AGENT_SESSION_TURN_START),
+        app_server_request_serialization_scope(METHOD_TURN_START),
         Some(AppServerRequestSerializationScope::Thread)
     );
     assert_eq!(
-        app_server_request_serialization_scope(METHOD_AGENT_SESSION_TURN_CANCEL),
+        app_server_request_serialization_scope(METHOD_TURN_INTERRUPT),
         Some(AppServerRequestSerializationScope::Thread)
     );
     assert_eq!(
-        app_server_request_serialization_scope(METHOD_AGENT_SESSION_THREAD_RESUME),
+        app_server_request_serialization_scope(METHOD_THREAD_RESUME),
         Some(AppServerRequestSerializationScope::Thread)
     );
     assert_eq!(
@@ -482,7 +496,7 @@ fn app_server_request_access_keeps_shared_reads_in_the_catalog() {
         );
     }
     assert_eq!(
-        app_server_request_access(METHOD_AGENT_SESSION_TURN_START),
+        app_server_request_access(METHOD_TURN_START),
         AppServerRequestAccess::Exclusive
     );
 }

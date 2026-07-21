@@ -5,7 +5,8 @@ pub const DURABLE_MEMORY_VIRTUAL_ROOT: &str = "/memories";
 pub const LIME_DURABLE_MEMORY_ROOT_ENV: &str = "LIME_DURABLE_MEMORY_DIR";
 pub const LEGACY_DURABLE_MEMORY_ROOT_ENV: &str = "PROXYCAST_DURABLE_MEMORY_DIR";
 
-const DURABLE_MEMORY_SUBDIR: &str = "harness/memories";
+#[cfg(test)]
+const DURABLE_MEMORY_TEST_SUBDIR: &str = "harness/memories";
 
 fn normalize_virtual_input(path: &str) -> String {
     let raw = path.trim();
@@ -25,31 +26,31 @@ pub fn durable_memory_permission_pattern() -> &'static str {
 }
 
 pub fn resolve_durable_memory_root() -> Result<PathBuf, String> {
-    let root = lime_core::env_compat::var_nonempty(&[
+    let configured_root = lime_core::env_compat::var_nonempty(&[
         LIME_DURABLE_MEMORY_ROOT_ENV,
         LEGACY_DURABLE_MEMORY_ROOT_ENV,
     ])
     .map(PathBuf::from);
 
-    let root = match root {
+    #[cfg(test)]
+    let root = match configured_root {
         Some(path) => path,
-        None => {
-            #[cfg(test)]
-            {
-                std::env::temp_dir()
-                    .join("lime-tests")
-                    .join(DURABLE_MEMORY_SUBDIR)
-            }
-            #[cfg(not(test))]
-            {
-                lime_core::app_paths::preferred_data_dir()?.join(DURABLE_MEMORY_SUBDIR)
-            }
-        }
+        None => std::env::temp_dir()
+            .join("lime-tests")
+            .join(DURABLE_MEMORY_TEST_SUBDIR),
     };
+    #[cfg(not(test))]
+    let root = require_explicit_durable_memory_root(configured_root)?;
 
     fs::create_dir_all(&root)
         .map_err(|e| format!("创建 durable memory 根目录失败 {}: {e}", root.display()))?;
     Ok(root)
+}
+
+fn require_explicit_durable_memory_root(root: Option<PathBuf>) -> Result<PathBuf, String> {
+    root.ok_or_else(|| {
+        format!("durable memory 已冻结隐式平台目录；必须显式设置 {LIME_DURABLE_MEMORY_ROOT_ENV}")
+    })
 }
 
 pub fn virtual_memory_relative_path(path: &str) -> Option<String> {
@@ -179,6 +180,14 @@ mod tests {
             .expect("mapped path");
 
         assert_eq!(resolved, tmp.path().join("preferences.md"));
+    }
+
+    #[test]
+    fn missing_explicit_root_fails_closed_without_platform_fallback() {
+        let error = require_explicit_durable_memory_root(None)
+            .expect_err("缺少显式 root 时不得猜测平台目录");
+
+        assert!(error.contains(LIME_DURABLE_MEMORY_ROOT_ENV));
     }
 
     #[test]

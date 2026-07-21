@@ -2,37 +2,45 @@ use std::path::Path;
 
 use lime_skills::{
     agent_skill_roots_for_workspace, build_agent_skill_snapshot_from_roots,
-    contains_agent_skills_prompt, contains_selected_agent_skill_body_prompt,
-    evaluate_agent_skill_selection_bodies, render_available_agent_skills,
-    render_selected_agent_skill_bodies, reorder_agent_skill_snapshot_for_query,
+    contains_agent_skills_prompt, evaluate_agent_skill_selection_bodies,
+    render_available_agent_skills, reorder_agent_skill_snapshot_for_query,
     select_agent_skills_by_name_candidates, select_explicit_agent_skills,
-    select_implicit_agent_skills, AgentSkillBodyBudgetDecisionKind, AgentSkillBodyRenderOptions,
-    AgentSkillRenderOptions, AgentSkillSelection, AgentSkillSelectionEvaluation,
-    AgentSkillSelectionTrigger, AgentSkillSnapshot, DEFAULT_AGENT_SKILL_BODY_TOKEN_BUDGET,
+    select_implicit_agent_skills, AgentSkillRenderOptions, AgentSkillSelection,
+    AgentSkillSelectionEvaluation, AgentSkillSelectionTrigger, AgentSkillSnapshot,
+    DEFAULT_AGENT_SKILL_BODY_TOKEN_BUDGET,
 };
 use serde_json::Value;
 
-pub(super) fn append_agent_skills_context_to_system_prompt(
+pub(super) struct AgentSkillsTurnContext {
+    pub system_prompt: Option<String>,
+    pub snapshot: Option<AgentSkillSnapshot>,
+}
+
+pub(super) fn agent_skills_context_for_turn(
     system_prompt: Option<String>,
     user_input: &str,
     metadata_values: &[&Value],
     working_dir: Option<&Path>,
     project_root: Option<&Path>,
-) -> Option<String> {
+) -> AgentSkillsTurnContext {
     if should_suppress_agent_skills_for_metadata(metadata_values) {
-        return system_prompt;
+        return AgentSkillsTurnContext {
+            system_prompt,
+            snapshot: None,
+        };
     }
 
     let snapshot = build_agent_skill_snapshot_for_turn(working_dir, project_root, metadata_values);
-    let system_prompt =
-        append_selected_agent_skill_bodies(system_prompt, user_input, metadata_values, &snapshot);
     let system_prompt = append_expert_skill_hints(system_prompt, metadata_values, &snapshot);
 
     if system_prompt
         .as_deref()
         .is_some_and(contains_agent_skills_prompt)
     {
-        return system_prompt;
+        return AgentSkillsTurnContext {
+            system_prompt,
+            snapshot: Some(snapshot),
+        };
     }
 
     let render_snapshot =
@@ -40,10 +48,34 @@ pub(super) fn append_agent_skills_context_to_system_prompt(
     let Some(context) =
         render_available_agent_skills(&render_snapshot, AgentSkillRenderOptions::default())
     else {
-        return system_prompt;
+        return AgentSkillsTurnContext {
+            system_prompt,
+            snapshot: Some(snapshot),
+        };
     };
 
-    append_context_block(system_prompt, context)
+    AgentSkillsTurnContext {
+        system_prompt: append_context_block(system_prompt, context),
+        snapshot: Some(snapshot),
+    }
+}
+
+#[cfg(test)]
+fn append_agent_skills_context_to_system_prompt(
+    system_prompt: Option<String>,
+    user_input: &str,
+    metadata_values: &[&Value],
+    working_dir: Option<&Path>,
+    project_root: Option<&Path>,
+) -> Option<String> {
+    agent_skills_context_for_turn(
+        system_prompt,
+        user_input,
+        metadata_values,
+        working_dir,
+        project_root,
+    )
+    .system_prompt
 }
 
 pub(super) fn selected_agent_skill_names_for_turn(
@@ -71,61 +103,6 @@ pub(super) fn build_agent_skill_snapshot_for_turn(
     let mut roots = agent_skill_roots_for_workspace(working_dir, project_root);
     roots.extend(super::plugin_runtime_context::plugin_runtime_agent_skill_roots(metadata_values));
     build_agent_skill_snapshot_from_roots(roots)
-}
-
-fn append_selected_agent_skill_bodies(
-    system_prompt: Option<String>,
-    user_input: &str,
-    metadata_values: &[&Value],
-    snapshot: &AgentSkillSnapshot,
-) -> Option<String> {
-    if system_prompt
-        .as_deref()
-        .is_some_and(contains_selected_agent_skill_body_prompt)
-    {
-        return system_prompt;
-    }
-
-    let selections =
-        selected_agent_skill_body_selections_for_prompt(user_input, metadata_values, snapshot);
-    if selections.is_empty() {
-        return system_prompt;
-    }
-    let evaluations = selected_agent_skill_body_evaluations(&selections, snapshot);
-    let bodies = evaluations
-        .into_iter()
-        .filter_map(|evaluation| match evaluation.decision {
-            AgentSkillBodyBudgetDecisionKind::Allow => evaluation.body,
-            AgentSkillBodyBudgetDecisionKind::Omitted => {
-                tracing::warn!(
-                    "[AgentSkillsContext] Skill 正文因 token budget 未注入: skill_id={}, name={}, estimated_tokens={:?}, max_visible_tokens={}",
-                    evaluation.skill_id,
-                    evaluation.selection.locator.name,
-                    evaluation.body_budget.estimated_tokens,
-                    evaluation.body_budget.max_visible_tokens,
-                );
-                None
-            }
-            AgentSkillBodyBudgetDecisionKind::Deny => {
-                tracing::warn!(
-                    "[AgentSkillsContext] 读取显式选择的 Agent Skill 失败: skill_id={}, name={}, path={}, reason={}, error={}",
-                    evaluation.skill_id,
-                    evaluation.selection.locator.name,
-                    evaluation.selection.locator.skill_file_path.display(),
-                    evaluation.reason,
-                    evaluation.error.as_deref().unwrap_or("unknown"),
-                );
-                None
-            }
-        })
-        .collect::<Vec<_>>();
-    let Some(context) =
-        render_selected_agent_skill_bodies(&bodies, AgentSkillBodyRenderOptions::default())
-    else {
-        return system_prompt;
-    };
-
-    append_context_block(system_prompt, context)
 }
 
 pub(super) fn selected_agent_skill_body_evaluations(
@@ -562,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn appends_explicitly_selected_skill_body() {
+    fn explicit_selection_does_not_inject_skill_body_into_system_prompt() {
         let workspace = TempDir::new().expect("workspace");
         write_skill(&workspace, "writer", "Writer", "Write clearly.");
 
@@ -575,10 +552,10 @@ mod tests {
         )
         .expect("prompt");
 
-        assert!(prompt.contains("<selected_skill_instructions>"));
         assert!(prompt.contains("`writer`"));
-        assert!(prompt.contains("# Body"));
-        assert!(prompt.contains("Full body should not be rendered."));
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("# Body"));
+        assert!(!prompt.contains("Full body should not be rendered."));
         assert!(prompt.contains("## 可用 Agent Skills"));
         assert!(!prompt.contains("allow_model_skills"));
     }
@@ -619,7 +596,7 @@ mod tests {
     }
 
     #[test]
-    fn appends_catalog_bound_skill_body_from_service_scene_metadata() {
+    fn catalog_binding_keeps_body_out_of_system_prompt() {
         let workspace = TempDir::new().expect("workspace");
         write_skill(&workspace, "writer", "Writer", "Write clearly.");
         let metadata = serde_json::json!({
@@ -646,9 +623,9 @@ mod tests {
         )
         .expect("prompt");
 
-        assert!(prompt.contains("<selected_skill_instructions>"));
         assert!(prompt.contains("`writer`"));
-        assert!(prompt.contains("# Body"));
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("# Body"));
         assert!(prompt.contains("## 可用 Agent Skills"));
     }
 
@@ -837,7 +814,7 @@ Call lime_create_image_generation_task directly.
     }
 
     #[test]
-    fn plugin_runtime_capability_injects_registered_workflow_skill_body() {
+    fn plugin_runtime_skill_stays_in_catalog_without_system_body() {
         let workspace = TempDir::new().expect("workspace");
         write_skill(
             &workspace,
@@ -884,13 +861,13 @@ Call lime_create_image_generation_task directly.
         )
         .expect("prompt");
 
-        assert!(prompt.contains("<selected_skill_instructions>"));
         assert!(prompt.contains("`article-writing`"));
-        assert!(prompt.contains("# Body"));
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("# Body"));
     }
 
     #[test]
-    fn plugin_package_skill_path_enters_selected_skill_instructions() {
+    fn plugin_package_skill_path_enters_snapshot_catalog_without_body() {
         let package = TempDir::new().expect("package");
         let skill_dir = package.path().join("skills").join("article-writing");
         std::fs::create_dir_all(&skill_dir).expect("skill dir");
@@ -938,19 +915,24 @@ Use package workflow rules.
             }
         });
 
-        let prompt = append_agent_skills_context_to_system_prompt(
+        let context = agent_skills_context_for_turn(
             Some("base".to_string()),
             "写一篇文章",
             &[&metadata],
             None,
             None,
-        )
-        .expect("prompt");
+        );
+        let prompt = context.system_prompt.expect("prompt");
+        let snapshot = context.snapshot.expect("snapshot");
+        let canonical_skill_path =
+            std::fs::canonicalize(skill_dir.join("SKILL.md")).expect("canonical skill path");
 
-        assert!(prompt.contains("<selected_skill_instructions>"));
-        assert!(prompt.contains("`article-writing`"));
-        assert!(prompt.contains("# Package Article Writing"));
-        assert!(prompt.contains("Use package workflow rules."));
+        assert!(snapshot.skills.iter().any(|skill| {
+            skill.name == "article-writing" && skill.skill_file_path == canonical_skill_path
+        }));
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("# Package Article Writing"));
+        assert!(!prompt.contains("Use package workflow rules."));
     }
 
     #[test]
@@ -978,7 +960,7 @@ Use package workflow rules.
     }
 
     #[test]
-    fn appends_implicit_high_confidence_skill_body() {
+    fn implicit_selection_keeps_body_out_of_system_prompt() {
         let workspace = TempDir::new().expect("workspace");
         write_skill(
             &workspace,
@@ -997,9 +979,9 @@ Use package workflow rules.
         )
         .expect("prompt");
 
-        assert!(prompt.contains("<selected_skill_instructions>"));
         assert!(prompt.contains("`fact-check-lab`"));
-        assert!(prompt.contains("# Body"));
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("# Body"));
         assert!(prompt.contains("## 可用 Agent Skills"));
     }
 

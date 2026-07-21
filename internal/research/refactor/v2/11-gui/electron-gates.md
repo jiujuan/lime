@@ -2,7 +2,7 @@
 
 > status: target GUI contract
 > owner: agent-ui + desktop-host
-> last_verified: 2026-07-12
+> last_verified: 2026-07-18
 
 ## GUI 不是 TUI 移植
 
@@ -25,15 +25,25 @@ Scene composition (JSX)
   -> app-server-client / Desktop Host
 ```
 
-`AgentChatWorkspace.tsx` 只做 scene composition；新逻辑按以下方向拆分：
+`AgentChatWorkspace.tsx` 只做公共入口；`useAgentChatWorkspaceRuntime` 作为 current composition owner，只编排以下已经落地的 current owner：
 
-| 目标模块 | 职责 |
-| --- | --- |
-| `chat-command-model` | send/interrupt/approval/queue/attachment intent |
-| `chat-runtime-projection` | Thread/Turn/Item -> visible model |
-| `chat-scene-composition` | 主区、timeline、workbench、right surface 组装 |
-| `chat-host-capabilities` | 文件、窗口、通知、sidecar 状态 |
-| `message-renderers` | text/reasoning/tool/media/artifact 单项渲染 |
+| 目标模块                  | 职责                                            |
+| ------------------------- | ----------------------------------------------- |
+| `chat-command-model`      | send/interrupt/approval/queue/attachment intent |
+| `chat-runtime-projection` | Thread/Turn/Item -> visible model               |
+| `chat-scene-composition`  | 主区、timeline、workbench、right surface 组装   |
+| `chat-host-capabilities`  | 文件、窗口、通知、sidecar 状态                  |
+| `message-renderers`       | text/reasoning/tool/media/artifact 单项渲染     |
+
+Workspace 主路径的 current owner 组合固定为：
+
+```text
+AgentChatWorkspace
+  -> useAgentChatWorkspaceRuntime
+  -> EntryRuntime -> SetupRuntime -> CommandRuntime -> SceneRuntime
+```
+
+`useAgentChatWorkspaceRuntime` 不再承接 entry、command 或 JSX 业务逻辑；真实 GUI/Gate B 仍必须验证这条组合链最终使用同一 canonical Thread/Turn/Item read model。
 
 单一 consumer 不先抽 package；只有两个以上独立 consumer 共享稳定 contract 才进入 `packages/`。
 
@@ -49,10 +59,10 @@ Electron 不做：Thread/Turn/Item、model request、tool execution、read model
 
 ## Gate A / Gate B
 
-| Gate | 证明 | 不能证明 |
-| --- | --- | --- |
-| Gate A | browser/renderer fixture、notification/read model 到 projection 的正确性 | preload、IPC、sidecar、真实 Electron |
-| Gate B | Electron、preload、IPC、App Server JSON-RPC、runtime/read model、可见 GUI 完整闭环 | live provider 的商业/网络质量 |
+| Gate   | 证明                                                                               | 不能证明                             |
+| ------ | ---------------------------------------------------------------------------------- | ------------------------------------ |
+| Gate A | browser/renderer fixture、notification/read model 到 projection 的正确性           | preload、IPC、sidecar、真实 Electron |
+| Gate B | Electron、preload、IPC、App Server JSON-RPC、runtime/read model、可见 GUI 完整闭环 | live provider 的商业/网络质量        |
 
 涉及 Workspace、bridge、Agent 主路径的切片必须至少有 Gate B；只跑 Vitest 或浏览器截图不算产品完成。
 

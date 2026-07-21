@@ -2,9 +2,11 @@ import React from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { ThreadWorkspaceHeader } from "./ThreadWorkspaceHeader";
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -12,8 +14,9 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-afterEach(() => {
+afterEach(async () => {
   document.body.innerHTML = "";
+  await changeLimeLocale("en-US");
 });
 
 describe("ThreadWorkspaceHeader", () => {

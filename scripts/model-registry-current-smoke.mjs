@@ -46,7 +46,7 @@ const FORBIDDEN_MODEL_SIDE_EFFECT_COMMANDS = [
   "record_model_usage",
   "fetch_provider_models_auto",
 ];
-const FORBIDDEN_APP_SERVER_METHODS = ["agentSession/turn/start"];
+const FORBIDDEN_APP_SERVER_METHODS = ["turn/start"];
 
 function printHelp() {
   console.log(`

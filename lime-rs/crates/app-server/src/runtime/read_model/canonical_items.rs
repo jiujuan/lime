@@ -1,10 +1,11 @@
 use super::approval;
-use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload};
+use agent_protocol::{FileChangeStatus, ItemStatus, ThreadItem, ThreadItemPayload};
 use serde_json::json;
 
 pub(in crate::runtime) fn canonical_item_to_agent_detail(item: &ThreadItem) -> serde_json::Value {
     let (item_type, payload) = canonical_payload_to_agent_detail(&item.payload);
     let metadata = canonical_item_agent_metadata(item);
+    let status = agent_item_status_for_payload(item.status, &item.payload);
     let mut detail = serde_json::Map::from_iter([
         ("id".to_string(), json!(item.item_id.as_str())),
         ("item_id".to_string(), json!(item.item_id.as_str())),
@@ -14,7 +15,7 @@ pub(in crate::runtime) fn canonical_item_to_agent_detail(item: &ThreadItem) -> s
         ("sequence".to_string(), json!(item.sequence)),
         ("ordinal".to_string(), json!(item.ordinal)),
         ("type".to_string(), json!(item_type)),
-        ("status".to_string(), json!(agent_item_status(item.status))),
+        ("status".to_string(), json!(status)),
         (
             "started_at".to_string(),
             json!(timestamp_from_millis(item.created_at_ms)),
@@ -234,14 +235,26 @@ fn canonical_payload_to_agent_detail(
             }
             "command_execution"
         }
-        ThreadItemPayload::File { path, diff, status } => {
-            detail.insert("path".to_string(), json!(path));
+        ThreadItemPayload::File { changes, status } => {
+            detail.insert("changes".to_string(), json!(changes));
+            detail.insert(
+                "text".to_string(),
+                json!(serde_json::to_string(changes).unwrap_or_default()),
+            );
+            detail.insert(
+                "paths".to_string(),
+                json!(changes
+                    .iter()
+                    .map(|change| &change.path)
+                    .collect::<Vec<_>>()),
+            );
+            detail.insert(
+                "success".to_string(),
+                json!(matches!(status, FileChangeStatus::Applied)),
+            );
             detail.insert("source".to_string(), json!("canonical_thread_store"));
             detail.insert("file_status".to_string(), json!(status));
-            if let Some(diff) = diff {
-                detail.insert("content".to_string(), json!(diff));
-            }
-            "file_artifact"
+            "patch"
         }
         ThreadItemPayload::Media {
             uri,
@@ -345,6 +358,27 @@ fn agent_item_status(status: ItemStatus) -> &'static str {
         ItemStatus::Pending | ItemStatus::InProgress => "in_progress",
         ItemStatus::Completed => "completed",
         ItemStatus::Failed | ItemStatus::Interrupted | ItemStatus::Cancelled => "failed",
+    }
+}
+
+fn agent_item_status_for_payload(
+    item_status: ItemStatus,
+    payload: &ThreadItemPayload,
+) -> &'static str {
+    match payload {
+        ThreadItemPayload::File {
+            status: FileChangeStatus::Proposed,
+            ..
+        } => "in_progress",
+        ThreadItemPayload::File {
+            status: FileChangeStatus::Applied,
+            ..
+        } => "completed",
+        ThreadItemPayload::File {
+            status: FileChangeStatus::Rejected | FileChangeStatus::Failed,
+            ..
+        } => "failed",
+        _ => agent_item_status(item_status),
     }
 }
 

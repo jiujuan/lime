@@ -449,7 +449,10 @@ impl McpClientManager {
                     owner.thread_id.clone(),
                 )
             }
-            _ => crate::client_service::LimeMcpClientService::new(name.to_string(), self.emitter.clone()),
+            _ => crate::client_service::LimeMcpClientService::new(
+                name.to_string(),
+                self.emitter.clone(),
+            ),
         }
     }
 }

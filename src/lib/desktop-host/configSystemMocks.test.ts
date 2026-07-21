@@ -78,10 +78,6 @@ describe("configSystemMocks", () => {
     ]);
   });
 
-  it("不应保留快捷键校验默认成功 mock", async () => {
-    await expectRetiredCommandsToFailClosed(["validate_shortcut"]);
-  });
-
   it("不应保留前端崩溃上报默认成功 mock", async () => {
     await expectRetiredCommandsToFailClosed(["report_frontend_crash"]);
   });

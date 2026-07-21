@@ -20,13 +20,15 @@ fn parse_request_user_input_tool_input_validates_current_surface() {
                 {"label": "自动", "description": "继续执行"},
                 {"label": "确认", "description": "等待确认"}
             ]
-        }]
+        }],
+        "autoResolutionMs": 60000
     }))
     .expect("request should parse");
 
     assert_eq!(request.questions.len(), 1);
     assert_eq!(request.questions[0].id.as_deref(), Some("mode"));
     assert_eq!(request.questions[0].options[0].value, "自动");
+    assert_eq!(request.auto_resolution_ms, Some(60000));
 }
 
 #[test]
@@ -108,6 +110,7 @@ fn build_requested_schema_embeds_questions_extension() {
             ],
             multi_select: false,
         }],
+        auto_resolution_ms: None,
     };
 
     let schema = build_requested_schema(&request);
@@ -140,6 +143,7 @@ fn extract_response_normalizes_question_answers() {
                 multi_select: false,
             },
         ],
+        auto_resolution_ms: None,
     };
 
     let response = extract_response(
@@ -175,6 +179,7 @@ fn extract_response_uses_question_text_as_single_answer_key() {
             ],
             multi_select: false,
         }],
+        auto_resolution_ms: None,
     };
 
     let response = extract_response(
@@ -210,6 +215,7 @@ fn normalize_result_preserves_annotations_and_option_identity() {
             ],
             multi_select: false,
         }],
+        auto_resolution_ms: None,
     };
 
     let result = normalize_request_user_input_result(
@@ -251,6 +257,7 @@ fn project_request_user_input_result_builds_output_and_metadata() {
             ],
             multi_select: false,
         }],
+        auto_resolution_ms: None,
     };
     let result = normalize_request_user_input_result(
         &request,

@@ -1,5 +1,6 @@
 use crate::provider_stream::RuntimeReplyProviderRequestWireShape;
 use crate::runtime_provider::RuntimeProviderConfig;
+use agent_protocol::ImageDetail;
 use runtime_core::{CanonicalRequest, CanonicalRole, ContentPart, ToolResultValue};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -236,15 +237,19 @@ fn chat_content(content: &[ContentPart], media_payloads: &BTreeMap<String, Strin
             .iter()
             .filter_map(|part| match part {
                 ContentPart::Text { text, .. } => Some(json!({ "type": "text", "text": text })),
-                ContentPart::Media {
-                    uri, media_type, ..
-                } => Some(json!({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": provider_media_uri(uri, media_payloads),
-                        "media_type": media_type
-                    },
-                })),
+                ContentPart::Media { uri, detail, .. } => {
+                    let mut image_url = Map::from_iter([(
+                        "url".to_string(),
+                        json!(provider_media_uri(uri, media_payloads)),
+                    )]);
+                    if let Some(detail) = detail.map(openai_image_detail) {
+                        image_url.insert("detail".to_string(), json!(detail));
+                    }
+                    Some(json!({
+                        "type": "image_url",
+                        "image_url": Value::Object(image_url),
+                    }))
+                }
                 _ => None,
             })
             .collect(),
@@ -323,13 +328,19 @@ fn responses_input_content(
         .iter()
         .filter_map(|part| match part {
             ContentPart::Text { text, .. } => Some(json!({ "type": "input_text", "text": text })),
-            ContentPart::Media {
-                uri, media_type, ..
-            } => Some(json!({
-                "type": "input_image",
-                "image_url": provider_media_uri(uri, media_payloads),
-                "media_type": media_type,
-            })),
+            ContentPart::Media { uri, detail, .. } => {
+                let mut image = Map::from_iter([
+                    ("type".to_string(), json!("input_image")),
+                    (
+                        "image_url".to_string(),
+                        json!(provider_media_uri(uri, media_payloads)),
+                    ),
+                ]);
+                if let Some(detail) = detail.map(openai_image_detail) {
+                    image.insert("detail".to_string(), json!(detail));
+                }
+                Some(Value::Object(image))
+            }
             _ => None,
         })
         .collect()
@@ -384,6 +395,15 @@ fn provider_media_uri<'a>(uri: &'a str, media_payloads: &'a BTreeMap<String, Str
     media_payloads.get(uri).map(String::as_str).unwrap_or(uri)
 }
 
+fn openai_image_detail(detail: ImageDetail) -> &'static str {
+    match detail {
+        ImageDetail::Auto => "auto",
+        ImageDetail::Low => "low",
+        ImageDetail::High => "high",
+        ImageDetail::Original => "original",
+    }
+}
+
 fn anthropic_media_source(uri: &str, media_type: &str) -> Value {
     if let Some(encoded) = uri
         .strip_prefix("data:")
@@ -423,5 +443,96 @@ fn tool_result_text(result: &ToolResultValue, error: Option<&str>) -> String {
         ToolResultValue::Text { value } => value.clone(),
         ToolResultValue::Json { value } | ToolResultValue::Error { value } => value.to_string(),
         ToolResultValue::Content { value } => text_from_parts(value),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn image_content() -> Vec<ContentPart> {
+        vec![ContentPart::media("sidecar://image-1", "image/png").expect("canonical media")]
+    }
+
+    fn detailed_image_content(detail: ImageDetail) -> Vec<ContentPart> {
+        vec![
+            ContentPart::media_with_detail("sidecar://image-1", "image/png", Some(detail))
+                .expect("canonical media"),
+        ]
+    }
+
+    fn media_payloads() -> BTreeMap<String, String> {
+        BTreeMap::from([(
+            "sidecar://image-1".to_string(),
+            "data:image/png;base64,abc".to_string(),
+        )])
+    }
+
+    #[test]
+    fn openai_compatible_image_parts_use_only_native_wire_fields() {
+        let content = image_content();
+        let payloads = media_payloads();
+
+        let chat = chat_content(&content, &payloads);
+        let responses = responses_input_content(&content, &payloads);
+
+        assert_eq!(chat[0]["type"], "image_url");
+        assert_eq!(
+            chat[0]["image_url"],
+            json!({ "url": "data:image/png;base64,abc" })
+        );
+        assert!(chat[0]["image_url"].get("media_type").is_none());
+        assert_eq!(
+            responses[0],
+            json!({
+                "type": "input_image",
+                "image_url": "data:image/png;base64,abc"
+            })
+        );
+        assert!(responses[0].get("media_type").is_none());
+    }
+
+    #[test]
+    fn anthropic_base64_image_keeps_required_media_type() {
+        let message = runtime_core::CanonicalMessage {
+            id: None,
+            role: CanonicalRole::User,
+            content: image_content(),
+            metadata: Default::default(),
+        };
+
+        let lowered = anthropic_message(&message, &media_payloads());
+
+        assert_eq!(
+            lowered[0]["content"][0]["source"],
+            json!({
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "abc"
+            })
+        );
+    }
+
+    #[test]
+    fn image_detail_is_lowered_only_to_supported_openai_fields() {
+        let content = detailed_image_content(ImageDetail::Original);
+        let payloads = media_payloads();
+
+        let chat = chat_content(&content, &payloads);
+        let responses = responses_input_content(&content, &payloads);
+        let anthropic = anthropic_message(
+            &runtime_core::CanonicalMessage {
+                id: None,
+                role: CanonicalRole::User,
+                content,
+                metadata: Default::default(),
+            },
+            &payloads,
+        );
+
+        assert_eq!(chat[0]["image_url"]["detail"], "original");
+        assert_eq!(responses[0]["detail"], "original");
+        assert!(anthropic[0]["content"][0].get("detail").is_none());
+        assert!(anthropic[0]["content"][0]["source"].get("detail").is_none());
     }
 }

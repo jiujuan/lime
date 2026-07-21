@@ -1,32 +1,43 @@
 use super::RuntimeEvent;
+use agent_protocol::AgentInput;
 use app_server_protocol::AgentEvent;
-use app_server_protocol::AgentInput;
 use serde_json::json;
 use serde_json::Value;
 use std::collections::HashMap;
 
 pub(super) const TURN_INPUT_EVENT_TYPE: &str = "message.created";
 
-pub(super) fn runtime_event_for_turn_input(input: &AgentInput) -> Option<super::RuntimeEvent> {
-    if input.text.trim().is_empty() && input.attachments.is_empty() {
-        return None;
-    }
-    Some(super::RuntimeEvent::new(
-        TURN_INPUT_EVENT_TYPE,
-        json!({
-            "role": "user",
-            "visibility": "user_visible",
-            "input": input,
-            "content": {
-                "kind": "inline_text",
-                "text": input.text,
-            },
-            "attachments": input.attachments,
-        }),
-    ))
+pub(super) fn runtime_event_for_turn_input(input: &[AgentInput]) -> Option<super::RuntimeEvent> {
+    runtime_event_for_turn_input_with_client_id(input, None)
 }
 
-pub(super) fn turn_inputs_from_events(events: &[AgentEvent]) -> HashMap<String, AgentInput> {
+pub(super) fn runtime_event_for_turn_input_with_client_id(
+    input: &[AgentInput],
+    client_id: Option<&str>,
+) -> Option<super::RuntimeEvent> {
+    if super::turn_start::validate_user_input(input).is_err() {
+        return None;
+    }
+    let text = super::turn_start::user_input_text(input);
+    let mut payload = json!({
+        "role": "user",
+        "visibility": "user_visible",
+        "input": input,
+        "content": {
+            "kind": "inline_text",
+            "text": text,
+        },
+    });
+    if let Some(client_id) = client_id
+        .map(str::trim)
+        .filter(|client_id| !client_id.is_empty())
+    {
+        payload["clientId"] = Value::String(client_id.to_string());
+    }
+    Some(super::RuntimeEvent::new(TURN_INPUT_EVENT_TYPE, payload))
+}
+
+pub(super) fn turn_inputs_from_events(events: &[AgentEvent]) -> HashMap<String, Vec<AgentInput>> {
     events
         .iter()
         .filter(|event| event.event_type == TURN_INPUT_EVENT_TYPE)
@@ -54,23 +65,18 @@ pub(super) fn runtime_event_is_turn_input(event: &RuntimeEvent) -> bool {
             .is_none_or(|mailbox| mailbox["turnInput"] == true)
 }
 
-fn turn_input_from_event(event: &AgentEvent) -> Option<(String, AgentInput)> {
+fn turn_input_from_event(event: &AgentEvent) -> Option<(String, Vec<AgentInput>)> {
     let turn_id = event.turn_id.clone()?;
     if let Some(input) = event
         .payload
         .get("input")
-        .and_then(|value| serde_json::from_value::<AgentInput>(value.clone()).ok())
+        .and_then(|value| serde_json::from_value::<Vec<AgentInput>>(value.clone()).ok())
     {
         return Some((turn_id, input));
     }
 
     let text = turn_input_text(&event.payload)?;
-    let attachments = event
-        .payload
-        .get("attachments")
-        .and_then(|value| serde_json::from_value(value.clone()).ok())
-        .unwrap_or_default();
-    Some((turn_id, AgentInput { text, attachments }))
+    Some((turn_id, vec![AgentInput::text(text)]))
 }
 
 fn turn_input_text(payload: &Value) -> Option<String> {

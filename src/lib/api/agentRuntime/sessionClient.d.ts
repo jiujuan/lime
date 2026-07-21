@@ -35,16 +35,15 @@ export declare function createSessionClient({
   listAgentRuntimeSessions: (
     options?: AgentRuntimeListSessionsOptions,
   ) => Promise<AgentSessionInfo[]>;
-  archiveManyAgentRuntimeSessions: (
-    sessionIds: string[],
-  ) => Promise<AgentSessionInfo[]>;
+  archiveAgentRuntimeSession: (sessionId: string) => Promise<void>;
+  unarchiveAgentRuntimeSession: (sessionId: string) => Promise<void>;
   updateAgentRuntimeSession: (
     request: AgentRuntimeUpdateSessionRequest,
   ) => Promise<void>;
 };
-export declare const archiveManyAgentRuntimeSessions: (
-    sessionIds: string[],
-  ) => Promise<AgentSessionInfo[]>,
+export declare const archiveAgentRuntimeSession: (
+    sessionId: string,
+  ) => Promise<void>,
   createAgentRuntimeSession: (
     workspaceId?: string,
     name?: string,
@@ -59,6 +58,7 @@ export declare const archiveManyAgentRuntimeSessions: (
   listAgentRuntimeSessions: (
     options?: AgentRuntimeListSessionsOptions,
   ) => Promise<AgentSessionInfo[]>,
+  unarchiveAgentRuntimeSession: (sessionId: string) => Promise<void>,
   updateAgentRuntimeSession: (
     request: AgentRuntimeUpdateSessionRequest,
   ) => Promise<void>;

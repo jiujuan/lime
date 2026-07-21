@@ -450,10 +450,7 @@ fn read_session_projection_groups_message_deltas_by_turn() {
         .expect("projection store");
     let mut user = event(1, "message.created", "sess_1", "thread_1", Some("turn_1"));
     user.payload = json!({
-        "input": {
-            "text": "你好",
-            "attachments": []
-        }
+        "input": [{"type": "text", "text": "你好"}]
     });
     let mut delta_1 = event(2, "message.delta", "sess_1", "thread_1", Some("turn_1"));
     delta_1.payload = json!({ "text": "你" });
@@ -500,10 +497,7 @@ fn read_session_projection_tail_keeps_multiple_turns_when_last_turn_has_many_del
             Some(turn_id.as_str()),
         );
         user.payload = json!({
-            "input": {
-                "text": format!("user-{turn_index}"),
-                "attachments": []
-            }
+            "input": [{"type": "text", "text": format!("user-{turn_index}")}]
         });
         events.push(user);
         for delta_index in 0..80 {
@@ -571,10 +565,7 @@ fn read_session_projection_pages_messages_with_offset_and_cursor() {
             Some(turn_id.as_str()),
         );
         user.payload = json!({
-            "input": {
-                "text": format!("user-{turn_index}"),
-                "attachments": []
-            }
+            "input": [{"type": "text", "text": format!("user-{turn_index}")}]
         });
         let mut delta = event(
             base + 2,
@@ -655,10 +646,7 @@ fn read_session_projection_cursor_page_keeps_large_previous_assistant_summary() 
     let mut events = Vec::new();
     let mut first_user = event(1, "message.created", "sess_1", "thread_1", Some("turn_1"));
     first_user.payload = json!({
-        "input": {
-            "text": "user-1",
-            "attachments": []
-        }
+        "input": [{"type": "text", "text": "user-1"}]
     });
     events.push(first_user);
     for delta_index in 0..5_000 {
@@ -680,10 +668,7 @@ fn read_session_projection_cursor_page_keeps_large_previous_assistant_summary() 
         Some("turn_2"),
     );
     second_user.payload = json!({
-        "input": {
-            "text": "user-2",
-            "attachments": []
-        }
+        "input": [{"type": "text", "text": "user-2"}]
     });
     events.push(second_user);
     let mut second_delta = event(6_001, "message.delta", "sess_1", "thread_1", Some("turn_2"));
@@ -738,10 +723,7 @@ fn read_session_projection_keeps_plugin_workspace_events_outside_message_window(
             Some(turn_id.as_str()),
         );
         user.payload = json!({
-            "input": {
-                "text": format!("user-{turn_index}"),
-                "attachments": []
-            }
+            "input": [{"type": "text", "text": format!("user-{turn_index}")}]
         });
         let mut delta = event(
             base + 2,

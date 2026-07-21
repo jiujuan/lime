@@ -4,10 +4,119 @@ import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 
 import { hydrateSessionDetailMessages } from "./agentChatHistory";
 import { mergeThreadItemReasoningIntoMessages } from "./agentChatHistoryReasoning";
-import { collectDetailThreadItems } from "./agentChatHistoryThreadItems";
+import {
+  collectDetailThreadItems,
+  hydrateSessionDetailMessagesFromThreadItems,
+} from "./agentChatHistoryThreadItems";
 import { orderStreamingContentPartsForDisplay } from "../components/streamingContentPartOrder";
 
 describe("agentChatHistoryThreadItems", () => {
+  it("canonical declined FileChange 历史应保留精确 batch 与拒绝状态", () => {
+    const messages = hydrateSessionDetailMessagesFromThreadItems(
+      {
+        id: "file-change-declined-session",
+        created_at: 1,
+        updated_at: 2,
+        messages: [],
+        turns: [
+          {
+            id: "turn-file-change-declined",
+            thread_id: "thread-file-change-declined",
+            status: "completed",
+          },
+        ],
+        items: [
+          {
+            id: "file-change-declined",
+            type: "patch",
+            thread_id: "thread-file-change-declined",
+            turn_id: "turn-file-change-declined",
+            sequence: 1,
+            status: "failed",
+            file_status: "declined",
+            text: "declined batch",
+            paths: ["src/added.ts", "src/source.ts"],
+            changes: [
+              {
+                path: "src/added.ts",
+                kind: { type: "add" },
+                diff: "+export const added = true;",
+              },
+              {
+                path: "src/source.ts",
+                kind: { type: "update", move_path: "src/destination.ts" },
+                diff: "-source\n+destination",
+              },
+            ],
+            started_at: "2026-07-21T00:00:00.000Z",
+            updated_at: "2026-07-21T00:00:01.000Z",
+            completed_at: "2026-07-21T00:00:01.000Z",
+          },
+        ],
+      } as unknown as AgentSessionDetail,
+      "file-change-declined-session",
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "file_changes_batch",
+        aggregate: expect.objectContaining({
+          fileCount: 2,
+          files: [
+            expect.objectContaining({
+              path: "src/added.ts",
+              fileStatus: "declined",
+            }),
+            expect.objectContaining({
+              path: "src/source.ts",
+              movePath: "src/destination.ts",
+              fileStatus: "declined",
+            }),
+          ],
+        }),
+      }),
+    ]);
+  });
+
+  it("typed skill/mention 历史 part 应在 GUI projection 中保持可见", () => {
+    const detail = {
+      id: "typed-reference-parts-session",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          id: "user-reference-parts",
+          role: "user",
+          runtime_turn_id: "turn-1",
+          timestamp: 1784188800,
+          content: [
+            { type: "skill", name: "review", path: "/skills/review" },
+            { type: "mention", name: "README", path: "README.md" },
+          ],
+        },
+      ],
+      turns: [],
+      items: [],
+    } as unknown as AgentSessionDetail;
+
+    expect(
+      hydrateSessionDetailMessages(detail, "typed-reference-parts-session"),
+    ).toEqual([
+      expect.objectContaining({
+        id: "typed-reference-parts-session-0",
+        role: "user",
+        content: "$review (/skills/review)\n@README (README.md)",
+        contentParts: [
+          {
+            type: "text",
+            text: "$review (/skills/review)\n@README (README.md)",
+          },
+        ],
+      }),
+    ]);
+  });
+
   it("canonical items 应覆盖 legacy messages 缺失的同 Turn 多段 final 与助手消息", () => {
     const detail = {
       id: "canonical-message-owner-session",

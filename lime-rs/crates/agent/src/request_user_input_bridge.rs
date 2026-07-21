@@ -4,15 +4,15 @@
 //! 通过 elicitation 事件把问题发送到前端并等待用户输入。
 
 use crate::protocol::AgentEvent;
-use agent_protocol::action_required::elicitation_action;
 use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequiredScope;
-use agent_protocol::action_required::ELICITATION_ACTION_TYPE;
+use agent_protocol::action_required::ASK_USER_ACTION_TYPE;
 use agent_runtime::action_required::ActionRequiredState;
 use agent_runtime::request_user_input::{
     run_request_user_input, RequestUserInputAction, RequestUserInputCallback,
     RequestUserInputGateway, RequestUserInputRequest, RequestUserInputRunRequest,
     DEFAULT_REQUEST_USER_INPUT_TIMEOUT_SECS,
 };
+use agent_runtime::session_loop::{RuntimeSessionInputHandle, RuntimeSessionResponseKind};
 use futures::future::BoxFuture;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,6 +20,8 @@ use tokio::sync::mpsc::UnboundedSender;
 
 struct RuntimeActionRequiredGateway {
     state: Arc<ActionRequiredState>,
+    response_handle: RuntimeSessionInputHandle,
+    item_id: String,
     event_sender: UnboundedSender<AgentEvent>,
 }
 
@@ -32,37 +34,34 @@ impl RequestUserInputGateway for RuntimeActionRequiredGateway {
             let event_sender = self.event_sender.clone();
             self.state
                 .request_action_and_wait_with_notification(
-                    ELICITATION_ACTION_TYPE,
-                    None,
+                    self.response_handle.clone(),
+                    RuntimeSessionResponseKind::AskUser,
+                    ASK_USER_ACTION_TYPE,
+                    Some(self.item_id.clone()),
                     Vec::new(),
                     action.scope,
                     action.prompt,
                     action.requested_schema,
                     action.timeout,
                     move |queued| {
-                        let mut projection = elicitation_action(
-                            queued.id.clone(),
-                            queued.message.clone(),
-                            queued.requested_schema.clone(),
-                            queued.scope.clone(),
-                        );
-                        if let Some(data) = projection.data.as_object_mut() {
-                            data.insert(
-                                "actionType".to_string(),
-                                queued.action_type.clone().into(),
-                            );
-                            data.insert(
-                                "availableDecisions".to_string(),
-                                queued.available_decisions.clone().into(),
-                            );
-                            data.insert("createdAtMs".to_string(), queued.created_at_ms.into());
-                            data.insert("deadlineAtMs".to_string(), queued.deadline_at_ms.into());
-                        }
+                        let questions = queued
+                            .requested_schema
+                            .get(agent_runtime::request_user_input::REQUEST_USER_INPUT_QUESTIONS_SCHEMA_KEY)
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!([]));
                         let _ = event_sender.send(AgentEvent::ActionRequired {
-                            request_id: projection.id,
-                            action_type: projection.action_type,
-                            data: projection.data,
-                            scope: projection.scope,
+                            request_id: queued.id.clone(),
+                            action_type: queued.action_type.clone(),
+                            data: serde_json::json!({
+                                "actionType": ASK_USER_ACTION_TYPE,
+                                "toolCallId": queued.tool_id,
+                                "prompt": queued.message,
+                                "questions": questions,
+                                "autoResolutionMs": action.auto_resolution_ms,
+                                "createdAtMs": queued.created_at_ms,
+                                "deadlineAtMs": queued.deadline_at_ms,
+                            }),
+                            scope: queued.scope.clone(),
                         });
                     },
                 )
@@ -74,11 +73,15 @@ impl RequestUserInputGateway for RuntimeActionRequiredGateway {
 /// 创建 request_user_input 回调
 pub(crate) fn create_request_user_input_callback(
     state: Arc<ActionRequiredState>,
+    response_handle: RuntimeSessionInputHandle,
+    item_id: String,
     scope: Option<RuntimeActionRequiredScope>,
     event_sender: UnboundedSender<AgentEvent>,
 ) -> RequestUserInputCallback {
     Arc::new(move |request: RequestUserInputRequest| {
         let state = Arc::clone(&state);
+        let response_handle = response_handle.clone();
+        let item_id = item_id.clone();
         let scope = scope.clone();
         let event_sender = event_sender.clone();
         Box::pin(async move {
@@ -89,6 +92,8 @@ pub(crate) fn create_request_user_input_callback(
             );
             let gateway = RuntimeActionRequiredGateway {
                 state,
+                response_handle,
+                item_id,
                 event_sender,
             };
 
@@ -111,6 +116,8 @@ pub(crate) fn create_request_user_input_callback(
 mod tests {
     use super::*;
     use agent_runtime::request_user_input::{RequestUserInputOption, RequestUserInputQuestion};
+    use agent_runtime::session_loop::{RuntimeSessionClosureTask, RuntimeSessionRegistry};
+    use std::sync::Mutex as StdMutex;
     use std::time::Duration;
 
     #[test]
@@ -129,6 +136,7 @@ mod tests {
                     multi_select: false,
                 },
             ],
+            auto_resolution_ms: None,
         };
 
         assert_eq!(request.questions.len(), 2);
@@ -152,11 +160,6 @@ mod tests {
             turn_id: Some("turn-1".to_string()),
         };
         let (event_sender, mut event_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let callback = create_request_user_input_callback(
-            Arc::clone(&state),
-            Some(scope.clone()),
-            event_sender,
-        );
         let request = RequestUserInputRequest {
             questions: vec![RequestUserInputQuestion {
                 id: Some("mode".to_string()),
@@ -168,9 +171,42 @@ mod tests {
                 ],
                 multi_select: false,
             }],
+            auto_resolution_ms: Some(60_000),
         };
-
-        let pending = tokio::spawn(async move { callback(request).await });
+        let registry = RuntimeSessionRegistry::default();
+        let session = registry.get_or_create("session-1").await;
+        let (response_tx, response_rx) = tokio::sync::oneshot::channel();
+        let response_tx = Arc::new(StdMutex::new(Some(response_tx)));
+        let task_state = Arc::clone(&state);
+        let task_scope = scope.clone();
+        let task = RuntimeSessionClosureTask::new(
+            "turn-1",
+            Vec::new(),
+            move |context, _input, _cancel| {
+                let callback = create_request_user_input_callback(
+                    Arc::clone(&task_state),
+                    context.input_handle(),
+                    "item-request-user-input-1".to_string(),
+                    Some(task_scope.clone()),
+                    event_sender.clone(),
+                );
+                let request = request.clone();
+                let response_tx = Arc::clone(&response_tx);
+                Box::pin(async move {
+                    let response = callback(request).await;
+                    if let Some(response_tx) =
+                        response_tx.lock().expect("response sender lock").take()
+                    {
+                        let _ = response_tx.send(response);
+                    }
+                    Ok(())
+                })
+            },
+        );
+        let submission = session
+            .submit(Arc::new(task), false)
+            .await
+            .expect("request task");
         let event = tokio::time::timeout(Duration::from_secs(1), event_receiver.recv())
             .await
             .expect("action event timeout")
@@ -178,30 +214,42 @@ mod tests {
         let AgentEvent::ActionRequired {
             request_id,
             action_type,
+            data,
             scope: event_scope,
             ..
         } = event
         else {
             panic!("expected action_required event");
         };
-        assert_eq!(action_type, "elicitation");
+        assert_eq!(action_type, "ask_user");
+        assert_eq!(data["toolCallId"], "item-request-user-input-1");
+        assert_eq!(data["autoResolutionMs"], 60_000);
         assert_eq!(event_scope, Some(scope.clone()));
 
         let descriptors = state.pending_action_descriptors().await;
         assert_eq!(descriptors.len(), 1);
         assert_eq!(descriptors[0].request_id, request_id);
-        assert_eq!(descriptors[0].action_type, ELICITATION_ACTION_TYPE);
+        assert_eq!(descriptors[0].action_type, ASK_USER_ACTION_TYPE);
         assert_eq!(descriptors[0].scope, Some(scope.clone()));
 
         state
-            .submit_response(
+            .resolve_action(&request_id, Some(&scope))
+            .await
+            .expect("resolve action");
+        session
+            .answer_user_input(
+                Some("turn-1"),
                 &request_id,
-                Some(&scope),
                 serde_json::json!({ "answer": "确认后执行" }),
             )
             .await
-            .expect("submit response");
-        let response = pending.await.expect("pending callback");
+            .expect("typed response");
+        let response = response_rx.await.expect("pending callback");
         assert!(response.is_some());
+        assert_eq!(
+            submission.completion.await.expect("task completion"),
+            Ok(agent_runtime::session_loop::RuntimeSessionTaskOutcome::Completed)
+        );
+        registry.shutdown("session-1").await.expect("shutdown");
     }
 }

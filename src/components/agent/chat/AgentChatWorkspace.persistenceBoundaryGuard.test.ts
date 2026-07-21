@@ -5,10 +5,15 @@ import { describe, expect, it } from "vitest";
 
 describe("AgentChatWorkspace persistence runtime boundary", () => {
   it("session files、resource sync 和 document sync 胶水必须由 persistence runtime 提供", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const commandWiringSource = readFileSync(
       join(
         process.cwd(),

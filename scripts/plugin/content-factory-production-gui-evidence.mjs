@@ -33,6 +33,7 @@ const DEFAULTS = {
   ),
   prefix: "content-factory-production-gui-evidence",
   sessionId: process.env.CONTENT_FACTORY_PRODUCTION_SESSION_ID || "",
+  threadId: process.env.CONTENT_FACTORY_PRODUCTION_THREAD_ID || "",
   workflowJsonl: process.env.CONTENT_FACTORY_PRODUCTION_WORKFLOW_JSONL || "",
   turnStartTrace: process.env.CONTENT_FACTORY_PRODUCTION_TURN_START_TRACE || "",
   timeoutMs: 30_000,
@@ -44,7 +45,8 @@ function printHelp() {
 
 Options:
   --cdp-url <url>          Electron CDP endpoint, or LIME_ELECTRON_CDP_URL.
-  --session-id <id>        Target Writing v2 session id. If omitted, inferred from the latest trace/read request when possible.
+  --thread-id <id>         Target canonical thread id. If omitted, inferred from the turn/start trace.
+  --session-id <id>        Internal session id for evidence/export. If omitted, read from thread/read.
   --turn-start-trace <path>  Real CDP turn-start trace JSON proving Electron IPC -> App Server turn/start.
   --workflow-jsonl <path>  workflow-events.jsonl path copied from the real runtime evidence.
   --evidence-dir <dir>     Evidence output directory.
@@ -73,6 +75,11 @@ function parseArgs(argv) {
     }
     if (arg === "--session-id" && next) {
       options.sessionId = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--thread-id" && next) {
+      options.threadId = next.trim();
       index += 1;
       continue;
     }
@@ -224,7 +231,22 @@ function appServerMethodsWithTurnStartTrace(traceEntries, turnStartTrace) {
   return Array.from(methods).sort();
 }
 
-function inferSessionId(options, traceEntries) {
+function inferThreadId(options, traceEntries, turnStartTrace) {
+  if (options.threadId) return options.threadId;
+  const requests = traceEntries.flatMap(
+    (entry) => entry.appServerRequests || [],
+  );
+  const preferred = [...requests]
+    .reverse()
+    .find(
+      (request) =>
+        (request.method === "thread/read" || request.method === "turn/start") &&
+        readString(request.params?.threadId),
+    );
+  return readString(preferred?.params?.threadId, turnStartTrace?.threadId);
+}
+
+function inferSessionId(options, traceEntries, readResult) {
   if (options.sessionId) return options.sessionId;
   const requests = traceEntries.flatMap(
     (entry) => entry.appServerRequests || [],
@@ -233,20 +255,14 @@ function inferSessionId(options, traceEntries) {
     .reverse()
     .find(
       (request) =>
-        (request.method === "agentSession/read" ||
-          request.method === "agentSession/turn/start" ||
-          request.method === "agentSession/action/respond" ||
-          request.method === "agentSession/thread/resume") &&
-        readString(request.params?.sessionId, request.params?.session_id),
+        ["agentSession/action/respond", "workflow/respond"].includes(
+          request.method,
+        ) && readString(request.params?.sessionId),
     );
   return readString(
+    readResult?.thread?.sessionId,
     preferred?.params?.sessionId,
-    preferred?.params?.session_id,
   );
-}
-
-function inferSessionIdFromTurnStartTrace(turnStartTrace) {
-  return readString(turnStartTrace?.sessionId);
 }
 
 function findContentFactoryInstalledState(listResult) {
@@ -464,9 +480,7 @@ async function inspectArticleEditorWorkflowFacts(page) {
       workflowDetailCount: countByTestId(testIds.detail),
       workflowStepCount: countByTestId(testIds.step),
       sidePanelWorkflowFactMentioned:
-        /content_article_workflow|workflow-events\.jsonl/i.test(
-          sidePanelText,
-        ),
+        /content_article_workflow|workflow-events\.jsonl/i.test(sidePanelText),
     };
   }, ARTICLE_EDITOR_WORKFLOW_FACT_TEST_IDS);
   return summarizeWorkflowFactsDom(snapshot);
@@ -536,16 +550,16 @@ function buildAssertions({
       entry.transport === "electron-ipc" &&
       entry.status === "success" &&
       (entry.appServerRequests || []).some(
-        (request) => request.method === "agentSession/turn/start",
+        (request) => request.method === "turn/start",
       ),
   );
   const tracedTurnStartViaElectronIpc =
     turnStartTrace?.matched === true &&
-    turnStartTrace?.sessionMatched === true &&
+    turnStartTrace?.threadMatched === true &&
     turnStartTrace?.command === APP_SERVER_HANDLE_JSON_LINES_COMMAND &&
     turnStartTrace?.transport === "electron-ipc" &&
     turnStartTrace?.status === "success" &&
-    turnStartTrace?.method === "agentSession/turn/start";
+    turnStartTrace?.method === "turn/start";
   return {
     articleDraftDocumentPresent: readModel.articleDraftDocumentPresent,
     contentFactoryArticleWorkspaceWorkflowFactsHidden:
@@ -580,7 +594,7 @@ function buildAssertions({
         "workflow_audit_metadata_only" &&
       evidenceExport.workflowAudit?.redactionPolicyEventCount > 0,
     workflowResumeLifecyclePresent:
-      workflowResumeLifecycle.contractMetadataPresent &&
+      workflowResumeLifecycle.actionMetadataPresent &&
       workflowResumeLifecycle.auditEventsPresent,
     appServerMethodsSeen: methods,
   };
@@ -674,27 +688,34 @@ async function run() {
     );
     const initialTurnStartTrace = readProductionTurnStartTrace(
       options.turnStartTrace,
-      { expectedSessionId: options.sessionId },
+      { expectedThreadId: options.threadId },
     );
     const installedList = await callAppServer(page, "pluginInstalled/list", {});
     const installedState = summarizeInstalledState(
       findContentFactoryInstalledState(installedList) || {},
     );
-    const sessionId =
-      inferSessionId(options, traceEntriesBefore) ||
-      inferSessionIdFromTurnStartTrace(initialTurnStartTrace);
-    if (!sessionId) {
+    const threadId = inferThreadId(
+      options,
+      traceEntriesBefore,
+      initialTurnStartTrace,
+    );
+    if (!threadId) {
       throw new Error(
-        "缺少 --session-id，且无法从 Electron trace 推断目标 session",
+        "缺少 --thread-id，且无法从 turn/start trace 推断目标 thread",
       );
+    }
+    const readResult = await callAppServer(page, "thread/read", {
+      threadId,
+      includeTurns: true,
+    });
+    const sessionId = inferSessionId(options, traceEntriesBefore, readResult);
+    if (!sessionId) {
+      throw new Error("thread/read 未返回 thread.sessionId");
     }
     const turnStartTrace = readProductionTurnStartTrace(
       options.turnStartTrace,
-      { expectedSessionId: sessionId },
+      { expectedThreadId: threadId },
     );
-    const readResult = await callAppServer(page, "agentSession/read", {
-      sessionId,
-    });
     const evidenceResult = await callAppServer(page, "evidence/export", {
       sessionId,
       includeArtifacts: true,
@@ -736,7 +757,9 @@ async function run() {
       schemaVersion: "content-factory-production-gui-evidence.v1",
       appId: APP_ID,
       generatedAt: new Date().toISOString(),
+      sessionId,
       status,
+      threadId,
       assertions,
       missingAssertions,
       cdp: {
@@ -784,6 +807,7 @@ async function run() {
                   ? true
                   : null,
               decision: workflowResumeTraceBindings[0].decision,
+              method: workflowResumeTraceBindings[0].method,
               metadata: {
                 workflowResume: {
                   stepId: workflowResumeTraceBindings[0].stepId,
@@ -793,21 +817,6 @@ async function run() {
               },
             }
           : null,
-      runtimeResumeContract: {
-        decisions: workflowResumeTraceBindings.map((binding) => ({
-          actionId: binding.actionId,
-          decision: binding.decision,
-          metadata: {
-            workflowResume: {
-              stepId: binding.stepId,
-              workflowKey: binding.workflowKey,
-              workflowRunId: binding.workflowRunId,
-            },
-          },
-        })),
-        resumeMode:
-          workflowResumeTraceBindings.length > 0 ? "selected-actions" : null,
-      },
       signatureVerificationStatus:
         installedState.signatureVerificationStatus || null,
       sourceKind: installedState.sourceKind || null,

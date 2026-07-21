@@ -1,0 +1,700 @@
+use super::deprecated_agent_event_notification;
+use super::thread::{project_event, ProjectedEvent};
+use app_server_protocol::protocol::v2::{self, ServerNotification};
+use app_server_protocol::{error_codes, AgentEvent, JsonRpcError, JsonRpcNotification};
+use serde_json::Value;
+use std::collections::HashSet;
+
+enum EventProjection {
+    Direct(Vec<JsonRpcNotification>),
+    SideChannel,
+    Reject(JsonRpcError),
+}
+
+#[derive(Default)]
+pub(crate) struct V2NotificationProjector {
+    started_turn_ids: HashSet<String>,
+}
+
+impl V2NotificationProjector {
+    pub(crate) fn project(
+        &mut self,
+        event: AgentEvent,
+    ) -> Result<Vec<JsonRpcNotification>, JsonRpcError> {
+        match self.classify(&event) {
+            EventProjection::Direct(notifications) => Ok(notifications),
+            EventProjection::SideChannel => Ok(vec![deprecated_agent_event_notification(event)]),
+            EventProjection::Reject(error) => Err(error),
+        }
+    }
+
+    fn classify(&mut self, event: &AgentEvent) -> EventProjection {
+        let notification = match event.event_type.as_str() {
+            "thread.created" | "thread.started" => self.project_thread_started(event),
+            "turn.accepted" => return EventProjection::Direct(Vec::new()),
+            "turn.started" => return self.project_turn_started(event),
+            "turn.completed" => {
+                return self.project_turn_completed_with_usage(event, v2::TurnStatus::Completed)
+            }
+            "turn.failed" => {
+                return self.project_turn_completed_with_usage(event, v2::TurnStatus::Failed)
+            }
+            "turn.canceled" => {
+                return self.project_turn_completed_with_usage(event, v2::TurnStatus::Interrupted)
+            }
+            "action.required" | "action.resolved" | "action.canceled" | "action.cancelled"
+            | "action.expired" => return EventProjection::Direct(Vec::new()),
+            "provider.usage" => return self.project_token_usage(event),
+            "item.started" | "command.started" => self.project_item(event, false),
+            "item.completed" | "command.exited" => self.project_item(event, true),
+            "plan.delta" => self.project_item(event, false),
+            "plan.final" => self.project_item(event, true),
+            "message.delta" | "message.delta_batch" | "message.batch" => {
+                self.project_agent_message_delta(event)
+            }
+            _ => return EventProjection::SideChannel,
+        };
+        match notification {
+            Some(notification) => EventProjection::Direct(vec![notification.into()]),
+            None => EventProjection::Reject(projection_error(event)),
+        }
+    }
+
+    fn project_thread_started(&self, event: &AgentEvent) -> Option<ServerNotification> {
+        match project_event(event)? {
+            ProjectedEvent::Thread(thread) => Some(ServerNotification::ThreadStarted(
+                v2::ThreadStartedNotification { thread },
+            )),
+            _ => None,
+        }
+    }
+
+    fn project_turn_started(&mut self, event: &AgentEvent) -> EventProjection {
+        let Some((thread_id, turn_id, turn)) = project_turn(event, v2::TurnStatus::InProgress)
+        else {
+            return EventProjection::Reject(projection_error(event));
+        };
+        if !self.started_turn_ids.insert(turn_id) {
+            return EventProjection::Direct(Vec::new());
+        }
+        EventProjection::Direct(vec![ServerNotification::TurnStarted(
+            v2::TurnStartedNotification { thread_id, turn },
+        )
+        .into()])
+    }
+
+    fn project_turn_completed(
+        &self,
+        event: &AgentEvent,
+        expected_status: v2::TurnStatus,
+    ) -> Option<ServerNotification> {
+        let (thread_id, _, turn) = project_turn(event, expected_status)?;
+        Some(ServerNotification::TurnCompleted(
+            v2::TurnCompletedNotification { thread_id, turn },
+        ))
+    }
+
+    fn project_turn_completed_with_usage(
+        &self,
+        event: &AgentEvent,
+        expected_status: v2::TurnStatus,
+    ) -> EventProjection {
+        let Some(turn_notification) = self.project_turn_completed(event, expected_status) else {
+            return EventProjection::Reject(projection_error(event));
+        };
+        let mut notifications = Vec::with_capacity(2);
+        if let Some(usage_notification) = self.project_token_usage_notification(event) {
+            notifications.push(usage_notification.into());
+        }
+        notifications.push(turn_notification.into());
+        EventProjection::Direct(notifications)
+    }
+
+    fn project_item(&self, event: &AgentEvent, completed: bool) -> Option<ServerNotification> {
+        let thread_id = required_event_id(event.thread_id.as_deref())?;
+        let turn_id = required_event_id(event.turn_id.as_deref())?;
+        let item = match project_event(event)? {
+            ProjectedEvent::Item(item) => item,
+            _ => return None,
+        };
+        let timestamp_ms = timestamp_millis(&event.timestamp)?;
+        if completed {
+            return Some(ServerNotification::ItemCompleted(
+                v2::ItemCompletedNotification {
+                    item,
+                    thread_id,
+                    turn_id,
+                    completed_at_ms: timestamp_ms,
+                },
+            ));
+        }
+        Some(ServerNotification::ItemStarted(
+            v2::ItemStartedNotification {
+                item,
+                thread_id,
+                turn_id,
+                started_at_ms: timestamp_ms,
+            },
+        ))
+    }
+
+    fn project_token_usage(&self, event: &AgentEvent) -> EventProjection {
+        EventProjection::Direct(
+            self.project_token_usage_notification(event)
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        )
+    }
+
+    fn project_token_usage_notification(&self, event: &AgentEvent) -> Option<ServerNotification> {
+        let thread_id = required_event_id(event.thread_id.as_deref())?;
+        let turn_id = required_event_id(event.turn_id.as_deref())?;
+        let usage = event.payload.get("usage")?;
+        let total = usage
+            .get("total_token_usage")
+            .and_then(project_token_usage_breakdown)?;
+        let last = usage
+            .get("last_token_usage")
+            .and_then(project_token_usage_breakdown)?;
+        let model_context_window = usage.get("model_context_window").and_then(Value::as_i64);
+
+        Some(ServerNotification::ThreadTokenUsageUpdated(
+            v2::ThreadTokenUsageUpdatedNotification {
+                thread_id,
+                turn_id,
+                token_usage: v2::ThreadTokenUsage {
+                    total,
+                    last,
+                    model_context_window,
+                },
+            },
+        ))
+    }
+
+    fn project_agent_message_delta(&self, event: &AgentEvent) -> Option<ServerNotification> {
+        let thread_id = required_event_id(event.thread_id.as_deref())?;
+        let turn_id = required_event_id(event.turn_id.as_deref())?;
+        let projected_item_id = match project_event(event) {
+            Some(ProjectedEvent::Item(v2::ThreadItem::AgentMessage { id, .. })) => Some(id),
+            Some(ProjectedEvent::Item(_)) => return None,
+            _ => None,
+        };
+        let payload_item_id = payload_string(
+            &event.payload,
+            &["itemId", "item_id", "messageId", "message_id", "id"],
+        );
+        if let (Some(projected), Some(payload)) =
+            (projected_item_id.as_ref(), payload_item_id.as_ref())
+        {
+            let canonical_payload = agent_protocol::ItemId::new(payload.clone());
+            if projected != canonical_payload.as_str() {
+                return None;
+            }
+        }
+        let item_id = projected_item_id.or(payload_item_id)?;
+        let delta = text_from_payload(&event.payload)?;
+        Some(ServerNotification::AgentMessageDelta(
+            v2::AgentMessageDeltaNotification {
+                thread_id,
+                turn_id,
+                item_id,
+                delta,
+            },
+        ))
+    }
+}
+
+pub(super) fn project_events(
+    projector: &mut V2NotificationProjector,
+    events: Vec<AgentEvent>,
+) -> Result<Vec<JsonRpcNotification>, JsonRpcError> {
+    let mut notifications = Vec::new();
+    for event in events {
+        notifications.extend(projector.project(event)?);
+    }
+    Ok(notifications)
+}
+
+fn project_turn(
+    event: &AgentEvent,
+    expected_status: v2::TurnStatus,
+) -> Option<(String, String, v2::Turn)> {
+    let thread_id = required_event_id(event.thread_id.as_deref())?;
+    let turn_id = required_event_id(event.turn_id.as_deref())?;
+    let turn = match project_event(event)? {
+        ProjectedEvent::Turn(turn) => turn,
+        _ => return None,
+    };
+    (turn.id == turn_id && turn.status == expected_status).then_some((thread_id, turn_id, turn))
+}
+
+fn required_event_id(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn payload_string(payload: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        payload
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+fn text_from_payload(payload: &Value) -> Option<String> {
+    if let Some(text) = payload.as_str().filter(|text| !text.is_empty()) {
+        return Some(text.to_string());
+    }
+    if let Some(text) = payload_string(
+        payload,
+        &[
+            "text",
+            "delta",
+            "content",
+            "message",
+            "outputText",
+            "output_text",
+        ],
+    ) {
+        return Some(text);
+    }
+    for key in ["deltas", "messages", "items", "parts", "content"] {
+        let Some(values) = payload.get(key).and_then(Value::as_array) else {
+            continue;
+        };
+        let text = values
+            .iter()
+            .filter_map(text_from_payload)
+            .collect::<String>();
+        if !text.is_empty() {
+            return Some(text);
+        }
+    }
+    None
+}
+
+fn project_token_usage_breakdown(value: &Value) -> Option<v2::TokenUsageBreakdown> {
+    Some(v2::TokenUsageBreakdown {
+        total_tokens: value.get("total_tokens")?.as_i64()?,
+        input_tokens: value.get("input_tokens")?.as_i64()?,
+        cached_input_tokens: value.get("cached_input_tokens")?.as_i64()?,
+        output_tokens: value.get("output_tokens")?.as_i64()?,
+        reasoning_output_tokens: value.get("reasoning_output_tokens")?.as_i64()?,
+    })
+}
+
+fn timestamp_millis(value: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|value| value.timestamp_millis())
+}
+
+fn projection_error(event: &AgentEvent) -> JsonRpcError {
+    JsonRpcError::new(
+        error_codes::RUNTIME_ERROR,
+        format!(
+            "recognized lifecycle event {} ({}) has no valid v2 projection",
+            event.event_id, event.event_type
+        ),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn event(event_type: &str, payload: Value) -> AgentEvent {
+        AgentEvent {
+            event_id: format!("evt-{event_type}"),
+            sequence: 1,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: event_type.to_string(),
+            timestamp: "2026-07-19T00:00:01.000Z".to_string(),
+            payload,
+        }
+    }
+
+    fn canonical_turn(status: &str) -> Value {
+        json!({
+            "sessionId": "session-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "status": status,
+            "createdAtMs": 1,
+            "updatedAtMs": 2,
+            "startedAtMs": 1,
+            "completedAtMs": (status != "inProgress").then_some(2),
+            "items": [],
+            "itemsView": "full"
+        })
+    }
+
+    fn canonical_item(status: &str) -> Value {
+        json!({
+            "sessionId": "session-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "itemId": "item-1",
+            "sequence": 1,
+            "ordinal": 1,
+            "createdAtMs": 1,
+            "updatedAtMs": 2,
+            "completedAtMs": (status == "completed").then_some(2),
+            "kind": "agentMessage",
+            "status": status,
+            "payload": {"type": "agentMessage", "text": "hello"},
+            "metadata": {}
+        })
+    }
+
+    fn canonical_plan_item(status: &str) -> Value {
+        json!({
+            "sessionId": "session-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "itemId": "plan_turn-1_proposed_plan:1",
+            "sequence": 1,
+            "ordinal": 1,
+            "createdAtMs": 1,
+            "updatedAtMs": 2,
+            "completedAtMs": (status == "completed").then_some(2),
+            "kind": "plan",
+            "status": status,
+            "payload": {
+                "type": "plan",
+                "text": "- [ ] 验证计划通知",
+                "revision_id": "proposed_plan:1",
+                "source": "proposed_plan",
+                "plan": [{"step": "验证计划通知", "status": "pending"}]
+            },
+            "metadata": {}
+        })
+    }
+
+    fn canonical_command_item(status: &str) -> Value {
+        json!({
+            "sessionId": "session-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "itemId": "shell-1",
+            "sequence": 1,
+            "ordinal": 1,
+            "createdAtMs": 1,
+            "updatedAtMs": 2,
+            "completedAtMs": (status == "completed").then_some(2),
+            "kind": "command",
+            "status": status,
+            "payload": {
+                "type": "command",
+                "command": "printf ready",
+                "cwd": "/workspace",
+                "output": (status == "completed").then_some("ready"),
+                "exitCode": (status == "completed").then_some(0)
+            },
+            "metadata": {
+                "commandExecutionSource": "userShell",
+                "processId": "process-1",
+                "durationMs": 42
+            }
+        })
+    }
+
+    fn canonical_thread() -> Value {
+        json!({
+            "sessionId": "session-1",
+            "threadId": "thread-1",
+            "status": {"type": "idle"},
+            "createdAtMs": 1,
+            "updatedAtMs": 2,
+            "archived": false,
+            "preview": "hello",
+            "modelProvider": "openai",
+            "metadata": {},
+            "turns": [],
+            "turnsView": "full"
+        })
+    }
+
+    #[test]
+    fn maps_thread_started_to_the_direct_v2_shape() {
+        let mut projector = V2NotificationProjector::default();
+        let notifications = projector
+            .project(event(
+                "thread.started",
+                json!({"thread": canonical_thread()}),
+            ))
+            .expect("thread started");
+
+        assert_eq!(notifications[0].method, "thread/started");
+        assert_eq!(
+            notifications[0].params.as_ref().expect("params")["thread"]["id"],
+            "thread-1"
+        );
+    }
+
+    #[test]
+    fn accepted_is_internal_and_started_emits_one_direct_turn_started() {
+        let mut projector = V2NotificationProjector::default();
+        let accepted = projector
+            .project(event(
+                "turn.accepted",
+                json!({"turn": canonical_turn("inProgress")}),
+            ))
+            .expect("accepted turn");
+        let duplicate = projector
+            .project(event(
+                "turn.started",
+                json!({"turn": canonical_turn("inProgress")}),
+            ))
+            .expect("started turn");
+
+        assert!(accepted.is_empty());
+        assert_eq!(duplicate.len(), 1);
+        assert_eq!(duplicate[0].method, "turn/started");
+    }
+
+    #[test]
+    fn maps_item_and_terminal_lifecycle_to_direct_v2() {
+        let cases = [
+            (
+                "turn.completed",
+                json!({"turn": canonical_turn("completed")}),
+                "turn/completed",
+            ),
+            (
+                "turn.failed",
+                json!({"turn": canonical_turn("failed")}),
+                "turn/completed",
+            ),
+            (
+                "turn.canceled",
+                json!({"turn": canonical_turn("interrupted")}),
+                "turn/completed",
+            ),
+            (
+                "item.started",
+                json!({"item": canonical_item("inProgress")}),
+                "item/started",
+            ),
+            (
+                "item.completed",
+                json!({"item": canonical_item("completed")}),
+                "item/completed",
+            ),
+            (
+                "plan.delta",
+                json!({"item": canonical_plan_item("inProgress")}),
+                "item/started",
+            ),
+            (
+                "plan.final",
+                json!({"item": canonical_plan_item("completed")}),
+                "item/completed",
+            ),
+        ];
+        for (event_type, payload, method) in cases {
+            let mut projector = V2NotificationProjector::default();
+            let notifications = projector
+                .project(event(event_type, payload))
+                .expect("direct lifecycle");
+            assert_eq!(notifications[0].method, method);
+        }
+    }
+
+    #[test]
+    fn maps_terminal_usage_to_direct_v2_notification_without_context_window() {
+        let mut projector = V2NotificationProjector::default();
+        let notifications = projector
+            .project(event(
+                "turn.completed",
+                json!({
+                    "turn": canonical_turn("completed"),
+                    "usage": {
+                        "total_token_usage": {
+                            "total_tokens": 31_000,
+                            "input_tokens": 31_000,
+                            "cached_input_tokens": 0,
+                            "output_tokens": 0,
+                            "reasoning_output_tokens": 0
+                        },
+                        "last_token_usage": {
+                            "total_tokens": 31_000,
+                            "input_tokens": 31_000,
+                            "cached_input_tokens": 0,
+                            "output_tokens": 0,
+                            "reasoning_output_tokens": 0
+                        }
+                    }
+                }),
+            ))
+            .expect("terminal usage");
+
+        assert_eq!(notifications.len(), 2);
+        assert_eq!(notifications[0].method, "thread/tokenUsage/updated");
+        assert_eq!(notifications[1].method, "turn/completed");
+        let params = notifications[0].params.as_ref().expect("usage params");
+        assert_eq!(params["tokenUsage"]["last"]["inputTokens"], 31_000);
+        assert_eq!(params["tokenUsage"]["modelContextWindow"], Value::Null);
+    }
+
+    #[test]
+    fn maps_command_lifecycle_to_direct_v2_item_notifications() {
+        let mut projector = V2NotificationProjector::default();
+        let started = projector
+            .project(event(
+                "command.started",
+                json!({"item": canonical_command_item("inProgress")}),
+            ))
+            .expect("command started");
+        let completed = projector
+            .project(event(
+                "command.exited",
+                json!({"item": canonical_command_item("completed")}),
+            ))
+            .expect("command exited");
+
+        assert_eq!(started[0].method, "item/started");
+        assert_eq!(completed[0].method, "item/completed");
+        assert_eq!(
+            completed[0].params.as_ref().expect("completed params")["item"]["source"],
+            "userShell"
+        );
+    }
+
+    #[test]
+    fn delta_accepts_the_real_outer_item_identity_shape() {
+        let mut projector = V2NotificationProjector::default();
+        let notifications = projector
+            .project(event(
+                "message.delta",
+                json!({"itemId": "item-1", "text": "hello"}),
+            ))
+            .expect("direct delta");
+
+        assert_eq!(notifications[0].method, "item/agentMessage/delta");
+        let params = notifications[0].params.as_ref().expect("delta params");
+        assert_eq!(params["itemId"], "item-1");
+        assert_eq!(params["delta"], "hello");
+    }
+
+    #[test]
+    fn delta_compares_outer_identity_after_canonical_item_normalization() {
+        let mut item = canonical_item("inProgress");
+        item["itemId"] = json!("item_assistant-1");
+        let mut projector = V2NotificationProjector::default();
+        let notifications = projector
+            .project(event(
+                "message.delta",
+                json!({
+                    "itemId": "assistant-1",
+                    "item": item,
+                    "text": "hello"
+                }),
+            ))
+            .expect("canonicalized direct delta");
+
+        let params = notifications[0].params.as_ref().expect("delta params");
+        assert_eq!(params["itemId"], "item_assistant-1");
+        assert_eq!(params["delta"], "hello");
+    }
+
+    #[test]
+    fn delta_rejects_real_outer_and_canonical_item_identity_drift() {
+        let mut item = canonical_item("inProgress");
+        item["itemId"] = json!("item_assistant-1");
+        let mut projector = V2NotificationProjector::default();
+        let error = projector
+            .project(event(
+                "message.delta",
+                json!({
+                    "itemId": "assistant-2",
+                    "item": item,
+                    "text": "hello"
+                }),
+            ))
+            .expect_err("identity drift must fail closed");
+
+        assert_eq!(error.code, error_codes::RUNTIME_ERROR);
+        assert!(error.message.contains("message.delta"));
+    }
+
+    #[test]
+    fn side_channel_keeps_the_deprecated_envelope() {
+        let mut projector = V2NotificationProjector::default();
+        let notifications = projector
+            .project(event("provider.request.started", json!({})))
+            .expect("side channel");
+        assert_eq!(notifications[0].method, "agentSession/event");
+    }
+
+    #[test]
+    fn action_lifecycle_is_internal_to_typed_server_requests() {
+        for event_type in [
+            "action.required",
+            "action.resolved",
+            "action.canceled",
+            "action.cancelled",
+            "action.expired",
+        ] {
+            let mut projector = V2NotificationProjector::default();
+            let notifications = projector
+                .project(event(event_type, json!({})))
+                .expect("internal action lifecycle");
+            assert!(notifications.is_empty(), "{event_type}");
+        }
+    }
+
+    #[test]
+    fn maps_canonical_provider_usage_to_direct_v2_notification() {
+        let mut projector = V2NotificationProjector::default();
+        let notifications = projector
+            .project(event(
+                "provider.usage",
+                json!({
+                    "usage": {
+                        "total_token_usage": {
+                            "total_tokens": 31_000,
+                            "input_tokens": 31_000,
+                            "cached_input_tokens": 0,
+                            "output_tokens": 0,
+                            "reasoning_output_tokens": 0
+                        },
+                        "last_token_usage": {
+                            "total_tokens": 31_000,
+                            "input_tokens": 31_000,
+                            "cached_input_tokens": 0,
+                            "output_tokens": 0,
+                            "reasoning_output_tokens": 0
+                        },
+                        "model_context_window": 128_000
+                    }
+                }),
+            ))
+            .expect("provider usage");
+
+        assert_eq!(notifications[0].method, "thread/tokenUsage/updated");
+        let params = notifications[0].params.as_ref().expect("usage params");
+        assert_eq!(params["threadId"], "thread-1");
+        assert_eq!(params["turnId"], "turn-1");
+        assert_eq!(params["tokenUsage"]["last"]["inputTokens"], 31_000);
+    }
+
+    #[test]
+    fn malformed_recognized_lifecycle_is_rejected_without_wrapper_fallback() {
+        let mut projector = V2NotificationProjector::default();
+        let error = projector
+            .project(event("item.completed", json!({})))
+            .expect_err("malformed lifecycle must reject");
+        assert_eq!(error.code, error_codes::RUNTIME_ERROR);
+        assert!(error.message.contains("item.completed"));
+    }
+}

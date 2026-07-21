@@ -83,9 +83,6 @@ fn runtime_capability_id_from_descriptor_id(id: &str) -> String {
     if id.contains("action") || id.contains("hitl") {
         return "hitl.actions".to_string();
     }
-    if id.contains("resume") {
-        return "hitl.resume".to_string();
-    }
     if id.contains("subagent") {
         return "subagents.handoff".to_string();
     }

@@ -24,7 +24,7 @@ function guiRequest(method) {
 function rawEvidence() {
   return {
     sidebarGuiArchive: {
-      requests: [guiRequest("agentSession/list")],
+      requests: [guiRequest("thread/list")],
     },
     settingsGuiRestoreArchive: {
       requests: [guiRequest("agentSession/update")],
@@ -33,7 +33,7 @@ function rawEvidence() {
       requests: [guiRequest("agentSession/update")],
     },
     persistedArchive: {
-      requests: [{ method: "agentSession/read" }],
+      requests: [{ method: "thread/read" }],
     },
   };
 }
@@ -105,8 +105,8 @@ describe("Settings archived lifecycle Gate B evidence", () => {
     ).toMatchObject({
       appServerIpcHitCount: 3,
       methods: [
-        "agentSession/list",
-        "agentSession/read",
+        "thread/list",
+        "thread/read",
         "agentSession/update",
       ],
       missingMethods: [],

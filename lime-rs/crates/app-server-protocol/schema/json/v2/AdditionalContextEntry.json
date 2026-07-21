@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "AdditionalContextKind": {
+      "enum": [
+        "application",
+        "untrusted"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "kind": {
+      "$ref": "#/$defs/AdditionalContextKind"
+    },
+    "value": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "value"
+  ],
+  "title": "AdditionalContextEntry",
+  "type": "object"
+}

@@ -1,4 +1,5 @@
 use super::*;
+use app_server_protocol::AgentSessionReadResponse;
 
 fn persistent_core(
     temp: &tempfile::TempDir,
@@ -14,6 +15,123 @@ fn persistent_core(
     (event_log_writer, projection_store, core)
 }
 
+struct ProviderSelectionFailureBackend;
+
+#[async_trait::async_trait]
+impl ExecutionBackend for ProviderSelectionFailureBackend {
+    fn requires_provider_selection(&self) -> bool {
+        true
+    }
+
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Err(RuntimeCoreError::PendingRoute {
+            session_id: _request.session.session_id,
+            provider: None,
+            model: None,
+            reason_code: "provider_and_model_missing".to_string(),
+        })
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
+struct ProviderSelectionRecoveryBackend;
+
+#[async_trait::async_trait]
+impl ExecutionBackend for ProviderSelectionRecoveryBackend {
+    fn requires_provider_selection(&self) -> bool {
+        true
+    }
+
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.accepted", json!({})))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn recovery_route_fills_missing_selection_from_session_defaults() {
+    let session = app_server_protocol::AgentSession {
+        session_id: "recovery-session".to_string(),
+        thread_id: "recovery-thread".to_string(),
+        app_id: "agent-chat".to_string(),
+        workspace_id: None,
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: "recovery-session".to_string(),
+            title: None,
+            uri: None,
+            metadata: Some(serde_json::json!({
+                "providerSelector": "durable-provider",
+                "providerName": "durable-provider",
+                "modelName": "durable-model"
+            })),
+        }),
+        status: app_server_protocol::AgentSessionStatus::Idle,
+        created_at: "2026-07-18T00:00:00Z".to_string(),
+        updated_at: "2026-07-18T00:00:00Z".to_string(),
+    };
+
+    let explicit = app_server_protocol::RuntimeOptions {
+        runtime_request: Some(app_server_protocol::RuntimeRequest {
+            provider_preference: Some("explicit-provider".to_string()),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
+        ..app_server_protocol::RuntimeOptions::default()
+    };
+    let merged =
+        super::super::super::agent_control::runtime_options_with_agent_control_session_defaults(
+            Some(explicit),
+            &session,
+        )
+        .expect("route options");
+    let request = merged.runtime_request.as_ref().expect("runtime request");
+    assert_eq!(
+        request.provider_preference.as_deref(),
+        Some("explicit-provider")
+    );
+    assert_eq!(request.model_preference.as_deref(), Some("durable-model"));
+    assert!(super::super::super::agent_control::has_agent_control_runtime_route(Some(&merged)));
+}
+
 fn assert_session_unloaded(core: &RuntimeCore, session_id: &str) {
     assert!(matches!(
         core.read_session(AgentSessionReadParams {
@@ -24,6 +142,29 @@ fn assert_session_unloaded(core: &RuntimeCore, session_id: &str) {
         }),
         Err(RuntimeCoreError::SessionNotFound(missing)) if missing == session_id
     ));
+}
+
+async fn wait_for_session_with_turn(
+    core: &RuntimeCore,
+    session_id: &str,
+    scenario: &str,
+) -> AgentSessionReadResponse {
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            match core.read_session(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            }) {
+                Ok(response) if !response.turns.is_empty() => return response,
+                Ok(_) | Err(RuntimeCoreError::SessionNotFound(_)) => tokio::task::yield_now().await,
+                Err(error) => panic!("{scenario}: {error}"),
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("{scenario}: session {session_id} did not expose a turn"))
 }
 
 async fn session_id_for_thread(store: &ProjectionStore, thread_id: ThreadId) -> String {
@@ -201,6 +342,508 @@ async fn restart_hydrates_open_none_fork_child_from_session_created_without_item
         canonical.agent_state.map(|state| state.status),
         Some(agent_protocol::CollabAgentStatus::PendingInit)
     );
+}
+
+#[tokio::test]
+async fn restart_preserves_agent_control_provider_defaults() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let (event_log_writer, store, core) = persistent_core(&temp);
+    let parent = core
+        .start_session(start_params(
+            "provider-parent-session",
+            "provider-parent-thread",
+        ))
+        .expect("parent")
+        .session;
+    let parent_turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: parent.session_id.clone(),
+                turn_id: Some("provider-parent-turn".to_string()),
+                input: AgentInput {
+                    text: "delegate with a durable route".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(app_server_protocol::RuntimeOptions {
+                    runtime_request: Some(app_server_protocol::RuntimeRequest {
+                        provider_preference: Some("fixture-provider".to_string()),
+                        model_preference: Some("fixture-model".to_string()),
+                        provider_config: Some(app_server_protocol::RuntimeProviderConfig {
+                            provider_id: Some("fixture-provider-id".to_string()),
+                            provider_name: Some("fixture-provider".to_string()),
+                            model_name: Some("fixture-model".to_string()),
+                            api_key: Some("fixture-secret-must-not-persist".to_string()),
+                            base_url: Some("https://provider.example/v1".to_string()),
+                            tool_call_strategy: Some(
+                                app_server_protocol::RuntimeToolCallStrategy::ToolShim,
+                            ),
+                            toolshim_model: Some("fixture-toolshim".to_string()),
+                            model_capabilities: Some(serde_json::json!({
+                                "streaming": true,
+                                "vision": true
+                            })),
+                            supports_websockets: Some(true),
+                        }),
+                        metadata: Some(serde_json::json!({
+                            "agentControlRoute": {
+                                "schemaVersion": 2,
+                                "providerPreference": "fixture-provider",
+                                "modelPreference": "fixture-model",
+                                "providerConfig": {
+                                    "providerId": "fixture-provider-id",
+                                    "providerName": "fixture-provider",
+                                    "modelName": "fixture-model",
+                                    "toolshimModel": "fixture-toolshim",
+                                    "supportsWebsockets": true
+                                },
+                                "routeProtocol": "openai_responses",
+                                "authKind": "api_key_ref",
+                                "credentialRef": "credential-ref-1",
+                                "effectiveGeneration": 7
+                            }
+                        })),
+                        ..app_server_protocol::RuntimeRequest::default()
+                    }),
+                    ..app_server_protocol::RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("parent turn")
+        .response
+        .turn;
+    store
+        .upsert_agent_identity(thread_store::AgentIdentity {
+            root_thread_id: ThreadId::new("provider-parent-thread"),
+            thread_id: ThreadId::new("provider-parent-thread"),
+            agent_path: "/root".to_string(),
+            nickname: None,
+            role: None,
+            last_task_message: None,
+        })
+        .await
+        .expect("root identity");
+
+    let gateway =
+        core.agent_control_gateway_for_turn(&parent, &parent_turn, RuntimeHostContext::default());
+    gateway
+        .gateway()
+        .execute(AgentControlGatewayRequest {
+            caller: AgentControlCaller {
+                session_id: parent.session_id.clone(),
+                thread_id: parent.thread_id.clone(),
+                turn_id: parent_turn.turn_id.clone(),
+                call_id: "provider-defaults-spawn".to_string(),
+            },
+            command: AgentControlCommand::SpawnAgent {
+                task_name: "provider_child".to_string(),
+                message: "continue after restart".to_string(),
+                fork_mode: SpawnAgentForkMode::None,
+            },
+            cancel_token: None,
+        })
+        .await
+        .expect("spawn child");
+
+    let identity =
+        agent_identity_for_path(&store, "provider-parent-thread", "/root/provider_child").await;
+    let child_session_id = session_id_for_thread(&store, identity.thread_id).await;
+    let child = core
+        .read_session(AgentSessionReadParams {
+            session_id: child_session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("child before restart")
+        .session;
+    let metadata = child
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .expect("child provider defaults");
+    assert_eq!(metadata["providerSelector"], "fixture-provider");
+    assert_eq!(metadata["providerName"], "fixture-provider");
+    assert_eq!(metadata["modelName"], "fixture-model");
+    let route_snapshot = metadata["agentControlRoute"]
+        .as_object()
+        .expect("route snapshot");
+    let provider_config = route_snapshot["providerConfig"]
+        .as_object()
+        .expect("provider config snapshot");
+    assert_eq!(provider_config["providerId"], "fixture-provider-id");
+    assert_eq!(provider_config["providerName"], "fixture-provider");
+    assert_eq!(provider_config["modelName"], "fixture-model");
+    assert!(provider_config.get("baseUrl").is_none());
+    assert!(provider_config.get("apiKeyPresent").is_none());
+    assert!(provider_config.get("apiKey").is_none());
+    assert_eq!(route_snapshot["credentialRef"], "credential-ref-1");
+    assert_eq!(route_snapshot["routeProtocol"], "openai_responses");
+    assert_eq!(route_snapshot["effectiveGeneration"], 7);
+    store
+        .append_agent_mailbox_message(thread_store::AppendAgentMailboxMessageParams {
+            message: thread_store::AgentMailboxMessage {
+                message_id: "provider-defaults-restart-message".to_string(),
+                root_thread_id: ThreadId::new("provider-parent-thread"),
+                sender_thread_id: ThreadId::new("provider-parent-thread"),
+                recipient_thread_id: ThreadId::new(child.thread_id.clone()),
+                content: "resume with the persisted route".to_string(),
+                kind: thread_store::AgentMailboxMessageKind::Message,
+                source_turn_id: None,
+                result_status: None,
+                delivery_mode: AgentMailboxDeliveryMode::TriggerTurn,
+                delivery_status: thread_store::AgentMailboxDeliveryStatus::Pending,
+                created_at_ms: 2,
+                delivered_at_ms: None,
+            },
+        })
+        .await
+        .expect("pending restart mailbox");
+    drop(gateway);
+    drop(core);
+
+    let restarted = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(store);
+    restarted
+        .recover_agent_control_spawns(RuntimeHostContext::default(), None)
+        .await
+        .expect("recover child with persisted route");
+    restarted
+        .ensure_current_session_hydrated(&child_session_id)
+        .await
+        .expect("hydrate child after restart");
+    let restored = restarted
+        .read_session(AgentSessionReadParams {
+            session_id: child_session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("child after restart")
+        .session;
+    let metadata = restored
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .expect("restored provider defaults");
+    assert_eq!(metadata["providerSelector"], "fixture-provider");
+    assert_eq!(metadata["modelName"], "fixture-model");
+    let restored_options =
+        super::super::super::agent_control::runtime_options_with_agent_control_session_defaults(
+            None, &restored,
+        )
+        .expect("restore route options");
+    let restored_request = restored_options
+        .runtime_request
+        .as_ref()
+        .expect("restored runtime request");
+    let restored_provider_config = restored_request
+        .provider_config
+        .as_ref()
+        .expect("restored provider config");
+    assert_eq!(
+        restored_provider_config.provider_id.as_deref(),
+        Some("fixture-provider-id")
+    );
+    assert!(restored_provider_config.base_url.is_none());
+    assert_eq!(
+        restored_provider_config.toolshim_model.as_deref(),
+        Some("fixture-toolshim")
+    );
+    assert!(restored_provider_config.api_key.is_none());
+    let restored_metadata = restored_request
+        .metadata
+        .as_ref()
+        .and_then(serde_json::Value::as_object)
+        .expect("restored route metadata");
+    let restored_route = restored_metadata["agentControlRoute"]
+        .as_object()
+        .expect("restored durable route");
+    assert_eq!(restored_route["credentialRef"], "credential-ref-1");
+    assert_eq!(restored_route["routeProtocol"], "openai_responses");
+    assert_eq!(restored_route["effectiveGeneration"], 7);
+}
+
+#[tokio::test]
+async fn restart_defers_agent_control_recovery_without_provider_defaults() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let (event_log_writer, store, core) = persistent_core(&temp);
+    let parent = core
+        .start_session(start_params(
+            "missing-provider-parent-session",
+            "missing-provider-parent-thread",
+        ))
+        .expect("parent")
+        .session;
+    store
+        .upsert_agent_identity(thread_store::AgentIdentity {
+            root_thread_id: ThreadId::new("missing-provider-parent-thread"),
+            thread_id: ThreadId::new("missing-provider-parent-thread"),
+            agent_path: "/root".to_string(),
+            nickname: None,
+            role: None,
+            last_task_message: None,
+        })
+        .await
+        .expect("root identity");
+    let child = core
+        .stage_agent_control_spawn(AgentControlSpawnRequest {
+            parent_session_id: parent.session_id,
+            child_session_id: Some("missing-provider-child-session".to_string()),
+            child_thread_id: Some("missing-provider-child-thread".to_string()),
+            fork_mode: SpawnAgentForkMode::None,
+        })
+        .await
+        .expect("stage child")
+        .session;
+    store
+        .upsert_agent_identity(thread_store::AgentIdentity {
+            root_thread_id: ThreadId::new("missing-provider-parent-thread"),
+            thread_id: ThreadId::new("missing-provider-child-thread"),
+            agent_path: "/root/missing_provider".to_string(),
+            nickname: None,
+            role: None,
+            last_task_message: Some("retry when a provider is configured".to_string()),
+        })
+        .await
+        .expect("child identity");
+    store
+        .append_agent_mailbox_message(thread_store::AppendAgentMailboxMessageParams {
+            message: thread_store::AgentMailboxMessage {
+                message_id: "missing-provider-message".to_string(),
+                root_thread_id: ThreadId::new("missing-provider-parent-thread"),
+                sender_thread_id: ThreadId::new("missing-provider-parent-thread"),
+                recipient_thread_id: ThreadId::new("missing-provider-child-thread"),
+                content: "wait for provider selection".to_string(),
+                kind: thread_store::AgentMailboxMessageKind::Message,
+                source_turn_id: None,
+                result_status: None,
+                delivery_mode: AgentMailboxDeliveryMode::TriggerTurn,
+                delivery_status: thread_store::AgentMailboxDeliveryStatus::Pending,
+                created_at_ms: 1,
+                delivered_at_ms: None,
+            },
+        })
+        .await
+        .expect("pending mailbox");
+    core.commit_agent_control_spawn(&child)
+        .await
+        .expect("commit child");
+    drop(core);
+
+    let restarted = RuntimeCore::with_backend(Arc::new(ProviderSelectionFailureBackend))
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(store.clone());
+    let pending = restarted
+        .recover_agent_control_spawns(RuntimeHostContext::default(), None)
+        .await
+        .expect_err("missing provider/model route must remain pending");
+    assert!(matches!(
+        &pending,
+        RuntimeCoreError::PendingRoute {
+            session_id,
+            reason_code,
+            ..
+        } if session_id == "missing-provider-child-session"
+            && reason_code == "provider_and_model_missing"
+    ));
+    assert!(pending.is_provider_selection_required());
+    tokio::time::timeout(
+        Duration::from_secs(1),
+        restarted.schedule_pending_agent_mailbox_triggers(
+            "missing-provider-child-session".to_string(),
+            RuntimeHostContext::default(),
+            None,
+        ),
+    )
+    .await
+    .expect("deferred scheduling should not block admission");
+    drop(restarted);
+
+    let ready = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(store.clone());
+    ready
+        .recover_agent_control_spawns(RuntimeHostContext::default(), None)
+        .await
+        .expect("recovery retries once a backend route is available");
+    assert_eq!(
+        store
+            .list_pending_agent_mailbox_messages(
+                ThreadId::new("missing-provider-parent-thread"),
+                ThreadId::new("missing-provider-child-thread"),
+            )
+            .await
+            .expect("read deferred mailbox")
+            .len(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn restart_continues_recovery_after_one_recipient_has_pending_route() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let (event_log_writer, store, core) = persistent_core(&temp);
+    let parent = core
+        .start_session(start_params(
+            "multi-recipient-parent-session",
+            "multi-recipient-parent-thread",
+        ))
+        .expect("parent")
+        .session;
+    store
+        .upsert_agent_identity(thread_store::AgentIdentity {
+            root_thread_id: ThreadId::new("multi-recipient-parent-thread"),
+            thread_id: ThreadId::new("multi-recipient-parent-thread"),
+            agent_path: "/root".to_string(),
+            nickname: None,
+            role: None,
+            last_task_message: None,
+        })
+        .await
+        .expect("root identity");
+
+    let missing = core
+        .stage_agent_control_spawn(AgentControlSpawnRequest {
+            parent_session_id: parent.session_id.clone(),
+            child_session_id: Some("multi-recipient-missing-session".to_string()),
+            child_thread_id: Some("a-missing-child-thread".to_string()),
+            fork_mode: SpawnAgentForkMode::None,
+        })
+        .await
+        .expect("stage missing-route child")
+        .session;
+    let ready = core
+        .stage_agent_control_spawn_with_runtime_options(
+            AgentControlSpawnRequest {
+                parent_session_id: parent.session_id,
+                child_session_id: Some("multi-recipient-ready-session".to_string()),
+                child_thread_id: Some("z-ready-child-thread".to_string()),
+                fork_mode: SpawnAgentForkMode::None,
+            },
+            Some(app_server_protocol::RuntimeOptions {
+                runtime_request: Some(app_server_protocol::RuntimeRequest {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    ..app_server_protocol::RuntimeRequest::default()
+                }),
+                ..app_server_protocol::RuntimeOptions::default()
+            }),
+        )
+        .await
+        .expect("stage routed child")
+        .session;
+
+    for (child, path) in [(&missing, "/root/missing"), (&ready, "/root/ready")] {
+        store
+            .upsert_agent_identity(thread_store::AgentIdentity {
+                root_thread_id: ThreadId::new("multi-recipient-parent-thread"),
+                thread_id: ThreadId::new(child.thread_id.clone()),
+                agent_path: path.to_string(),
+                nickname: None,
+                role: None,
+                last_task_message: None,
+            })
+            .await
+            .expect("child identity");
+    }
+    for (child, message_id, content, created_at_ms) in [
+        (
+            &missing,
+            "multi-recipient-missing-message",
+            "wait for provider selection",
+            1,
+        ),
+        (
+            &ready,
+            "multi-recipient-ready-message",
+            "resume with the persisted route",
+            2,
+        ),
+    ] {
+        store
+            .append_agent_mailbox_message(thread_store::AppendAgentMailboxMessageParams {
+                message: thread_store::AgentMailboxMessage {
+                    message_id: message_id.to_string(),
+                    root_thread_id: ThreadId::new("multi-recipient-parent-thread"),
+                    sender_thread_id: ThreadId::new("multi-recipient-parent-thread"),
+                    recipient_thread_id: ThreadId::new(child.thread_id.clone()),
+                    content: content.to_string(),
+                    kind: thread_store::AgentMailboxMessageKind::Message,
+                    source_turn_id: None,
+                    result_status: None,
+                    delivery_mode: AgentMailboxDeliveryMode::TriggerTurn,
+                    delivery_status: thread_store::AgentMailboxDeliveryStatus::Pending,
+                    created_at_ms,
+                    delivered_at_ms: None,
+                },
+            })
+            .await
+            .expect("pending mailbox");
+    }
+    core.commit_agent_control_spawn(&missing)
+        .await
+        .expect("commit missing-route child");
+    core.commit_agent_control_spawn(&ready)
+        .await
+        .expect("commit routed child");
+    drop(core);
+
+    let restarted = RuntimeCore::with_backend(Arc::new(ProviderSelectionRecoveryBackend))
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(store.clone());
+    let pending = restarted
+        .recover_agent_control_spawns(RuntimeHostContext::default(), None)
+        .await
+        .expect_err("one missing route must remain pending after other recipients recover");
+    assert!(matches!(
+        pending,
+        RuntimeCoreError::PendingRoute {
+            session_id,
+            reason_code,
+            ..
+        } if session_id == "multi-recipient-missing-session"
+            && reason_code == "provider_and_model_missing"
+    ));
+
+    assert_eq!(
+        store
+            .list_pending_agent_mailbox_messages(
+                ThreadId::new("multi-recipient-parent-thread"),
+                ThreadId::new("a-missing-child-thread"),
+            )
+            .await
+            .expect("read missing-route mailbox")
+            .len(),
+        1
+    );
+    assert!(store
+        .list_pending_agent_mailbox_messages(
+            ThreadId::new("multi-recipient-parent-thread"),
+            ThreadId::new("z-ready-child-thread"),
+        )
+        .await
+        .expect("read routed mailbox")
+        .is_empty());
+    let ready_thread = store
+        .read_thread(ReadThreadParams {
+            thread_id: ThreadId::new("z-ready-child-thread"),
+            include_archived: true,
+            turns_view: ThreadTurnsView::Full,
+        })
+        .await
+        .expect("read routed child")
+        .expect("routed child");
+    assert!(ready_thread.turns.iter().any(|turn| {
+        turn.turn_id.as_str()
+            == super::super::super::agent_mailbox_delivery::mailbox_turn_id(
+                "multi-recipient-ready-message",
+            )
+    }));
 }
 
 #[tokio::test]
@@ -825,14 +1468,9 @@ async fn restart_hydrates_only_the_exact_open_child_on_demand() {
         session_id_for_thread(&store, interrupt_identity.thread_id.clone()).await;
     let closed_session_id = session_id_for_thread(&store, closed_identity.thread_id.clone()).await;
 
-    let followup_before_restart = core
-        .read_session(AgentSessionReadParams {
-            session_id: followup_session_id.clone(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("followup child before restart");
+    let followup_before_restart =
+        wait_for_session_with_turn(&core, &followup_session_id, "followup child before restart")
+            .await;
     let followup_turn = followup_before_restart
         .turns
         .first()
@@ -865,19 +1503,17 @@ async fn restart_hydrates_only_the_exact_open_child_on_demand() {
         agent_identity_for_path(&store, "root-thread", "/root/followup/reviewer").await;
     let reviewer_session_id =
         session_id_for_thread(&store, reviewer_identity.thread_id.clone()).await;
-    let interrupt_turn_id = core
-        .read_session(AgentSessionReadParams {
-            session_id: interrupt_session_id.clone(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("interrupt child before restart")
-        .turns
-        .first()
-        .expect("interrupt child initial turn")
-        .turn_id
-        .clone();
+    let interrupt_turn_id = wait_for_session_with_turn(
+        &core,
+        &interrupt_session_id,
+        "interrupt child before restart",
+    )
+    .await
+    .turns
+    .first()
+    .expect("interrupt child initial turn")
+    .turn_id
+    .clone();
     store
         .set_thread_spawn_edge_status(
             closed_identity.thread_id.clone(),
@@ -1001,14 +1637,7 @@ async fn restart_hydrates_only_the_exact_open_child_on_demand() {
         })
         .await
         .expect("followup exact child");
-    restarted
-        .read_session(AgentSessionReadParams {
-            session_id: followup_session_id,
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("followup child hydrated");
+    wait_for_session_with_turn(&restarted, &followup_session_id, "followup child hydrated").await;
     assert_session_unloaded(&restarted, &interrupt_session_id);
     assert_session_unloaded(&restarted, &closed_session_id);
     assert_session_unloaded(&restarted, &reviewer_session_id);

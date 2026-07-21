@@ -198,19 +198,13 @@ describe("workspaceSendHelpers", () => {
   it("输入框 plan / goal mode 应进入工作区 harness metadata", () => {
     const metadata = buildWorkspaceRequestMetadata({
       sendOptions: {
+        collaborationMode: "plan",
         requestMetadata: {
           harness: {
-            task_mode_enabled: true,
             goal_mode_enabled: true,
             preferences: {
-              task: true,
-              task_mode: true,
               goal: true,
               objective: true,
-            },
-            collaboration_mode: {
-              mode: "plan",
-              source: "inputbar",
             },
             thread_goal: {
               enabled: true,
@@ -244,17 +238,11 @@ describe("workspaceSendHelpers", () => {
       harness: {
         preferences: {
           task: true,
-          task_mode: true,
           subagent: false,
           goal: true,
           objective: true,
         },
-        task_mode_enabled: true,
         goal_mode_enabled: true,
-        collaboration_mode: {
-          mode: "plan",
-          source: "inputbar",
-        },
         thread_goal: {
           enabled: true,
           source: "inputbar",

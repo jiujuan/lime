@@ -1,173 +1,33 @@
-use super::event_store;
 use super::status::{agent_turn_blocks_queue_resume, agent_turn_is_active};
-use super::workflow::events::{WORKFLOW_RUN_RESUMING, WORKFLOW_STEP_RESUMING};
 use super::*;
+use agent_protocol::AgentInput as UserInput;
+use agent_runtime::session_loop::{
+    RuntimeSessionClosureTask, RuntimeSessionOperation, RuntimeSessionOperationResult,
+    RuntimeSessionOperationSubmission, RuntimeSessionTaskFailure, RuntimeSessionTaskKind,
+    RuntimeSessionTaskOutcome,
+};
 use app_server_protocol::*;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::sync::Arc;
+use tokio::sync::{oneshot, Mutex};
 
-fn validate_runtime_resume_contract(
-    contract: Option<&RuntimeResumeContract>,
-    session_id: &str,
-) -> Result<(), RuntimeCoreError> {
-    let Some(contract) = contract else {
-        return Ok(());
-    };
-    if contract.schema_version != RUNTIME_RESUME_CONTRACT_SCHEMA_VERSION {
-        return Err(RuntimeCoreError::CapabilityDenied(
-            "runtime.resume_contract.schema_version".to_string(),
-        ));
-    }
-    if contract.runtime_id.trim().is_empty()
-        || contract.session_id.trim().is_empty()
-        || contract.turn_id.trim().is_empty()
-        || contract.resume_mode.trim().is_empty()
-        || contract.created_at.trim().is_empty()
-    {
-        return Err(RuntimeCoreError::CapabilityDenied(
-            "runtime.resume_contract.required_fields".to_string(),
-        ));
-    }
-    if contract.session_id != session_id {
-        return Err(RuntimeCoreError::CapabilityDenied(
-            "runtime.resume_contract.session_mismatch".to_string(),
-        ));
-    }
-    if contract.resume_mode == "all-open-actions" || contract.resume_mode == "selected-actions" {
-        let decision_ids: HashSet<&str> = contract
-            .decisions
-            .iter()
-            .map(|decision| decision.action_id.as_str())
-            .filter(|action_id| !action_id.trim().is_empty())
-            .collect();
-        if contract
-            .open_action_ids
-            .iter()
-            .any(|action_id| !decision_ids.contains(action_id.as_str()))
-        {
-            return Err(RuntimeCoreError::CapabilityDenied(
-                "runtime.resume_contract.open_action_coverage".to_string(),
-            ));
-        }
-    }
-    Ok(())
+#[derive(Debug)]
+pub(in crate::runtime) enum QueuedTurnResume {
+    Empty,
+    Blocked,
+    Started {
+        queued_turn_id: String,
+        events: Vec<AgentEvent>,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct WorkflowResumeAuditBinding {
-    workflow_run_id: String,
-    workflow_key: String,
-    step_id: String,
-    action_id: String,
-    decision: String,
-}
-
-fn workflow_resume_audit_events_from_contract(
-    contract: Option<&RuntimeResumeContract>,
-    queued_turn_id: &str,
-) -> Vec<RuntimeEvent> {
-    let Some(contract) = contract else {
-        return Vec::new();
-    };
-    let mut seen = HashSet::new();
-    let mut events = Vec::new();
-    for decision in &contract.decisions {
-        let Some(metadata) = decision.metadata.as_ref() else {
-            continue;
-        };
-        let Some(binding) = workflow_resume_binding_from_metadata(metadata, decision) else {
-            continue;
-        };
-        if !seen.insert(binding.clone()) {
-            continue;
-        }
-        let base_payload = json!({
-            "workflowRunId": binding.workflow_run_id,
-            "workflowKey": binding.workflow_key,
-            "stepId": binding.step_id,
-            "actionId": binding.action_id,
-            "decision": binding.decision,
-            "status": "resuming",
-            "resumeMode": contract.resume_mode,
-            "runtimeId": contract.runtime_id,
-            "contractTurnId": contract.turn_id,
-            "queuedTurnId": queued_turn_id,
-            "schemaVersion": contract.schema_version,
-            "source": "agentSession/thread/resume",
-        });
-        events.push(RuntimeEvent::new(
-            WORKFLOW_STEP_RESUMING,
-            base_payload.clone(),
-        ));
-        events.push(RuntimeEvent::new(WORKFLOW_RUN_RESUMING, base_payload));
-    }
-    events
-}
-
-fn workflow_resume_binding_from_metadata(
-    metadata: &Value,
-    decision: &RuntimeResumeActionDecision,
-) -> Option<WorkflowResumeAuditBinding> {
-    let action_id = decision.action_id.trim();
-    let decision_value = decision.decision.trim();
-    if action_id.is_empty() || decision_value.is_empty() {
-        return None;
-    }
-    for candidate in workflow_resume_metadata_candidates(metadata) {
-        let Some(workflow_run_id) = string_field(
-            candidate,
-            &["workflowRunId", "workflow_run_id", "runId", "run_id"],
-        ) else {
-            continue;
-        };
-        let Some(workflow_key) = string_field(
-            candidate,
-            &["workflowKey", "workflow_key", "key", "workflow"],
-        ) else {
-            continue;
-        };
-        let Some(step_id) = string_field(candidate, &["stepId", "step_id", "id"]) else {
-            continue;
-        };
-        return Some(WorkflowResumeAuditBinding {
-            workflow_run_id,
-            workflow_key,
-            step_id,
-            action_id: action_id.to_string(),
-            decision: decision_value.to_string(),
-        });
-    }
-    None
-}
-
-fn workflow_resume_metadata_candidates(metadata: &Value) -> Vec<&Value> {
-    let mut candidates = vec![metadata];
-    for key in [
-        "workflowResume",
-        "workflow_resume",
-        "workflowResumeLifecycle",
-        "workflow_resume_lifecycle",
-        "workerLifecycle",
-        "worker_lifecycle",
-        "pluginWorkflow",
-        "plugin_workflow",
-    ] {
-        if let Some(candidate) = metadata.get(key) {
-            candidates.push(candidate);
-        }
-    }
-    candidates
-}
-
-fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .filter_map(|key| value.get(*key))
-        .find_map(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
+struct QueuedTurnResumeLease {
+    index: usize,
+    turn: AgentTurn,
+    input: Vec<UserInput>,
+    runtime_options: Option<RuntimeOptions>,
 }
 
 fn normalize_session_control_id(value: &str, message: &str) -> Result<String, RuntimeCoreError> {
@@ -207,6 +67,113 @@ impl RuntimeCore {
         trigger_context: Option<Value>,
     ) -> Result<RuntimeCoreOutput<AgentSessionCompactResponse>, RuntimeCoreError> {
         self.ensure_current_session_hydrated(session_id).await?;
+        let runtime = self.clone();
+        let session_id = session_id.to_string();
+        let event_name = event_name.map(str::to_string);
+        let source = source.to_string();
+        let trigger = trigger.to_string();
+        let actor_session_id = session_id.clone();
+        let (output_tx, output_rx) = oneshot::channel();
+        let output_tx = Arc::new(Mutex::new(Some(output_tx)));
+        let task = RuntimeSessionClosureTask::new(
+            new_id("compact"),
+            Vec::new(),
+            move |_context, _input, _cancel| {
+                let runtime = runtime.clone();
+                let session_id = session_id.clone();
+                let event_name = event_name.clone();
+                let source = source.clone();
+                let trigger = trigger.clone();
+                let trigger_context = trigger_context.clone();
+                let output_tx = Arc::clone(&output_tx);
+                Box::pin(async move {
+                    let output = runtime
+                        .compact_agent_session_now(
+                            &session_id,
+                            event_name.as_deref(),
+                            &source,
+                            &trigger,
+                            trigger_context,
+                        )
+                        .await;
+                    match output {
+                        Ok(output) => {
+                            if let Some(sender) = output_tx.lock().await.take() {
+                                let _ = sender.send(Ok(output));
+                            }
+                            Ok(())
+                        }
+                        Err(error) => {
+                            let message = error.to_string();
+                            if let Some(sender) = output_tx.lock().await.take() {
+                                let _ = sender.send(Err(message.clone()));
+                            }
+                            Err(RuntimeSessionTaskFailure {
+                                message,
+                                reason_code: None,
+                            })
+                        }
+                    }
+                })
+            },
+        )
+        .with_kind(RuntimeSessionTaskKind::Compact);
+        let session = self.session_loops.get_or_create(&actor_session_id).await;
+        let result = session
+            .dispatch(RuntimeSessionOperationSubmission::new(
+                RuntimeSessionOperation::Compact {
+                    task: Arc::new(task),
+                },
+            ))
+            .await
+            .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
+        let RuntimeSessionOperationResult::Submission(submission) = result else {
+            return Err(RuntimeCoreError::Backend(
+                "compact operation returned an invalid receipt".to_string(),
+            ));
+        };
+        match submission.completion.await.map_err(|_| {
+            RuntimeCoreError::Backend("compact operation completion channel closed".to_string())
+        })? {
+            Ok(RuntimeSessionTaskOutcome::Completed) => {}
+            Ok(outcome) => {
+                return Err(RuntimeCoreError::Backend(format!(
+                    "compact operation ended without completion: {outcome:?}"
+                )));
+            }
+            Err(error) => return Err(RuntimeCoreError::Backend(error.message)),
+        }
+        output_rx
+            .await
+            .map_err(|_| RuntimeCoreError::Backend("compact output channel closed".to_string()))?
+            .map_err(RuntimeCoreError::Backend)
+    }
+
+    async fn compact_agent_session_now(
+        &self,
+        session_id: &str,
+        event_name: Option<&str>,
+        source: &str,
+        trigger: &str,
+        trigger_context: Option<Value>,
+    ) -> Result<RuntimeCoreOutput<AgentSessionCompactResponse>, RuntimeCoreError> {
+        self.ensure_current_session_hydrated(session_id).await?;
+        let (_, turns) = self.session_snapshot(session_id)?;
+        let active_turn_ids = turns
+            .iter()
+            .filter(|turn| agent_turn_is_active(turn.status))
+            .map(|turn| turn.turn_id.clone())
+            .collect::<Vec<_>>();
+        for turn_id in active_turn_ids {
+            self.cancel_turn(
+                AgentSessionTurnCancelParams {
+                    session_id: session_id.to_string(),
+                    turn_id,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await?;
+        }
         let (session, turns) = self.session_snapshot(session_id)?;
         let existing_events = self.events_for_session(session_id)?;
         let compaction = super::context_compaction::build_session_context_compaction(
@@ -228,6 +195,23 @@ impl RuntimeCore {
             "tailStartTurnId".to_string(),
             json!(compaction.tail_start_turn_id),
         );
+        completed_payload.insert(
+            "replacementHistory".to_string(),
+            json!(compaction.window.replacement_history),
+        );
+        completed_payload.insert(
+            "windowNumber".to_string(),
+            json!(compaction.window.window_number),
+        );
+        completed_payload.insert(
+            "firstWindowId".to_string(),
+            json!(compaction.window.first_window_id),
+        );
+        completed_payload.insert(
+            "previousWindowId".to_string(),
+            json!(compaction.window.previous_window_id),
+        );
+        completed_payload.insert("windowId".to_string(), json!(compaction.window.window_id));
         completed_payload.insert("turnCount".to_string(), json!(turns.len()));
         completed_payload.insert("trigger".to_string(), json!(trigger));
         if let Some(trigger_context) = trigger_context.clone() {
@@ -253,6 +237,11 @@ impl RuntimeCore {
                         "compactionId": compaction.compaction_id,
                         "contextEpoch": compaction.context_epoch,
                         "tailStartTurnId": compaction.tail_start_turn_id,
+                        "replacementHistory": compaction.window.replacement_history,
+                        "windowNumber": compaction.window.window_number,
+                        "firstWindowId": compaction.window.first_window_id,
+                        "previousWindowId": compaction.window.previous_window_id,
+                        "windowId": compaction.window.window_id,
                         "turnCount": turns.len(),
                         "trigger": trigger,
                         "triggerContext": trigger_context,
@@ -276,17 +265,12 @@ impl RuntimeCore {
         })
     }
 
-    pub async fn resume_agent_session_thread(
+    pub(in crate::runtime) async fn resume_next_queued_turn_if_idle(
         &self,
-        params: AgentSessionThreadResumeParams,
+        session_id: &str,
         host: RuntimeHostContext,
-    ) -> Result<RuntimeCoreOutput<AgentSessionThreadResumeResponse>, RuntimeCoreError> {
-        let session_id = normalize_session_control_id(
-            &params.session_id,
-            "sessionId is required for agentSession/thread/resume",
-        )?;
-        validate_runtime_resume_contract(params.resume_contract.as_ref(), &session_id)?;
-        self.ensure_current_session_hydrated(&session_id).await?;
+    ) -> Result<QueuedTurnResume, RuntimeCoreError> {
+        self.ensure_current_session_hydrated(session_id).await?;
         let queued = {
             let mut state = self
                 .state
@@ -294,64 +278,41 @@ impl RuntimeCore {
                 .expect("runtime core state mutex poisoned");
             let stored = state
                 .sessions
-                .get_mut(&session_id)
-                .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.clone()))?;
+                .get_mut(session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
             if stored
                 .turns
                 .iter()
                 .any(|turn| agent_turn_blocks_queue_resume(turn.status))
             {
-                let session = stored.session.clone();
-                let turns = stored.turns.clone();
-                return Ok(RuntimeCoreOutput {
-                    response: AgentSessionThreadResumeResponse {
-                        session,
-                        turns,
-                        resumed: false,
-                    },
-                    events: Vec::new(),
-                });
+                return Ok(QueuedTurnResume::Blocked);
             }
             let Some(index) = stored
                 .turns
                 .iter()
                 .position(|turn| matches!(turn.status, AgentTurnStatus::Queued))
             else {
-                let session = stored.session.clone();
-                let turns = stored.turns.clone();
-                return Ok(RuntimeCoreOutput {
-                    response: AgentSessionThreadResumeResponse {
-                        session,
-                        turns,
-                        resumed: false,
-                    },
-                    events: Vec::new(),
-                });
+                return Ok(QueuedTurnResume::Empty);
             };
             let turn = stored.turns.remove(index);
-            let input = stored
-                .turn_inputs
-                .remove(&turn.turn_id)
-                .unwrap_or_else(|| AgentInput {
-                    text: String::new(),
-                    attachments: Vec::new(),
-                });
+            let input = stored.turn_inputs.remove(&turn.turn_id).unwrap_or_default();
             let runtime_options = stored.turn_runtime_options.remove(&turn.turn_id);
-            (index, turn, input, runtime_options)
+            QueuedTurnResumeLease {
+                index,
+                turn,
+                input,
+                runtime_options,
+            }
         };
-        let queued_turn_id = queued.1.turn_id.clone();
-        let workflow_resume_audit_events = workflow_resume_audit_events_from_contract(
-            params.resume_contract.as_ref(),
-            &queued_turn_id,
-        );
-        let mut resumed_runtime_options = queued.3.clone().unwrap_or_default();
+        let queued_turn_id = queued.turn.turn_id.clone();
+        let mut resumed_runtime_options = queued.runtime_options.clone().unwrap_or_default();
         resumed_runtime_options.queued_turn_id = Some(queued_turn_id.clone());
         let output = match self
             .start_turn(
-                AgentSessionTurnStartParams {
-                    session_id: session_id.clone(),
+                TurnStartRequest {
+                    session_id: session_id.to_string(),
                     turn_id: Some(queued_turn_id.clone()),
-                    input: queued.2.clone(),
+                    input: queued.input.clone(),
                     runtime_options: Some(resumed_runtime_options),
                     queue_if_busy: false,
                     skip_pre_submit_resume: true,
@@ -363,30 +324,17 @@ impl RuntimeCore {
             Ok(output) => output,
             Err(error) => {
                 self.restore_queued_turn_if_missing(
-                    &session_id,
-                    queued.0,
-                    queued.1,
-                    queued.2,
-                    queued.3,
+                    session_id,
+                    queued.index,
+                    queued.turn,
+                    queued.input,
+                    queued.runtime_options,
                 );
                 return Err(error);
             }
         };
-        let (session, turns) = self.session_snapshot(&session_id)?;
-        event_store::append_workflow_audit_runtime_events(
-            self.event_log_writer.as_deref(),
-            &session.session_id,
-            &session.thread_id,
-            Some(&queued_turn_id),
-            workflow_resume_audit_events,
-        )?;
-
-        Ok(RuntimeCoreOutput {
-            response: AgentSessionThreadResumeResponse {
-                session,
-                turns,
-                resumed: true,
-            },
+        Ok(QueuedTurnResume::Started {
+            queued_turn_id,
             events: output.events,
         })
     }

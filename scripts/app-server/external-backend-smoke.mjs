@@ -54,7 +54,7 @@ async function main() {
             {
               id: "content.draft.generate",
               title: "Generate Draft",
-              methods: ["agentSession/turn/start"],
+              methods: ["turn/start"],
               appIds: ["content-studio"],
             },
           ],

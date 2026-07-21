@@ -59,25 +59,16 @@ describe("buildThreadWorkspaceHeaderViewModel", () => {
 
   it.each([
     {
-      name: "待用户操作优先于运行态和队列",
+      name: "待用户操作优先于运行态",
       isSending: true,
       pendingActionCount: 1,
-      queuedTurnCount: 1,
       expected: "waiting",
     },
     {
-      name: "运行态优先于队列和 Topic 缓存状态",
+      name: "运行态优先于 Topic 缓存状态",
       isSending: true,
       pendingActionCount: 0,
-      queuedTurnCount: 1,
       expected: "running",
-    },
-    {
-      name: "队列优先于 Topic 缓存状态",
-      isSending: false,
-      pendingActionCount: 0,
-      queuedTurnCount: 1,
-      expected: "queued",
     },
   ])("应使用 current scene 投影状态：$name", (projection) => {
     expect(
@@ -86,7 +77,6 @@ describe("buildThreadWorkspaceHeaderViewModel", () => {
         topic: topic({ status: "done" }),
         isSending: projection.isSending,
         pendingActionCount: projection.pendingActionCount,
-        queuedTurnCount: projection.queuedTurnCount,
         untitledTaskLabel: "未命名任务",
       })?.status,
     ).toBe(projection.expected);

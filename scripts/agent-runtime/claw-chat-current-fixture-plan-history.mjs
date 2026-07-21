@@ -2,9 +2,9 @@ import {
   APP_SERVER_METHOD_SESSION_READ,
   PLAN_PROMPT,
   PLAN_STEPS,
-  SESSION_ID,
   SESSION_TITLE,
 } from "./claw-chat-current-fixture-constants.mjs";
+import { collectReadModelItems } from "./claw-chat-current-fixture-read-model-core.mjs";
 import {
   openSessionFromSidebar,
   waitForGuiSessionVisible,
@@ -24,6 +24,8 @@ export async function verifyPlanHistoryHydrate({
   options,
   requestLog,
   readModelPlanCompleted,
+  sessionId,
+  threadId,
 }) {
   const readModelPlanThreadItem = summarizeReadModelPlanThreadItem(
     readModelPlanCompleted,
@@ -45,7 +47,7 @@ export async function verifyPlanHistoryHydrate({
     options,
     requestLog,
     {
-      sessionId: SESSION_ID,
+      sessionId,
       title: SESSION_TITLE,
       allowPlanDecision: true,
     },
@@ -56,8 +58,8 @@ export async function verifyPlanHistoryHydrate({
     page,
     APP_SERVER_METHOD_SESSION_READ,
     {
-      sessionId: SESSION_ID,
-      historyLimit: 100,
+      threadId,
+      includeTurns: true,
     },
     requestLog,
   );
@@ -78,9 +80,9 @@ export async function verifyPlanHistoryHydrate({
 
 export function summarizeReadModelPlanThreadItem(readModel) {
   const items = collectReadModelItems(readModel);
-  const planItems = items.filter((item) => readString(item, "type") === "plan");
-  const completedPlanItems = planItems.filter(
-    (item) => readString(item, "status") === "completed",
+  const planItems = items.filter(isPlanItem);
+  const completedPlanItems = planItems.filter((item) =>
+    isCompletedPlanItem(item, readModel),
   );
   const latestPlanItem = completedPlanItems.at(-1) ?? planItems.at(-1) ?? null;
   const serializedLatest = JSON.stringify(latestPlanItem || {});
@@ -93,7 +95,7 @@ export function summarizeReadModelPlanThreadItem(readModel) {
     hasCompletedPlanThreadItem: completedPlanItems.length > 0,
     hasRevisionId: Boolean(revisionId),
     revisionId,
-    source: readMetadataString(latestPlanItem, "source"),
+    source: readPlanSource(latestPlanItem, revisionId),
     includesAllPlanSteps: PLAN_STEPS.every((step) =>
       serializedLatest.includes(step.step),
     ),
@@ -101,12 +103,7 @@ export function summarizeReadModelPlanThreadItem(readModel) {
     legacyUpdatePlanToolNames: legacyUpdatePlanToolItems
       .map((item) => readString(item, "toolName", "tool_name", "name"))
       .filter(Boolean),
-    textPreview: readString(
-      latestPlanItem,
-      "text",
-      "summary",
-      "content",
-    )?.slice(0, 240),
+    textPreview: readPlanText(latestPlanItem)?.slice(0, 240),
   };
 }
 
@@ -280,23 +277,6 @@ async function waitForGuiPlanHistoryHydrateCompleted(page, options) {
   );
 }
 
-function collectReadModelItems(readModel) {
-  const detail = readModel?.detail ?? readModel ?? {};
-  return [
-    detail?.thread_read?.thread_items,
-    detail?.threadRead?.threadItems,
-    detail?.thread_read?.items,
-    detail?.items,
-    readModel?.thread_read?.thread_items,
-    readModel?.threadRead?.threadItems,
-    readModel?.thread_items,
-    readModel?.threadItems,
-    readModel?.items,
-  ]
-    .filter(Array.isArray)
-    .flat();
-}
-
 function isLegacyUpdatePlanToolItem(item) {
   const itemType = readString(item, "type", "kind") || "";
   if (!itemType.includes("tool")) {
@@ -311,12 +291,70 @@ function isLegacyUpdatePlanToolItem(item) {
 function readRevisionId(item) {
   return (
     readString(item, "revisionId", "revision_id") ||
-    readMetadataString(item, "revisionId", "revision_id")
+    readMetadataString(item, "revisionId", "revision_id") ||
+    readString(item?.payload, "revisionId", "revision_id") ||
+    readPlanRevisionIdFromItemId(item)
   );
 }
 
 function readMetadataString(item, ...keys) {
   return readString(item?.metadata, ...keys);
+}
+
+function isPlanItem(item) {
+  return (
+    readString(item, "type", "kind") === "plan" ||
+    readString(item?.payload, "type") === "plan"
+  );
+}
+
+function isCompletedPlanItem(item, readModel) {
+  const status = readString(item, "status");
+  return status ? status === "completed" : isLatestTurnCompleted(readModel);
+}
+
+function isLatestTurnCompleted(readModel) {
+  const detail = readModel?.detail ?? readModel ?? {};
+  const thread = detail.thread ?? detail.thread_read ?? detail.threadRead ?? {};
+  const turns = Array.isArray(thread.turns)
+    ? thread.turns
+    : Array.isArray(detail.turns)
+      ? detail.turns
+      : [];
+  return String(turns.at(-1)?.status ?? "").toLowerCase() === "completed";
+}
+
+function readPlanRevisionIdFromItemId(item) {
+  const itemId = readString(item, "id", "itemId", "item_id");
+  if (!itemId) {
+    return null;
+  }
+  for (const prefix of ["proposed_plan:", "update_plan:"]) {
+    const index = itemId.indexOf(prefix);
+    if (index >= 0) {
+      return itemId.slice(index);
+    }
+  }
+  return null;
+}
+
+function readPlanSource(item, revisionId) {
+  return (
+    readString(item?.payload, "source") ||
+    readMetadataString(item, "source") ||
+    (revisionId?.startsWith("proposed_plan:")
+      ? "proposed_plan"
+      : revisionId?.startsWith("update_plan:")
+        ? "update_plan"
+        : null)
+  );
+}
+
+function readPlanText(item) {
+  return (
+    readString(item, "text", "summary", "content") ||
+    readString(item?.payload, "text", "summary", "content")
+  );
 }
 
 function readString(value, ...keys) {

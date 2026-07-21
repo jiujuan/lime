@@ -5,7 +5,6 @@ import {
   EXPERT_SKILLS_RUNTIME_PROMPT,
   EXPERT_SKILLS_RUNTIME_SCENARIO,
   EXPERT_SKILLS_RUNTIME_SESSION_ID,
-  EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
   SESSION_ID,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
   SKILLS_RUNTIME_EXPLICIT_SCENARIO,
@@ -25,10 +24,8 @@ import {
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
 import { waitForGuiSkillsRuntimeCompleted } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
 import {
-  createExpertSkillsRuntimeSession,
   injectExpertSkillsRuntimeCatalog,
   openSessionFromSidebar,
-  waitForGuiSessionVisible,
 } from "./claw-chat-current-fixture-session.mjs";
 import {
   ensureManualEnableWorkspaceSkill,
@@ -42,7 +39,7 @@ import {
 } from "./claw-chat-current-fixture-rpc.mjs";
 import {
   exportSkillsRuntimeEvidencePack,
-  waitForBackendTurnStartWithCurrentQueueResume,
+  waitForCanonicalThreadIdBySessionId,
   waitForSessionReadSkillsRuntimeCompleted,
 } from "./claw-chat-current-fixture-read-model-waits.mjs";
 import {
@@ -86,6 +83,7 @@ export async function runSkillsRuntimeScenario({
     page,
     appServerRequests,
     SKILLS_RUNTIME_SCENARIO,
+    options.sessionId,
   );
   result.evidencePackSkillsRuntime = evidencePackSkillsRuntime.summary;
 
@@ -120,6 +118,7 @@ export async function runSkillsRuntimeScenario({
       page,
       appServerRequests,
       SKILLS_RUNTIME_EXPLICIT_SCENARIO,
+      options.sessionId,
     );
   result.evidencePackExplicitSkillsRuntime =
     evidencePackExplicitSkillsRuntime.summary;
@@ -142,6 +141,13 @@ export async function runSkillsRuntimeScenario({
     );
   const manualEnableSkillsRuntimeSessionId =
     manualEnableSkillsRuntimeBackendTurn.entry.sessionId ?? SESSION_ID;
+  const manualEnableSkillsRuntimeThreadId =
+    await waitForCanonicalThreadIdBySessionId(
+      page,
+      options,
+      appServerRequests,
+      manualEnableSkillsRuntimeSessionId,
+    );
   result.manualEnableSkillsRuntimeTurnStart = sanitizeJson({
     ...result.manualEnableSkillsRuntimeTurnStart,
     backend: {
@@ -167,7 +173,7 @@ export async function runSkillsRuntimeScenario({
       options,
       appServerRequests,
       SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
-      manualEnableSkillsRuntimeSessionId,
+      manualEnableSkillsRuntimeThreadId,
     );
   result.readModelManualEnableSkillsRuntimeCompleted =
     readModelManualEnableSkillsRuntimeCompleted.summary;
@@ -194,16 +200,6 @@ export async function runExpertSkillsRuntimeScenario({
   runtimeEnv,
   logStage,
 }) {
-  if (options.scenario === "expert-skills-runtime") {
-    return runDirectExpertSkillsRuntimeScenario({
-      page,
-      options,
-      workspace,
-      appServerRequests,
-      runtimeEnv,
-      logStage,
-    });
-  }
   return runPlazaOrPanelExpertSkillsRuntimeScenario({
     page,
     options,
@@ -212,120 +208,6 @@ export async function runExpertSkillsRuntimeScenario({
     runtimeEnv,
     logStage,
   });
-}
-
-async function runDirectExpertSkillsRuntimeScenario({
-  page,
-  options,
-  workspace,
-  appServerRequests,
-  runtimeEnv,
-  logStage,
-}) {
-  const result = {};
-
-  logStage("prepare-expert-skills-runtime-workspace-skill");
-  result.expertSkillsRuntimeSkill = sanitizeJson(
-    ensureManualEnableWorkspaceSkill(workspace.rootPath),
-  );
-
-  logStage("create-expert-skills-runtime-session");
-  const expertSessionCreation = await createExpertSkillsRuntimeSession(
-    page,
-    workspace,
-    appServerRequests,
-  );
-  result.expertSkillsRuntimeSessionCreation = sanitizeJson({
-    sessionId:
-      expertSessionCreation.session?.session?.sessionId ??
-      expertSessionCreation.session?.sessionId ??
-      null,
-    updatedSessionId:
-      expertSessionCreation.update?.session?.sessionId ??
-      expertSessionCreation.update?.sessionId ??
-      null,
-    expertId: expertSessionCreation.expertMetadata?.expert?.expertId ?? null,
-    skillRefs: expertSessionCreation.expertMetadata?.expert?.skillRefs ?? [],
-  });
-
-  logStage("open-expert-skills-runtime-session-from-sidebar");
-  result.guiExpertSkillsRuntimeSessionVisible = sanitizeJson(
-    await waitForGuiSessionVisible(
-      page,
-      options,
-      EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-    ),
-  );
-  result.guiExpertSkillsRuntimeSessionOpened = sanitizeJson(
-    await openSessionFromSidebar(page, options, appServerRequests, {
-      sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
-      title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-    }),
-  );
-
-  logStage("send-expert-skills-runtime-prompt-from-gui");
-  result.expertSkillsRuntimeInputSend = sanitizeJson(
-    await sendPromptFromGui(page, options, EXPERT_SKILLS_RUNTIME_PROMPT, {
-      expectedSessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
-    }),
-  );
-
-  logStage("wait-expert-skills-runtime-backend-turn-start");
-  const expertSkillsRuntimeBackendStart =
-    await waitForBackendTurnStartWithCurrentQueueResume(
-      page,
-      options,
-      appServerRequests,
-      runtimeEnv.backendLedgerPath,
-      EXPERT_SKILLS_RUNTIME_SESSION_ID,
-      EXPERT_SKILLS_RUNTIME_PROMPT,
-    );
-  const expertSkillsRuntimeBackendTurn =
-    expertSkillsRuntimeBackendStart.backendTurn;
-  const expertSkillsRuntimeSessionId =
-    expertSkillsRuntimeBackendTurn.entry.sessionId ??
-    EXPERT_SKILLS_RUNTIME_SESSION_ID;
-  result.expertSkillsRuntimeQueueResume = sanitizeJson(
-    expertSkillsRuntimeBackendStart.queueResume,
-  );
-  result.expertSkillsRuntimeTurnStart = sanitizeJson({
-    sessionId: expertSkillsRuntimeSessionId,
-    turnId: expertSkillsRuntimeBackendTurn.entry.turnId ?? null,
-    inputText: expertSkillsRuntimeBackendTurn.entry.inputText ?? null,
-  });
-
-  logStage("wait-read-model-expert-skills-runtime-completed");
-  const readModelExpertSkillsRuntimeCompleted =
-    await waitForSessionReadSkillsRuntimeCompleted(
-      page,
-      options,
-      appServerRequests,
-      EXPERT_SKILLS_RUNTIME_SCENARIO,
-      expertSkillsRuntimeSessionId,
-    );
-  result.readModelExpertSkillsRuntimeCompleted =
-    readModelExpertSkillsRuntimeCompleted.summary;
-
-  logStage("export-expert-skills-runtime-evidence-pack");
-  const evidencePackExpertSkillsRuntime = await exportSkillsRuntimeEvidencePack(
-    page,
-    appServerRequests,
-    EXPERT_SKILLS_RUNTIME_SCENARIO,
-    expertSkillsRuntimeSessionId,
-  );
-  result.evidencePackExpertSkillsRuntime =
-    evidencePackExpertSkillsRuntime.summary;
-
-  logStage("wait-gui-expert-skills-runtime-completed");
-  result.guiExpertSkillsRuntimeCompleted = sanitizeJson(
-    await waitForGuiSkillsRuntimeCompleted(
-      page,
-      options,
-      EXPERT_SKILLS_RUNTIME_SCENARIO,
-    ),
-  );
-
-  return result;
 }
 
 async function runPlazaOrPanelExpertSkillsRuntimeScenario({
@@ -397,6 +279,13 @@ async function runPlazaOrPanelExpertSkillsRuntimeScenario({
   const expertPlazaSkillsRuntimeSessionId =
     expertPlazaSkillsRuntimeBackendTurn.entry.sessionId ??
     EXPERT_SKILLS_RUNTIME_SESSION_ID;
+  const expertPlazaSkillsRuntimeThreadId =
+    await waitForCanonicalThreadIdBySessionId(
+      page,
+      options,
+      appServerRequests,
+      expertPlazaSkillsRuntimeSessionId,
+    );
   result.expertSkillsRuntimeTurnStart = sanitizeJson({
     sessionId: expertPlazaSkillsRuntimeSessionId,
     turnId: expertPlazaSkillsRuntimeBackendTurn.entry.turnId ?? null,
@@ -410,7 +299,7 @@ async function runPlazaOrPanelExpertSkillsRuntimeScenario({
       options,
       appServerRequests,
       EXPERT_SKILLS_RUNTIME_SCENARIO,
-      expertPlazaSkillsRuntimeSessionId,
+      expertPlazaSkillsRuntimeThreadId,
     );
   result.readModelExpertSkillsRuntimeCompleted =
     readModelExpertSkillsRuntimeCompleted.summary;
@@ -431,6 +320,10 @@ async function runPlazaOrPanelExpertSkillsRuntimeScenario({
       page,
       options,
       EXPERT_SKILLS_RUNTIME_SCENARIO,
+      {
+        sessionId: expertPlazaSkillsRuntimeSessionId,
+        turnId: expertPlazaSkillsRuntimeBackendTurn.entry.turnId,
+      },
     ),
   );
 
@@ -522,25 +415,24 @@ async function runExpertPanelSkillsRuntimeFollowup({
   );
 
   logStage("wait-expert-panel-skills-runtime-backend-turn-start");
-  const expertPanelSkillsRuntimeBackendStart =
-    await waitForBackendTurnStartWithCurrentQueueResume(
-      page,
-      options,
-      appServerRequests,
-      runtimeEnv.backendLedgerPath,
-      expertPlazaSkillsRuntimeSessionId,
-      EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
-    );
   const expertPanelSkillsRuntimeBackendTurn =
-    expertPanelSkillsRuntimeBackendStart.backendTurn;
+    await waitForBackendLedgerTurnStart(
+      runtimeEnv.backendLedgerPath,
+      EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
+      options,
+    );
   const expertPanelSkillsRuntimeSessionId =
     selectExpertPanelSkillsRuntimeSessionId(
       expertPanelSkillsRuntimeBackendTurn,
       expertPlazaSkillsRuntimeSessionId,
     );
-  result.expertPanelSkillsRuntimeQueueResume = sanitizeJson(
-    expertPanelSkillsRuntimeBackendStart.queueResume,
-  );
+  const expertPanelSkillsRuntimeThreadId =
+    await waitForCanonicalThreadIdBySessionId(
+      page,
+      options,
+      appServerRequests,
+      expertPanelSkillsRuntimeSessionId,
+    );
   result.expertPanelSkillsRuntimeTurnStart =
     summarizeExpertPanelSkillsRuntimeTurnStart(
       expertPanelSkillsRuntimeBackendTurn,
@@ -554,7 +446,7 @@ async function runExpertPanelSkillsRuntimeFollowup({
       options,
       appServerRequests,
       EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
-      expertPanelSkillsRuntimeSessionId,
+      expertPanelSkillsRuntimeThreadId,
     );
   result.readModelExpertPanelSkillsRuntimeCompleted =
     readModelExpertPanelSkillsRuntimeCompleted.summary;
@@ -576,6 +468,10 @@ async function runExpertPanelSkillsRuntimeFollowup({
       page,
       options,
       EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
+      {
+        sessionId: expertPanelSkillsRuntimeSessionId,
+        turnId: expertPanelSkillsRuntimeBackendTurn.entry.turnId,
+      },
     ),
   );
 

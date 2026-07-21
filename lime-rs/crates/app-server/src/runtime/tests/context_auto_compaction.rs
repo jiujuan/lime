@@ -347,8 +347,10 @@ async fn auto_compaction_replaces_provider_prefix_with_summary_and_bounded_tail(
         })
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(!provider_text.contains("fact-from-turn-1"));
-    assert!(!provider_text.contains("fact-from-turn-2"));
+    // Replacement history contains the original user boundary and the compact summary. A third
+    // occurrence would mean the durable prefix was appended again after replacement.
+    assert_eq!(provider_text.matches("fact-from-turn-1").count(), 2);
+    assert_eq!(provider_text.matches("fact-from-turn-2").count(), 2);
     for index in 3..=6 {
         assert!(
             provider_text.contains(&format!("fact-from-turn-{index}")),

@@ -11,12 +11,10 @@ import {
   mapSessionDetailToTopic,
   prependVerifiedSessionTopicFromDetail,
   resolveRestoreCandidateSanitizationPlan,
-  resolveRuntimePreviewFromSessionDetail,
   resolveRuntimeThreadStatusFromSessionDetail,
   selectActiveSessionTransientItems,
   selectActiveSessionTransientMessages,
   selectActiveSessionTransientTurns,
-  shouldAutoResumeHydratedRuntimeThread,
   sortTopicsByRecentActivity,
   upsertFreshSessionDraftTopic,
   upsertTopicFromSessionDetail,
@@ -178,37 +176,7 @@ describe("agentSessionTopicViewModel", () => {
     });
   });
 
-  it("应识别需要自动恢复的 runtime thread 状态", () => {
-    expect(
-      shouldAutoResumeHydratedRuntimeThread({
-        thread_id: "thread-1",
-        status: "running",
-        pending_requests: [],
-        incidents: [],
-        queued_turns: [],
-      }),
-    ).toBe(true);
-    expect(
-      shouldAutoResumeHydratedRuntimeThread({
-        thread_id: "thread-1",
-        status: "idle",
-        pending_requests: [],
-        incidents: [],
-        queued_turns: [{ queued_turn_id: "queued-1" } as never],
-      }),
-    ).toBe(true);
-    expect(
-      shouldAutoResumeHydratedRuntimeThread({
-        thread_id: "thread-1",
-        status: "idle",
-        pending_requests: [],
-        incidents: [],
-        queued_turns: [],
-      }),
-    ).toBe(false);
-  });
-
-  it("应从 session detail 推导 topic runtime 状态与预览", () => {
+  it("应从 session detail 的 canonical 状态推导 topic runtime 状态", () => {
     expect(
       resolveRuntimeThreadStatusFromSessionDetail(
         createDetail({
@@ -217,7 +185,6 @@ describe("agentSessionTopicViewModel", () => {
             status: "waiting_request",
             pending_requests: [],
             incidents: [],
-            queued_turns: [],
           },
         }),
       ),
@@ -226,38 +193,13 @@ describe("agentSessionTopicViewModel", () => {
     expect(
       resolveRuntimeThreadStatusFromSessionDetail(
         createDetail({
-          queued_turns: [{ message_preview: "继续执行" } as never],
-        }),
-      ),
-    ).toBe("queued");
-
-    expect(
-      resolveRuntimeThreadStatusFromSessionDetail(
-        createDetail({
           thread_read: {
             thread_id: "thread-1",
             status: "queued",
-            pending_requests: [],
-            incidents: [],
-            queued_turns: [{ message_preview: " 后台排队中 " } as never],
           },
         }),
       ),
     ).toBe("queued");
-
-    expect(
-      resolveRuntimePreviewFromSessionDetail(
-        createDetail({
-          thread_read: {
-            thread_id: "thread-1",
-            status: "queued",
-            pending_requests: [],
-            incidents: [],
-            queued_turns: [{ message_preview: " 后台排队中 " } as never],
-          },
-        }),
-      ),
-    ).toBe("后台排队中");
   });
 
   it("应把 runtime detail 映射为 topic 并覆盖运行态展示", () => {
@@ -273,7 +215,6 @@ describe("agentSessionTopicViewModel", () => {
           status: "running",
           pending_requests: [],
           incidents: [],
-          queued_turns: [],
         },
       }),
       "workspace-fallback",
@@ -301,12 +242,6 @@ describe("agentSessionTopicViewModel", () => {
           status: "queued",
           pending_requests: [],
           incidents: [],
-          queued_turns: [
-            {
-              queued_turn_id: "queued-1",
-              message_preview: "后台排队中",
-            } as never,
-          ],
         },
       }),
       null,
@@ -318,7 +253,6 @@ describe("agentSessionTopicViewModel", () => {
       messagesCount: 2,
       status: "queued",
       statusReason: "default",
-      lastPreview: "后台排队中",
     });
   });
 

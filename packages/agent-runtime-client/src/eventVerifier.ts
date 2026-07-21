@@ -1,7 +1,4 @@
-import type {
-  CanonicalThreadEventNotification,
-  AgentSessionEventNotification,
-} from "@limecloud/app-server-client";
+import type { AgentRuntimeLifecycleNotification } from "@limecloud/app-server-client";
 import {
   createRuntimeSequenceVerifier,
   type AgentRuntimeExecutionEvent,
@@ -29,12 +26,60 @@ export interface AgentRuntimeSequenceVerificationResult {
   violations: RuntimeSequenceViolation[];
 }
 
+type CanonicalThread = Extract<
+  AgentRuntimeLifecycleNotification,
+  { method: "thread/started" }
+>["params"]["thread"];
+type CanonicalTurn = Extract<
+  AgentRuntimeLifecycleNotification,
+  { method: "turn/started" | "turn/completed" }
+>["params"]["turn"];
 type CanonicalThreadItem = Extract<
-  CanonicalThreadEventNotification,
-  { method: "item/updated" }
->["params"];
-type CanonicalItemKind = CanonicalThreadItem["kind"];
-type CanonicalItemStatus = CanonicalThreadItem["status"];
+  AgentRuntimeLifecycleNotification,
+  { method: "item/started" | "item/completed" }
+>["params"]["item"];
+type EntityLifecycleNotification = Extract<
+  AgentRuntimeLifecycleNotification,
+  {
+    method:
+      | "thread/started"
+      | "turn/started"
+      | "turn/completed"
+      | "item/started"
+      | "item/completed";
+  }
+>;
+const CANONICAL_ITEM_TYPES = [
+  "userMessage",
+  "hookPrompt",
+  "agentMessage",
+  "plan",
+  "reasoning",
+  "commandExecution",
+  "fileChange",
+  "mcpToolCall",
+  "dynamicToolCall",
+  "collabAgentToolCall",
+  "subAgentActivity",
+  "webSearch",
+  "imageView",
+  "sleep",
+  "imageGeneration",
+  "enteredReviewMode",
+  "exitedReviewMode",
+  "contextCompaction",
+] as const;
+type CanonicalItemType = (typeof CANONICAL_ITEM_TYPES)[number];
+const CANONICAL_ITEM_TYPE_SET = new Set<string>(CANONICAL_ITEM_TYPES);
+
+const STATUSFUL_ITEM_TYPES = new Set<CanonicalItemType>([
+  "commandExecution",
+  "fileChange",
+  "mcpToolCall",
+  "dynamicToolCall",
+  "collabAgentToolCall",
+  "imageGeneration",
+]);
 
 export class AgentRuntimeSequenceViolationError extends Error {
   readonly violations: RuntimeSequenceViolation[];
@@ -59,20 +104,20 @@ export class AgentRuntimeEventSequenceGate {
     this.#verifier =
       this.#mode === "off"
         ? undefined
-        : options.verifier ?? createRuntimeSequenceVerifier();
+        : (options.verifier ?? createRuntimeSequenceVerifier());
   }
 
-  verify(notification: AgentSessionEventNotification): AgentRuntimeSequenceVerificationResult {
-    if (!this.#verifier) {
+  verify(
+    notification: AgentRuntimeLifecycleNotification,
+  ): AgentRuntimeSequenceVerificationResult {
+    if (
+      !this.#verifier ||
+      notification.method === "item/agentMessage/delta" ||
+      notification.method === "thread/settings/updated"
+    ) {
       return { accepted: true, violations: [] };
     }
-    const canonical = notification.params.canonicalEvent;
-    if (!canonical) {
-      // Raw agentSession events belong to the non-thread channel. They must
-      // never participate in the Thread/Turn/Item lifecycle verifier.
-      return { accepted: true, violations: [] };
-    }
-    const event = runtimeExecutionEventFromCanonicalEvent(canonical);
+    const event = runtimeExecutionEventFromLifecycleNotification(notification);
     const violations = this.#verifier.push(event);
     return {
       accepted: this.#mode !== "fail-closed" || violations.length === 0,
@@ -91,79 +136,116 @@ export class AgentRuntimeEventSequenceGate {
 
 /**
  * Convert a canonical Thread/Turn/Item entity into the package's verifier
- * input. Lifecycle state is read from the typed entity itself; the raw
- * agentSession/event envelope is intentionally not consulted.
+ * input. Lifecycle state is read only from the canonical v2 entity.
  */
-export function runtimeExecutionEventFromCanonicalEvent(
-  event: CanonicalThreadEventNotification,
+export function runtimeExecutionEventFromLifecycleNotification(
+  event: EntityLifecycleNotification,
 ): AgentRuntimeExecutionEvent {
-  if (event.method === "thread/updated") {
-    const thread = event.params;
+  if (event.method === "thread/started") {
+    const thread = requireEntity(event.params.thread, "Thread");
+    const threadId = requireEntityId(thread, "Thread");
+    const observedAtMs = unixSecondsToMillis(
+      thread.updatedAt,
+      "Thread.updatedAt",
+    );
     return {
-      id: `thread:${thread.threadId}:${thread.updatedAtMs}`,
+      id: `thread:${threadId}:started:${observedAtMs}`,
       runtimeId: "app-server",
-      threadId: thread.threadId,
-      sequence: thread.updatedAtMs,
+      threadId,
+      sequence: observedAtMs,
       kind: "state",
-      status: threadStatus(thread.status.type),
+      status: threadStatus(thread.status?.type),
       eventClass: "run.status",
-      title: thread.name ?? "Thread",
-      payload: { canonical: thread },
-      createdAt: dateFromMillis(thread.updatedAtMs),
+      title: thread.name ?? (thread.preview || "Thread"),
+      payload: { lifecycle: event, canonical: thread },
+      createdAt: dateFromUnixSeconds(thread.createdAt, "Thread.createdAt"),
     };
   }
 
-  if (event.method === "turn/updated") {
-    const turn = event.params;
-    const eventClass = turnEventClass(turn.status);
+  if (event.method === "turn/started" || event.method === "turn/completed") {
+    const turn = requireEntity(event.params.turn, "Turn");
+    const turnId = requireEntityId(turn, "Turn");
+    const observedAt = turnTimestamp(turn, event.method);
+    const observedAtMs = unixSecondsToMillis(observedAt, "Turn timestamp");
     return {
-      id: `turn:${turn.turnId}:${turn.updatedAtMs}`,
+      id: `turn:${turnId}:${turn.status}:${observedAtMs}`,
       runtimeId: "app-server",
-      threadId: turn.threadId,
-      turnId: turn.turnId,
-      sequence: turn.updatedAtMs,
+      threadId: event.params.threadId,
+      turnId,
+      sequence: observedAtMs,
       kind: "state",
       status: turnStatus(turn.status),
-      eventClass,
+      eventClass: turnEventClass(turn.status),
       title: "Turn",
-      payload: { canonical: turn },
-      createdAt: dateFromMillis(turn.updatedAtMs),
+      payload: { lifecycle: event, canonical: turn },
+      createdAt: dateFromUnixSeconds(
+        turn.startedAt ?? observedAt,
+        "Turn.startedAt",
+      ),
       completedAt:
-        turn.completedAtMs == null
+        turn.completedAt == null
           ? undefined
-          : dateFromMillis(turn.completedAtMs),
+          : dateFromUnixSeconds(turn.completedAt, "Turn.completedAt"),
     };
   }
 
-  const item = event.params;
-  const eventClass = itemEventClass(item.kind, item.status);
+  const item = requireEntity(event.params.item, "ThreadItem");
+  const itemId = requireStringField(item, "id");
+  const type = canonicalItemType(item);
+  const status = itemExecutionStatus(item, type, event.method);
+  const observedAtMs =
+    event.method === "item/started"
+      ? event.params.startedAtMs
+      : event.params.completedAtMs;
+  requireUnixMilliseconds(observedAtMs, `${event.method} timestamp`);
   return {
-    id: `item:${item.itemId}:${item.sequence}:${item.updatedAtMs}`,
+    id: `item:${itemId}:${type}:${status}:${observedAtMs}`,
     runtimeId: "app-server",
-    threadId: item.threadId,
-    turnId: item.turnId,
-    toolCallId: item.kind === "tool" ? item.itemId : undefined,
-    actionId: item.kind === "approval" ? item.itemId : undefined,
-    sequence: item.sequence,
-    kind: itemRuntimeKind(item.kind),
-    status: itemStatus(item.status),
-    eventClass,
-    title: itemTitle(item),
-    payload: { canonical: item },
-    createdAt: dateFromMillis(item.createdAtMs),
+    threadId: event.params.threadId,
+    turnId: event.params.turnId,
+    toolCallId: itemToolCallId(type, itemId),
+    sequence: observedAtMs,
+    kind: itemRuntimeKind(type),
+    status,
+    eventClass: itemEventClass(type, status),
+    title: itemTitle(item, type),
+    payload: { lifecycle: event, canonical: item },
+    createdAt: dateFromUnixMilliseconds(observedAtMs),
     completedAt:
-      item.completedAtMs == null
-        ? undefined
-        : dateFromMillis(item.completedAtMs),
+      event.method === "item/completed"
+        ? dateFromUnixMilliseconds(observedAtMs)
+        : undefined,
   };
 }
 
-function dateFromMillis(value: number): string {
+function dateFromUnixSeconds(value: number, field: string): string {
+  return new Date(requireUnixSeconds(value, field) * 1_000).toISOString();
+}
+
+function requireUnixSeconds(value: number, field: string): number {
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`${field} must be a finite Unix timestamp.`);
+  }
+  return value;
+}
+
+function unixSecondsToMillis(value: number, field: string): number {
+  return requireUnixSeconds(value, field) * 1_000;
+}
+
+function requireUnixMilliseconds(value: number, field: string): number {
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`${field} must be a finite Unix timestamp.`);
+  }
+  return value;
+}
+
+function dateFromUnixMilliseconds(value: number): string {
   return new Date(value).toISOString();
 }
 
 function threadStatus(
-  status: "notLoaded" | "idle" | "systemError" | "active",
+  status: NonNullable<CanonicalThread["status"]>["type"] | undefined,
 ): AgentRuntimeExecutionEvent["status"] {
   switch (status) {
     case "systemError":
@@ -171,15 +253,28 @@ function threadStatus(
     case "active":
       return "running";
     case "notLoaded":
-      return "pending";
     case "idle":
-    default:
-      return "completed";
+    case undefined:
+      return "pending";
   }
 }
 
+function turnTimestamp(
+  turn: CanonicalTurn,
+  method: "turn/started" | "turn/completed",
+): number {
+  const value =
+    method === "turn/completed"
+      ? (turn.completedAt ?? turn.startedAt)
+      : turn.startedAt;
+  if (value == null || !Number.isFinite(value)) {
+    throw new TypeError(`${method} requires a finite Turn timestamp.`);
+  }
+  return value;
+}
+
 function turnStatus(
-  status: "completed" | "failed" | "inProgress" | "interrupted",
+  status: CanonicalTurn["status"],
 ): AgentRuntimeExecutionEvent["status"] {
   switch (status) {
     case "completed":
@@ -189,14 +284,13 @@ function turnStatus(
     case "interrupted":
       return "canceled";
     case "inProgress":
-    default:
       return "running";
+    default:
+      throw new TypeError(`Unsupported canonical Turn status '${status}'.`);
   }
 }
 
-function turnEventClass(
-  status: "completed" | "failed" | "inProgress" | "interrupted",
-): string {
+function turnEventClass(status: CanonicalTurn["status"]): string {
   switch (status) {
     case "completed":
       return "turn.completed";
@@ -205,138 +299,226 @@ function turnEventClass(
     case "interrupted":
       return "turn.canceled";
     case "inProgress":
-    default:
       return "turn.started";
+    default:
+      throw new TypeError(`Unsupported canonical Turn status '${status}'.`);
   }
 }
 
-function itemStatus(
-  status: CanonicalItemStatus,
+function itemExecutionStatus(
+  item: CanonicalThreadItem,
+  itemType: CanonicalItemType,
+  method: "item/started" | "item/completed",
 ): AgentRuntimeExecutionEvent["status"] {
+  if (!STATUSFUL_ITEM_TYPES.has(itemType)) {
+    return method === "item/started" ? "running" : "completed";
+  }
+  const status = requireStringField(item, "status");
   switch (status) {
     case "completed":
       return "completed";
     case "failed":
       return "failed";
-    case "cancelled":
-    case "interrupted":
+    case "declined":
       return "canceled";
     case "inProgress":
       return "running";
-    case "pending":
     default:
-      return "pending";
+      throw new TypeError(
+        `Unsupported ${itemType} status '${status}' in canonical ThreadItem.`,
+      );
   }
 }
 
 function itemEventClass(
-  kind: CanonicalItemKind,
-  status: CanonicalItemStatus,
+  type: CanonicalItemType,
+  status: AgentRuntimeExecutionEvent["status"],
 ): string {
-  const family = itemEventFamily(kind);
+  const family = itemEventFamily(type);
   if (family === "tool") {
-    if (status === "pending") return "tool.pending";
-    if (status === "inProgress") return "tool.started";
+    if (status === "running") return "tool.started";
     if (status === "completed") return "tool.result";
     return "tool.failed";
   }
   if (family === "model") {
-    if (status === "pending") return "model.pending";
-    if (status === "inProgress") return "model.delta";
+    if (status === "running") return "model.delta";
     if (status === "completed") return "model.completed";
     return "model.failed";
   }
-  if (family === "action") {
-    if (status === "pending" || status === "inProgress") {
-      return "action.required";
-    }
-    if (status === "completed") return "action.resolved";
-    return "action.canceled";
-  }
   if (family === "command") {
-    if (status === "pending") return "command.pending";
-    if (status === "inProgress") return "command.started";
+    if (status === "running") return "command.started";
     return "command.exited";
   }
-  if (status === "failed") return `${family}.failed`;
-  if (status === "cancelled" || status === "interrupted") {
-    return `${family}.canceled`;
+  if (family === "patch") {
+    if (status === "running") return "patch.started";
+    if (status === "completed") return "patch.completed";
+    return "patch.failed";
   }
+  if (status === "failed") return `${family}.failed`;
+  if (status === "canceled") return `${family}.canceled`;
   if (status === "completed") return `${family}.completed`;
-  if (status === "inProgress") return `${family}.started`;
-  return `${family}.pending`;
+  return `${family}.started`;
 }
 
-function itemEventFamily(kind: CanonicalItemKind): string {
-  switch (kind) {
+function itemEventFamily(type: CanonicalItemType): string {
+  switch (type) {
     case "agentMessage":
     case "userMessage":
+    case "hookPrompt":
+    case "plan":
     case "reasoning":
       return "model";
-    case "approval":
-      return "action";
     case "contextCompaction":
       return "context";
-    case "file":
-    case "media":
+    case "fileChange":
+      return "patch";
+    case "imageView":
       return "artifact";
-    case "subAgent":
+    case "subAgentActivity":
+    case "collabAgentToolCall":
       return "handoff";
-    case "extension":
+    case "enteredReviewMode":
+    case "exitedReviewMode":
       return "runtime";
-    case "command":
+    case "commandExecution":
       return "command";
-    case "tool":
-    default:
+    case "mcpToolCall":
+    case "dynamicToolCall":
+    case "webSearch":
+    case "sleep":
+    case "imageGeneration":
       return "tool";
   }
 }
 
 function itemRuntimeKind(
-  kind: CanonicalItemKind,
+  type: CanonicalItemType,
 ): AgentRuntimeExecutionEvent["kind"] {
-  switch (kind) {
-    case "agentMessage":
-    case "userMessage":
-    case "reasoning":
+  switch (itemEventFamily(type)) {
+    case "model":
       return "model";
-    case "approval":
-      return "action";
-    case "contextCompaction":
+    case "context":
       return "context";
-    case "file":
-    case "media":
+    case "artifact":
+    case "patch":
       return "draft";
-    case "subAgent":
+    case "handoff":
       return "handoff";
-    case "extension":
+    case "runtime":
       return "note";
-    case "command":
-      return "tool";
-    case "tool":
     default:
       return "tool";
   }
 }
 
-function itemTitle(item: CanonicalThreadItem): string {
-  const payload = item.payload;
-  switch (payload.type) {
+function itemTitle(item: CanonicalThreadItem, type: CanonicalItemType): string {
+  switch (type) {
     case "agentMessage":
-      return payload.text;
+    case "plan":
+      return optionalStringField(item, "text") ?? type;
     case "userMessage":
-      return payload.content;
-    case "tool":
-      return payload.name;
-    case "command":
-      return payload.command;
-    case "file":
-      return payload.path;
-    case "media":
-      return payload.mime_type;
-    case "subAgent":
-      return payload.child_thread_id;
+      return userMessageTitle(item);
+    case "mcpToolCall":
+    case "dynamicToolCall":
+    case "collabAgentToolCall":
+      return optionalStringField(item, "tool") ?? type;
+    case "commandExecution":
+      return optionalStringField(item, "command") ?? type;
+    case "imageView":
+      return optionalStringField(item, "path") ?? type;
+    case "subAgentActivity":
+      return optionalStringField(item, "agentPath") ?? type;
+    case "webSearch":
+      return optionalStringField(item, "query") ?? type;
+    case "enteredReviewMode":
+    case "exitedReviewMode":
+      return optionalStringField(item, "review") ?? type;
     default:
-      return payload.type;
+      return type;
   }
+}
+
+function canonicalItemType(item: CanonicalThreadItem): CanonicalItemType {
+  const type = optionalStringField(item, "type");
+  if (!type || !CANONICAL_ITEM_TYPE_SET.has(type)) {
+    throw new TypeError(
+      "Canonical ThreadItem.type must be a supported v2 item tag.",
+    );
+  }
+  return type as CanonicalItemType;
+}
+
+function itemToolCallId(
+  type: CanonicalItemType,
+  itemId: string,
+): string | undefined {
+  switch (type) {
+    case "commandExecution":
+    case "fileChange":
+    case "mcpToolCall":
+    case "dynamicToolCall":
+    case "collabAgentToolCall":
+    case "webSearch":
+    case "sleep":
+    case "imageGeneration":
+      return itemId;
+    default:
+      return undefined;
+  }
+}
+
+function userMessageTitle(item: CanonicalThreadItem): string {
+  const content = recordField(item, "content");
+  if (!Array.isArray(content)) {
+    return "userMessage";
+  }
+  for (const part of content) {
+    if (
+      isRecord(part) &&
+      part.type === "text" &&
+      typeof part.text === "string"
+    ) {
+      return part.text;
+    }
+  }
+  return "userMessage";
+}
+
+function requireStringField(value: object, field: string): string {
+  const result = optionalStringField(value, field);
+  if (!result) {
+    throw new TypeError(`Canonical ThreadItem.${field} must be a string.`);
+  }
+  return result;
+}
+
+function requireEntity<Value extends object>(
+  value: Value,
+  entity: string,
+): Value {
+  if (!isRecord(value)) {
+    throw new TypeError(`Canonical ${entity} must be an object.`);
+  }
+  return value;
+}
+
+function requireEntityId(value: object, entity: string): string {
+  const id = optionalStringField(value, "id");
+  if (!id) {
+    throw new TypeError(`Canonical ${entity}.id must be a string.`);
+  }
+  return id;
+}
+
+function optionalStringField(value: object, field: string): string | undefined {
+  const result = recordField(value, field);
+  return typeof result === "string" ? result : undefined;
+}
+
+function recordField(value: object, field: string): unknown {
+  return (value as Record<string, unknown>)[field];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

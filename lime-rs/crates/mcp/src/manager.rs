@@ -172,8 +172,14 @@ impl McpClientManager {
     ) -> Self {
         let session_id = session_id.into();
         let thread_id = thread_id.into();
-        assert!(!session_id.trim().is_empty(), "runtime MCP session id is required");
-        assert!(!thread_id.trim().is_empty(), "runtime MCP thread id is required");
+        assert!(
+            !session_id.trim().is_empty(),
+            "runtime MCP session id is required"
+        );
+        assert!(
+            !thread_id.trim().is_empty(),
+            "runtime MCP thread id is required"
+        );
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
             tool_cache: Arc::new(RwLock::new(None)),
@@ -389,7 +395,9 @@ impl McpClientManager {
 
     pub async fn bridge_snapshots(self: &Arc<Self>) -> Result<Vec<McpBridgeSnapshot>, McpError> {
         self.runtime_owner.as_ref().ok_or_else(|| {
-            McpError::ConfigError("management MCP connections cannot become runtime bridges".to_string())
+            McpError::ConfigError(
+                "management MCP connections cannot become runtime bridges".to_string(),
+            )
         })?;
         let tools = self.list_tools().await?;
         let mut tools_by_server: HashMap<String, Vec<McpToolDefinition>> = HashMap::new();

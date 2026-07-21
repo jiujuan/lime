@@ -6,7 +6,6 @@ import {
   shouldScheduleAgentStreamTextRenderTimer,
 } from "./agentStreamTextRenderFlushController";
 
-export const AGENT_STREAM_QUEUED_DRAFT_CLEANUP_GRACE_MS = 1800;
 // 首字仍立即渲染；后续 delta 以接近 10fps 的节奏合并，避免拖动整棵消息树。
 export const AGENT_STREAM_TEXT_DELTA_RENDER_FLUSH_MS = 96;
 export const AGENT_STREAM_TEXT_DELTA_BACKLOG_FLUSH_CHARS = 120;
@@ -24,16 +23,6 @@ export type AgentStreamTextRenderTimerAction =
 export interface AgentStreamTextRenderTimerSchedulePlan {
   action: AgentStreamTextRenderTimerAction;
   delayMs: number | null;
-}
-
-export interface AgentStreamQueuedDraftCleanupTimerSchedulePlan {
-  shouldClearExistingTimer: boolean;
-  shouldScheduleTimer: boolean;
-  delayMs: number | null;
-}
-
-export interface AgentStreamQueuedDraftCleanupTimerFirePlan {
-  shouldCleanup: boolean;
 }
 
 export function buildAgentStreamTimerClearPlan(params: {
@@ -104,30 +93,5 @@ export function buildAgentStreamTextRenderTimerSchedulePlan(params: {
   return {
     action: "schedule_timer",
     delayMs: AGENT_STREAM_TEXT_DELTA_RENDER_FLUSH_MS,
-  };
-}
-
-export function buildAgentStreamQueuedDraftCleanupTimerSchedulePlan(params: {
-  shouldWatchCurrentRequest: boolean;
-  streamActivated: boolean;
-}): AgentStreamQueuedDraftCleanupTimerSchedulePlan {
-  const shouldScheduleTimer =
-    params.shouldWatchCurrentRequest && !params.streamActivated;
-
-  return {
-    shouldClearExistingTimer: true,
-    shouldScheduleTimer,
-    delayMs: shouldScheduleTimer
-      ? AGENT_STREAM_QUEUED_DRAFT_CLEANUP_GRACE_MS
-      : null,
-  };
-}
-
-export function buildAgentStreamQueuedDraftCleanupTimerFirePlan(params: {
-  requestFinished: boolean;
-  streamActivated: boolean;
-}): AgentStreamQueuedDraftCleanupTimerFirePlan {
-  return {
-    shouldCleanup: !params.requestFinished && !params.streamActivated,
   };
 }

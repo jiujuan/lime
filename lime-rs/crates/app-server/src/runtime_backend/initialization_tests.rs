@@ -3,6 +3,9 @@ use crate::execution_process::ExecutionProcessServer;
 use crate::runtime::RuntimeHostContext;
 use crate::{ActionRespondRequest, CancelExecutionRequest, ExecutionBackend};
 use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload};
+use agent_runtime::session_loop::{
+    RuntimeSessionClosureTask, RuntimeSessionRegistry, RuntimeSessionTaskFailure,
+};
 use app_server_protocol::{
     AgentInput, AgentSession, AgentSessionActionRespondParams, AgentSessionActionScope,
     AgentSessionActionType, AgentSessionApprovalDecision, AgentSessionStartParams,
@@ -165,6 +168,146 @@ async fn main_turn_initializes_agent_before_live_execution_hook() {
         .expect("live execution hook should install after agent initialization");
 
     assert!(backend.agent_state.is_initialized().await);
+}
+
+#[tokio::test]
+async fn unexecutable_route_returns_typed_rejection_before_provider_call() {
+    let backend = RuntimeBackend::with_db(test_db());
+    let request = crate::runtime_backend::tests::request_for_test(
+        "do not reach the provider",
+        Some(app_server_protocol::RuntimeRequest {
+            provider_config: Some(app_server_protocol::RuntimeProviderConfig {
+                provider_id: Some("fixture-openai".to_string()),
+                provider_name: Some("openai".to_string()),
+                model_name: Some("fixture-model".to_string()),
+                api_key: Some("fixture-key".to_string()),
+                base_url: Some("http://127.0.0.1:1".to_string()),
+                ..app_server_protocol::RuntimeProviderConfig::default()
+            }),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
+        None,
+    );
+    let mut sink = TestRuntimeEventSink::default();
+
+    let error = ExecutionBackend::start_turn(&backend, request, &mut sink)
+        .await
+        .expect_err("missing capability snapshot must reject the current route");
+
+    assert!(matches!(
+        &error,
+        RuntimeCoreError::RouteRejected {
+            session_id,
+            provider: Some(provider),
+            model: Some(model),
+            category: app_server_protocol::RouteFailureCategory::CapabilityGap,
+            reason_code,
+        } if session_id == "session-1"
+            && provider == "fixture-openai"
+            && model == "fixture-model"
+            && reason_code == "capability_snapshot_missing"
+    ));
+    let rpc_error = error.into_jsonrpc_error();
+    assert_eq!(
+        rpc_error
+            .data
+            .as_ref()
+            .and_then(|data| data.get("type"))
+            .and_then(serde_json::Value::as_str),
+        Some("RouteRejected")
+    );
+    assert_eq!(
+        rpc_error
+            .data
+            .as_ref()
+            .and_then(|data| data.get("retryable"))
+            .and_then(serde_json::Value::as_bool),
+        Some(false)
+    );
+    assert!(sink
+        .events
+        .iter()
+        .any(|event| event.event_type == "routing.not_possible"));
+    assert!(!backend.agent_state.is_initialized().await);
+}
+
+#[test]
+fn internal_route_failure_does_not_enter_pending_route_recovery() {
+    let selection = super::request_context::RuntimeModelSelection {
+        provider: "fixture-provider".to_string(),
+        model: "fixture-model".to_string(),
+        source: "test",
+        reasoning_effort: None,
+    };
+    let failure = app_server_protocol::RouteFailure {
+        category: app_server_protocol::RouteFailureCategory::InternalError,
+        reason_code: "route_owner_failed".to_string(),
+        ..app_server_protocol::RouteFailure::default()
+    };
+
+    let error = super::runtime_error_from_route_failure("session-1", &selection, &failure);
+
+    assert!(
+        matches!(error, RuntimeCoreError::Backend(message) if message.contains("route_owner_failed"))
+    );
+}
+
+#[test]
+fn fixed_capability_gap_returns_typed_route_rejection() {
+    let selection = super::request_context::RuntimeModelSelection {
+        provider: "fixture-provider".to_string(),
+        model: "fixture-model".to_string(),
+        source: "test",
+        reasoning_effort: None,
+    };
+    let failure = app_server_protocol::RouteFailure {
+        category: app_server_protocol::RouteFailureCategory::CapabilityGap,
+        reason_code: "capability_gap".to_string(),
+        capability_gap: Some("task_family:vision_understanding".to_string()),
+        ..app_server_protocol::RouteFailure::default()
+    };
+
+    let error = super::runtime_error_from_route_failure("session-1", &selection, &failure);
+
+    assert!(matches!(
+        error,
+        RuntimeCoreError::RouteRejected {
+            category: app_server_protocol::RouteFailureCategory::CapabilityGap,
+            reason_code,
+            ..
+        } if reason_code == "capability_gap"
+    ));
+}
+
+#[test]
+fn missing_model_catalog_enters_pending_route_recovery() {
+    let selection = super::request_context::RuntimeModelSelection {
+        provider: "fixture-provider".to_string(),
+        model: "fixture-model".to_string(),
+        source: "test",
+        reasoning_effort: None,
+    };
+    let failure = app_server_protocol::RouteFailure {
+        category: app_server_protocol::RouteFailureCategory::ModelUnavailable,
+        reason_code: "model_registry_metadata_missing".to_string(),
+        provider_id: Some("fixture-provider".to_string()),
+        model_id: Some("fixture-model".to_string()),
+        ..app_server_protocol::RouteFailure::default()
+    };
+
+    let error = super::runtime_error_from_route_failure("session-1", &selection, &failure);
+
+    assert!(matches!(
+        error,
+        RuntimeCoreError::PendingRoute {
+            provider: Some(provider),
+            model: Some(model),
+            reason_code,
+            ..
+        } if provider == "fixture-provider"
+            && model == "fixture-model"
+            && reason_code == "model_registry_metadata_missing"
+    ));
 }
 
 #[tokio::test]
@@ -545,34 +688,56 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
     let stream_events = Arc::new(Mutex::new(Vec::new()));
     let stream_backend = backend.clone();
     let stream_events_for_sink = stream_events.clone();
-    let mut stream_task = tokio::spawn(async move {
-        let mut sink = BridgeRuntimeEventSink {
-            events: stream_events_for_sink,
-            approval_tx,
-        };
-        ExecutionBackend::start_turn(&*stream_backend, request, &mut sink).await
-    });
+    let registry = RuntimeSessionRegistry::default();
+    let session_loop = registry.get_or_create(&action_session.session_id).await;
+    let turn_id = action_turn.turn_id.clone();
+    let task = RuntimeSessionClosureTask::new(
+        turn_id,
+        Vec::new(),
+        move |context, _input, cancellation_token| {
+            let stream_backend = stream_backend.clone();
+            let request = request.clone();
+            let stream_events = stream_events_for_sink.clone();
+            let approval_tx = approval_tx.clone();
+            Box::pin(async move {
+                let mut sink = BridgeRuntimeEventSink {
+                    events: stream_events,
+                    approval_tx,
+                };
+                ExecutionBackend::start_turn_with_provider_history_and_session_input(
+                    &*stream_backend,
+                    request,
+                    Vec::new(),
+                    Some(context.input_handle()),
+                    Some(cancellation_token),
+                    &mut sink,
+                )
+                .await
+                .map_err(|error| RuntimeSessionTaskFailure {
+                    message: error.to_string(),
+                    reason_code: None,
+                })
+            })
+        },
+    );
+    let submission = session_loop
+        .submit(Arc::new(task), false)
+        .await
+        .expect("submit runtime turn task");
+    let mut completion = submission.completion;
 
     let request_id = tokio::select! {
         request_id = approval_rx.recv() => match request_id {
             Some(request_id) => request_id,
             None => {
-                let detail = if stream_task.is_finished() {
-                    match stream_task.await.expect("runtime task should join") {
-                        Ok(()) => "runtime turn finished successfully".to_string(),
-                        Err(error) => format!("runtime turn failed: {error:?}"),
-                    }
-                } else {
-                    "approval channel closed before runtime turn finished".to_string()
-                };
                 panic!(
-                    "tool confirmation request channel closed before request id; detail={detail}; events={:?}; provider_requests={:?}",
+                    "tool confirmation request channel closed before request id; events={:?}; provider_requests={:?}",
                     stream_events.lock().expect("read stream events"),
                     provider.requests.lock().expect("read provider requests")
                 );
             }
         },
-        result = &mut stream_task => {
+        result = &mut completion => {
             panic!(
                 "runtime turn finished before tool confirmation; result={:?}; events={:?}",
                 result,
@@ -580,7 +745,7 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
             );
         }
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
-            stream_task.abort();
+            let _ = session_loop.interrupt().await;
             panic!(
                 "timed out waiting for tool confirmation; events={:?}; provider_requests={:?}",
                 stream_events.lock().expect("read stream events"),
@@ -606,9 +771,9 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
             metadata: None,
             event_name: None,
             action_scope: Some(app_server_protocol::AgentSessionActionScope {
-                session_id: Some(action_session.session_id),
-                thread_id: Some(action_session.thread_id),
-                turn_id: Some(action_turn.turn_id),
+                session_id: Some(action_session.session_id.clone()),
+                thread_id: Some(action_session.thread_id.clone()),
+                turn_id: Some(action_turn.turn_id.clone()),
             }),
             pending_action_descriptor: None,
         },
@@ -617,11 +782,24 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
     .await
     .expect("respond_action should release pending tool confirmation");
 
-    timeout(Duration::from_secs(20), stream_task)
+    session_loop
+        .approve(
+            Some(&action_turn.turn_id),
+            &request_id,
+            json!({ "confirmed": true }),
+        )
+        .await
+        .expect("typed approval should resume runtime task");
+
+    timeout(Duration::from_secs(20), &mut completion)
         .await
         .expect("runtime turn should finish after confirmation")
-        .expect("runtime task should join")
+        .expect("runtime task should complete")
         .expect("runtime turn should succeed");
+    registry
+        .shutdown(&action_session.session_id)
+        .await
+        .expect("shutdown runtime session");
 
     assert_eq!(action_sink.events.len(), 1);
     assert_eq!(action_sink.events[0].event_type, "action.resolved");
@@ -710,10 +888,9 @@ fn execution_request_for_tool_confirmation_bridge_test(
             started_at: None,
             completed_at: None,
         },
-        input: AgentInput {
-            text: "run the runtime confirmation command".to_string(),
-            attachments: Vec::new(),
-        },
+        input: agent_runtime::reply_input::RuntimeReplyInput::text(
+            "run the runtime confirmation command",
+        ),
         runtime_options: Some(RuntimeOptions {
             stream: true,
             runtime_request: Some(app_server_protocol::RuntimeRequest {

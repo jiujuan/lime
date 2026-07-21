@@ -33,6 +33,15 @@ impl RequestProcessor {
             .with_notifications(self.config_warning_notifications(ConfigWarningScope::Initialize)))
     }
 
+    pub(super) fn handle_transport_initialize(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        let dispatch = RpcDispatch::single(self.initialize_transport(params)?);
+        Ok(dispatch
+            .with_notifications(self.config_warning_notifications(ConfigWarningScope::Initialize)))
+    }
+
     pub(super) fn config_warning_notifications(
         &self,
         scope: ConfigWarningScope,

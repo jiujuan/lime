@@ -1,5 +1,4 @@
 import {
-  APP_SERVER_METHOD_SESSION_THREAD_RESUME,
   APP_SERVER_METHOD_SESSION_TURN_CANCEL,
   INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
@@ -42,11 +41,9 @@ export function buildPendingSteerPopFrontResumeScenarioAssertions(context) {
       summary.inputbarPendingSteerPopFrontBackendCancel?.turnId ===
       inputbarPendingSteerActiveTurnStart?.turnId,
     inputbarPendingSteerPopFrontUsedCurrentResume:
-      appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_THREAD_RESUME) &&
       summary.inputbarPendingSteerPopFrontRichBackendTurnStart?.inputText?.includes(
         INPUTBAR_RICH_RESTORE_PROMPT,
-      ) === true &&
-      readModelAfterResume.richPromptStillQueued === false,
+      ) === true && readModelAfterResume.richPromptStillQueued === false,
     inputbarPendingSteerPopFrontRichStartedBackend:
       summary.inputbarPendingSteerPopFrontRichBackendTurnStart?.inputText?.includes(
         INPUTBAR_RICH_RESTORE_PROMPT,

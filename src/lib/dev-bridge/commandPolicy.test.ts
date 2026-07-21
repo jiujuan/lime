@@ -364,7 +364,7 @@ describe("commandPolicy", () => {
           lines: [
             JSON.stringify({
               id: 1,
-              method: "agentSession/list",
+              method: "thread/list",
               params: {},
             }),
           ],
@@ -377,7 +377,7 @@ describe("commandPolicy", () => {
           lines: [
             JSON.stringify({
               id: 2,
-              method: "agentSession/turn/start",
+              method: "turn/start",
               params: {},
             }),
           ],
@@ -429,12 +429,12 @@ describe("commandPolicy", () => {
           lines: [
             JSON.stringify({
               id: 3,
-              method: "agentSession/list",
+              method: "thread/list",
               params: {},
             }),
             JSON.stringify({
               id: 4,
-              method: "agentSession/turn/start",
+              method: "turn/start",
               params: {},
             }),
           ],
@@ -447,7 +447,7 @@ describe("commandPolicy", () => {
           lines: [
             JSON.stringify({
               id: 5,
-              method: "agentSession/read",
+              method: "thread/read",
               params: {},
             }),
           ],
@@ -578,7 +578,7 @@ describe("commandPolicy", () => {
             }),
             JSON.stringify({
               id: "session-start",
-              method: "agentSession/start",
+              method: "thread/start",
               params: { workspaceId: "workspace-1" },
             }),
           ],
@@ -694,6 +694,45 @@ describe("commandPolicy", () => {
         },
       }),
     ).toBe("knowledge-compile");
+    for (const method of [
+      "modelProvider/testConnection",
+      "modelProvider/testChat",
+      "modelProvider/fetchModels",
+    ]) {
+      expect(
+        resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+          request: {
+            lines: [
+              JSON.stringify({
+                id: `provider-network-${method}`,
+                method,
+                params: { providerId: "provider-1" },
+              }),
+            ],
+          },
+        }),
+      ).toBe("app-server-provider-network");
+    }
+    for (const method of [
+      "modelProvider/create",
+      "modelProvider/update",
+      "modelProviderKey/create",
+      "modelProviderUiState/write",
+    ]) {
+      expect(
+        resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+          request: {
+            lines: [
+              JSON.stringify({
+                id: `provider-write-${method}`,
+                method,
+                params: {},
+              }),
+            ],
+          },
+        }),
+      ).toBe("app-server-read");
+    }
     expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
         request: {

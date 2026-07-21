@@ -8,286 +8,557 @@ const event: AppServerAgentEvent = {
   sessionId: "session-1",
   threadId: "thread-1",
   turnId: "turn-1",
-  type: "item.updated",
+  type: "item.started",
   timestamp: "2026-07-13T00:00:02.000Z",
   payload: {},
 };
 
-function item(
-  payload: Record<string, unknown>,
-  override: Record<string, unknown> = {},
-): Record<string, unknown> {
+function item(value: Record<string, unknown>): Record<string, unknown> {
   return {
-    sessionId: "session-1",
-    threadId: "thread-1",
-    turnId: "turn-1",
-    itemId: "item-1",
-    sequence: 7,
-    ordinal: 3,
-    createdAtMs: Date.parse("2026-07-13T00:00:00.000Z"),
-    updatedAtMs: Date.parse("2026-07-13T00:00:01.000Z"),
-    kind: payload.type,
-    status: "inProgress",
-    payload,
-    metadata: { source: "canonical" },
-    ...override,
+    id: "item-1",
+    ...value,
   };
 }
 
 describe("readCanonicalThreadItem", () => {
+  it("rejects internal snake_case detail items at the Codex v2 boundary", () => {
+    for (const type of [
+      "user_message",
+      "agent_message",
+      "command_execution",
+      "file_artifact",
+      "tool_call",
+      "subagent_activity",
+      "context_compaction",
+      "web_search",
+      "media",
+    ]) {
+      expect(readCanonicalThreadItem(item({ type }), event)).toBeNull();
+    }
+  });
+
   it.each([
     [
       "userMessage",
-      { type: "userMessage", content: "hello" },
-      { type: "user_message", content: "hello" },
+      {
+        type: "userMessage",
+        clientId: "client-1",
+        content: [
+          {
+            type: "text",
+            text: "hello",
+            text_elements: [
+              {
+                byteRange: { start: 0, end: 5 },
+                placeholder: "greeting",
+              },
+            ],
+          },
+          {
+            type: "image",
+            url: "https://example.test/input",
+            detail: "high",
+          },
+          {
+            type: "image",
+            url: "data:image/gif;base64,R0lGODlh",
+            detail: "low",
+          },
+          { type: "localImage", path: "/tmp/local.webp", detail: "auto" },
+          { type: "skill", name: "review", path: "/skills/review" },
+          { type: "mention", name: "README", path: "README.md" },
+        ],
+      },
+      {
+        type: "user_message",
+        content: "hello",
+        content_parts: [
+          {
+            type: "text",
+            text: "hello",
+            text_elements: [
+              {
+                byte_range: { start: 0, end: 5 },
+                placeholder: "greeting",
+              },
+            ],
+          },
+          {
+            type: "image",
+            mime_type: "image/*",
+            data: "",
+            uri: "https://example.test/input",
+            detail: "high",
+          },
+          {
+            type: "image",
+            mime_type: "image/gif",
+            data: "R0lGODlh",
+            detail: "low",
+          },
+          {
+            type: "image",
+            mime_type: "image/webp",
+            data: "",
+            uri: "/tmp/local.webp",
+            source_path: "/tmp/local.webp",
+            detail: "auto",
+          },
+          { type: "skill", name: "review", path: "/skills/review" },
+          { type: "mention", name: "README", path: "README.md" },
+        ],
+        client_id: "client-1",
+        status: "in_progress",
+      },
     ],
     [
       "agentMessage",
       {
         type: "agentMessage",
         text: "answer",
-        content_parts: [
-          { type: "text", text: "answer" },
-          {
-            type: "media",
-            kind: "image",
-            caption: "结果图",
-            reference: {
-              uri: "sidecar://media/image-1",
-              mime_type: "image/png",
-              source_path: "/tmp/media/image-1.png",
-            },
-          },
-        ],
         phase: "final",
       },
       {
         type: "agent_message",
         text: "answer",
-        contentParts: [
-          { type: "text", text: "answer" },
-          {
-            type: "media",
-            kind: "image",
-            caption: "结果图",
-            reference: {
-              uri: "sidecar://media/image-1",
-              mime_type: "image/png",
-              source_path: "/tmp/media/image-1.png",
-            },
-          },
-        ],
         phase: "final",
+        status: "in_progress",
       },
     ],
     [
       "plan",
+      { type: "plan", text: "- [ ] 验证历史恢复" },
       {
         type: "plan",
         text: "- [ ] 验证历史恢复",
-        revision_id: "proposed_plan:1",
-        source: "proposed_plan",
-        plan: [{ step: "验证历史恢复", status: "pending" }],
-      },
-      {
-        type: "plan",
-        text: "- [ ] 验证历史恢复",
-        metadata: {
-          revisionId: "proposed_plan:1",
-          source: "proposed_plan",
-          plan: [{ step: "验证历史恢复", status: "pending" }],
-        },
+        status: "in_progress",
       },
     ],
     [
       "reasoning",
       { type: "reasoning", summary: ["summary"], content: ["a", "b"] },
-      { type: "reasoning", text: "ab", summary: ["summary"] },
-    ],
-    [
-      "command",
-      { type: "command", command: "npm test", cwd: "/repo", exit_code: 0 },
-      { type: "command_execution", command: "npm test", exit_code: 0 },
-    ],
-    [
-      "file",
-      { type: "file", path: "src/app.ts", diff: "+ok", status: "applied" },
-      { type: "file_artifact", path: "src/app.ts", content: "+ok" },
-    ],
-    [
-      "media",
-      { type: "media", uri: "artifact://image", mime_type: "image/png" },
-      { type: "media", uri: "artifact://image", mime_type: "image/png" },
-    ],
-    [
-      "subAgent",
       {
-        type: "subAgent",
-        child_thread_id: "thread-child",
-        activity: "started",
-        detail: "queued",
+        type: "reasoning",
+        text: "ab",
+        summary: ["summary"],
+        content: ["a", "b"],
+        status: "in_progress",
+      },
+    ],
+    [
+      "commandExecution",
+      {
+        type: "commandExecution",
+        command: "npm test",
+        cwd: "/repo",
+        status: "completed",
+        processId: "process-1",
+        source: "agent",
+        commandActions: [{ type: "read", path: "package.json" }],
+        aggregatedOutput: "passed",
+        exitCode: 0,
+        durationMs: 18,
       },
       {
-        type: "subagent_activity",
-        session_id: "thread-child",
-        status_label: "started",
+        type: "command_execution",
+        command: "npm test",
+        cwd: "/repo",
+        process_id: "process-1",
+        source: "agent",
+        command_actions: [{ type: "read", path: "package.json" }],
+        aggregated_output: "passed",
+        exit_code: 0,
+        duration_ms: 18,
+        status: "completed",
+        completed_at: "2026-07-13T00:00:02.000Z",
+      },
+    ],
+    [
+      "fileChange",
+      {
+        type: "fileChange",
+        changes: [
+          { path: "src/app.ts", kind: { type: "add" }, diff: "+ok" },
+          {
+            path: "src/old.ts",
+            kind: { type: "update", move_path: "src/new.ts" },
+            diff: "-old\n+new",
+          },
+        ],
+        status: "completed",
+      },
+      {
+        type: "patch",
+        changes: [
+          { path: "src/app.ts", kind: { type: "add" }, diff: "+ok" },
+          {
+            path: "src/old.ts",
+            kind: { type: "update", move_path: "src/new.ts" },
+            diff: "-old\n+new",
+          },
+        ],
+        paths: ["src/app.ts", "src/old.ts"],
+        success: true,
+        file_status: "completed",
+        status: "completed",
+        completed_at: "2026-07-13T00:00:02.000Z",
+      },
+    ],
+    [
+      "imageView",
+      { type: "imageView", path: "/tmp/result.png" },
+      {
+        type: "media",
+        uri: "/tmp/result.png",
+        mime_type: "image/png",
+        status: "in_progress",
       },
     ],
     [
       "contextCompaction",
-      { type: "contextCompaction", summary: "bounded", window_id: "window-1" },
-      { type: "context_compaction", stage: "started", detail: "bounded" },
-    ],
-    [
-      "extension",
-      { type: "extension", name: "review", data: { score: 9 } },
-      { type: "extension", name: "review", data: { score: 9 } },
+      { type: "contextCompaction" },
+      {
+        type: "context_compaction",
+        stage: "started",
+        status: "in_progress",
+      },
     ],
   ])(
-    "projects canonical %s without raw payload inference",
-    (_name, payload, expected) => {
-      const expectedRecord = expected as Record<string, unknown>;
-      const expectedMetadata = (expectedRecord.metadata as
-        | Record<string, unknown>
-        | undefined) ?? { source: "canonical" };
-      expect(readCanonicalThreadItem(item(payload), event)).toMatchObject({
+    "projects canonical v2 %s without entity-envelope shadow fields",
+    (_name, value, expected) => {
+      const projected = readCanonicalThreadItem(item(value), event);
+      expect(projected).toMatchObject({
         id: "item-1",
         thread_id: "thread-1",
         turn_id: "turn-1",
         sequence: 7,
-        ordinal: 3,
-        status: "in_progress",
-        started_at: "2026-07-13T00:00:00.000Z",
-        updated_at: "2026-07-13T00:00:01.000Z",
-        ...expectedRecord,
-        metadata: expect.objectContaining({
-          ...expectedMetadata,
-          ordinal: 3,
-        }),
+        started_at: "2026-07-13T00:00:02.000Z",
+        updated_at: "2026-07-13T00:00:02.000Z",
+        ...(expected as Record<string, unknown>),
       });
+      expect(projected).not.toHaveProperty("ordinal");
+      expect(projected).not.toHaveProperty("metadata");
     },
   );
 
-  it.each(["started", "interacted", "interrupted"] as const)(
-    "projects canonical SubAgent %s activity without rewriting the child thread identity",
-    (activity) => {
-      expect(
-        readCanonicalThreadItem(
-          item({
-            type: "subAgent",
-            child_thread_id: "thread-child",
-            activity,
-            detail: `activity:${activity}`,
-          }),
-          event,
-        ),
-      ).toMatchObject({
-        id: "item-1",
-        type: "subagent_activity",
-        session_id: "thread-child",
-        status_label: activity,
-        summary: `activity:${activity}`,
-      });
-    },
-  );
-
-  it("projects canonical wait_agent lifecycle as a Tool item", () => {
-    expect(
-      readCanonicalThreadItem(
-        item(
-          {
-            type: "collabAgentToolCall",
-            call_id: "call-wait",
-            operation: "wait",
-            output: { text: "completed", durationMs: 18 },
-          },
-          { status: "completed" },
-        ),
-        event,
-      ),
-    ).toMatchObject({
-      id: "item-1",
-      type: "tool_call",
-      tool_name: "wait_agent",
-      arguments: [],
-      output: "completed",
-      duration_ms: 18,
-      success: true,
+  it("derives the current plan revision from a canonical v2 item identity", () => {
+    const projected = readCanonicalThreadItem(
+      item({
+        id: "plan_turn-1_proposed_plan:fixture-1",
+        type: "plan",
+        text: "- [ ] 验证历史恢复",
+      }),
+      event,
+    );
+    expect(projected).toMatchObject({
+      type: "plan",
       metadata: {
-        callId: "call-wait",
-        toolFamily: "agent_control",
+        revisionId: "proposed_plan:fixture-1",
+        source: "proposed_plan",
       },
     });
   });
 
-  it.each(["spawn", "sendMessage", "followUp", "interrupt", "resume", "close"])(
-    "rejects dead CollabAgent operation %s",
-    (operation) => {
-      expect(
-        readCanonicalThreadItem(
-          item({
-            type: "collabAgentToolCall",
-            call_id: `call-${operation}`,
-            operation,
-            target_thread_id: "thread-child",
-            message: "legacy activity",
-          }),
-          event,
-        ),
-      ).toBeNull();
+  it.each(["started", "interacted", "interrupted"] as const)(
+    "projects canonical v2 SubAgent %s activity without rewriting child thread identity",
+    (kind) => {
+      const projected = readCanonicalThreadItem(
+        item({
+          type: "subAgentActivity",
+          kind,
+          agentThreadId: "thread-child",
+          agentPath: "root/child",
+        }),
+        event,
+      );
+      expect(projected).toMatchObject({
+        id: "item-1",
+        type: "subagent_activity",
+        session_id: "thread-child",
+        status_label: kind,
+        metadata: { agentPath: "root/child" },
+      });
+      expect(projected).not.toHaveProperty("summary");
     },
   );
 
-  it("keeps Tool item identity separate from call identity", () => {
+  it("projects a canonical v2 dynamic tool call with stable UI identity", () => {
+    const contentItems = [{ type: "inputText", text: "score:9" }];
+    const projected = readCanonicalThreadItem(
+      item({
+        type: "dynamicToolCall",
+        namespace: "review",
+        tool: "review",
+        arguments: { score: 9 },
+        status: "completed",
+        contentItems,
+        success: true,
+        durationMs: 12,
+      }),
+      event,
+    );
+
+    expect(projected).toMatchObject({
+      id: "item-1",
+      type: "tool_call",
+      tool_name: "review",
+      arguments: { score: 9 },
+      output: "score:9",
+      duration_ms: 12,
+      success: true,
+      status: "completed",
+      started_at: "2026-07-13T00:00:02.000Z",
+      completed_at: "2026-07-13T00:00:02.000Z",
+      metadata: {
+        canonical_type: "dynamicToolCall",
+        namespace: "review",
+        content_items: contentItems,
+        callId: "item-1",
+      },
+    });
+    expect(projected).not.toHaveProperty("ordinal");
+  });
+
+  it("preserves canonical v2 MCP context and structured result blocks", () => {
+    const content = [{ type: "text", text: "found" }];
     expect(
       readCanonicalThreadItem(
         item({
-          type: "tool",
-          call_id: "call-1",
-          name: "read_file",
-          arguments: [{ name: "path", value: "src/app.ts" }],
-          output: { text: "done", durationMs: 12 },
+          type: "mcpToolCall",
+          server: "docs",
+          tool: "search",
+          arguments: { query: "ThreadItem" },
+          status: "completed",
+          appContext: {
+            connectorId: "connector-docs",
+            resourceUri: "docs://codex",
+          },
+          pluginId: "plugin-docs",
+          result: {
+            content,
+            structuredContent: { matches: 3 },
+            _meta: { requestId: "request-1" },
+          },
+          durationMs: 24,
         }),
         event,
       ),
     ).toMatchObject({
       id: "item-1",
       type: "tool_call",
-      tool_name: "read_file",
-      output: "done",
-      metadata: { callId: "call-1", durationMs: 12 },
+      tool_name: "search",
+      output: "found",
+      structured_content: { matches: 3 },
+      duration_ms: 24,
+      success: true,
+      metadata: {
+        callId: "item-1",
+        canonical_type: "mcpToolCall",
+        server: "docs",
+        app_context: {
+          connectorId: "connector-docs",
+          resourceUri: "docs://codex",
+        },
+        plugin_id: "plugin-docs",
+        result_content: content,
+        result_meta: { requestId: "request-1" },
+      },
     });
   });
 
-  it("fails closed on malformed canonical AgentMessage contentParts", () => {
+  it("projects a canonical v2 collab wait lifecycle as a Tool item", () => {
     expect(
       readCanonicalThreadItem(
         item({
-          type: "agentMessage",
-          text: "answer",
-          content_parts: { type: "media" },
+          type: "collabAgentToolCall",
+          tool: "wait",
+          status: "completed",
+          senderThreadId: "thread-1",
+          receiverThreadIds: ["thread-child"],
+          prompt: null,
+          model: null,
+          reasoningEffort: null,
+          agentsStates: {
+            "thread-child": { status: "completed", message: "done" },
+          },
         }),
         event,
       ),
-    ).toBeNull();
+    ).toMatchObject({
+      id: "item-1",
+      type: "tool_call",
+      tool_name: "wait",
+      status: "completed",
+      success: true,
+      metadata: {
+        callId: "item-1",
+        canonical_type: "collabAgentToolCall",
+        sender_thread_id: "thread-1",
+        receiver_thread_ids: ["thread-child"],
+        agents_states: {
+          "thread-child": { status: "completed", message: "done" },
+        },
+      },
+    });
   });
 
-  it("fails closed on missing durable fields or identity conflicts", () => {
-    for (const override of [
-      { itemId: "" },
-      { sequence: 8 },
-      { ordinal: undefined },
-      { createdAtMs: undefined },
-      { sessionId: "session-other" },
-      { threadId: "thread-other" },
-      { turnId: "turn-other" },
+  it("preserves canonical v2 WebSearch action and opaque results", () => {
+    const action = {
+      type: "search",
+      query: "Codex ThreadItem",
+      queries: ["Codex ThreadItem", "Codex app server v2"],
+    };
+    const results = [
+      { title: "ThreadItem", url: "https://example.test/thread-item" },
+    ];
+    expect(
+      readCanonicalThreadItem(
+        item({
+          type: "webSearch",
+          query: "Codex ThreadItem",
+          action,
+          results,
+        }),
+        { ...event, type: "item.completed" },
+      ),
+    ).toMatchObject({
+      id: "item-1",
+      type: "web_search",
+      query: "Codex ThreadItem",
+      action: "search",
+      action_data: action,
+      results,
+      status: "completed",
+    });
+  });
+
+  it("takes routing, sequence, and lifecycle timestamps from the raw event envelope", () => {
+    const projected = readCanonicalThreadItem(
+      item({ type: "agentMessage", text: "answer" }),
+      {
+        ...event,
+        sequence: 41,
+        threadId: "thread-envelope",
+        turnId: "turn-envelope",
+        timestamp: "2026-07-13T00:01:00.000Z",
+      },
+    );
+
+    expect(projected).toMatchObject({
+      id: "item-1",
+      thread_id: "thread-envelope",
+      turn_id: "turn-envelope",
+      sequence: 41,
+      started_at: "2026-07-13T00:01:00.000Z",
+      updated_at: "2026-07-13T00:01:00.000Z",
+    });
+    expect(projected).not.toHaveProperty("ordinal");
+    expect(projected).not.toHaveProperty("metadata");
+    expect(projected).not.toHaveProperty("completed_at");
+  });
+
+  it("derives terminal lifecycle from the raw event envelope", () => {
+    expect(
+      readCanonicalThreadItem(item({ type: "contextCompaction" }), {
+        ...event,
+        type: "item.completed",
+        timestamp: "2026-07-13T00:02:00.000Z",
+      }),
+    ).toMatchObject({
+      id: "item-1",
+      type: "context_compaction",
+      status: "completed",
+      stage: "completed",
+      started_at: "2026-07-13T00:02:00.000Z",
+      updated_at: "2026-07-13T00:02:00.000Z",
+      completed_at: "2026-07-13T00:02:00.000Z",
+    });
+  });
+
+  it("fails closed on malformed canonical v2 variants", () => {
+    for (const malformed of [
+      { id: "", type: "agentMessage", text: "ignored" },
+      { id: "item-1", type: "agentMessage" },
+      { id: "item-1", type: "userMessage", content: { text: "ignored" } },
+      { id: "item-1", type: "userMessage", content: [] },
+      {
+        id: "item-1",
+        type: "userMessage",
+        content: [{ type: "unknown", text: "ignored" }],
+      },
+      {
+        id: "item-1",
+        type: "userMessage",
+        content: [{ type: "skill", name: "review" }],
+      },
+      {
+        id: "item-1",
+        type: "userMessage",
+        content: [
+          { type: "image", url: "data:image/png;base64,AA==", detail: "max" },
+        ],
+      },
+      {
+        id: "item-1",
+        type: "userMessage",
+        content: [
+          {
+            type: "text",
+            text: "hello",
+            text_elements: [{ byteRange: { start: 0, end: 6 } }],
+          },
+        ],
+      },
+      {
+        id: "item-1",
+        type: "userMessage",
+        content: [
+          {
+            type: "text",
+            text: "hello",
+            textElements: [{ byteRange: { start: 0, end: 5 } }],
+          },
+        ],
+      },
+      { id: "item-1", type: "commandExecution", command: "npm test" },
+      {
+        id: "item-1",
+        type: "mcpToolCall",
+        tool: "search",
+        arguments: {},
+        status: "completed",
+      },
+      {
+        id: "item-1",
+        type: "dynamicToolCall",
+        status: "declined",
+        tool: "review",
+        arguments: {},
+      },
+      {
+        id: "item-1",
+        type: "commandExecution",
+        command: "npm test",
+        cwd: "/repo",
+        status: "running",
+      },
+      {
+        id: "item-1",
+        type: "collabAgentToolCall",
+        tool: "wait",
+        status: "completed",
+        senderThreadId: "thread-1",
+        receiverThreadIds: [],
+      },
+      {
+        id: "item-1",
+        type: "webSearch",
+        query: "Codex",
+        results: { title: "invalid" },
+      },
+      { id: "item-1", type: "unknown" },
     ]) {
-      expect(
-        readCanonicalThreadItem(
-          item({ type: "agentMessage", text: "ignored" }, override),
-          event,
-        ),
-      ).toBeNull();
+      expect(readCanonicalThreadItem(malformed, event)).toBeNull();
     }
   });
 });

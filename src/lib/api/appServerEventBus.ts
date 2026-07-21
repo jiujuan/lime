@@ -1,8 +1,5 @@
 import { AppServerClient } from "./appServerClient";
-import {
-  METHOD_SERVER_REQUEST_RESOLVED,
-  type ServerRequestResolvedNotification,
-} from "@limecloud/app-server-client";
+import { METHOD_SERVER_REQUEST_RESOLVED } from "@limecloud/app-server-client";
 import {
   isAppServerJsonRpcNotification,
   isAppServerJsonRpcRequest,
@@ -166,7 +163,10 @@ export class AppServerEventBus {
 
   #queueServerRequests(requests: AppServerJsonRpcRequest[]): void {
     for (const request of requests) {
-      const requestKey = stableServerRequestId(request.id);
+      const requestKey = stableServerRequestKey(
+        request.id,
+        requestThreadId(request),
+      );
       if (this.#seenServerRequestIds.has(requestKey)) {
         continue;
       }
@@ -182,11 +182,14 @@ export class AppServerEventBus {
     notifications: AppServerJsonRpcNotification[],
   ): void {
     for (const notification of notifications) {
-      const requestId = readResolvedServerRequestId(notification);
-      if (requestId === null) {
+      const resolved = readResolvedServerRequest(notification);
+      if (!resolved) {
         continue;
       }
-      const requestKey = stableServerRequestId(requestId);
+      const requestKey = stableServerRequestKey(
+        resolved.requestId,
+        resolved.threadId,
+      );
       if (
         this.#pendingServerRequests.delete(requestKey) ||
         this.#seenServerRequestIds.has(requestKey)
@@ -233,8 +236,24 @@ export class AppServerEventBus {
   }
 }
 
-function stableServerRequestId(id: AppServerJsonRpcRequest["id"]): string {
-  return `${typeof id}:${String(id)}`;
+function stableServerRequestKey(
+  id: AppServerJsonRpcRequest["id"],
+  threadId: string | null,
+): string {
+  return JSON.stringify([typeof id, String(id), threadId]);
+}
+
+function requestThreadId(request: AppServerJsonRpcRequest): string | null {
+  const params =
+    request.params &&
+    typeof request.params === "object" &&
+    !Array.isArray(request.params)
+      ? (request.params as Record<string, unknown>)
+      : {};
+  const threadId = params.threadId;
+  return typeof threadId === "string" && threadId.trim()
+    ? threadId.trim()
+    : null;
 }
 
 function rememberBoundedTombstone(
@@ -354,9 +373,9 @@ function readServerRequests(
   return messages.filter(isAppServerJsonRpcRequest);
 }
 
-function readResolvedServerRequestId(
+function readResolvedServerRequest(
   notification: AppServerJsonRpcNotification,
-): AppServerJsonRpcRequest["id"] | null {
+): { requestId: AppServerJsonRpcRequest["id"]; threadId: string } | null {
   if (notification.method !== METHOD_SERVER_REQUEST_RESOLVED) {
     return null;
   }
@@ -364,11 +383,17 @@ function readResolvedServerRequestId(
   if (!params || typeof params !== "object" || Array.isArray(params)) {
     return null;
   }
-  const requestId = (params as Partial<ServerRequestResolvedNotification>)
-    .requestId;
-  return typeof requestId === "string" || typeof requestId === "number"
-    ? requestId
-    : null;
+  const record = params as Record<string, unknown>;
+  const requestId = record.requestId;
+  const threadId = record.threadId;
+  if (
+    (typeof requestId !== "string" && typeof requestId !== "number") ||
+    typeof threadId !== "string" ||
+    !threadId.trim()
+  ) {
+    return null;
+  }
+  return { requestId, threadId: threadId.trim() };
 }
 
 function normalizePositiveInteger(value: unknown): number | undefined {

@@ -606,18 +606,10 @@ export function buildPlanImplementationSubmitPlan(params: {
       ),
       textOverride: adjustment,
       sendOptions: {
+        collaborationMode: "plan",
         requestMetadata: {
           harness: {
             ...planImplementationMetadata,
-            collaboration_mode: {
-              mode: "plan",
-              source: "plan_implementation_adjustment",
-            },
-            preferences: {
-              task: true,
-              task_mode: true,
-            },
-            task_mode_enabled: true,
           },
         },
         skipSceneCommandRouting: true,
@@ -641,10 +633,6 @@ export function buildPlanImplementationSubmitPlan(params: {
       requestMetadata: {
         harness: {
           ...planImplementationMetadata,
-          collaboration_mode: {
-            mode: "implement",
-            source: "plan_implementation_accept",
-          },
         },
       },
       skipSceneCommandRouting: true,

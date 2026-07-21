@@ -23,9 +23,9 @@ type ConnectionMethodSpec = Pick<
 declare module "./connection.js" {
   interface AppServerConnection {
     startSession(
-      params: protocol.AgentSessionStartParams,
+      params: protocol.ThreadStartParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentSessionStartResponse>>;
+    ): Promise<AppServerRequestResult<protocol.ThreadStartResponse>>;
     listCapabilities(
       params?: protocol.CapabilityListParams,
       options?: AppServerRequestOptions,
@@ -42,6 +42,14 @@ declare module "./connection.js" {
       params?: protocol.ThreadListParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.ThreadListResponse>>;
+    archiveThread(
+      params: protocol.ThreadArchiveParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadArchiveResponse>>;
+    unarchiveThread(
+      params: protocol.ThreadUnarchiveParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadUnarchiveResponse>>;
     listThreadTurns(
       params: protocol.ThreadTurnsListParams,
       options?: AppServerRequestOptions,
@@ -50,16 +58,18 @@ declare module "./connection.js" {
       params: protocol.ThreadItemsListParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.ThreadItemsListResponse>>;
+    updateThreadSettings(
+      params: protocol.ThreadSettingsUpdateParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadSettingsUpdateResponse>>;
+    setThreadMemoryMode(
+      params: protocol.ThreadMemoryModeSetParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadMemoryModeSetResponse>>;
     updateSession(
       params: protocol.AgentSessionUpdateParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.AgentSessionUpdateResponse>>;
-    archiveManySessions(
-      params: protocol.AgentSessionArchiveManyParams,
-      options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.AgentSessionArchiveManyResponse>
-    >;
     deleteSession(
       params: protocol.AgentSessionDeleteParams,
       options?: AppServerRequestOptions,
@@ -104,12 +114,10 @@ declare module "./connection.js" {
       params: protocol.AgentSessionCompactParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.AgentSessionCompactResponse>>;
-    resumeAgentSessionThread(
-      params: protocol.AgentSessionThreadResumeParams,
+    resumeThread(
+      params: protocol.ThreadResumeParams,
       options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.AgentSessionThreadResumeResponse>
-    >;
+    ): Promise<AppServerRequestResult<protocol.ThreadResumeResponse>>;
     removeAgentSessionQueuedTurn(
       params: protocol.AgentSessionQueuedTurnRemoveParams,
       options?: AppServerRequestOptions,
@@ -1173,13 +1181,17 @@ declare module "./connection.js" {
       AppServerRequestResult<protocol.ConversationImportJobReadResponse>
     >;
     startTurn(
-      params: protocol.AgentSessionTurnStartParams,
+      params: protocol.TurnStartParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentSessionTurnStartResponse>>;
+    ): Promise<AppServerRequestResult<protocol.TurnStartResponse>>;
+    steerTurn(
+      params: protocol.TurnSteerParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.TurnSteerResponse>>;
     cancelTurn(
-      params: protocol.AgentSessionTurnCancelParams,
+      params: protocol.TurnInterruptParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentSessionTurnCancelResponse>>;
+    ): Promise<AppServerRequestResult<protocol.TurnInterruptResponse>>;
     replayAction(
       params: protocol.AgentSessionActionReplayParams,
       options?: AppServerRequestOptions,

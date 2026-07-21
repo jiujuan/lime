@@ -1673,7 +1673,6 @@ Extract it into the Agent Skills directory.`,
             {
               skipSessionRestore: true,
               skipSessionStartHooks: true,
-              skipPreSubmitResume: true,
             },
           );
         expect(started).toBe(true);
@@ -1684,7 +1683,6 @@ Extract it into the Agent Skills directory.`,
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
         skipSessionRestore: true,
         skipSessionStartHooks: true,
-        skipPreSubmitResume: true,
       });
       const requestMetadata = mockSendMessage.mock.calls[0]?.[8]
         ?.requestMetadata as { harness?: Record<string, unknown> } | undefined;

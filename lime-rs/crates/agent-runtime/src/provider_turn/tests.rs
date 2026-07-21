@@ -155,6 +155,32 @@ impl CurrentProvider for HangingFirstEventProvider {
     }
 }
 
+struct CancelOnFirstUsageProvider {
+    cancel_token: CancellationToken,
+}
+
+impl CurrentProvider for CancelOnFirstUsageProvider {
+    fn stream<'a>(
+        &'a self,
+        _request: CurrentProviderRequest,
+    ) -> BoxFuture<'a, Result<CurrentProviderStream, CurrentProviderError>> {
+        let cancel_token = self.cancel_token.clone();
+        Box::pin(async move {
+            let stream: CurrentProviderStream = Box::pin(stream::once(async move {
+                cancel_token.cancel();
+                Ok(CanonicalLlmEvent::Usage {
+                    usage: Usage {
+                        input_tokens: Some(17),
+                        output_tokens: Some(5),
+                        ..Usage::default()
+                    },
+                })
+            }));
+            Ok(stream)
+        })
+    }
+}
+
 // The production client owns HTTP. This fake only documents turn-loop behavior below.
 struct EchoTool;
 
@@ -324,6 +350,7 @@ async fn provider_request_includes_model_visible_working_directory_before_user_i
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("/tmp/task<&>"),
             cancel_token: None,
+            pending_input: None,
         },
         |_| {},
     )
@@ -426,6 +453,7 @@ async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |event| events.push(event),
     )
@@ -621,6 +649,7 @@ async fn max_turns_stops_before_starting_an_extra_provider_request() {
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |event| events.push(event),
     )
@@ -713,6 +742,7 @@ async fn provider_token_budget_stops_before_tool_execution_and_next_sampling() {
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |event| events.push(event),
     )
@@ -812,6 +842,7 @@ async fn turn_executes_tool_then_continues_with_tool_result_transcript() {
             tool_lifecycle_emitter: lifecycle_emitter.clone(),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |event| events.push(event),
     )
@@ -915,6 +946,7 @@ async fn each_sampling_step_uses_a_fresh_definition_and_executor_snapshot() {
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |_| {},
     )
@@ -992,6 +1024,7 @@ async fn unadvertised_native_and_mcp_calls_fail_without_reaching_step_executor()
             tool_lifecycle_emitter: lifecycle_emitter.clone(),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |_| {},
     )
@@ -1011,6 +1044,12 @@ async fn unadvertised_native_and_mcp_calls_fail_without_reaching_step_executor()
             .error
             .as_deref()
             .is_some_and(|error| error.contains("not advertised")));
+        assert_eq!(
+            output
+                .metadata
+                .get(tool_runtime::tool_result_projection::TOOL_HANDLER_EXECUTED_METADATA_KEY),
+            Some(&serde_json::Value::Bool(false))
+        );
     }
 
     let requests = requests.lock().expect("recorded requests");
@@ -1095,6 +1134,7 @@ async fn turn_executes_same_response_tool_batch_in_parallel_when_policy_allows()
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |_| {},
     )
@@ -1134,6 +1174,7 @@ async fn turn_propagates_canonical_provider_error() {
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |_| {},
     )
@@ -1142,6 +1183,47 @@ async fn turn_propagates_canonical_provider_error() {
 
     assert_eq!(error.message, "stream truncated");
     assert!(!error.emitted_any);
+}
+
+#[tokio::test]
+async fn provider_quota_error_preserves_usage_limit_kind() {
+    let provider = Arc::new(ScriptedProvider::new(vec![vec![Ok(
+        CanonicalLlmEvent::ProviderError {
+            message: "provider quota exhausted".to_string(),
+            classification: Some(FailureClassification::Quota),
+            retryable: Some(false),
+        },
+    )]]));
+
+    let error = run_current_provider_turn(
+        CurrentProviderTurnInput {
+            provider,
+            provider_trace_metadata: None,
+            session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                .turn_id("turn-1")
+                .build(),
+            initial_messages: vec![CurrentProviderMessage::user(vec![
+                CurrentProviderContent::Text("hello".to_string()),
+            ])],
+            tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                RuntimeToolStepSnapshot::new(
+                    Vec::new(),
+                    RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                ),
+            ),
+            model_request_policy: None,
+            tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+            working_directory: PathBuf::from("."),
+            cancel_token: None,
+            pending_input: None,
+        },
+        |_| {},
+    )
+    .await
+    .expect_err("provider quota must fail the turn");
+
+    assert_eq!(error.message, "provider quota exhausted");
+    assert!(error.is_usage_limit_exceeded());
 }
 
 #[tokio::test]
@@ -1179,6 +1261,7 @@ async fn turn_fails_when_provider_completes_with_reasoning_but_no_user_visible_o
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |event| events.push(event),
     )
@@ -1245,6 +1328,7 @@ async fn cancelling_during_provider_request_releases_the_turn_without_waiting_fo
                 tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
                 working_directory: PathBuf::from("."),
                 cancel_token: Some(turn_cancel_token),
+                pending_input: None,
             },
             |_| {},
         )
@@ -1295,6 +1379,7 @@ async fn cancelling_while_waiting_for_the_first_provider_event_releases_the_turn
                 tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
                 working_directory: PathBuf::from("."),
                 cancel_token: Some(turn_cancel_token),
+                pending_input: None,
             },
             |_| {},
         )
@@ -1313,6 +1398,59 @@ async fn cancelling_while_waiting_for_the_first_provider_event_releases_the_turn
         .expect("canceled provider stream should be a normal terminal result");
 
     assert!(execution.cancelled);
+}
+
+#[tokio::test]
+async fn cancellation_preserves_usage_returned_by_the_same_provider_poll() {
+    let cancel_token = CancellationToken::new();
+    let provider = Arc::new(CancelOnFirstUsageProvider {
+        cancel_token: cancel_token.clone(),
+    });
+    let mut events = Vec::new();
+
+    let execution = run_current_provider_turn(
+        CurrentProviderTurnInput {
+            provider,
+            provider_trace_metadata: None,
+            session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                .turn_id("turn-1")
+                .build(),
+            initial_messages: vec![CurrentProviderMessage::user(vec![
+                CurrentProviderContent::Text("hello".to_string()),
+            ])],
+            tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                RuntimeToolStepSnapshot::new(
+                    Vec::new(),
+                    RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                ),
+            ),
+            model_request_policy: None,
+            tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+            working_directory: PathBuf::from("."),
+            cancel_token: Some(cancel_token),
+            pending_input: None,
+        },
+        |event| events.push(event),
+    )
+    .await
+    .expect("canceled provider stream should be a normal terminal result");
+
+    assert!(execution.cancelled);
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| match event {
+                CurrentProviderTurnEvent::Usage { attempt, usage } => {
+                    Some((*attempt, usage.input_tokens, usage.output_tokens))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![(1, 17, 5)]
+    );
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, CurrentProviderTurnEvent::ProviderStep { .. })));
 }
 
 #[tokio::test]
@@ -1336,6 +1474,7 @@ async fn turn_requires_canonical_turn_id_before_provider_sampling() {
             tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
             working_directory: PathBuf::from("."),
             cancel_token: None,
+            pending_input: None,
         },
         |_| {},
     )
@@ -1347,4 +1486,86 @@ async fn turn_requires_canonical_turn_id_before_provider_sampling() {
         "Current provider turn requires a canonical turn_id"
     );
     assert!(requests.lock().expect("provider requests").is_empty());
+}
+
+#[test]
+fn session_user_input_preserves_provider_part_order_without_injection_text() {
+    use crate::reply_input::{
+        ImageDetail, RuntimeReplyInput, RuntimeReplyInputImage, RuntimeReplyInputPart,
+    };
+    use crate::session_loop::RuntimeSessionInput;
+    use model_provider::current_client::CurrentProviderContent;
+
+    let message = runtime_session_input_message(RuntimeSessionInput::User(
+        RuntimeReplyInput::from_parts(vec![
+            RuntimeReplyInputPart::Text {
+                text: "before".to_string(),
+                text_elements: Vec::new(),
+            },
+            RuntimeReplyInputPart::Skill {
+                name: "review".to_string(),
+                path: "/skills/review/SKILL.md".to_string(),
+            },
+            RuntimeReplyInputPart::Image(RuntimeReplyInputImage {
+                uri: "sidecar://image-1".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: Some("data:image/png;base64,abc".to_string()),
+                detail: Some(ImageDetail::High),
+            }),
+            RuntimeReplyInputPart::Mention {
+                name: "docs".to_string(),
+                path: "app://docs".to_string(),
+            },
+            RuntimeReplyInputPart::Text {
+                text: "after".to_string(),
+                text_elements: Vec::new(),
+            },
+        ]),
+    ))
+    .expect("provider message");
+
+    assert!(matches!(
+        message.content.as_slice(),
+        [
+            CurrentProviderContent::Text(before),
+            CurrentProviderContent::Image {
+                uri,
+                media_type,
+                detail: Some(ImageDetail::High),
+                ..
+            },
+            CurrentProviderContent::Text(after),
+        ] if before == "before"
+            && uri == "sidecar://image-1"
+            && media_type == "image/png"
+            && after == "after"
+    ));
+}
+
+#[test]
+fn inter_agent_input_preserves_typed_identity_and_delivery_semantics() {
+    use crate::session_loop::{
+        RuntimeSessionInterAgentDeliveryMode, RuntimeSessionInterAgentInput,
+        RuntimeSessionInterAgentMessageKind, RuntimeSessionInterAgentResultStatus,
+    };
+
+    let text = runtime_inter_agent_text(&RuntimeSessionInterAgentInput {
+        message_id: "message-1".to_string(),
+        root_thread_id: "thread-root".to_string(),
+        sender_thread_id: "thread-sender".to_string(),
+        recipient_thread_id: "thread-recipient".to_string(),
+        content: "done <ok>".to_string(),
+        kind: RuntimeSessionInterAgentMessageKind::Result,
+        source_turn_id: Some("turn-source".to_string()),
+        result_status: Some(RuntimeSessionInterAgentResultStatus::Completed),
+        delivery_mode: RuntimeSessionInterAgentDeliveryMode::TriggerTurn,
+    });
+
+    assert!(text.contains("<message_id>message-1</message_id>"));
+    assert!(text.contains("<sender_thread_id>thread-sender</sender_thread_id>"));
+    assert!(text.contains("<recipient_thread_id>thread-recipient</recipient_thread_id>"));
+    assert!(text.contains("<kind>result</kind>"));
+    assert!(text.contains("<result_status>completed</result_status>"));
+    assert!(text.contains("<delivery_mode>trigger_turn</delivery_mode>"));
+    assert!(text.contains("<content>done &lt;ok&gt;</content>"));
 }

@@ -21,9 +21,18 @@ export interface AgentToolExecutionResult {
   structured_content?: unknown;
 }
 
+export interface AgentMessageTextElement {
+  byte_range: {
+    start: number;
+    end: number;
+  };
+  placeholder?: string;
+}
+
 export interface AgentMessageContentText {
   type: "text";
   text: string;
+  text_elements?: AgentMessageTextElement[];
 }
 
 export interface AgentMessageContentThinking {
@@ -59,7 +68,23 @@ export interface AgentMessageContentActionRequired {
 export interface AgentMessageContentImage {
   type: "image";
   mime_type: string;
+  /** 内联图片使用 data；历史文件/URL 图片使用 uri/source_path，data 保持为空。 */
   data: string;
+  uri?: string;
+  source_path?: string;
+  detail?: "auto" | "low" | "high" | "original";
+}
+
+export interface AgentMessageContentSkill {
+  type: "skill";
+  name: string;
+  path: string;
+}
+
+export interface AgentMessageContentMention {
+  type: "mention";
+  name: string;
+  path: string;
 }
 
 export type AgentMessageContent =
@@ -68,7 +93,9 @@ export type AgentMessageContent =
   | AgentMessageContentToolRequest
   | AgentMessageContentToolResponse
   | AgentMessageContentActionRequired
-  | AgentMessageContentImage;
+  | AgentMessageContentImage
+  | AgentMessageContentSkill
+  | AgentMessageContentMention;
 
 export interface AgentMessage {
   id?: string;
@@ -145,6 +172,7 @@ interface AgentThreadItemBase {
 export interface AgentThreadUserMessageItem extends AgentThreadItemBase {
   type: "user_message";
   content: string;
+  content_parts?: AgentMessageContent[];
 }
 
 export interface AgentThreadContentReference {
@@ -204,14 +232,36 @@ export interface AgentThreadCommandExecutionItem extends AgentThreadItemBase {
   type: "command_execution";
   command: string;
   cwd: string;
+  source?: string;
+  process_id?: string;
+  duration_ms?: number;
   aggregated_output?: string;
   exit_code?: number;
   error?: string;
 }
 
+export type AgentThreadPatchChangeKind =
+  | { type: "add" }
+  | { type: "delete" }
+  | { type: "update"; move_path?: string | null };
+
+export interface AgentThreadPatchChange {
+  path: string;
+  kind: AgentThreadPatchChangeKind;
+  diff: string;
+}
+
+export type AgentThreadPatchApplyStatus =
+  | "inProgress"
+  | "completed"
+  | "declined"
+  | "failed";
+
 export interface AgentThreadPatchItem extends AgentThreadItemBase {
   type: "patch";
   text: string;
+  changes?: AgentThreadPatchChange[];
+  file_status?: AgentThreadPatchApplyStatus;
   summary?: string[];
   paths?: string[];
   success?: boolean;
@@ -224,6 +274,8 @@ export interface AgentThreadWebSearchItem extends AgentThreadItemBase {
   type: "web_search";
   query?: string;
   action?: string;
+  action_data?: unknown;
+  results?: unknown[];
   output?: string;
 }
 

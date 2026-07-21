@@ -9,7 +9,6 @@ function createRequestState(): StreamRequestState {
     requestStartedAt: 100,
     listenerBoundAt: 140,
     requestFinished: false,
-    queuedTurnId: null,
     performanceTrace: {
       requestId: "request-a",
       sessionId: "session-a",
@@ -42,7 +41,6 @@ describe("agentStreamSubmitLifecycleController", () => {
       effectiveModel: "deepseek-chat",
       effectiveProviderType: "deepseek",
       eventName: "event-a",
-      expectingQueue: false,
       requestState,
       submit,
       deps: {
@@ -61,7 +59,6 @@ describe("agentStreamSubmitLifecycleController", () => {
       {
         elapsedMs: 75,
         eventName: "event-a",
-        expectingQueue: false,
         listenerBoundDeltaMs: 35,
         model: "deepseek-chat",
         provider: "deepseek",
@@ -108,7 +105,6 @@ describe("agentStreamSubmitLifecycleController", () => {
         effectiveModel: "gpt-5.4",
         effectiveProviderType: "openai",
         eventName: "event-a",
-        expectingQueue: true,
         requestState,
         submit,
         deps: {

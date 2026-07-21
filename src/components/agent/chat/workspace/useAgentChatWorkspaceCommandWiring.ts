@@ -1,4 +1,6 @@
 import { useTrayModelShortcuts } from "../hooks/useTrayModelShortcuts";
+import type { useAgentChatUnified } from "../hooks";
+import type { useWorkspaceProjectSelection } from "../hooks/useWorkspaceProjectSelection";
 import { useGeneralWorkbenchInitialDispatchRuntime } from "./useGeneralWorkbenchInitialDispatchRuntime";
 import { useWorkspaceCanvasMessageSyncRuntime } from "./useWorkspaceCanvasMessageSyncRuntime";
 import { useWorkspacePersistenceRuntime } from "./useWorkspacePersistenceRuntime";
@@ -8,6 +10,7 @@ import { useWorkspaceSessionRestore } from "./useWorkspaceSessionRestore";
 import { useWorkspaceTaskCenterDraftStateRuntime } from "./useWorkspaceTaskCenterDraftStateRuntime";
 import { useWorkspaceTaskCenterNavigationRuntime } from "./useWorkspaceTaskCenterNavigationRuntime";
 import { useWorkspaceWorkbenchActionSurfaceRuntime } from "./useWorkspaceWorkbenchActionSurfaceRuntime";
+import type { useAgentChatWorkspaceLocalDisplayState } from "./useAgentChatWorkspaceLocalDisplayState";
 
 type DraftStateParams = Parameters<
   typeof useWorkspaceTaskCenterDraftStateRuntime
@@ -34,7 +37,12 @@ type SendActionsParams = SendSurfaceParams["sendActions"];
 type CanvasWorkflowParams = WorkbenchActionParams["canvasWorkflow"];
 type EntryPromptParams = WorkbenchActionParams["entryPrompt"];
 
-type CommandScope = DraftStateParams &
+export type AgentChatWorkspaceCommandScope = ReturnType<
+  typeof useAgentChatUnified
+> &
+  ReturnType<typeof useAgentChatWorkspaceLocalDisplayState> &
+  ReturnType<typeof useWorkspaceProjectSelection> &
+  DraftStateParams &
   Omit<PersistenceParams, "draftSendInFlight"> &
   InitialDispatchParams &
   Omit<SessionRestoreParams, "sessionFiles" | "sessionMeta"> &
@@ -72,8 +80,10 @@ type CommandScope = DraftStateParams &
     | "initialDispatchKey"
   >;
 
-interface UseAgentChatWorkspaceCommandWiringParams {
-  scope: CommandScope;
+interface UseAgentChatWorkspaceCommandWiringParams<
+  Scope extends AgentChatWorkspaceCommandScope,
+> {
+  scope: Scope;
   navigationProjectId: NavigationParams["projectId"];
   trayActiveTheme: TrayShortcutParams["activeTheme"];
   consumePendingSkill: SendSurfaceParams["pendingSkill"]["consumePendingSkill"];
@@ -82,14 +92,16 @@ interface UseAgentChatWorkspaceCommandWiringParams {
 }
 
 /** 只组合既有 command owners，不持有 runtime 或 read-model truth。 */
-export function useAgentChatWorkspaceCommandWiring({
+export function useAgentChatWorkspaceCommandWiring<
+  Scope extends AgentChatWorkspaceCommandScope,
+>({
   scope,
   navigationProjectId,
   trayActiveTheme,
   consumePendingSkill,
   pendingSkillKey,
   sceneGateResumeHandlerRef,
-}: UseAgentChatWorkspaceCommandWiringParams) {
+}: UseAgentChatWorkspaceCommandWiringParams<Scope>) {
   const taskCenterDraftState = useWorkspaceTaskCenterDraftStateRuntime(scope);
   const persistence = useWorkspacePersistenceRuntime({
     ...scope,
@@ -168,7 +180,20 @@ export function useAgentChatWorkspaceCommandWiring({
     },
   });
 
+  const compositionScope = {
+    ...scope,
+    ...taskCenterDraftState,
+    ...persistence,
+    ...initialDispatch,
+    ...sessionRestore,
+    ...reset,
+    ...taskCenterNavigation,
+    ...send,
+    ...workbenchActionsRuntime,
+  };
+
   return {
+    compositionScope,
     initialDispatch,
     persistence,
     reset,
@@ -176,5 +201,6 @@ export function useAgentChatWorkspaceCommandWiring({
     taskCenterDraftState,
     taskCenterNavigation,
     workbenchActions: workbenchActionsRuntime,
+    scope,
   };
 }

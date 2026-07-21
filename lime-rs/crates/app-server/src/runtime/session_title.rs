@@ -1,4 +1,4 @@
-use app_server_protocol::AgentInput;
+use agent_protocol::AgentInput;
 use serde_json::Value;
 
 const PLACEHOLDER_TITLES: &[&str] = &["新对话", "新话题", "新任务", "未命名", "未命名对话"];
@@ -20,14 +20,20 @@ pub(crate) fn resolve_session_title(
     normalize_title(first_user_message.as_deref()).or(explicit_title)
 }
 
-pub(crate) fn first_user_message_from_agent_input(input: &AgentInput) -> Option<String> {
-    normalize_title(Some(&input.text))
+pub(crate) fn first_user_message_from_agent_input(input: &[AgentInput]) -> Option<String> {
+    input.iter().find_map(|part| match part {
+        AgentInput::Text { text, .. } => normalize_title(Some(text)),
+        AgentInput::Image { .. }
+        | AgentInput::LocalImage { .. }
+        | AgentInput::Skill { .. }
+        | AgentInput::Mention { .. } => None,
+    })
 }
 
 pub(crate) fn first_user_message_from_runtime_payload(payload: &Value) -> Option<String> {
     payload
         .get("input")
-        .and_then(|value| serde_json::from_value::<AgentInput>(value.clone()).ok())
+        .and_then(|value| serde_json::from_value::<Vec<AgentInput>>(value.clone()).ok())
         .and_then(|input| first_user_message_from_agent_input(&input))
         .or_else(|| {
             nested_string(payload, &["content", "text"])
@@ -172,10 +178,7 @@ mod tests {
     fn extracts_user_message_from_runtime_payload() {
         assert_eq!(
             first_user_message_from_runtime_payload(&json!({
-                "input": {
-                    "text": "生成项目摘要",
-                    "attachments": []
-                }
+                "input": [{"type": "text", "text": "生成项目摘要"}]
             })),
             Some("生成项目摘要".to_string())
         );

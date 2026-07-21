@@ -4,9 +4,7 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_UPDATE,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
   CONTENT_FACTORY_INLINE_IMAGE_FILE_PATH,
   CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID,
   CONTENT_FACTORY_INLINE_IMAGE_TASK_PROMPT,
@@ -59,22 +57,29 @@ export async function runContentFactoryInlineImageArticleWorkspaceScenario({
     appServerRequests,
   });
   Object.assign(summary, base);
+  const identity = base.contentFactoryArticleWorkspaceSessionCreation?.identity;
+  assert(identity?.sessionId, "inline image fixture 缺少 canonical sessionId");
+  assert(identity?.threadId, "inline image fixture 缺少 canonical threadId");
+  assert(identity?.workerTaskId, "inline image fixture 缺少 worker taskId");
 
   const objectRef = await waitForArticleDraftObjectRef(
     page,
     options,
     appServerRequests,
+    identity,
   );
   const editedDraftUpdate = await writeInlinePendingEditedDraft({
     page,
     requestLog: appServerRequests,
     objectRef,
+    identity,
   });
   summary.contentFactoryInlineImageEditedDraftUpdate = editedDraftUpdate;
   const created = await createInlineImageTask({
     page,
     workspace,
     requestLog: appServerRequests,
+    identity,
   });
   summary.contentFactoryInlineImageTaskCreated =
     summarizeMediaTaskArtifact(created);
@@ -82,6 +87,7 @@ export async function runContentFactoryInlineImageArticleWorkspaceScenario({
     page,
     workspace,
     created,
+    identity,
   });
   summary.contentFactoryInlineImageTaskSubmittedEvent = submittedEvent;
   const completed = await completeInlineImageTask({
@@ -89,6 +95,7 @@ export async function runContentFactoryInlineImageArticleWorkspaceScenario({
     workspace,
     requestLog: appServerRequests,
     created,
+    identity,
   });
   summary.contentFactoryInlineImageTaskCompleted =
     summarizeMediaTaskArtifact(completed);
@@ -97,12 +104,14 @@ export async function runContentFactoryInlineImageArticleWorkspaceScenario({
     options,
     workspace,
     requestLog: appServerRequests,
+    identity,
   });
   summary.contentFactoryInlineImageReload = restored;
   const readModel = await waitForInlineImageReadModelReplacement(
     page,
     options,
     appServerRequests,
+    identity,
   );
   summary.contentFactoryInlineImageReadModel = readModel;
   const canvas = await waitForInlineImageReplacement(page, options);
@@ -121,7 +130,7 @@ export async function runContentFactoryInlineImageArticleWorkspaceScenario({
   });
 }
 
-async function waitForArticleDraftObjectRef(page, options, requestLog) {
+async function waitForArticleDraftObjectRef(page, options, requestLog, identity) {
   const startedAt = Date.now();
   let lastSummary = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -129,13 +138,13 @@ async function waitForArticleDraftObjectRef(page, options, requestLog) {
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        historyLimit: 20,
+        threadId: identity.threadId,
+        includeTurns: true,
       },
       requestLog,
     );
-    const objectRef = findArticleDraftObjectRef(read.result);
-    lastSummary = summarizeArticleWorkspaceRead(read.result);
+    const objectRef = findArticleDraftObjectRef(read.result, identity.workerTaskId);
+    lastSummary = summarizeArticleWorkspaceRead(read.result, identity.workerTaskId);
     if (objectRef) {
       return objectRef;
     }
@@ -148,7 +157,7 @@ async function waitForArticleDraftObjectRef(page, options, requestLog) {
   );
 }
 
-function findArticleDraftObjectRef(result) {
+function findArticleDraftObjectRef(result, workerTaskId) {
   const objects = readArticleWorkspaceObjects(result);
   const articleObjects = objects
     .map((object) => ({
@@ -159,21 +168,28 @@ function findArticleDraftObjectRef(result) {
   const selected =
     articleObjects.find(
       ({ ref, sourceTaskId }) =>
-        ref.sourceTaskId === CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID ||
-        sourceTaskId === CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+        ref.sourceTaskId === workerTaskId || sourceTaskId === workerTaskId,
     ) ?? articleObjects[0];
   return selected?.ref ?? null;
 }
 
 function readArticleWorkspaceObjects(result) {
   const detail = asRecord(result?.detail) ?? asRecord(result) ?? {};
+  const thread = asRecord(result?.thread) ?? {};
+  const threadExtra = asRecord(thread.extra) ?? {};
   const threadRead =
-    asRecord(detail.threadRead) ?? asRecord(detail.thread_read) ?? {};
+    asRecord(detail.threadRead) ??
+    asRecord(detail.thread_read) ??
+    asRecord(threadExtra.threadRead) ??
+    asRecord(threadExtra.thread_read) ??
+    thread;
   const articleWorkspace =
     asRecord(threadRead.articleWorkspace) ??
     asRecord(threadRead.article_workspace) ??
     asRecord(detail.articleWorkspace) ??
     asRecord(detail.article_workspace) ??
+    asRecord(threadExtra.articleWorkspace) ??
+    asRecord(threadExtra.article_workspace) ??
     {};
   return readArray(articleWorkspace.objects);
 }
@@ -238,7 +254,7 @@ function readArticleObjectSourceTaskId(object) {
   );
 }
 
-function summarizeArticleWorkspaceRead(result) {
+function summarizeArticleWorkspaceRead(result, workerTaskId) {
   const objects = readArticleWorkspaceObjects(result);
   return sanitizeJson({
     hasArticleWorkspace: objects.length > 0,
@@ -250,11 +266,16 @@ function summarizeArticleWorkspaceRead(result) {
         sourceTaskId: readArticleObjectSourceTaskId(object),
       }))
       .filter(({ ref }) => ref?.kind === "articleDraft"),
-    expectedWorkerTaskId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+    expectedWorkerTaskId: workerTaskId,
   });
 }
 
-async function writeInlinePendingEditedDraft({ page, requestLog, objectRef }) {
+async function writeInlinePendingEditedDraft({
+  page,
+  requestLog,
+  objectRef,
+  identity,
+}) {
   assert(objectRef?.appId, "inline image fixture 缺少 article object appId");
   assert(
     objectRef?.sessionId,
@@ -269,7 +290,7 @@ async function writeInlinePendingEditedDraft({ page, requestLog, objectRef }) {
     page,
     APP_SERVER_METHOD_SESSION_UPDATE,
     {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId: identity.sessionId,
       articleWorkspaceSelectedObjectRef: objectRef,
       articleWorkspaceEditedDraft: {
         objectKey,
@@ -286,7 +307,7 @@ async function writeInlinePendingEditedDraft({ page, requestLog, objectRef }) {
     sessionId:
       response.result?.session?.sessionId ??
       response.result?.session?.session_id ??
-      CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      identity.sessionId,
     objectKey,
     marker: CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID,
     hasPendingImage: INLINE_PENDING_MARKDOWN.includes("pending-image-task://"),
@@ -294,7 +315,7 @@ async function writeInlinePendingEditedDraft({ page, requestLog, objectRef }) {
   });
 }
 
-async function createInlineImageTask({ page, workspace, requestLog }) {
+async function createInlineImageTask({ page, workspace, requestLog, identity }) {
   return await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
@@ -310,7 +331,7 @@ async function createInlineImageTask({ page, workspace, requestLog }) {
       slotId: CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID,
       anchorSectionTitle: INLINE_SECTION_TITLE,
       anchorText: INLINE_ANCHOR_TEXT,
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId: identity.sessionId,
       projectId: workspace.workspaceId,
       entrySource: "article_inline_fixture",
       modalityContractKey: "image_generation",
@@ -323,7 +344,7 @@ async function createInlineImageTask({ page, workspace, requestLog }) {
   );
 }
 
-async function emitInlineTaskSubmittedEvent({ page, workspace, created }) {
+async function emitInlineTaskSubmittedEvent({ page, workspace, created, identity }) {
   const result = created?.result ?? {};
   const payload = {
     task_id: readString(result.task_id, result.taskId),
@@ -339,7 +360,7 @@ async function emitInlineTaskSubmittedEvent({ page, workspace, created }) {
     provider_id: FIXTURE_PROVIDER,
     model: FIXTURE_MODEL,
     count: 1,
-    session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+    session_id: identity.sessionId,
     project_id: workspace.workspaceId,
     entry_source: "article_inline_fixture",
     requested_target: "generate",
@@ -380,6 +401,7 @@ async function completeInlineImageTask({
   workspace,
   requestLog,
   created,
+  identity,
 }) {
   const taskRef =
     readString(created.result?.artifact_path, created.result?.artifactPath) ||
@@ -419,18 +441,19 @@ async function reloadAndOpenInlineArticleWorkspace({
   options,
   workspace,
   requestLog,
+  identity,
 }) {
   const reload = await reloadRendererDocument(page, options);
   const renderer = await waitForRendererReady(page, options);
   await page.evaluate(
-    ({ workspaceId }) => {
+    ({ workspaceId, sessionId }) => {
       window.dispatchEvent(
         new CustomEvent("lime:agent-runtime-sessions-changed", {
-          detail: { reason: "external", workspaceId },
+          detail: { reason: "external", workspaceId, sessionId },
         }),
       );
     },
-    { workspaceId: workspace.workspaceId },
+    { workspaceId: workspace.workspaceId, sessionId: identity.sessionId },
   );
   const visible = await waitForGuiSessionVisible(
     page,
@@ -438,7 +461,7 @@ async function reloadAndOpenInlineArticleWorkspace({
     CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
   );
   const opened = await openSessionFromSidebar(page, options, requestLog, {
-    sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+    sessionId: identity.sessionId,
     title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
   });
   return sanitizeJson({ reload, renderer, visible, opened });
@@ -448,6 +471,7 @@ async function waitForInlineImageReadModelReplacement(
   page,
   options,
   requestLog,
+  identity,
 ) {
   const startedAt = Date.now();
   let lastSummary = null;
@@ -456,8 +480,8 @@ async function waitForInlineImageReadModelReplacement(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        historyLimit: 20,
+        threadId: identity.threadId,
+        includeTurns: true,
       },
       requestLog,
     );

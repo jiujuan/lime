@@ -1,56 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, SetStateAction } from "react";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import {
-  APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-  type AppServerJsonRpcNotification,
-} from "@/lib/api/appServer";
+import type { AppServerJsonRpcNotification } from "@/lib/api/appServer";
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
 import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { StreamRequestState } from "./agentStreamSubmissionLifecycle";
 import { registerAgentStreamTurnEventBinding } from "./agentStreamTurnEventBinding";
-import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/appServerEventPayloadProjection";
+import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/appServerEventStream";
 
 function noopDispatch<T>() {
   return vi.fn() as unknown as Dispatch<SetStateAction<T>>;
-}
-
-function canonicalAgentMessageEvent(params: {
-  itemId: string;
-  ordinal?: number;
-  phase: "commentary" | "final_answer";
-  sequence: number;
-  sessionId: string;
-  text: string;
-  threadId: string;
-  timestamp: string;
-  turnId: string;
-}) {
-  const updatedAtMs = Date.parse(params.timestamp);
-  return {
-    method: "item/updated",
-    params: {
-      sessionId: params.sessionId,
-      threadId: params.threadId,
-      turnId: params.turnId,
-      itemId: params.itemId,
-      sequence: params.sequence,
-      ordinal: params.ordinal ?? params.sequence,
-      kind: "agentMessage",
-      status: "inProgress",
-      createdAtMs: updatedAtMs,
-      updatedAtMs,
-      payload: {
-        type: "agentMessage",
-        text: params.text,
-        phase: params.phase,
-      },
-    },
-  };
 }
 
 describe("agentStreamTurnEventBinding", () => {
@@ -74,7 +36,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     const result = await registerAgentStreamTurnEventBinding({
@@ -86,7 +47,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
       content: "继续生成提纲",
-      expectingQueue: false,
       activeSessionId: "session-1",
       resolvedWorkspaceId: "workspace-1",
       assistantMsgId: "assistant-1",
@@ -108,10 +68,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: noopDispatch<Message[]>(),
@@ -176,7 +133,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -188,7 +144,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "glm-5.1",
       effectiveExecutionStrategy: "react",
       content: "帮我分析当前仓库",
-      expectingQueue: false,
       activeSessionId: "session-timeout",
       resolvedWorkspaceId: "workspace-timeout",
       assistantMsgId: "assistant-timeout",
@@ -210,10 +165,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -267,7 +219,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -280,7 +231,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "astron-code-latest",
       effectiveExecutionStrategy: "react",
       content: "你好",
-      expectingQueue: false,
       activeSessionId: "session-recovery",
       resolvedWorkspaceId: "workspace-recovery",
       assistantMsgId: "assistant-recovery",
@@ -302,10 +252,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -362,7 +309,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -374,7 +320,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "glm-5.1",
       effectiveExecutionStrategy: "react",
       content: "继续分析当前仓库",
-      expectingQueue: false,
       activeSessionId: "session-dispatched",
       resolvedWorkspaceId: "workspace-dispatched",
       assistantMsgId: "assistant-dispatched",
@@ -398,10 +343,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -453,7 +395,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -466,7 +407,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.5",
       effectiveExecutionStrategy: "react",
       content: "停止后恢复测试",
-      expectingQueue: false,
       activeSessionId: "session-deferred-recovery",
       resolvedWorkspaceId: "workspace-deferred-recovery",
       assistantMsgId: "assistant-deferred-recovery",
@@ -490,10 +430,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: noopDispatch<Message[]>(),
@@ -561,7 +498,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
       currentTurnId: "turn-live-fast-complete",
     };
 
@@ -575,7 +511,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.5",
       effectiveExecutionStrategy: "react",
       content: "联网搜索并总结最新信息",
-      expectingQueue: false,
       activeSessionId: "session-submit-accepted-terminal-recovery",
       resolvedWorkspaceId: "workspace-submit-accepted-terminal-recovery",
       assistantMsgId: "assistant-submit-accepted-terminal-recovery",
@@ -599,10 +534,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: noopDispatch<Message[]>(),
@@ -687,7 +619,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -699,7 +630,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
       content: "继续处理图片任务",
-      expectingQueue: false,
       activeSessionId: "session-unknown-heartbeat",
       resolvedWorkspaceId: "workspace-unknown-heartbeat",
       assistantMsgId: "assistant-unknown-event",
@@ -723,10 +653,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -802,7 +729,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -814,7 +740,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.5",
       effectiveExecutionStrategy: "react",
       content: "@写文章 写一篇公众号文章",
-      expectingQueue: false,
       activeSessionId: "session-runtime-error",
       resolvedWorkspaceId: "workspace-runtime-error",
       assistantMsgId: "assistant-runtime-error",
@@ -836,10 +761,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -856,33 +778,17 @@ describe("agentStreamTurnEventBinding", () => {
     }
 
     const payload = projectAppServerAgentEventPayload({
-      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      method: "turn/completed",
       params: {
-        event: {
-          eventId: "evt-runtime-error",
-          sequence: 1,
-          sessionId: "session-runtime-error",
-          threadId: "thread-runtime-error",
-          turnId: "turn-runtime-error",
-          type: "turn.failed",
-          timestamp: "2026-06-28T07:45:02.000Z",
-          payload: {
-            message: "Plugin worker failed",
-            errorCode: "PLUGIN_WORKER_PACKAGE_SIGNATURE_UNVERIFIED",
-          },
-        },
-        canonicalEvent: {
-          method: "turn/updated",
-          params: {
-            sessionId: "session-runtime-error",
-            threadId: "thread-runtime-error",
-            turnId: "turn-runtime-error",
-            status: "failed",
-            error: { message: "Plugin worker failed" },
-            createdAtMs: Date.parse("2026-06-28T07:45:02.000Z"),
-            completedAtMs: Date.parse("2026-06-28T07:45:02.000Z"),
-            updatedAtMs: Date.parse("2026-06-28T07:45:02.000Z"),
-          },
+        threadId: "thread-runtime-error",
+        turn: {
+          id: "turn-runtime-error",
+          status: "failed",
+          items: [],
+          itemsView: "full",
+          error: { message: "Plugin worker failed" },
+          startedAt: Date.parse("2026-06-28T07:45:02.000Z") / 1_000,
+          completedAt: Date.parse("2026-06-28T07:45:02.000Z") / 1_000,
         },
       },
     });
@@ -940,7 +846,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -952,7 +857,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "glm-5.1",
       effectiveExecutionStrategy: "react",
       content: "继续分析当前仓库",
-      expectingQueue: false,
       activeSessionId: "session-inactivity",
       resolvedWorkspaceId: "workspace-inactivity",
       assistantMsgId: "assistant-inactivity",
@@ -976,10 +880,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -1064,7 +965,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
       currentTurnId: "turn-running-read-model",
     };
 
@@ -1078,7 +978,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.5",
       effectiveExecutionStrategy: "react",
       content: "继续输出未完成内容",
-      expectingQueue: false,
       activeSessionId: "session-running-read-model",
       resolvedWorkspaceId: "workspace-running-read-model",
       assistantMsgId: "assistant-running-read-model",
@@ -1102,10 +1001,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -1122,30 +1018,12 @@ describe("agentStreamTurnEventBinding", () => {
     }
 
     const payload = projectAppServerAgentEventPayload({
-      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      method: "item/agentMessage/delta",
       params: {
-        event: {
-          eventId: "evt-running-read-model-1",
-          sequence: 1,
-          sessionId: "session-running-read-model",
-          threadId: "thread-running-read-model",
-          turnId: "turn-running-read-model",
-          type: "message.delta",
-          timestamp: "2026-06-06T00:00:00.000Z",
-          payload: {
-            text: "第一段",
-          },
-        },
-        canonicalEvent: canonicalAgentMessageEvent({
-          itemId: "agent-message-running-read-model",
-          phase: "final_answer",
-          sequence: 1,
-          sessionId: "session-running-read-model",
-          text: "第一段",
-          threadId: "thread-running-read-model",
-          timestamp: "2026-06-06T00:00:00.000Z",
-          turnId: "turn-running-read-model",
-        }),
+        delta: "第一段",
+        itemId: "agent-message-running-read-model",
+        threadId: "thread-running-read-model",
+        turnId: "turn-running-read-model",
       },
     });
     if (!payload) {
@@ -1213,7 +1091,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -1225,7 +1102,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "deepseek-v4-pro",
       effectiveExecutionStrategy: "react",
       content: "帮我整理一下今天的国际新闻",
-      expectingQueue: false,
       activeSessionId: "session-keepalive",
       resolvedWorkspaceId: "workspace-keepalive",
       assistantMsgId: "assistant-keepalive",
@@ -1249,10 +1125,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -1341,7 +1214,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -1353,7 +1225,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
       content: "生成草稿",
-      expectingQueue: false,
       activeSessionId: "session-app-server",
       resolvedWorkspaceId: "workspace-app-server",
       assistantMsgId: "assistant-app-server",
@@ -1377,10 +1248,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -1408,57 +1276,26 @@ describe("agentStreamTurnEventBinding", () => {
     };
 
     project({
-      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      method: "item/agentMessage/delta",
       params: {
-        event: {
-          eventId: "evt-app-server-1",
-          sequence: 1,
-          sessionId: "session-app-server",
-          threadId: "thread-app-server",
-          turnId: "turn-app-server",
-          type: "message.delta",
-          timestamp: "2026-06-06T00:00:00.000Z",
-          payload: {
-            text: "第一段",
-          },
-        },
-        canonicalEvent: canonicalAgentMessageEvent({
-          itemId: "agent-message-app-server",
-          phase: "final_answer",
-          sequence: 1,
-          sessionId: "session-app-server",
-          text: "第一段",
-          threadId: "thread-app-server",
-          timestamp: "2026-06-06T00:00:00.000Z",
-          turnId: "turn-app-server",
-        }),
+        delta: "第一段",
+        itemId: "agent-message-app-server",
+        threadId: "thread-app-server",
+        turnId: "turn-app-server",
       },
     });
 
     project({
-      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      method: "turn/completed",
       params: {
-        event: {
-          eventId: "evt-app-server-2",
-          sequence: 2,
-          sessionId: "session-app-server",
-          threadId: "thread-app-server",
-          turnId: "turn-app-server",
-          type: "turn.completed",
-          timestamp: "2026-06-06T00:00:01.000Z",
-          payload: {},
-        },
-        canonicalEvent: {
-          method: "turn/updated",
-          params: {
-            sessionId: "session-app-server",
-            threadId: "thread-app-server",
-            turnId: "turn-app-server",
-            status: "completed",
-            createdAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
-            completedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
-            updatedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
-          },
+        threadId: "thread-app-server",
+        turn: {
+          id: "turn-app-server",
+          status: "completed",
+          items: [],
+          itemsView: "full",
+          startedAt: Date.parse("2026-06-06T00:00:00.000Z") / 1_000,
+          completedAt: Date.parse("2026-06-06T00:00:01.000Z") / 1_000,
         },
       },
     });
@@ -1474,8 +1311,6 @@ describe("agentStreamTurnEventBinding", () => {
         metadata: {
           source: "agent_text_delta",
           itemId: "agent-message-app-server",
-          phase: "final_answer",
-          sequence: 1,
           turnId: "turn-app-server",
         },
       },
@@ -1530,7 +1365,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -1542,7 +1376,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
       content: "验证网页搜索渲染",
-      expectingQueue: false,
       activeSessionId: "session-app-server-web-tools",
       resolvedWorkspaceId: "workspace-app-server",
       assistantMsgId: "assistant-app-server-web-tools",
@@ -1566,10 +1399,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts, textDelta) => [
         ...parts,
@@ -1592,7 +1422,6 @@ describe("agentStreamTurnEventBinding", () => {
     const activeStreamHandler = streamHandler as (event: {
       payload: unknown;
     }) => void;
-    const toolOrdinalById = new Map<string, number>();
     const project = (
       type: string,
       sequence: number,
@@ -1600,142 +1429,120 @@ describe("agentStreamTurnEventBinding", () => {
     ) => {
       const timestamp = `2026-06-20T10:00:0${sequence}.000Z`;
       const updatedAtMs = Date.parse(timestamp);
+      const threadId = "thread-app-server-web-tools";
+      const turnId = "turn-app-server-web-tools";
       const rawItem =
         payload.item && typeof payload.item === "object"
           ? (payload.item as Record<string, unknown>)
           : null;
-      let canonicalEvent: Record<string, unknown>;
+      let notification: AppServerJsonRpcNotification;
       if (type === "message.delta") {
-        canonicalEvent = canonicalAgentMessageEvent({
-          itemId:
-            typeof payload.itemId === "string"
-              ? payload.itemId
-              : `agent-message-${sequence}`,
-          phase: payload.phase === "commentary" ? "commentary" : "final_answer",
-          sequence,
-          sessionId: "session-app-server-web-tools",
-          text: typeof payload.text === "string" ? payload.text : "",
-          threadId: "thread-app-server-web-tools",
-          timestamp,
-          turnId: "turn-app-server-web-tools",
-        });
+        notification = {
+          method: "item/agentMessage/delta",
+          params: {
+            delta: typeof payload.text === "string" ? payload.text : "",
+            itemId:
+              typeof payload.itemId === "string"
+                ? payload.itemId
+                : `agent-message-${sequence}`,
+            threadId,
+            turnId,
+          },
+        };
       } else if (
         (type === "item.started" || type === "item.completed") &&
         typeof payload.toolCallId === "string"
       ) {
-        const toolCallId = payload.toolCallId;
-        if (type === "item.started") {
-          toolOrdinalById.set(toolCallId, sequence);
-        }
-        const status = type === "item.completed" ? "completed" : "inProgress";
-        canonicalEvent = {
-          method: "item/updated",
+        const completed = type === "item.completed";
+        notification = {
+          method: completed ? "item/completed" : "item/started",
           params: {
-            sessionId: "session-app-server-web-tools",
-            threadId: "thread-app-server-web-tools",
-            turnId: "turn-app-server-web-tools",
-            itemId: toolCallId,
-            sequence,
-            ordinal: toolOrdinalById.get(toolCallId) ?? sequence,
-            kind: "tool",
-            status,
-            createdAtMs: updatedAtMs,
-            updatedAtMs,
-            ...(status === "completed" ? { completedAtMs: updatedAtMs } : {}),
-            payload: {
-              type: "tool",
-              call_id: toolCallId,
-              name:
+            [completed ? "completedAtMs" : "startedAtMs"]: updatedAtMs,
+            item: {
+              id: payload.toolCallId,
+              type: "dynamicToolCall",
+              tool:
                 typeof payload.toolName === "string" ? payload.toolName : "",
               arguments: payload.arguments,
-              ...(status === "completed"
+              status: completed ? "completed" : "inProgress",
+              ...(completed
                 ? {
-                    output: {
-                      text:
+                    result: {
+                      output:
                         typeof payload.output === "string"
                           ? payload.output
                           : "",
                     },
+                    success: payload.success !== false,
                   }
                 : {}),
             },
+            threadId,
+            turnId,
           },
         };
       } else if (
-        (type === "item.updated" || type === "item.completed") &&
+        (type === "item.started" ||
+          type === "item.updated" ||
+          type === "item.completed") &&
         rawItem
       ) {
+        const completed = type === "item.completed";
+        const itemId =
+          typeof rawItem.id === "string" ? rawItem.id : `reasoning-${sequence}`;
         const text = typeof rawItem.text === "string" ? rawItem.text : "";
-        const status = type === "item.completed" ? "completed" : "inProgress";
-        const ordinal =
-          typeof rawItem.sequence === "number" ? rawItem.sequence : sequence;
-        canonicalEvent = {
-          method: "item/updated",
+        const itemType =
+          rawItem.type === "agentMessage" ? "agentMessage" : "reasoning";
+        notification = {
+          method: completed ? "item/completed" : "item/started",
           params: {
-            sessionId: "session-app-server-web-tools",
-            threadId: "thread-app-server-web-tools",
-            turnId: "turn-app-server-web-tools",
-            itemId:
-              typeof rawItem.id === "string"
-                ? rawItem.id
-                : `reasoning-${sequence}`,
-            sequence,
-            ordinal,
-            kind: "reasoning",
-            status,
-            createdAtMs:
-              typeof rawItem.started_at === "string"
-                ? Date.parse(rawItem.started_at)
-                : updatedAtMs,
-            updatedAtMs,
-            ...(status === "completed" ? { completedAtMs: updatedAtMs } : {}),
-            payload: {
-              type: "reasoning",
-              content: [text],
-              summary: [],
+            [completed ? "completedAtMs" : "startedAtMs"]: updatedAtMs,
+            item: {
+              id: itemId,
+              type: itemType,
+              ...(itemType === "agentMessage"
+                ? { text, phase: rawItem.phase }
+                : { summary: [text] }),
             },
+            threadId,
+            turnId,
           },
         };
       } else if (type === "turn.completed") {
-        canonicalEvent = {
-          method: "turn/updated",
+        notification = {
+          method: "turn/completed",
           params: {
-            sessionId: "session-app-server-web-tools",
-            threadId: "thread-app-server-web-tools",
-            turnId: "turn-app-server-web-tools",
-            status: "completed",
-            createdAtMs: updatedAtMs,
-            completedAtMs: updatedAtMs,
-            updatedAtMs,
+            threadId,
+            turn: {
+              id: turnId,
+              status: "completed",
+              items: [],
+              itemsView: "full",
+              startedAt: Date.parse("2026-06-20T10:00:00.000Z") / 1_000,
+              completedAt: updatedAtMs / 1_000,
+            },
           },
         };
       } else {
-        throw new Error(`missing canonical fixture for ${type}`);
+        throw new Error(`missing direct v2 fixture for ${type}`);
       }
-      const projected = projectAppServerAgentEventPayload({
-        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-        params: {
-          event: {
-            eventId: `evt-web-tools-${sequence}`,
-            sequence,
-            sessionId: "session-app-server-web-tools",
-            threadId: "thread-app-server-web-tools",
-            turnId: "turn-app-server-web-tools",
-            type,
-            timestamp,
-            payload,
-          },
-          canonicalEvent,
-        },
-      });
+      const projected = projectAppServerAgentEventPayload(notification);
       if (!projected) {
         throw new Error(`expected App Server ${type} notification to project`);
       }
       activeStreamHandler({ payload: projected });
     };
 
+    project("item.started", 0, {
+      item: {
+        id: "agent-message-commentary-turn-app-server-web-tools",
+        type: "agentMessage",
+        text: "",
+        phase: "commentary",
+      },
+    });
     project("message.delta", 1, {
-      text: "我先联网核实目标页面来源。\n",
+      text: "我先联网核实目标页面来源。",
       itemId: "agent-message-commentary-turn-app-server-web-tools",
       phase: "commentary",
     });
@@ -1803,12 +1610,23 @@ describe("agentStreamTurnEventBinding", () => {
         updated_at: "2026-06-20T10:00:07.000Z",
       },
     });
-    project("message.delta", 8, {
-      text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
-      itemId: "agent-message-final-turn-app-server-web-tools",
-      phase: "final_answer",
+    project("item.started", 8, {
+      item: {
+        id: "agent-message-final-turn-app-server-web-tools",
+        type: "agentMessage",
+        text: "",
+        phase: "final_answer",
+      },
     });
-    project("turn.completed", 9, {
+    project("item.completed", 9, {
+      item: {
+        id: "agent-message-final-turn-app-server-web-tools",
+        type: "agentMessage",
+        text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+        phase: "final_answer",
+      },
+    });
+    project("turn.completed", 10, {
       turn: {
         id: "turn-app-server-web-tools",
         thread_id: "thread-app-server-web-tools",
@@ -1826,8 +1644,8 @@ describe("agentStreamTurnEventBinding", () => {
     expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
       "text",
       "tool_use",
-      "thinking",
       "tool_use",
+      "thinking",
       "text",
     ]);
     expect(messages[0]?.contentParts?.[0]).toMatchObject({
@@ -1836,12 +1654,10 @@ describe("agentStreamTurnEventBinding", () => {
       metadata: {
         source: "agent_text_delta",
         itemId: "agent-message-commentary-turn-app-server-web-tools",
-        phase: "commentary",
-        sequence: 1,
         turnId: "turn-app-server-web-tools",
       },
     });
-    expect(messages[0]?.contentParts?.[2]).toMatchObject({
+    expect(messages[0]?.contentParts?.[3]).toMatchObject({
       type: "thinking",
       text: "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
       metadata: {
@@ -1855,7 +1671,13 @@ describe("agentStreamTurnEventBinding", () => {
       "tool_call",
       "reasoning",
       "tool_call",
+      "agent_message",
     ]);
+    expect(threadItems.at(-1)).toMatchObject({
+      id: "agent-message-final-turn-app-server-web-tools",
+      phase: "final_answer",
+      text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
+    });
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
       "agent_stream_message-app-server-web-tools",
     );
@@ -1904,7 +1726,6 @@ describe("agentStreamTurnEventBinding", () => {
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
-      queuedTurnId: null,
     };
 
     await registerAgentStreamTurnEventBinding({
@@ -1916,7 +1737,6 @@ describe("agentStreamTurnEventBinding", () => {
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
       content: "整理今天的国际新闻",
-      expectingQueue: false,
       activeSessionId: "session-app-server-cancel",
       resolvedWorkspaceId: "workspace-app-server",
       assistantMsgId: "assistant-app-server-cancel",
@@ -1940,10 +1760,7 @@ describe("agentStreamTurnEventBinding", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnsFromProjection: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -1965,31 +1782,16 @@ describe("agentStreamTurnEventBinding", () => {
     }
 
     const payload = projectAppServerAgentEventPayload({
-      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      method: "turn/completed",
       params: {
-        event: {
-          eventId: "evt-app-server-cancel",
-          sequence: 1,
-          sessionId: "session-app-server-cancel",
-          threadId: "thread-app-server-cancel",
-          turnId: "turn-app-server-cancel",
-          type: "turn.canceled",
-          timestamp: "2026-06-06T00:00:02.000Z",
-          payload: {
-            reason: "user_cancelled",
-          },
-        },
-        canonicalEvent: {
-          method: "turn/updated",
-          params: {
-            sessionId: "session-app-server-cancel",
-            threadId: "thread-app-server-cancel",
-            turnId: "turn-app-server-cancel",
-            status: "interrupted",
-            createdAtMs: Date.parse("2026-06-06T00:00:02.000Z"),
-            completedAtMs: Date.parse("2026-06-06T00:00:02.000Z"),
-            updatedAtMs: Date.parse("2026-06-06T00:00:02.000Z"),
-          },
+        threadId: "thread-app-server-cancel",
+        turn: {
+          id: "turn-app-server-cancel",
+          status: "interrupted",
+          items: [],
+          itemsView: "full",
+          startedAt: Date.parse("2026-06-06T00:00:00.000Z") / 1_000,
+          completedAt: Date.parse("2026-06-06T00:00:02.000Z") / 1_000,
         },
       },
     });

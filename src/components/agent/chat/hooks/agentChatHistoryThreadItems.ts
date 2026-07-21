@@ -11,6 +11,7 @@ import {
   shouldUseAgentMessageAsFinalText,
 } from "../utils/agentMessagePhase";
 import {
+  aggregateCanonicalPatchChanges,
   aggregateFileChanges,
   isFileMutationToolName,
 } from "../utils/fileChangeSummary";
@@ -48,7 +49,10 @@ import {
   isAuxiliaryHistoryTurn,
   readThreadItemText,
 } from "./agentChatHistoryTimelineBasics";
-import { messageContentPartsFromAgentThreadItem } from "./agentThreadMessageContentParts";
+import {
+  mediaReferenceContentPartFromThreadItem,
+  messageContentPartsFromAgentThreadItem,
+} from "./agentThreadMessageContentParts";
 import { isUpdatePlanToolName } from "../utils/toolNameFamily";
 import { resolveSessionDetailTurnUsage } from "./agentChatHistoryUsage";
 
@@ -429,6 +433,19 @@ export function hydrateSessionDetailMessagesFromThreadItems(
       continue;
     }
 
+    if (item.type === "media") {
+      const mediaPart = mediaReferenceContentPartFromThreadItem(item);
+      if (!mediaPart) {
+        continue;
+      }
+      const draft = ensureAssistantDraft(item);
+      draft.contentParts = [...(draft.contentParts || []), mediaPart];
+      draft.timestamp = parseHistoryTimestamp(
+        item.completed_at || item.updated_at || item.started_at,
+      );
+      continue;
+    }
+
     if (
       item.type === "tool_call" ||
       item.type === "command_execution" ||
@@ -439,6 +456,32 @@ export function hydrateSessionDetailMessagesFromThreadItems(
         continue;
       }
       const draft = ensureAssistantDraft(item);
+      if (item.type === "patch" && item.changes?.length) {
+        const aggregate = aggregateCanonicalPatchChanges(
+          item.changes,
+          item.status === "in_progress" ? "running" : "completed",
+          item.file_status,
+        );
+        if (aggregate.fileCount > 0) {
+          draft.contentParts = [
+            ...(draft.contentParts || []),
+            {
+              type: "file_changes_batch",
+              aggregate,
+              metadata: {
+                source: "thread_item_patch",
+                threadItemId: item.id,
+                sequence: resolveThreadItemTimelinePosition(item),
+                turnId: item.turn_id,
+              },
+            },
+          ];
+          draft.timestamp = parseHistoryTimestamp(
+            item.completed_at || item.updated_at || item.started_at,
+          );
+          continue;
+        }
+      }
       const toolCall = toToolCallState(item);
       if (!toolCall) {
         continue;

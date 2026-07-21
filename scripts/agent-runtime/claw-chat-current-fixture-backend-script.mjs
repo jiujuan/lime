@@ -17,6 +17,7 @@ import {
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
   EVENT_READ_PROBE_DONE_TEXT,
+  EVENT_READ_PROBE_PROMPT,
   EVENT_READ_PROBE_READ_TEXT,
   EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
   EXPERT_SKILLS_RUNTIME_DONE_TEXT,
@@ -86,21 +87,14 @@ import {
   SKILLS_RUNTIME_SCENARIO,
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
-  MEDIA_REFERENCE_BYTE_SIZE,
-  MEDIA_REFERENCE_CAPTION,
   MEDIA_REFERENCE_DONE_TEXT,
   MEDIA_REFERENCE_MIME_TYPE,
   MEDIA_REFERENCE_PROMPT,
-  MEDIA_REFERENCE_SHA256,
   MEDIA_REFERENCE_SUMMARY_TEXT,
-  MEDIA_REFERENCE_TITLE,
   MEDIA_REFERENCE_URI,
 } from "./claw-chat-current-fixture-media-reference.mjs";
 
 export function summarizeRequestInput(request) {
-  const attachments = Array.isArray(request?.input?.attachments)
-    ? request.input.attachments
-    : [];
   const agentImages = Array.isArray(
     request?.runtimeOptions?.runtimeRequest?.images,
   )
@@ -121,14 +115,11 @@ export function summarizeRequestInput(request) {
       : [];
   const fileReferences =
     pathReferences.length > 0 ? pathReferences : harnessFileReferences;
-  const imageAttachments = attachments.filter(
-    (attachment) => attachment?.kind === "image",
-  );
+  const inputImageCount = runtimeInputImageCount(request);
   return {
-    textLength:
-      typeof request?.input?.text === "string" ? request.input.text.length : 0,
-    attachmentCount: attachments.length + agentImages.length,
-    imageAttachmentCount: imageAttachments.length + agentImages.length,
+    textLength: runtimeInputText(request).length,
+    attachmentCount: inputImageCount + agentImages.length,
+    imageAttachmentCount: inputImageCount + agentImages.length,
     fileReferenceCount: fileReferences.length,
     fileReferenceNames: fileReferences
       .map((reference) => reference?.name)
@@ -137,6 +128,18 @@ export function summarizeRequestInput(request) {
       .map((reference) => reference?.path)
       .filter((value) => typeof value === "string"),
   };
+}
+
+export function runtimeInputText(request) {
+  const parts = Array.isArray(request?.input?.parts) ? request.input.parts : [];
+  return parts
+    .map((part) => (typeof part?.Text?.text === "string" ? part.Text.text : ""))
+    .join("");
+}
+
+export function runtimeInputImageCount(request) {
+  const parts = Array.isArray(request?.input?.parts) ? request.input.parts : [];
+  return parts.filter((part) => part?.Image !== undefined).length;
 }
 
 export function buildCanonicalToolItem({
@@ -198,7 +201,7 @@ export function writeFixtureBackend(backendPath, options = {}) {
   const proposedPlanThreadItemText = PLAN_STEPS.map(
     (step) => `- ${step.step}`,
   ).join("\n");
-  const webToolsRenderingFixtureText = `网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\n${WEB_TOOLS_BROKEN_MARKDOWN_TEXT}\n`;
+  const webToolsRenderingFixtureText = `网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\n${WEB_TOOLS_BROKEN_MARKDOWN_TEXT}\n${WEB_TOOLS_RENDERING_DONE_TEXT}\n`;
   const liveTailCommitFixtureText = [
     `${LIVE_TAIL_COMMIT_OVERFLOW_MARKER}: 长输出已经从 live tail commit 到消息历史。`,
     "live tail 长输出第 01 行：首字已经可见，后续追加不能重写前段。",
@@ -332,6 +335,8 @@ export function currentTurnId() {
 }
 
 ${summarizeRequestInput.toString()}
+${runtimeInputText.toString()}
+${runtimeInputImageCount.toString()}
 ${buildCanonicalToolItem.toString()}
 
 export function summarizeActionRespondRequest(request) {
@@ -367,7 +372,7 @@ appendLedgerEntry({
     kind: input.kind,
     sessionId: input.request?.session?.sessionId,
     turnId: input.request?.turn?.turnId,
-    inputText: input.request?.input?.text,
+    inputText: runtimeInputText(input.request),
     inputSummary: summarizeRequestInput(input.request),
     providerPreference: input.request?.providerPreference,
     modelPreference: input.request?.modelPreference,
@@ -409,7 +414,7 @@ if (input.kind === "turnCancel") {
 ${renderApprovalRequestResumeActionRespondScript()}
 
 if (input.kind === "turnStart") {
-  const inputText = input.request?.input?.text || "";
+  const inputText = runtimeInputText(input.request);
   const serializedInput = JSON.stringify(input);
   const isImageTaskPresentationPrompt =
     inputText.includes("image_task_presentation.v1") ||
@@ -417,7 +422,7 @@ if (input.kind === "turnStart") {
     serializedInput.includes("image_task_presentation.v1") ||
     serializedInput.includes("Generate user-visible copy for one image generation turn.") ||
     serializedInput.includes("image_command_presentation");
-  const isEventReadProbe = inputText.includes("agentSession/event");
+  const isEventReadProbe = inputText.includes("${EVENT_READ_PROBE_PROMPT}");
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
   const isGreetingPrompt = inputText === "${GREETING_PROMPT}";
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
@@ -945,21 +950,12 @@ ${renderApprovalRequestResumeTurnStartScript()}
   if (isMediaReferencePrompt) {
     emitEvents([
       {
-        type: "item.started",
-        payload: {
-          item: {
-            id: "agent-media-reference-1",
-            thread_id: currentThreadId(),
-            threadId: currentThreadId(),
-            turn_id: currentTurnId(),
-            turnId: currentTurnId(),
-            type: "agent_message",
-            role: "assistant",
-            phase: "final_answer",
-            status: "in_progress",
-            text: ""
-          }
-        }
+        type: "message.delta",
+        payload: messageDeltaPayload(
+          "${MEDIA_REFERENCE_SUMMARY_TEXT}",
+          "final_answer",
+          finalAnswerItemId,
+        ),
       },
       {
         type: "item.completed",
@@ -970,32 +966,10 @@ ${renderApprovalRequestResumeTurnStartScript()}
             threadId: currentThreadId(),
             turn_id: currentTurnId(),
             turnId: currentTurnId(),
-            type: "agent_message",
-            role: "assistant",
-            phase: "final_answer",
+            type: "media",
             status: "completed",
-            text: "${MEDIA_REFERENCE_SUMMARY_TEXT}",
-            contentParts: [
-              {
-                type: "text",
-                text: "${MEDIA_REFERENCE_SUMMARY_TEXT}"
-              },
-              {
-                type: "media",
-                kind: "image",
-                caption: "${MEDIA_REFERENCE_CAPTION}",
-                reference: {
-                  uri: "${MEDIA_REFERENCE_URI}",
-                  mime_type: "${MEDIA_REFERENCE_MIME_TYPE}",
-                  title: "${MEDIA_REFERENCE_TITLE}",
-                  ...(mediaReferenceSourcePath
-                    ? { source_path: mediaReferenceSourcePath }
-                    : {}),
-                  sha256: "${MEDIA_REFERENCE_SHA256}",
-                  byte_size: ${MEDIA_REFERENCE_BYTE_SIZE}
-                }
-              }
-            ]
+            uri: mediaReferenceSourcePath || "${MEDIA_REFERENCE_URI}",
+            mime_type: "${MEDIA_REFERENCE_MIME_TYPE}"
           }
         }
       },
@@ -1062,7 +1036,7 @@ ${renderApprovalRequestResumeTurnStartScript()}
       type: "turn.completed",
       payload: {
         status: "completed",
-        text: assistantDoneText
+        text: isWebToolsRenderingPrompt ? followupText : assistantDoneText
       }
     }
   ]);

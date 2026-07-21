@@ -80,6 +80,20 @@ const rendererAppServerSplitSourceFiles = [
   "src/lib/api/appServerClientMethods.ts",
   "src/lib/api/appServerClientMethodSpecs.ts",
 ];
+const rendererQueuedTurnWriteSurfaceRoots = [
+  "src/components/agent/chat",
+  "src/lib/api/agentRuntime",
+];
+const rendererQueuedTurnWriteSurfaceForbiddenSnippets = [
+  '"agentSession/queuedTurn/promote"',
+  '"agentSession/queuedTurn/remove"',
+  "promoteAgentRuntimeQueuedTurn",
+  "removeAgentRuntimeQueuedTurn",
+  "promoteAgentSessionQueuedTurn",
+  "removeAgentSessionQueuedTurn",
+  "onPromoteQueuedTurn",
+  "onRemoveQueuedTurn",
+];
 
 function expandContractFiles(files) {
   return [
@@ -125,6 +139,9 @@ function collectRustFiles(relativeDir) {
 const protocolV0ModuleFiles = collectRustFiles(
   "lime-rs/crates/app-server-protocol/src/protocol/v0",
 );
+const protocolV2ModuleFiles = collectRustFiles(
+  "lime-rs/crates/app-server-protocol/src/protocol/v2",
+);
 const schemaExportModuleFiles = collectRustFiles(
   "lime-rs/crates/app-server-protocol/src/schema_export",
 );
@@ -150,6 +167,7 @@ const appServerRuntimeBackendFiles = [
 ];
 const appServerRuntimeBackendExecutionChainFiles = [
   "lime-rs/crates/app-server/src/runtime_backend.rs",
+  "lime-rs/crates/app-server/src/runtime/turn_execution.rs",
   "lime-rs/crates/app-server/src/runtime_backend/action_response.rs",
   "lime-rs/crates/app-server/src/runtime_backend/event_mapper.rs",
   "lime-rs/crates/app-server/src/runtime_backend/execution_backend.rs",
@@ -196,6 +214,7 @@ const rustProtocolFiles = [
   "lime-rs/crates/app-server-protocol/src/jsonrpc_lite.rs",
   "lime-rs/crates/app-server-protocol/src/protocol/v0.rs",
   ...protocolV0ModuleFiles,
+  ...protocolV2ModuleFiles,
   "lime-rs/crates/app-server-protocol/src/schema_export.rs",
   ...schemaExportModuleFiles,
   "lime-rs/crates/app-server-protocol/src/schema_fixtures.rs",
@@ -433,12 +452,12 @@ const pluginUiRuntimeLifecycleForbiddenSnippets = [
       "Plugin UI runtime lifecycle cannot submit Agent task host responses",
   },
   {
-    snippet: "agentSession/turn/start",
+    snippet: "turn/start",
     reason:
       "Plugin UI runtime lifecycle cannot call App Server turn lifecycle methods",
   },
   {
-    snippet: "METHOD_AGENT_SESSION_TURN_START",
+    snippet: "METHOD_TURN_START",
     reason:
       "Plugin UI runtime lifecycle cannot call App Server turn lifecycle methods",
   },
@@ -593,6 +612,96 @@ const retiredAgentRuntimeAdapterFiles = [
   "lime-rs/crates/agent/src/message_content_adapter.rs",
   "lime-rs/crates/agent/src/event_converter.rs",
 ];
+const retiredRendererProjectionFiles = [
+  "src/lib/api/agentRuntime/canonicalApprovalItemProjection.ts",
+  "src/lib/api/agentRuntime/canonicalApprovalItemProjection.test.ts",
+  "src/lib/api/agentRuntime/appServerEventPayloadProjection.ts",
+  "src/components/agent/chat/projection/queueProjection.ts",
+  "src/components/agent/chat/projection/queueProjection.test.ts",
+  "packages/agent-runtime-projection/src/queueEvents.ts",
+  "src/components/agent/chat/hooks/agentStreamReadModelParsing.ts",
+  "src/components/agent/chat/hooks/agentQueuedTurnProjection.ts",
+  "src/components/agent/chat/hooks/agentQueuedTurnProjection.unit.test.ts",
+];
+const retiredRendererQueuedTurnProjectionProductionFiles = [
+  "src/lib/api/agentProtocolEventTypes.ts",
+  "src/lib/api/agentProtocol.d.ts",
+  "src/lib/api/agentProtocolRuntimeParsers.ts",
+  "src/components/agent/chat/projection/agentUiEventProjection.ts",
+  "src/components/agent/chat/hooks/agentStreamRuntimeLifecycleEvents.ts",
+  "src/components/agent/chat/hooks/agentStreamRuntimeHandler.ts",
+];
+const retiredRendererQueuedTurnProjectionSnippets = [
+  "AgentEventQueueAdded",
+  "AgentEventQueueRemoved",
+  "AgentEventQueueStarted",
+  "AgentEventQueueCleared",
+  'case "queue_added"',
+  'case "queue_removed"',
+  'case "queue_started"',
+  'case "queue_cleared"',
+  "buildQueueProjectionEvents",
+  "handleAgentStreamQueueEvent",
+];
+const retiredRendererQueuedTurnSecondaryProjectionSpecs = [
+  {
+    file: "src/components/agent/chat/projection/threadReadActivity.ts",
+    snippets: [
+      "includeQueuedActivity",
+      '"queued_turns"',
+      '"queuedTurns"',
+      "hasPendingOrQueuedActivity",
+    ],
+  },
+  {
+    file: "src/components/agent/chat/hooks/agentSessionTopicViewModel.ts",
+    snippets: [
+      "shouldAutoResumeHydratedRuntimeThread",
+      "resolveRuntimePreviewFromSessionDetail",
+      ".queued_turns",
+    ],
+  },
+  {
+    file: "src/components/agent/chat/hooks/agentChatHistoryNormalize.ts",
+    snippets: [".queued_turns"],
+  },
+  {
+    file: "src/lib/api/agentRuntime/sessionClient.ts",
+    snippets: ["queuedTurnsCount:"],
+  },
+  {
+    file: "src/components/agent/chat/hooks/agentSessionState.ts",
+    snippets: [
+      "QueuedTurnSnapshot",
+      "normalizeQueuedTurnSnapshots",
+      "queuedTurns:",
+    ],
+  },
+  {
+    file: "src/components/agent/chat/hooks/agentSessionRefresh.ts",
+    snippets: [
+      "QueuedTurnSnapshot",
+      "normalizeQueuedTurnSnapshots",
+      "queuedTurns:",
+    ],
+  },
+  {
+    file: "src/components/agent/chat/hooks/useAgentSession.ts",
+    snippets: ["QueuedTurnSnapshot", "setQueuedTurns", "queuedTurns:"],
+  },
+  {
+    file: "src/components/agent/chat/hooks/useAgentChat.ts",
+    snippets: ["session.queuedTurns", "queuedTurns: session.queuedTurns"],
+  },
+  {
+    file: "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+    snippets: ["queuedTurns = []", "queuedTurns,"],
+  },
+  {
+    file: "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+    snippets: ["queuedTurns.length"],
+  },
+];
 const retiredAgentRuntimeLegacyQueueFiles = [
   "lime-rs/crates/core/src/database/agent_runtime_queue_repository.rs",
   "lime-rs/crates/agent/src/agent_runtime_support.rs",
@@ -600,6 +709,9 @@ const retiredAgentRuntimeLegacyQueueFiles = [
 const retiredAgentRuntimeLegacyQueueSurfaceFiles = [
   "lime-rs/crates/core/src/database/mod.rs",
   "src/lib/governance/legacySurfaceCatalog.json",
+];
+const retiredAgentUiResumeContractFiles = [
+  "packages/agent-ui-contracts/schemas/agent-runtime-resume-contract.v0.1.schema.json",
 ];
 const retiredAgentRuntimeLegacyQueueSnippets = [
   "agent_runtime_queued_turns",
@@ -643,11 +755,12 @@ const checks = [
     ],
   },
   {
-    name: "Rust protocol exports JSON schema fixtures for JSON-RPC and appserver.v0 DTOs",
+    name: "Rust protocol exports JSON schema fixtures for JSON-RPC, v0, and v2 DTOs",
     files: rustProtocolFiles,
     snippets: [
       "pub const JSONRPC_SCHEMA_TYPE_NAMES: &[&str]",
       "pub const V0_SCHEMA_TYPE_NAMES: &[&str]",
+      "pub const V2_SCHEMA_TYPE_NAMES: &[&str]",
       "JsonRpcRequest",
       "AgentSessionTurnStartParams",
       "EvidenceExportResponse",
@@ -655,11 +768,13 @@ const checks = [
       "pub include_protocol_types: bool",
       "fn jsonrpc_schemas() -> Vec<GeneratedJsonSchema>",
       "fn v0_schemas() -> Vec<GeneratedJsonSchema>",
+      "fn v2_schemas() -> Vec<GeneratedJsonSchema>",
       'typed_schema::<AppServerRequestSerializationScope>("AppServerRequestSerializationScope")',
       'typed_schema::<AppServerRequestSerializationScopeSpec>("AppServerRequestSerializationScopeSpec")',
       'typed_schema::<AgentSessionTurnStartParams>("AgentSessionTurnStartParams")',
       'PathBuf::from("json")',
       '.join("v0")',
+      '.join("v2")',
       '.join("jsonrpc")',
       '"schemas": {',
       "schema_registry_matches_declared_type_names",
@@ -936,8 +1051,8 @@ const checks = [
       "fn scope_matches",
       "inventory_source_filters_by_session_scope",
       'id: "agent.session".to_string()',
-      "METHOD_AGENT_SESSION_TURN_START.to_string()",
-      "METHOD_AGENT_SESSION_TURN_CANCEL.to_string()",
+      "METHOD_TURN_START.to_string()",
+      "METHOD_TURN_INTERRUPT.to_string()",
     ],
   },
   {
@@ -958,7 +1073,7 @@ const checks = [
       "fn paginate_capabilities(",
       "next_cursor",
       "fn ensure_capability_allowed_with_context(",
-      "METHOD_AGENT_SESSION_TURN_START",
+      "METHOD_TURN_START",
       "capability_list_with_session_id_uses_stored_session_scope",
       "start_turn_allows_session_scoped_capability_id",
       "RuntimeCoreError::CapabilityDenied",
@@ -1127,7 +1242,7 @@ const checks = [
     ],
   },
   {
-    name: "Runtime projection store preserves current session list cwd and archive filters",
+    name: "Runtime projection store preserves current session list cwd filters",
     files: [
       "lime-rs/crates/app-server/src/runtime/session_lifecycle.rs",
       "lime-rs/crates/app-server/src/runtime/session_list_scope.rs",
@@ -1149,17 +1264,16 @@ const checks = [
       "params.archived_only.unwrap_or(false)",
       "(?1 = 1 AND archived_at IS NOT NULL)",
       "(?1 = 0 AND (?2 = 1 OR archived_at IS NULL))",
-      "pub fn archive_many_sessions(",
       "pub fn list_session_overviews(",
       ".list_session_overviews(&params)",
-      ".archive_many_sessions(",
-      "archived_only: Some(true)",
       "list_agent_sessions_filters_projection_by_cwd",
     ],
     absentSnippets: [
       "pub(crate) fn list_current_timeline_sessions(",
       "pub(crate) fn resolve_session_list_scope(",
       "fn query_current_timeline_session_overviews(",
+      "pub fn archive_many_sessions(",
+      ".archive_many_sessions(",
     ],
   },
   {
@@ -1410,7 +1524,7 @@ const checks = [
       "params: PluginShellPrepareParams",
       "parse_plugin_shell_descriptor(&params.descriptor)",
       "validate_plugin_shell_against_installed_state(",
-      "resolve_plugin_runtime_dir(&state)",
+      "self.installed_plugin_runtime_dir(&state)",
       "spawn_plugin_ui_process(&app_dir, port)",
       "self.app_data_source.list_knowledge_packs(params).await",
       "self.app_data_source.read_knowledge_pack(params).await",
@@ -1431,7 +1545,7 @@ const checks = [
       "self.app_data_source.consolidate_memory_store(params).await",
       "self.app_data_source.health_memory_store(params).await",
       "self.app_data_source.reset_memory_store(params).await",
-      "list_plugin_installed_state().map_err(data_error)",
+      "plugins::list_plugin_installed_state(&self.plugin_data_root).map_err(data_error)",
       "lime_knowledge::list_knowledge_packs(lime_knowledge::KnowledgeListPacksRequest",
       "lime_knowledge::get_knowledge_pack(lime_knowledge::KnowledgeGetPackRequest",
       "lime_knowledge::import_knowledge_source(lime_knowledge::KnowledgeImportSourceRequest",
@@ -2802,12 +2916,10 @@ const checks = [
       "electron/ipcChannels.test.ts",
     ],
     snippets: [
-      "AppServerRequestError",
-      "ERROR_CODES",
-      "METHOD_AGENT_SESSION_START",
-      "METHOD_AGENT_SESSION_READ",
-      "METHOD_AGENT_SESSION_TURN_START",
-      "METHOD_AGENT_SESSION_TURN_CANCEL",
+      "METHOD_THREAD_START",
+      "METHOD_THREAD_READ",
+      "METHOD_TURN_START",
+      "METHOD_TURN_INTERRUPT",
       "METHOD_AGENT_SESSION_ACTION_RESPOND",
       'case "plugin_runtime_start_task":',
       'case "plugin_runtime_get_task":',
@@ -2818,8 +2930,10 @@ const checks = [
       "async getTask(",
       "async cancelTask(",
       "async submitHostResponse(",
-      "async #ensureSession(",
-      "isAppServerSessionAlreadyExistsError(",
+      "async #resolveThreadIdentity(",
+      "buildThreadStartParams(",
+      "buildTurnStartParams(",
+      "requireCanonicalThread(",
       "buildPluginRuntimeTaskMessage(",
       "sessionStatusToPluginTaskStatus(",
       "normalizeAgentSessionActionScope(",
@@ -2827,14 +2941,14 @@ const checks = [
       '"plugin_runtime_cancel_task"',
       '"plugin_runtime_get_task"',
       '"plugin_runtime_submit_host_response"',
-      '"agentSession/start"',
-      '"agentSession/turn/start"',
-      '"agentSession/read"',
-      '"agentSession/turn/cancel"',
+      '"thread/start"',
+      '"turn/start"',
+      '"thread/read"',
+      '"turn/interrupt"',
       '"agentSession/action/respond"',
       "const runtimeRequest = {",
-      "runtimeRequest: expect.objectContaining({",
-      "startTask 对已存在 session 做幂等投影并继续提交 turn",
+      "responsesapiClientMetadata: expect.objectContaining({",
+      "startTask 对已有 canonical thread 直接提交 turn",
       "submitHostResponse 投影 snake_case runtime request 到 action/respond",
       "ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS",
     ],
@@ -2844,6 +2958,8 @@ const checks = [
       "defaultMocks",
       "invokeMockOnly",
       "build_queued_turn_task(",
+      "async #ensureSession(",
+      "isAppServerSessionAlreadyExistsError(",
     ],
   },
   {
@@ -3137,7 +3253,7 @@ const checks = [
     ],
   },
   {
-    name: "Electron session history fixture proves App Server current read list update path",
+    name: "Electron session history fixture proves v2 archive lifecycle and current history read path",
     file: "scripts/electron/session-history-fixture-smoke.mjs",
     snippets: [
       "[smoke:agent-session-history-electron-fixture]",
@@ -3150,61 +3266,38 @@ const checks = [
       "window.electronAPI.supportsCommand",
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
       '"initialize"',
-      '"agentSession/start"',
-      '"agentSession/read"',
+      '"thread/start"',
+      '"thread/archive"',
+      '"thread/unarchive"',
+      '"thread/read"',
+      '"thread/list"',
+      '"thread/turns/list"',
+      '"thread/resume"',
+      "const FORBIDDEN_METHODS = [",
       '"agentSession/update"',
-      '"agentSession/list"',
-      'const FORBIDDEN_METHODS = ["agentSession/turn/start"]',
-      "forbiddenMethodsSeen.length === 0",
-      "ARCHIVE_FAIL_CLOSED_MESSAGE",
-      "archived: true",
-      "callExpectError",
-      "archiveRequestSeen",
-      "archiveFailClosed",
-      "listedSessionArchivedAt == null",
-      "seedPersistedProjectionSession",
+      '"agentSession/archiveMany"',
       "SQLITE3_BINARY",
-      "PERSISTED_SESSION_ID",
       "launchElectronFixture",
       "closeElectronFixture",
-      '"archive-readback"',
-      '"unarchive-readback"',
-      "sidecarRestartReadback",
-      "persistedArchiveReopenSummary",
-      "persistedUnarchiveReopenSummary",
-      "archived: false",
-      "PERSISTED_SESSION_FORBIDDEN_METHODS",
-      "SIDEBAR_GUI_REQUIRED_METHODS",
-      "SIDEBAR_GUI_FORBIDDEN_METHODS",
+      "runThreadArchivePhase",
+      "assertThreadArchivePhase",
+      "runThreadUnarchivePhase",
+      "assertThreadUnarchivePhase",
+      "findRolloutPaths",
+      "threadArchiveSummary",
+      "threadUnarchiveSummary",
+      "archivedRolloutPaths",
+      "restoredRolloutPaths",
+      "archivedRolloutPaths.active.length === 0",
+      "archivedRolloutPaths.archived.length === 1",
+      "restoredRolloutPaths.active.length === 1",
+      "restoredRolloutPaths.archived.length === 0",
+      "seedThreadReadPageIsomorphicCanonicalThread",
+      "runThreadReadPageIsomorphicReadPhase",
+      "runThreadReadPageIsomorphicDomOracle",
       "LAST_PROJECT_ID_KEY",
       "APP_SIDEBAR_COLLAPSED_STORAGE_KEY",
-      "runSidebarGuiArchivePhase",
-      "primeSidebarWorkspace",
-      "openSidebarConversationMenu",
-      "clickSidebarArchiveMenuItem",
-      "waitForSidebarGuiUpdateTrace",
-      "parseJsonRpcRequestsFromInvokeTrace",
-      "SIDEBAR_RECENT_LIST_SELECTOR",
-      "SETTINGS_ARCHIVED_CONVERSATIONS_SELECTOR",
-      "SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR",
-      "app-sidebar-conversation-menu-archive",
-      'entry.status === "success"',
-      "sidebarGuiArchiveSummary",
-      "settingsGuiRestoreSummary",
-      "runSettingsGuiRestorePhase",
-      "settings-archived-conversation-restore",
-      "settingsGuiRestore",
-      "archiveTrace",
-      "unarchiveTrace",
-      "侧栏 GUI 点击未发起 agentSession/update archived=true",
-      "归档设置页 GUI 点击未发起 agentSession/update archived=false",
-      "detail.turns",
-      "detail.items",
-      "detail.queued_turns",
-      "detail.thread_read",
-      "listSessionFound",
-      "listedSession?.title === UPDATED_TITLE",
-      "不是数组",
+      "databaseBootstrapRestart",
     ],
     absentSnippets: [
       'APP_SERVER_BACKEND_MODE: "mock"',
@@ -3216,6 +3309,8 @@ const checks = [
       "defaultMocks",
       "invokeMockOnly",
       'backendMode: "mock"',
+      'call("agentSession/update"',
+      'call("agentSession/archiveMany"',
     ],
   },
   {
@@ -3235,11 +3330,10 @@ const checks = [
       "window.__LIME_ELECTRON__ === true",
       "window.electronAPI.supportsCommand",
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
-      '"agentSession/start"',
-      '"agentSession/update"',
-      '"agentSession/turn/start"',
-      '"agentSession/read"',
-      '"agentSession/list"',
+      '"thread/start"',
+      '"turn/start"',
+      '"thread/read"',
+      '"thread/list"',
       'type: "artifact.snapshot"',
       'type: "turn.completed"',
       'kind: "backendEvents"',
@@ -3266,6 +3360,7 @@ const checks = [
       "invokeMockOnly",
       "explicitMockFallback",
       'type: "turn.final_done"',
+      '"agentSession/update"',
     ],
   },
   {
@@ -3295,7 +3390,7 @@ const checks = [
       'LIME_ELECTRON_DEV_HTTP_BRIDGE: "0"',
       "createClickThroughFixtureRuntimeEnv",
       "REQUIRED_BACKEND_METHODS",
-      '"agentSession/read"',
+      '"thread/read"',
       "导入细节还原",
       "waitForImportedSessionDetails",
       "sendFollowUpFromGui",
@@ -3324,8 +3419,8 @@ const checks = [
       '"conversationImport/source/scan"',
       '"conversationImport/thread/preview"',
       '"conversationImport/thread/commit"',
-      '"agentSession/read"',
-      '"agentSession/turn/start"',
+      '"thread/read"',
+      '"turn/start"',
       "IMPORTED_REASONING_TEXT",
       "IMPORTED_CWD",
       "readBackendLedger(",
@@ -3404,9 +3499,9 @@ const checks = [
       "window.electronAPI.supportsCommand",
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
       '"initialize"',
-      '"agentSession/start"',
-      '"agentSession/turn/start"',
-      '"agentSession/read"',
+      '"thread/start"',
+      '"turn/start"',
+      '"thread/read"',
       "writeFixtureBackend(",
       "readBackendLedger(",
       'input.kind === "turnStart"',
@@ -3437,15 +3532,21 @@ const checks = [
     ],
   },
   {
-    name: "Rust JSON-RPC router denies hidden capability ids before starting turns",
-    file: "lime-rs/crates/app-server/src/lib.rs",
+    name: "Rust v2 router rejects legacy turn shape and RuntimeCore denies hidden capabilities",
+    files: [
+      "lime-rs/crates/app-server/src/lib.rs",
+      "lime-rs/crates/app-server/src/runtime/tests/turn_lifecycle.rs",
+    ],
     snippets: [
-      "turn_start_with_hidden_capability_returns_capability_denied_error",
+      "turn_start_rejects_legacy_session_shape_before_runtime_dispatch",
       "capability_list_with_session_id_uses_stored_session_scope",
-      "error_codes::CAPABILITY_DENIED",
+      "error_codes::INVALID_PARAMS",
       "error_codes::SESSION_NOT_FOUND",
-      '"capability denied: content.draft.generate"',
-      'assert!(read["turns"].as_array().expect("turns").is_empty())',
+      'assert!(error.error.message.contains("threadId"))',
+      "start_turn_rejects_hidden_capability_id_without_persisting_turn",
+      "RuntimeCoreError::CapabilityDenied(capability_id)",
+      'assert_eq!(capability_id, "content.draft.generate")',
+      "assert!(read.turns.is_empty())",
     ],
   },
   {
@@ -3650,8 +3751,9 @@ const checks = [
       "pub struct RuntimeBackend",
       "impl ExecutionBackend for RuntimeBackend",
       "init_agent_with_db(",
-      "failed to initialize Agent runtime for App Server runtime backend",
       "AgentRuntimeState::new()",
+      "session_loops.get_or_create(",
+      "execute_backend_via_session_loop(",
       "direct_provider_config_from_request",
       "configure_provider_for_session(",
       "install_provider_for_session(agent_state, request.session_id, &runtime_config).await?",
@@ -3713,8 +3815,10 @@ const checks = [
       "session_extension_data_provider_routing_is_used_as_session_default",
       "let provider = session_default_provider(metadata)?;",
       "let model = session_default_model(metadata)?;",
-      "App Server runtime backend requires provider/model selection",
-      "persist a complete session provider/model default",
+      "RuntimeCoreError::pending_route_for_session(",
+      "RuntimeCoreError::RouteRejected",
+      'reason_code == "provider_and_model_missing"',
+      'reason_code == "capability_snapshot_missing"',
     ],
     absentSnippets: [
       ".configure_provider(",
@@ -3769,7 +3873,7 @@ const checks = [
     ],
   },
   {
-    name: "App Server stdio streams backend events before turn response",
+    name: "App Server stdio streams direct v2 lifecycle before turn response",
     files: [
       "lime-rs/crates/app-server/src/lib.rs",
       "lime-rs/crates/app-server/src/processor/mod.rs",
@@ -3794,11 +3898,13 @@ const checks = [
       "METHOD_EVIDENCE_EXPORT",
       "json_lines_loop_streams_external_backend_events_before_turn_response",
       "json_lines_loop_streams_turn_failed_after_partial_external_backend_events",
-      "expected evidence export response after failed turn",
+      "assert_next_direct_delta_notification",
+      'notification.method != "turn/completed"',
+      'assert_eq!(params["turn"]["status"], "failed")',
+      "let evidence = next_json_response_result(",
       '"includeEvents": true',
       '"includeArtifacts": true',
       "external backend crashed after partial output",
-      "assert_scoped_agent_event_notification",
     ],
   },
   {
@@ -3815,13 +3921,16 @@ const checks = [
       "TransportEvent::StdioClientInitialized",
       "TransportEvent::ConnectionClosed",
       "TransportEvent::IncomingMessage",
-      "server.register_transport_writer(connection_id, writer)",
+      "server.register_transport_writer(",
+      "disconnect_sender",
       "server.unregister_transport_writer(connection_id)",
       "send_to_transport_connection",
       "QueuedOutgoingMessage::new(OutgoingMessage::from(message))",
-      "enqueue_transport_outbound_message(&self.transport_writers, message.clone())",
+      "enqueue_transport_outbound_message(",
+      "disconnects: &TransportDisconnects",
+      "initialized: &TransportInitialized",
       "tokio::spawn(async move",
-      ".send(QueuedOutgoingMessage::new(OutgoingMessage::from(message)))",
+      "writer.try_send(queued)",
       "stdio_connection_emits_lifecycle_events_and_writes_queue_messages",
     ],
     absentSnippets: [
@@ -3927,7 +4036,7 @@ const checks = [
       "pub fn list_capabilities_default(&mut self) -> Result<JsonRpcRequest, ClientError>",
       "TypedRequest<CapabilityListParams>",
       "TypedRequest::new(METHOD_CAPABILITY_LIST, params)",
-      "pub use app_server_protocol::APP_SERVER_METHODS",
+      "pub use app_server_protocol::app_server_method_catalog",
       "pub use app_server_protocol::is_app_server_request_method",
       "reexports_protocol_method_catalog_for_consumers",
     ],
@@ -4068,24 +4177,39 @@ const checks = [
     ],
   },
   {
-    name: "Generated TypeScript protocol exposes Rust-owned method constants and tagged messages",
+    name: "Generated TypeScript protocol exposes Rust-owned method constants and v2 typed envelopes",
     file: "packages/app-server-client/src/generated/protocol-types.ts",
     snippets: [
       'export const METHOD_INITIALIZE = "initialize";',
       'export const METHOD_CAPABILITY_LIST = "capability/list";',
       "export type AppServerClientRequest =",
       'method: "initialize";',
-      'method: "agentSession/turn/start";',
+      "export type ClientRequest =",
+      'method: "thread/start";',
+      'method: "turn/start";',
       "export type ClientNotification =",
       'method: "initialized";',
       "export type ServerNotification =",
-      'method: "agentSession/event";',
-      'method: "workspaceRightSurface/pendingChanged";',
+      'method: "turn/started";',
+      'method: "turn/completed";',
+      "export type ServerRequest =",
+      'method: "mcpServer/elicitation/request";',
+      "params: McpServerElicitationRequestParams;",
+      'method: "item/commandExecution/requestApproval";',
+      "params: CommandExecutionRequestApprovalParams;",
+      'method: "item/fileChange/requestApproval";',
+      "params: FileChangeRequestApprovalParams;",
+      'method: "item/tool/requestUserInput";',
+      "params: ToolRequestUserInputParams;",
+      "export interface McpServerElicitationRequestResponse",
+      "export interface FileChangeRequestApprovalResponse",
+      "export interface ToolRequestUserInputResponse",
     ],
     absentSnippets: [
       "export interface AppServerClientRequest",
       "method: AppServerRequestMethod;",
       "export type AppServerNotification =",
+      "export interface McpServerElicitationResponse",
     ],
   },
   {
@@ -4422,24 +4546,52 @@ const checks = [
     ],
   },
   {
-    name: "TypeScript protocol exposes typed agentSession/archiveMany contract",
+    name: "TypeScript protocol exposes typed thread archive lifecycle contract",
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
-      'export const METHOD_AGENT_SESSION_ARCHIVE_MANY = "agentSession/archiveMany"',
-      "export type AgentSessionArchiveManyParams = {",
-      "sessionIds?: string[]",
-      "export type AgentSessionArchiveManyResponse = {",
-      "sessions: AgentSessionOverview[]",
+      'export const METHOD_THREAD_ARCHIVE = "thread/archive"',
+      'export const METHOD_THREAD_UNARCHIVE = "thread/unarchive"',
+      "export interface ThreadArchiveParams {",
+      "export type ThreadArchiveResponse = Record<string, unknown>",
+      "export interface ThreadUnarchiveParams {",
+      "export interface ThreadUnarchiveResponse {",
+    ],
+    absentSnippets: [
+      '"agentSession/archiveMany"',
+      "AgentSessionArchiveManyParams",
+      "AgentSessionArchiveManyResponse",
     ],
   },
   {
-    name: "TypeScript client wraps typed agentSession/archiveMany helper",
+    name: "Retired bulk archive and update archived flag stay absent from current protocol",
+    files: [
+      ...protocolV0ModuleFiles,
+      ...protocolV2ModuleFiles,
+      ...schemaExportModuleFiles,
+      "lime-rs/crates/app-server-protocol/schema/json/app_server_protocol.schemas.json",
+      "lime-rs/crates/app-server-protocol/schema/json/manifest.json",
+      "packages/app-server-client/src/protocol.ts",
+      "packages/app-server-client/src/generated/protocol-types.ts",
+    ],
+    snippets: [],
+    absentSnippets: [
+      '"agentSession/archiveMany"',
+      "AgentSessionArchiveManyParams",
+      "AgentSessionArchiveManyResponse",
+    ],
+  },
+  {
+    name: "TypeScript client wraps typed thread archive lifecycle helpers",
     file: "packages/app-server-client/src/index.ts",
     snippets: [
-      "METHOD_AGENT_SESSION_ARCHIVE_MANY",
-      "archiveManySessions(params: AgentSessionArchiveManyParams): JsonRpcRequest",
-      "this.client.archiveManySessions(params)",
-      "Promise<AppServerRequestResult<AgentSessionArchiveManyResponse>>",
+      "METHOD_THREAD_ARCHIVE",
+      "METHOD_THREAD_UNARCHIVE",
+      "archiveThread(params: ThreadArchiveParams): JsonRpcRequest",
+      "unarchiveThread(params: ThreadUnarchiveParams): JsonRpcRequest",
+      "this.client.archiveThread(params)",
+      "this.client.unarchiveThread(params)",
+      "Promise<AppServerRequestResult<ThreadArchiveResponse>>",
+      "Promise<AppServerRequestResult<ThreadUnarchiveResponse>>",
     ],
   },
   {
@@ -4544,7 +4696,7 @@ const checks = [
       "assert.equal(deleteSession.method, METHOD_AGENT_SESSION_DELETE)",
       'providerSelector: "custom-provider"',
       'recentAccessMode: "full-access"',
-      "isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START)",
+      "isAppServerRequestMethod(METHOD_TURN_START)",
       "isAppServerNotificationMethod(METHOD_AGENT_SESSION_EVENT)",
       "connection wraps capability list response",
       "connection request errors preserve streamed notifications and response context",
@@ -4764,12 +4916,23 @@ const checks = [
     name: "Renderer-safe App Server helper aliases turn cancel protocol types",
     file: "src/lib/api/appServer.ts",
     snippets: [
-      "export const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =",
-      "protocol.METHOD_AGENT_SESSION_TURN_CANCEL;",
+      "export const APP_SERVER_METHOD_TURN_INTERRUPT =",
+      "protocol.METHOD_TURN_INTERRUPT;",
       "export type AppServerAgentSessionTurnCancelParams =\n  protocol.AgentSessionTurnCancelParams;",
       "export type AppServerAgentSessionTurnCancelResponse =\n  protocol.AgentSessionTurnCancelResponse;",
       "cancelTurn(params: appServer.AppServerAgentSessionTurnCancelParams)",
-      '{ name: "cancelTurn", method: constants.APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL',
+      '{ name: "cancelTurn", method: constants.APP_SERVER_METHOD_TURN_INTERRUPT',
+    ],
+  },
+  {
+    name: "Renderer-safe App Server helper exposes typed turn steer",
+    file: "src/lib/api/appServer.ts",
+    snippets: [
+      "export const APP_SERVER_METHOD_TURN_STEER = protocol.METHOD_TURN_STEER;",
+      "export type AppServerTurnSteerParams = protocol.TurnSteerParams;",
+      "export type AppServerTurnSteerResponse = protocol.TurnSteerResponse;",
+      "steerTurn(params: appServer.AppServerTurnSteerParams)",
+      '{ name: "steerTurn", method: constants.APP_SERVER_METHOD_TURN_STEER',
     ],
   },
   {
@@ -4778,7 +4941,8 @@ const checks = [
       "src/lib/api/agentRuntime/threadClient.ts",
       "src/lib/api/agentRuntime/appServerEventStream.ts",
       "src/lib/api/agentRuntime/appServerEventStreamRouting.ts",
-      "src/lib/api/agentRuntime/appServerEventPayloadProjection.ts",
+      "src/lib/api/agentRuntime/appServerEventStreamProjection.ts",
+      "src/lib/api/agentRuntime/appServerV2Notification.ts",
       "src/lib/api/agentRuntime/appServerEventTimelineReaders.ts",
     ],
     snippets: [
@@ -4789,15 +4953,14 @@ const checks = [
       "assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable)",
       "Agent Runtime requires the App Server current lifecycle channel",
       "appServerClient.startTurn(",
-      "standardRuntimeClient.startTurn(request)",
+      "standardRuntimeClient.startTurn(params)",
       "createAppServerAgentRuntimeLifecycleClient(",
       "appServerClient.cancelTurn(",
       "appServerTurnCancelParamsFromRequest(request)",
       "request.turn_id",
       "appServerClient.compactAgentSession(",
-      "appServerClient.resumeAgentSessionThread(",
-      "appServerClient.removeAgentSessionQueuedTurn(",
-      "appServerClient.promoteAgentSessionQueuedTurn(",
+      "const params: ThreadResumeParams",
+      "appServerClient.resumeThread(params)",
       "appServerClient.replayAction(",
       "appServerActionReplayParamsFromRequest(request)",
       "appServerClient.respondAction(",
@@ -4807,23 +4970,18 @@ const checks = [
       "projectAppServerAgentEventPayload(",
       "APP_SERVER_METHOD_AGENT_SESSION_EVENT",
       "publishProcessedAgentRuntimeEvent(eventName, payload)",
+      '"thread/started"',
+      '"turn/started"',
+      '"turn/completed"',
+      '"item/started"',
+      '"item/completed"',
+      '"item/agentMessage/delta"',
       'type: "text_delta"',
-      'readString(payload, "type") === "text_delta_batch"',
-      'type: "text_delta_batch"',
-      'case "message.delta_batch":',
-      'case "message.batch":',
-      'case "message.completed":',
-      'case "item.completed":',
-      'type: "artifact_snapshot"',
-      'type: "action_required"',
-      'type: "action_resolved"',
+      '"item_completed"',
       'type: "runtime_status"',
-      'case "turn.completed":',
-      'type: "turn_completed"',
-      'case "turn.failed":',
-      'type: "turn_failed"',
-      'case "turn.canceled":',
-      'type: "turn_canceled"',
+      'return "turn_completed"',
+      'return "turn_failed"',
+      'return "turn_canceled"',
     ],
     absentSnippets: [
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
@@ -4838,6 +4996,9 @@ const checks = [
       '"agent_runtime_resume_thread"',
       '"agent_runtime_remove_queued_turn"',
       '"agent_runtime_promote_queued_turn"',
+      "resumeAgentSessionThread",
+      "resumeAgentRuntimeThread",
+      "RuntimeResumeContract",
       "runtimeRequest: {",
       "appServerTurnStartParamsFromRequest",
       "appServerRuntimeRequestFromRequest",
@@ -4859,26 +5020,113 @@ const checks = [
     ],
   },
   {
-    name: "Renderer Agent Runtime thread client preserves turn configuration in RuntimeRequest",
+    name: "Renderer user input op owns one typed turn/start payload",
+    files: [
+      "src/lib/api/agentProtocolOps.ts",
+      "src/lib/api/agentProtocol.d.ts",
+    ],
+    snippets: [
+      "export interface AgentUserInputOp {",
+      "turn: TurnStartParams;",
+      "const { additionalContext: turnContext, ...turn } = op.turn",
+    ],
+    absentSnippets: [
+      "AgentUserPreferences",
+      "preferences?:",
+      "providerConfig?:",
+      "providerPreference?:",
+      "webSearch?:",
+      "searchMode?:",
+      "systemPrompt?:",
+      "workspaceId?:",
+      "queueIfBusy?:",
+      "skipPreSubmitResume?:",
+    ],
+  },
+  {
+    name: "Renderer submit builder emits typed turn fields instead of runtime preferences",
+    file: "src/components/agent/chat/utils/buildUserInputSubmitOp.ts",
+    snippets: [
+      "turn: {",
+      "threadId: currentThreadId",
+      "input: buildTurnInput(",
+      "compaction.shouldSubmitModel",
+      "approvalPolicy: runtimePolicies.approvalPolicy",
+      "sandboxPolicy: runtimePolicies.sandboxPolicy",
+      "const collaborationMode = buildCollaborationMode(",
+      "metadata: compaction.metadata",
+      "collaborationMode ? { collaborationMode } : {}",
+      "? { additionalContext }",
+    ],
+    absentSnippets: [
+      "preferences: {",
+      "providerConfig: compaction.providerConfig",
+      "providerPreference: compaction.shouldSubmitProviderPreference",
+      "webSearch: compaction.shouldSubmitWebSearch",
+      "executionStrategy: compaction.shouldSubmitExecutionStrategy",
+      "autoContinue,",
+      "systemPrompt,",
+      "workspaceId,",
+      "turnId,",
+      "lowerCollaborationMode",
+      "collaboration_mode",
+    ],
+  },
+  {
+    name: "Renderer submit compaction owns only metadata sanitizing and typed model decisions",
+    files: [
+      "src/components/agent/chat/utils/submitOpRuntimeCompaction.ts",
+      "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts",
+    ],
+    snippets: [
+      "export interface SubmitOpRuntimeCompactionResult {",
+      "shouldSubmitModel: boolean",
+      "sanitizeSubmitMetadata(options)",
+      "shouldSubmitModel: shouldSubmitTurnModel(options, metadata)",
+      "RETIRED_TOOL_PREFERENCE_PATH",
+      "existsSync(resolve(process.cwd(), RETIRED_TOOL_PREFERENCE_PATH))",
+    ],
+    absentSnippets: [
+      'from "./submitOpToolPreferenceCompaction"',
+      "RuntimeProviderConfig",
+      "providerConfig?:",
+      "shouldSubmitProviderPreference",
+      "shouldSubmitModelPreference",
+      "shouldSubmitExecutionStrategy",
+      "shouldSubmitWebSearch",
+      "shouldSubmitThinking",
+      "webSearchPreference",
+      "thinkingPreference",
+      "requestedWebSearch",
+      "requestedThinking",
+    ],
+  },
+  {
+    name: "Renderer Agent Runtime thread client keeps current turn/start typed",
     file: "src/lib/api/agentRuntime/threadClient.test.ts",
     snippets: [
-      "App Server submit 参数将 Turn 输入与 current runtime 配置分离",
-      "runtimeRequest: {",
-      "providerConfig: {",
-      'reasoningEffort: "high"',
-      "thinkingEnabled: true",
+      "App Server submit 参数只保留 typed Turn 配置与业务 metadata",
+      'model: "deepseek-v4-pro"',
+      'effort: "high"',
       'approvalPolicy: "on-request"',
       'sandboxPolicy: "workspace-write"',
-      'executionStrategy: "react"',
+      "metadata: {",
+      "outputSchema,",
+    ],
+    absentSnippets: [
+      "runtimeRequest?: Record<string, unknown>",
+      "queueIfBusy?: boolean",
+      "skipPreSubmitResume?: boolean",
+      'queuedTurnId: "queued-claw"',
+      'providerPreference: "deepseek"',
+      "providerConfig: {",
+      "thinkingEnabled: true",
       "webSearch: true",
       'searchMode: "required"',
+      'executionStrategy: "react"',
       "autoContinue: true",
       'systemPrompt: "保留 Claw 原始系统提示"',
       'workspaceId: "workspace-claw"',
-      "queueIfBusy: true",
-      'queuedTurnId: "queued-claw"',
-    ],
-    absentSnippets: [
       "hostOptions: {",
       "agentChatRequest",
       "agent_chat_request",
@@ -5108,6 +5356,16 @@ const checks = [
     ],
   },
   {
+    name: "Plugin task queue keeps the generic queue.changed projection",
+    file: "src/features/plugin/runtime/agentUiProjectionBuilders.ts",
+    snippets: [
+      'case "task:queued"',
+      'type: "queue.changed"',
+      'control: "queue"',
+      'runtimeStatus: "queued"',
+    ],
+  },
+  {
     name: "Prompt-to-artifact smoke uses App Server current discovery and binding readiness",
     file: "scripts/prompt-to-artifact-smoke.mjs",
     snippets: [
@@ -5216,21 +5474,24 @@ const checks = [
     name: "Renderer App Server session facade uses protocol method constants",
     file: "src/lib/api/agentRuntime/appServerSessionClient.ts",
     snippets: [
-      'import { METHOD_AGENT_SESSION_LIST } from "../../../../packages/app-server-client/src/protocol"',
+      "METHOD_THREAD_LIST,",
+      "METHOD_THREAD_TURNS_LIST,",
       "export type AppServerSessionRpcClient = Pick<",
       '| "startSession"',
-      '| "readSession"',
+      '| "readThread"',
       '| "updateSession"',
-      '| "archiveManySessions"',
+      '| "archiveThread"',
+      '| "unarchiveThread"',
       '| "deleteSession"',
       '| "request"',
-      "appServerClient.request<AppServerAgentSessionListResponse>",
-      "METHOD_AGENT_SESSION_LIST",
-      "appServerSessionListParamsFromOptions(options)",
-      "appServerSessionReadParamsFromOptions(sessionId, options)",
-      "appServerClient.readSession(",
+      "client.request<AppServerThreadListResponse>",
+      "METHOD_THREAD_LIST",
+      "listCanonicalSessionOverviews(appServerClient, options)",
+      "appServerThreadReadParams(threadId, false)",
+      "appServerClient.readThread(",
       "appServerClient.updateSession(",
-      "appServerClient.archiveManySessions(",
+      "appServerClient.archiveThread(",
+      "appServerClient.unarchiveThread(",
       "appServerClient.deleteSession(",
       "appServerSessionUpdateParamsFromRequest(request)",
       "providerSelector: request.provider_selector?.trim() || undefined",
@@ -5238,34 +5499,36 @@ const checks = [
       "recentPreferences: request.recent_preferences",
     ],
     absentSnippets: [
-      "APP_SERVER_METHOD_AGENT_SESSION_LIST",
-      'const APP_SERVER_METHOD_AGENT_SESSION_LIST = "agentSession/list"',
+      "APP_SERVER_METHOD_THREAD_LIST",
+      'const APP_SERVER_METHOD_THREAD_LIST = "thread/list"',
+      "readAppServerAgentSessionReadResponse",
+      "readSessionDetail",
+      "appServerClient.readSession(",
       '"agent_runtime_list_sessions"',
       '"agent_runtime_get_session"',
       '"agent_runtime_create_session"',
       '"agent_runtime_update_session"',
       "recentTeamSelection",
       "recent_team_selection",
+      "archiveManySessions",
+      "agentSession/archiveMany",
+      "request.archived",
     ],
   },
   {
-    name: "Renderer App Server session facade tests preserve read detail messages",
+    name: "Renderer App Server session facade tests reject legacy read envelopes",
     file: "src/lib/api/agentRuntime/appServerSessionClient.test.ts",
     snippets: [
-      "get 应优先返回 App Server detail 并透传 history 游标",
-      "messages_count: 2",
-      "history_cursor: {",
-      "loaded_count: 2",
-      "请整理 App Server 对话历史",
-      "已从 App Server detail.messages 读取。",
-      "client.getAgentRuntimeSession(",
-      "appServerClient.readSession",
-      'sessionId: "session-1"',
-      "historyLimit: 40",
-      "historyOffset: 2",
-      "historyBeforeMessageId: 100",
+      "get 应从 canonical Thread items 恢复消息并分离排队回合",
+      "get 遇到旧 session envelope 时应显式拒绝，不恢复兼容解析",
+      "appServerClient.readThread",
+      'threadId: "session-codex"',
+      "includeTurns: false",
+      "thread/read did not return canonical session detail",
     ],
     absentSnippets: [
+      "appServerClient.readSession",
+      "readSessionResult",
       '"agent_runtime_get_session"',
       "invokeMockOnly",
       "mockPriorityCommands",
@@ -5321,16 +5584,15 @@ const checks = [
     snippets: [
       'import type { AgentRuntimeClient as StandardAgentRuntimeClient } from "@limecloud/agent-runtime-client"',
       "export type AgentRuntimeLifecycleClient = Pick<",
-      '"startTurn" | "cancelTurn" | "respondAction" | "readThread"',
+      '"startTurn" | "steerTurn" | "cancelTurn" | "respondAction" | "readThread"',
       "standardRuntimeClient?: AgentRuntimeLifecycleClient",
       "createAppServerAgentRuntimeLifecycleClient(appServerClient)",
       "async function getAgentRuntimeThreadRead(",
       "assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable)",
-      "appServerClient.readSession({",
-      "return projectAppServerSessionReadResult(response.result)",
-      "async function readAgentRuntimeThread(",
       "appServerClient.readThread({",
-      'turnsView: "full"',
+      "return projectAppServerThreadReadResult(response.result)",
+      "async function readAgentRuntimeThread(",
+      "includeTurns: true",
     ],
     absentSnippets: [
       "AGENT_RUNTIME_COMMANDS.getThreadRead",
@@ -5438,6 +5700,45 @@ const checks = [
     ],
   },
   {
+    name: "Agent UI contracts exclude retired runtime resume contract",
+    files: [
+      "packages/agent-ui-contracts/src/capabilities.ts",
+      "packages/agent-ui-contracts/src/validation.ts",
+      "packages/agent-ui-contracts/src/schemas.ts",
+      "packages/agent-ui-contracts/tests/contracts.test.mjs",
+    ],
+    snippets: [
+      "AgentRuntimeCapabilityManifest",
+      "validateRuntimeCapabilityManifest",
+      "AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA",
+      '"hitl.actions"',
+    ],
+    absentSnippets: [
+      "AgentRuntimeResumeMode",
+      "AgentRuntimeResumeActionDecision",
+      "AgentRuntimeResumeContract",
+      "validateRuntimeResumeContract",
+      "collectRuntimeResumeContractValidationIssues",
+      "AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA",
+      "runtimeResumeContract",
+      '"hitl.resume"',
+      "lime-runtime-resume-contract/v0.1",
+    ],
+  },
+  {
+    name: "Capability projection does not recreate retired HITL resume",
+    files: [
+      "src/lib/api/agentRuntime/capabilityContract.ts",
+      "lime-rs/crates/app-server/src/runtime/capabilities.rs",
+    ],
+    snippets: ['"hitl.actions"'],
+    absentSnippets: [
+      '"hitl.resume"',
+      'id.includes("resume")',
+      'id.contains("resume")',
+    ],
+  },
+  {
     name: "Agent Runtime projection package keeps index as barrel exports",
     files: [
       "packages/agent-runtime-projection/src/index.ts",
@@ -5458,7 +5759,6 @@ const checks = [
       'export * from "./normalization.js"',
       'export * from "./planApproval.js"',
       'export * from "./permissionEvents.js"',
-      'export * from "./queueEvents.js"',
       'export * from "./refs.js"',
       'export * from "./routing.js"',
       'export * from "./runtimeFacts.js"',
@@ -5492,7 +5792,6 @@ const checks = [
       "packages/agent-runtime-projection/src/normalization.ts",
       "packages/agent-runtime-projection/src/planApproval.ts",
       "packages/agent-runtime-projection/src/permissionEvents.ts",
-      "packages/agent-runtime-projection/src/queueEvents.ts",
       "packages/agent-runtime-projection/src/refs.ts",
       "packages/agent-runtime-projection/src/routing.ts",
       "packages/agent-runtime-projection/src/runtimeFacts.ts",
@@ -5518,8 +5817,6 @@ const checks = [
       "buildAgentUiPlanApprovalRequiredEvent",
       "buildAgentUiPlanApprovalResolvedEvent",
       "buildAgentUiRuntimePermissionChangedEvent",
-      "buildAgentUiQueueAddedEvents",
-      "buildAgentUiQueueLifecycleEvents",
       "buildAgentUiRoutingStatusEvent",
       "buildAgentUiProjectionBase",
       "buildAgentUiThreadStartedEvent",
@@ -5874,54 +6171,6 @@ const checks = [
       'scope: "action_request"',
       'decisionKind: "plan_approval_request"',
       'decisionKind: "plan_approval_response"',
-    ],
-  },
-  {
-    name: "Renderer Agent UI queue projection delegates queue and steer task builders to standard projection package",
-    file: "src/components/agent/chat/projection/queueProjection.ts",
-    snippets: [
-      'from "@limecloud/agent-runtime-projection"',
-      "buildAgentUiQueueAddedEvents",
-      "buildAgentUiQueueLifecycleEvents",
-      "return buildAgentUiQueueAddedEvents(",
-      "return buildAgentUiQueueLifecycleEvents(",
-      "sourceType: event.type",
-      "eventType: event.type",
-      "sessionId: event.session_id",
-      "queuedTurnId: event.queued_turn.queued_turn_id",
-      "messagePreview: event.queued_turn.message_preview",
-      "messageText: event.queued_turn.message_text",
-      "createdAt: event.queued_turn.created_at",
-      "imageCount: event.queued_turn.image_count",
-      "position: event.queued_turn.position",
-      "queuedTurnIds: event.queued_turn_ids",
-    ],
-    absentSnippets: [
-      "buildAgentUiProjectionBase",
-      "truncateText",
-      'type: "queue.changed"',
-      'type: "task.changed"',
-      'owner: "task"',
-      'scope: "task"',
-      'scope: "turn"',
-      'phase: "waiting"',
-      'phase: "submitted"',
-      'phase: "accepted"',
-      'phase: "cancelled"',
-      'surface: "task_capsule"',
-      'persistence: "snapshot"',
-      'control: "queue"',
-      'control: "steer"',
-      'control: "remove"',
-      'runtimeStatus: "queued"',
-      'runtimeStatus: "running"',
-      'runtimeStatus: "cancelled"',
-      "queuedTurnCount:",
-      "messageLength:",
-      "taskEvent:",
-      "queueEvent:",
-      "clearedIndex:",
-      "clearedCount:",
     ],
   },
   {
@@ -6459,28 +6708,31 @@ const checks = [
     ],
   },
   {
-    name: "Renderer Agent Runtime tests lock App Server turn lifecycle fail-closed behavior",
-    file: "src/lib/api/agentRuntime/threadClient.test.ts",
+    name: "Renderer Agent Runtime tests lock App Server lifecycle and direct v2 notification behavior",
+    files: [
+      "src/lib/api/agentRuntime/threadClient.test.ts",
+      "src/lib/api/agentRuntime/appServerV2Notification.test.ts",
+      "src/lib/api/agentRuntime/appServerEventStream.test.ts",
+    ],
     snippets: [
-      "App Server 可用时 submit 应进入 agentSession/turn/start",
+      "App Server 可用时 submit 应进入 turn/start",
       "App Server 不可用时 submit 应 fail closed，不回退 legacy command",
-      "App Server 可用且 turn_id 存在时 interrupt 应进入 agentSession/turn/cancel",
+      "App Server 可用且 turn_id 存在时 interrupt 应进入 turn/interrupt",
       "App Server 不可用时 interrupt 应 fail closed，不回退 legacy command",
       "缺少 turn_id 时 interrupt 应 fail closed，不回退 legacy command",
       "App Server 可用时 respond action 应进入 agentSession/action/respond",
       "App Server 不可用时 respond action 应 fail closed，不回退 legacy command",
-      "App Server submit 返回 notification 时应投递到请求里的前端 stream event",
-      "App Server respond action 返回 notification 时应继续投递到来源 stream event",
-      "App Server event payload projection 应覆盖 current event type",
+      "projects direct lifecycle notifications into the existing GUI payloads",
+      "routes drained direct notifications and closes on turn/completed",
+      "拒绝 retired agentSession/event wrapper",
+      "即使 wrapper 携带 canonicalEvent/typedEvent 也应 fail closed",
       "request projection 应在未传可选项时保持精简 App Server 参数",
       "replay request 应走 App Server current action/replay 且不调用 legacy command gateway",
       "listenAgentRuntimeEvent",
       "appServerClient.startTurn",
       "appServerClient.cancelTurn",
       "appServerClient.compactAgentSession",
-      "appServerClient.resumeAgentSessionThread",
-      "appServerClient.removeAgentSessionQueuedTurn",
-      "appServerClient.promoteAgentSessionQueuedTurn",
+      "appServerClient.resumeThread",
       "appServerClient.replayAction",
       "appServerClient.respondAction",
       "App Server turn lifecycle is unavailable; Agent Runtime requires the App Server current lifecycle channel.",
@@ -6491,6 +6743,9 @@ const checks = [
       "缺少 turn_id 时 interrupt 应回退 legacy command",
       "AGENT_RUNTIME_COMMANDS",
       "publishAgentRuntimeEvent",
+      "resumeAgentSessionThread",
+      "resumeAgentRuntimeThread",
+      "RuntimeResumeContract",
     ],
   },
   {
@@ -6498,27 +6753,24 @@ const checks = [
     file: "src/lib/api/agent.test.ts",
     snippets: [
       'expect(call?.[0]).toBe("app_server_handle_json_lines")',
-      "APP_SERVER_METHOD_AGENT_SESSION_TURN_START",
+      "APP_SERVER_METHOD_TURN_START",
       "APP_SERVER_METHOD_AGENT_SESSION_UPDATE",
       "APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY",
       "APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
-      "APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME",
-      "APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE",
+      "APP_SERVER_METHOD_THREAD_RESUME",
       "APP_SERVER_METHOD_EVIDENCE_EXPORT",
       "submitAgentRuntimeTurn 应经 Electron IPC 调 App Server turn/start",
       "replayAgentRuntimeRequest 应经 Electron IPC 调 App Server action/replay",
       "respondAgentRuntimeAction 应经 Electron IPC 调 App Server action/respond",
-      "resumeAgentRuntimeThread 应经 Electron IPC 调 App Server thread/resume",
-      "promoteAgentRuntimeQueuedTurn 应经 Electron IPC 调 App Server queuedTurn/promote",
+      "resumeThread 应经 Electron IPC 调 App Server thread/resume",
       "updateAgentRuntimeSession 应经 Electron IPC 调 App Server",
       "exportAgentRuntimeEvidencePack 应经 Electron IPC 调 App Server evidence/export",
       "mockIsElectronHostCommandAvailable.mockReturnValue(true)",
-      "expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START",
+      "expectAppServerRequest(1, APP_SERVER_METHOD_TURN_START",
       "expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE",
       "expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY",
       "expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
-      "expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME",
-      "APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE",
+      "expectAppServerRequest(1, APP_SERVER_METHOD_THREAD_RESUME",
       "expectAppServerRequest(1, APP_SERVER_METHOD_EVIDENCE_EXPORT",
       "includeEvidencePack: true",
     ],
@@ -6530,6 +6782,9 @@ const checks = [
       '"agent_runtime_interrupt_turn"',
       '"agent_runtime_respond_action"',
       '"agent_runtime_export_evidence_pack"',
+      "resumeAgentSessionThread",
+      "resumeAgentRuntimeThread",
+      "RuntimeResumeContract",
     ],
   },
   {
@@ -6538,7 +6793,7 @@ const checks = [
     snippets: [
       "queue/session control 应走 App Server current，且不再暴露 retired site adapter surface",
       "queue/session control 不应回退到 legacy bridgeInvoke",
-      "appServerClient.resumeAgentSessionThread",
+      "appServerClient.resumeThread",
       'expect(client).not.toHaveProperty("siteListAdapters")',
       'expect(client).not.toHaveProperty("siteRunAdapter")',
       "expect(invoke).not.toHaveBeenCalled()",
@@ -6553,6 +6808,9 @@ const checks = [
       '"agent_runtime_submit_turn"',
       '"agent_runtime_interrupt_turn"',
       '"agent_runtime_respond_action"',
+      "resumeAgentSessionThread",
+      "resumeAgentRuntimeThread",
+      "RuntimeResumeContract",
     ],
   },
   {
@@ -6602,19 +6860,19 @@ const checks = [
       "runtimeClient.readThread({",
       "runtimeClient.cancelTurn({",
       "runtimeClient.respondAction(",
-      "AgentRuntimeClient adapter requires an existing sessionId",
-      "runtimeRequest: mergePluginRuntimeRequest(",
+      "AgentRuntimeClient adapter requires a canonical session identity for Plugin tasks.",
+      "const runtimeRequest = mergePluginRuntimeRequest(",
       "function mergePluginRuntimeRequest(",
       "const thread = await readCanonicalThread(runtimeClient, threadId)",
       "function activeThreadTurn(thread:",
-      'turn.status === "inProgress" && turn.queue?.state !== "queued"',
+      'turn.status === "inProgress"',
       "function readCanonicalThread(",
-      "thread.threadId !== threadId",
-      "turn.threadId !== thread.threadId",
+      "thread.id !== threadId",
+      "const turnIds = new Set<string>()",
       "Plugin task cancel requires a canonical threadId",
       "requires a standard AgentRuntimeClient or explicit compat api",
       "把 Plugin startTask 投影到标准 AgentRuntimeClient.startTurn",
-      "没有 sessionId 时 fail closed，不伪造独立 task 协议",
+      "没有 canonical identity 时 fail closed，不伪造独立 task 协议",
     ],
     absentSnippets: [
       "defaultPluginRuntimeCapabilityApi",
@@ -6651,7 +6909,7 @@ const checks = [
       "createAgentRuntimeClientFromSessionGateway",
       "type AgentRuntimeLifecycleClient",
       "type AgentRuntimeSessionGateway",
-      '"startTurn" | "readThread" | "cancelTurn" | "respondAction"',
+      '"startTurn" | "steerTurn" | "readThread" | "cancelTurn" | "respondAction"',
       "readThread:",
       "callAgentRuntimeSessionGateway(gateway.readThread, params, options)",
       "if (options === undefined)",
@@ -6722,8 +6980,9 @@ const checks = [
       "createPluginRuntimeClientFromAppServer",
       "createPluginRuntimeSessionResolver",
       "createDefaultPluginRuntimeHostOptions",
-      "appServerClient.startSession({",
-      'kind: "plugin.task"',
+      "appServerClient.startSession(",
+      "pluginThreadStartParams(request)",
+      "pluginRuntime:",
       "createAgentRuntimeClientFromSessionGateway as",
       "runtimeClient: createPluginRuntimeClientFromAppServer(appServerClient)",
       "ensureSession: createPluginRuntimeSessionResolver(appServerClient)",
@@ -6731,11 +6990,11 @@ const checks = [
       "app_server_runtime_client",
       "appServerClientMocks.startSession",
       "appServerClientMocks.startTurn",
-      "appServerClientMocks.readSession",
+      "appServerClientMocks.readThread",
       "appServerClientMocks.respondAction",
       "runtimeApiMocks.startPluginRuntimeTask).not.toHaveBeenCalled()",
       "runtimeApiMocks.getPluginRuntimeTask).not.toHaveBeenCalled()",
-      "通过 agentSession/start 为 Plugin 默认宿主创建 current session",
+      "通过 thread/start 为 Plugin 默认宿主创建 current session",
       "默认 Host options 同时提供 runtime client 与 session resolver，且 session 失败时 fail closed",
     ],
     absentSnippets: [
@@ -6962,11 +7221,11 @@ const checks = [
     file: "scripts/claw-chat-ready-streaming-smoke.mjs",
     snippets: [
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
-      "const APP_SERVER_METHOD_AGENT_SESSION_TURN_START",
-      '"agentSession/turn/start"',
-      "const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL",
-      '"agentSession/turn/cancel"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read"',
+      "const APP_SERVER_METHOD_TURN_START",
+      '"turn/start"',
+      "const APP_SERVER_METHOD_TURN_INTERRUPT",
+      '"turn/interrupt"',
+      'const APP_SERVER_METHOD_THREAD_READ = "thread/read"',
       'const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event"',
       "attachAppServerRequestMessages(",
       "attachAppServerResponsePayload(",
@@ -7048,12 +7307,12 @@ const checks = [
     file: "scripts/social-workbench-e2e-smoke.mjs",
     snippets: [
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
-      'const METHOD_AGENT_SESSION_READ = "agentSession/read"',
+      'const METHOD_THREAD_READ = "thread/read"',
       "async function readAgentSession(sessionId)",
       "function projectWorkbenchState(sessionRead, limit)",
       "function projectRunDetail(sessionRead, runId)",
-      "await invokeAppServerJsonRpc(METHOD_AGENT_SESSION_READ",
-      "agentSession/read 未能投影运行详情",
+      "await invokeAppServerJsonRpc(METHOD_THREAD_READ",
+      "thread/read 未能投影运行详情",
     ],
     absentSnippets: [
       '"execution_run_get_theme_workbench_state"',
@@ -7205,12 +7464,12 @@ const checks = [
     file: "scripts/agent-runtime/tool-surface-page-smoke.mjs",
     snippets: [
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start"',
+      'const APP_SERVER_METHOD_THREAD_START = "thread/start"',
       'const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_LIST = "agentSession/list"',
-      "const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =",
-      '"agentSession/turn/start"',
+      'const APP_SERVER_METHOD_THREAD_READ = "thread/read"',
+      'const APP_SERVER_METHOD_THREAD_LIST = "thread/list"',
+      "const APP_SERVER_METHOD_TURN_START =",
+      '"turn/start"',
       "const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =",
       '"agentSession/action/respond"',
       "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =",
@@ -7224,7 +7483,7 @@ const checks = [
       "FORBIDDEN_AGENT_RUNTIME_CURRENT_METHOD_COMMANDS",
       "legacy_agent_runtime_current_method_command",
       "hasAppServerMethodCount(",
-      "APP_SERVER_METHOD_AGENT_SESSION_TURN_START",
+      "APP_SERVER_METHOD_TURN_START",
       "APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
       "APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ",
       "APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE",
@@ -7249,20 +7508,20 @@ const checks = [
     file: "scripts/code-runtime-fixture-smoke.mjs",
     snippets: [
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start"',
+      'const APP_SERVER_METHOD_THREAD_START = "thread/start"',
       'const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read"',
+      'const APP_SERVER_METHOD_TURN_START = "turn/start"',
+      'const APP_SERVER_METHOD_THREAD_READ = "thread/read"',
       "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =",
       '"agentSession/fileCheckpoint/list"',
       "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =",
       '"agentSession/fileCheckpoint/diff"',
       'const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export"',
       "async function invokeAppServer(",
-      "APP_SERVER_METHOD_AGENT_SESSION_START",
+      "APP_SERVER_METHOD_THREAD_START",
       "APP_SERVER_METHOD_AGENT_SESSION_UPDATE",
-      "APP_SERVER_METHOD_AGENT_SESSION_TURN_START",
-      "APP_SERVER_METHOD_AGENT_SESSION_READ",
+      "APP_SERVER_METHOD_TURN_START",
+      "APP_SERVER_METHOD_THREAD_READ",
       "APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST",
       "APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF",
       "APP_SERVER_METHOD_EVIDENCE_EXPORT",
@@ -7371,7 +7630,7 @@ const checks = [
       "App Server turn notification 应通过当前 stream event 触发 read model 刷新",
       "createThreadClient",
       "listenAgentRuntimeEvent(name, handler)",
-      "APP_SERVER_METHOD_AGENT_SESSION_EVENT",
+      'method: "turn/completed"',
       'currentTurnEventName: "agent_stream_assistant-1"',
       'type: "runtime_status"',
       'type: "text_delta"',
@@ -7756,7 +8015,7 @@ const checks = [
       "app-server schema method catalog mismatch",
       "export function protocolSchemaFilePath(",
       "export function listProtocolSchemaFiles(",
-      '(["jsonrpc", "v0"] as const).flatMap',
+      '(["jsonrpc", "v0", "v2"] as const).flatMap',
     ],
   },
   {
@@ -7772,6 +8031,8 @@ const checks = [
       "reads and validates protocol schema manifest metadata",
       "consumes checked-in Rust protocol schema manifest",
       "AgentSessionTurnStartParams",
+      "ThreadStartParams",
+      "TurnStartParams",
       "EvidenceExportResponse",
       "JsonRpcRequest",
       "schema method catalog mismatch",
@@ -8000,7 +8261,7 @@ const checks = [
     snippets: [
       'resolveRuntimeBackendLaunchOptions("runtime")',
       "...resolveRuntimeBackendLaunchOptions(defaultBackendMode)",
-      'const APP_SERVER_TURN_START_METHOD = "agentSession/turn/start"',
+      'const APP_SERVER_TURN_START_METHOD = "turn/start"',
       "APP_SERVER_BACKEND_TIMEOUT_GRACE_MS",
       "process.env.APP_SERVER_BACKEND_TIMEOUT_MS",
       "process.env.APP_SERVER_BACKEND_COMMAND?.trim()",
@@ -8012,7 +8273,18 @@ const checks = [
     normalizedSnippets: [
       "resolveAppServerRequestTimeoutMs(proxiedMessage.message.method,request.timeoutMs,)",
     ],
-    absentSnippets: ['backendMode: "mock"', 'backendMode: "unavailable",'],
+    absentSnippets: [
+      'backendMode: "mock"',
+      'backendMode: "unavailable",',
+      "#requestStreamingTurnStart",
+      "#readCanonicalTurnIdentity",
+      "#recentTurnStartedIdentity",
+      "APP_SERVER_STREAMING_TURN_ACK_GRACE_MS",
+      "APP_SERVER_STREAMING_TURN_IDENTITY_READ_RETRY_MS",
+      "streamingTurnStartAcceptedResponse",
+      "turnIdentityFromThreadRead",
+      "requestUntilFirstNotificationOrResponse",
+    ],
   },
   {
     name: "TypeScript client exposes one-step packaged sidecar lifecycle",
@@ -8194,10 +8466,50 @@ const checks = [
     name: "TypeScript turn start params mirror Rust wire fields",
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
-      "export type AgentSessionTurnStartParams = {",
-      "turnId?: string",
-      "queueIfBusy?: boolean",
-      "skipPreSubmitResume?: boolean",
+      "export interface TurnStartParams {",
+      "threadId: string",
+      "input: UserInput[]",
+      "clientUserMessageId?: null | string",
+    ],
+  },
+  {
+    name: "TypeScript client exposes canonical v2 thread resume only",
+    files: [
+      "packages/app-server-client/src/index.ts",
+      "packages/app-server-client/src/protocol.ts",
+    ],
+    snippets: [
+      "resumeThread(params: protocol.ThreadResumeParams)",
+      'name: "resumeThread"',
+      "method: protocol.METHOD_THREAD_RESUME",
+      "params: protocol.ThreadResumeParams",
+      "AppServerRequestResult<protocol.ThreadResumeResponse>",
+      'export const METHOD_THREAD_RESUME = "thread/resume"',
+    ],
+    absentSnippets: [
+      "resumeAgentSessionThread",
+      "resumeAgentRuntimeThread",
+      "AgentSessionThreadResumeParams",
+      "AgentSessionThreadResumeResponse",
+      "RuntimeResumeContract",
+      "RuntimeResumeActionDecision",
+    ],
+  },
+  {
+    name: "TypeScript request builder test locks canonical thread resume shape",
+    file: "packages/app-server-client/tests/client.test.mjs",
+    snippets: [
+      "const resume = client.resumeThread({",
+      'threadId: "thread_1"',
+      "excludeTurns: true",
+      "initialTurnsPage: {",
+      "assert.equal(resume.method, METHOD_THREAD_RESUME)",
+      "assert.deepEqual(resume.params, {",
+    ],
+    absentSnippets: [
+      "resumeAgentSessionThread",
+      "RuntimeResumeContract",
+      'sessionId: "sess_1",\n    resumeContract:',
     ],
   },
   {
@@ -8218,11 +8530,10 @@ const checks = [
     name: "TypeScript request builder test locks caller supplied turnId",
     file: "packages/app-server-client/tests/client.test.mjs",
     snippets: [
-      'turnId: "turn_external"',
-      'assert.equal(turn.params.turnId, "turn_external")',
-      "assert.equal(turn.params.queueIfBusy, true)",
-      "assert.equal(turn.params.skipPreSubmitResume, true)",
-      'assert.equal(turn.params.runtimeOptions.capabilityId, "draft.write")',
+      'threadId: "thread_external"',
+      'assert.equal(turn.params.threadId, "thread_external")',
+      'assert.deepEqual(turn.params.input, [{ type: "text", text: "draft" }])',
+      'assert.equal(turn.params.model, "gpt-5-codex")',
     ],
   },
   {
@@ -8238,13 +8549,12 @@ const checks = [
     ],
   },
   {
-    name: "TypeScript event router tests lock renderer projection shape",
+    name: "TypeScript event router tests lock direct lifecycle projection shape",
     file: "packages/app-server-client/tests/client.test.mjs",
     snippets: [
       "AppServerAgentEventRouter",
-      "agentSessionEventNotification",
-      "isAgentSessionEventNotification",
-      "routes agent session event notifications for renderer projection",
+      "agentRuntimeLifecycleNotification(notification)",
+      "routes direct lifecycle notifications without wrapper projection",
       "connection buffers request responses read by idle notification loop",
       "assert.equal(await router.dispatch(notification), true)",
       "assert.deepEqual(routed, [",
@@ -8255,7 +8565,7 @@ const checks = [
     file: "packages/app-server-client/README.md",
     snippets: [
       "AppServerAgentEventRouter",
-      'mainWindow.webContents.send("agent:event", event)',
+      'mainWindow.webContents.send("agent:lifecycle", notification)',
       "await eventRouter.dispatch(await connection.nextNotification())",
       "project events into their own renderer state",
     ],
@@ -8268,27 +8578,13 @@ const checks = [
       "packages/agent-runtime-client/src/sessionGateway.ts",
     ],
     snippets: ["connection.readThread", "gateway.readThread"],
-    absentSnippets: ["readSession", '"agentSession/read"'],
+    absentSnippets: ["readSession", '"thread/read"'],
   },
   {
     name: "Runtime client root exports canonical thread read types only",
     file: "packages/agent-runtime-client/src/index.ts",
     snippets: ["type ThreadReadParams", "type ThreadReadResponse"],
     absentSnippets: ["AgentSessionReadParams", "AgentSessionReadResponse"],
-  },
-  {
-    name: "Queued promotion decisions do not read legacy session truth",
-    files: [
-      "src/components/agent/chat/hooks/agentStreamFlowControl.ts",
-      "src/components/agent/chat/hooks/useAgentStream.ts",
-      "src/components/agent/chat/projection/chatRuntimeQueueControlProjection.ts",
-    ],
-    snippets: [
-      "getThreadQueueControl(canonicalThreadId)",
-      "threadId: threadRead?.thread_id",
-      "queuedTurnIdsBeforePromote.has(queuedTurnId.trim())",
-    ],
-    absentSnippets: ["readSession", "getSessionReadModel("],
   },
 ];
 
@@ -8355,6 +8651,11 @@ checkPluginUiRuntimeLifecycleContracts();
 checkRetiredAgentRuntimeMockFiles();
 checkRetiredAgentRuntimeCommandManifestFiles();
 checkRetiredAgentRuntimeAdapterFiles();
+checkRetiredSessionArchiveMutationSurface();
+checkRetiredRendererProjectionFiles();
+checkRetiredRendererQueuedTurnProjectionSurface();
+checkRetiredRendererQueuedTurnSecondaryProjectionSurface();
+checkRetiredAgentUiResumeContractFiles();
 checkRetiredAgentRuntimeLegacyQueueSurface();
 checkRetiredSkillExecutionSurfaceFiles();
 checkRetiredAgentRuntimeToolInventoryMockFiles();
@@ -8363,6 +8664,7 @@ checkRetiredAgentRuntimeThreadReadFacadeSurface();
 checkRetiredAgentRuntimeSubmitTurnFacadeSurface();
 checkRetiredAgentRuntimeInterruptTurnFacadeSurface();
 checkRetiredAgentRuntimeRespondActionFacadeSurface();
+checkRendererQueuedTurnWriteSurface();
 checkActiveAipromptsDoNotPromoteRetiredAgentRuntimeCommands();
 checkScriptsDoNotCallRetiredAgentRuntimeCommands();
 checkMcpRuntimeCurrentContracts({ repoRoot, failures });
@@ -8923,6 +9225,33 @@ function walkSourceFiles(root) {
   return files.sort();
 }
 
+function checkRendererQueuedTurnWriteSurface() {
+  for (const relativeRoot of rendererQueuedTurnWriteSurfaceRoots) {
+    const sourceRoot = path.join(repoRoot, relativeRoot);
+    for (const relativePath of walkSourceFiles(sourceRoot)) {
+      if (
+        !/\.(?:d\.ts|ts|tsx)$/u.test(relativePath) ||
+        relativePath.includes(".test") ||
+        relativePath.includes(".spec") ||
+        /(?:^|\/)__tests__(?:\/|$)/u.test(relativePath)
+      ) {
+        continue;
+      }
+      const content = fs.readFileSync(
+        path.join(repoRoot, relativePath),
+        "utf8",
+      );
+      for (const snippet of rendererQueuedTurnWriteSurfaceForbiddenSnippets) {
+        if (content.includes(snippet)) {
+          failures.push(
+            `Renderer queued-turn write surface must stay deleted: ${relativePath} contains ${JSON.stringify(snippet)}`,
+          );
+        }
+      }
+    }
+  }
+}
+
 function isAgentRuntimeGatewaySource(relativePath) {
   return (
     relativePath.endsWith(".ts") &&
@@ -9050,6 +9379,115 @@ function checkRetiredAgentRuntimeAdapterFiles() {
   for (const file of retiredAgentRuntimeAdapterFiles) {
     if (fs.existsSync(path.join(repoRoot, file))) {
       failures.push(`retired Agent runtime adapter must stay deleted: ${file}`);
+    }
+  }
+}
+
+function checkRetiredSessionArchiveMutationSurface() {
+  const sourceBlocks = [
+    {
+      file: "lime-rs/crates/app-server-protocol/src/protocol/v0/session_admin.rs",
+      pattern: /pub struct AgentSessionUpdateParams\s*\{(?<body>[\s\S]*?)\n\}/u,
+    },
+    {
+      file: "packages/app-server-client/src/protocol.ts",
+      pattern:
+        /export type AgentSessionUpdateParams\s*=\s*\{(?<body>[\s\S]*?)\n\};/u,
+    },
+    {
+      file: "packages/app-server-client/src/generated/protocol-types.ts",
+      pattern:
+        /export interface AgentSessionUpdateParams\s*\{(?<body>[\s\S]*?)\n\}/u,
+    },
+  ];
+
+  for (const { file, pattern } of sourceBlocks) {
+    const content = fs.readFileSync(path.join(repoRoot, file), "utf8");
+    const match = content.match(pattern);
+    if (!match?.groups?.body) {
+      failures.push(`missing AgentSessionUpdateParams contract block: ${file}`);
+      continue;
+    }
+    if (/\barchived\b/u.test(match.groups.body)) {
+      failures.push(
+        `retired AgentSessionUpdateParams.archived must stay deleted: ${file}`,
+      );
+    }
+  }
+
+  const schemaFile =
+    "lime-rs/crates/app-server-protocol/schema/json/v0/AgentSessionUpdateParams.json";
+  const schema = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, schemaFile), "utf8"),
+  );
+  if (Object.hasOwn(schema.properties ?? {}, "archived")) {
+    failures.push(
+      `retired AgentSessionUpdateParams.archived must stay deleted: ${schemaFile}`,
+    );
+  }
+}
+
+function checkRetiredRendererProjectionFiles() {
+  for (const file of retiredRendererProjectionFiles) {
+    if (fs.existsSync(path.join(repoRoot, file))) {
+      failures.push(`retired Renderer projection must stay deleted: ${file}`);
+    }
+  }
+}
+
+function checkRetiredRendererQueuedTurnProjectionSurface() {
+  for (const file of retiredRendererQueuedTurnProjectionProductionFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired Renderer queued-turn projection guard: missing expected production file ${file}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of retiredRendererQueuedTurnProjectionSnippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired Renderer queued-turn projection surface: ${file} must not contain ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredRendererQueuedTurnSecondaryProjectionSurface() {
+  for (const {
+    file,
+    snippets,
+  } of retiredRendererQueuedTurnSecondaryProjectionSpecs) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired Renderer queued-turn secondary projection guard: missing expected production file ${file}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of snippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired Renderer queued-turn secondary projection surface: ${file} must not contain ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredAgentUiResumeContractFiles() {
+  for (const file of retiredAgentUiResumeContractFiles) {
+    if (fs.existsSync(path.join(repoRoot, file))) {
+      failures.push(
+        `retired Agent UI resume contract must stay deleted: ${file}`,
+      );
     }
   }
 }

@@ -71,9 +71,7 @@ import { CodeRenderer } from '@/components/artifact/renderers/CodeRenderer';
 ## 相关文档
 
 - [Artifact 类型定义](../../lib/artifact/types.ts)
-- [Artifact 解析器](../../lib/artifact/parser.ts)
 - [Artifact 状态管理](../../lib/artifact/store.ts)
-
 
 ## ArtifactRenderer
 

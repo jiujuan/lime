@@ -340,6 +340,14 @@ async fn read_session_projects_failed_runtime_event_into_diagnostics_and_error_i
         .expect_err("backend failure should propagate");
     let expected_error_message = error.to_string();
     assert!(expected_error_message.contains("provider stream timed out"));
+    let events = core
+        .events_for_session("sess_failed_read")
+        .expect("failed runtime events");
+    let failed = events
+        .iter()
+        .find(|event| event.event_type == "turn.failed")
+        .expect("turn failed event");
+    assert_eq!(failed.payload["reason"], "turn_error");
 
     let read = core
         .read_session(AgentSessionReadParams {
@@ -377,6 +385,128 @@ async fn read_session_projects_failed_runtime_event_into_diagnostics_and_error_i
         items[0]["message"].as_str(),
         Some(expected_error_message.as_str())
     );
+}
+
+#[tokio::test]
+async fn usage_limit_failure_preserves_structured_terminal_reason() {
+    let core = RuntimeCore::with_backend(Arc::new(UsageLimitFailureBackend));
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_usage_limit_read".to_string()),
+        thread_id: Some("thread_usage_limit_read".to_string()),
+        app_id: "desktop".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_usage_limit_read".to_string(),
+            turn_id: Some("turn_usage_limit_read".to_string()),
+            input: AgentInput {
+                text: "continue".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect_err("usage limit must fail the turn");
+
+    let events = core
+        .events_for_session("sess_usage_limit_read")
+        .expect("usage-limit runtime events");
+    let failed = events
+        .iter()
+        .find(|event| event.event_type == "turn.failed")
+        .expect("turn failed event");
+    assert_eq!(failed.payload["message"], "provider quota exhausted");
+    assert_eq!(failed.payload["reason"], "usage_limit_exceeded");
+}
+
+#[tokio::test]
+async fn runtime_failure_updates_bound_thread_goal_with_codex_status() {
+    let cases: Vec<(
+        Arc<dyn ExecutionBackend>,
+        &str,
+        app_server_protocol::protocol::v2::ThreadGoalStatus,
+    )> = vec![
+        (
+            Arc::new(PartialFailureBackend),
+            "blocked",
+            app_server_protocol::protocol::v2::ThreadGoalStatus::Blocked,
+        ),
+        (
+            Arc::new(UsageLimitFailureBackend),
+            "usage-limited",
+            app_server_protocol::protocol::v2::ThreadGoalStatus::UsageLimited,
+        ),
+    ];
+
+    for (backend, suffix, expected_status) in cases {
+        let temp = tempfile::tempdir().expect("goal failure tempdir");
+        let projection_store = Arc::new(
+            ProjectionStore::initialize(temp.path().join("state.sqlite"))
+                .expect("goal failure projection store"),
+        );
+        let core =
+            RuntimeCore::with_backend(backend).with_projection_store(Arc::clone(&projection_store));
+        let session_id = format!("sess_goal_failure_{suffix}");
+        let thread_id = format!("thread_goal_failure_{suffix}");
+        let turn_id = format!("turn_goal_failure_{suffix}");
+        core.start_session(AgentSessionStartParams {
+            session_id: Some(session_id.clone()),
+            thread_id: Some(thread_id.clone()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("goal failure session");
+        core.set_thread_goal(app_server_protocol::protocol::v2::ThreadGoalSetParams {
+            thread_id: thread_id.clone(),
+            objective: Some("finish the active goal".to_string()),
+            status: None,
+            token_budget: None,
+        })
+        .expect("set active thread goal");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id,
+                turn_id: Some(turn_id),
+                input: AgentInput {
+                    text: "continue".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("terminal backend error must propagate");
+
+        let events = core
+            .events_for_session(&format!("sess_goal_failure_{suffix}"))
+            .expect("goal failure runtime events");
+        assert!(
+            events
+                .iter()
+                .any(|event| event.event_type == "turn.accepted"),
+            "case={suffix} must preserve canonical turn admission"
+        );
+        let goal = core
+            .get_thread_goal(&thread_id)
+            .expect("read terminal thread goal")
+            .expect("terminal thread goal");
+        assert_eq!(goal.status, expected_status, "case={suffix}");
+    }
 }
 
 #[tokio::test]

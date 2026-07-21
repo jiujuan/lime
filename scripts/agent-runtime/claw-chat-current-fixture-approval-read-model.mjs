@@ -18,6 +18,8 @@ import {
 import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
 import { sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
 
+const APP_SERVER_METHOD_ACTION_REPLAY = "agentSession/action/replay";
+
 function collectPendingRequests(readModel) {
   const detail = readModel?.detail ?? readModel ?? {};
   const threadRead = detail?.thread_read ?? detail?.threadRead ?? {};
@@ -56,12 +58,16 @@ function collectReadModelItems(readModel) {
 }
 
 function readLatestTurnStatus(readModel) {
+  const canonicalTurns = Array.isArray(readModel?.thread?.turns)
+    ? readModel.thread.turns
+    : [];
   return (
     readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
     readModel?.detail?.threadRead?.runtimeSummary?.latestTurnStatus ??
     readModel?.detail?.thread_read?.status ??
     readModel?.detail?.threadRead?.status ??
     readModel?.detail?.status ??
+    canonicalTurns.at(-1)?.status ??
     null
   );
 }
@@ -84,7 +90,7 @@ function summarizeApprovalPendingReadModel(readModel) {
   const pendingRequests = collectPendingRequests(readModel);
   const request = findApprovalPendingRequest(readModel);
   const serialized = JSON.stringify(readModel || {});
-  const payload = request?.payload ?? {};
+  const payload = request?.payload ?? request ?? {};
   return sanitizeJson({
     pendingRequestCount: pendingRequests.length,
     latestTurnStatus: readLatestTurnStatus(readModel),
@@ -193,7 +199,9 @@ export function summarizeApprovalDecisionReadModel(readModel, decision) {
     pendingRequestCount: pendingRequests.length,
     latestTurnStatus,
     latestTurnCanceled:
-      latestTurnStatus === "canceled" || latestTurnStatus === "cancelled",
+      latestTurnStatus === "canceled" ||
+      latestTurnStatus === "cancelled" ||
+      latestTurnStatus === "interrupted",
     includesPrompt: serialized.includes(APPROVAL_REQUEST_RESUME_PROMPT),
     includesApprovalPrompt: serialized.includes(
       APPROVAL_REQUEST_RESUME_APPROVAL_PROMPT,
@@ -225,6 +233,8 @@ export function summarizeApprovalDecisionReadModel(readModel, decision) {
     includesCanceled:
       serialized.includes('"status":"canceled"') ||
       serialized.includes('"status": "canceled"') ||
+      serialized.includes('"status":"interrupted"') ||
+      serialized.includes('"status": "interrupted"') ||
       serialized.includes("turn.canceled") ||
       serialized.includes("turn_canceled") ||
       approvalEvents.some((event) => event.payload?.decision === "abort") ||
@@ -389,12 +399,25 @@ export async function waitForApprovalPendingReadModel(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: SESSION_ID,
-        historyLimit: 100,
+        threadId: options.threadId,
+        includeTurns: true,
       },
       requestLog,
     );
-    lastSummary = summarizeApprovalPendingReadModel(read.result);
+    const replay = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_ACTION_REPLAY,
+      {
+        sessionId: options.sessionId,
+        requestId: APPROVAL_REQUEST_RESUME_REQUEST_ID,
+      },
+      requestLog,
+    );
+    const pendingAction = replay.result?.action ?? null;
+    lastSummary = summarizeApprovalPendingReadModel({
+      ...read.result,
+      pending_requests: pendingAction ? [pendingAction] : [],
+    });
     if (
       lastSummary.hasPendingRequest === true &&
       lastSummary.payloadActionType === "tool_confirmation" &&

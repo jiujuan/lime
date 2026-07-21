@@ -105,7 +105,7 @@ pub(super) fn coding_activity_from_events(stored: &StoredSession) -> CodingActiv
     for event in &stored.events {
         match event.event_type.as_str() {
             "file.changed" => update_change_summary_file(&mut change_summary, event),
-            "patch.started" | "patch.applied" | "patch.failed" => {
+            "patch.started" | "patch.applied" | "patch.failed" | "patch.declined" => {
                 update_change_summary_patch(&mut change_summary, event)
             }
             "command.started" => upsert_command_started(&mut commands, event),
@@ -192,6 +192,7 @@ fn update_change_summary_patch(summary: &mut ChangeSummaryState, event: &AgentEv
             "patch.started" => "running",
             "patch.applied" => "applied",
             "patch.failed" => "failed",
+            "patch.declined" => "declined",
             _ => "unknown",
         };
         summary

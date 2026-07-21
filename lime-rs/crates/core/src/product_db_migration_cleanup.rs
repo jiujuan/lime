@@ -1,9 +1,12 @@
+#[cfg(test)]
 use rusqlite::Connection;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
 use std::time::Duration;
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProductDbMigrationCleanupPolicy {
     Retain,
@@ -12,22 +15,15 @@ pub enum ProductDbMigrationCleanupPolicy {
     DeleteFile,
 }
 
+#[cfg(test)]
 impl Default for ProductDbMigrationCleanupPolicy {
     fn default() -> Self {
-        Self::DropTables
+        Self::Retain
     }
 }
 
+#[cfg(test)]
 impl ProductDbMigrationCleanupPolicy {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Retain => "retain",
-            Self::ClearRows => "clear-rows",
-            Self::DropTables => "drop-tables",
-            Self::DeleteFile => "delete-file",
-        }
-    }
-
     pub fn parse(value: &str) -> Result<Self, String> {
         let normalized = value.trim().to_ascii_lowercase();
         match normalized.as_str() {
@@ -42,6 +38,7 @@ impl ProductDbMigrationCleanupPolicy {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductDbMigrationCleanupReport {
     pub source_path: PathBuf,
@@ -51,12 +48,14 @@ pub struct ProductDbMigrationCleanupReport {
     pub database_files_deleted: usize,
 }
 
+#[cfg(test)]
 impl ProductDbMigrationCleanupReport {
     pub fn changed(&self) -> bool {
         self.rows_deleted > 0 || self.schema_objects_dropped > 0 || self.database_files_deleted > 0
     }
 }
 
+#[cfg(test)]
 pub fn cleanup_migrated_product_db_source(
     source_path: &Path,
     policy: ProductDbMigrationCleanupPolicy,
@@ -86,7 +85,7 @@ pub fn cleanup_migrated_product_db_source(
     }
 }
 
-pub fn remove_database_with_sidecars(path: &Path) -> Result<usize, String> {
+pub(crate) fn remove_database_with_sidecars(path: &Path) -> Result<usize, String> {
     let mut deleted = 0;
     if path.exists() {
         fs::remove_file(path)
@@ -94,7 +93,7 @@ pub fn remove_database_with_sidecars(path: &Path) -> Result<usize, String> {
         deleted += 1;
     }
 
-    for suffix in ["-wal", "-shm"] {
+    for suffix in ["-wal", "-shm", "-journal"] {
         let sidecar = sqlite_sidecar_path(path, suffix);
         if sidecar.exists() {
             fs::remove_file(&sidecar)
@@ -106,6 +105,7 @@ pub fn remove_database_with_sidecars(path: &Path) -> Result<usize, String> {
     Ok(deleted)
 }
 
+#[cfg(test)]
 fn clear_user_rows(path: &Path) -> Result<usize, String> {
     if !path.exists() {
         return Ok(0);
@@ -134,10 +134,10 @@ fn clear_user_rows(path: &Path) -> Result<usize, String> {
     transaction
         .commit()
         .map_err(|e| format!("提交旧数据库清理事务失败 {}: {e}", path.display()))?;
-    checkpoint_and_vacuum(&conn, path)?;
     Ok(rows_deleted)
 }
 
+#[cfg(test)]
 fn drop_user_schema_objects(path: &Path) -> Result<usize, String> {
     if !path.exists() {
         return Ok(0);
@@ -174,10 +174,10 @@ fn drop_user_schema_objects(path: &Path) -> Result<usize, String> {
     transaction
         .commit()
         .map_err(|e| format!("提交旧数据库 drop 事务失败 {}: {e}", path.display()))?;
-    checkpoint_and_vacuum(&conn, path)?;
     Ok(dropped)
 }
 
+#[cfg(test)]
 fn open_source_database(path: &Path) -> Result<Connection, String> {
     let conn = Connection::open(path)
         .map_err(|e| format!("打开迁移源数据库失败 {}: {e}", path.display()))?;
@@ -186,10 +186,12 @@ fn open_source_database(path: &Path) -> Result<Connection, String> {
     Ok(conn)
 }
 
+#[cfg(test)]
 fn user_table_names(conn: &Connection) -> Result<Vec<String>, String> {
     user_schema_object_names(conn, "table")
 }
 
+#[cfg(test)]
 fn user_schema_object_names(conn: &Connection, object_type: &str) -> Result<Vec<String>, String> {
     let mut statement = conn
         .prepare(
@@ -208,6 +210,7 @@ fn user_schema_object_names(conn: &Connection, object_type: &str) -> Result<Vec<
         .map_err(|e| format!("读取旧数据库对象名称失败: {e}"))
 }
 
+#[cfg(test)]
 fn sqlite_sequence_exists(conn: &Connection) -> Result<bool, String> {
     conn.query_row(
         "SELECT COUNT(*)
@@ -220,12 +223,7 @@ fn sqlite_sequence_exists(conn: &Connection) -> Result<bool, String> {
     .map_err(|e| format!("检查 sqlite_sequence 失败: {e}"))
 }
 
-fn checkpoint_and_vacuum(conn: &Connection, path: &Path) -> Result<(), String> {
-    let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-    conn.execute_batch("VACUUM;")
-        .map_err(|e| format!("压缩旧数据库失败 {}: {e}", path.display()))
-}
-
+#[cfg(test)]
 fn quote_identifier(value: &str) -> String {
     format!("\"{}\"", value.replace('"', "\"\""))
 }
@@ -243,6 +241,32 @@ fn sqlite_sidecar_path(path: &Path, suffix: &str) -> PathBuf {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn default_policy_retains_migrated_source() {
+        let temp = tempdir().unwrap();
+        let db_path = temp.path().join("lime.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute(
+            "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('providers.active_tab', 'service-providers')",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        let before = fs::read(&db_path).unwrap();
+
+        let policy = ProductDbMigrationCleanupPolicy::default();
+        let report = cleanup_migrated_product_db_source(&db_path, policy).unwrap();
+
+        assert_eq!(policy, ProductDbMigrationCleanupPolicy::Retain);
+        assert!(!report.changed());
+        assert_eq!(fs::read(&db_path).unwrap(), before);
+    }
 
     #[test]
     fn parse_accepts_supported_policies() {
@@ -347,6 +371,7 @@ mod tests {
         fs::write(&db_path, b"db").unwrap();
         fs::write(sqlite_sidecar_path(&db_path, "-wal"), b"wal").unwrap();
         fs::write(sqlite_sidecar_path(&db_path, "-shm"), b"shm").unwrap();
+        fs::write(sqlite_sidecar_path(&db_path, "-journal"), b"journal").unwrap();
 
         let report = cleanup_migrated_product_db_source(
             &db_path,
@@ -354,9 +379,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(report.database_files_deleted, 3);
+        assert_eq!(report.database_files_deleted, 4);
         assert!(!db_path.exists());
         assert!(!sqlite_sidecar_path(&db_path, "-wal").exists());
         assert!(!sqlite_sidecar_path(&db_path, "-shm").exists());
+        assert!(!sqlite_sidecar_path(&db_path, "-journal").exists());
     }
 }

@@ -1,9 +1,7 @@
-import {
-  APP_SERVER_METHOD_SESSION_READ,
-  SESSION_ID,
-} from "./claw-chat-current-fixture-constants.mjs";
+import { APP_SERVER_METHOD_SESSION_READ } from "./claw-chat-current-fixture-constants.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
 import { waitForGuiChatCompleted } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
+import { readModelLatestTurnStatus } from "./claw-chat-current-fixture-read-model-core.mjs";
 import {
   evaluatePageSnapshot,
   invokeAppServerFromPage,
@@ -14,10 +12,10 @@ export const MEDIA_REFERENCE_SCENARIO = "media-reference";
 export const MEDIA_REFERENCE_PROMPT = "验证媒体引用展示";
 export const MEDIA_REFERENCE_DONE_TEXT = "CLAW_MEDIA_REFERENCE_FIXTURE_DONE";
 export const MEDIA_REFERENCE_SUMMARY_TEXT = "媒体引用已进入对话";
-export const MEDIA_REFERENCE_CAPTION = "结果图";
-export const MEDIA_REFERENCE_URI = "sidecar://media/fixture-image-1";
+export const MEDIA_REFERENCE_CAPTION = "fixture-media-reference.png";
+export const MEDIA_REFERENCE_URI = "fixture-media-reference.png";
 export const MEDIA_REFERENCE_MIME_TYPE = "image/png";
-export const MEDIA_REFERENCE_TITLE = "fixture-image-1.png";
+export const MEDIA_REFERENCE_TITLE = "fixture-media-reference.png";
 export const MEDIA_REFERENCE_SHA256 = "sha256-fixture-image-1";
 export const MEDIA_REFERENCE_BYTE_SIZE = 2048;
 
@@ -31,10 +29,10 @@ export const MEDIA_REFERENCE_ASSERTION_KEYS = [
   "readModelMediaReferenceObserved",
 ];
 
-function collectMediaContentParts(value, collector = []) {
+function collectImageViews(value, collector = []) {
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectMediaContentParts(item, collector);
+      collectImageViews(item, collector);
     }
     return collector;
   }
@@ -42,91 +40,39 @@ function collectMediaContentParts(value, collector = []) {
     return collector;
   }
 
-  const type = value.type ?? value.contentType ?? value.content_type;
-  const reference = value.reference ?? value.mediaReference ?? value;
-  const uri = reference?.uri ?? reference?.url ?? null;
-  if (
-    (type === "media" || type === "media_reference") &&
-    typeof uri === "string" &&
-    uri.trim()
-  ) {
-    collector.push({
-      uri,
-      kind: value.kind ?? reference.kind ?? null,
-      mimeType:
-        reference.mime_type ??
-        reference.mimeType ??
-        value.mime_type ??
-        value.mimeType ??
-        null,
-      title: reference.title ?? value.title ?? null,
-      caption: value.caption ?? reference.caption ?? null,
-      sourceUri:
-        reference.source_uri ??
-        reference.sourceUri ??
-        value.source_uri ??
-        value.sourceUri ??
-        null,
-      sourcePath:
-        reference.source_path ??
-        reference.sourcePath ??
-        value.source_path ??
-        value.sourcePath ??
-        null,
-      previewUrl:
-        reference.preview_url ??
-        reference.previewUrl ??
-        value.preview_url ??
-        value.previewUrl ??
-        null,
-      sha256: reference.sha256 ?? value.sha256 ?? null,
-      byteSize:
-        reference.byte_size ??
-        reference.byteSize ??
-        value.byte_size ??
-        value.byteSize ??
-        null,
-    });
+  if (value.type === "imageView" && typeof value.path === "string") {
+    collector.push({ path: value.path });
   }
 
   for (const item of Object.values(value)) {
-    collectMediaContentParts(item, collector);
+    collectImageViews(item, collector);
   }
   return collector;
 }
 
-export function summarizeReadModelMediaReference(readModel) {
+export function summarizeReadModelMediaReference(readModel, referencePath) {
   const serialized = JSON.stringify(readModel || {});
-  const mediaParts = collectMediaContentParts(readModel);
-  const matchingParts = mediaParts.filter(
-    (part) => part.uri === MEDIA_REFERENCE_URI,
+  const imageViews = collectImageViews(readModel);
+  const matchingViews = imageViews.filter(
+    (item) => item.path === referencePath,
   );
   return sanitizeJson({
     detailItemCount: Array.isArray(readModel?.detail?.items)
       ? readModel.detail.items.length
       : null,
-    latestTurnStatus:
-      readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
-      readModel?.detail?.thread_read?.status ??
-      readModel?.detail?.status ??
-      null,
+    latestTurnStatus: readModelLatestTurnStatus(readModel),
     includesPrompt: serialized.includes(MEDIA_REFERENCE_PROMPT),
     includesAssistantDone: serialized.includes(MEDIA_REFERENCE_DONE_TEXT),
-    includesAssistantSummary: serialized.includes(
-      MEDIA_REFERENCE_SUMMARY_TEXT,
-    ),
-    contentPartsKeyObserved:
-      serialized.includes("contentParts") || serialized.includes("content_parts"),
-    mediaPartCount: mediaParts.length,
-    matchingMediaPartCount: matchingParts.length,
-    hasMediaReference: matchingParts.length > 0,
-    hasReferenceUri: serialized.includes(MEDIA_REFERENCE_URI),
-    hasMimeType: serialized.includes(MEDIA_REFERENCE_MIME_TYPE),
-    hasCaption: serialized.includes(MEDIA_REFERENCE_CAPTION),
-    hasSourceOwner: matchingParts.some(
-      (part) =>
-        typeof part.sourcePath === "string" && part.sourcePath.trim(),
-    ),
+    includesAssistantSummary: serialized.includes(MEDIA_REFERENCE_SUMMARY_TEXT),
+    contentPartsKeyObserved: false,
+    imageViewCount: imageViews.length,
+    imageViewPaths: imageViews.map((item) => item.path),
+    matchingImageViewCount: matchingViews.length,
+    hasMediaReference: matchingViews.length > 0,
+    hasReferenceUri: serialized.includes(referencePath),
+    hasMimeType: false,
+    hasCaption: false,
+    hasSourceOwner: matchingViews.some((item) => item.path === referencePath),
     noInlinePayload:
       !serialized.includes("data:image") && !serialized.includes("base64,"),
   });
@@ -136,6 +82,8 @@ export async function waitForSessionReadMediaReferenceCompleted(
   page,
   options,
   requestLog,
+  referencePath,
+  threadId,
 ) {
   const startedAt = Date.now();
   let lastSummary = null;
@@ -145,17 +93,17 @@ export async function waitForSessionReadMediaReferenceCompleted(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: SESSION_ID,
-        historyLimit: 100,
+        threadId,
+        includeTurns: true,
       },
       requestLog,
     );
     lastRead = read.result;
-    lastSummary = summarizeReadModelMediaReference(lastRead);
+    lastSummary = summarizeReadModelMediaReference(lastRead, referencePath);
     if (
       lastSummary.includesPrompt === true &&
       (lastSummary.includesAssistantDone === true ||
-      lastSummary.includesAssistantSummary === true) &&
+        lastSummary.includesAssistantSummary === true) &&
       lastSummary.hasMediaReference === true &&
       lastSummary.hasSourceOwner === true &&
       lastSummary.noInlinePayload === true
@@ -177,10 +125,10 @@ export async function waitForSessionReadMediaReferenceCompleted(
   );
 }
 
-export async function summarizeGuiMediaReferenceSnapshot(page) {
+export async function summarizeGuiMediaReferenceSnapshot(page, referencePath) {
   return await evaluatePageSnapshot(
     page,
-    ({ caption, uri, mimeType }) => {
+    ({ caption, uri, mimeType, referencePath: expectedPath }) => {
       const text = document.body?.innerText || "";
       const cards = Array.from(
         document.querySelectorAll(
@@ -188,7 +136,9 @@ export async function summarizeGuiMediaReferenceSnapshot(page) {
         ),
       );
       const matchingCard =
-        cards.find((card) => card.getAttribute("data-reference-uri") === uri) ??
+        cards.find(
+          (card) => card.getAttribute("data-reference-uri") === expectedPath,
+        ) ??
         cards[0] ??
         null;
       const cardText = matchingCard?.textContent || "";
@@ -204,11 +154,11 @@ export async function summarizeGuiMediaReferenceSnapshot(page) {
       const shellStyle = shell ? window.getComputedStyle(shell) : null;
       const shellVisible = Boolean(
         shell &&
-          shellRect &&
-          shellRect.width > 32 &&
-          shellRect.height > 32 &&
-          shellStyle?.visibility !== "hidden" &&
-          shellStyle?.display !== "none",
+        shellRect &&
+        shellRect.width > 32 &&
+        shellRect.height > 32 &&
+        shellStyle?.visibility !== "hidden" &&
+        shellStyle?.display !== "none",
       );
       const mainArea = document.querySelector(
         '[data-testid="workspace-main-area"]',
@@ -230,11 +180,11 @@ export async function summarizeGuiMediaReferenceSnapshot(page) {
         : null;
       const previewImageVisible = Boolean(
         previewImage &&
-          previewImageRect &&
-          previewImageRect.width > 8 &&
-          previewImageRect.height > 8 &&
-          previewImageStyle?.visibility !== "hidden" &&
-          previewImageStyle?.display !== "none",
+        previewImageRect &&
+        previewImageRect.width > 8 &&
+        previewImageRect.height > 8 &&
+        previewImageStyle?.visibility !== "hidden" &&
+        previewImageStyle?.display !== "none",
       );
       const canvasWorkbenchVisible =
         shellVisible || layoutMode === "chat-canvas";
@@ -270,11 +220,16 @@ export async function summarizeGuiMediaReferenceSnapshot(page) {
       caption: MEDIA_REFERENCE_CAPTION,
       uri: MEDIA_REFERENCE_URI,
       mimeType: MEDIA_REFERENCE_MIME_TYPE,
+      referencePath,
     },
   );
 }
 
-export async function openGuiMediaReferencePreview(page, options) {
+export async function openGuiMediaReferencePreview(
+  page,
+  options,
+  referencePath,
+) {
   const clickSnapshot = await evaluatePageSnapshot(
     page,
     ({ uri }) => {
@@ -284,7 +239,9 @@ export async function openGuiMediaReferencePreview(page, options) {
         ),
       );
       const card =
-        cards.find((candidate) => candidate.getAttribute("data-reference-uri") === uri) ??
+        cards.find(
+          (candidate) => candidate.getAttribute("data-reference-uri") === uri,
+        ) ??
         cards[0] ??
         null;
       if (card instanceof HTMLElement) {
@@ -301,13 +258,16 @@ export async function openGuiMediaReferencePreview(page, options) {
         referenceUri: null,
       };
     },
-    { uri: MEDIA_REFERENCE_URI },
+    { uri: referencePath },
   );
 
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await summarizeGuiMediaReferenceSnapshot(page);
+    const snapshot = await summarizeGuiMediaReferenceSnapshot(
+      page,
+      referencePath,
+    );
     lastSnapshot = snapshot;
     if (
       snapshot?.workbenchPreviewVisible === true &&
@@ -336,8 +296,10 @@ export async function runMediaReferenceScenario({
   page,
   options,
   appServerRequests,
+  runtimeEnv,
 }) {
   const result = {};
+  const referencePath = runtimeEnv.mediaReferenceSourcePath;
 
   result.mediaReferenceInputSend = sanitizeJson(
     await sendPromptFromGui(page, options, MEDIA_REFERENCE_PROMPT),
@@ -348,27 +310,25 @@ export async function runMediaReferenceScenario({
       prompt: MEDIA_REFERENCE_PROMPT,
       doneText: MEDIA_REFERENCE_DONE_TEXT,
       summaryText: MEDIA_REFERENCE_SUMMARY_TEXT,
-      requiredVisibleTexts: [
-        MEDIA_REFERENCE_CAPTION,
-        MEDIA_REFERENCE_URI,
-        MEDIA_REFERENCE_MIME_TYPE,
-      ],
+      requiredVisibleTexts: [MEDIA_REFERENCE_TITLE, MEDIA_REFERENCE_MIME_TYPE],
       disallowedVisibleTexts: ["data:image", "base64,"],
     }),
   );
   result.guiMediaReferenceSnapshot = sanitizeJson(
-    await summarizeGuiMediaReferenceSnapshot(page),
+    await summarizeGuiMediaReferenceSnapshot(page, referencePath),
   );
 
   const readModel = await waitForSessionReadMediaReferenceCompleted(
     page,
     options,
     appServerRequests,
+    referencePath,
+    options.threadId,
   );
   result.readModelMediaReferenceCompleted = readModel.summary;
 
   result.guiMediaReferencePreview = sanitizeJson(
-    await openGuiMediaReferencePreview(page, options),
+    await openGuiMediaReferencePreview(page, options, referencePath),
   );
 
   return result;

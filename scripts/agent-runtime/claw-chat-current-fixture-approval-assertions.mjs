@@ -1,5 +1,6 @@
 import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+  APP_SERVER_METHOD_SESSION_TURN_CANCEL,
   APPROVAL_REQUEST_DECLINE_RESULT_TEXT,
   APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
   APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
@@ -9,7 +10,6 @@ import {
   APPROVAL_REQUEST_RESUME_RESULT_TEXT,
   APPROVAL_REQUEST_RESUME_SECOND_PROMPT,
   APPROVAL_REQUEST_RESUME_TOOL_CALL_ID,
-  SESSION_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 
 const LEGACY_RESPOND_ACTION_METHOD = [
@@ -20,24 +20,57 @@ const LEGACY_RESPOND_ACTION_METHOD = [
 ].join("_");
 
 function emitEventTypesForTurn(backendLedger, turnId) {
-  return backendLedger
+  return (Array.isArray(backendLedger) ? backendLedger : [])
     .filter((entry) => entry?.kind === "backendEmit" && entry.turnId === turnId)
     .flatMap((entry) =>
       Array.isArray(entry.eventTypes) ? entry.eventTypes : [],
     );
 }
 
-function decisionRequestScoped(summary, turnId, expectedDecision) {
+function decisionRequestScoped(summary, threadId, turnId, expectedDecision) {
   const params = summary.approvalRequestDecisionRespondActionRequest?.params;
+  const actionScope =
+    params?.actionScope ??
+    summary.approvalRequestDecisionBackendActionRespond?.actionScope;
   return (
-    params?.sessionId === SESSION_ID &&
+    params?.sessionId === summary.sessionId &&
     params?.requestId === APPROVAL_REQUEST_RESUME_REQUEST_ID &&
     params?.actionType === "tool_confirmation" &&
     params?.decision === expectedDecision &&
     !Object.prototype.hasOwnProperty.call(params ?? {}, "confirmed") &&
-    (params?.actionScope?.turnId === turnId ||
-      summary.approvalRequestDecisionBackendActionRespond?.actionScope
-        ?.turnId === turnId)
+    actionScope?.threadId === threadId &&
+    actionScope?.turnId === turnId
+  );
+}
+
+function serverRequestLifecycleResolved(
+  summary,
+  expectedWireDecision,
+  threadId,
+  turnId,
+) {
+  return (
+    summary?.request?.method === "item/commandExecution/requestApproval" &&
+    summary?.request?.threadId === threadId &&
+    summary?.request?.turnId === turnId &&
+    summary?.response?.decision === expectedWireDecision &&
+    summary?.resolved?.method === "serverRequest/resolved" &&
+    summary?.resolved?.threadId === threadId &&
+    summary?.responseMatchesResolved === true &&
+    summary?.responseBeforeResolved === true &&
+    summary?.resolvedBeforeRuntimeTerminal === true
+  );
+}
+
+function hostInterruptLifecycleResolved(summary, threadId, turnId) {
+  return (
+    summary?.request?.method === "item/commandExecution/requestApproval" &&
+    summary?.request?.threadId === threadId &&
+    summary?.request?.turnId === turnId &&
+    summary?.resolved?.method === "serverRequest/resolved" &&
+    summary?.resolved?.threadId === threadId &&
+    summary?.noRendererResponse === true &&
+    summary?.resolvedBeforeRuntimeTerminal === true
   );
 }
 
@@ -48,10 +81,15 @@ function noLegacyRuntimeRespond(appServerRequestMethods) {
 function historicalApprovalDetailsHidden(snapshot) {
   const shape = snapshot?.approvalRecordShape;
   return (
-    Number(snapshot?.compactTimelinePreviewCount || 0) > 0 &&
     shape?.recordCount === 0 &&
     Array.isArray(shape?.texts) &&
     shape.texts.length === 0
+  );
+}
+
+function currentFailureStatusHidden(snapshot) {
+  return !String(snapshot?.completionScope?.assistantText ?? "").includes(
+    "当前处理失败",
   );
 }
 
@@ -152,9 +190,13 @@ export function buildApprovalRequestFullAccessScenarioAssertions({
 export function buildApprovalRequestResumeScenarioAssertions({
   appServerRequestMethods,
   approvalRequestResumeTurnStart,
+  backendLedger,
   pageText,
   summary,
 }) {
+  const secondTurnId =
+    summary.approvalRequestResumeSecondBackendTurnStart?.turnId;
+  const secondEmitTypes = emitEventTypesForTurn(backendLedger, secondTurnId);
   return {
     approvalRequestResumePromptReachedBackend:
       approvalRequestResumeTurnStart?.inputText ===
@@ -193,7 +235,9 @@ export function buildApprovalRequestResumeScenarioAssertions({
         APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
     approvalRequestResumeRespondPayloadScoped:
       summary.approvalRequestResumeRespondActionRequest?.params?.sessionId ===
-        SESSION_ID &&
+        summary.sessionId &&
+      summary.approvalRequestResumeRespondActionRequest?.params?.sessionId ===
+        approvalRequestResumeTurnStart?.sessionId &&
       summary.approvalRequestResumeRespondActionRequest?.params?.requestId ===
         APPROVAL_REQUEST_RESUME_REQUEST_ID &&
       summary.approvalRequestResumeRespondActionRequest?.params?.actionType ===
@@ -204,10 +248,22 @@ export function buildApprovalRequestResumeScenarioAssertions({
         summary.approvalRequestResumeRespondActionRequest?.params ?? {},
         "confirmed",
       ) &&
-      (summary.approvalRequestResumeRespondActionRequest?.params?.actionScope
-        ?.turnId === approvalRequestResumeTurnStart?.turnId ||
+      (
+        summary.approvalRequestResumeRespondActionRequest?.params
+          ?.actionScope ??
         summary.approvalRequestResumeBackendActionRespond?.actionScope
-          ?.turnId === approvalRequestResumeTurnStart?.turnId),
+      )?.threadId === summary.threadId &&
+      (
+        summary.approvalRequestResumeRespondActionRequest?.params
+          ?.actionScope ??
+        summary.approvalRequestResumeBackendActionRespond?.actionScope
+      )?.turnId === approvalRequestResumeTurnStart?.turnId,
+    approvalRequestResumeServerRequestResolved: serverRequestLifecycleResolved(
+      summary.approvalRequestResumeServerRequestLifecycle,
+      "acceptForSession",
+      summary.threadId,
+      approvalRequestResumeTurnStart?.turnId,
+    ),
     approvalRequestResumeBackendActionRespondObserved:
       summary.approvalRequestResumeBackendActionRespond?.requestId ===
         APPROVAL_REQUEST_RESUME_REQUEST_ID &&
@@ -229,7 +285,8 @@ export function buildApprovalRequestResumeScenarioAssertions({
         summary.guiApprovalRequestResumeCompleted?.hasDoneText === true) &&
       summary.guiApprovalRequestResumeCompleted?.textareaVisible === true &&
       summary.guiApprovalRequestResumeCompleted?.textareaDisabled === false &&
-      summary.guiApprovalRequestResumeCompleted?.stopButtonVisible === false,
+      summary.guiApprovalRequestResumeCompleted?.stopButtonVisible === false &&
+      currentFailureStatusHidden(summary.guiApprovalRequestResumeCompleted),
     guiApprovalRequestResumeHistoricalDetailsHidden:
       historicalApprovalDetailsHidden(
         summary.guiApprovalRequestResumeCompleted,
@@ -240,7 +297,11 @@ export function buildApprovalRequestResumeScenarioAssertions({
       summary.readModelApprovalRequestResumeCompleted?.includesPrompt ===
         true &&
       summary.readModelApprovalRequestResumeCompleted?.includesRequestId ===
-        true &&
+        false &&
+      summary.readModelApprovalRequestResumeCompleted
+        ?.includesApprovalPrompt === false &&
+      summary.readModelApprovalRequestResumeCompleted
+        ?.includesActionResolved === false &&
       summary.readModelApprovalRequestResumeCompleted?.includesToolCallId ===
         true &&
       summary.readModelApprovalRequestResumeCompleted?.includesToolResult ===
@@ -289,15 +350,18 @@ export function buildApprovalRequestResumeScenarioAssertions({
       summary.readModelApprovalRequestResumeSecondCompleted
         ?.pendingRequestCount === 0 &&
       summary.readModelApprovalRequestResumeSecondCompleted
-        ?.includesApprovalSessionCacheHit === true &&
+        ?.includesApprovalSessionCacheHit === false &&
       summary.readModelApprovalRequestResumeSecondCompleted
-        ?.includesAllowForSession === true &&
+        ?.includesAllowForSession === false &&
       summary.readModelApprovalRequestResumeSecondCompleted
-        ?.includesSecondPermissionRequestId === true &&
+        ?.includesSecondPermissionRequestId === false &&
       summary.readModelApprovalRequestResumeSecondCompleted
-        ?.includesActionResolvedForSecondPermission === true &&
+        ?.includesActionResolvedForSecondPermission === false &&
       summary.readModelApprovalRequestResumeSecondCompleted
-        ?.includesActionRequiredForSecondPermission === false,
+        ?.includesActionRequiredForSecondPermission === false &&
+      secondEmitTypes.includes("approval.session_cache.hit") &&
+      secondEmitTypes.includes("action.resolved") &&
+      !secondEmitTypes.includes("action.required"),
     guiApprovalRequestResumeSecondCompleted:
       summary.guiApprovalRequestResumeSecondCompleted?.hasPrompt === true &&
       (summary.guiApprovalRequestResumeSecondCompleted?.hasAssistantSummary ===
@@ -309,7 +373,10 @@ export function buildApprovalRequestResumeScenarioAssertions({
       summary.guiApprovalRequestResumeSecondCompleted?.textareaDisabled ===
         false &&
       summary.guiApprovalRequestResumeSecondCompleted?.stopButtonVisible ===
-        false,
+        false &&
+      currentFailureStatusHidden(
+        summary.guiApprovalRequestResumeSecondCompleted,
+      ),
     guiApprovalRequestResumeSecondHistoricalDetailsHidden:
       historicalApprovalDetailsHidden(
         summary.guiApprovalRequestResumeSecondCompleted,
@@ -387,9 +454,17 @@ export function buildApprovalRequestDecisionScenarioAssertions({
         APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
     approvalRequestDecisionRespondPayloadScoped: decisionRequestScoped(
       summary,
+      summary.threadId,
       turnId,
       expectedDecision,
     ),
+    approvalRequestDecisionServerRequestResolved:
+      serverRequestLifecycleResolved(
+        summary.approvalRequestDecisionServerRequestLifecycle,
+        expectedDecision,
+        summary.threadId,
+        turnId,
+      ),
     approvalRequestDecisionBackendActionRespondObserved:
       summary.approvalRequestDecisionBackendActionRespond?.requestId ===
         APPROVAL_REQUEST_RESUME_REQUEST_ID &&
@@ -420,7 +495,10 @@ export function buildApprovalRequestDecisionScenarioAssertions({
             summary.guiApprovalRequestDeclineCompleted?.textareaDisabled ===
               false &&
             summary.guiApprovalRequestDeclineCompleted?.stopButtonVisible ===
-              false,
+              false &&
+            currentFailureStatusHidden(
+              summary.guiApprovalRequestDeclineCompleted,
+            ),
           guiApprovalRequestDeclineHistoricalDetailsHidden:
             historicalApprovalDetailsHidden(
               summary.guiApprovalRequestDeclineCompleted,
@@ -431,13 +509,15 @@ export function buildApprovalRequestDecisionScenarioAssertions({
             summary.readModelApprovalRequestDeclineCompleted?.includesPrompt ===
               true &&
             summary.readModelApprovalRequestDeclineCompleted
-              ?.includesRequestId === true &&
+              ?.includesRequestId === false &&
+            summary.readModelApprovalRequestDeclineCompleted
+              ?.includesApprovalPrompt === false &&
             summary.readModelApprovalRequestDeclineCompleted
               ?.includesToolCallId === true &&
             summary.readModelApprovalRequestDeclineCompleted
-              ?.includesActionResolved === true &&
+              ?.includesActionResolved === false &&
             summary.readModelApprovalRequestDeclineCompleted
-              ?.includesDecision === true &&
+              ?.includesDecision === false &&
             summary.readModelApprovalRequestDeclineCompleted
               ?.includesDeclineResult === true &&
             summary.readModelApprovalRequestDeclineCompleted
@@ -459,7 +539,10 @@ export function buildApprovalRequestDecisionScenarioAssertions({
             summary.guiApprovalRequestCancelCompleted?.textareaDisabled ===
               false &&
             summary.guiApprovalRequestCancelCompleted?.stopButtonVisible ===
-              false,
+              false &&
+            currentFailureStatusHidden(
+              summary.guiApprovalRequestCancelCompleted,
+            ),
           guiApprovalRequestCancelHistoricalDetailsHidden:
             historicalApprovalDetailsHidden(
               summary.guiApprovalRequestCancelCompleted,
@@ -470,13 +553,7 @@ export function buildApprovalRequestDecisionScenarioAssertions({
             summary.readModelApprovalRequestCancelCanceled?.includesPrompt ===
               true &&
             summary.readModelApprovalRequestCancelCanceled
-              ?.includesRequestId === true &&
-            summary.readModelApprovalRequestCancelCanceled
               ?.includesToolCallId === true &&
-            summary.readModelApprovalRequestCancelCanceled
-              ?.includesActionResolved === true &&
-            summary.readModelApprovalRequestCancelCanceled?.includesDecision ===
-              true &&
             summary.readModelApprovalRequestCancelCanceled?.includesCanceled ===
               true &&
             summary.readModelApprovalRequestCancelCanceled
@@ -485,5 +562,73 @@ export function buildApprovalRequestDecisionScenarioAssertions({
     approvalRequestDecisionNoLegacyRuntimeRespond: noLegacyRuntimeRespond(
       appServerRequestMethods,
     ),
+  };
+}
+
+export function buildApprovalRequestHostInterruptScenarioAssertions({
+  appServerRequestMethods,
+  approvalRequestResumeTurnStart,
+  summary,
+}) {
+  const turnId = approvalRequestResumeTurnStart?.turnId;
+  const pendingGui = summary.approvalRequestDecisionPendingGui;
+  const pendingReadModel = summary.approvalRequestDecisionPendingReadModel;
+  const guiCanceled = summary.guiApprovalRequestCancelCompleted;
+  const readModelCanceled = summary.readModelApprovalRequestCancelCanceled;
+  const interruptRequest = summary.approvalRequestHostInterruptRequest;
+  return {
+    approvalRequestHostInterruptPromptReachedBackend:
+      approvalRequestResumeTurnStart?.inputText ===
+      APPROVAL_REQUEST_RESUME_PROMPT,
+    guiApprovalRequestHostInterruptInputSubmitted:
+      summary.approvalRequestDecisionInputSend?.afterFill
+        ?.promptVisibleInTextarea === true &&
+      summary.approvalRequestDecisionInputSend?.clicked?.clicked === true,
+    guiApprovalRequestHostInterruptPendingVisible:
+      pendingGui?.hasSection === true &&
+      pendingGui?.hasApprovalContent === true &&
+      pendingGui?.hasPrompt === true &&
+      pendingGui?.textareaVisible === false &&
+      pendingGui?.singleLine === true,
+    readModelApprovalRequestHostInterruptPending:
+      pendingReadModel?.hasPendingRequest === true &&
+      pendingReadModel?.payloadActionType === "tool_confirmation" &&
+      pendingReadModel?.includesRequestId === true &&
+      pendingReadModel?.includesToolCallId === true,
+    approvalRequestHostInterruptUsedCurrentMethod:
+      appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_CANCEL) &&
+      interruptRequest?.method === APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+    approvalRequestHostInterruptPayloadScoped:
+      interruptRequest?.params?.threadId === summary.threadId &&
+      interruptRequest?.params?.turnId === turnId,
+    approvalRequestHostInterruptServerRequestResolved:
+      hostInterruptLifecycleResolved(
+        summary.approvalRequestHostInterruptLifecycle,
+        summary.threadId,
+        turnId,
+      ),
+    approvalRequestHostInterruptNoRendererResponse:
+      summary.approvalRequestHostInterruptLifecycle?.responseCount === 0,
+    approvalRequestHostInterruptNoBackendActionRespond:
+      summary.approvalRequestHostInterruptBackend?.actionRespondCount === 0 &&
+      !appServerRequestMethods.includes(
+        APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+      ),
+    approvalRequestHostInterruptPendingCleared:
+      readModelCanceled?.pendingRequestCount === 0,
+    guiApprovalRequestHostInterruptCanceled:
+      guiCanceled?.hasPrompt === true &&
+      guiCanceled?.textareaVisible === true &&
+      guiCanceled?.textareaDisabled === false &&
+      guiCanceled?.stopButtonVisible === false &&
+      currentFailureStatusHidden(guiCanceled),
+    readModelApprovalRequestHostInterruptCanceled:
+      readModelCanceled?.latestTurnCanceled === true &&
+      readModelCanceled?.includesPrompt === true &&
+      readModelCanceled?.includesToolCallId === true &&
+      readModelCanceled?.includesCanceled === true &&
+      readModelCanceled?.includesToolResult === false,
+    approvalRequestHostInterruptCanonicalEventOrder:
+      summary.approvalRequestHostInterruptCanonicalEvents?.ordered === true,
   };
 }

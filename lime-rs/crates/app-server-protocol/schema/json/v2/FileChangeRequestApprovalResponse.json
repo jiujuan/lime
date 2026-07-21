@@ -1,0 +1,24 @@
+{
+  "$defs": {
+    "FileChangeApprovalDecision": {
+      "enum": [
+        "accept",
+        "acceptForSession",
+        "cancel",
+        "decline"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "decision": {
+      "$ref": "#/$defs/FileChangeApprovalDecision"
+    }
+  },
+  "required": [
+    "decision"
+  ],
+  "title": "FileChangeRequestApprovalResponse",
+  "type": "object"
+}

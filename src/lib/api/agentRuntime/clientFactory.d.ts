@@ -18,6 +18,7 @@ export interface AgentRuntimeClientDeps extends AgentRuntimeTransportDeps {
   bridgeInvoke?: AgentRuntimeBridgeInvoke;
   invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeAppServerClient;
+  standardRuntimeClient?: AgentRuntimeThreadClientDeps["standardRuntimeClient"];
   isAppServerTurnLifecycleAvailable?: AgentRuntimeThreadClientDeps["isAppServerTurnLifecycleAvailable"];
 }
 export declare function createAgentRuntimeClient({
@@ -45,12 +46,6 @@ export declare function createAgentRuntimeClient({
   listAgentRuntimeFileCheckpoints: (
     request: import("./requestTypes").AgentRuntimeListFileCheckpointsRequest,
   ) => Promise<import("./sessionTypes").AgentRuntimeFileCheckpointListResult>;
-  promoteAgentRuntimeQueuedTurn: (
-    request: import("./requestTypes").AgentRuntimePromoteQueuedTurnRequest,
-  ) => Promise<boolean>;
-  removeAgentRuntimeQueuedTurn: (
-    request: import("./requestTypes").AgentRuntimeRemoveQueuedTurnRequest,
-  ) => Promise<boolean>;
   replayAgentRuntimeRequest: (
     request: import("./requestTypes").AgentRuntimeReplayRequestRequest,
   ) => Promise<
@@ -59,11 +54,22 @@ export declare function createAgentRuntimeClient({
   respondAgentRuntimeAction: (
     request: import("./requestTypes").AgentRuntimeRespondActionRequest,
   ) => Promise<void>;
-  resumeAgentRuntimeThread: (
-    request: import("./requestTypes").AgentRuntimeResumeThreadRequest,
-  ) => Promise<boolean>;
+  resumeThread: (
+    request: import("@limecloud/app-server-client").ThreadResumeParams,
+  ) => Promise<
+    import("@limecloud/app-server-client").AppServerRequestResult<
+      import("@limecloud/app-server-client").ThreadResumeResponse
+    >
+  >;
+  steerAgentRuntimeTurn: (
+    request: import("@limecloud/app-server-client").TurnSteerParams,
+  ) => Promise<
+    import("@limecloud/app-server-client").AppServerRequestResult<
+      import("@limecloud/app-server-client").TurnSteerResponse
+    >
+  >;
   submitAgentRuntimeTurn: (
-    request: import("@/lib/api/appServer").AppServerAgentSessionTurnStartParams,
+    request: import("@limecloud/app-server-client").TurnStartParams,
   ) => Promise<void>;
   createAgentRuntimeSession: (
     workspaceId?: string,
@@ -79,6 +85,8 @@ export declare function createAgentRuntimeClient({
   listAgentRuntimeSessions: (
     options?: import("./sessionTypes").AgentRuntimeListSessionsOptions,
   ) => Promise<import("./sessionTypes").AgentSessionInfo[]>;
+  archiveAgentRuntimeSession: (sessionId: string) => Promise<void>;
+  unarchiveAgentRuntimeSession: (sessionId: string) => Promise<void>;
   updateAgentRuntimeSession: (
     request: import("./requestTypes").AgentRuntimeUpdateSessionRequest,
   ) => Promise<void>;

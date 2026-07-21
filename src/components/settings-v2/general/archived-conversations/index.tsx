@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import {
   listAgentRuntimeSessions,
-  updateAgentRuntimeSession,
+  unarchiveAgentRuntimeSession,
 } from "@/lib/api/agentRuntime/sessionClient";
 import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import { formatDate } from "@/i18n/format";
@@ -113,10 +113,7 @@ export function ArchivedConversationsSettings() {
     async (session: AgentSessionInfo) => {
       setRestoringSessionId(session.id);
       try {
-        await updateAgentRuntimeSession({
-          session_id: session.id,
-          archived: false,
-        });
+        await unarchiveAgentRuntimeSession(session.id);
         setSessions((current) =>
           current.filter((item) => item.id !== session.id),
         );

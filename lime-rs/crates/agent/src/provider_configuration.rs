@@ -28,6 +28,7 @@ struct ProviderConfigurationRequest<'a> {
     pub model: &'a str,
     pub reasoning_effort: Option<String>,
     pub route_protocol: Option<ProtocolKind>,
+    pub credential_ref: Option<&'a str>,
     pub direct_provider_config: Option<SessionProviderConfig>,
 }
 
@@ -74,9 +75,21 @@ async fn configure_provider_for_session(
     agent_state: &AgentRuntimeState,
     request: ProviderConfigurationRequest<'_>,
 ) -> Result<ConfiguredSessionProvider, String> {
+    let direct_route_protocol = request
+        .direct_provider_config
+        .as_ref()
+        .and_then(|config| config.route_protocol.as_ref());
+    ensure_supported_route_protocol(request.route_protocol.as_ref().or(direct_route_protocol))?;
     agent_state.init_agent_with_db(request.db).await?;
 
     if let Some(mut config) = request.direct_provider_config {
+        if let Some(credential_ref) = request.credential_ref {
+            if config.credential_uuid.as_deref() != Some(credential_ref) {
+                return Err(
+                    "direct provider config does not match the resolved credential ref".to_string(),
+                );
+            }
+        }
         config.route_protocol = request.route_protocol.or(config.route_protocol);
         let runtime_config =
             session_provider_config_to_runtime_provider_config(&config, request.session_id);
@@ -87,7 +100,12 @@ async fn configure_provider_for_session(
 
     let mut runtime_config = agent_state
         .credential_bridge()
-        .select_and_configure(request.db, request.provider, request.model)
+        .select_and_configure(
+            request.db,
+            request.provider,
+            request.model,
+            request.credential_ref,
+        )
         .await
         .map_err(|error| format!("从 API Key Provider 选择凭证失败: {error}"))?;
     runtime_config.reasoning_effort = request.reasoning_effort;
@@ -152,6 +170,23 @@ pub(crate) async fn configure_model_route_provider_for_session_with_provider(
     session_id: &str,
     configuration: ModelRouteProviderConfiguration,
 ) -> Result<ConfiguredSessionProvider, String> {
+    configure_model_route_provider_for_session_with_provider_and_credential_ref(
+        agent_state,
+        db,
+        session_id,
+        configuration,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn configure_model_route_provider_for_session_with_provider_and_credential_ref(
+    agent_state: &AgentRuntimeState,
+    db: &DbConnection,
+    session_id: &str,
+    configuration: ModelRouteProviderConfiguration,
+    credential_ref: Option<&str>,
+) -> Result<ConfiguredSessionProvider, String> {
     configure_provider_for_session(
         agent_state,
         ProviderConfigurationRequest {
@@ -161,6 +196,7 @@ pub(crate) async fn configure_model_route_provider_for_session_with_provider(
             model: configuration.turn_provider.route.model.as_str(),
             reasoning_effort: configuration.turn_provider.reasoning_effort,
             route_protocol: configuration.route_protocol,
+            credential_ref,
             direct_provider_config: configuration.direct_provider_config,
         },
     )
@@ -171,6 +207,18 @@ pub fn route_protocol_from_session_provider_config(
     config: &SessionProviderConfig,
 ) -> Option<ProtocolKind> {
     config.route_protocol.clone()
+}
+
+fn ensure_supported_route_protocol(protocol: Option<&ProtocolKind>) -> Result<(), String> {
+    let Some(protocol) = protocol else {
+        return Ok(());
+    };
+    if model_provider_protocol_from_route_protocol(Some(protocol.clone())).is_some() {
+        return Ok(());
+    }
+    Err(format!(
+        "unsupported provider protocol {protocol:?}; no current model-provider wire adapter is registered"
+    ))
 }
 
 fn runtime_provider_protocol_from_route_protocol(
@@ -263,6 +311,19 @@ fn route_protocol_from_model_provider_protocol(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lime_core::database::dao::api_key_provider::ApiProviderType;
+    use lime_core::database::schema;
+    use lime_core::models::runtime_api_key_credential_uuid;
+    use lime_services::api_key_provider_service::ApiKeyProviderService;
+    use rusqlite::Connection;
+    use std::sync::{Arc, Mutex};
+
+    fn test_db() -> DbConnection {
+        let connection =
+            Connection::open_in_memory().expect("open provider configuration database");
+        schema::create_tables(&connection).expect("create provider configuration schema");
+        Arc::new(Mutex::new(connection))
+    }
 
     #[test]
     fn route_protocol_is_projected_to_model_provider_protocol() {
@@ -320,6 +381,24 @@ mod tests {
                 None,
                 "{protocol:?} must stay route metadata until a matching runtime adapter exists"
             );
+        }
+    }
+
+    #[test]
+    fn unsupported_route_protocols_fail_closed_before_provider_selection() {
+        for protocol in [
+            ProtocolKind::OpenaiImages,
+            ProtocolKind::GeminiGenerateContent,
+            ProtocolKind::OllamaChat,
+            ProtocolKind::Fal,
+            ProtocolKind::BedrockConverse,
+            ProtocolKind::VertexGemini,
+            ProtocolKind::Unknown,
+        ] {
+            let error = ensure_supported_route_protocol(Some(&protocol))
+                .expect_err("unsupported protocol must fail closed");
+            assert!(error.contains("unsupported provider protocol"));
+            assert!(error.contains("no current model-provider wire adapter"));
         }
     }
 
@@ -386,5 +465,112 @@ mod tests {
             route_protocol_from_session_provider_config(&config),
             Some(ProtocolKind::OpenaiChat)
         );
+    }
+
+    #[tokio::test]
+    async fn model_route_configuration_honors_exact_credential_ref() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Configured Exact Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://configured.example/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create configured provider");
+        service
+            .add_api_key(&db, &provider.id, "sk-configured-first-key", None, false)
+            .expect("add first configured key");
+        let exact_key = service
+            .add_api_key(&db, &provider.id, "sk-configured-exact-key", None, false)
+            .expect("add exact configured key");
+        let credential_ref = runtime_api_key_credential_uuid(&exact_key.id);
+        let runtime = AgentRuntimeState::new();
+        let configuration = provider_configuration_from_model_selection(
+            provider.id,
+            "fixture-model",
+            Some("high".to_string()),
+            Some(ProtocolKind::OpenaiChat),
+        );
+
+        let configured =
+            configure_model_route_provider_for_session_with_provider_and_credential_ref(
+                &runtime,
+                &db,
+                "exact-session",
+                configuration,
+                Some(&credential_ref),
+            )
+            .await
+            .expect("configure exact model route")
+            .into_config();
+
+        assert_eq!(
+            configured.credential_uuid.as_deref(),
+            Some(credential_ref.as_str())
+        );
+        assert_eq!(
+            configured.api_key.as_deref(),
+            Some("sk-configured-exact-key")
+        );
+        assert_eq!(configured.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(configured.route_protocol, Some(ProtocolKind::OpenaiChat));
+    }
+
+    #[tokio::test]
+    async fn model_route_configuration_does_not_fallback_from_missing_exact_ref() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Configured No Fallback Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://configured.example/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create configured provider");
+        service
+            .add_api_key(
+                &db,
+                &provider.id,
+                "sk-configured-available-key",
+                None,
+                false,
+            )
+            .expect("add configured key");
+        let missing_ref = runtime_api_key_credential_uuid("missing-key");
+        let runtime = AgentRuntimeState::new();
+        let configuration = provider_configuration_from_model_selection(
+            provider.id,
+            "fixture-model",
+            None,
+            Some(ProtocolKind::OpenaiChat),
+        );
+
+        let error =
+            match configure_model_route_provider_for_session_with_provider_and_credential_ref(
+                &runtime,
+                &db,
+                "missing-exact-session",
+                configuration,
+                Some(&missing_ref),
+            )
+            .await
+            {
+                Ok(_) => panic!("missing exact ref must not fall back"),
+                Err(error) => error,
+            };
+        assert!(error.contains("指定的 durable"));
     }
 }

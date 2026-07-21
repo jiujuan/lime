@@ -1,4 +1,5 @@
 import type { AgentThreadItem, AgentThreadTurn } from "../types";
+import { resolveThreadItemTimelinePosition } from "./agentChatHistoryPrimitives";
 
 export function areJsonLikeValuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
@@ -46,16 +47,21 @@ function compareItemOrder(
   left: AgentThreadItem,
   right: AgentThreadItem,
 ): number {
-  if (left.turn_id === right.turn_id && left.sequence !== right.sequence) {
-    return left.sequence - right.sequence;
+  const leftTimelinePosition = resolveThreadItemTimelinePosition(left);
+  const rightTimelinePosition = resolveThreadItemTimelinePosition(right);
+  if (
+    left.turn_id === right.turn_id &&
+    leftTimelinePosition !== rightTimelinePosition
+  ) {
+    return leftTimelinePosition - rightTimelinePosition;
   }
   const leftStartedAt = String(left.started_at || "");
   const rightStartedAt = String(right.started_at || "");
   if (leftStartedAt !== rightStartedAt) {
     return leftStartedAt.localeCompare(rightStartedAt);
   }
-  if (left.sequence !== right.sequence) {
-    return left.sequence - right.sequence;
+  if (leftTimelinePosition !== rightTimelinePosition) {
+    return leftTimelinePosition - rightTimelinePosition;
   }
   return String(left.id || "").localeCompare(String(right.id || ""));
 }

@@ -5,9 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const CONSUMER_PATHS = [
   "src/components/agent/chat/hooks/handleSendTypes.ts",
-  "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.ts",
   "src/components/agent/chat/hooks/agentChatShared.ts",
-  "src/components/agent/chat/utils/buildUserInputSubmitOp.ts",
 ] as const;
 
 describe("runtime search mode current owner boundary", () => {

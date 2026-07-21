@@ -28,7 +28,12 @@ pub(super) async fn resolve_runtime_model_registry_metadata(
     direct_provider_config: Option<&SessionProviderConfig>,
 ) -> Result<RuntimeModelRegistryMetadata, String> {
     if let Some(config) = direct_provider_config {
-        let model_capabilities = config.model_capabilities.clone();
+        let model_capabilities = config.model_capabilities.as_ref().map(|value| {
+            serde_json::to_value(runtime_core::capability_snapshot_from_model_capabilities(
+                value,
+            ))
+            .unwrap_or_else(|_| json!({}))
+        });
         return Ok(RuntimeModelRegistryMetadata {
             payload: json!({
                 "source": "direct_provider_config",
@@ -237,7 +242,15 @@ mod tests {
                 route_protocol: None,
                 toolshim: false,
                 toolshim_model: None,
-                model_capabilities: None,
+                model_capabilities: Some(json!({
+                    "taskFamilies": ["chat"],
+                    "runtimeFeatures": ["streaming"],
+                    "capabilities": {
+                        "streaming": true,
+                        "apiKey": "must-not-persist"
+                    },
+                    "baseUrl": "https://user:token@example.test/v1?secret=1"
+                })),
                 supports_websockets: false,
             }),
         )
@@ -253,5 +266,15 @@ mod tests {
             Some("direct_provider_config_not_in_registry")
         );
         assert!(metadata.payload()["model"].is_null());
+        assert_eq!(
+            metadata
+                .payload()
+                .pointer("/modelCapabilities/capabilities/streaming")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        let encoded = metadata.payload().to_string();
+        assert!(!encoded.contains("must-not-persist"));
+        assert!(!encoded.contains("example.test"));
     }
 }

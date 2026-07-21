@@ -160,7 +160,7 @@ async function waitForTerminal(
     startError = error;
   });
   while (Date.now() - startedAt < options.timeoutMs) {
-    latestRead = await transport.invoke(options, "agentSession/read", {
+    latestRead = await transport.invoke(options, "thread/read", {
       sessionId,
       historyLimit: 100,
     });
@@ -172,14 +172,14 @@ async function waitForTerminal(
   }
   let cancelStatus = "not_requested";
   try {
-    await transport.invoke(options, "agentSession/turn/cancel", {
+    await transport.invoke(options, "turn/interrupt", {
       sessionId,
       turnId,
     });
     cancelStatus = "requested";
     const cancelDeadline = Date.now() + 10_000;
     while (Date.now() < cancelDeadline) {
-      latestRead = await transport.invoke(options, "agentSession/read", {
+      latestRead = await transport.invoke(options, "thread/read", {
         sessionId,
         historyLimit: 100,
       });
@@ -279,7 +279,7 @@ async function main() {
     const suffix = `${Date.now()}-${process.pid}`;
     const sessionId = `multimodal-capture-${suffix}`;
     const turnId = `multimodal-capture-turn-${suffix}`;
-    await transport.invoke(options, "agentSession/start", {
+    await transport.invoke(options, "thread/start", {
       sessionId,
       threadId: sessionId,
       appId: "desktop",
@@ -308,7 +308,7 @@ async function main() {
       executionStrategy: "react",
     });
 
-    const turnPromise = transport.invoke(options, "agentSession/turn/start", {
+    const turnPromise = transport.invoke(options, "turn/start", {
       sessionId,
       turnId,
       input: {
@@ -383,7 +383,7 @@ async function main() {
     const evidenceText = JSON.stringify(evidence);
     assert(
       !readText.includes("base64,"),
-      "agentSession/read leaked inline image payload",
+      "thread/read leaked inline image payload",
     );
     assert(
       !evidenceText.includes("base64,"),
@@ -391,7 +391,7 @@ async function main() {
     );
     assert(
       readText.includes("sidecar://"),
-      "agentSession/read did not retain canonical sidecar reference",
+      "thread/read did not retain canonical sidecar reference",
     );
     let providerRequestPath = null;
     let providerImagePayloadObserved = null;

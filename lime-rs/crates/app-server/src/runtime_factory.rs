@@ -275,7 +275,7 @@ mod tests {
                     id: "content.draft.generate".to_string(),
                     title: "Generate Draft".to_string(),
                     description: None,
-                    methods: vec!["agentSession/turn/start".to_string()],
+                    methods: vec!["turn/start".to_string()],
                 })
                 .for_apps(["content-studio"]),
             ])),
@@ -304,7 +304,7 @@ mod tests {
                     id: "content.draft.generate".to_string(),
                     title: "Generate Draft".to_string(),
                     description: None,
-                    methods: vec!["agentSession/turn/start".to_string()],
+                    methods: vec!["turn/start".to_string()],
                 })
                 .for_apps(["content-studio"]),
             ])),
@@ -337,7 +337,7 @@ mod tests {
                     id: "content.draft.generate".to_string(),
                     title: "Generate Draft".to_string(),
                     description: None,
-                    methods: vec!["agentSession/turn/start".to_string()],
+                    methods: vec!["turn/start".to_string()],
                 })
                 .for_apps(["content-studio"]),
             ])),
@@ -384,7 +384,7 @@ mod tests {
                     id: "content.draft.generate".to_string(),
                     title: "Generate Draft".to_string(),
                     description: None,
-                    methods: vec!["agentSession/turn/start".to_string()],
+                    methods: vec!["turn/start".to_string()],
                 },
             )
             .for_apps(["content-studio"])]),

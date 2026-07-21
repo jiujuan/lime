@@ -8,11 +8,15 @@ import {
   isJsonRpcNotification,
   isJsonRpcResponse,
   isJsonRpcErrorResponse,
-  type AgentSessionTurnStartParams,
-  type AgentSessionTurnStartResponse,
-  type AgentSessionReadResponse,
+  METHOD_AGENT_MESSAGE_DELTA,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
+  METHOD_ITEM_COMPLETED,
+  METHOD_ITEM_STARTED,
+  METHOD_THREAD_STARTED,
+  METHOD_THREAD_TOKEN_USAGE_UPDATED,
+  METHOD_TURN_COMPLETED,
+  METHOD_TURN_STARTED,
   METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
   readReleaseManifest,
   resolveSidecarFromReleaseManifest,
@@ -28,12 +32,13 @@ import {
   type SidecarLaunchConfig,
 } from "@limecloud/app-server-client";
 import { app, session } from "./electronRuntime";
+import { resolveCurrentDesktopStorageRoots } from "./appDataPaths";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS = 30_000;
 const APP_SERVER_BACKEND_TIMEOUT_GRACE_MS = 30_000;
-const APP_SERVER_TURN_START_METHOD = "agentSession/turn/start";
+const APP_SERVER_TURN_START_METHOD = "turn/start";
 const APP_SERVER_PLUGIN_UI_RUNTIME_START_METHOD = "pluginUiRuntime/start";
 const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_METHOD =
   "projectShell/session/drainEvents";
@@ -49,11 +54,8 @@ const APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_TIMEOUT_MS = 180_000;
 const APP_SERVER_CONVERSATION_IMPORT_SCAN_TIMEOUT_MS = 120_000;
 const APP_SERVER_CONVERSATION_IMPORT_PREVIEW_TIMEOUT_MS = 120_000;
 const APP_SERVER_REQUEST_TIMEOUT_OVERRIDE_CEILING_MS = 600_000;
-const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
-const APP_SERVER_STREAMING_TURN_IDENTITY_READ_RETRY_MS = 25;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_CANCEL_REQUEST_METHOD = "$/cancelRequest";
-const APP_SERVER_DATA_DIR_NAME = "app-server";
 const APP_SERVER_CONFIG_FILE_NAME = "config.yaml";
 const APP_SERVER_RECENT_NOTIFICATION_LIMIT = 500;
 const APP_SERVER_PROXY_PROBE_URL = "https://llm.limeai.run/v1/models";
@@ -67,9 +69,6 @@ const APP_SERVER_PROXY_ENV_KEYS = [
 ] as const;
 const APP_SERVER_NO_PROXY_ENV_KEYS = ["NO_PROXY", "no_proxy"] as const;
 const APP_SERVER_LOOPBACK_NO_PROXY_HOSTS = ["127.0.0.1", "localhost", "::1"];
-const DEFAULT_APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP: NonNullable<
-  SidecarLaunchConfig["productDbMigrationCleanup"]
-> = "drop-tables";
 
 type ElectronAppServerLaunchConfig = {
   config: SidecarLaunchConfig;
@@ -84,10 +83,6 @@ type HandleJsonLinesRequest = {
 type DrainEventsRequest = {
   includeRecent?: boolean;
   limit?: number;
-};
-
-type JsonRpcRequestWithParams = JsonRpcRequest & {
-  params?: unknown;
 };
 
 export class ElectronAppServerHost {
@@ -148,28 +143,6 @@ export class ElectronAppServerHost {
           proxiedMessage.message.method,
           request.timeoutMs,
         );
-        if (proxiedMessage.message.method === APP_SERVER_TURN_START_METHOD) {
-          try {
-            responses.push(
-              ...(await this.#requestStreamingTurnStart(
-                connected,
-                message,
-                proxiedMessage.message,
-                timeoutMs,
-              )),
-            );
-          } catch (error) {
-            const errorMessages = restoreAppServerRequestError(
-              error,
-              proxiedMessage.originalId,
-            );
-            if (!errorMessages) {
-              throw error;
-            }
-            responses.push(...errorMessages);
-          }
-          continue;
-        }
         try {
           const result = await this.#withActiveProxyRequest(
             proxiedMessage.originalId,
@@ -291,6 +264,7 @@ export class ElectronAppServerHost {
     const launchConfig = await resolveLaunchConfig();
     const sidecarEnv = await resolveAppServerSidecarEnv(
       launchConfig.config.binaryPath,
+      launchConfig.config.dataDir ?? resolveAppServerDataDir(),
     );
     const initializeParams: InitializeParams = {
       clientInfo: {
@@ -301,6 +275,13 @@ export class ElectronAppServerHost {
       capabilities: {
         eventMethods: [
           "agentSession/event",
+          METHOD_THREAD_STARTED,
+          METHOD_TURN_STARTED,
+          METHOD_TURN_COMPLETED,
+          METHOD_ITEM_STARTED,
+          METHOD_ITEM_COMPLETED,
+          METHOD_AGENT_MESSAGE_DELTA,
+          METHOD_THREAD_TOKEN_USAGE_UPDATED,
           METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
         ],
         experimental: true,
@@ -362,112 +343,6 @@ export class ElectronAppServerHost {
     };
   }
 
-  async #requestStreamingTurnStart(
-    connected: ConnectedAppServerSidecar,
-    originalMessage: JsonRpcRequest,
-    message: JsonRpcRequest,
-    timeoutMs: number,
-  ): Promise<JsonRpcMessage[]> {
-    const requestDeadlineAtMs = Date.now() + timeoutMs;
-    try {
-      const result = await this.#withActiveProxyRequest(
-        originalMessage.id,
-        message.id,
-        () =>
-          this.#requestAppServerUntilFirstNotificationOrResponse<AgentSessionTurnStartResponse>(
-            connected,
-            message,
-            message.method,
-            {
-              timeoutMs: APP_SERVER_STREAMING_TURN_ACK_GRACE_MS,
-            },
-          ),
-      );
-      const messages = result.messages.map((response) =>
-        restoreProxyResponseId(response, originalMessage.id),
-      );
-      if (result.completed) {
-        return messages;
-      }
-      const identity = turnEventIdentity(result.messages[0]);
-      const acceptedIdentity =
-        identity && turnIdentityMatchesStart(identity, originalMessage)
-          ? identity
-          : await this.#readCanonicalTurnIdentity(
-              connected,
-              originalMessage,
-              requestDeadlineAtMs,
-            );
-      return [
-        streamingTurnStartAcceptedResponse(originalMessage, acceptedIdentity),
-      ];
-    } catch (error) {
-      if (!isAppServerRequestTimeoutError(error)) {
-        throw error;
-      }
-      const identity = await this.#readCanonicalTurnIdentity(
-        connected,
-        originalMessage,
-        requestDeadlineAtMs,
-      );
-      return [streamingTurnStartAcceptedResponse(originalMessage, identity)];
-    }
-  }
-
-  async #readCanonicalTurnIdentity(
-    connected: ConnectedAppServerSidecar,
-    originalMessage: JsonRpcRequest,
-    requestDeadlineAtMs: number,
-  ): Promise<CanonicalTurnIdentity> {
-    const params = turnStartParams(originalMessage);
-    const sessionId = nonEmptyString(params?.sessionId);
-    const turnId = nonEmptyString(params?.turnId);
-    if (!sessionId || !turnId) {
-      throw new Error(
-        "app-server turn/start timed out before a canonical turn identity event",
-      );
-    }
-
-    for (;;) {
-      const remainingMs = requestDeadlineAtMs - Date.now();
-      if (remainingMs <= 0) {
-        break;
-      }
-
-      const read = await this.#requestAppServer<AgentSessionReadResponse>(
-        connected,
-        connected.connection.client.readSession({ sessionId }),
-        "agentSession/read",
-        {
-          timeoutMs: remainingMs,
-        },
-      );
-      const identity = turnIdentityFromSessionRead(
-        read.result,
-        sessionId,
-        turnId,
-      );
-      if (identity) {
-        return identity;
-      }
-
-      const retryDelayMs = Math.min(
-        APP_SERVER_STREAMING_TURN_IDENTITY_READ_RETRY_MS,
-        Math.max(0, requestDeadlineAtMs - Date.now()),
-      );
-      if (retryDelayMs <= 0) {
-        break;
-      }
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, retryDelayMs);
-      });
-    }
-
-    throw new Error(
-      "app-server turn/start did not resolve a canonical turn identity",
-    );
-  }
-
   async #withActiveProxyRequest<T>(
     originalId: RequestId,
     proxiedId: RequestId,
@@ -526,40 +401,6 @@ export class ElectronAppServerHost {
     }
   }
 
-  async #requestAppServerUntilFirstNotificationOrResponse<T>(
-    connected: ConnectedAppServerSidecar,
-    request: JsonRpcRequest,
-    method: string,
-    options: AppServerRequestOptions,
-  ) {
-    try {
-      return await connected.connection.requestUntilFirstNotificationOrResponse<T>(
-        request,
-        method,
-        options,
-      );
-    } catch (error) {
-      if (!isStaleSidecarConnectionError(error)) {
-        throw error;
-      }
-      if (this.#stopping) {
-        throw appServerHostStoppingError();
-      }
-
-      console.warn(
-        "[electron-host] app-server stale connection detected; restarting sidecar",
-        error,
-      );
-      await this.#discardStaleSidecar();
-      const freshConnected = await this.#connect();
-      return await freshConnected.connection.requestUntilFirstNotificationOrResponse<T>(
-        request,
-        method,
-        options,
-      );
-    }
-  }
-
   async #discardStaleSidecar(): Promise<void> {
     const lifecycle = this.#lifecycle;
     this.#lifecycle = null;
@@ -587,13 +428,6 @@ function isStaleSidecarConnectionError(error: unknown): boolean {
 
 function appServerHostStoppingError(): Error {
   return new Error("app-server host is stopping");
-}
-
-function isAppServerRequestTimeoutError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.includes("timed out waiting for app-server message after")
-  );
 }
 
 function isCancelRequestNotification(
@@ -670,132 +504,6 @@ function jsonRpcNotificationEventId(
     : undefined;
 }
 
-type CanonicalTurnIdentity = {
-  sessionId: string;
-  threadId: string;
-  turnId: string;
-  timestamp: string;
-};
-
-function streamingTurnStartAcceptedResponse(
-  originalMessage: JsonRpcRequest,
-  identity: CanonicalTurnIdentity,
-): JsonRpcMessage {
-  const expected = turnStartParams(originalMessage);
-  const sessionId = nonEmptyString(expected?.sessionId);
-  const requestedTurnId = nonEmptyString(expected?.turnId);
-  if (!sessionId || identity.sessionId !== sessionId) {
-    throw new Error(
-      "app-server turn/start did not emit a canonical turn identity",
-    );
-  }
-  if (requestedTurnId && identity.turnId !== requestedTurnId) {
-    throw new Error(
-      "app-server turn/start admission turnId does not match the requested turn",
-    );
-  }
-  return {
-    id: originalMessage.id,
-    result: {
-      turn: {
-        turnId: identity.turnId,
-        sessionId: identity.sessionId,
-        threadId: identity.threadId,
-        status: "accepted",
-        startedAt: identity.timestamp,
-      },
-    },
-  } satisfies JsonRpcMessage;
-}
-
-function turnEventIdentity(
-  message: JsonRpcMessage | undefined,
-): CanonicalTurnIdentity | null {
-  if (
-    !message ||
-    !isJsonRpcNotification(message) ||
-    message.method !== "agentSession/event"
-  ) {
-    return null;
-  }
-  const params = message.params;
-  if (!params || typeof params !== "object" || Array.isArray(params)) {
-    return null;
-  }
-  const event = (params as { event?: unknown }).event;
-  if (!event || typeof event !== "object" || Array.isArray(event)) {
-    return null;
-  }
-  const record = event as {
-    sessionId?: unknown;
-    threadId?: unknown;
-    timestamp?: unknown;
-    turnId?: unknown;
-    type?: unknown;
-  };
-  const sessionId = nonEmptyString(record.sessionId);
-  const threadId = nonEmptyString(record.threadId);
-  const turnId = nonEmptyString(record.turnId);
-  const timestamp = nonEmptyString(record.timestamp);
-  if (!sessionId || !threadId || !turnId || !timestamp) {
-    return null;
-  }
-  return { sessionId, threadId, turnId, timestamp };
-}
-
-function turnIdentityMatchesStart(
-  identity: CanonicalTurnIdentity,
-  originalMessage: JsonRpcRequest,
-): boolean {
-  const params = turnStartParams(originalMessage);
-  const sessionId = nonEmptyString(params?.sessionId);
-  const turnId = nonEmptyString(params?.turnId);
-  return (
-    (!sessionId || identity.sessionId === sessionId) &&
-    (!turnId || identity.turnId === turnId)
-  );
-}
-
-function turnIdentityFromSessionRead(
-  response: AgentSessionReadResponse,
-  sessionId: string,
-  turnId: string,
-): CanonicalTurnIdentity | null {
-  if (response.session.sessionId !== sessionId) {
-    return null;
-  }
-  const threadId = nonEmptyString(response.session.threadId);
-  const turn = response.turns?.find((candidate) => candidate.turnId === turnId);
-  if (
-    !threadId ||
-    !turn ||
-    turn.sessionId !== sessionId ||
-    turn.threadId !== threadId
-  ) {
-    return null;
-  }
-  return {
-    sessionId,
-    threadId,
-    turnId,
-    timestamp: nonEmptyString(turn.startedAt) ?? response.session.updatedAt,
-  };
-}
-
-function turnStartParams(
-  message: JsonRpcRequest,
-): AgentSessionTurnStartParams | undefined {
-  const params = (message as JsonRpcRequestWithParams).params;
-  if (!params || typeof params !== "object" || Array.isArray(params)) {
-    return undefined;
-  }
-  return params as AgentSessionTurnStartParams;
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
 function restoreProxyResponseId(
   message: JsonRpcMessage,
   originalId: RequestId,
@@ -860,8 +568,12 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
 
 async function resolveAppServerSidecarEnv(
   binaryPath: string,
+  agentRoot: string,
 ): Promise<NodeJS.ProcessEnv | undefined> {
-  const env: NodeJS.ProcessEnv = resolveAppServerRuntimeLibraryEnv(binaryPath);
+  const env: NodeJS.ProcessEnv = {
+    ...resolveAppServerRuntimeLibraryEnv(binaryPath),
+    LIME_AGENT_RUNTIME_ROOT: agentRoot,
+  };
   const currentNoProxy = APP_SERVER_NO_PROXY_ENV_KEYS.map(
     (key) => process.env[key],
   ).find((value) => Boolean(value?.trim()));
@@ -1030,7 +742,6 @@ async function resolveResourceLaunchConfig(
       resourcesPath,
       appPolicyPath: process.env.APP_SERVER_POLICY_PATH,
       dataDir,
-      productDbMigrationCleanup: resolveProductDbMigrationCleanup(),
       ...resolveRuntimeBackendLaunchOptions("runtime"),
     });
     if (resolved) {
@@ -1060,44 +771,17 @@ function stdioSidecarWithRuntimeBackend(
   dataDir: string,
 ): SidecarLaunchConfig {
   return {
-    ...stdioSidecar(
-      binaryPath,
-      appPolicyPath,
-      dataDir,
-      resolveProductDbMigrationCleanup(),
-    ),
+    ...stdioSidecar(binaryPath, appPolicyPath, dataDir),
     ...resolveRuntimeBackendLaunchOptions(defaultBackendMode),
   };
 }
 
 function resolveAppServerDataDir(): string {
-  return path.join(app.getPath("userData"), APP_SERVER_DATA_DIR_NAME);
+  return resolveCurrentDesktopStorageRoots(app.getPath("userData")).agentRoot;
 }
 
 function resolveAppServerConfigPath(): string {
   return path.join(app.getPath("userData"), APP_SERVER_CONFIG_FILE_NAME);
-}
-
-function resolveProductDbMigrationCleanup(): NonNullable<
-  SidecarLaunchConfig["productDbMigrationCleanup"]
-> {
-  const value = process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP?.trim();
-  if (!value) {
-    return DEFAULT_APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP;
-  }
-
-  if (
-    value === "retain" ||
-    value === "clear-rows" ||
-    value === "drop-tables" ||
-    value === "delete-file"
-  ) {
-    return value;
-  }
-
-  throw new Error(
-    "APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP must be one of retain, clear-rows, drop-tables, delete-file",
-  );
 }
 
 function resolveRuntimeBackendLaunchOptions(

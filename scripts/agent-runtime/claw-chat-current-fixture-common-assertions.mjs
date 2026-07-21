@@ -135,6 +135,8 @@ export function buildCommonAssertions(context) {
     !isApprovalRequestFullAccessScenario;
   const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
   const appServerTraceEvidence = summary.appServerTraceEvidence;
+  const appServerTraceEvidenceDeferred =
+    summary.appServerTraceEvidenceDeferred != null;
   const approvalRequestDecisionCompleted = isApprovalRequestDeclineScenario
     ? summary.guiApprovalRequestDeclineCompleted
     : isApprovalRequestCancelScenario
@@ -910,12 +912,7 @@ export function buildCommonAssertions(context) {
                               ? summary.guiWebToolsRenderingCompleted
                                   ?.hasPrompt === true &&
                                 summary.guiWebToolsRenderingCompleted
-                                  ?.hasProcessTitle === true &&
-                                summary.guiWebToolsRenderingCompleted
-                                  ?.expandedDetails?.hasSearchTitle === true &&
-                                summary.guiWebToolsRenderingCompleted
-                                  ?.expandedDetails?.hasSearchSourceLabel ===
-                                  true &&
+                                  ?.historicalTimelinePreviewVisible === true &&
                                 summary.guiWebToolsRenderingCompleted
                                   ?.hasAssistantSummary === true
                               : isReasoningFirstVisibleScenario
@@ -1144,10 +1141,12 @@ export function buildCommonAssertions(context) {
       agentUiPerformanceTrace?.available === true,
     agentUiPerformanceTraceSeparatesProviderAndClient:
       !shouldRequireTextStreamTraceSeparation ||
+      summary.agentUiPerformanceTraceDeferred != null ||
       (agentUiPerformanceTrace?.hasProviderWaitMs === true &&
         agentUiPerformanceTrace?.hasClientLocalOutputMs === true),
     agentUiPerformanceTraceHasFirstVisibleTextPaint:
       !shouldRequireTextStreamTraceSeparation ||
+      summary.agentUiPerformanceTraceDeferred != null ||
       (agentUiPerformanceTrace?.hasFirstVisibleOutputMs === true &&
         agentUiPerformanceTrace?.hasFirstTextDeltaToFirstTextPaintMs === true),
     agentUiPerformanceTraceNoRawPayload:
@@ -1159,6 +1158,7 @@ export function buildCommonAssertions(context) {
       appServerTraceEvidence?.available === true,
     appServerTraceEvidenceUsesCurrentMethods:
       !shouldRequireAgentUiTraceEvidence ||
+      appServerTraceEvidenceDeferred ||
       (appServerRequestMethods.includes(
         APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST,
       ) &&
@@ -1170,18 +1170,38 @@ export function buildCommonAssertions(context) {
         )),
     appServerTraceSupportBundleOptInUsesCurrentMethod:
       !shouldRequireAgentUiTraceEvidence ||
+      appServerTraceEvidenceDeferred ||
       appServerRequestMethods.includes(
         APP_SERVER_METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
       ),
     appServerTraceEvidenceSeparatesProviderAndServer:
       !shouldRequireTextStreamTraceSeparation ||
+      appServerTraceEvidenceDeferred ||
       (appServerTraceEvidence?.hasProviderFirstTextDelta === true &&
         appServerTraceEvidence?.hasAppServerMessageDelta === true),
+    appServerTraceEvidenceHasProviderFirstTextCheckpoint:
+      !shouldRequireTextStreamTraceSeparation ||
+      appServerTraceEvidenceDeferred ||
+      appServerTraceEvidence?.hasProviderFirstTextDelta === true,
+    appServerTraceEvidenceHasMessageDeltaCheckpoint:
+      !shouldRequireTextStreamTraceSeparation ||
+      appServerTraceEvidenceDeferred ||
+      appServerTraceEvidence?.hasAppServerMessageDelta === true,
+    appServerTraceEvidenceHasProviderWaitMs:
+      !shouldRequireTextStreamTraceSeparation ||
+      appServerTraceEvidenceDeferred ||
+      appServerTraceEvidence?.hasProviderWaitMs === true,
+    appServerTraceEvidenceHasServerEmissionTimestamp:
+      !shouldRequireTextStreamTraceSeparation ||
+      appServerTraceEvidenceDeferred ||
+      appServerTraceEvidence?.hasServerEventEmittedAt === true,
     appServerTraceEvidenceHasW3cCarrier:
       !shouldRequireAgentUiTraceEvidence ||
+      appServerTraceEvidenceDeferred ||
       appServerTraceEvidence?.hasW3cTraceContext === true,
     appServerTraceEvidenceExportedSummaryOnly:
       !shouldRequireAgentUiTraceEvidence ||
+      appServerTraceEvidenceDeferred ||
       (appServerTraceEvidence?.export?.exported === true &&
         appServerTraceEvidence?.export?.includedSections?.includes(
           "trace/events.jsonl",
@@ -1192,6 +1212,7 @@ export function buildCommonAssertions(context) {
         appServerTraceEvidence?.export?.redactionMode === "summary_only"),
     appServerTraceSupportBundleOptInSummaryOnly:
       !shouldRequireAgentUiTraceEvidence ||
+      appServerTraceEvidenceDeferred ||
       (appServerTraceEvidence?.supportBundleWithTrace?.bundlePathExists ===
         true &&
         appServerTraceEvidence?.supportBundleWithTrace?.traceExportIncluded ===

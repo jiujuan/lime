@@ -1,6 +1,5 @@
 import type { MutableRefObject } from "react";
 import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
-import type { Message } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import { logAgentDebug } from "@/lib/agentDebug";
@@ -27,16 +26,11 @@ interface ResolveAgentStreamSubmitContextOptions {
   ) => AgentExecutionStrategy | null;
   effectiveExecutionStrategy: AgentExecutionStrategy;
   assistantDraft?: AssistantDraftState;
-  expectingQueue: boolean;
   targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
   soulCopy?: SoulInteractionCopy;
-  activateStream: (
-    activeSessionId: string,
-    effectiveWaitingRuntimeStatus: NonNullable<Message["runtimeStatus"]>,
-  ) => void;
 }
 
 export async function resolveAgentStreamSubmitContext(
@@ -50,13 +44,11 @@ export async function resolveAgentStreamSubmitContext(
     getSyncedSessionExecutionStrategy,
     effectiveExecutionStrategy,
     assistantDraft,
-    expectingQueue,
     targetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
     performanceTrace,
     soulCopy,
-    activateStream,
   } = options;
 
   const hadActiveSessionBeforeEnsure = Boolean(sessionIdRef.current?.trim());
@@ -122,10 +114,6 @@ export async function resolveAgentStreamSubmitContext(
   });
   const effectiveWaitingRuntimeStatus =
     assistantDraft?.waitingRuntimeStatus || waitingRuntimeStatus;
-
-  if (!expectingQueue) {
-    activateStream(activeSessionId, effectiveWaitingRuntimeStatus);
-  }
 
   return {
     activeSessionId,

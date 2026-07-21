@@ -19,11 +19,6 @@ use std::time::UNIX_EPOCH;
 mod support_bundle;
 
 pub(crate) use support_bundle::export_support_bundle;
-pub(crate) use support_bundle::export_support_bundle_with_trace_root;
-
-pub(super) fn current_log_path() -> Result<PathBuf, String> {
-    Ok(app_paths::resolve_logs_dir()?.join("lime.log"))
-}
 
 fn parse_persisted_log_line(line: &str) -> Option<LogEntry> {
     let trimmed = line.trim();
@@ -185,11 +180,6 @@ pub(super) fn read_persisted_logs_tail_from_path(
     parsed
 }
 
-pub(crate) fn read_persisted_logs_tail(lines: usize) -> Result<Vec<LogEntry>, String> {
-    let current_path = current_log_path()?;
-    Ok(read_persisted_logs_tail_from_path(&current_path, lines))
-}
-
 fn build_log_artifact_entry(path: &Path) -> Option<LogArtifactEntry> {
     let metadata = fs::metadata(path).ok()?;
     let modified_at = metadata.modified().ok().map(to_rfc3339);
@@ -236,11 +226,6 @@ pub(super) fn read_log_storage_diagnostics_from_path(
         related_log_files,
         raw_response_files,
     }
-}
-
-pub(crate) fn read_log_storage_diagnostics() -> Result<LogStorageDiagnosticsResponse, String> {
-    let current_path = current_log_path()?;
-    Ok(read_log_storage_diagnostics_from_path(&current_path, 0))
 }
 
 pub(super) fn legacy_data_dir_guess() -> Option<PathBuf> {
@@ -414,7 +399,9 @@ fn truncate_current_log_file(current_log_path: &Path) -> Result<(), String> {
         })
 }
 
-fn clear_diagnostic_log_artifacts_from_path(current_log_path: &Path) -> Result<(), String> {
+pub(super) fn clear_diagnostic_log_artifacts_from_path(
+    current_log_path: &Path,
+) -> Result<(), String> {
     for path in collect_related_log_paths(current_log_path) {
         if path == current_log_path || !path.exists() {
             continue;
@@ -444,19 +431,11 @@ fn clear_diagnostic_log_artifacts_from_path(current_log_path: &Path) -> Result<(
     Ok(())
 }
 
-pub(crate) fn clear_diagnostic_log_artifacts() -> Result<(), String> {
-    let current_path = current_log_path()?;
-    clear_diagnostic_log_artifacts_from_path(&current_path)
-}
-
-fn clear_persisted_log_artifacts_from_path(current_log_path: &Path) -> Result<(), String> {
+pub(super) fn clear_persisted_log_artifacts_from_path(
+    current_log_path: &Path,
+) -> Result<(), String> {
     truncate_current_log_file(current_log_path)?;
     clear_diagnostic_log_artifacts_from_path(current_log_path)
-}
-
-pub(crate) fn clear_persisted_log_artifacts() -> Result<(), String> {
-    let current_path = current_log_path()?;
-    clear_persisted_log_artifacts_from_path(&current_path)
 }
 
 #[cfg(test)]

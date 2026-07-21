@@ -2,7 +2,6 @@ import type React from "react";
 import type { Artifact } from "@/lib/artifact/types";
 import type { A2UIFormData } from "@/components/workspace/a2ui/types";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import type { buildMessageRenderGroupsProjection } from "../projection/messageTimelineRenderProjection";
@@ -35,7 +34,6 @@ export interface MessageListProps {
   threadRead?: AgentRuntimeThreadReadModel | null;
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
-  queuedTurns?: readonly QueuedTurnSnapshot[];
   canonicalChildren?: CanonicalChildThreadSummary[];
   sessionHistoryWindow?: {
     loadedMessages: number;
@@ -106,15 +104,11 @@ export interface MessageListProps {
   isRestoringSession?: boolean;
   /** 中断当前执行 */
   onInterruptCurrentTurn?: () => void | Promise<void>;
-  /** 恢复当前线程排队执行 */
-  onResumeThread?: () => boolean | Promise<boolean>;
   /** 重新拉起当前最重要的待处理请求 */
   onReplayPendingRequest?: (
     requestId: string,
     assistantMessageId: string,
   ) => boolean | Promise<boolean>;
-  /** 立即恢复下一条排队回合 */
-  onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
   /** 是否压缩左侧留白，适用于工作台右栏 */
   compactLeadingSpacing?: boolean;
   /** 需要高亮的 timeline item */

@@ -5,13 +5,14 @@ use super::super::request_serialization::{
 use super::super::RequestProcessor;
 use super::tests_support::initialize_processor;
 use crate::{
-    ActionRespondRequest, CancelExecutionRequest, ExecutionBackend, ExecutionRequest, RuntimeCore,
-    RuntimeCoreError, RuntimeEvent, RuntimeEventSink,
+    ActionRespondRequest, AppServer, CancelExecutionRequest, ExecutionBackend, ExecutionRequest,
+    ProjectionStore, RuntimeCore, RuntimeCoreError, RuntimeEvent, RuntimeEventSink,
 };
 use app_server_protocol::{
-    AgentSessionStartParams, JsonRpcMessage, JsonRpcRequest, RequestId,
-    METHOD_AGENT_SESSION_THREAD_RESUME, METHOD_AGENT_SESSION_TURN_START,
-    METHOD_BROWSER_SESSION_READ, METHOD_CAPABILITY_LIST, METHOD_THREAD_READ,
+    AgentSessionStartParams, ClientCapabilities, ClientInfo, InitializeParams, JsonRpcMessage,
+    JsonRpcNotification, JsonRpcRequest, RequestId, METHOD_BROWSER_SESSION_READ,
+    METHOD_CAPABILITY_LIST, METHOD_INITIALIZE, METHOD_INITIALIZED, METHOD_THREAD_READ,
+    METHOD_TURN_START,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -22,6 +23,7 @@ use tokio::time::{timeout, Duration};
 struct BlockingTurnBackend {
     started: Arc<Notify>,
     release: Arc<Notify>,
+    completed: Arc<Notify>,
 }
 
 #[async_trait::async_trait]
@@ -34,7 +36,9 @@ impl ExecutionBackend for BlockingTurnBackend {
         sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
         self.started.notify_one();
         self.release.notified().await;
-        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+        let result = sink.emit(RuntimeEvent::new("turn.completed", json!({})));
+        self.completed.notify_one();
+        result
     }
 
     async fn cancel_turn(
@@ -237,7 +241,7 @@ async fn request_scope_uses_catalog_domain_key_and_access_policy() {
     start_session(&runtime, "session-a", "thread-a");
     let turn = JsonRpcRequest::new(
         RequestId::Integer(1),
-        METHOD_AGENT_SESSION_TURN_START,
+        METHOD_TURN_START,
         Some(json!({
             "sessionId": "session-a",
             "threadId": "thread-a"
@@ -289,82 +293,9 @@ async fn request_scope_uses_catalog_domain_key_and_access_policy() {
 }
 
 #[tokio::test]
-async fn different_sessions_for_same_thread_share_fifo_scope() {
-    let runtime = RuntimeCore::default();
-    start_session(&runtime, "session-a", "thread-shared");
-    start_session(&runtime, "session-b", "thread-shared");
-
-    let first_scope = request_serialization_scope(
-        &runtime,
-        &JsonRpcRequest::new(
-            RequestId::Integer(1),
-            METHOD_AGENT_SESSION_TURN_START,
-            Some(json!({ "sessionId": "session-a" })),
-        ),
-    )
-    .await
-    .expect("first scope")
-    .expect("first scoped request");
-    let second_scope = request_serialization_scope(
-        &runtime,
-        &JsonRpcRequest::new(
-            RequestId::Integer(2),
-            METHOD_AGENT_SESSION_TURN_START,
-            Some(json!({ "sessionId": "session-b" })),
-        ),
-    )
-    .await
-    .expect("second scope")
-    .expect("second scoped request");
-    assert_eq!(first_scope, second_scope);
-    assert_eq!(
-        first_scope.key,
-        RequestSerializationQueueKey::Thread("thread-shared".to_string())
-    );
-
-    let queues = RequestSerializationQueues::default();
-    let (events_tx, mut events_rx) = mpsc::unbounded_channel();
-    let (release_first_tx, release_first_rx) = oneshot::channel();
-    let first_queues = queues.clone();
-    let first_events = events_tx.clone();
-    let first = tokio::spawn(async move {
-        first_queues
-            .run(Some(first_scope), async move {
-                first_events.send("first-start").expect("first start");
-                release_first_rx.await.expect("release first");
-                first_events.send("first-end").expect("first end");
-            })
-            .await;
-    });
-    assert_eq!(events_rx.recv().await, Some("first-start"));
-
-    let second_events = events_tx.clone();
-    let second = tokio::spawn(async move {
-        queues
-            .run(Some(second_scope), async move {
-                second_events.send("second-start").expect("second start");
-            })
-            .await;
-    });
-    assert!(timeout(Duration::from_millis(25), events_rx.recv())
-        .await
-        .is_err());
-
-    release_first_tx.send(()).expect("release first request");
-    assert_eq!(events_rx.recv().await, Some("first-end"));
-    assert_eq!(events_rx.recv().await, Some("second-start"));
-    first.await.expect("first request task");
-    second.await.expect("second request task");
-}
-
-#[tokio::test]
 async fn missing_scope_key_executes_without_serialization() {
     let runtime = RuntimeCore::default();
-    let request = JsonRpcRequest::new(
-        RequestId::Integer(1),
-        METHOD_AGENT_SESSION_TURN_START,
-        Some(json!({})),
-    );
+    let request = JsonRpcRequest::new(RequestId::Integer(1), METHOD_TURN_START, Some(json!({})));
 
     assert_eq!(
         request_serialization_scope(&runtime, &request).await,
@@ -373,45 +304,40 @@ async fn missing_scope_key_executes_without_serialization() {
 }
 
 #[tokio::test]
-async fn conflicting_thread_and_session_scope_fails_closed() {
+async fn v2_thread_scope_uses_only_the_canonical_thread_id() {
     let runtime = RuntimeCore::default();
     start_session(&runtime, "session-b", "thread-b");
     let request = JsonRpcRequest::new(
         RequestId::Integer(1),
-        METHOD_AGENT_SESSION_TURN_START,
+        METHOD_TURN_START,
         Some(json!({
             "threadId": "thread-a",
             "sessionId": "session-b"
         })),
     );
 
-    let error = request_serialization_scope(&runtime, &request)
-        .await
-        .expect_err("conflicting scope must fail");
-    assert_eq!(error.code, app_server_protocol::error_codes::INVALID_PARAMS);
     assert_eq!(
-        error.message,
-        "invalid params: sessionId session-b belongs to threadId thread-b, not thread-a"
+        request_serialization_scope(&runtime, &request).await,
+        Ok(Some(RequestSerializationScope {
+            key: RequestSerializationQueueKey::Thread("thread-a".to_string()),
+            access: RequestSerializationAccess::Exclusive,
+        }))
     );
 }
 
 #[tokio::test]
-async fn missing_session_scope_preserves_session_not_found_error() {
+async fn v2_thread_scope_does_not_resolve_legacy_session_alias() {
     let runtime = RuntimeCore::default();
     let request = JsonRpcRequest::new(
         RequestId::Integer(1),
-        METHOD_AGENT_SESSION_TURN_START,
+        METHOD_TURN_START,
         Some(json!({ "sessionId": "missing-session" })),
     );
 
-    let error = request_serialization_scope(&runtime, &request)
-        .await
-        .expect_err("missing session scope must fail");
     assert_eq!(
-        error.code,
-        app_server_protocol::error_codes::SESSION_NOT_FOUND
+        request_serialization_scope(&runtime, &request).await,
+        Ok(None)
     );
-    assert_eq!(error.message, "session not found: missing-session");
 }
 
 #[tokio::test]
@@ -424,7 +350,7 @@ async fn processor_rejects_conflicting_thread_and_session_scope() {
     let messages = processor
         .handle_request(JsonRpcRequest::new(
             RequestId::Integer(2),
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_TURN_START,
             Some(json!({
                 "threadId": "thread-a",
                 "sessionId": "session-b",
@@ -471,55 +397,21 @@ async fn unscoped_request_does_not_wait_for_scoped_work() {
 }
 
 #[tokio::test]
-async fn admission_release_keeps_long_running_future_outside_scope_lock() {
-    let queues = RequestSerializationQueues::default();
-    let (admitted_tx, admitted_rx) = oneshot::channel();
-    let (release_turn_tx, release_turn_rx) = oneshot::channel();
-    let (turn_finished_tx, mut turn_finished_rx) = mpsc::unbounded_channel();
-    let first_queues = queues.clone();
-    let first = tokio::spawn(async move {
-        first_queues
-            .run_until_released(
-                Some(scope("thread-a", RequestSerializationAccess::Exclusive)),
-                async move {
-                    admitted_rx.await.expect("turn admission signal");
-                },
-                async move {
-                    release_turn_rx.await.expect("release long-running turn");
-                    turn_finished_tx.send(()).expect("record turn completion");
-                },
-            )
-            .await;
-    });
-
-    admitted_tx.send(()).expect("admit turn");
-    let second = timeout(
-        Duration::from_millis(100),
-        queues.run(
-            Some(scope("thread-a", RequestSerializationAccess::Exclusive)),
-            async { "control-request-completed" },
-        ),
-    )
-    .await
-    .expect("control request should run after admission");
-    assert_eq!(second, "control-request-completed");
-    assert!(timeout(Duration::from_millis(25), turn_finished_rx.recv())
-        .await
-        .is_err());
-
-    release_turn_tx.send(()).expect("release long-running turn");
-    first.await.expect("long-running turn task");
-    assert_eq!(turn_finished_rx.recv().await, Some(()));
-}
-
-#[tokio::test]
-async fn non_streaming_turn_releases_thread_scope_after_admission() {
+async fn turn_start_returns_before_backend_completion() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
     let started = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
+    let completed = Arc::new(Notify::new());
     let runtime = RuntimeCore::with_backend(Arc::new(BlockingTurnBackend {
         started: started.clone(),
         release: release.clone(),
-    }));
+        completed: completed.clone(),
+    }))
+    .with_projection_store(store);
     runtime
         .start_session(AgentSessionStartParams {
             session_id: Some("session-non-streaming".to_string()),
@@ -538,10 +430,10 @@ async fn non_streaming_turn_releases_thread_scope_after_admission() {
         turn_processor
             .handle_request(JsonRpcRequest::new(
                 RequestId::Integer(20),
-                METHOD_AGENT_SESSION_TURN_START,
+                METHOD_TURN_START,
                 Some(json!({
-                    "sessionId": "session-non-streaming",
-                    "input": { "text": "hold the backend" }
+                    "threadId": "thread-non-streaming",
+                    "input": [{ "type": "text", "text": "hold the backend" }]
                 })),
             ))
             .await
@@ -550,61 +442,137 @@ async fn non_streaming_turn_releases_thread_scope_after_admission() {
         .await
         .expect("turn backend should start after admission");
 
-    let resume_messages = timeout(
+    let turn_messages = timeout(Duration::from_millis(250), turn)
+        .await
+        .expect("turn/start should return while backend is blocked")
+        .expect("turn task")
+        .expect("turn request");
+    let [JsonRpcMessage::Response(response)] = turn_messages.as_slice() else {
+        panic!("expected immediate turn/start response, got {turn_messages:?}");
+    };
+    assert_eq!(response.result["turn"]["status"], "inProgress");
+
+    let read_messages = timeout(
         Duration::from_millis(250),
         processor.handle_request(JsonRpcRequest::new(
             RequestId::Integer(21),
-            METHOD_AGENT_SESSION_THREAD_RESUME,
-            Some(json!({ "sessionId": "session-non-streaming" })),
-        )),
-    )
-    .await
-    .expect("same-thread request should run after turn admission")
-    .expect("resume request");
-    let [JsonRpcMessage::Response(response)] = resume_messages.as_slice() else {
-        panic!("expected resume response, got {resume_messages:?}");
-    };
-    assert_eq!(response.result["resumed"], false);
-
-    let queued_messages = timeout(
-        Duration::from_millis(250),
-        processor.handle_request(JsonRpcRequest::new(
-            RequestId::Integer(22),
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_THREAD_READ,
             Some(json!({
-                "sessionId": "session-non-streaming",
-                "input": { "text": "queue behind the active turn" },
-                "queueIfBusy": true
+                "threadId": "thread-non-streaming",
+                "includeTurns": true
             })),
         )),
     )
     .await
-    .expect("queued turn should be admitted after the active turn admission")
-    .expect("queued turn request");
-    assert!(matches!(
-        queued_messages.first(),
-        Some(JsonRpcMessage::Response(response))
-            if response.result["turn"]["status"] == "queued"
-    ));
-    assert!(queued_messages.iter().any(|message| matches!(
-        message,
-        JsonRpcMessage::Notification(notification)
-            if notification
-                .params
-                .as_ref()
-                .is_some_and(|params| params["event"]["type"] == "queue.added")
-    )));
+    .expect("same-thread read should run after native turn admission")
+    .expect("thread/read request");
+    let [JsonRpcMessage::Response(response)] = read_messages.as_slice() else {
+        panic!("expected thread/read response, got {read_messages:?}");
+    };
+    assert_eq!(response.result["thread"]["id"], "thread-non-streaming");
+    assert_eq!(
+        response.result["thread"]["turns"][0]["status"],
+        "inProgress"
+    );
 
     release.notify_one();
-    let turn_messages = timeout(Duration::from_secs(1), turn)
+    timeout(Duration::from_secs(1), completed.notified())
         .await
-        .expect("turn should finish after backend release")
-        .expect("turn task")
-        .expect("turn request");
-    assert!(matches!(
-        turn_messages.first(),
-        Some(JsonRpcMessage::Response(_))
+        .expect("background completion should be recorded");
+}
+
+#[tokio::test]
+async fn app_server_publishes_direct_lifecycle_after_immediate_response() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let started = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let completed = Arc::new(Notify::new());
+    let runtime = RuntimeCore::with_backend(Arc::new(BlockingTurnBackend {
+        started: started.clone(),
+        release: release.clone(),
+        completed: completed.clone(),
+    }))
+    .with_projection_store(Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite")).expect("projection"),
     ));
+    runtime
+        .start_session(AgentSessionStartParams {
+            session_id: Some("session-app-server-pump".to_string()),
+            thread_id: Some("thread-app-server-pump".to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+    let server = AppServer::with_runtime(runtime);
+    let mut outbound = server.subscribe_outbound_messages();
+    server
+        .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
+            RequestId::Integer(1),
+            METHOD_INITIALIZE,
+            Some(
+                serde_json::to_value(InitializeParams {
+                    client_info: ClientInfo {
+                        name: "test-client".to_string(),
+                        title: None,
+                        version: None,
+                    },
+                    capabilities: ClientCapabilities::default(),
+                })
+                .expect("initialize params"),
+            ),
+        )))
+        .await
+        .expect("initialize request");
+    server
+        .handle_message(JsonRpcMessage::Notification(JsonRpcNotification::new(
+            METHOD_INITIALIZED,
+            Some(json!({})),
+        )))
+        .await
+        .expect("initialized notification");
+
+    let response_messages = server
+        .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
+            RequestId::Integer(2),
+            METHOD_TURN_START,
+            Some(json!({
+                "threadId": "thread-app-server-pump",
+                "input": [{"type": "text", "text": "pump"}]
+            })),
+        )))
+        .await
+        .expect("turn/start request");
+    let [JsonRpcMessage::Response(response)] = response_messages.as_slice() else {
+        panic!("expected immediate response, got {response_messages:?}");
+    };
+    assert_eq!(response.result["turn"]["status"], "inProgress");
+    timeout(Duration::from_secs(1), started.notified())
+        .await
+        .expect("backend started");
+
+    let started_notification = timeout(Duration::from_secs(1), async {
+        loop {
+            let message = outbound.recv().await.expect("outbound notification");
+            if let JsonRpcMessage::Notification(notification) = message {
+                if notification.method == app_server_protocol::protocol::v2::METHOD_TURN_STARTED {
+                    break notification;
+                }
+            }
+        }
+    })
+    .await
+    .expect("direct lifecycle notification");
+    assert_eq!(
+        started_notification.method,
+        app_server_protocol::protocol::v2::METHOD_TURN_STARTED
+    );
+
+    release.notify_one();
+    timeout(Duration::from_secs(1), completed.notified())
+        .await
+        .expect("background completion");
 }
 
 #[tokio::test]

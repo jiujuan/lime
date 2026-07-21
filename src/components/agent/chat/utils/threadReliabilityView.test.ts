@@ -215,7 +215,7 @@ describe("buildThreadReliabilityView", () => {
 
     expect(view.summary).toContain("当前回合长时间无进展");
     expect(view.recommendations).toContain(
-      "当前回合长时间无进展，建议停止后恢复执行",
+      "当前回合长时间无进展，建议停止后重新提交",
     );
     expect(view.recommendations).toContain(
       "Provider 故障通常可重试，建议稍后恢复或重发回合",

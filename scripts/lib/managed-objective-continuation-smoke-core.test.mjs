@@ -265,7 +265,7 @@ describe("managed-objective-continuation-smoke-core", () => {
       const line = JSON.parse(String(body.args?.request?.lines?.[0] || "{}"));
       observedMethods.push(line.method);
       const resultByMethod = {
-        "agentSession/read": {
+        "thread/read": {
           session: {
             sessionId: "session-failed",
             threadId: "thread-failed",
@@ -354,9 +354,9 @@ describe("managed-objective-continuation-smoke-core", () => {
         /wait auto continuation allow guard failed early: latest_turn_status=failed/,
       );
       expect(observedMethods).toEqual([
-        "agentSession/read",
+        "thread/read",
         "agentSession/objective/read",
-        "agentSession/read",
+        "thread/read",
       ]);
     } finally {
       globalThis.fetch = originalFetch;
@@ -399,7 +399,7 @@ describe("managed-objective-continuation-smoke-core", () => {
       observedMethods.push(line.method);
       observedParams.push(line.params);
       const resultByMethod = {
-        "agentSession/start": {
+        "thread/start": {
           session: {
             sessionId: "session-current",
             threadId: "thread-current",
@@ -459,7 +459,7 @@ describe("managed-objective-continuation-smoke-core", () => {
             status: "completed",
           },
         },
-        "agentSession/read": {
+        "thread/read": {
           session: {
             sessionId: "session-current",
             threadId: "thread-current",
@@ -476,7 +476,7 @@ describe("managed-objective-continuation-smoke-core", () => {
             items: [],
           },
         },
-        "agentSession/turn/start": {
+        "turn/start": {
           turn: {
             turnId: "turn-current",
             sessionId: "session-current",
@@ -485,7 +485,7 @@ describe("managed-objective-continuation-smoke-core", () => {
           },
         },
         "agentSession/action/respond": {},
-        "agentSession/turn/cancel": {},
+        "turn/interrupt": {},
         "evidence/export": {
           session: {
             sessionId: "session-current",
@@ -628,16 +628,16 @@ describe("managed-objective-continuation-smoke-core", () => {
         ".lime/harness/sessions/session-current/evidence",
       );
       expect(observedMethods).toEqual([
-        "agentSession/start",
+        "thread/start",
         "agentSession/update",
         "agentSession/objective/set",
         "agentSession/objective/read",
         "agentSession/objective/continue",
         "agentSession/objective/audit",
-        "agentSession/turn/start",
+        "turn/start",
         "agentSession/action/respond",
-        "agentSession/read",
-        "agentSession/read",
+        "thread/read",
+        "thread/read",
         "evidence/export",
       ]);
       expect(observedMethods).not.toContain("agent_runtime_create_session");

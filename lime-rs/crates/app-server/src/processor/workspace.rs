@@ -109,20 +109,6 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_session_read_impl(
-        &self,
-        params: Option<Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_session_current(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
     pub(super) async fn handle_workspace_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self

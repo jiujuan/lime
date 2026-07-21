@@ -1,9 +1,10 @@
 use super::*;
 use agent_protocol::{
-    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, ItemId, ItemStatus,
-    MessageContentPart, MessageContentReference, SessionId, SubAgentActivityKind, Thread,
-    ThreadHistoryChangeSet, ThreadId, ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView,
-    Turn, TurnAdmissionState, TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
+    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChange,
+    FileChangeKind, FileChangeStatus, ItemId, ItemStatus, MessageContentPart,
+    MessageContentReference, SessionId, SubAgentActivityKind, Thread, ThreadHistoryChangeSet,
+    ThreadId, ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn,
+    TurnAdmissionState, TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
 };
 use app_server_protocol::{AgentEvent, AgentSession, AgentTurn, AgentTurnStatus};
 use futures::executor::block_on;
@@ -282,6 +283,51 @@ fn canonical_wait_collab_tool_projects_as_completed_tool_call() {
 }
 
 #[test]
+fn canonical_file_change_matches_v2_patch_projection_for_decline() {
+    let item = ThreadItem {
+        session_id: SessionId::new("session-patch-read"),
+        thread_id: ThreadId::new("thread-patch-read"),
+        turn_id: TurnId::new("turn-patch-read"),
+        item_id: ItemId::new("patch-read"),
+        sequence: 1,
+        ordinal: 0,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        completed_at_ms: Some(2),
+        kind: agent_protocol::ItemKind::File,
+        status: ItemStatus::Completed,
+        payload: ThreadItemPayload::File {
+            changes: vec![
+                FileChange {
+                    path: "source.txt".to_string(),
+                    kind: FileChangeKind::Update {
+                        move_path: Some("target.txt".to_string()),
+                    },
+                    diff: "-before\n+after".to_string(),
+                },
+                FileChange {
+                    path: "dead.txt".to_string(),
+                    kind: FileChangeKind::Delete,
+                    diff: "-dead".to_string(),
+                },
+            ],
+            status: FileChangeStatus::Rejected,
+        },
+        metadata: json!({}),
+    };
+
+    let detail = canonical_item_to_agent_detail(&item);
+
+    assert_eq!(detail["type"], "patch");
+    assert_eq!(detail["status"], "failed");
+    assert_eq!(detail["success"], false);
+    assert_eq!(detail["paths"], json!(["source.txt", "dead.txt"]));
+    assert_eq!(detail["changes"][0]["path"], "source.txt");
+    assert_eq!(detail["changes"][0]["kind"]["type"], "update");
+    assert_eq!(detail["changes"][0]["kind"]["move_path"], "target.txt");
+}
+
+#[test]
 fn read_detail_projects_thread_items_into_thread_read() {
     let session_id = "sess_read_model_thread_items".to_string();
     let thread_id = "thread_read_model_thread_items".to_string();
@@ -319,10 +365,7 @@ fn read_detail_projects_thread_items_into_thread_read() {
                 payload: json!({
                     "role": "user",
                     "visibility": "user_visible",
-                    "input": {
-                        "text": "恢复历史用户输入",
-                        "attachments": []
-                    },
+                    "input": [{"type": "text", "text": "恢复历史用户输入"}],
                     "content": {
                         "kind": "inline_text",
                         "text": "恢复历史用户输入"
@@ -391,8 +434,7 @@ fn read_detail_projects_thread_items_into_thread_read() {
 
 #[test]
 fn canonical_overlay_preserves_richer_current_coding_projection() {
-    const FILE_PATH: &str =
-        ".lime/qc/code-artifact-workbench-host-fixture/src/coding-target.ts";
+    const FILE_PATH: &str = ".lime/qc/code-artifact-workbench-host-fixture/src/coding-target.ts";
     const COMMAND_ID: &str = "code-artifact-workbench-host:command:test";
     const TEST_RUN_ID: &str = "code-artifact-workbench-host:test:unit";
     const FAILURE_PREVIEW: &str =
@@ -465,10 +507,16 @@ fn canonical_overlay_preserves_richer_current_coding_projection() {
         }),
         json!({
             "id": "item_coding-target",
-            "type": "file_change",
+            "type": "patch",
             "turn_id": stored.turns[0].turn_id,
             "status": "completed",
-            "path": FILE_PATH
+            "changes": [{
+                "path": FILE_PATH,
+                "kind": { "type": "update", "move_path": null },
+                "diff": ""
+            }],
+            "paths": [FILE_PATH],
+            "success": true
         }),
     ];
 

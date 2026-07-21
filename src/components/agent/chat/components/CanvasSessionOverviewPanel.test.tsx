@@ -5,7 +5,6 @@ import { CanvasSessionOverviewPanel } from "./CanvasSessionOverviewPanel";
 import type { CanvasSessionOverviewActivity } from "./CanvasSessionOverviewPanel";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { formatDate } from "@/i18n/format";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, AgentThreadTurn } from "../types";
 
 const mountedRoots: Array<{ container: HTMLDivElement; root: Root }> = [];
@@ -14,7 +13,6 @@ function renderPanel(props: {
   turns: AgentThreadTurn[];
   activityItems?: CanvasSessionOverviewActivity[];
   pendingActions?: ActionRequired[];
-  queuedTurns?: QueuedTurnSnapshot[];
   currentTurnId?: string;
   focusedItemId?: string;
 }) {
@@ -84,16 +82,6 @@ describe("CanvasSessionOverviewPanel", () => {
           requestId: "request-1",
         },
       ],
-      queuedTurns: [
-        {
-          created_at: 1_762_000_000,
-          image_count: 2,
-          message_preview: "Generate another draft",
-          message_text: "Generate another draft",
-          position: 1,
-          queued_turn_id: "queue-1",
-        },
-      ],
       activityItems: [
         {
           id: "activity-command",
@@ -128,7 +116,6 @@ describe("CanvasSessionOverviewPanel", () => {
     expect(text).not.toContain("exec_command");
     expect(text).not.toContain("turn-1");
     expect(text).not.toContain("request-1");
-    expect(text).not.toContain("queue-1");
     expect(text).not.toContain("会话过程索引");
     expect(text).not.toContain("执行时间线");
     expect(text).not.toContain("排队消息");

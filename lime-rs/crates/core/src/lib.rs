@@ -33,9 +33,10 @@ pub mod tray_state;
 pub mod backends;
 pub mod config;
 pub mod connect;
+pub(crate) mod database_path_migration;
 pub mod errors;
 pub mod middleware;
-pub mod orchestrator;
+pub(crate) mod migration_manifest;
 pub mod plugin;
 pub mod session;
 pub mod session_files;
@@ -51,7 +52,7 @@ pub mod router;
 
 // 请求处理器核心类型（context, error）
 pub mod processor;
-pub mod product_db_migration_cleanup;
+pub(crate) mod product_db_migration_cleanup;
 pub mod provider_prompt_cache_support;
 
 // WebSocket 核心类型

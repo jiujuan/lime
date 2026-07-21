@@ -54,10 +54,10 @@ describe("codex import continuation Electron fixture smoke guard", () => {
     const content = readSmokeSources();
 
     expect(content).toContain('"conversationImport/thread/commit"');
-    expect(content).toContain('"agentSession/read"');
-    expect(content).toContain('"agentSession/start"');
+    expect(content).toContain('"thread/read"');
+    expect(content).toContain('"thread/start"');
     expect(content).toContain('"agentSession/update"');
-    expect(content).toContain('"agentSession/turn/start"');
+    expect(content).toContain('"turn/start"');
     expect(content).toContain("writeCodexRolloutFixture");
     expect(content).toContain('type: "reasoning"');
     expect(content).toContain('type: "function_call"');

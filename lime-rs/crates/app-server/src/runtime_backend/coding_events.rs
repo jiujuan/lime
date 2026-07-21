@@ -8,7 +8,10 @@ mod command;
 mod patch;
 
 use command::{command_facts_from_arguments, command_facts_from_text, CommandFacts};
-use patch::{patch_id_for_tool_start, patch_paths_from_arguments, patch_terminal_events};
+use patch::{
+    patch_changes_from_arguments, patch_id_for_tool_start, patch_paths_from_arguments,
+    patch_terminal_events,
+};
 
 const COMMAND_OUTPUT_PREVIEW_CHARS: usize = 1_200;
 
@@ -93,6 +96,7 @@ impl CodingEventMirror {
                     "toolCallId": tool_id,
                     "toolName": normalized_name,
                     "source": "runtime_tool",
+                    "changes": patch_changes_from_arguments(arguments_value.as_ref()),
                     "paths": patch_paths_from_arguments(arguments_value.as_ref()),
                 })),
             ));
@@ -380,11 +384,10 @@ fn file_tool_end_events(
     result: &AgentToolResult,
 ) -> Vec<RuntimeEvent> {
     let mut events = patch_terminal_events(tool_id, tool, result);
-    if !result.success {
+    if tool.patch_id.is_some() {
         return events;
     }
-    if let Some(patch_file_change_events) = patch_file_change_events(tool_id, tool, result) {
-        events.extend(patch_file_change_events);
+    if !result.success {
         return events;
     }
 
@@ -419,51 +422,6 @@ fn file_tool_end_events(
         })),
     ));
     events
-}
-
-fn patch_file_change_events(
-    tool_id: &str,
-    tool: &TrackedTool,
-    result: &AgentToolResult,
-) -> Option<Vec<RuntimeEvent>> {
-    if tool.name != "apply_patch" {
-        return None;
-    }
-    let metadata = result.metadata.as_ref()?;
-    let changes = metadata
-        .get("file_changes")
-        .and_then(|value| value.get("changes"))
-        .and_then(Value::as_array)?;
-
-    let events = changes
-        .iter()
-        .filter_map(|change| {
-            let path = change.get("path").and_then(value_string)?;
-            let artifact_id = stable_scope_id("artifact:file", &path);
-            Some(RuntimeEvent::new(
-                "file.changed",
-                compact_object(json!({
-                    "path": path,
-                    "artifactId": artifact_id,
-                    "artifactRefs": artifact_refs_from_metadata(Some(metadata), &artifact_id),
-                    "toolCallId": tool_id,
-                    "toolName": tool.name,
-                    "checkpointRef": value_string_from_object(change, &["checkpointRef", "checkpoint_ref", "checkpointId", "checkpoint_id"])
-                        .or_else(|| metadata_string(metadata, &["checkpointRef", "checkpoint_ref", "checkpointId", "checkpoint_id"])),
-                    "contentRef": value_string_from_object(change, &["contentRef", "content_ref"])
-                        .or_else(|| metadata_string(metadata, &["contentRef", "content_ref"])),
-                    "diffRef": value_string_from_object(change, &["diffRef", "diff_ref"])
-                        .or_else(|| metadata_string(metadata, &["diffRef", "diff_ref"])),
-                    "diff": change.get("diff").cloned(),
-                    "preview": metadata_string(metadata, &["preview", "summary", "previewText", "preview_text"]),
-                    "change": change.clone(),
-                    "source": "runtime_tool",
-                })),
-            ))
-        })
-        .collect::<Vec<_>>();
-
-    (!events.is_empty()).then_some(events)
 }
 
 fn file_read_tool_end_events(

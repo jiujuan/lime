@@ -49,7 +49,6 @@ describe("MessageList runtime status", () => {
       turns: [],
       threadItems: [],
       pendingActions: [],
-      queuedTurns: [],
       canonicalChildren: [],
       threadRead: {
         thread_id: "thread-plain-completed",

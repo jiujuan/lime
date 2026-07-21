@@ -217,16 +217,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
       text: liveText,
     });
     expect(result.snapshot.threadRead?.status).toBe("waiting_request");
-    expect(result.snapshot.queuedTurns).toEqual([
-      {
-        queued_turn_id: "queued-runtime-sync",
-        message_preview: "继续",
-        message_text: "继续当前输出",
-        created_at: 1782800002000,
-        image_count: 0,
-        position: 1,
-      },
-    ]);
+    expect(result.snapshot).not.toHaveProperty("queuedTurns");
   });
 
   it("runtimeSync terminal detail 应允许最终 transcript 接管 pending 壳", () => {

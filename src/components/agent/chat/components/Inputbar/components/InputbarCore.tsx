@@ -51,8 +51,6 @@ import {
 } from "@/components/input-kit";
 import { isKnowledgeTextSourceCandidate } from "@/features/knowledge/import/knowledgeSourceSupport";
 import type { MessageImage, MessagePathReference } from "../../../types";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
-import { QueuedTurnsPanel } from "./QueuedTurnsPanel";
 import type { InputbarCoreCopy } from "./inputbarCoreCopy";
 import {
   InputbarPlusMenu,
@@ -133,9 +131,6 @@ interface InputbarCoreProps {
   /** 当前输入所属会话，仅用于运行态可观测性与稳定回归定位。 */
   sessionId?: string | null;
   activeTheme?: string;
-  queuedTurns?: QueuedTurnSnapshot[];
-  onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
-  onRemoveQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   showMetaTools?: boolean;
   showTextareaExpandButton?: boolean;
   plusMenu?: InputbarPlusMenuConfig;
@@ -173,9 +168,6 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   sendOnPointerDown = false,
   sessionId = null,
   activeTheme,
-  queuedTurns = [],
-  onPromoteQueuedTurn,
-  onRemoveQueuedTurn,
   showMetaTools = true,
   showTextareaExpandButton = true,
   plusMenu,
@@ -203,8 +195,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   const hasInlineComposerContent =
     text.trim().length > 0 ||
     pendingImages.length > 0 ||
-    pathReferences.length > 0 ||
-    queuedTurns.length > 0;
+    pathReferences.length > 0;
   const shouldCollapseFloatingTools =
     isFloatingVariant &&
     toolMode === "attach-only" &&
@@ -473,12 +464,6 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
               ) : null}
 
               {topExtra}
-              <QueuedTurnsPanel
-                queuedTurns={queuedTurns}
-                onPromoteQueuedTurn={onPromoteQueuedTurn}
-                onRemoveQueuedTurn={onRemoveQueuedTurn}
-              />
-
               <MainRow className={mainRowClassName}>
                 <InputIconButton
                   type="button"

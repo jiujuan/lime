@@ -31,7 +31,6 @@ interface UseWorkspaceTaskCenterSendRuntimeParams<
   TExecutionRuntime,
   TPendingAction,
   TSubmittedAction,
-  TQueuedTurn,
 > {
   activeDraftTabIdRef: MutableRefObject<string | null>;
   activeSessionIdRef?: MutableRefObject<string | null>;
@@ -73,7 +72,6 @@ interface UseWorkspaceTaskCenterSendRuntimeParams<
   normalizedInitialSessionId?: string | null;
   planComposerPendingActions: TPendingAction[];
   prewarmedDraftSessionIdsRef: MutableRefObject<Set<string>>;
-  queuedTurns: TQueuedTurn[];
   sendRef: MutableRefObject<WorkspaceHandleSend>;
   setActiveDraftTabId: Dispatch<SetStateAction<string | null>>;
   setDetachedTopicId: Dispatch<SetStateAction<string | null>>;
@@ -113,7 +111,6 @@ type WorkspaceTaskCenterSendRuntime<
   TExecutionRuntime,
   TPendingAction,
   TSubmittedAction,
-  TQueuedTurn,
 > = WorkspaceSceneSessionProjection<
   TMessage,
   TTurn,
@@ -121,8 +118,7 @@ type WorkspaceTaskCenterSendRuntime<
   TThreadRead,
   TExecutionRuntime,
   TPendingAction,
-  TSubmittedAction,
-  TQueuedTurn
+  TSubmittedAction
 > & {
   handleSendFromEmptyState: InputbarSendHandler;
   sceneIsRestoringSession: boolean;
@@ -155,7 +151,6 @@ export function useWorkspaceTaskCenterSendRuntime<
   TExecutionRuntime,
   TPendingAction,
   TSubmittedAction,
-  TQueuedTurn,
 >({
   activeDraftTabIdRef,
   activeSessionIdRef,
@@ -185,7 +180,6 @@ export function useWorkspaceTaskCenterSendRuntime<
   normalizedInitialSessionId,
   planComposerPendingActions,
   prewarmedDraftSessionIdsRef,
-  queuedTurns,
   sendRef,
   setActiveDraftTabId,
   setDetachedTopicId,
@@ -212,8 +206,7 @@ export function useWorkspaceTaskCenterSendRuntime<
   TThreadRead,
   TExecutionRuntime,
   TPendingAction,
-  TSubmittedAction,
-  TQueuedTurn
+  TSubmittedAction
 >): WorkspaceTaskCenterSendRuntime<
   TMessage,
   TTurn,
@@ -221,8 +214,7 @@ export function useWorkspaceTaskCenterSendRuntime<
   TThreadRead,
   TExecutionRuntime,
   TPendingAction,
-  TSubmittedAction,
-  TQueuedTurn
+  TSubmittedAction
 > {
   const handleNonMaterializedSessionReady = useCallback(
     (
@@ -345,7 +337,6 @@ export function useWorkspaceTaskCenterSendRuntime<
       executionRuntime,
       planComposerPendingActions,
       submittedActionsInFlight,
-      queuedTurns,
       isPreparingSend,
       isTaskCenterDraftSendPending,
       isSending,

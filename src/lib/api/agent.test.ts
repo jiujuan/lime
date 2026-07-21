@@ -31,16 +31,15 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
   APP_SERVER_METHOD_AGENT_SESSION_DELETE,
   APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
-  APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
-  APP_SERVER_METHOD_AGENT_SESSION_READ,
+  APP_SERVER_METHOD_THREAD_READ,
   APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
   APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
   APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
-  APP_SERVER_METHOD_AGENT_SESSION_START,
-  APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME,
+  APP_SERVER_METHOD_THREAD_START,
+  APP_SERVER_METHOD_THREAD_RESUME,
   APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
   APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
-  APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+  APP_SERVER_METHOD_TURN_START,
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
 } from "./appServer";
 import {
@@ -66,9 +65,8 @@ import {
 } from "./agentRuntime/sessionClient";
 import {
   getAgentRuntimeThreadRead,
-  promoteAgentRuntimeQueuedTurn,
   replayAgentRuntimeRequest,
-  resumeAgentRuntimeThread,
+  resumeThread,
   respondAgentRuntimeAction,
   submitAgentRuntimeTurn,
 } from "./agentRuntime/threadClient";
@@ -164,7 +162,7 @@ describe("Agent API 治理护栏", () => {
       }),
     ).resolves.toBe("session-created");
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_START, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_THREAD_START, {
       appId: "desktop",
       workspaceId: "workspace-2",
       businessObjectRef: {
@@ -211,7 +209,7 @@ describe("Agent API 治理护栏", () => {
       },
     });
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_TURN_START, {
       sessionId: "session-runtime",
       input: {
         text: "runtime hello",
@@ -262,7 +260,7 @@ describe("Agent API 治理护栏", () => {
       skipPreSubmitResume: true,
     });
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_TURN_START, {
       sessionId: "session-runtime-search",
       input: {
         text: "查一下今天的汇率",
@@ -309,7 +307,7 @@ describe("Agent API 治理护栏", () => {
       },
     });
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_TURN_START, {
       sessionId: "session-runtime-preference",
       input: {
         text: "请继续",
@@ -457,28 +455,27 @@ describe("Agent API 治理护栏", () => {
     });
   });
 
-  it("resumeAgentRuntimeThread 应经 Electron IPC 调 App Server thread/resume", async () => {
+  it("resumeThread 应经 Electron IPC 调 App Server thread/resume", async () => {
     mockAppServerResponse({
-      session: {
+      thread: {
+        id: "thread-runtime-resume",
         sessionId: "session-runtime-resume",
-        threadId: "thread-runtime-resume",
-        appId: "agent-chat",
-        status: "running",
-        createdAt: "2026-06-06T00:00:00.000Z",
-        updatedAt: "2026-06-06T00:00:01.000Z",
+        turns: [],
       },
-      turns: [],
-      resumed: true,
+      model: "gpt-5.4",
+      modelProvider: "openai",
+      cwd: "/tmp/workspace",
     });
 
     await expect(
-      resumeAgentRuntimeThread({
-        session_id: "session-runtime-resume",
+      resumeThread({
+        thread_id: "thread-runtime-resume",
       }),
     ).resolves.toBe(true);
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME, {
-      sessionId: "session-runtime-resume",
+    expectAppServerRequest(1, APP_SERVER_METHOD_THREAD_RESUME, {
+      threadId: "thread-runtime-resume",
+      excludeTurns: true,
     });
   });
 
@@ -527,12 +524,12 @@ describe("Agent API 治理护栏", () => {
           status: "running",
         },
       ],
-        detail: {
-          thread_read: {
-            thread_id: "thread-runtime",
-            status: "blocked",
-            active_turn_id: "turn-runtime",
-            queued_turns: [
+      detail: {
+        thread_read: {
+          thread_id: "thread-runtime",
+          status: "blocked",
+          active_turn_id: "turn-runtime",
+          queued_turns: [
             {
               queued_turn_id: "queued-turn-1",
               message_preview: "继续执行",
@@ -559,7 +556,7 @@ describe("Agent API 治理护栏", () => {
       ],
     });
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_THREAD_READ, {
       sessionId: "session-runtime",
     });
   });
@@ -600,38 +597,6 @@ describe("Agent API 治理护栏", () => {
       APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
       {
         sessionId: "session-runtime-replay-case",
-      },
-    );
-  });
-
-  it("promoteAgentRuntimeQueuedTurn 应经 Electron IPC 调 App Server queuedTurn/promote", async () => {
-    mockAppServerResponse({
-      session: {
-        sessionId: "session-runtime",
-        threadId: "thread-runtime",
-        appId: "agent-chat",
-        status: "running",
-        createdAt: "2026-06-06T00:00:00.000Z",
-        updatedAt: "2026-06-06T00:00:01.000Z",
-      },
-      turns: [],
-      queuedTurnId: "queued-turn-2",
-      promoted: true,
-    });
-
-    await expect(
-      promoteAgentRuntimeQueuedTurn({
-        session_id: "session-runtime",
-        queued_turn_id: "queued-turn-2",
-      }),
-    ).resolves.toBe(true);
-
-    expectAppServerRequest(
-      1,
-      APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
-      {
-        sessionId: "session-runtime",
-        queuedTurnId: "queued-turn-2",
       },
     );
   });
@@ -710,7 +675,7 @@ describe("Agent API 治理护栏", () => {
         },
       },
     ]);
-    expectAppServerRequest(1, "agentSession/list", {});
+    expectAppServerRequest(1, "thread/list", {});
   });
 
   it("listAgentRuntimeSessions 应支持请求包含归档会话", async () => {
@@ -743,7 +708,7 @@ describe("Agent API 治理护栏", () => {
       },
     ]);
 
-    expectAppServerRequest(1, "agentSession/list", {
+    expectAppServerRequest(1, "thread/list", {
       includeArchived: true,
     });
   });
@@ -784,7 +749,7 @@ describe("Agent API 治理护栏", () => {
       },
     ]);
 
-    expectAppServerRequest(1, "agentSession/list", {
+    expectAppServerRequest(1, "thread/list", {
       archivedOnly: true,
       workspaceId: "workspace-1",
       limit: 12,
@@ -934,7 +899,7 @@ describe("Agent API 治理护栏", () => {
       todo_items: [],
       turns: [],
     });
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_THREAD_READ, {
       sessionId: "session-runtime-2",
     });
   });
@@ -965,7 +930,7 @@ describe("Agent API 治理护栏", () => {
       messages: [],
     });
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_THREAD_READ, {
       sessionId: "session-runtime-resume",
     });
   });
@@ -996,7 +961,7 @@ describe("Agent API 治理护栏", () => {
       messages: [],
     });
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_THREAD_READ, {
       sessionId: "session-runtime-tail",
       historyLimit: 120,
     });

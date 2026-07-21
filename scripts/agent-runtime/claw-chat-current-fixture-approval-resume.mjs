@@ -1,5 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+  APP_SERVER_METHOD_SESSION_TURN_CANCEL,
   APPROVAL_REQUEST_CANCEL_DONE_TEXT,
   APPROVAL_REQUEST_DECLINE_DONE_TEXT,
   APPROVAL_REQUEST_DECLINE_RESULT_TEXT,
@@ -33,7 +37,11 @@ import {
   summarizeApprovalSessionCacheReadModel,
   waitForApprovalPendingReadModel,
 } from "./claw-chat-current-fixture-approval-read-model.mjs";
-import { waitForActionRespondTrace } from "./claw-chat-current-fixture-approval-trace.mjs";
+import {
+  waitForApprovalHostInterruptLifecycle,
+  waitForActionRespondTrace,
+  waitForApprovalServerRequestLifecycle,
+} from "./claw-chat-current-fixture-approval-trace.mjs";
 import {
   waitForGuiChatCanceled,
   waitForGuiChatCompleted,
@@ -42,11 +50,13 @@ import {
   sendPromptFromGui,
   setInputbarAccessMode,
 } from "./claw-chat-current-fixture-gui-actions.mjs";
+import { readModelLatestTurnStatus } from "./claw-chat-current-fixture-read-model-core.mjs";
 import {
   waitForSessionReadCanceled,
   waitForSessionReadCompleted,
 } from "./claw-chat-current-fixture-read-model-waits.mjs";
-import { sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
+import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
+import { readJsonl, sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
 function summarizeFullAccessReadModel(readModel) {
   const detail = readModel?.detail ?? readModel ?? {};
@@ -70,12 +80,7 @@ function summarizeFullAccessReadModel(readModel) {
   const serialized = JSON.stringify(readModel || {});
   return sanitizeJson({
     pendingRequestCount: pendingRequests.length,
-    latestTurnStatus:
-      threadRead?.runtime_summary?.latestTurnStatus ??
-      threadRead?.runtimeSummary?.latestTurnStatus ??
-      threadRead?.status ??
-      detail?.status ??
-      null,
+    latestTurnStatus: readModelLatestTurnStatus(readModel),
     includesPrompt: serialized.includes(APPROVAL_REQUEST_FULL_ACCESS_PROMPT),
     includesAssistantSummary: serialized.includes(
       APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
@@ -90,9 +95,7 @@ function summarizeFullAccessReadModel(readModel) {
     includesActionResolved:
       serialized.includes("action.resolved") ||
       serialized.includes("action_resolved"),
-    includesApprovalPrompt: serialized.includes(
-      "需要确认浏览器控制权限",
-    ),
+    includesApprovalPrompt: serialized.includes("需要确认浏览器控制权限"),
   });
 }
 
@@ -109,6 +112,159 @@ function summarizeBackendActionRespond(entry) {
     response: entry.response ?? null,
     actionScope: entry.actionScope ?? null,
   };
+}
+
+function summarizeHostInterruptCanonicalEvents({
+  agentRoot,
+  sessionId,
+  turnId,
+}) {
+  const eventLogPath = path.join(
+    agentRoot,
+    "runtime",
+    "events",
+    "sessions",
+    `session_${sessionId}.jsonl`,
+  );
+  const events = fs.existsSync(eventLogPath)
+    ? readJsonl(eventLogPath).filter(
+        (event) => (event?.turnId ?? event?.turn_id) === turnId,
+      )
+    : [];
+  return summarizeHostInterruptCanonicalEventSequence(events);
+}
+
+export function summarizeHostInterruptCanonicalEventSequence(events) {
+  const eventTypes = events.map(
+    (event) => event?.type ?? event?.eventType ?? event?.event_type ?? null,
+  );
+  const actionCanceledIndex = eventTypes.findIndex(
+    (eventType) => eventType === "action.canceled",
+  );
+  const itemCompletedCanceledIndex = events.findIndex(
+    (event) =>
+      (event?.type ?? event?.eventType ?? event?.event_type) ===
+        "item.completed" &&
+      ["cancelled", "canceled"].includes(
+        String(event?.payload?.item?.status ?? "").toLowerCase(),
+      ),
+  );
+  const turnCanceledIndex = eventTypes.findIndex(
+    (eventType) => eventType === "turn.canceled",
+  );
+  return sanitizeJson({
+    eventCount: events.length,
+    eventTypes,
+    actionCanceledIndex,
+    itemCompletedCanceledIndex,
+    turnCanceledIndex,
+    ordered:
+      actionCanceledIndex >= 0 &&
+      itemCompletedCanceledIndex > actionCanceledIndex &&
+      turnCanceledIndex > itemCompletedCanceledIndex,
+  });
+}
+
+export async function runApprovalRequestHostInterruptScenario({
+  page,
+  options,
+  appServerRequests,
+  runtimeEnv,
+  logStage,
+}) {
+  logStage("send-approval-request-host-interrupt-prompt-from-gui");
+  const inputSend = sanitizeJson(
+    await sendPromptFromGui(page, options, APPROVAL_REQUEST_RESUME_PROMPT),
+  );
+
+  logStage("wait-approval-request-host-interrupt-backend-turn-start");
+  const backendTurnStart = await waitForBackendLedgerTurnStart(
+    runtimeEnv.backendLedgerPath,
+    APPROVAL_REQUEST_RESUME_PROMPT,
+    options,
+  );
+  const turnId = backendTurnStart.entry.turnId;
+
+  logStage("wait-gui-approval-request-host-interrupt-pending");
+  const pendingGui = await waitForGuiApprovalPending(page, options);
+
+  logStage("wait-read-model-approval-request-host-interrupt-pending");
+  const pendingReadModel = await waitForApprovalPendingReadModel(
+    page,
+    options,
+    appServerRequests,
+  );
+
+  logStage("invoke-approval-request-host-interrupt");
+  await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+    { threadId: options.threadId, turnId },
+    appServerRequests,
+  );
+
+  logStage("wait-gui-approval-request-host-interrupt-canceled");
+  const guiCanceled = sanitizeJson(
+    await waitForGuiChatCanceled(page, options, {
+      prompt: APPROVAL_REQUEST_RESUME_PROMPT,
+    }),
+  );
+
+  logStage("wait-read-model-approval-request-host-interrupt-canceled");
+  const canceledReadModel = await waitForSessionReadCanceled(
+    page,
+    options,
+    appServerRequests,
+    {
+      threadId: options.threadId,
+      prompt: APPROVAL_REQUEST_RESUME_PROMPT,
+    },
+  );
+
+  logStage("wait-approval-request-host-interrupt-lifecycle");
+  const lifecycle = await waitForApprovalHostInterruptLifecycle(page, options, {
+    threadId: options.threadId,
+    turnId,
+  });
+  const backendLedger = readJsonl(runtimeEnv.backendLedgerPath);
+  const backendActionRespondCount = backendLedger.filter(
+    (entry) =>
+      ["actionRespond", "approvalRequestResumeActionRespond"].includes(
+        entry?.kind,
+      ) && entry?.turnId === turnId,
+  ).length;
+  const canonicalEvents = summarizeHostInterruptCanonicalEvents({
+    agentRoot: runtimeEnv.agentRoot,
+    sessionId: backendTurnStart.entry.sessionId,
+    turnId,
+  });
+  const summarizedReadModel = summarizeApprovalDecisionReadModel(
+    canceledReadModel,
+    "cancel",
+  );
+
+  return sanitizeJson({
+    approvalRequestDecisionInputSend: inputSend,
+    approvalRequestDecisionBackendTurnStart: {
+      sessionId: backendTurnStart.entry.sessionId ?? null,
+      threadId: backendTurnStart.entry.threadId ?? null,
+      turnId,
+      inputText: backendTurnStart.entry.inputText ?? null,
+    },
+    approvalRequestDecisionPendingGui: pendingGui,
+    approvalRequestDecisionPendingReadModel: pendingReadModel,
+    guiApprovalRequestCancelCompleted: guiCanceled,
+    readModelApprovalRequestCancelCanceled: summarizedReadModel,
+    approvalRequestHostInterruptRequest: {
+      method: APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+      params: { threadId: options.threadId, turnId },
+    },
+    approvalRequestHostInterruptLifecycle: lifecycle,
+    approvalRequestHostInterruptBackend: {
+      actionRespondCount: backendActionRespondCount,
+    },
+    approvalRequestHostInterruptCanonicalEvents: canonicalEvents,
+  });
 }
 
 export async function runApprovalRequestFullAccessScenario({
@@ -258,6 +414,17 @@ export async function runApprovalRequestDecisionScenario({
       },
     );
 
+    logStage(`wait-${scenarioStage}-server-request-lifecycle`);
+    const serverRequestLifecycle = await waitForApprovalServerRequestLifecycle(
+      page,
+      options,
+      {
+        wireDecision: "cancel",
+        threadId: options.threadId,
+        turnId: backendTurnStart.entry.turnId,
+      },
+    );
+
     return sanitizeJson({
       approvalRequestDecisionExpectedDecision: decision,
       approvalRequestDecisionInputSend: inputSend,
@@ -284,6 +451,7 @@ export async function runApprovalRequestDecisionScenario({
       },
       approvalRequestDecisionBackendActionRespond:
         summarizeBackendActionRespond(backendActionRespond.entry),
+      approvalRequestDecisionServerRequestLifecycle: serverRequestLifecycle,
       guiApprovalRequestCancelCompleted: {
         ...guiCanceled,
         expectedDoneText: APPROVAL_REQUEST_CANCEL_DONE_TEXT,
@@ -314,6 +482,17 @@ export async function runApprovalRequestDecisionScenario({
     },
   );
 
+  logStage(`wait-${scenarioStage}-server-request-lifecycle`);
+  const serverRequestLifecycle = await waitForApprovalServerRequestLifecycle(
+    page,
+    options,
+    {
+      wireDecision: "decline",
+      threadId: options.threadId,
+      turnId: backendTurnStart.entry.turnId,
+    },
+  );
+
   return sanitizeJson({
     approvalRequestDecisionExpectedDecision: decision,
     approvalRequestDecisionInputSend: inputSend,
@@ -338,8 +517,10 @@ export async function runApprovalRequestDecisionScenario({
         actionScope: backendActionRespond.entry.actionScope,
       },
     },
-    approvalRequestDecisionBackendActionRespond:
-      summarizeBackendActionRespond(backendActionRespond.entry),
+    approvalRequestDecisionBackendActionRespond: summarizeBackendActionRespond(
+      backendActionRespond.entry,
+    ),
+    approvalRequestDecisionServerRequestLifecycle: serverRequestLifecycle,
     guiApprovalRequestDeclineCompleted: guiCompleted,
     readModelApprovalRequestDeclineCompleted:
       summarizeApprovalDecisionReadModel(completedReadModel, decision),
@@ -408,6 +589,17 @@ export async function runApprovalRequestResumeScenario({
       prompt: APPROVAL_REQUEST_RESUME_PROMPT,
       doneText: APPROVAL_REQUEST_RESUME_DONE_TEXT,
       summaryText: APPROVAL_REQUEST_RESUME_RESULT_TEXT,
+    },
+  );
+
+  logStage("wait-approval-request-resume-server-request-lifecycle");
+  const serverRequestLifecycle = await waitForApprovalServerRequestLifecycle(
+    page,
+    options,
+    {
+      wireDecision: "acceptForSession",
+      threadId: options.threadId,
+      turnId: backendTurnStart.entry.turnId,
     },
   );
 
@@ -482,8 +674,10 @@ export async function runApprovalRequestResumeScenario({
         actionScope: backendActionRespond.entry.actionScope,
       },
     },
-    approvalRequestResumeBackendActionRespond:
-      summarizeBackendActionRespond(backendActionRespond.entry),
+    approvalRequestResumeBackendActionRespond: summarizeBackendActionRespond(
+      backendActionRespond.entry,
+    ),
+    approvalRequestResumeServerRequestLifecycle: serverRequestLifecycle,
     guiApprovalRequestResumeCompleted: guiCompleted,
     readModelApprovalRequestResumeCompleted:
       summarizeApprovalCompletedReadModel(completedReadModel),

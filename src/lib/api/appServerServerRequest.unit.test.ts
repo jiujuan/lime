@@ -4,8 +4,13 @@ import {
   METHOD_SERVER_REQUEST_RESOLVED,
   type JsonRpcRequest,
 } from "../../../packages/app-server-client/src/protocol";
-import { AppServerServerRequestDispatcher } from "./appServerServerRequest";
+import {
+  APP_SERVER_SERVER_REQUEST_LIFECYCLE_TRACE_KEY,
+  AppServerServerRequestDispatcher,
+} from "./appServerServerRequest";
 import { AppServerEventBus } from "./appServerEventBus";
+import { METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL } from "./agentApprovalServerRequest";
+import { CLAW_TRACE_DEBUG_OVERRIDE_KEY } from "../developerFeatures";
 
 function createHarness() {
   let subscription:
@@ -33,13 +38,15 @@ function createHarness() {
     responder,
     publish: (request: JsonRpcRequest) =>
       subscription?.onServerRequests?.([request]),
-    resolve: (requestId: JsonRpcRequest["id"]) =>
+    resolve: (requestId: JsonRpcRequest["id"], threadId = "thread-1") =>
       subscription?.onNotifications?.([
         {
           method: METHOD_SERVER_REQUEST_RESOLVED,
-          params: { requestId },
+          params: { requestId, threadId },
         },
       ]),
+    notify: (notification: { method: string; params?: unknown }) =>
+      subscription?.onNotifications?.([notification]),
   };
 }
 
@@ -48,7 +55,11 @@ function elicitationRequest(id = "app-server-request:1"): JsonRpcRequest {
     id,
     method: METHOD_MCP_SERVER_ELICITATION_REQUEST,
     params: {
-      server: "form-server",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      serverName: "form-server",
+      mode: "form",
+      _meta: null,
       message: "Choose a value",
       requestedSchema: {
         type: "object",
@@ -109,6 +120,113 @@ describe("AppServerServerRequestDispatcher", () => {
         content: { confirmed: true },
       },
     );
+  });
+
+  it("接受 Codex command approval current server request", async () => {
+    const harness = createHarness();
+    const handler = vi.fn(async () => ({ decision: "Accept" }));
+    harness.dispatcher.register(
+      METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      handler,
+    );
+    const request = {
+      id: "app-server-request:approval",
+      method: METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-command-1",
+        startedAtMs: 1,
+      },
+    };
+
+    await expect(harness.dispatcher.dispatch(request)).resolves.toBe(true);
+    expect(harness.responder.respondServerRequest).toHaveBeenCalledWith(
+      request.id,
+      { decision: "Accept" },
+    );
+  });
+
+  it("Claw debug 模式只记录脱敏 server-request 生命周期", async () => {
+    window.localStorage.setItem(CLAW_TRACE_DEBUG_OVERRIDE_KEY, "on");
+    window.localStorage.removeItem(
+      APP_SERVER_SERVER_REQUEST_LIFECYCLE_TRACE_KEY,
+    );
+    try {
+      const harness = createHarness();
+      harness.dispatcher.register(
+        METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        async () => ({ decision: "acceptForSession" }),
+      );
+      const request = {
+        id: "app-server-request:approval-trace",
+        method: METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-command-1",
+          approvalId: "approval-1",
+          command: "must-not-be-recorded",
+          reason: "must-not-be-recorded",
+        },
+      };
+
+      await expect(harness.dispatcher.dispatch(request)).resolves.toBe(true);
+      harness.resolve(request.id);
+      harness.notify({
+        method: "item/completed",
+        params: { threadId: "thread-1", turnId: "turn-1" },
+      });
+
+      const trace = JSON.parse(
+        window.localStorage.getItem(
+          APP_SERVER_SERVER_REQUEST_LIFECYCLE_TRACE_KEY,
+        ) || "[]",
+      );
+      expect(trace).toEqual([
+        {
+          sequence: 1,
+          kind: "request",
+          id: request.id,
+          method: request.method,
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-command-1",
+          approvalId: "approval-1",
+        },
+        {
+          sequence: 2,
+          kind: "response",
+          id: request.id,
+          method: request.method,
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-command-1",
+          approvalId: "approval-1",
+          decision: "acceptForSession",
+        },
+        {
+          sequence: 3,
+          kind: "resolved",
+          method: METHOD_SERVER_REQUEST_RESOLVED,
+          id: request.id,
+          threadId: "thread-1",
+        },
+        {
+          sequence: 4,
+          kind: "terminal",
+          method: "item/completed",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+      ]);
+      expect(JSON.stringify(trace)).not.toContain("must-not-be-recorded");
+    } finally {
+      window.localStorage.removeItem(CLAW_TRACE_DEBUG_OVERRIDE_KEY);
+      window.localStorage.removeItem(
+        APP_SERVER_SERVER_REQUEST_LIFECYCLE_TRACE_KEY,
+      );
+    }
   });
 
   it("未知 method 与 handler 错误都 fail closed 为 JSON-RPC error", async () => {
@@ -211,6 +329,37 @@ describe("AppServerServerRequestDispatcher", () => {
     expect(harness.responder.rejectServerRequest).not.toHaveBeenCalled();
   });
 
+  it("重复 resolved 对同一 request key 保持幂等", () => {
+    window.localStorage.setItem(CLAW_TRACE_DEBUG_OVERRIDE_KEY, "on");
+    window.localStorage.removeItem(
+      APP_SERVER_SERVER_REQUEST_LIFECYCLE_TRACE_KEY,
+    );
+    try {
+      const harness = createHarness();
+      harness.dispatcher.register(
+        METHOD_MCP_SERVER_ELICITATION_REQUEST,
+        async () => ({ action: "decline" }),
+      );
+
+      harness.resolve("app-server-request:resolved-duplicate");
+      harness.resolve("app-server-request:resolved-duplicate");
+
+      const trace = JSON.parse(
+        window.localStorage.getItem(
+          APP_SERVER_SERVER_REQUEST_LIFECYCLE_TRACE_KEY,
+        ) || "[]",
+      );
+      expect(
+        trace.filter((entry: { kind?: unknown }) => entry.kind === "resolved"),
+      ).toHaveLength(1);
+    } finally {
+      window.localStorage.removeItem(CLAW_TRACE_DEBUG_OVERRIDE_KEY);
+      window.localStorage.removeItem(
+        APP_SERVER_SERVER_REQUEST_LIFECYCLE_TRACE_KEY,
+      );
+    }
+  });
+
   it("resolved 中止正在等待的 handler 并禁止迟到回包", async () => {
     const harness = createHarness();
     let handlerSignal: AbortSignal | undefined;
@@ -234,6 +383,63 @@ describe("AppServerServerRequestDispatcher", () => {
     await expect(dispatched).resolves.toBe(false);
     expect(harness.responder.respondServerRequest).not.toHaveBeenCalled();
     expect(harness.responder.rejectServerRequest).not.toHaveBeenCalled();
+  });
+
+  it("不同 thread 的 resolved 不得中止 handler", async () => {
+    const harness = createHarness();
+    let handlerSignal: AbortSignal | undefined;
+    let release: (() => void) | undefined;
+    harness.dispatcher.register(
+      METHOD_MCP_SERVER_ELICITATION_REQUEST,
+      (_params, _request, signal) =>
+        new Promise((resolve) => {
+          handlerSignal = signal;
+          release = () => resolve({ action: "decline" });
+        }),
+    );
+    const request = elicitationRequest("app-server-request:wrong-thread");
+    const dispatched = harness.dispatcher.dispatch(request);
+    await vi.waitFor(() => expect(handlerSignal).toBeDefined());
+
+    harness.resolve(request.id, "thread-other");
+    expect(handlerSignal?.aborted).toBe(false);
+    release?.();
+
+    await expect(dispatched).resolves.toBe(true);
+    expect(harness.responder.respondServerRequest).toHaveBeenCalledWith(
+      request.id,
+      { action: "decline" },
+    );
+  });
+
+  it("缺少 threadId 的 resolved fail closed 且不中止 handler", async () => {
+    const harness = createHarness();
+    let handlerSignal: AbortSignal | undefined;
+    let release: (() => void) | undefined;
+    harness.dispatcher.register(
+      METHOD_MCP_SERVER_ELICITATION_REQUEST,
+      (_params, _request, signal) =>
+        new Promise((resolve) => {
+          handlerSignal = signal;
+          release = () => resolve({ action: "decline" });
+        }),
+    );
+    const request = elicitationRequest("app-server-request:missing-thread");
+    const dispatched = harness.dispatcher.dispatch(request);
+    await vi.waitFor(() => expect(handlerSignal).toBeDefined());
+
+    harness.notify({
+      method: METHOD_SERVER_REQUEST_RESOLVED,
+      params: { requestId: request.id },
+    });
+    expect(handlerSignal?.aborted).toBe(false);
+    release?.();
+
+    await expect(dispatched).resolves.toBe(true);
+    expect(harness.responder.respondServerRequest).toHaveBeenCalledWith(
+      request.id,
+      { action: "decline" },
+    );
   });
 
   it("reset 中止全部 handler 且旧 handler 完成后不回包", async () => {

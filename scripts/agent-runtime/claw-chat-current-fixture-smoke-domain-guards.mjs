@@ -16,6 +16,13 @@ function readImageCommandScript() {
   );
 }
 
+function readImageCommandWorkflowReadScript() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/claw-chat-current-fixture-image-command-workflow-read.mjs",
+    "utf8",
+  );
+}
+
 function readRpcScript() {
   return fs.readFileSync(
     "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
@@ -39,6 +46,8 @@ export function registerImageContentSmokeGuards({
   it("covers Claw @配图 through ImageCommandWorkflow and current task artifact", () => {
     const content = readSmokeScript();
     const imageCommandContent = readImageCommandScript();
+    const imageCommandWorkflowReadContent =
+      readImageCommandWorkflowReadScript();
     const rpcContent = readRpcScript();
 
     expectAllToContain(expect, content, [
@@ -54,7 +63,6 @@ export function registerImageContentSmokeGuards({
       "imageCommandLegacySkillLaunchNotSubmitted",
       "image_task",
       "lime_create_image_generation_task",
-      "IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID",
       "mediaTaskArtifact/image/create",
       "mediaTaskArtifact/get",
       "mediaTaskArtifact/list",
@@ -119,7 +127,25 @@ export function registerImageContentSmokeGuards({
       "{task_id}",
     ]);
     expectAllToContain(expect, imageCommandContent, [
-      "expectedSessionId: SESSION_ID",
+      "expectedSessionId: options.sessionId",
+      "sessionId: options.sessionId",
+      "sessionId === expectedSessionId",
+      "threadId: options.threadId",
+      "includeTurns: true",
+    ]);
+    expectAllNotToContain(expect, imageCommandContent, [
+      "SESSION_ID",
+      "THREAD_ID",
+    ]);
+    expectAllToContain(expect, imageCommandWorkflowReadContent, [
+      "sessionId,",
+      "sessionId",
+    ]);
+    expectAllNotToContain(expect, imageCommandWorkflowReadContent, [
+      "SESSION_ID",
+    ]);
+    expectAllToContain(expect, imageCommandContent, [
+      "expectedSessionId: options.sessionId",
       'entrySource: "at_image_command"',
       "image_command_workflow",
       "snapshot.hasVisibleImageTaskProcess",
@@ -159,7 +185,7 @@ export function registerImageContentSmokeGuards({
       "runContentFactoryArticleWorkspaceScenario",
       "runContentFactoryInlineImageArticleWorkspaceScenario",
       "pluginInstalled/save",
-      "agentSession/turn/start",
+      "turn/start",
       "agentSession/runtimeEvents/append",
       "workflow/read",
       "workflow/respond",

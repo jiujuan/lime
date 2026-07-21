@@ -111,106 +111,211 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function optionalString(value: unknown): boolean {
-  return value === undefined || value === null || typeof value === "string";
-}
-
-function isAgentSessionStatus(value: unknown): boolean {
-  return (
-    value === "idle" ||
-    value === "running" ||
-    value === "waitingAction" ||
-    value === "completed" ||
-    value === "failed" ||
-    value === "canceled"
-  );
-}
-
-function isAgentTurnStatus(value: unknown): boolean {
-  return (
-    value === "accepted" ||
-    value === "queued" ||
-    value === "running" ||
-    value === "waitingAction" ||
-    value === "completed" ||
-    value === "failed" ||
-    value === "canceled"
-  );
-}
-
-function isAppServerAgentSession(
+function normalizeAppServerThreadListResponse(
   value: unknown,
-): value is AppServerAgentSession {
-  return (
-    isRecord(value) &&
-    typeof value.sessionId === "string" &&
-    value.sessionId.length > 0 &&
-    typeof value.threadId === "string" &&
-    value.threadId.length > 0 &&
-    typeof value.appId === "string" &&
-    value.appId.length > 0 &&
-    optionalString(value.workspaceId) &&
-    isAgentSessionStatus(value.status) &&
-    typeof value.createdAt === "string" &&
-    typeof value.updatedAt === "string"
-  );
+): AppServerAgentSessionListResponse {
+  if (!isRecord(value) || !Array.isArray(value.data)) {
+    throw new Error("thread/list did not return thread list");
+  }
+  const sessions = value.data.map((thread) => threadOverviewToSession(thread));
+  if (sessions.some((session) => !session)) {
+    throw new Error("thread/list did not return canonical thread summaries");
+  }
+  return {
+    sessions: sessions as AppServerAgentSessionListResponse["sessions"],
+  };
 }
 
-function isAppServerAgentTurn(value: unknown): value is AppServerAgentTurn {
-  return (
-    isRecord(value) &&
-    typeof value.turnId === "string" &&
-    value.turnId.length > 0 &&
-    typeof value.sessionId === "string" &&
-    value.sessionId.length > 0 &&
-    typeof value.threadId === "string" &&
-    value.threadId.length > 0 &&
-    isAgentTurnStatus(value.status) &&
-    optionalString(value.startedAt) &&
-    optionalString(value.completedAt)
-  );
-}
-
-function assertAppServerAgentSessionListResponse(
+function normalizeAppServerThreadReadResponse(
   value: unknown,
-): asserts value is AppServerAgentSessionListResponse {
-  if (
-    !isRecord(value) ||
-    !Array.isArray(value.sessions) ||
-    !value.sessions.every(
-      (session) =>
-        isRecord(session) &&
-        typeof session.sessionId === "string" &&
-        optionalString(session.threadId) &&
-        optionalString(session.title) &&
-        typeof session.model === "string" &&
-        typeof session.createdAt === "string" &&
-        typeof session.updatedAt === "string" &&
-        (session.archivedAt === undefined ||
-          session.archivedAt === null ||
-          typeof session.archivedAt === "string") &&
-        optionalString(session.workspaceId) &&
-        optionalString(session.workingDir) &&
-        optionalString(session.executionStrategy) &&
-        typeof session.messagesCount === "number" &&
-        Number.isFinite(session.messagesCount),
-    )
-  ) {
-    throw new Error("agentSession/list did not return session list");
+): AppServerAgentSessionReadResponse {
+  if (!isRecord(value) || !isRecord(value.thread)) {
+    throw new Error("thread/read did not return thread read model");
+  }
+  const thread = value.thread;
+  const session = threadToSession(thread);
+  const turns = threadTurnsToAgentTurns(thread);
+  if (!session || !turns) {
+    throw new Error("thread/read did not return canonical thread detail");
+  }
+  return {
+    session,
+    turns,
+    detail: {
+      threadRead: thread,
+      title: thread.name,
+    },
+  };
+}
+
+function threadOverviewToSession(
+  value: unknown,
+): AppServerAgentSessionListResponse["sessions"][number] | null {
+  const thread = asCurrentThread(value);
+  if (!thread) {
+    return null;
+  }
+  const turns = threadTurnsToAgentTurns(thread) ?? [];
+  return {
+    sessionId: thread.sessionId,
+    threadId: thread.threadId,
+    title: thread.name,
+    model: thread.modelProvider,
+    createdAt: timestampFromUnixSeconds(thread.createdAt),
+    updatedAt: timestampFromUnixSeconds(thread.updatedAt),
+    archivedAt: undefined,
+    workspaceId: undefined,
+    workingDir: thread.cwd,
+    executionStrategy: undefined,
+    messagesCount: countThreadItems(thread.turns),
+    threadStatus: currentThreadStatus(thread.status),
+    latestTurnStatus: turns.at(-1)?.status,
+    activeTurnId: turns.find((turn) => !isTerminalAgentTurn(turn.status))
+      ?.turnId,
+    queuedTurnCount: 0,
+  };
+}
+
+function threadToSession(value: unknown): AppServerAgentSession | null {
+  const thread = asCurrentThread(value);
+  if (!thread) {
+    return null;
+  }
+  return {
+    sessionId: thread.sessionId,
+    threadId: thread.threadId,
+    appId: "desktop",
+    status: currentThreadStatus(thread.status),
+    createdAt: timestampFromUnixSeconds(thread.createdAt),
+    updatedAt: timestampFromUnixSeconds(thread.updatedAt),
+  };
+}
+
+function threadTurnsToAgentTurns(value: unknown): AppServerAgentTurn[] | null {
+  const thread = asCurrentThread(value);
+  if (!thread) {
+    return null;
+  }
+  const turns = Array.isArray(thread.turns) ? thread.turns : [];
+  const normalized = turns.map((turn) => {
+    if (!isRecord(turn) || typeof turn.id !== "string") {
+      return null;
+    }
+    const status = currentTurnStatus(turn);
+    return {
+      turnId: turn.id,
+      sessionId: thread.sessionId,
+      threadId: thread.threadId,
+      status,
+      startedAt: timestampFromOptionalUnixSeconds(turn.startedAt),
+      completedAt: timestampFromOptionalUnixSeconds(turn.completedAt),
+    } satisfies AppServerAgentTurn;
+  });
+  return normalized.some((turn) => !turn)
+    ? null
+    : (normalized as AppServerAgentTurn[]);
+}
+
+type CurrentThread = {
+  sessionId: string;
+  threadId: string;
+  status: unknown;
+  createdAt: number;
+  updatedAt: number;
+  cwd: string;
+  modelProvider: string;
+  name?: string;
+  preview?: string;
+  turns?: unknown[];
+};
+
+function asCurrentThread(value: unknown): CurrentThread | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const sessionId = normalizeString(value.sessionId);
+  const threadId = normalizeString(value.id);
+  const createdAt = finiteNumber(value.createdAt);
+  const updatedAt = finiteNumber(value.updatedAt);
+  const cwd = normalizeString(value.cwd) ?? "";
+  const modelProvider = normalizeString(value.modelProvider) ?? "";
+  if (!sessionId || !threadId || createdAt === null || updatedAt === null) {
+    return null;
+  }
+  return {
+    sessionId,
+    threadId,
+    status: value.status,
+    createdAt,
+    updatedAt,
+    cwd,
+    modelProvider,
+    name:
+      normalizeString(value.name) ??
+      normalizeString(value.preview) ??
+      undefined,
+    turns: Array.isArray(value.turns) ? value.turns : [],
+  };
+}
+
+function currentThreadStatus(value: unknown): AppServerAgentSession["status"] {
+  const type = isRecord(value)
+    ? normalizeString(value.type)
+    : normalizeString(value);
+  switch (type) {
+    case "active":
+      return "running";
+    case "systemError":
+      return "failed";
+    case "idle":
+    case "notLoaded":
+    default:
+      return "idle";
   }
 }
 
-function assertAppServerAgentSessionReadResponse(
-  value: unknown,
-): asserts value is AppServerAgentSessionReadResponse {
-  if (
-    !isRecord(value) ||
-    !isAppServerAgentSession(value.session) ||
-    !Array.isArray(value.turns) ||
-    !value.turns.every(isAppServerAgentTurn)
-  ) {
-    throw new Error("agentSession/read did not return session read model");
+function currentTurnStatus(
+  value: Record<string, unknown>,
+): AppServerAgentTurn["status"] {
+  const status = normalizeString(value.status);
+  switch (status) {
+    case "inProgress":
+      return "running";
+    case "completed":
+      return "completed";
+    case "interrupted":
+      return "canceled";
+    case "failed":
+      return "failed";
+    default:
+      return "accepted";
   }
+}
+
+function isTerminalAgentTurn(status: AppServerAgentTurn["status"]): boolean {
+  return status === "completed" || status === "failed" || status === "canceled";
+}
+
+function countThreadItems(turns: unknown[] | undefined): number {
+  return (turns ?? []).reduce<number>((count, turn) => {
+    if (!isRecord(turn) || !Array.isArray(turn.items)) {
+      return count;
+    }
+    return count + turn.items.length;
+  }, 0);
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function timestampFromUnixSeconds(value: number): string {
+  return new Date(value * 1000).toISOString();
+}
+
+function timestampFromOptionalUnixSeconds(value: unknown): string | undefined {
+  const number = finiteNumber(value);
+  return number === null ? undefined : timestampFromUnixSeconds(number);
 }
 
 function statusFromSessionStatus(
@@ -322,7 +427,7 @@ function appServerSessionOverviewToAgentRun(
     error_code: null,
     error_message: null,
     metadata: metadataFromValue({
-      source: "agentSession/list",
+      source: "thread/list",
       title: session.title ?? null,
       model: session.model,
       thread_id: session.threadId ?? null,
@@ -367,7 +472,7 @@ function appServerReadResponseToAgentRun(
     error_code: status === "error" ? "agent_session_failed" : null,
     error_message: null,
     metadata: metadataFromValue({
-      source: "agentSession/read",
+      source: "thread/read",
       title,
       thread_id: response.session.threadId,
       workspace_id: response.session.workspaceId ?? null,
@@ -554,12 +659,12 @@ export async function executionRunList(
 ): Promise<AgentRun[]> {
   const safeRequestLimit = safeLimit(limit, 50, 200);
   const safeRequestOffset = safeOffset(offset);
-  const response = await createAppServerClient().listSessions({
-    includeArchived: true,
+  const response = await createAppServerClient().listThreads({
+    archived: true,
     limit: safeRequestLimit + safeRequestOffset,
   });
-  assertAppServerAgentSessionListResponse(response.result);
-  return response.result.sessions
+  const threadList = normalizeAppServerThreadListResponse(response.result);
+  return threadList.sessions
     .map(appServerSessionOverviewToAgentRun)
     .slice(safeRequestOffset, safeRequestOffset + safeRequestLimit);
 }
@@ -567,11 +672,12 @@ export async function executionRunList(
 export async function executionRunGet(runId: string): Promise<AgentRun | null> {
   const sessionId = requireNonEmptyText(runId, "runId");
   try {
-    const response = await createAppServerClient().readSession({
-      sessionId,
+    const response = await createAppServerClient().readThread({
+      threadId: sessionId,
+      includeTurns: true,
     });
-    assertAppServerAgentSessionReadResponse(response.result);
-    return appServerReadResponseToAgentRun(response.result);
+    const threadRead = normalizeAppServerThreadReadResponse(response.result);
+    return appServerReadResponseToAgentRun(threadRead);
   } catch (error) {
     if (error instanceof Error && /not found/i.test(error.message)) {
       return null;
@@ -586,24 +692,26 @@ export async function executionRunGetGeneralWorkbenchState(
 ): Promise<GeneralWorkbenchRunState> {
   const normalizedSessionId = requireNonEmptyText(sessionId, "sessionId");
   const safeRequestLimit = safeLimit(limit, 3, 10);
-  const response = await createAppServerClient().readSession({
-    sessionId: normalizedSessionId,
+  const response = await createAppServerClient().readThread({
+    threadId: normalizedSessionId,
+    includeTurns: true,
   });
-  assertAppServerAgentSessionReadResponse(response.result);
+  const threadRead = normalizeAppServerThreadReadResponse(response.result);
   const queueItems = deriveQueueItemsFromReadResponse(
-    response.result,
+    threadRead,
     safeRequestLimit,
   );
-  const recentTerminals = deriveTerminalRunsFromReadResponse(
-    response.result,
-  ).slice(0, safeRequestLimit);
+  const recentTerminals = deriveTerminalRunsFromReadResponse(threadRead).slice(
+    0,
+    safeRequestLimit,
+  );
   return {
     run_state: queueItems.length > 0 ? "auto_running" : "idle",
     current_gate_key: currentGateKeyFromQueueItems(queueItems),
     queue_items: queueItems,
     latest_terminal: recentTerminals[0] ?? null,
     recent_terminals: recentTerminals,
-    updated_at: response.result.session.updatedAt,
+    updated_at: threadRead.session.updatedAt,
   };
 }
 
@@ -615,11 +723,12 @@ export async function executionRunListGeneralWorkbenchHistory(
   const normalizedSessionId = requireNonEmptyText(sessionId, "sessionId");
   const safeRequestLimit = safeLimit(limit, 20, 100);
   const safeRequestOffset = safeOffset(offset);
-  const response = await createAppServerClient().readSession({
-    sessionId: normalizedSessionId,
+  const response = await createAppServerClient().readThread({
+    threadId: normalizedSessionId,
+    includeTurns: true,
   });
-  assertAppServerAgentSessionReadResponse(response.result);
-  const items = deriveTerminalRunsFromReadResponse(response.result);
+  const threadRead = normalizeAppServerThreadReadResponse(response.result);
+  const items = deriveTerminalRunsFromReadResponse(threadRead);
   const pageItems = items.slice(
     safeRequestOffset,
     safeRequestOffset + safeRequestLimit,

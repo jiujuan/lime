@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const TOOL_CONFIRMATION_ACTION_TYPE: &str = "tool_confirmation";
+pub const ASK_USER_ACTION_TYPE: &str = "ask_user";
 pub const ELICITATION_ACTION_TYPE: &str = "elicitation";
 pub const ELICITATION_RESPONSE_ACTION_TYPE: &str = "elicitation_response";
 

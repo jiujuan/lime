@@ -28,16 +28,16 @@ import {
 } from "./agentStreamReasoningContentSync";
 import { syncAssistantAgentMessageContentPartFromThreadItem } from "./agentStreamAgentMessageContentSync";
 import { syncMessageToolCallFromThreadItem } from "./agentStreamToolItemMessageSync";
-import {
-  buildAgentStreamTurnStartedPendingItemUpdate,
-  shouldDeferAgentStreamThreadItemUpdate,
-} from "./agentStreamThreadItemController";
+import { buildAgentStreamTurnStartedPendingItemUpdate } from "./agentStreamThreadItemController";
 import {
   bindAssistantMessageToRuntimeTurn,
   extractVisibleTextFromAgentMessage,
 } from "./agentStreamRuntimeHandlerUtils";
 import { resolveAccumulatedFinalContentForCompletion } from "./agentStreamTextDeltaLifecycle";
-import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
+import {
+  isAgentMessageFinalAnswerPhase,
+  shouldUseAgentMessageAsFinalText,
+} from "../utils/agentMessagePhase";
 import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 import type {
   HandleTurnStreamEventOptions,
@@ -73,6 +73,59 @@ function noteCompletedTextAsAssistantReplyIfNeeded(
     return;
   }
   requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary = true;
+}
+
+function syncFinalAgentMessageSnapshotToRequestState(params: {
+  event: Extract<
+    AgentEvent,
+    { type: "item_started" | "item_completed" | "item_updated" }
+  >;
+  requestState: StreamRequestState;
+  shouldPreserveAssistantContent?: boolean;
+}): void {
+  const item = params.event.item;
+  if (
+    params.shouldPreserveAssistantContent ||
+    item.type !== "agent_message" ||
+    !isAgentMessageFinalAnswerPhase(item.phase) ||
+    !item.text.trim()
+  ) {
+    return;
+  }
+
+  const existingContent = params.requestState.accumulatedContent;
+  const isSameActiveItem =
+    params.requestState.activeTextSegmentItemId === item.id;
+  const nextContent =
+    isSameActiveItem &&
+    existingContent.length > item.text.length &&
+    existingContent.startsWith(item.text)
+      ? existingContent
+      : item.text;
+  params.requestState.accumulatedContent = nextContent;
+  params.requestState.renderedContent = nextContent;
+  params.requestState.activeTextSegmentItemId = item.id;
+  params.requestState.activeTextSegmentPhase = item.phase ?? null;
+  params.requestState.activeTextSegmentSequence = item.sequence;
+  params.requestState.activeTextSegmentTurnId = item.turn_id;
+  params.requestState.activeTextSegmentStartOffset = 0;
+  params.requestState.activeTextSegmentFinalEligibility = "explicit_final";
+  params.requestState.latestAssistantTextEventSequence = Math.max(
+    params.requestState.latestAssistantTextEventSequence ??
+      Number.NEGATIVE_INFINITY,
+    item.sequence,
+  );
+
+  const latestProcessSequence =
+    params.requestState.maxFinalAnswerRequiredProcessEventSequence ??
+    params.requestState.maxProcessEventSequence;
+  if (
+    params.requestState.hasFinalAnswerRequiredProcessBoundary &&
+    (typeof latestProcessSequence !== "number" ||
+      item.sequence > latestProcessSequence)
+  ) {
+    params.requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary = true;
+  }
 }
 
 export function handleAgentStreamMessageSnapshotEvent(params: {
@@ -123,65 +176,6 @@ export function handleAgentStreamMessageSnapshotEvent(params: {
   );
 }
 
-export function handleAgentStreamQueueEvent(params: {
-  event: Extract<
-    AgentEvent,
-    {
-      type: "queue_added" | "queue_removed" | "queue_started" | "queue_cleared";
-    }
-  >;
-  markQueuedDraftState: (queuedMessageText?: string | null) => void;
-  removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
-  requestState: StreamRequestState;
-  scheduleQueuedDraftCleanup: (shouldWatchCurrentRequest: boolean) => void;
-  shouldWatchAgentStreamQueuedDraftCleanup: (params: {
-    affectedQueuedTurnId: string;
-    currentQueuedTurnId: string | null;
-  }) => boolean;
-  shouldWatchAgentStreamQueuedDraftCleanupForCleared: (params: {
-    clearedQueuedTurnIds: string[];
-    currentQueuedTurnId: string | null;
-  }) => boolean;
-  upsertQueuedTurn: HandleTurnStreamEventOptions["callbacks"]["upsertQueuedTurn"];
-  clearQueuedDraftCleanupTimer: () => void;
-  activateStream: () => void;
-}): void {
-  switch (params.event.type) {
-    case "queue_added":
-      params.requestState.queuedTurnId =
-        params.event.queued_turn.queued_turn_id;
-      params.upsertQueuedTurn(params.event.queued_turn);
-      params.markQueuedDraftState(params.event.queued_turn.message_text);
-      break;
-    case "queue_removed":
-      params.removeQueuedTurnsFromProjection([params.event.queued_turn_id]);
-      params.scheduleQueuedDraftCleanup(
-        params.shouldWatchAgentStreamQueuedDraftCleanup({
-          affectedQueuedTurnId: params.event.queued_turn_id,
-          currentQueuedTurnId: params.requestState.queuedTurnId,
-        }),
-      );
-      break;
-    case "queue_started":
-      params.requestState.queuedTurnId = params.event.queued_turn_id;
-      params.removeQueuedTurnsFromProjection([params.event.queued_turn_id]);
-      params.clearQueuedDraftCleanupTimer();
-      params.activateStream();
-      break;
-    case "queue_cleared":
-      params.removeQueuedTurnsFromProjection(params.event.queued_turn_ids);
-      params.scheduleQueuedDraftCleanup(
-        params.shouldWatchAgentStreamQueuedDraftCleanupForCleared({
-          clearedQueuedTurnIds: params.event.queued_turn_ids,
-          currentQueuedTurnId: params.requestState.queuedTurnId,
-        }),
-      );
-      break;
-    default:
-      break;
-  }
-}
-
 export function handleAgentStreamTurnStartedEvent(params: {
   assistantMsgId: string;
   event: Extract<AgentEvent, { type: "turn_started" }>;
@@ -228,8 +222,9 @@ export function handleAgentStreamThreadItemLifecycleEvent(params: {
   >;
   pendingItemKey: string;
   requestState: StreamRequestState;
+  shouldPreserveAssistantContent?: boolean;
   setters: RuntimeHandlerStateSetters;
-}): "deferred" | "applied" {
+}): void {
   params.requestState.currentTurnId = params.event.item.turn_id;
   if (params.event.item.type === "reasoning") {
     resetStreamedReasoningSegment(params.requestState);
@@ -239,13 +234,6 @@ export function handleAgentStreamThreadItemLifecycleEvent(params: {
     params.assistantMsgId,
     params.event.item.turn_id,
   );
-  if (
-    params.event.type === "item_updated" &&
-    shouldDeferAgentStreamThreadItemUpdate(params.event.item)
-  ) {
-    return "deferred";
-  }
-
   let nextThreadItemsForSync: readonly AgentThreadItem[] =
     params.setters.getThreadItems?.() ?? [];
   params.setters.setThreadItems((prev) => {
@@ -278,6 +266,7 @@ export function handleAgentStreamThreadItemLifecycleEvent(params: {
     threadItems: nextThreadItemsForSync,
     setMessages: params.setters.setMessages,
   });
+  syncFinalAgentMessageSnapshotToRequestState(params);
   if (
     params.event.item.type === "approval_request" &&
     (params.event.item.status === "completed" ||
@@ -295,7 +284,6 @@ export function handleAgentStreamThreadItemLifecycleEvent(params: {
       }),
     );
   }
-  return "applied";
 }
 
 export function handleAgentStreamTurnCompletedEvent(params: {
@@ -385,7 +373,6 @@ export function handleAgentStreamTurnCompletedEvent(params: {
       params.requestState.hasFinalAnswerRequiredProcessBoundary,
     hasMeaningfulCompletionSignal:
       params.requestState.hasMeaningfulCompletionSignal,
-    queuedTurnId: params.requestState.queuedTurnId,
     toolCallCount: params.toolCallCount,
     usage: params.event.usage,
   });
@@ -459,7 +446,6 @@ export function handleAgentStreamTurnFailedEvent(params: {
       params.requestState.hasFinalAnswerRequiredProcessBoundary,
     hasMeaningfulCompletionSignal:
       params.requestState.hasMeaningfulCompletionSignal,
-    queuedTurnId: params.requestState.queuedTurnId,
     toolCallCount: params.toolCallCount,
   });
   if (softCompletionPlan.type === "complete") {
@@ -473,7 +459,6 @@ export function handleAgentStreamTurnFailedEvent(params: {
       errorMessage,
       toastMessage:
         resolveAgentRuntimeErrorPresentation(errorMessage).toastMessage,
-      queuedTurnId: params.requestState.queuedTurnId,
     }),
   );
 }

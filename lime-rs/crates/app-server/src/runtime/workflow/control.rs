@@ -7,12 +7,13 @@ use super::events::{
 };
 use super::read_model::{WorkflowReadModel, WorkflowRunReadModel, WorkflowStepReadModel};
 use super::status::WorkflowStatus;
+use crate::runtime::TurnStartRequest;
 use crate::{RuntimeCore, RuntimeCoreError, RuntimeEvent, RuntimeHostContext};
 use app_server_protocol::{
     AgentSessionActionRespondParams, AgentSessionActionScope, AgentSessionActionType,
-    AgentSessionApprovalDecision, AgentSessionReadParams, AgentSessionTurnStartParams,
-    RuntimeOptions, WorkflowCancelParams, WorkflowCancelResponse, WorkflowRespondParams,
-    WorkflowRespondResponse, WorkflowRetryParams, WorkflowRetryResponse,
+    AgentSessionApprovalDecision, AgentSessionReadParams, RuntimeOptions, WorkflowCancelParams,
+    WorkflowCancelResponse, WorkflowRespondParams, WorkflowRespondResponse, WorkflowRetryParams,
+    WorkflowRetryResponse,
 };
 use serde_json::{json, Map, Value};
 
@@ -167,6 +168,7 @@ impl RuntimeCore {
                 reschedule.start_params(&context.stored.session.session_id),
                 host,
                 None,
+                false,
                 false,
             )
             .await;
@@ -354,7 +356,7 @@ struct WorkflowRespondTarget {
 struct WorkflowRetryReschedulePlan {
     source_turn_id: String,
     rescheduled_turn_id: String,
-    input: app_server_protocol::AgentInput,
+    input: Vec<agent_protocol::AgentInput>,
     runtime_options: RuntimeOptions,
 }
 
@@ -391,8 +393,8 @@ impl WorkflowControlTarget {
 }
 
 impl WorkflowRetryReschedulePlan {
-    fn start_params(&self, session_id: &str) -> AgentSessionTurnStartParams {
-        AgentSessionTurnStartParams {
+    fn start_params(&self, session_id: &str) -> TurnStartRequest {
+        TurnStartRequest {
             session_id: session_id.to_string(),
             turn_id: Some(self.rescheduled_turn_id.clone()),
             input: self.input.clone(),

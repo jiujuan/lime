@@ -438,10 +438,6 @@ describe("planImplementationDecision", () => {
         },
         requestMetadata: {
           harness: {
-            collaboration_mode: {
-              mode: "implement",
-              source: "plan_implementation_accept",
-            },
             plan_implementation_decision: {
               decision: "accepted",
               request_id: "local-plan-implementation:1",
@@ -479,6 +475,7 @@ describe("planImplementationDecision", () => {
       requestId: "local-plan-implementation:adjust",
       textOverride: "先补 Electron CDP Gate B",
       sendOptions: {
+        collaborationMode: "plan",
         skipSceneCommandRouting: true,
         toolPreferencesOverride: {
           task: true,
@@ -486,15 +483,6 @@ describe("planImplementationDecision", () => {
         },
         requestMetadata: {
           harness: {
-            collaboration_mode: {
-              mode: "plan",
-              source: "plan_implementation_adjustment",
-            },
-            preferences: {
-              task: true,
-              task_mode: true,
-            },
-            task_mode_enabled: true,
             plan_implementation_decision: {
               decision: "adjustment",
               request_id: "local-plan-implementation:adjust",
@@ -513,14 +501,14 @@ describe("planImplementationDecision", () => {
       messages: [
         createAssistantMessage(
           "assistant-1",
-          "失败agentSession/turn/start failed: App Server runtime backend requires provider/model selection.",
+          "失败turn/start failed: App Server runtime backend requires provider/model selection.",
         ),
       ],
       planState: {
         phase: "ready",
         items: [],
         summaryText:
-          "失败agentSession/turn/start failed: App Server runtime backend requires provider/model selection.",
+          "失败turn/start failed: App Server runtime backend requires provider/model selection.",
       },
     });
 

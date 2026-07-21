@@ -48,7 +48,6 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   onOpenExecutionPolicySettings: HarnessStatusPanelProps["onOpenExecutionPolicySettings"];
   onOpenFileCheckpoints: HarnessStatusPanelProps["onOpenFileCheckpoints"];
   onOpenSubagentSession: HarnessStatusPanelProps["onOpenSubagentSession"];
-  onPromoteQueuedTurn: HarnessStatusPanelProps["onPromoteQueuedTurn"];
   onRefreshToolInventory: HarnessStatusPanelProps["onRefreshToolInventory"];
   mcpPrepareCandidateCount: number;
   mcpPrepareLoading: boolean;
@@ -56,10 +55,8 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   onPrepareMcpTargets: HarnessStatusPanelProps["onPrepareMcpTargets"];
   onReplayPendingRequest: HarnessStatusPanelProps["onReplayPendingRequest"];
   onRespondToAction: HarnessStatusPanelProps["onRespondToAction"];
-  onResumeThread: HarnessStatusPanelProps["onResumeThread"];
   pendingActions: NonNullable<HarnessStatusPanelProps["pendingActions"]>;
   previewModel: PreviewModel;
-  queuedTurns: NonNullable<HarnessStatusPanelProps["queuedTurns"]>;
   realTeamSummary: ChildSubagentSessionSummary;
   registerSectionRef: HarnessStatusPanelSectionsProps["registerSectionRef"];
   runtimeFactSummary: HarnessRuntimeFactSummary | null;
@@ -102,7 +99,6 @@ export function buildHarnessStatusPanelSectionModels({
   onOpenExecutionPolicySettings,
   onOpenFileCheckpoints,
   onOpenSubagentSession,
-  onPromoteQueuedTurn,
   onRefreshToolInventory,
   mcpPrepareCandidateCount,
   mcpPrepareLoading,
@@ -110,10 +106,8 @@ export function buildHarnessStatusPanelSectionModels({
   onPrepareMcpTargets,
   onReplayPendingRequest,
   onRespondToAction: _onRespondToAction,
-  onResumeThread,
   pendingActions,
   previewModel,
-  queuedTurns,
   realTeamSummary,
   registerSectionRef,
   runtimeFactSummary,
@@ -238,12 +232,9 @@ export function buildHarnessStatusPanelSectionModels({
         currentTurnId,
         pendingActions,
         submittedActionsInFlight,
-        queuedTurns,
         canInterrupt,
         onInterruptCurrentTurn,
-        onResumeThread,
         onReplayPendingRequest,
-        onPromoteQueuedTurn,
         onManageProviders,
         onOpenExecutionPolicySettings,
         harnessState,

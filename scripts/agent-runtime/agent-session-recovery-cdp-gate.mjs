@@ -14,11 +14,6 @@ import {
   APP_SERVER_HANDLE_JSON_LINES_COMMAND,
   APP_SERVER_METHOD_INITIALIZED,
   APP_SERVER_METHOD_INITIALIZE,
-  APP_SERVER_METHOD_SESSION_LIST,
-  APP_SERVER_METHOD_SESSION_READ,
-  APP_SERVER_METHOD_SESSION_START,
-  APP_SERVER_METHOD_SESSION_THREAD_RESUME,
-  APP_SERVER_METHOD_SESSION_UPDATE,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
 } from "./claw-chat-current-fixture-constants.mjs";
@@ -58,9 +53,11 @@ const DEFAULTS = {
   intervalMs: 250,
   keepTemp: false,
 };
-const SESSION_ID = "agent-session-recovery-cdp-gate-session";
-const THREAD_ID = "agent-session-recovery-cdp-gate-thread";
 const SESSION_TITLE = "Agent recovery CDP Gate session";
+const APP_SERVER_METHOD_THREAD_START = "thread/start";
+const APP_SERVER_METHOD_THREAD_READ = "thread/read";
+const APP_SERVER_METHOD_THREAD_LIST = "thread/list";
+const APP_SERVER_METHOD_THREAD_RESUME = "thread/resume";
 
 function printHelp() {
   console.log(`
@@ -70,10 +67,10 @@ Agent Session Recovery CDP Gate
   启动真实 Electron Desktop Host，打开 CDP 端口，再通过
   chromium.connectOverCDP 连接真实 Electron renderer，验证:
   window.__LIME_ELECTRON__、preload invoke、app_server_handle_json_lines、
-  agentSession/start/read/list current JSON-RPC 主链。
+  thread/start/read/list current JSON-RPC 主链。
 
 边界:
-  默认 APP_SERVER_BACKEND_MODE=unavailable，不触发 agentSession/turn/start，
+  默认 APP_SERVER_BACKEND_MODE=unavailable，不触发 turn/start，
   不调用正式模型后端，不使用 App Server mock backend 或 renderer mock fallback。
 
 用法:
@@ -264,7 +261,8 @@ function summarizeTraceMessages(traceMessages) {
       status: entry.status ?? null,
       method: message.method ?? null,
       id: message.id ?? null,
-      sessionId: message.params?.sessionId ?? message.params?.session_id ?? null,
+      sessionId:
+        message.params?.sessionId ?? message.params?.session_id ?? null,
       threadId: message.params?.threadId ?? message.params?.thread_id ?? null,
       turnId: message.params?.turnId ?? message.params?.turn_id ?? null,
       promptLength:
@@ -319,108 +317,85 @@ async function waitForProductTraceMethods(page, options, requiredMethods) {
   );
 }
 
-async function startProbeSession(page, workspace, requestLog) {
-  const session = await invokeAppServerFromPage(
+async function startProbeThread(page, workspace, requestLog) {
+  const response = await invokeAppServerFromPage(
     page,
-    APP_SERVER_METHOD_SESSION_START,
+    APP_SERVER_METHOD_THREAD_START,
     {
-      sessionId: SESSION_ID,
-      threadId: THREAD_ID,
-      appId: "desktop",
-      workspaceId: workspace.workspaceId,
-      workingDir: workspace.rootPath,
-      businessObjectRef: {
-        kind: "agent.session",
-        id: `agent-session:${workspace.workspaceId}:${SESSION_ID}`,
-        title: SESSION_TITLE,
-        metadata: {
-          title: SESSION_TITLE,
-          workingDir: workspace.rootPath,
-          working_dir: workspace.rootPath,
-          executionStrategy: "react",
-          runStartHooks: false,
-          harness: {
-            hiddenFromUserRecents: false,
-            source: "cdp:agent-session-recovery",
-          },
-        },
-      },
+      model: FIXTURE_MODEL,
+      modelProvider: FIXTURE_PROVIDER,
+      cwd: workspace.rootPath,
+      serviceName: SESSION_TITLE,
+      threadSource: "appServer",
+      historyMode: "legacy",
     },
     requestLog,
   );
-  const update = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_SESSION_UPDATE,
-    {
-      sessionId: SESSION_ID,
-      title: SESSION_TITLE,
-      providerSelector: "fixture-provider",
-      providerName: "fixture-provider",
-      modelName: "fixture-model",
-      executionStrategy: "react",
-      recentAccessMode: "full-access",
-    },
-    requestLog,
-  );
+  const thread = response.result?.thread;
+  const threadId = String(thread?.id || "").trim();
+  const sessionId = String(thread?.sessionId || "").trim();
+  assert(threadId, "thread/start 未返回 thread.id");
+  assert(sessionId, "thread/start 未返回 thread.sessionId");
   return {
-    session: session.result,
-    update: update.result,
+    response: response.result,
+    sessionId,
+    threadId,
   };
 }
 
-function summarizeSessionRead(result) {
+function summarizeThreadRead(result) {
+  const thread = result?.thread;
   return sanitizeJson({
-    sessionId:
-      result?.session?.sessionId ??
-      result?.session?.session_id ??
-      result?.sessionId ??
-      null,
-    threadId:
-      result?.thread?.threadId ??
-      result?.thread?.thread_id ??
-      result?.threadId ??
-      null,
-    title: result?.session?.title ?? result?.title ?? null,
-    itemCount: Array.isArray(result?.items)
-      ? result.items.length
-      : Array.isArray(result?.thread?.items)
-        ? result.thread.items.length
-        : null,
-    turnCount: Array.isArray(result?.turns)
-      ? result.turns.length
-      : Array.isArray(result?.thread?.turns)
-        ? result.thread.turns.length
-        : null,
-    activeTurnId:
-      result?.activeTurnId ??
-      result?.active_turn_id ??
-      result?.thread?.activeTurnId ??
-      result?.thread?.active_turn_id ??
-      null,
+    sessionId: thread?.sessionId ?? null,
+    threadId: thread?.id ?? null,
+    name: thread?.name ?? null,
+    modelProvider: thread?.modelProvider ?? null,
+    cwd: thread?.cwd ?? null,
+    turnCount: Array.isArray(thread?.turns) ? thread.turns.length : null,
+    status: thread?.status?.type ?? null,
   });
 }
 
-function summarizeSessionList(result) {
-  const sessions = Array.isArray(result?.sessions)
-    ? result.sessions
-    : Array.isArray(result?.items)
-      ? result.items
-      : [];
-  const matched = sessions.find(
-    (session) =>
-      session?.sessionId === SESSION_ID || session?.session_id === SESSION_ID,
+function summarizeThreadList(result, identity) {
+  const threads = Array.isArray(result?.data) ? result.data : [];
+  const matched = threads.find(
+    (thread) =>
+      thread?.id === identity.threadId &&
+      thread?.sessionId === identity.sessionId,
   );
-  return sanitizeJson({
-    count: sessions.length,
+  return {
+    count: threads.length,
     matched: matched
       ? {
-          sessionId: matched.sessionId ?? matched.session_id ?? null,
-          title: matched.title ?? null,
-          status: matched.status ?? matched.state ?? null,
-          latestTurnStatus:
-            matched.latestTurnStatus ?? matched.latest_turn_status ?? null,
+          sessionId: matched.sessionId,
+          threadId: matched.id,
+          name: matched.name ?? null,
+          status: matched.status?.type ?? null,
         }
       : null,
+  };
+}
+
+function summarizeThreadResume(invocation) {
+  const result = invocation?.result;
+  return sanitizeJson({
+    sessionId: result?.thread?.sessionId ?? null,
+    threadId: result?.thread?.id ?? null,
+    threadTurnCount: Array.isArray(result?.thread?.turns)
+      ? result.thread.turns.length
+      : null,
+    initialTurnCount: Array.isArray(result?.initialTurnsPage?.data)
+      ? result.initialTurnsPage.data.length
+      : null,
+    model: result?.model ?? null,
+    modelProvider: result?.modelProvider ?? null,
+    cwd: result?.cwd ?? null,
+    hasLegacyFields: ["resumed", "session", "turns"].some((key) =>
+      Object.hasOwn(result ?? {}, key),
+    ),
+    emittedThreadStarted: (invocation?.messages ?? []).some(
+      (message) => message?.method === "thread/started",
+    ),
   });
 }
 
@@ -464,13 +439,13 @@ async function run() {
     scenarioId: "agent-session-recovery-cdp-gate",
     proofLevel: "Gate B",
     claimBoundary:
-      "真实 Electron CDP attach + preload IPC + app_server_handle_json_lines + agentSession start/read/list；不证明 live Provider turn 输出。",
+      "真实 Electron CDP attach + preload IPC + app_server_handle_json_lines + canonical thread start/read/list/resume；不证明 live Provider turn 输出。",
     appUrl: options.appUrl || null,
     cdpUrl: options.cdpUrl,
     cdpPort: options.cdpPort,
     backendMode: "unavailable",
-    sessionId: SESSION_ID,
-    threadId: THREAD_ID,
+    sessionId: null,
+    threadId: null,
     checkedAt: new Date().toISOString(),
     tempRoot: options.keepTemp ? runtimeEnv.tempRoot : null,
     electronUserDataDir: options.keepTemp
@@ -481,10 +456,10 @@ async function run() {
     cdpPage: null,
     initialize: null,
     workspace: null,
-    sessionCreation: null,
-    sessionRead: null,
-    sessionList: null,
-    optionalThreadResume: null,
+    threadCreation: null,
+    threadRead: null,
+    threadList: null,
+    threadResume: null,
     traceSummary: null,
     traceSummaryPath: tracePath,
     screenshot: null,
@@ -592,10 +567,15 @@ async function run() {
       await navigateGuiToWorkspaceScopedAgent(page, options, workspaceId),
     );
 
-    logStage("session-start-read-list");
-    summary.sessionCreation = sanitizeJson(
-      await startProbeSession(page, { workspaceId, rootPath }, requestLog),
+    logStage("thread-start-read-list-resume");
+    const identity = await startProbeThread(
+      page,
+      { workspaceId, rootPath },
+      requestLog,
     );
+    summary.sessionId = identity.sessionId;
+    summary.threadId = identity.threadId;
+    summary.threadCreation = sanitizeJson(identity.response);
     await page.evaluate(
       ({ sessionId, workspaceId }) => {
         window.dispatchEvent(
@@ -608,64 +588,60 @@ async function run() {
           }),
         );
       },
-      { sessionId: SESSION_ID, workspaceId },
+      { sessionId: identity.sessionId, workspaceId },
     );
     summary.guiSessionVisible = sanitizeJson(
       await waitForGuiSessionVisible(page, options, SESSION_TITLE),
     );
     summary.productListTrace = await waitForProductTraceMethods(page, options, [
-      APP_SERVER_METHOD_SESSION_LIST,
+      APP_SERVER_METHOD_THREAD_LIST,
     ]);
     const read = await invokeAppServerFromPage(
       page,
-      APP_SERVER_METHOD_SESSION_READ,
+      APP_SERVER_METHOD_THREAD_READ,
       {
-        sessionId: SESSION_ID,
-        historyLimit: 40,
+        threadId: identity.threadId,
+        includeTurns: true,
       },
       requestLog,
     );
-    summary.sessionRead = summarizeSessionRead(read.result);
+    summary.threadRead = summarizeThreadRead(read.result);
     const list = await invokeAppServerFromPage(
       page,
-      APP_SERVER_METHOD_SESSION_LIST,
+      APP_SERVER_METHOD_THREAD_LIST,
       {
-        includeArchived: true,
+        archived: false,
         limit: 20,
       },
       requestLog,
     );
-    summary.sessionList = summarizeSessionList(list.result);
+    summary.threadList = summarizeThreadList(list.result, identity);
     summary.guiSessionOpened = sanitizeJson(
       await openSessionFromSidebar(page, options, requestLog, {
-        sessionId: SESSION_ID,
+        sessionId: identity.sessionId,
+        threadId: identity.threadId,
         title: SESSION_TITLE,
       }),
     );
     summary.productReadTrace = await waitForProductTraceMethods(page, options, [
-      APP_SERVER_METHOD_SESSION_LIST,
-      APP_SERVER_METHOD_SESSION_READ,
+      APP_SERVER_METHOD_THREAD_LIST,
+      APP_SERVER_METHOD_THREAD_READ,
     ]);
-    summary.optionalThreadResume = sanitizeJson(
-      await invokeAppServerFromPage(
-        page,
-        APP_SERVER_METHOD_SESSION_THREAD_RESUME,
-        {
-          sessionId: SESSION_ID,
-          threadId: THREAD_ID,
-          historyLimit: 40,
+    const resume = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_THREAD_RESUME,
+      {
+        threadId: identity.threadId,
+        excludeTurns: true,
+        initialTurnsPage: {
+          limit: 20,
+          sortDirection: "desc",
+          itemsView: "summary",
         },
-        requestLog,
-      )
-        .then((response) => ({
-          ok: true,
-          result: response.result,
-        }))
-        .catch((error) => ({
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        })),
+      },
+      requestLog,
     );
+    summary.threadResume = summarizeThreadResume(resume);
 
     logStage("collect-trace");
     const traceMessages = await readRendererTrace(page);
@@ -698,17 +674,33 @@ async function run() {
       initializedSeen:
         directMethods.has(APP_SERVER_METHOD_INITIALIZED) ||
         methods.has(APP_SERVER_METHOD_INITIALIZED),
-      sessionStartSeen: directMethods.has(APP_SERVER_METHOD_SESSION_START),
-      sessionUpdateSeen: directMethods.has(APP_SERVER_METHOD_SESSION_UPDATE),
-      sessionReadSeen: methods.has(APP_SERVER_METHOD_SESSION_READ),
-      sessionListSeen: methods.has(APP_SERVER_METHOD_SESSION_LIST),
-      sessionReadMatched:
-        summary.sessionRead?.sessionId === SESSION_ID ||
-        summary.sessionRead?.threadId === THREAD_ID,
-      sessionListMatched: summary.sessionList?.matched?.sessionId === SESSION_ID,
+      threadStartSeen: directMethods.has(APP_SERVER_METHOD_THREAD_START),
+      threadReadSeen: methods.has(APP_SERVER_METHOD_THREAD_READ),
+      threadListSeen: methods.has(APP_SERVER_METHOD_THREAD_LIST),
+      threadResumeSeen: directMethods.has(APP_SERVER_METHOD_THREAD_RESUME),
+      threadReadMatched:
+        summary.threadRead?.sessionId === identity.sessionId &&
+        summary.threadRead?.threadId === identity.threadId,
+      threadListMatched:
+        summary.threadList?.matched?.sessionId === identity.sessionId &&
+        summary.threadList?.matched?.threadId === identity.threadId,
+      threadResumeMatched:
+        summary.threadResume?.sessionId === identity.sessionId &&
+        summary.threadResume?.threadId === identity.threadId,
+      threadResumeMetadataOnly: summary.threadResume?.threadTurnCount === 0,
+      threadResumeInitialPage:
+        typeof summary.threadResume?.initialTurnCount === "number",
+      threadResumeRoute:
+        summary.threadResume?.model === FIXTURE_MODEL &&
+        summary.threadResume?.modelProvider === FIXTURE_PROVIDER &&
+        summary.threadResume?.cwd === rootPath,
+      threadResumeNoLegacyFields:
+        summary.threadResume?.hasLegacyFields === false,
+      threadResumeDoesNotRestartThread:
+        summary.threadResume?.emittedThreadStarted === false,
       noTurnStart:
-        !methods.has("agentSession/turn/start") &&
-        !requestLog.some((entry) => entry.method === "agentSession/turn/start"),
+        !methods.has("turn/start") &&
+        !requestLog.some((entry) => entry.method === "turn/start"),
     };
     for (const [name, passed] of Object.entries(summary.assertions)) {
       assert(passed, `CDP Gate B assertion failed: ${name}`);
@@ -727,7 +719,9 @@ async function run() {
     console.log(`${LOG_PREFIX} trace=${tracePath}`);
     console.log(`${LOG_PREFIX} screenshot=${screenshotPath}`);
   } catch (error) {
-    summary.error = sanitizeText(error instanceof Error ? error.message : error);
+    summary.error = sanitizeText(
+      error instanceof Error ? error.message : error,
+    );
     writeJsonFile(summaryPath, summary);
     console.error(`${LOG_PREFIX} failed summary=${summaryPath}`);
     throw error;

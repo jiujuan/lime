@@ -10,8 +10,7 @@ const {
   AppServerConnection,
   createAgentRuntimeClient,
   createAgentRuntimeClientFromSessionGateway,
-  runtimeExecutionEventFromCanonicalEvent,
-  withEvent,
+  runtimeExecutionEventFromLifecycleNotification,
 } = runtimeClientPackage;
 
 test("createAgentRuntimeClient delegates current App Server requests", async () => {
@@ -21,15 +20,19 @@ test("createAgentRuntimeClient delegates current App Server requests", async () 
       id: 1,
       result: {
         turn: {
-          turnId: "turn-1",
-          sessionId: "session-1",
-          threadId: "thread-1",
-          status: "accepted",
+          id: "turn-1",
+          status: "inProgress",
         },
       },
     },
     {
       id: 2,
+      result: {
+        turnId: "turn-1",
+      },
+    },
+    {
+      id: 3,
       result: {
         tools: [],
         updatedAt: "2026-05-15T00:00:01.000Z",
@@ -50,14 +53,21 @@ test("createAgentRuntimeClient delegates current App Server requests", async () 
   );
 
   const result = await runtime.startTurn({
-    sessionId: "session-1",
-    input: { text: "生成草稿" },
+    threadId: "thread-1",
+    input: [{ type: "text", text: "生成草稿" }],
+  });
+  const steered = await runtime.steerTurn({
+    threadId: "thread-1",
+    expectedTurnId: "turn-1",
+    input: [{ type: "text", text: "补充约束" }],
   });
   await runtime.readToolInventory({ sessionId: "session-1" });
 
-  assert.equal(sent[0].method, "agentSession/turn/start");
-  assert.equal(sent[1].method, "agentSession/toolInventory/read");
-  assert.equal(result.result.turn.turnId, "turn-1");
+  assert.equal(sent[0].method, "turn/start");
+  assert.equal(sent[1].method, "turn/steer");
+  assert.equal(sent[2].method, "agentSession/toolInventory/read");
+  assert.equal(result.result.turn.id, "turn-1");
+  assert.equal(steered.result.turnId, "turn-1");
 });
 
 test("session gateway delegates the standard runtime client surface", async () => {
@@ -92,18 +102,26 @@ test("session gateway delegates the standard runtime client surface", async () =
   const options = { timeoutMs: 120_000 };
 
   await runtime.startTurn(
-    { sessionId: "session-1", input: { text: "生成草稿" } },
+    {
+      threadId: "thread-1",
+      input: [{ type: "text", text: "生成草稿" }],
+    },
+    options,
+  );
+  await runtime.steerTurn(
+    {
+      threadId: "thread-1",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "补充约束" }],
+    },
     options,
   );
   await runtime.readThread(
-    { threadId: "thread-1", turnsView: "full" },
+    { threadId: "thread-1", includeTurns: true },
     options,
   );
   await runtime.readToolInventory({ sessionId: "session-1" }, options);
-  await runtime.cancelTurn(
-    { sessionId: "session-1", turnId: "turn-1" },
-    options,
-  );
+  await runtime.cancelTurn({ threadId: "thread-1", turnId: "turn-1" }, options);
   await runtime.respondAction(
     {
       sessionId: "session-1",
@@ -119,21 +137,35 @@ test("session gateway delegates the standard runtime client surface", async () =
     options,
   );
 
-  assert.deepEqual(calls.map(([name]) => name), [
-    "startTurn",
-    "readThread",
-    "readToolInventory",
-    "cancelTurn",
-    "respondAction",
-    "exportEvidence",
-  ]);
-  assert.equal(calls[1][2].timeoutMs, 120_000);
-  assert.equal(calls[5][1].includeEvents, true);
+  assert.deepEqual(
+    calls.map(([name]) => name),
+    [
+      "startTurn",
+      "steerTurn",
+      "readThread",
+      "readToolInventory",
+      "cancelTurn",
+      "respondAction",
+      "exportEvidence",
+    ],
+  );
+  assert.equal(calls[2][2].timeoutMs, 120_000);
+  assert.equal(calls[6][1].includeEvents, true);
 });
 
-test("package root exports the canonical mapper without compatibility aliases", () => {
-  assert.equal(typeof runtimeExecutionEventFromCanonicalEvent, "function");
-  assert.equal("runtimeExecutionEventFromAgentEvent" in runtimeClientPackage, false);
+test("package root exports the direct lifecycle mapper without compatibility aliases", () => {
+  assert.equal(
+    typeof runtimeExecutionEventFromLifecycleNotification,
+    "function",
+  );
+  assert.equal(
+    "runtimeExecutionEventFromCanonicalEvent" in runtimeClientPackage,
+    false,
+  );
+  assert.equal(
+    "runtimeExecutionEventFromAgentEvent" in runtimeClientPackage,
+    false,
+  );
   assert.equal(
     "createSchemaVersionCompatibilityMiddleware" in runtimeClientPackage,
     false,
@@ -148,33 +180,31 @@ test("package root type surface exports canonical thread read types only", async
 
   assert.equal(declarations.includes("type ThreadReadParams"), true);
   assert.equal(declarations.includes("type ThreadReadResponse"), true);
+  assert.equal(declarations.includes("type TurnStartParams"), true);
+  assert.equal(declarations.includes("type TurnSteerParams"), true);
+  assert.equal(declarations.includes("type TurnInterruptParams"), true);
   assert.equal(declarations.includes("AgentSessionReadParams"), false);
   assert.equal(declarations.includes("AgentSessionReadResponse"), false);
+  assert.equal(declarations.includes("AgentSessionTurnStartParams"), false);
+  assert.equal(declarations.includes("AgentSessionTurnCancelParams"), false);
 });
 
-test("canonical mapper reads lifecycle state from typed Thread Turn and Item", () => {
-  const thread = runtimeExecutionEventFromCanonicalEvent({
-    method: "thread/updated",
-    params: {
-      sessionId: "session-1",
-      threadId: "thread-1",
-      name: "Research",
-      status: { type: "active", activeFlags: ["waitingOnApproval"] },
-      createdAtMs: 100,
-      updatedAtMs: 110,
-    },
-  });
-  const turn = runtimeExecutionEventFromCanonicalEvent(
-    turnEvent("interrupted", { updatedAtMs: 220, completedAtMs: 220 }),
+test("direct lifecycle mapper reads typed Thread Turn and Item", () => {
+  const thread = runtimeExecutionEventFromLifecycleNotification(
+    threadStartedNotification(),
   );
-  const item = runtimeExecutionEventFromCanonicalEvent(
-    itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
+  const turn = runtimeExecutionEventFromLifecycleNotification(
+    turnNotification("interrupted", { completedAt: 220 }),
   );
-  const approval = runtimeExecutionEventFromCanonicalEvent(
-    itemEvent({ kind: "approval", status: "pending" }),
+  const item = runtimeExecutionEventFromLifecycleNotification(
+    itemNotification({ method: "item/completed", status: "completed" }),
   );
-  const command = runtimeExecutionEventFromCanonicalEvent(
-    itemEvent({ kind: "command", status: "completed" }),
+  const command = runtimeExecutionEventFromLifecycleNotification(
+    itemNotification({
+      type: "commandExecution",
+      method: "item/completed",
+      status: "completed",
+    }),
   );
 
   assert.equal(thread.status, "running");
@@ -183,46 +213,98 @@ test("canonical mapper reads lifecycle state from typed Thread Turn and Item", (
   assert.equal(turn.status, "canceled");
   assert.equal(item.eventClass, "tool.result");
   assert.equal(item.toolCallId, "tool_call_1");
-  assert.equal(approval.eventClass, "action.required");
   assert.equal(command.eventClass, "command.exited");
 });
 
-test("root client dispatches canonical lifecycle only to canonical listeners", async () => {
+test("malformed direct lifecycle notifications fail closed with explicit mapper errors", async () => {
+  for (const runtime of [
+    createRuntimeClient(),
+    createAgentRuntimeClientFromSessionGateway(createMinimalSessionGateway()),
+  ]) {
+    assert.equal(
+      await runtime.dispatchEvent({
+        method: "turn/started",
+        params: { threadId: "thread-1", turn: { status: "inProgress" } },
+      }),
+      false,
+    );
+  }
+  assert.throws(
+    () =>
+      runtimeExecutionEventFromLifecycleNotification({
+        method: "thread/started",
+        params: { thread: undefined },
+      }),
+    /Canonical Thread must be an object/,
+  );
+  assert.throws(
+    () =>
+      runtimeExecutionEventFromLifecycleNotification({
+        method: "turn/started",
+        params: { threadId: "thread-1", turn: undefined },
+      }),
+    /Canonical Turn must be an object/,
+  );
+  assert.throws(
+    () =>
+      runtimeExecutionEventFromLifecycleNotification({
+        method: "item/started",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          startedAtMs: 1,
+          item: undefined,
+        },
+      }),
+    /Canonical ThreadItem must be an object/,
+  );
+});
+
+test("root client dispatches direct lifecycle and delta only to lifecycle listeners", async () => {
   const runtime = createRuntimeClient();
-  const canonical = [];
+  const lifecycle = [];
   const raw = [];
-  runtime.subscribeCanonicalEvents((event) => canonical.push(event));
+  runtime.subscribeLifecycleEvents((event) => lifecycle.push(event));
   runtime.subscribeEvents((event) => raw.push(event));
 
-  for (const notification of canonicalToolLifecycle()) {
+  for (const notification of directToolLifecycle()) {
     assert.equal(await runtime.dispatchEvent(notification), true);
   }
+  const delta = agentMessageDeltaNotification();
+  assert.equal(await runtime.dispatchEvent(delta), true);
   assert.equal(
     await runtime.dispatchEvent(rawNotification("turn.completed")),
     false,
   );
 
-  assert.deepEqual(canonical.map((event) => event.method), [
-    "turn/updated",
-    "item/updated",
-    "item/updated",
-    "item/updated",
-    "turn/updated",
-  ]);
+  assert.deepEqual(
+    lifecycle.map((event) => event.method),
+    [
+      "turn/started",
+      "item/started",
+      "item/completed",
+      "turn/completed",
+      "item/agentMessage/delta",
+    ],
+  );
   assert.deepEqual(raw, []);
 });
 
-test("session gateway dispatches canonical lifecycle and rejects raw lifecycle", async () => {
+test("session gateway dispatches direct lifecycle and rejects wrapper lifecycle", async () => {
   const runtime = createAgentRuntimeClientFromSessionGateway(
     createMinimalSessionGateway(),
   );
-  const canonical = [];
+  const lifecycle = [];
   const raw = [];
-  runtime.subscribeCanonicalEvents((event) => canonical.push(event));
+  runtime.subscribeLifecycleEvents((event) => lifecycle.push(event));
   runtime.subscribeEvents((event) => raw.push(event));
 
   assert.equal(
-    await runtime.dispatchEvent(canonicalNotification(turnEvent("inProgress"))),
+    await runtime.dispatchEvent(turnNotification("inProgress")),
+    true,
+  );
+  assert.equal(
+    await runtime.dispatchEvent(agentMessageDeltaNotification()),
     true,
   );
   assert.equal(
@@ -230,7 +312,10 @@ test("session gateway dispatches canonical lifecycle and rejects raw lifecycle",
     false,
   );
 
-  assert.equal(canonical[0].method, "turn/updated");
+  assert.deepEqual(
+    lifecycle.map((event) => event.method),
+    ["turn/started", "item/agentMessage/delta"],
+  );
   assert.deepEqual(raw, []);
 });
 
@@ -246,7 +331,7 @@ test("disabling sequence verification does not restore raw lifecycle", async () 
   );
   assert.equal(
     await runtime.dispatchEvent(
-      canonicalNotification(itemEvent({ status: "completed" })),
+      itemNotification({ method: "item/completed", status: "completed" }),
     ),
     true,
   );
@@ -281,10 +366,8 @@ test("raw channel accepts only explicit media.read notifications", async () => {
   }
 });
 
-test("nextEvent consumes canonical notifications from gateway sources", async () => {
-  const directNotification = canonicalNotification(
-    itemEvent({ kind: "agentMessage", status: "inProgress" }),
-  );
+test("nextEvent consumes direct notifications from gateway sources", async () => {
+  const directNotification = itemNotification({ type: "agentMessage" });
   const directRuntime = createAgentRuntimeClientFromSessionGateway({
     ...createMinimalSessionGateway(),
     async nextEvent(timeoutMs) {
@@ -293,14 +376,14 @@ test("nextEvent consumes canonical notifications from gateway sources", async ()
     },
   });
   const directReceived = [];
-  directRuntime.subscribeCanonicalEvents((event) => directReceived.push(event));
+  directRuntime.subscribeLifecycleEvents((event) => directReceived.push(event));
 
   const directEvent = await directRuntime.nextEvent(500);
 
-  assert.equal(directEvent.params.canonicalEvent.method, "item/updated");
-  assert.equal(directReceived[0].params.kind, "agentMessage");
+  assert.equal(directEvent.method, "item/started");
+  assert.equal(directReceived[0].params.item.type, "agentMessage");
 
-  const drainedNotification = canonicalNotification(turnEvent("inProgress"));
+  const drainedNotification = turnNotification("inProgress");
   const drainedRuntime = createAgentRuntimeClientFromSessionGateway({
     ...createMinimalSessionGateway(),
     async drainEvents(limit) {
@@ -310,13 +393,11 @@ test("nextEvent consumes canonical notifications from gateway sources", async ()
   });
 
   const drainedEvent = await drainedRuntime.nextEvent();
-  assert.equal(drainedEvent.params.canonicalEvent.method, "turn/updated");
+  assert.equal(drainedEvent.method, "turn/started");
 });
 
-test("sequence verifier fails closed for orphan canonical tool completion", async () => {
-  const notification = canonicalNotification(
-    itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
-  );
+test("sequence verifier fails closed for orphan direct tool completion", async () => {
+  const notification = itemNotification({ method: "item/completed", status: "completed" });
   const runtime = createRuntimeClient();
 
   assert.equal(await runtime.dispatchEvent(notification), false);
@@ -335,71 +416,53 @@ test("sequence verifier fails closed for orphan canonical tool completion", asyn
   );
 });
 
-test("collect-diagnostics keeps canonical dispatch observable", async () => {
+test("collect-diagnostics keeps direct dispatch observable", async () => {
   const runtime = createAgentRuntimeClientFromSessionGateway(
     createMinimalSessionGateway(),
     { sequenceVerifierMode: "collect-diagnostics" },
   );
   const received = [];
-  runtime.subscribeCanonicalEvents((event) => received.push(event));
+  runtime.subscribeLifecycleEvents((event) => received.push(event));
 
   const handled = await runtime.dispatchEvent(
-    canonicalNotification(
-      itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
-    ),
+    itemNotification({ method: "item/completed", status: "completed" }),
   );
 
   assert.equal(handled, true);
-  assert.equal(received[0].params.status, "completed");
+  assert.equal(received[0].params.item.status, "completed");
 });
 
-test("canonical adapters run before verification and may fan out", async () => {
+test("direct lifecycle adapters run before verification and may fan out", async () => {
   const runtime = createRuntimeClient({
     adapters: [
       ({ notification, event }) => {
-        if (event.method !== "item/updated") return;
+        if (event.method !== "item/started") return;
         return [
-          withEvent(notification, {
-            ...event,
-            params: {
-              ...event.params,
-              status: "inProgress",
-              sequence: 1,
-              updatedAtMs: 310,
-            },
-          }),
-          withEvent(notification, {
-            ...event,
-            params: {
-              ...event.params,
-              status: "completed",
-              sequence: 2,
-              updatedAtMs: 320,
-              completedAtMs: 320,
-            },
+          notification,
+          itemNotification({
+            method: "item/completed",
+            status: "completed",
           }),
         ];
       },
     ],
   });
   const received = [];
-  runtime.subscribeCanonicalEvents((event) => {
-    received.push(`${event.params.sequence}:${event.params.status}`);
+  runtime.subscribeLifecycleEvents((event) => {
+    received.push(event.method);
   });
 
   const handled = await runtime.dispatchEvent(
-    canonicalNotification(itemEvent({ status: "pending", sequence: 0 })),
+    itemNotification({ method: "item/started", status: "inProgress" }),
   );
 
   assert.equal(handled, true);
-  assert.deepEqual(received, ["1:inProgress", "2:completed"]);
+  assert.deepEqual(received, ["item/started", "item/completed"]);
 });
 
-test("nextEvent returns canonical adapter fanout before another transport read", async () => {
+test("nextEvent returns direct adapter fanout before another transport read", async () => {
   let reads = 0;
-  const source = canonicalNotification(
-    itemEvent({ status: "pending", sequence: 0 }),
-  );
+  const source = itemNotification({ method: "item/started", status: "inProgress" });
   const runtime = createAgentRuntimeClient(
     new AppServerConnection({
       send() {},
@@ -410,26 +473,9 @@ test("nextEvent returns canonical adapter fanout before another transport read",
     }),
     {
       adapters: [
-        ({ notification, event }) => [
-          withEvent(notification, {
-            ...event,
-            params: {
-              ...event.params,
-              status: "inProgress",
-              sequence: 1,
-              updatedAtMs: 310,
-            },
-          }),
-          withEvent(notification, {
-            ...event,
-            params: {
-              ...event.params,
-              status: "completed",
-              sequence: 2,
-              updatedAtMs: 320,
-              completedAtMs: 320,
-            },
-          }),
+        () => [
+          source,
+          itemNotification({ method: "item/completed", status: "completed" }),
         ],
       ],
     },
@@ -438,34 +484,33 @@ test("nextEvent returns canonical adapter fanout before another transport read",
   const first = await runtime.nextEvent();
   const second = await runtime.nextEvent();
 
-  assert.equal(first.params.canonicalEvent.params.status, "inProgress");
-  assert.equal(second.params.canonicalEvent.params.status, "completed");
+  assert.equal(first.method, "item/started");
+  assert.equal(second.method, "item/completed");
   assert.equal(reads, 1);
 });
 
-test("canonical middleware can drop an item before listener dispatch", async () => {
+test("direct lifecycle middleware can drop an item before listener dispatch", async () => {
   const runtime = createRuntimeClient({
     middlewares: [
-      ({ event }) => event.method === "item/updated" ? false : undefined,
+      ({ event }) => (event.method === "item/started" ? false : undefined),
     ],
   });
   const received = [];
-  runtime.subscribeCanonicalEvents((event) => received.push(event));
+  runtime.subscribeLifecycleEvents((event) => received.push(event));
 
   const handled = await runtime.dispatchEvent(
-    canonicalNotification(
-      itemEvent({ kind: "agentMessage", status: "inProgress" }),
-    ),
+    itemNotification({ type: "agentMessage" }),
   );
 
   assert.equal(handled, false);
   assert.deepEqual(received, []);
 });
 
-test("pipeline flush verifies buffered canonical notifications", async () => {
-  const completed = canonicalNotification(
-    itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
-  );
+test("pipeline flush verifies buffered direct notifications", async () => {
+  const completed = itemNotification({
+    method: "item/completed",
+    status: "completed",
+  });
   const pipeline = new AgentRuntimeEventPipeline({
     middlewares: [
       {
@@ -478,22 +523,41 @@ test("pipeline flush verifies buffered canonical notifications", async () => {
   });
 
   const processed = await pipeline.process(
-    canonicalNotification(
-      itemEvent({ status: "inProgress", sequence: 1, updatedAtMs: 310 }),
-    ),
+    itemNotification({ method: "item/started", status: "inProgress" }),
   );
   const flushed = await pipeline.flush();
 
   assert.equal(processed.accepted, true);
   assert.equal(
-    processed.notifications[0].params.canonicalEvent.params.status,
-    "inProgress",
+    processed.notifications[0].method,
+    "item/started",
   );
   assert.equal(flushed.accepted, true);
   assert.equal(
-    flushed.notifications[0].params.canonicalEvent.params.status,
-    "completed",
+    flushed.notifications[0].method,
+    "item/completed",
   );
+});
+
+test("delta crosses the pipeline without synthesizing verifier sequence", async () => {
+  let pushes = 0;
+  const pipeline = new AgentRuntimeEventPipeline({
+    sequenceVerifier: {
+      push() {
+        pushes += 1;
+        return [];
+      },
+      getViolations() {
+        return [];
+      },
+    },
+  });
+
+  const processed = await pipeline.process(agentMessageDeltaNotification());
+
+  assert.equal(processed.accepted, true);
+  assert.equal(processed.notification.method, "item/agentMessage/delta");
+  assert.equal(pushes, 0);
 });
 
 test("session gateway fails closed when optional runtime surfaces are absent", async () => {
@@ -505,7 +569,10 @@ test("session gateway fails closed when optional runtime surfaces are absent", a
     runtime.exportEvidence({ sessionId: "session-1" }),
     /does not expose exportEvidence/,
   );
-  await assert.rejects(runtime.nextEvent(), /does not expose agentSession\/event/);
+  await assert.rejects(
+    runtime.nextEvent(),
+    /does not expose direct lifecycle notifications/,
+  );
 });
 
 test("session gateway propagates transport errors without mock fallback", async () => {
@@ -517,12 +584,15 @@ test("session gateway propagates transport errors without mock fallback", async 
   });
 
   await assert.rejects(
-    runtime.startTurn({ sessionId: "session-1", input: { text: "生成草稿" } }),
+    runtime.startTurn({
+      threadId: "thread-1",
+      input: [{ type: "text", text: "生成草稿" }],
+    }),
     /bridge offline/,
   );
 });
 
-test("sessionGateway subpath is browser-safe and canonical-only", async () => {
+test("sessionGateway subpath is browser-safe and direct-lifecycle-only", async () => {
   const subpath = await import("../dist/sessionGateway.js");
   const source = await readFile(
     new URL("../dist/sessionGateway.js", import.meta.url),
@@ -532,17 +602,13 @@ test("sessionGateway subpath is browser-safe and canonical-only", async () => {
   assert.equal(typeof subpath.AgentRuntimeEventSequenceGate, "function");
   assert.equal(typeof subpath.AgentRuntimeEventPipeline, "function");
   assert.equal(
-    typeof subpath.runtimeExecutionEventFromCanonicalEvent,
+    typeof subpath.runtimeExecutionEventFromLifecycleNotification,
     "function",
   );
   assert.equal("runtimeExecutionEventFromAgentEvent" in subpath, false);
-  assert.equal(
-    "createSchemaVersionCompatibilityMiddleware" in subpath,
-    false,
-  );
+  assert.equal("createSchemaVersionCompatibilityMiddleware" in subpath, false);
   assert.equal(source.includes("node:"), false);
-  assert.equal(source.includes("app-server-client"), false);
-  assert.equal(source.includes("@limecloud/app-server-client"), false);
+  assert.equal(source.includes("sidecar"), false);
 });
 
 function createRuntimeClient(options = {}) {
@@ -563,35 +629,41 @@ function createMinimalSessionGateway(calls = []) {
       calls.push(["startTurn", params, options]);
       return requestResult(1, {
         turn: {
-          turnId: "turn-1",
-          sessionId: params.sessionId,
-          threadId: "thread-1",
-          status: "accepted",
+          id: "turn-1",
+          status: "inProgress",
         },
       });
     },
+    async steerTurn(params, options) {
+      calls.push(["steerTurn", params, options]);
+      return requestResult(2, { turnId: params.expectedTurnId });
+    },
     async readThread(params, options) {
       calls.push(["readThread", params, options]);
-      return requestResult(2, {
+      return requestResult(3, {
         thread: {
-          archived: false,
-          createdAtMs: 1778803200000,
+          cliVersion: "0.0.0-test",
+          createdAt: 1778803200,
+          cwd: "/tmp/project",
+          ephemeral: false,
+          id: params.threadId,
+          modelProvider: "openai",
+          preview: "",
           sessionId: "session-1",
+          source: "appServer",
           status: { type: "active" },
-          threadId: params.threadId,
           turns: [],
-          turnsView: params.turnsView,
-          updatedAtMs: 1778803201000,
+          updatedAt: 1778803201,
         },
       });
     },
     async cancelTurn(params, options) {
       calls.push(["cancelTurn", params, options]);
-      return requestResult(3, {});
+      return requestResult(4, {});
     },
     async respondAction(params, options) {
       calls.push(["respondAction", params, options]);
-      return requestResult(4, {});
+      return requestResult(5, {});
     },
   };
 }
@@ -606,101 +678,110 @@ function requestResult(id, result) {
   };
 }
 
-function canonicalToolLifecycle() {
+function directToolLifecycle() {
   return [
-    canonicalNotification(turnEvent("inProgress", { updatedAtMs: 210 })),
-    canonicalNotification(
-      itemEvent({ status: "pending", sequence: 0, updatedAtMs: 300 }),
-    ),
-    canonicalNotification(
-      itemEvent({ status: "inProgress", sequence: 1, updatedAtMs: 310 }),
-    ),
-    canonicalNotification(
-      itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
-    ),
-    canonicalNotification(
-      turnEvent("completed", { updatedAtMs: 220, completedAtMs: 220 }),
-    ),
+    turnNotification("inProgress"),
+    itemNotification({ method: "item/started", status: "inProgress" }),
+    itemNotification({ method: "item/completed", status: "completed" }),
+    turnNotification("completed", { completedAt: 220 }),
   ];
 }
 
-function turnEvent(status, overrides = {}) {
+function threadStartedNotification(overrides = {}) {
   return {
-    method: "turn/updated",
+    method: "thread/started",
     params: {
-      sessionId: "session-1",
-      threadId: "thread-1",
-      turnId: "turn-1",
-      status,
-      createdAtMs: 200,
-      updatedAtMs: 210,
-      ...overrides,
+      thread: {
+        cliVersion: "0.0.0-test",
+        createdAt: 100,
+        cwd: "/tmp/project",
+        ephemeral: false,
+        id: "thread-1",
+        modelProvider: "openai",
+        preview: "Research thread",
+        sessionId: "session-1",
+        source: "appServer",
+        name: "Research",
+        status: { type: "active", activeFlags: ["waitingOnApproval"] },
+        updatedAt: 110,
+        ...overrides,
+      },
     },
   };
 }
 
-function itemEvent({
-  kind = "tool",
+function turnNotification(status, overrides = {}) {
+  return {
+    method: status === "inProgress" ? "turn/started" : "turn/completed",
+    params: {
+      threadId: "thread-1",
+      turn: {
+        id: "turn-1",
+        startedAt: 200,
+        status,
+        ...overrides,
+      },
+    },
+  };
+}
+
+function itemNotification({
+  method = "item/started",
+  type = "mcpToolCall",
   status = "inProgress",
-  itemId = kind === "agentMessage" ? "msg_1" : "tool_call_1",
-  sequence = 1,
-  updatedAtMs = 310,
+  id = type === "agentMessage"
+    ? "msg_1"
+    : type === "commandExecution"
+      ? "command_1"
+      : "tool_call_1",
+  observedAtMs = method === "item/started" ? 210 : 215,
   ...overrides
 } = {}) {
-  const payload = itemPayload(kind);
+  let item;
+  if (type === "agentMessage") {
+    item = { id, type, text: "hello", ...overrides };
+  } else if (type === "commandExecution") {
+    item = {
+      command: "npm test",
+      cwd: "/tmp/project",
+      id,
+      status,
+      type,
+      ...overrides,
+    };
+  } else {
+    item = {
+      arguments: {},
+      id,
+      server: "test-server",
+      status,
+      tool: "shell",
+      type,
+      ...overrides,
+    };
+  }
   return {
-    method: "item/updated",
+    method,
     params: {
-      sessionId: "session-1",
       threadId: "thread-1",
       turnId: "turn-1",
-      itemId,
-      sequence,
-      ordinal: 0,
-      createdAtMs: 300,
-      updatedAtMs,
-      kind,
-      status,
-      payload,
-      ...overrides,
+      item,
+      ...(method === "item/started"
+        ? { startedAtMs: observedAtMs }
+        : { completedAtMs: observedAtMs }),
     },
   };
 }
 
-function itemPayload(kind) {
-  switch (kind) {
-    case "agentMessage":
-      return { type: "agentMessage", text: "hello" };
-    case "approval":
-      return {
-        type: "approval",
-        action: { type: "askUser", prompt: "Continue?" },
-        decision: { type: "pending" },
-      };
-    case "command":
-      return { type: "command", command: "npm test" };
-    default:
-      return { type: "tool", name: "shell", arguments: [] };
-  }
-}
-
-function canonicalNotification(canonicalEvent) {
-  const sequence = canonicalEvent.params.sequence
-    ?? canonicalEvent.params.updatedAtMs;
+function agentMessageDeltaNotification(overrides = {}) {
   return {
-    method: "agentSession/event",
+    method: "item/agentMessage/delta",
     params: {
-      event: {
-        eventId: `event-${canonicalEvent.method}-${sequence}`,
-        sequence,
-        sessionId: canonicalEvent.params.sessionId,
-        threadId: canonicalEvent.params.threadId,
-        turnId: canonicalEvent.params.turnId,
-        type: canonicalEvent.method,
-        timestamp: new Date(canonicalEvent.params.updatedAtMs).toISOString(),
-        payload: {},
-      },
-      canonicalEvent,
+      delta: "hello",
+      itemId: "msg_1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      ...overrides,
     },
   };
 }

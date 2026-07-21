@@ -1,6 +1,6 @@
 import path from "node:path";
 
-export const SETTINGS_GATE_A_STATE_FIXTURE_METHOD = "agentSession/list";
+export const SETTINGS_GATE_A_STATE_FIXTURE_METHOD = "thread/list";
 export const SETTINGS_GATE_A_STATE_ERROR_MARKER =
   "SETTINGS-01 archived state fixture unavailable";
 
@@ -17,7 +17,7 @@ export function readSettingsGateAStateRequest(payload) {
       const message = JSON.parse(String(line));
       if (
         message?.method === SETTINGS_GATE_A_STATE_FIXTURE_METHOD &&
-        message?.params?.archivedOnly === true
+        message?.params?.archived === true
       ) {
         return message;
       }
@@ -92,7 +92,7 @@ async function installArchivedStateFixture(page) {
         status: 200,
         contentType: "application/json",
         body: buildSettingsGateAStateBridgeResponse(request, {
-          result: { sessions: [] },
+          result: { data: [], nextCursor: null },
         }),
       });
       return;

@@ -1,5 +1,112 @@
 use super::*;
 
+#[tokio::test]
+async fn prepared_route_pins_the_round_robin_credential_for_execution() {
+    let connection = rusqlite::Connection::open_in_memory().expect("open database");
+    lime_core::database::schema::create_tables(&connection).expect("create schema");
+    let db = std::sync::Arc::new(std::sync::Mutex::new(connection));
+    let backend = RuntimeBackend::with_db(db.clone());
+    let provider = backend
+        .api_key_provider_service
+        .add_custom_provider(
+            &db,
+            "Route Pin Fixture".to_string(),
+            lime_core::database::dao::api_key_provider::ApiProviderType::Openai,
+            "https://example.invalid/v1".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("custom provider");
+    let first_key = backend
+        .api_key_provider_service
+        .add_api_key(
+            &db,
+            &provider.id,
+            "first-key",
+            Some("first".to_string()),
+            true,
+        )
+        .expect("first key");
+    let second_key = backend
+        .api_key_provider_service
+        .add_api_key(
+            &db,
+            &provider.id,
+            "second-key",
+            Some("second".to_string()),
+            true,
+        )
+        .expect("second key");
+    backend
+        .api_key_provider_service
+        .update_provider(
+            &db,
+            &provider.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(vec!["route-pin-model".to_string()]),
+        )
+        .expect("declared model");
+
+    backend
+        .api_key_provider_service
+        .select_credential_for_provider(&db, &provider.id, Some(&provider.id), None)
+        .await
+        .expect("advance round robin")
+        .expect("first credential");
+
+    let mut request = request_for_test("hello", None, None);
+    let runtime_request = request
+        .runtime_options
+        .as_mut()
+        .expect("runtime options")
+        .runtime_request_mut();
+    runtime_request.provider_preference = Some(provider.id.clone());
+    runtime_request.model_preference = Some("route-pin-model".to_string());
+
+    let prepared = backend
+        .prepare_turn_route(&request, true)
+        .await
+        .expect("prepare route")
+        .expect("prepared options");
+    let expected_ref = lime_core::models::runtime_api_key_credential_uuid(&second_key.id);
+    let first_ref = lime_core::models::runtime_api_key_credential_uuid(&first_key.id);
+    let prepared_ref = prepared
+        .runtime_request
+        .as_ref()
+        .and_then(|runtime_request| runtime_request.metadata.as_ref())
+        .and_then(|metadata| metadata.pointer("/agentControlRoute/credentialRef"))
+        .and_then(Value::as_str);
+    assert_eq!(prepared_ref, Some(expected_ref.as_str()));
+    assert_ne!(prepared_ref, Some(first_ref.as_str()));
+
+    request.runtime_options = Some(prepared);
+    let execution_route = backend
+        .resolve_turn_route(&request)
+        .await
+        .expect("resolve prepared route");
+    assert_eq!(
+        execution_route
+            .resolution
+            .resolved_route
+            .auth
+            .credential_ref
+            .as_deref(),
+        Some(expected_ref.as_str())
+    );
+}
+
 #[test]
 fn explicit_runtime_preferences_win() {
     let mut request = request_for_test("hello", None, None);
@@ -17,6 +124,23 @@ fn explicit_runtime_preferences_win() {
             reasoning_effort: None,
         }
     );
+}
+
+#[test]
+fn missing_runtime_selection_returns_typed_pending_route() {
+    let request = request_for_test("hello", None, None);
+
+    let error = resolve_runtime_model_selection(&request).expect_err("selection must stay pending");
+
+    assert!(matches!(
+        error,
+        RuntimeCoreError::PendingRoute {
+            session_id,
+            provider: None,
+            model: None,
+            reason_code,
+        } if session_id == "session-1" && reason_code == "provider_and_model_missing"
+    ));
 }
 
 #[test]
@@ -574,19 +698,21 @@ fn typed_runtime_reasoning_is_used_without_metadata_aliases() {
 }
 
 #[test]
-fn inputbar_plan_mode_metadata_flows_to_turn_context_collaboration_mode() {
+fn typed_plan_mode_flows_to_turn_context_collaboration_mode() {
     let mut request = request_for_test(
         "先给我一个修复计划，不要直接改代码",
+        Some(app_server_protocol::RuntimeRequest {
+            collaboration_mode: Some(agent_protocol::CollaborationMode {
+                mode: agent_protocol::ModeKind::Plan,
+                settings: agent_protocol::CollaborationModeSettings {
+                    model: "gpt-4.1".to_string(),
+                    reasoning_effort: None,
+                    developer_instructions: None,
+                },
+            }),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
         None,
-        Some(json!({
-            "harness": {
-                "task_mode_enabled": true,
-                "collaboration_mode": {
-                    "mode": "plan",
-                    "source": "inputbar"
-                }
-            }
-        })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("openai".to_string());
@@ -597,39 +723,13 @@ fn inputbar_plan_mode_metadata_flows_to_turn_context_collaboration_mode() {
     let turn_context =
         turn_context_from_request(&request, None, &scope, &selection, None).expect("turn context");
 
-    assert_eq!(turn_context.collaboration_mode.as_deref(), Some("plan"));
-}
-
-#[test]
-fn planning_collaboration_mode_alias_is_normalized_to_plan() {
-    let mut request = request_for_test(
-        "先规划",
-        Some(app_server_protocol::RuntimeRequest {
-            provider_preference: Some("openai".to_string()),
-            model_preference: Some("gpt-4.1".to_string()),
-            metadata: Some(json!({
-                "harness": {
-                    "collaborationMode": {
-                        "mode": "planning"
-                    }
-                }
-            })),
-            ..app_server_protocol::RuntimeRequest::default()
-        }),
-        None,
+    assert_eq!(
+        turn_context
+            .collaboration_mode
+            .as_ref()
+            .map(|mode| mode.mode),
+        Some(agent_protocol::ModeKind::Plan)
     );
-    let options = request.runtime_options.as_mut().expect("runtime options");
-    options.runtime_request_mut().provider_preference = Some("openai".to_string());
-    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
-
-    let host_request = runtime_request_from_request(&request);
-    let selection = selection_from_explicit_preferences(&request).expect("selection");
-    let scope = session_scope_from_request(&request).expect("scope");
-    let turn_context =
-        turn_context_from_request(&request, host_request.as_ref(), &scope, &selection, None)
-            .expect("turn context");
-
-    assert_eq!(turn_context.collaboration_mode.as_deref(), Some("plan"));
 }
 
 #[test]
@@ -797,6 +897,56 @@ fn session_default_provider_model_is_used_after_frontend_compaction() {
     assert_eq!(selection.provider, "openai-compatible");
     assert_eq!(selection.model, "gpt-4.1-mini");
     assert_eq!(selection.source, "session_default");
+}
+
+#[test]
+fn turn_model_override_uses_durable_session_provider() {
+    let mut request = request_with_session_metadata(json!({
+        "providerSelector": "openai-compatible",
+        "modelName": "gpt-4.1-mini"
+    }));
+    request
+        .runtime_options
+        .get_or_insert_default()
+        .runtime_request_mut()
+        .model_preference = Some("gpt-5.4".to_string());
+
+    let selection = resolve_runtime_model_selection(&request).expect("selection");
+
+    assert_eq!(selection.provider, "openai-compatible");
+    assert_eq!(selection.model, "gpt-5.4");
+    assert_eq!(selection.source, "runtime_request_with_session_default");
+}
+
+#[test]
+fn partial_turn_route_without_complete_session_default_fails_closed() {
+    let mut request = request_for_test(
+        "hello",
+        Some(app_server_protocol::RuntimeRequest {
+            model_preference: Some("gpt-5.4".to_string()),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
+        None,
+    );
+    request.session.business_object_ref = Some(BusinessObjectRef {
+        kind: "agent.thread".to_string(),
+        id: "thread-1".to_string(),
+        title: None,
+        uri: None,
+        metadata: Some(json!({ "modelName": "gpt-4.1-mini" })),
+    });
+
+    let error = resolve_runtime_model_selection(&request).expect_err("incomplete route");
+
+    assert!(matches!(
+        error,
+        RuntimeCoreError::PendingRoute {
+            provider: None,
+            model: Some(model),
+            reason_code,
+            ..
+        } if model == "gpt-5.4" && reason_code == "provider_missing"
+    ));
 }
 
 #[test]

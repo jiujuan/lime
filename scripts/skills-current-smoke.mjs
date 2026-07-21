@@ -69,7 +69,7 @@ const LEGACY_SKILL_COMMANDS = [
   ...LEGACY_SKILL_READ_COMMANDS,
   ...RETIRED_SKILL_MANAGEMENT_FACADE_COMMANDS,
 ];
-const FORBIDDEN_APP_SERVER_METHODS = ["agentSession/turn/start"];
+const FORBIDDEN_APP_SERVER_METHODS = ["turn/start"];
 const FORBIDDEN_SIDE_EFFECT_COMMANDS = [
   "execute_skill",
   "agent_runtime_submit_turn",

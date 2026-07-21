@@ -5,10 +5,15 @@ import { describe, expect, it } from "vitest";
 
 describe("AgentChatWorkspace workbench side-effect runtime boundary", () => {
   it("自动引导和媒体任务必须由 side-effect runtime 组合", () => {
-    const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
-      "utf8",
-    );
+    const workspaceSource = [
+      "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx",
+    ]
+      .map((ownerPath) => readFileSync(join(process.cwd(), ownerPath), "utf8"))
+      .join("\n");
     const ownerSource = readFileSync(
       join(
         process.cwd(),

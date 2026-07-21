@@ -387,7 +387,7 @@ describe("Electron current package entrypoints", () => {
     );
     expect(memorySmokeContent).toContain("/灵感库/");
     expect(memorySmokeContent).toContain("/MemoryPage/");
-    expect(mainContent).not.toContain('"agentSession/turn/start"');
+    expect(mainContent).not.toContain('"turn/start"');
     expect(mainContent).not.toContain('"test_api_key_provider_chat"');
     expect(smokeChecksContent).toContain("LIME_GATE_RUN_ID");
     expect(smokeChecksContent).toContain("LIME_ELECTRON_SMOKE_EVIDENCE_DIR");

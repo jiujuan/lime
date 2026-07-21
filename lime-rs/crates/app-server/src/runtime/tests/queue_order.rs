@@ -1,5 +1,6 @@
 use super::support::*;
 use super::*;
+use crate::runtime::session_control::QueuedTurnResume;
 
 use std::sync::Arc;
 
@@ -140,19 +141,23 @@ async fn queued_turn_read_model_reindexes_after_pop_front_resume() {
     )
     .expect("complete running turn");
     let resumed = core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_queue_order".to_string(),
-                resume_contract: None,
-            },
-            RuntimeHostContext::default(),
-        )
+        .resume_next_queued_turn_if_idle("sess_queue_order", RuntimeHostContext::default())
         .await
         .expect("resume queued turn");
-    assert!(resumed.response.resumed);
-    assert!(resumed.response.turns.iter().any(|turn| {
-        turn.turn_id == "turn_queued_first" && turn.status == AgentTurnStatus::Accepted
-    }));
+    match resumed {
+        QueuedTurnResume::Started {
+            queued_turn_id,
+            events,
+        } => {
+            assert_eq!(queued_turn_id, "turn_queued_first");
+            assert!(events
+                .iter()
+                .any(|event| event.event_type == "turn.accepted"));
+        }
+        QueuedTurnResume::Empty | QueuedTurnResume::Blocked => {
+            panic!("queued turn helper did not pop the first queued turn")
+        }
+    }
 
     let queued_after_resume = read_queued_turns(&core, "sess_queue_order").await;
     assert_eq!(queued_ids(&queued_after_resume), vec!["turn_queued_second"]);
@@ -170,7 +175,7 @@ async fn queued_turn_read_model_reindexes_after_pop_front_resume() {
         .iter()
         .find(|request| request.turn.turn_id == "turn_queued_first")
         .expect("resumed queued request");
-    assert_eq!(resumed_request.input.text, "first queued steer");
+    assert_eq!(resumed_request.input.concat_text(), "first queued steer");
     assert_eq!(
         resumed_request.queued_turn_id.as_deref(),
         Some("turn_queued_first")

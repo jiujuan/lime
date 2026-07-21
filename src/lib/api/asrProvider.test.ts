@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import { invalidateAppConfigCache } from "./appConfig";
 import {
@@ -12,7 +12,6 @@ import {
   getRecordingStatus,
   getVoiceInputConfig,
   getVoiceInstructions,
-  listAudioDevices,
   outputVoiceText,
   polishVoiceInputText,
   polishVoiceText,
@@ -64,8 +63,6 @@ vi.mock("./appServer", () => ({
 }));
 
 describe("asrProvider API", () => {
-  const originalNavigator = globalThis.navigator;
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(safeInvoke).mockReset();
@@ -73,58 +70,6 @@ describe("asrProvider API", () => {
       mock.mockReset();
     });
     invalidateAppConfigCache();
-  });
-
-  afterEach(() => {
-    Object.defineProperty(globalThis, "navigator", {
-      configurable: true,
-      value: originalNavigator,
-    });
-  });
-
-  function mockMediaDevices(
-    devices: Array<{
-      deviceId: string;
-      kind: "audioinput" | "audiooutput" | "videoinput";
-      label: string;
-    }>,
-  ) {
-    const stop = vi.fn();
-    const getUserMedia = vi.fn().mockResolvedValue({
-      getTracks: () => [{ stop }],
-    });
-    const enumerateDevices = vi.fn().mockResolvedValue(devices);
-    Object.defineProperty(globalThis, "navigator", {
-      configurable: true,
-      value: {
-        mediaDevices: {
-          enumerateDevices,
-          getUserMedia,
-        },
-      },
-    });
-    return { enumerateDevices, getUserMedia, stop };
-  }
-
-  it("麦克风设备列表走 renderer media devices current，不再调用旧命令", async () => {
-    const mediaDevices = mockMediaDevices([
-      {
-        deviceId: "default",
-        kind: "audioinput",
-        label: "Default - 内置麦克风",
-      },
-      { deviceId: "input-2", kind: "audioinput", label: "USB 麦克风" },
-      { deviceId: "camera-1", kind: "videoinput", label: "摄像头" },
-    ]);
-
-    await expect(listAudioDevices()).resolves.toEqual([
-      { id: "内置麦克风", name: "内置麦克风", is_default: true },
-      { id: "USB 麦克风", name: "USB 麦克风", is_default: false },
-    ]);
-    expect(mediaDevices.getUserMedia).toHaveBeenCalledWith({ audio: true });
-    expect(mediaDevices.enumerateDevices).toHaveBeenCalledTimes(1);
-    expect(mediaDevices.stop).toHaveBeenCalledTimes(1);
-    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("ASR 凭证读写应走 App Server current 并投影 provider 名", async () => {
@@ -225,18 +170,6 @@ describe("asrProvider API", () => {
       id: "cred-2",
     });
     expect(safeInvoke).not.toHaveBeenCalledWith("get_asr_credentials");
-  });
-
-  it("麦克风设备枚举缺少浏览器能力时应 fail closed", async () => {
-    Object.defineProperty(globalThis, "navigator", {
-      configurable: true,
-      value: {},
-    });
-
-    await expect(listAudioDevices()).rejects.toThrow(
-      "当前环境不支持麦克风设备枚举",
-    );
-    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("旧转写、输出与录音控制入口应本地 fail closed，不再调用旧命令", async () => {

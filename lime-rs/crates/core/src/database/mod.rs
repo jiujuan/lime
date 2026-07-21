@@ -7,6 +7,7 @@ pub mod migration_v2;
 pub mod migration_v4;
 pub mod migration_v5;
 pub mod migration_v6;
+pub mod model_control_migration;
 pub mod schema;
 mod startup_migrations;
 pub mod system_providers;

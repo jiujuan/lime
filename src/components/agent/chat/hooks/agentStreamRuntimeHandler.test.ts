@@ -46,7 +46,6 @@ describe("agentStreamRuntimeHandler storage", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -64,10 +63,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -174,7 +170,6 @@ describe("agentStreamRuntimeHandler storage", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -192,10 +187,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -320,7 +312,6 @@ describe("agentStreamRuntimeHandler storage", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -347,10 +338,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -546,7 +534,6 @@ describe("agentStreamRuntimeHandler storage", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -573,10 +560,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -787,7 +771,6 @@ describe("agentStreamRuntimeHandler storage", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -814,10 +797,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -996,7 +976,6 @@ describe("agentStreamRuntimeHandler storage", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -1023,10 +1002,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -1254,7 +1230,7 @@ describe("agentStreamRuntimeHandler storage", () => {
     });
   });
 
-  it("item_completed 的 agent_message contentParts 应同步到当前 assistant 消息", () => {
+  it("item_completed 的 canonical imageView media item 应同步到当前 assistant 消息", () => {
     let messages: Message[] = [
       {
         id: "assistant-media-reference",
@@ -1268,7 +1244,6 @@ describe("agentStreamRuntimeHandler storage", () => {
     let threadItems: AgentThreadItem[] = [];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -1296,10 +1271,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -1319,30 +1291,9 @@ describe("agentStreamRuntimeHandler storage", () => {
           started_at: "2026-07-07T10:00:00.100Z",
           completed_at: "2026-07-07T10:00:00.200Z",
           updated_at: "2026-07-07T10:00:00.200Z",
-          type: "agent_message",
-          role: "assistant",
-          phase: "final_answer",
-          text: "媒体引用已进入对话",
-          contentParts: [
-            {
-              type: "text",
-              text: "媒体引用已进入对话",
-            },
-            {
-              type: "media",
-              kind: "image",
-              caption: "结果图",
-              reference: {
-                uri: "sidecar://media/fixture-image-1",
-                mime_type: "image/png",
-                title: "fixture-image-1.png",
-                source_path: "/tmp/lime-media/fixture-image-1.png",
-                preview_url: "asset:///tmp/lime-media/fixture-image-1.png",
-                sha256: "sha256-fixture-image-1",
-                byte_size: 2048,
-              },
-            },
-          ],
+          type: "media",
+          uri: "/tmp/lime-media/fixture-image-1.png",
+          mime_type: "image/png",
         },
       } as AgentEvent,
       eventName: "agent-runtime-media-reference-content-parts-test",
@@ -1372,18 +1323,15 @@ describe("agentStreamRuntimeHandler storage", () => {
 
     expect(messages[0]?.runtimeTurnId).toBe("turn-media-reference");
     expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
-      "text",
       "media_reference",
     ]);
-    expect(messages[0]?.contentParts?.[1]).toMatchObject({
+    expect(messages[0]?.contentParts?.[0]).toMatchObject({
       type: "media_reference",
       reference: {
-        uri: "sidecar://media/fixture-image-1",
+        uri: "/tmp/lime-media/fixture-image-1.png",
         mimeType: "image/png",
         title: "fixture-image-1.png",
-        caption: "结果图",
         sourcePath: "/tmp/lime-media/fixture-image-1.png",
-        previewUrl: "asset:///tmp/lime-media/fixture-image-1.png",
       },
       metadata: {
         source: "agent_media_reference",
@@ -1391,7 +1339,6 @@ describe("agentStreamRuntimeHandler storage", () => {
         turnId: "turn-media-reference",
         sequence: 5,
         sourcePath: "/tmp/lime-media/fixture-image-1.png",
-        previewUrl: "asset:///tmp/lime-media/fixture-image-1.png",
       },
     });
   });

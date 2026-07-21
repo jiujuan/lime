@@ -1,12 +1,12 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
 } from "@/lib/api/agentExecutionRuntime";
 import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
+import type { TurnSteerParams } from "@limecloud/app-server-client";
+import type { ModeKind } from "@limecloud/app-server-client";
 import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime/objectiveClient";
 import { modelRegistryApi } from "@/lib/api/modelRegistry";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
@@ -33,6 +33,7 @@ import type { ActionRequired, Message, MessageImage } from "../types";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import { runAgentStreamSubmitLifecycle } from "./agentStreamSubmitLifecycleController";
 import { buildAgentStreamSubmitOp } from "./agentStreamSubmitOpController";
+import { buildTurnInput } from "../utils/buildUserInputSubmitOp";
 import { resolveAgentStreamSubmitContext } from "./agentStreamSubmitContext";
 import { registerAgentStreamTurnEventBinding } from "./agentStreamTurnEventBinding";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
@@ -60,6 +61,7 @@ interface ExecuteAgentStreamSubmitOptions {
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
   sessionIdRef: MutableRefObject<string | null>;
   getWorkspaceIdForSubmit: () => string | undefined;
+  getThreadIdForSubmit: () => string | undefined;
   getSyncedSessionExecutionStrategy: (
     sessionId: string,
   ) => AgentExecutionStrategy | null;
@@ -70,28 +72,25 @@ interface ExecuteAgentStreamSubmitOptions {
   content: string;
   images: MessageImage[];
   skipUserMessage: boolean;
-  expectingQueue: boolean;
   effectiveProviderType: string;
   effectiveModel: string;
   effectiveExecutionStrategy: AgentExecutionStrategy;
   modelOverride?: string;
   reasoningEffort?: string;
   webSearch?: boolean;
-  searchMode?: RuntimeSearchMode;
   thinking?: boolean;
-  explicitToolPreferences?: boolean;
   autoContinue?: AutoContinueRequestPayload;
   systemPrompt?: string;
   requestMetadata?: Record<string, unknown>;
+  collaborationMode?: ModeKind;
   assistantDraft?: AssistantDraftState;
   targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
-  skipPreSubmitResume?: boolean;
   executionRuntime?: AgentSessionExecutionRuntime | null;
   syncedSessionModelPreference?: SessionModelPreference | null;
   eventName: string;
-  requestTurnId: string;
+  clientUserMessageId?: string;
   requestState: StreamRequestState;
   assistantMsgId: string;
   pendingTurnKey: string;
@@ -111,15 +110,13 @@ interface ExecuteAgentStreamSubmitOptions {
     activateStream: (
       activeSessionId: string,
       effectiveWaitingRuntimeStatus: NonNullable<Message["runtimeStatus"]>,
+      canonicalThreadId?: string,
     ) => void;
     isStreamActivated: () => boolean;
     clearOptimisticItem: () => void;
     clearOptimisticTurn: () => void;
     disposeListener: () => void;
-    removeQueuedDraftMessages: () => void;
     clearActiveStreamIfMatch: (eventName: string) => boolean;
-    upsertQueuedTurn: (queuedTurn: QueuedTurnSnapshot) => void;
-    removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
     registerListener: (unlisten: () => void) => void;
   };
   appendThinkingToParts: (
@@ -185,34 +182,32 @@ export async function executeAgentStreamSubmit(
     refreshSessionReadModel,
     sessionIdRef,
     getWorkspaceIdForSubmit,
+    getThreadIdForSubmit,
     getSyncedSessionExecutionStrategy,
     getSyncedSessionRecentPreferences,
     effectiveAccessMode,
     content,
     images,
     skipUserMessage,
-    expectingQueue,
     effectiveProviderType,
     effectiveModel,
     effectiveExecutionStrategy,
     modelOverride,
     reasoningEffort,
     webSearch,
-    searchMode,
     thinking,
-    explicitToolPreferences,
     autoContinue,
     systemPrompt,
     requestMetadata,
+    collaborationMode,
     assistantDraft,
     targetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
-    skipPreSubmitResume,
     executionRuntime,
     syncedSessionModelPreference,
     eventName,
-    requestTurnId,
+    clientUserMessageId,
     requestState,
     assistantMsgId,
     pendingTurnKey,
@@ -240,7 +235,6 @@ export async function executeAgentStreamSubmit(
   if (!effectiveProviderType.trim() || !effectiveModel.trim()) {
     throw new Error(MODEL_SELECTION_REQUIRED_ERROR_MESSAGE);
   }
-
   let resolvedRequestMetadata = requestMetadata;
   let performanceTrace =
     extractAgentUiPerformanceTraceMetadata(requestMetadata);
@@ -249,9 +243,7 @@ export async function executeAgentStreamSubmit(
   const {
     activeSessionId,
     resolvedWorkspaceId,
-    submitWorkspaceId,
     syncedRecentPreferences,
-    syncedExecutionStrategy,
     effectiveWaitingRuntimeStatus,
   } = await resolveAgentStreamSubmitContext({
     ensureSession,
@@ -261,18 +253,73 @@ export async function executeAgentStreamSubmit(
     getSyncedSessionExecutionStrategy,
     effectiveExecutionStrategy,
     assistantDraft,
-    expectingQueue,
     targetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
     performanceTrace,
     soulCopy,
-    activateStream: callbacks.activateStream,
   });
   const resolvedActiveSessionId = activeSessionId?.trim();
   if (!resolvedActiveSessionId) {
     throw new Error("缺少会话 ID，无法启动流式任务");
   }
+  let resolvedThreadId = getThreadIdForSubmit()?.trim();
+  if (!resolvedThreadId) {
+    await refreshSessionReadModel(resolvedActiveSessionId);
+    resolvedThreadId = getThreadIdForSubmit()?.trim();
+  }
+  if (!resolvedThreadId) {
+    throw new Error("缺少 canonical threadId，无法启动流式任务");
+  }
+  const resolvedExecutionRuntime =
+    executionRuntime?.session_id === resolvedActiveSessionId
+      ? executionRuntime
+      : null;
+  const turnControl = await runtime.getThreadTurnControl(resolvedThreadId);
+  const expectedTurnId = turnControl.activeTurnId?.trim();
+  if (expectedTurnId) {
+    const { modelCapabilitySummary } = await resolveSubmitModelPolicy({
+      images,
+      providerType: effectiveProviderType,
+      model: effectiveModel,
+    });
+    const params: TurnSteerParams = {
+      threadId: resolvedThreadId,
+      expectedTurnId,
+      input: buildTurnInput({ content, images, modelCapabilitySummary }),
+      ...(clientUserMessageId?.trim()
+        ? { clientUserMessageId: clientUserMessageId.trim() }
+        : {}),
+    };
+    callbacks.clearOptimisticItem();
+    callbacks.clearOptimisticTurn();
+    const response = await runtime.steerTurn(params);
+    if (response.turnId !== expectedTurnId) {
+      throw new Error(
+        `turn/steer returned mismatched turnId: expected ${expectedTurnId}, received ${response.turnId || "<empty>"}`,
+      );
+    }
+    await refreshSessionReadModel(resolvedActiveSessionId);
+    setMessages((previous) =>
+      previous.flatMap((message) => {
+        if (message.id === assistantMsgId) {
+          return [];
+        }
+        return [
+          message.id === clientUserMessageId
+            ? { ...message, runtimeTurnId: expectedTurnId }
+            : message,
+        ];
+      }),
+    );
+    return;
+  }
+  callbacks.activateStream(
+    resolvedActiveSessionId,
+    effectiveWaitingRuntimeStatus,
+    resolvedThreadId,
+  );
+  setIsSending(true);
   if (performanceTrace) {
     resolvedRequestMetadata = mergeAgentUiPerformanceTraceMetadata(
       requestMetadata,
@@ -314,7 +361,6 @@ export async function executeAgentStreamSubmit(
     content,
     webSearch,
     autoContinue,
-    expectingQueue,
     activeSessionId: resolvedActiveSessionId,
     resolvedWorkspaceId: eventBindingWorkspaceId,
     assistantMsgId,
@@ -331,18 +377,12 @@ export async function executeAgentStreamSubmit(
     observer,
     onWriteFile,
     callbacks: {
-      activateStream: expectingQueue
-        ? () => undefined
-        : callbacks.activateStream,
+      activateStream: callbacks.activateStream,
       isStreamActivated: callbacks.isStreamActivated,
       clearOptimisticItem: callbacks.clearOptimisticItem,
       clearOptimisticTurn: callbacks.clearOptimisticTurn,
       disposeListener: callbacks.disposeListener,
-      removeQueuedDraftMessages: callbacks.removeQueuedDraftMessages,
       clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
-      upsertQueuedTurn: callbacks.upsertQueuedTurn,
-      removeQueuedTurnsFromProjection:
-        callbacks.removeQueuedTurnsFromProjection,
     },
     appendThinkingToParts,
     setMessages,
@@ -363,11 +403,8 @@ export async function executeAgentStreamSubmit(
     effectiveModel,
     effectiveProviderType,
     eventName,
-    expectingQueue,
     onSubmitAccepted: () => {
-      if (!expectingQueue) {
-        requestState.startTerminalRecoveryPoll?.();
-      }
+      requestState.startTerminalRecoveryPoll?.();
     },
     requestState,
     submit: async () => {
@@ -397,27 +434,19 @@ export async function executeAgentStreamSubmit(
         content,
         images,
         activeSessionId: resolvedActiveSessionId,
+        activeThreadId: resolvedThreadId,
+        clientUserMessageId,
         eventName,
-        submitWorkspaceId,
-        requestTurnId,
-        systemPrompt,
-        skipPreSubmitResume,
         requestMetadata: resolvedRequestMetadata,
-        executionRuntime,
+        collaborationMode,
+        executionRuntime: resolvedExecutionRuntime,
         syncedRecentPreferences,
         syncedSessionModelPreference,
-        syncedExecutionStrategy,
-        effectiveExecutionStrategy,
         effectiveAccessMode,
         effectiveProviderType,
         effectiveModel,
         modelOverride,
         reasoningEffort,
-        webSearch,
-        searchMode,
-        thinking,
-        explicitToolPreferences,
-        autoContinue,
         modelCapabilitySummary,
       });
 
@@ -436,9 +465,4 @@ export async function executeAgentStreamSubmit(
       await runtime.submitOp(submitOp);
     },
   });
-
-  if (expectingQueue) {
-    callbacks.disposeListener();
-    await refreshSessionReadModel(resolvedActiveSessionId);
-  }
 }

@@ -7,7 +7,6 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-const PLUGIN_DATA_DIR: &str = "plugins";
 const CONTENT_FACTORY_APP_ID: &str = "content-factory-app";
 const CONTENT_FACTORY_APP_DIR_ENV: &str = "CONTENT_FACTORY_APP_DIR";
 const RETIRED_PLUGIN_RUNTIME_FIXTURE_DIR: &str = "plugins-runtime-fixtures";
@@ -92,8 +91,9 @@ pub(super) fn build_plugin_task_runtime_contract(
 
 pub(super) fn build_plugin_task_runtime_contract_with_runtime_dir(
     state: &Value,
+    plugin_data_root: Option<&Path>,
 ) -> PluginTaskRuntimeContract {
-    let app_dir = resolve_plugin_runtime_dir(state).ok();
+    let app_dir = resolve_plugin_runtime_dir(state, plugin_data_root).ok();
     let mut contract = build_plugin_task_runtime_contract(state, app_dir.as_deref());
     if contract.enabled && contract.package_root_path.is_none() {
         contract
@@ -105,6 +105,7 @@ pub(super) fn build_plugin_task_runtime_contract_with_runtime_dir(
 
 pub(super) fn resolve_plugin_runtime_dir(
     state: &serde_json::Value,
+    plugin_data_root: Option<&Path>,
 ) -> Result<PathBuf, RuntimeCoreError> {
     let app_id = json_string(state, &["appId"])
         .or_else(|| json_string(state, &["identity", "appId"]))
@@ -119,12 +120,11 @@ pub(super) fn resolve_plugin_runtime_dir(
     let package_hash = json_string(state, &["identity", "packageHash"]).ok_or_else(|| {
         RuntimeCoreError::Backend("Plugin installed state 缺少 packageHash。".to_string())
     })?;
+    let plugin_data_root = plugin_data_root.ok_or_else(|| {
+        RuntimeCoreError::Backend("PluginDataSource 未提供 cloud package root。".to_string())
+    })?;
     let package_dir_name = package_hash.replace(':', "_");
-    let app_dir = lime_core::app_paths::preferred_data_dir()
-        .map_err(RuntimeCoreError::Backend)?
-        .join(PLUGIN_DATA_DIR)
-        .join("packages")
-        .join(package_dir_name);
+    let app_dir = plugin_data_root.join("packages").join(package_dir_name);
     canonicalize_existing_plugin_dir(&app_dir.to_string_lossy())
 }
 
@@ -292,6 +292,41 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
+
+    #[test]
+    fn local_folder_runtime_does_not_require_plugin_data_root() {
+        let package = tempfile::tempdir().expect("package");
+        let state = json!({
+            "identity": {
+                "sourceKind": "local_folder",
+                "sourceUri": package.path()
+            }
+        });
+
+        let resolved = resolve_plugin_runtime_dir(&state, None).expect("local package root");
+
+        assert_eq!(
+            resolved,
+            package.path().canonicalize().expect("canonical package")
+        );
+    }
+
+    #[test]
+    fn cloud_runtime_requires_injected_plugin_data_root() {
+        let state = json!({
+            "identity": {
+                "sourceKind": "cloud_release",
+                "packageHash": "sha256:test-package"
+            }
+        });
+
+        let error = resolve_plugin_runtime_dir(&state, None)
+            .expect_err("cloud package root must be injected");
+
+        assert!(error
+            .to_string()
+            .contains("PluginDataSource 未提供 cloud package root"));
+    }
 
     #[test]
     fn projects_v3_worker_contract_from_installed_state() {

@@ -13,7 +13,6 @@ local-sensevoice = ["voice-core/local-sensevoice"]
 [dependencies]
 # 项目内 crate
 lime-core.workspace = true
-lime-providers.workspace = true
 model-provider.workspace = true
 voice-core.workspace = true
 document-preview.workspace = true

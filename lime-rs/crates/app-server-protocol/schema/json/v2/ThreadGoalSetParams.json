@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "ThreadGoalStatus": {
+      "enum": [
+        "active",
+        "blocked",
+        "budgetLimited",
+        "complete",
+        "paused",
+        "usageLimited"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "objective": {
+      "default": null,
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThreadGoalStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "tokenBudget": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "threadId"
+  ],
+  "title": "ThreadGoalSetParams",
+  "type": "object"
+}

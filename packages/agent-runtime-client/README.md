@@ -9,8 +9,8 @@
 - 暴露 `AgentRuntimeClient` 标准接口。
 - 暴露 `createAgentRuntimeClient(...)` 工厂。
 - 暴露 browser-safe 子路径 `@limecloud/agent-runtime-client/sessionGateway`，用于把已有 App Server session gateway 适配为标准 runtime client。
-- 委托 App Server current methods：`agentSession/turn/start`、`agentSession/turn/cancel`、`agentSession/action/respond`、canonical `thread/read`、`evidence/export`。
-- 订阅并分发 canonical Thread / Turn / Item notifications；`agentSession/event` 只保留为 App Server envelope 和 `media.read.*` 非 Thread 通道。
+- 委托 App Server current methods：`turn/start`、`turn/steer`、`turn/interrupt`、`thread/read`、`agentSession/action/respond`、`evidence/export`。
+- 订阅并分发 direct v2 Thread / Turn / Item notifications；`agentSession/event` 只保留为 `media.read.*` raw side-channel。
 
 这个包不负责：
 
@@ -34,7 +34,7 @@ AgentUI / AgentRuntime 当前四包链路：
 ```text
 @limecloud/agent-runtime-client
   -> App Server JSON-RPC current facade
-  -> canonical Thread / Turn / Item notifications + thread/read
+  -> direct v2 Thread / Turn / Item notifications + thread/read
   -> @limecloud/agent-runtime-projection
   -> @limecloud/agent-runtime-ui
 ```
@@ -56,36 +56,37 @@ const runtime = createAgentRuntimeClient(connection, {
   request: { timeoutMs: 120_000 },
 });
 
-runtime.subscribeCanonicalEvents((notification) => {
-  console.log(notification.entity, notification.sequence);
+runtime.subscribeLifecycleEvents((notification) => {
+  console.log(notification.method, notification.params);
 });
 
 await runtime.startTurn({
-  sessionId: "session-1",
-  input: { text: "整理资料并生成草稿" },
-  runtimeOptions: { stream: true },
+  threadId: "thread-1",
+  input: [{ type: "text", text: "整理资料并生成草稿" }],
 });
 
 const thread = await runtime.readThread({
   threadId: "thread-1",
-  turnsView: "full",
+  includeTurns: true,
 });
 ```
 
-`readThread` 当前映射到 App Server canonical `thread/read`。参数必须是
-hydrated canonical `threadId`，不能把 legacy `sessionId` 直接当作
-`threadId`；返回的 `thread.sessionId` 仅供仍为 session-scoped 的旧方法寻址。
+`readThread` 当前映射到 App Server `thread/read`。参数必须是 v2
+`threadId`，不能把 `sessionId` 当作 `threadId`；返回的
+`thread.sessionId` 仅供仍为 session-scoped 的 action / evidence 方法寻址。
 
 ## Client API
 
 | Method                             | App Server owner              | Result                   | Rule                                                    |
 | ---------------------------------- | ----------------------------- | ------------------------ | ------------------------------------------------------- |
-| `startTurn(params, options?)`      | `agentSession/turn/start`     | turn start response      | 只提交 runtime intent，不生成 UI state。                |
-| `cancelTurn(params, options?)`     | `agentSession/turn/cancel`    | cancel response          | 失败直接向上抛出，不本地假设已取消。                    |
+| `startTurn(params, options?)`      | `turn/start`                 | turn start response      | 只提交 runtime intent，不生成 UI state。                |
+| `steerTurn(params, options?)`     | `turn/steer`                 | turn steer response      | 只提交追加输入，不本地改写 turn 状态。                   |
+| `cancelTurn(params, options?)`     | `turn/interrupt`             | cancel response          | 失败直接向上抛出，不本地假设已取消。                    |
 | `respondAction(params, options?)`  | `agentSession/action/respond` | action response          | 不乐观改 pending action，等待 runtime facts。           |
-| `readThread(params, options?)`     | `thread/read`                | canonical thread         | 供 projection hydration / repair 使用，建议 `turnsView: "full"`。 |
+| `readThread(params, options?)`     | `thread/read`                | Thread read model        | 供 projection hydration / repair 使用，建议 `includeTurns: true`。 |
 | `exportEvidence(params, options?)` | `evidence/export`             | evidence export response | 缺 surface 时 fail closed，不伪造空 evidence。          |
-| `subscribeEvents(listener)`        | `agentSession/event`          | unsubscribe handle       | 只分发 App Server runtime events。                      |
+| `subscribeLifecycleEvents(listener)` | direct v2 notifications    | unsubscribe handle       | 分发 Thread / Turn / Item lifecycle 与 message delta。   |
+| `subscribeEvents(listener)`        | `agentSession/event`         | unsubscribe handle       | 只分发 `media.read.*` raw side-channel。                 |
 | `dispatchEvent(message)`           | local event router            | boolean                  | 用于现有 gateway 把 JSON-RPC notification 喂给 client。 |
 | `nextEvent(timeoutMs?)`            | gateway event source          | notification             | 优先 gateway `nextEvent`，其次 `drainEvents`。          |
 
@@ -97,10 +98,10 @@ hydrated canonical `threadId`，不能把 legacy `sessionId` 直接当作
 
 ```text
 startTurn
-  -> canonical Thread / Turn / Item notifications
+  -> direct v2 Thread / Turn / Item notifications
   -> readThread for hydration or repair
   -> respondAction / cancelTurn when user intent occurs
-  -> canonical Turn / Item terminal entities
+  -> direct v2 Turn / Item terminal notifications
   -> exportEvidence when host needs replay / review package
 ```
 
@@ -108,7 +109,7 @@ client 只传递 lifecycle intent 和 facts，不维护 tool 状态机、subagen
 
 ## Browser-Safe Session Gateway
 
-Renderer 宿主如果已经有自己的 App Server gateway，应从 browser-safe 子路径导入 session gateway 适配器，避免把根入口中的 Node 侧 sidecar / stdio client 打进前端包。该适配器仍返回标准 `AgentRuntimeClient`，覆盖 turn lifecycle、`readThread`、`exportEvidence`、`subscribeCanonicalEvents`、`dispatchEvent` 和 `nextEvent`；宿主缺少 evidence 或 event source 时会 fail closed，不会静默回退 mock。
+Renderer 宿主如果已经有自己的 App Server gateway，应从 browser-safe 子路径导入 session gateway 适配器，避免把根入口中的 Node 侧 sidecar / stdio client 打进前端包。该适配器仍返回标准 `AgentRuntimeClient`，覆盖 turn lifecycle、`readThread`、`exportEvidence`、`subscribeLifecycleEvents`、`dispatchEvent` 和 `nextEvent`；宿主缺少 evidence 或 event source 时会 fail closed，不会静默回退 mock。
 
 `createAgentRuntimeClientFromSessionGateway(...)` 只适配现有 session gateway，
 不会创建第二套 transport、lifecycle state 或兼容协议。
@@ -120,6 +121,7 @@ import { createAgentRuntimeClientFromSessionGateway } from "@limecloud/agent-run
 
 const runtime = createAgentRuntimeClientFromSessionGateway({
   startTurn: (params, options) => appServerClient.startTurn(params, options),
+  steerTurn: (params, options) => appServerClient.steerTurn(params, options),
   readThread: (params, options) =>
     appServerClient.readThread(params, options),
   cancelTurn: (params, options) => appServerClient.cancelTurn(params, options),
@@ -139,6 +141,7 @@ import type { AgentRuntimeLifecycleClient } from "@limecloud/agent-runtime-clien
 const runtime: AgentRuntimeLifecycleClient =
   createAgentRuntimeClientFromSessionGateway({
     startTurn: (params) => appServerClient.startTurn(params),
+    steerTurn: (params) => appServerClient.steerTurn(params),
     readThread: (params) => appServerClient.readThread(params),
     cancelTurn: (params) => appServerClient.cancelTurn(params),
     respondAction: (params) => appServerClient.respondAction(params),
@@ -152,7 +155,7 @@ const runtime: AgentRuntimeLifecycleClient =
 | Root entry              | 适合 Node / host owner，复用 `@limecloud/app-server-client` 的 `AppServerConnection`。                                                                |
 | `./sessionGateway`      | browser-safe，适合 renderer 复用已有 App Server gateway。                                                                                             |
 | Electron / Desktop Host | 只能由宿主 gateway 封装，不能在本包直接 import bridge helper。                                                                                        |
-| Event source            | `nextEvent(timeoutMs?)` 或 `drainEvents(limit?)`，只接受 canonical Thread / Turn / Item notification 或明确的 `media.read.*` 非 Thread notification。 |
+| Event source            | `nextEvent(timeoutMs?)` 或 `drainEvents(limit?)`，只接受 direct v2 Thread / Turn / Item notification、message delta 或明确的 `media.read.*` raw notification。 |
 | Mock / fixture          | 只允许测试显式传入，不允许 production transport fallback。                                                                                            |
 
 如果 gateway 方法来自 class instance，必须在宿主里包成闭包，避免丢失 `this`。本包不会替宿主绑定私有 client 实例。
@@ -163,10 +166,10 @@ const runtime: AgentRuntimeLifecycleClient =
 
 ```text
 Product App business context
-  -> AgentRuntimeClient.startTurn / readThread / respondAction
-  -> App Server agentSession/* + canonical thread/read
+  -> AgentRuntimeClient.startTurn / steerTurn / readThread / respondAction
+  -> App Server turn/* + thread/read
   -> RuntimeCore / ExecutionBackend
-  -> canonical Thread / Turn / Item notifications + thread/read
+  -> direct v2 Thread / Turn / Item notifications + thread/read
   -> @limecloud/agent-runtime-projection
   -> @limecloud/agent-runtime-ui
 ```
@@ -197,11 +200,11 @@ Product App business context
 
 最小 runtime client conformance：
 
-- lifecycle：`startTurn -> readThread -> cancelTurn / respondAction` 均委托 gateway。
-- events：`subscribeCanonicalEvents`、`dispatchEvent`、`nextEvent` 只把 canonical Thread / Turn / Item 送入 lifecycle pipeline；raw channel 仅允许 `media.read.*`。
+- lifecycle：`startTurn -> steerTurn / readThread -> cancelTurn / respondAction` 均委托 gateway。
+- events：`subscribeLifecycleEvents`、`dispatchEvent`、`nextEvent` 只把 direct v2 Thread / Turn / Item 与 message delta 送入 lifecycle pipeline；raw channel 仅允许 `media.read.*`。
 - evidence：`exportEvidence` 有实现时委托，没有实现时 fail closed。
 - errors：transport error 原样传播，不切 mock。
-- bundle：`@limecloud/agent-runtime-client/sessionGateway` dist 不包含 Node builtin 或 `@limecloud/app-server-client` 依赖。
+- bundle：`@limecloud/agent-runtime-client/sessionGateway` dist 不包含 Node builtin 或 sidecar/stdio 模块；只允许依赖 browser-safe App Server entry。
 
 ## Development
 

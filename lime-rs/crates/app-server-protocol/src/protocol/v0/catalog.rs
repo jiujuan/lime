@@ -1,6 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::protocol::v2::METHOD_THREAD_RESUME;
+
 #[cfg(test)]
 use crate::{JsonRpcRequest, RequestId};
 
@@ -120,20 +122,8 @@ pub enum AppServerRequestMethod {
     AgentSessionReviewDecisionTemplateExport,
     #[serde(rename = "agentSession/reviewDecision/save")]
     AgentSessionReviewDecisionSave,
-    #[serde(rename = "agentSession/list")]
-    AgentSessionList,
-    #[serde(rename = "thread/read")]
-    ThreadRead,
-    #[serde(rename = "thread/list")]
-    ThreadList,
-    #[serde(rename = "thread/turns/list")]
-    ThreadTurnsList,
-    #[serde(rename = "thread/items/list")]
-    ThreadItemsList,
     #[serde(rename = "agentSession/update")]
     AgentSessionUpdate,
-    #[serde(rename = "agentSession/archiveMany")]
-    AgentSessionArchiveMany,
     #[serde(rename = "agentSession/delete")]
     AgentSessionDelete,
     #[serde(rename = "agentSession/objective/read")]
@@ -150,8 +140,6 @@ pub enum AppServerRequestMethod {
     AgentSessionObjectiveAudit,
     #[serde(rename = "agentSession/compact")]
     AgentSessionCompact,
-    #[serde(rename = "agentSession/thread/resume")]
-    AgentSessionThreadResume,
     #[serde(rename = "agentSession/queuedTurn/remove")]
     AgentSessionQueuedTurnRemove,
     #[serde(rename = "agentSession/queuedTurn/promote")]
@@ -622,16 +610,8 @@ pub enum AppServerRequestMethod {
     ConversationImportThreadCommit,
     #[serde(rename = "conversationImport/job/read")]
     ConversationImportJobRead,
-    #[serde(rename = "agentSession/start")]
-    AgentSessionStart,
-    #[serde(rename = "agentSession/read")]
-    AgentSessionRead,
     #[serde(rename = "agentSession/media/read")]
     AgentSessionMediaRead,
-    #[serde(rename = "agentSession/turn/start")]
-    AgentSessionTurnStart,
-    #[serde(rename = "agentSession/turn/cancel")]
-    AgentSessionTurnCancel,
     #[serde(rename = "agentSession/action/replay")]
     AgentSessionActionReplay,
     #[serde(rename = "agentSession/action/respond")]
@@ -685,13 +665,7 @@ impl AppServerRequestMethod {
                 METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT
             }
             Self::AgentSessionReviewDecisionSave => METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
-            Self::AgentSessionList => METHOD_AGENT_SESSION_LIST,
-            Self::ThreadRead => METHOD_THREAD_READ,
-            Self::ThreadList => METHOD_THREAD_LIST,
-            Self::ThreadTurnsList => METHOD_THREAD_TURNS_LIST,
-            Self::ThreadItemsList => METHOD_THREAD_ITEMS_LIST,
             Self::AgentSessionUpdate => METHOD_AGENT_SESSION_UPDATE,
-            Self::AgentSessionArchiveMany => METHOD_AGENT_SESSION_ARCHIVE_MANY,
             Self::AgentSessionDelete => METHOD_AGENT_SESSION_DELETE,
             Self::AgentSessionObjectiveRead => METHOD_AGENT_SESSION_OBJECTIVE_READ,
             Self::AgentSessionObjectiveSet => METHOD_AGENT_SESSION_OBJECTIVE_SET,
@@ -700,7 +674,6 @@ impl AppServerRequestMethod {
             Self::AgentSessionObjectiveContinue => METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
             Self::AgentSessionObjectiveAudit => METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
             Self::AgentSessionCompact => METHOD_AGENT_SESSION_COMPACT,
-            Self::AgentSessionThreadResume => METHOD_AGENT_SESSION_THREAD_RESUME,
             Self::AgentSessionQueuedTurnRemove => METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
             Self::AgentSessionQueuedTurnPromote => METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
             Self::AgentSessionFileCheckpointList => METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
@@ -944,11 +917,7 @@ impl AppServerRequestMethod {
             Self::ConversationImportThreadPreview => METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW,
             Self::ConversationImportThreadCommit => METHOD_CONVERSATION_IMPORT_THREAD_COMMIT,
             Self::ConversationImportJobRead => METHOD_CONVERSATION_IMPORT_JOB_READ,
-            Self::AgentSessionStart => METHOD_AGENT_SESSION_START,
-            Self::AgentSessionRead => METHOD_AGENT_SESSION_READ,
             Self::AgentSessionMediaRead => METHOD_AGENT_SESSION_MEDIA_READ,
-            Self::AgentSessionTurnStart => METHOD_AGENT_SESSION_TURN_START,
-            Self::AgentSessionTurnCancel => METHOD_AGENT_SESSION_TURN_CANCEL,
             Self::AgentSessionActionReplay => METHOD_AGENT_SESSION_ACTION_REPLAY,
             Self::AgentSessionActionRespond => METHOD_AGENT_SESSION_ACTION_RESPOND,
             Self::AgentSessionRuntimeEventsAppend => METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
@@ -999,13 +968,7 @@ impl AppServerRequestMethod {
                 Some(Self::AgentSessionReviewDecisionTemplateExport)
             }
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE => Some(Self::AgentSessionReviewDecisionSave),
-            METHOD_AGENT_SESSION_LIST => Some(Self::AgentSessionList),
-            METHOD_THREAD_READ => Some(Self::ThreadRead),
-            METHOD_THREAD_LIST => Some(Self::ThreadList),
-            METHOD_THREAD_TURNS_LIST => Some(Self::ThreadTurnsList),
-            METHOD_THREAD_ITEMS_LIST => Some(Self::ThreadItemsList),
             METHOD_AGENT_SESSION_UPDATE => Some(Self::AgentSessionUpdate),
-            METHOD_AGENT_SESSION_ARCHIVE_MANY => Some(Self::AgentSessionArchiveMany),
             METHOD_AGENT_SESSION_DELETE => Some(Self::AgentSessionDelete),
             METHOD_AGENT_SESSION_OBJECTIVE_READ => Some(Self::AgentSessionObjectiveRead),
             METHOD_AGENT_SESSION_OBJECTIVE_SET => Some(Self::AgentSessionObjectiveSet),
@@ -1016,7 +979,6 @@ impl AppServerRequestMethod {
             METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE => Some(Self::AgentSessionObjectiveContinue),
             METHOD_AGENT_SESSION_OBJECTIVE_AUDIT => Some(Self::AgentSessionObjectiveAudit),
             METHOD_AGENT_SESSION_COMPACT => Some(Self::AgentSessionCompact),
-            METHOD_AGENT_SESSION_THREAD_RESUME => Some(Self::AgentSessionThreadResume),
             METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE => Some(Self::AgentSessionQueuedTurnRemove),
             METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE => Some(Self::AgentSessionQueuedTurnPromote),
             METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST => Some(Self::AgentSessionFileCheckpointList),
@@ -1274,11 +1236,7 @@ impl AppServerRequestMethod {
             }
             METHOD_CONVERSATION_IMPORT_THREAD_COMMIT => Some(Self::ConversationImportThreadCommit),
             METHOD_CONVERSATION_IMPORT_JOB_READ => Some(Self::ConversationImportJobRead),
-            METHOD_AGENT_SESSION_START => Some(Self::AgentSessionStart),
-            METHOD_AGENT_SESSION_READ => Some(Self::AgentSessionRead),
             METHOD_AGENT_SESSION_MEDIA_READ => Some(Self::AgentSessionMediaRead),
-            METHOD_AGENT_SESSION_TURN_START => Some(Self::AgentSessionTurnStart),
-            METHOD_AGENT_SESSION_TURN_CANCEL => Some(Self::AgentSessionTurnCancel),
             METHOD_AGENT_SESSION_ACTION_REPLAY => Some(Self::AgentSessionActionReplay),
             METHOD_AGENT_SESSION_ACTION_RESPOND => Some(Self::AgentSessionActionRespond),
             METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND => {
@@ -1299,8 +1257,6 @@ pub enum AppServerNotificationMethod {
     Initialized,
     #[serde(rename = "configWarning")]
     ConfigWarning,
-    #[serde(rename = "serverRequest/resolved")]
-    ServerRequestResolved,
     #[serde(rename = "workspaceRightSurface/pendingChanged")]
     WorkspaceRightSurfacePendingChanged,
     #[serde(rename = "agentSession/event")]
@@ -1312,7 +1268,6 @@ impl AppServerNotificationMethod {
         match self {
             Self::Initialized => METHOD_INITIALIZED,
             Self::ConfigWarning => METHOD_CONFIG_WARNING,
-            Self::ServerRequestResolved => METHOD_SERVER_REQUEST_RESOLVED,
             Self::WorkspaceRightSurfacePendingChanged => {
                 METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
             }
@@ -1324,7 +1279,6 @@ impl AppServerNotificationMethod {
         match method {
             METHOD_INITIALIZED => Some(Self::Initialized),
             METHOD_CONFIG_WARNING => Some(Self::ConfigWarning),
-            METHOD_SERVER_REQUEST_RESOLVED => Some(Self::ServerRequestResolved),
             METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED => {
                 Some(Self::WorkspaceRightSurfacePendingChanged)
             }
@@ -1345,10 +1299,6 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_CONFIG_WARNING,
-        kind: AppServerMethodKind::Notification,
-    },
-    AppServerMethodSpec {
-        method: METHOD_SERVER_REQUEST_RESOLVED,
         kind: AppServerMethodKind::Notification,
     },
     AppServerMethodSpec {
@@ -1476,31 +1426,7 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_LIST,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_THREAD_READ,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_THREAD_LIST,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_THREAD_TURNS_LIST,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_THREAD_ITEMS_LIST,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_UPDATE,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_ARCHIVE_MANY,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -1533,10 +1459,6 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_COMPACT,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_THREAD_RESUME,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -2208,10 +2130,6 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
-        method: METHOD_MCP_SERVER_ELICITATION_REQUEST,
-        kind: AppServerMethodKind::ServerRequest,
-    },
-    AppServerMethodSpec {
         method: METHOD_MCP_TOOL_LIST,
         kind: AppServerMethodKind::Request,
     },
@@ -2488,23 +2406,7 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_START,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_READ,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_MEDIA_READ,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_TURN_START,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_TURN_CANCEL,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -2547,6 +2449,14 @@ pub const APP_SERVER_REQUEST_SERIALIZATION_SCOPES: &[AppServerRequestSerializati
         scope: AppServerRequestSerializationScope::Thread,
     },
     AppServerRequestSerializationScopeSpec {
+        method: crate::protocol::v2::METHOD_THREAD_ARCHIVE,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: crate::protocol::v2::METHOD_THREAD_UNARCHIVE,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
         method: METHOD_THREAD_TURNS_LIST,
         scope: AppServerRequestSerializationScope::Thread,
     },
@@ -2555,15 +2465,43 @@ pub const APP_SERVER_REQUEST_SERIALIZATION_SCOPES: &[AppServerRequestSerializati
         scope: AppServerRequestSerializationScope::Thread,
     },
     AppServerRequestSerializationScopeSpec {
-        method: METHOD_AGENT_SESSION_TURN_START,
+        method: crate::protocol::v2::METHOD_THREAD_SETTINGS_UPDATE,
         scope: AppServerRequestSerializationScope::Thread,
     },
     AppServerRequestSerializationScopeSpec {
-        method: METHOD_AGENT_SESSION_TURN_CANCEL,
+        method: crate::protocol::v2::METHOD_THREAD_MEMORY_MODE_SET,
         scope: AppServerRequestSerializationScope::Thread,
     },
     AppServerRequestSerializationScopeSpec {
-        method: METHOD_AGENT_SESSION_THREAD_RESUME,
+        method: crate::protocol::v2::METHOD_THREAD_SHELL_COMMAND,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: crate::protocol::v2::METHOD_THREAD_GOAL_SET,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: crate::protocol::v2::METHOD_THREAD_GOAL_GET,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: crate::protocol::v2::METHOD_THREAD_GOAL_CLEAR,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: METHOD_TURN_START,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: METHOD_TURN_STEER,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: METHOD_TURN_INTERRUPT,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: METHOD_THREAD_RESUME,
         scope: AppServerRequestSerializationScope::Thread,
     },
     AppServerRequestSerializationScopeSpec {
@@ -2673,6 +2611,10 @@ pub const APP_SERVER_REQUEST_ACCESSES: &[AppServerRequestAccessSpec] = &[
         method: METHOD_THREAD_ITEMS_LIST,
         access: AppServerRequestAccess::SharedRead,
     },
+    AppServerRequestAccessSpec {
+        method: crate::protocol::v2::METHOD_THREAD_GOAL_GET,
+        access: AppServerRequestAccess::SharedRead,
+    },
 ];
 
 pub fn app_server_request_access(method: &str) -> AppServerRequestAccess {
@@ -2693,11 +2635,15 @@ pub fn app_server_request_serialization_scope(
 }
 
 pub fn is_app_server_request_method(method: &str) -> bool {
-    AppServerRequestMethod::parse(method).is_some()
+    crate::protocol::v2::Method::parse(method).is_some()
+        || AppServerRequestMethod::parse(method).is_some()
 }
 
 pub fn is_app_server_notification_method(method: &str) -> bool {
-    AppServerNotificationMethod::parse(method).is_some()
+    crate::protocol::v2::NOTIFICATION_METHODS.contains(&method)
+        || APP_SERVER_METHODS
+            .iter()
+            .any(|spec| spec.kind == AppServerMethodKind::Notification && spec.method == method)
 }
 
 #[cfg(test)]
@@ -2715,26 +2661,33 @@ mod tests {
     }
 
     #[test]
-    fn client_request_round_trips_typed_request_method() {
+    fn client_request_round_trips_v0_request_method() {
         let request = AppServerClientRequest::try_from(JsonRpcRequest::new(
             RequestId::Integer(7),
-            METHOD_AGENT_SESSION_TURN_START,
-            Some(json!({
-                "sessionId": "sess_1",
-                "input": {
-                    "text": "hello"
-                }
-            })),
+            METHOD_CAPABILITY_LIST,
+            Some(json!({})),
         ))
         .expect("typed request");
 
-        assert_eq!(
-            request.method(),
-            AppServerRequestMethod::AgentSessionTurnStart
-        );
+        assert_eq!(request.method(), AppServerRequestMethod::CapabilityList);
         let raw: JsonRpcRequest = request.into();
-        assert_eq!(raw.method, METHOD_AGENT_SESSION_TURN_START);
+        assert_eq!(raw.method, METHOD_CAPABILITY_LIST);
         assert_eq!(raw.id, RequestId::Integer(7));
+    }
+
+    #[test]
+    fn v0_client_request_rejects_v2_request_method() {
+        let error = AppServerClientRequest::try_from(JsonRpcRequest::new(
+            RequestId::Integer(7),
+            METHOD_TURN_START,
+            Some(json!({ "threadId": "thread-1", "input": [] })),
+        ))
+        .expect_err("v2 request must use the typed v2 envelope");
+
+        assert_eq!(
+            error,
+            "v2 method requires protocol::v2::ClientRequest: turn/start"
+        );
     }
 
     #[test]
@@ -2788,9 +2741,9 @@ mod tests {
             timestamp: "2026-07-05T00:00:00Z".to_string(),
             payload: json!({}),
         };
-        let notification = ServerNotification::AgentSessionEvent(
-            AgentSessionEventParams::from_event(event.clone()),
-        );
+        let notification = ServerNotification::AgentSessionEvent(AgentSessionEventParams {
+            event: event.clone(),
+        });
 
         let raw: crate::JsonRpcNotification = notification.into();
         assert_eq!(raw.method, METHOD_AGENT_SESSION_EVENT);
@@ -2798,7 +2751,7 @@ mod tests {
 
         assert_eq!(
             decoded,
-            ServerNotification::AgentSessionEvent(AgentSessionEventParams::from_event(event))
+            ServerNotification::AgentSessionEvent(AgentSessionEventParams { event })
         );
     }
 
@@ -2822,25 +2775,5 @@ mod tests {
         let decoded = ServerNotification::try_from(raw).expect("decode");
 
         assert_eq!(decoded, notification);
-    }
-
-    #[test]
-    fn notification_round_trips_server_request_resolved_outer_id() {
-        let notification =
-            ServerNotification::ServerRequestResolved(ServerRequestResolvedNotification {
-                request_id: RequestId::String("app-server-request:boot:7".to_string()),
-            });
-
-        let raw: crate::JsonRpcNotification = notification.clone().into();
-        assert_eq!(raw.method, METHOD_SERVER_REQUEST_RESOLVED);
-        assert_eq!(
-            raw.params.as_ref(),
-            Some(&json!({ "requestId": "app-server-request:boot:7" }))
-        );
-
-        assert_eq!(
-            ServerNotification::try_from(raw).expect("decode resolved notification"),
-            notification
-        );
     }
 }

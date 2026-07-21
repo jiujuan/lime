@@ -12,15 +12,19 @@ import {
 
 function thread(threadId: string, parentThreadId?: string): AppServerThread {
   return {
-    archived: false,
-    createdAtMs: 100,
+    cliVersion: "1.0.0",
+    createdAt: 100,
+    cwd: "/workspace",
+    ephemeral: false,
+    id: threadId,
+    modelProvider: "openai",
     parentThreadId,
+    preview: "",
     sessionId: `session-${threadId}`,
+    source: "cli",
     status: { type: "idle" },
-    threadId,
     turns: [],
-    turnsView: "summary",
-    updatedAtMs: 200,
+    updatedAt: 200,
   };
 }
 
@@ -56,20 +60,15 @@ describe("listCanonicalChildThreads", () => {
       parentThreadId: " parent ",
     });
 
-    expect(children.map((child) => child.threadId)).toEqual([
-      "child-b",
-      "child-a",
-    ]);
+    expect(children.map((child) => child.id)).toEqual(["child-b", "child-a"]);
     expect(listThreads).toHaveBeenNthCalledWith(1, {
-      includeArchived: false,
+      archived: false,
       limit: 500,
-      turnsView: "summary",
     });
     expect(listThreads).toHaveBeenNthCalledWith(2, {
+      archived: false,
       cursor: "page-2",
-      includeArchived: false,
       limit: 500,
-      turnsView: "summary",
     });
   });
 

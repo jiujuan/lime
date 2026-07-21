@@ -12,7 +12,7 @@
 
 `agentSession/turn/start ArtifactSnapshot -> AgentTimeline FileArtifact -> artifact_document_service sidecar versions -> SessionDetail / AgentRuntimeThreadReadModel / App Server file checkpoint methods -> evidence / replay`
 
-路径边界：旧 `agent_runtime_*file_checkpoint*` 文件快照命令名只允许作为迁移期读取 surface、retired guard 或历史 evidence；`lime-rs/src/**` 与 `lime-rs/src/commands/**` 已删除，不是新增持久化实现目录。新增 file checkpoint、artifact sidecar、export / replay 持久化逻辑应进入 `lime-rs/crates/**` 下的 App Server / RuntimeCore / services / core / agent 或协议 client，不得恢复旧 command wrapper。DB 瘦身与平台落盘主线见 `internal/roadmap/db/README.md` 与 `internal/exec-plans/db-slimming-codex-alignment-plan.md`。
+路径边界：旧 `agent_runtime_*file_checkpoint*` 文件快照命令名只允许作为迁移期读取 surface、retired guard 或历史 evidence；`lime-rs/src/**` 与 `lime-rs/src/commands/**` 已删除，不是新增持久化实现目录。新增 file checkpoint、artifact sidecar、export / replay 持久化逻辑应进入 `lime-rs/crates/**` 下的 App Server / RuntimeCore / services / core / agent 或协议 client，不得恢复旧 command wrapper。DB 瘦身与平台落盘主线见 `internal/exec-plans/codex-lime-storage-alignment-plan.md`，逐路径账本见 `internal/refactor/data/03-one-to-one-storage-alignment-plan.md`；旧 `db-slimming-codex-alignment-plan.md` 仅保留历史 evidence。
 
 含义如下：
 
@@ -27,6 +27,13 @@
 6. `runtime_evidence_pack_service` 与 `runtime_replay_case_service` 统一消费同一份 file checkpoint 读模型，不再各自重新解析 artifact 状态
 
 ## 事实源分层
+
+### 0. Thread durable history 目标与 file checkpoint 的边界
+
+- P1 目标合同：Thread/Turn/Item 的 durable truth 只允许由 App Server `AgentRoot/sessions/YYYY/MM/DD/rollout-*.jsonl` 承载；state/read-model SQLite 只保存定位、语义状态或经验证可重建的 projection。
+- 当前生产实现仍同时写 flat EventLog、`ProjectionStore.projected_*` 与 `canonical_*` SQLite；它们是 `deprecated / frozen-for-migration` 的过渡实现，不得新增 payload、第二 writer 或长期兼容读取。完成 canonical cutover、rebuild 和 Gate B 前，本目标只能保持 `in_progress`。
+- `file_checkpoint` 是 workspace/artifact sidecar，保存用户文件快照和版本，不是 Thread transcript，也不能反向成为 session history owner。
+- Event、trace、telemetry、tool IO、renderer `localStorage` 和 host profile 都不能复制完整 transcript 或 durable session/domain truth。
 
 ### 1. Timeline facts
 
@@ -124,10 +131,12 @@
 - `current`：Product DB，保留 provider、API key、model registry、workspace、settings、user assets、插件与低频产品对象。
 - `compat / projection`：`agent_sessions`、`agent_thread_turns`、`agent_thread_items`、`agent_turn_outcomes`、`agent_thread_incidents`。
 - `deprecated / migration-source`：`agent_messages`，只允许 migration/backfill/export 输入，不承接新 Agent runtime transcript truth，也不保留长期产品 fallback。
-- `move`：request telemetry、runtime trace、大输出、file checkpoint content，分别进入 Telemetry DB、Event Log、Sidecar 或 Projection DB。
+- `move`：request telemetry、runtime trace、大输出、file checkpoint content，分别进入 bounded Observability owner、diagnostic Event input、Sidecar 或 Artifact owner；都不能成为 canonical Thread transcript。
 
 平台路径要求：
 
-- Desktop 托管时由 Electron `userData` 派生 App Server `--data-dir`。
+- Desktop 托管时 `userData` 只负责 Electron profile/config；App Server `--data-dir` 必须由统一安装路径契约解析：macOS 使用 `~/Library/Application Support/lime/app-server`，Windows 使用 `%LOCALAPPDATA%\\LimeCloud\\lime\\app-server`，不能使用 Squirrel 安装包根 `%LOCALAPPDATA%\\lime`。
+- Windows roaming host profile 固定为 `%APPDATA%\\lime`；Chromium `sessionData`、模型和 connector 等机器资产不得落在 roaming root。
 - CLI / 测试通过 `--data-dir` 或 `APP_SERVER_DATA_DIR` 注入。
+- `LIME_AGENT_RUNTIME_ROOT` 仅作为显式测试/便携/运维 override；Electron 启动子进程时将最终 `AgentRoot` 回写到同名环境变量，禁止默认 root 与 override 双写。
 - Rust store 只接受显式 `data_root` / `workspace_root`，业务层不硬编码 macOS / Windows 目录、`~/.lime`、repo 根或 temp。

@@ -70,6 +70,11 @@ async function installClipboardSink(page) {
             typeof payload.runtime_snapshot === "object"
               ? payload.runtime_snapshot
               : null;
+          const currentLogPath = String(
+            payload?.log_storage_diagnostics?.current_log_path ?? "",
+          )
+            .replace(/\\/g, "/")
+            .replace(/\/+/g, "/");
           sink.writeCount += 1;
           sink.textLength = value.length;
           sink.jsonObject = Boolean(
@@ -81,28 +86,31 @@ async function installClipboardSink(page) {
             persistedLogTail: Array.isArray(payload?.persisted_log_tail),
             serverDiagnostics: Boolean(
               payload?.server_diagnostics &&
-                typeof payload.server_diagnostics === "object",
+              typeof payload.server_diagnostics === "object",
             ),
             logStorageDiagnostics: Boolean(
               payload?.log_storage_diagnostics &&
-                typeof payload.log_storage_diagnostics === "object",
+              typeof payload.log_storage_diagnostics === "object",
+            ),
+            currentLogPathAtAgentRoot: currentLogPath.endsWith(
+              "/app-server/observability/log/lime.log",
             ),
             windowsStartupDiagnostics: Boolean(
               payload?.windows_startup_diagnostics &&
-                typeof payload.windows_startup_diagnostics === "object",
+              typeof payload.windows_startup_diagnostics === "object",
             ),
             runtimeSnapshot: Boolean(runtimeSnapshot),
             configSummary: Boolean(
               runtimeSnapshot?.config_summary &&
-                typeof runtimeSnapshot.config_summary === "object",
+              typeof runtimeSnapshot.config_summary === "object",
             ),
             providerSummary: Boolean(
               runtimeSnapshot?.api_key_provider_summary &&
-                typeof runtimeSnapshot.api_key_provider_summary === "object",
+              typeof runtimeSnapshot.api_key_provider_summary === "object",
             ),
             mcpSummary: Boolean(
               runtimeSnapshot?.mcp_summary &&
-                typeof runtimeSnapshot.mcp_summary === "object",
+              typeof runtimeSnapshot.mcp_summary === "object",
             ),
           };
         },
@@ -156,12 +164,11 @@ async function readDeveloperReadyState(page, options) {
         document
           .querySelector('[data-testid="developer-lab-tab-developer"]')
           ?.getAttribute("data-state") === "active";
-      const copyButton = Array.from(
-        document.querySelectorAll("button"),
-      ).find((button) =>
-        /复制纯 JSON|複製純 JSON|Copy raw JSON|JSON.*コピー|JSON 복사/i.test(
-          button.textContent ?? "",
-        ),
+      const copyButton = Array.from(document.querySelectorAll("button")).find(
+        (button) =>
+          /复制纯 JSON|複製純 JSON|Copy raw JSON|JSON.*コピー|JSON 복사/i.test(
+            button.textContent ?? "",
+          ),
       );
       if (
         !developerTabActive ||

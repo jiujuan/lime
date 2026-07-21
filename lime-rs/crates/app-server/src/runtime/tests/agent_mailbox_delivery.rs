@@ -3,10 +3,12 @@ use crate::runtime::agent_mailbox_delivery::{
     canonical_mailbox_item_is_terminal, mailbox_item_id, mailbox_message_runtime_events,
     mailbox_turn_id,
 };
+use crate::runtime::inter_agent_input::from_mailbox_message;
 use agent_protocol::{ThreadId, ThreadTurnsView, TurnStatus};
 use app_server_protocol::AgentSessionStartParams;
 use async_trait::async_trait;
 use rusqlite::Connection;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use thread_store::{
     AgentIdentity, AgentIdentityStore, AgentMailboxDeliveryMode, AgentMailboxDeliveryStatus,
@@ -18,6 +20,101 @@ use thread_store::{
 struct RecordingBackend {
     requests: Mutex<Vec<ExecutionRequest>>,
     histories: Mutex<Vec<Vec<model_provider::current_client::CurrentProviderMessage>>>,
+}
+
+struct BlockingBackend {
+    started: tokio::sync::mpsc::UnboundedSender<String>,
+    release: Arc<tokio::sync::Semaphore>,
+}
+
+struct PendingPreflightBackend {
+    pending_once: AtomicBool,
+    executions: AtomicUsize,
+}
+
+#[async_trait]
+impl ExecutionBackend for PendingPreflightBackend {
+    fn requires_provider_selection(&self) -> bool {
+        true
+    }
+
+    async fn preflight_turn(
+        &self,
+        request: &ExecutionRequest,
+        _first_sampling_turn: bool,
+    ) -> Result<(), RuntimeCoreError> {
+        if self.pending_once.swap(false, Ordering::AcqRel) {
+            return Err(RuntimeCoreError::PendingRoute {
+                session_id: request.session.session_id.clone(),
+                provider: request.provider_preference().map(str::to_string),
+                model: request.model_preference().map(str::to_string),
+                reason_code: "fixture_route_pending".to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.executions.fetch_add(1, Ordering::AcqRel);
+        sink.emit(RuntimeEvent::new("turn.accepted", json!({})))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ExecutionBackend for BlockingBackend {
+    async fn start_turn(
+        &self,
+        request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.started
+            .send(request.turn.turn_id.clone())
+            .map_err(|_| RuntimeCoreError::Backend("turn start observer dropped".to_string()))?;
+        self.release
+            .acquire()
+            .await
+            .map_err(|_| RuntimeCoreError::Backend("turn release closed".to_string()))?
+            .forget();
+        sink.emit(RuntimeEvent::new("turn.accepted", json!({})))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -74,15 +171,22 @@ fn setup() -> (
     Arc<ProjectionStore>,
     Arc<RecordingBackend>,
 ) {
+    let backend = Arc::new(RecordingBackend::default());
+    let (temp, core, store) = setup_with_backend(backend.clone());
+    (temp, core, store, backend)
+}
+
+fn setup_with_backend(
+    backend: Arc<dyn ExecutionBackend>,
+) -> (tempfile::TempDir, RuntimeCore, Arc<ProjectionStore>) {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = Arc::new(
         ProjectionStore::initialize(temp.path().join("projection.sqlite"))
             .expect("projection store"),
     );
-    let backend = Arc::new(RecordingBackend::default());
     let event_log_writer =
         Arc::new(EventLogWriter::new(temp.path().join("event-log")).expect("event log writer"));
-    let core = RuntimeCore::with_backend(backend.clone())
+    let core = RuntimeCore::with_backend(backend)
         .with_event_log_writer(event_log_writer)
         .with_projection_store(store.clone());
     core.start_session(AgentSessionStartParams {
@@ -121,7 +225,7 @@ fn setup() -> (
         last_task_message: None,
     }))
     .expect("child identity");
-    (temp, core, store, backend)
+    (temp, core, store)
 }
 
 fn message(id: &str, mode: AgentMailboxDeliveryMode) -> AgentMailboxMessage {
@@ -141,6 +245,22 @@ fn message(id: &str, mode: AgentMailboxDeliveryMode) -> AgentMailboxMessage {
     }
 }
 
+#[test]
+fn mailbox_message_event_uses_ordered_typed_input() {
+    let message = message("typed-input", AgentMailboxDeliveryMode::TriggerTurn);
+    let event = mailbox_message_runtime_events(&message, "mailbox-item-typed-input", true)
+        .into_iter()
+        .next()
+        .expect("mailbox message event");
+    let input =
+        serde_json::from_value::<Vec<agent_protocol::AgentInput>>(event.payload["input"].clone())
+            .expect("typed mailbox input");
+    assert_eq!(
+        input,
+        vec![agent_protocol::AgentInput::text("content-typed-input")]
+    );
+}
+
 fn result(id: &str) -> AgentMailboxMessage {
     AgentMailboxMessage {
         message_id: id.to_string(),
@@ -156,6 +276,31 @@ fn result(id: &str) -> AgentMailboxMessage {
         created_at_ms: 1,
         delivered_at_ms: None,
     }
+}
+
+#[test]
+fn durable_message_maps_to_typed_runtime_input_without_losing_identity() {
+    use agent_runtime::session_loop::{
+        RuntimeSessionInterAgentDeliveryMode, RuntimeSessionInterAgentMessageKind,
+        RuntimeSessionInterAgentResultStatus,
+    };
+
+    let input = from_mailbox_message(&result("typed-result"));
+    assert_eq!(input.message_id, "typed-result");
+    assert_eq!(input.root_thread_id, "root-thread");
+    assert_eq!(input.sender_thread_id, "child-thread");
+    assert_eq!(input.recipient_thread_id, "child-thread");
+    assert_eq!(input.content, "result-typed-result");
+    assert_eq!(input.kind, RuntimeSessionInterAgentMessageKind::Result);
+    assert_eq!(input.source_turn_id.as_deref(), Some("source-typed-result"));
+    assert_eq!(
+        input.result_status,
+        Some(RuntimeSessionInterAgentResultStatus::Completed)
+    );
+    assert_eq!(
+        input.delivery_mode,
+        RuntimeSessionInterAgentDeliveryMode::QueueOnly
+    );
 }
 
 fn append(store: &ProjectionStore, message: AgentMailboxMessage) {
@@ -244,7 +389,7 @@ async fn trigger_turn_appends_canonical_item_before_ack_and_starts_recipient() {
     assert!(has_item(&store, "trigger-1").await);
     let requests = backend.requests.lock().expect("requests mutex poisoned");
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].input.text, "content-trigger-1");
+    assert_eq!(requests[0].input.concat_text(), "content-trigger-1");
     assert_eq!(requests[0].turn.turn_id, mailbox_turn_id("trigger-1"));
     let histories = backend.histories.lock().expect("histories mutex poisoned");
     assert!(
@@ -272,6 +417,246 @@ async fn trigger_turn_appends_canonical_item_before_ack_and_starts_recipient() {
         mailbox_message.payload["itemId"],
         mailbox_item_id("trigger-1")
     );
+}
+
+#[tokio::test]
+async fn concurrent_trigger_schedules_serialize_without_losing_tail_mail() {
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let release = Arc::new(tokio::sync::Semaphore::new(0));
+    let backend = Arc::new(BlockingBackend {
+        started: started_tx,
+        release: Arc::clone(&release),
+    });
+    let (_temp, core, store) = setup_with_backend(backend);
+    append(
+        &store,
+        message("serial-trigger-1", AgentMailboxDeliveryMode::TriggerTurn),
+    );
+
+    core.schedule_pending_agent_mailbox_triggers(
+        "child-session".to_string(),
+        RuntimeHostContext::default(),
+        None,
+    )
+    .await;
+    assert_eq!(
+        started_rx.recv().await.as_deref(),
+        Some(mailbox_turn_id("serial-trigger-1").as_str())
+    );
+
+    append(
+        &store,
+        message("serial-trigger-2", AgentMailboxDeliveryMode::TriggerTurn),
+    );
+    let second_core = core.clone();
+    let second = tokio::spawn(async move {
+        second_core
+            .schedule_pending_agent_mailbox_triggers(
+                "child-session".to_string(),
+                RuntimeHostContext::default(),
+                None,
+            )
+            .await;
+    });
+    let duplicate_core = core.clone();
+    let duplicate = tokio::spawn(async move {
+        duplicate_core
+            .schedule_pending_agent_mailbox_triggers(
+                "child-session".to_string(),
+                RuntimeHostContext::default(),
+                None,
+            )
+            .await;
+    });
+    tokio::task::yield_now().await;
+    assert!(!second.is_finished());
+    assert!(!duplicate.is_finished());
+
+    release.add_permits(1);
+    let second_turn = tokio::time::timeout(std::time::Duration::from_secs(1), started_rx.recv())
+        .await
+        .expect("tail mailbox turn should start after the active recovery")
+        .expect("turn start observer");
+    assert_eq!(second_turn, mailbox_turn_id("serial-trigger-2"));
+    assert!(!second.is_finished());
+    assert!(!duplicate.is_finished());
+
+    release.add_permits(1);
+    second.await.expect("second schedule task");
+    duplicate.await.expect("duplicate schedule task");
+    assert!(started_rx.try_recv().is_err());
+    assert!(pending(&store).await.is_empty());
+    assert!(has_item(&store, "serial-trigger-1").await);
+    assert!(has_item(&store, "serial-trigger-2").await);
+}
+
+#[tokio::test]
+async fn detached_pending_work_wake_returns_before_target_turn_terminal() {
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let release = Arc::new(tokio::sync::Semaphore::new(0));
+    let backend = Arc::new(BlockingBackend {
+        started: started_tx,
+        release: Arc::clone(&release),
+    });
+    let (_temp, core, store) = setup_with_backend(backend);
+    append(
+        &store,
+        message("detached-trigger", AgentMailboxDeliveryMode::TriggerTurn),
+    );
+
+    core.wake_pending_session_work(
+        "child-session".to_string(),
+        RuntimeHostContext::default(),
+        None,
+    );
+
+    let turn_id = tokio::time::timeout(std::time::Duration::from_secs(1), started_rx.recv())
+        .await
+        .expect("detached wake should start the target turn")
+        .expect("turn start observer");
+    assert_eq!(turn_id, mailbox_turn_id("detached-trigger"));
+    assert!(!matches!(
+        canonical_turn_status(&store, &turn_id).await,
+        Some(TurnStatus::Completed | TurnStatus::Failed | TurnStatus::Interrupted)
+    ));
+
+    release.add_permits(1);
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            if canonical_turn_status(&store, &turn_id).await == Some(TurnStatus::Completed) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("target turn should complete after release");
+}
+
+#[tokio::test]
+async fn pending_route_preflight_keeps_trigger_mail_unmaterialized_until_retry() {
+    let backend = Arc::new(PendingPreflightBackend {
+        pending_once: AtomicBool::new(true),
+        executions: AtomicUsize::new(0),
+    });
+    let (_temp, core, store) = setup_with_backend(backend.clone());
+    append(
+        &store,
+        message("preflight-trigger", AgentMailboxDeliveryMode::TriggerTurn),
+    );
+    let runtime_options = Some(RuntimeOptions {
+        runtime_request: Some(RuntimeRequest {
+            provider_preference: Some("provider-current".to_string()),
+            model_preference: Some("model-current".to_string()),
+            ..RuntimeRequest::default()
+        }),
+        ..RuntimeOptions::default()
+    });
+
+    let error = core
+        .process_pending_session_work_with_options(
+            "child-session",
+            RuntimeHostContext::default(),
+            runtime_options.clone(),
+            None,
+        )
+        .await
+        .expect_err("first route preflight should remain pending");
+    assert!(matches!(
+        error,
+        RuntimeCoreError::PendingRoute { reason_code, .. }
+            if reason_code == "fixture_route_pending"
+    ));
+    assert_eq!(backend.executions.load(Ordering::Acquire), 0);
+    assert_eq!(pending(&store).await.len(), 1);
+    assert!(!has_item(&store, "preflight-trigger").await);
+
+    assert_eq!(
+        core.process_pending_session_work_with_options(
+            "child-session",
+            RuntimeHostContext::default(),
+            runtime_options,
+            None,
+        )
+        .await
+        .expect("retry ready route"),
+        1
+    );
+    assert_eq!(backend.executions.load(Ordering::Acquire), 1);
+    assert!(pending(&store).await.is_empty());
+    assert!(has_item(&store, "preflight-trigger").await);
+}
+
+#[tokio::test]
+async fn terminal_turn_wakes_trigger_mail_that_arrived_while_recipient_was_active() {
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let release = Arc::new(tokio::sync::Semaphore::new(0));
+    let backend = Arc::new(BlockingBackend {
+        started: started_tx,
+        release: Arc::clone(&release),
+    });
+    let (_temp, core, store) = setup_with_backend(backend);
+    let active_core = core.clone();
+    let active_turn = tokio::spawn(async move {
+        active_core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: "child-session".to_string(),
+                    turn_id: Some("active-before-mail".to_string()),
+                    input: AgentInput {
+                        text: "active child work".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+    });
+    assert_eq!(
+        started_rx.recv().await.as_deref(),
+        Some("active-before-mail")
+    );
+
+    append(
+        &store,
+        message(
+            "arrived-while-active",
+            AgentMailboxDeliveryMode::TriggerTurn,
+        ),
+    );
+    core.wake_pending_session_work(
+        "child-session".to_string(),
+        RuntimeHostContext::default(),
+        None,
+    );
+    tokio::task::yield_now().await;
+    assert!(started_rx.try_recv().is_err());
+
+    release.add_permits(1);
+    active_turn
+        .await
+        .expect("active turn task")
+        .expect("active turn completion");
+    let mailbox_turn = tokio::time::timeout(std::time::Duration::from_secs(1), started_rx.recv())
+        .await
+        .expect("terminal wake should start pending mailbox work")
+        .expect("mailbox turn observer");
+    assert_eq!(mailbox_turn, mailbox_turn_id("arrived-while-active"));
+
+    release.add_permits(1);
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            if canonical_turn_status(&store, &mailbox_turn).await == Some(TurnStatus::Completed) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("pending mailbox work should complete after release");
 }
 
 #[tokio::test]
@@ -326,7 +711,7 @@ async fn queue_only_stays_pending_until_a_real_turn_without_starting_one() {
         .expect("mailbox activity after delivery"));
     let requests = backend.requests.lock().expect("requests mutex poisoned");
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].input.text, "real user turn");
+    assert_eq!(requests[0].input.concat_text(), "real user turn");
     let histories = backend.histories.lock().expect("histories mutex poisoned");
     assert_eq!(histories.len(), 1);
     assert_eq!(
@@ -499,10 +884,7 @@ async fn in_progress_result_is_completed_before_retry_ack() {
     core.deliver_pending_agent_mailbox_for_turn(
         &session,
         &turn,
-        &AgentInput {
-            text: "continue".to_string(),
-            attachments: Vec::new(),
-        },
+        &[agent_protocol::AgentInput::text("continue")],
     )
     .await
     .expect("retry result delivery");
@@ -567,10 +949,7 @@ async fn existing_canonical_item_is_acknowledged_without_a_duplicate_visible_ite
         .deliver_pending_agent_mailbox_for_turn(
             &session,
             &turn,
-            &AgentInput {
-                text: message.content.clone(),
-                attachments: Vec::new(),
-            },
+            &[agent_protocol::AgentInput::text(message.content.clone())],
         )
         .await
         .expect("retry delivery");
@@ -732,7 +1111,7 @@ async fn event_log_first_queue_only_retry_recovers_canonical_item_before_ack() {
     );
     assert!(child_events.iter().any(|event| {
         event.turn_id.as_deref() == Some("second-user-turn")
-            && event.payload.pointer("/input/text") == Some(&json!("second user input"))
+            && event.payload.pointer("/input/0/text") == Some(&json!("second user input"))
     }));
     assert!(child_events.iter().any(|event| {
         event.turn_id.as_deref() == Some("first-user-turn")

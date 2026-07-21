@@ -1,6 +1,5 @@
 import {
   AppServerRpcError,
-  type AppServerAgentEvent,
   type AppServerDrainEventsRequest,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
@@ -10,8 +9,9 @@ import {
 } from "@/lib/api/appServerEventBus";
 import { publishProcessedAgentRuntimeEvent } from "../agentRuntimeEvents";
 import { projectAgentRuntimeSequenceGateNotifications } from "./eventSequenceGate";
-import { projectAppServerAgentEventPayload } from "./appServerEventPayloadProjection";
+import { projectAppServerAgentEventPayload } from "./appServerEventStreamProjection";
 import { readAppServerAgentEvent } from "./appServerEventPayloadUtils";
+import { readAppServerV2NotificationRoute } from "./appServerV2Notification";
 
 export const APP_SERVER_EVENT_DRAIN_LIMIT = 50;
 export const APP_SERVER_EVENT_DRAIN_ACTIVE_INTERVAL_MS = 32;
@@ -41,6 +41,13 @@ type AppServerAgentSessionEventRoute = {
   requestedTurnId?: string;
   seenEventIds: Set<string>;
   sessionId: string;
+  turnId?: string;
+};
+
+type AppServerRoutableNotification = {
+  eventId?: string;
+  sessionId: string;
+  terminal: boolean;
   turnId?: string;
 };
 
@@ -139,8 +146,8 @@ export class AppServerAgentSessionEventDrainRouter {
     notification: AppServerJsonRpcNotification,
     fallbackEventName?: string,
   ): void {
-    const event = readAppServerAgentEvent(notification.params);
-    if (!event) {
+    const routable = readRoutableNotification(notification);
+    if (!routable) {
       if (fallbackEventName) {
         publishAppServerAgentSessionNotifications(fallbackEventName, [
           notification,
@@ -149,11 +156,11 @@ export class AppServerAgentSessionEventDrainRouter {
       return;
     }
 
-    const matchedRoutes = this.#matchingRoutes(event);
+    const matchedRoutes = this.#matchingRoutes(routable);
     if (
       matchedRoutes.length === 0 &&
       fallbackEventName &&
-      !this.#isClosedFallbackRoute(event, fallbackEventName)
+      !this.#isClosedFallbackRoute(routable, fallbackEventName)
     ) {
       publishAppServerAgentSessionNotifications(fallbackEventName, [
         notification,
@@ -162,15 +169,17 @@ export class AppServerAgentSessionEventDrainRouter {
     }
 
     for (const route of matchedRoutes) {
-      if (route.seenEventIds.has(event.eventId)) {
+      if (routable.eventId && route.seenEventIds.has(routable.eventId)) {
         continue;
       }
-      route.seenEventIds.add(event.eventId);
+      if (routable.eventId) {
+        route.seenEventIds.add(routable.eventId);
+      }
       route.hasPublishedEvent = true;
       publishAppServerAgentSessionNotifications(route.eventName, [
         notification,
       ]);
-      if (isTerminalAppServerAgentEvent(event)) {
+      if (routable.terminal) {
         this.#closedRouteKeys.add(routeKey(route));
         if (route.requestedTurnId) {
           this.#closedRouteKeys.add(
@@ -196,7 +205,7 @@ export class AppServerAgentSessionEventDrainRouter {
   }
 
   #isClosedFallbackRoute(
-    event: AppServerAgentEvent,
+    event: AppServerRoutableNotification,
     fallbackEventName: string,
   ): boolean {
     return (
@@ -217,12 +226,15 @@ export class AppServerAgentSessionEventDrainRouter {
   }
 
   #matchingRoutes(
-    event: AppServerAgentEvent,
+    event: AppServerRoutableNotification,
   ): AppServerAgentSessionEventRoute[] {
     const routes: AppServerAgentSessionEventRoute[] = [];
     for (const route of this.#routes.values()) {
       if (route.sessionId !== event.sessionId) {
         continue;
+      }
+      if (!route.turnId && event.turnId) {
+        route.turnId = event.turnId;
       }
       if (route.turnId && event.turnId && route.turnId !== event.turnId) {
         if (
@@ -240,7 +252,7 @@ export class AppServerAgentSessionEventDrainRouter {
 
   #isClosedRouteForEvent(
     route: AppServerAgentSessionEventRoute,
-    event: AppServerAgentEvent,
+    event: AppServerRoutableNotification,
   ): boolean {
     return (
       this.#closedRouteKeys.has(
@@ -304,7 +316,7 @@ function doesNotificationMatchRoute(
   notification: AppServerJsonRpcNotification,
   routeParams: AppServerAgentSessionEventRouteParams,
 ): boolean {
-  const event = readAppServerAgentEvent(notification.params);
+  const event = readRoutableNotification(notification);
   if (!event) {
     return true;
   }
@@ -321,12 +333,27 @@ function doesNotificationMatchRoute(
   return true;
 }
 
-function isTerminalAppServerAgentEvent(event: AppServerAgentEvent): boolean {
-  return (
-    event.type === "turn.completed" ||
-    event.type === "turn.failed" ||
-    event.type === "turn.canceled"
-  );
+function readRoutableNotification(
+  notification: AppServerJsonRpcNotification,
+): AppServerRoutableNotification | null {
+  const event = readAppServerAgentEvent(notification.params);
+  if (event) {
+    return {
+      eventId: event.eventId,
+      sessionId: event.threadId ?? event.sessionId,
+      terminal: false,
+      turnId: event.turnId,
+    };
+  }
+
+  const direct = readAppServerV2NotificationRoute(notification);
+  return direct
+    ? {
+        sessionId: direct.threadId,
+        terminal: direct.terminal,
+        turnId: direct.turnId,
+      }
+    : null;
 }
 
 function routeKey(route: AppServerAgentSessionEventRouteParams): string {

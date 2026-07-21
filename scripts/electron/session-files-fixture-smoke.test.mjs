@@ -46,6 +46,11 @@ describe("session files Electron fixture smoke guard", () => {
     expect(content).toContain("fileShellCommands");
     expect(content).toContain("assertElectronHostEmptyResult");
     expect(content).toContain("listedAfterDeleteCount");
+    expect(content).toContain(
+      'storageContract: "AgentRoot/artifacts/sessions"',
+    );
+    expect(content).toContain('"artifacts",');
+    expect(content).toContain('"sessions",');
     expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "mock"');
     expect(content).not.toContain("--allow-live-provider");
   });

@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  buildCodexReviewStartItemProjectionEvent,
-  extractCodexReviewStartItemSnapshot,
+  buildReviewStartItemProjectionEvent,
+  extractReviewStartItemSnapshot,
 } from "../dist/index.js";
 
 function reviewStartResponse(overrides = {}) {
@@ -81,7 +81,7 @@ function baseInput(overrides = {}) {
 }
 
 test("review/start inline review binds entered and exited review items to the same turn", () => {
-  const event = buildCodexReviewStartItemProjectionEvent(
+  const event = buildReviewStartItemProjectionEvent(
     baseInput(),
     {
       sequence: 261,
@@ -140,7 +140,7 @@ test("review/start inline review binds entered and exited review items to the sa
 });
 
 test("detached review requires a new thread/started before review items", () => {
-  const snapshot = extractCodexReviewStartItemSnapshot(
+  const snapshot = extractReviewStartItemSnapshot(
     baseInput({
       delivery: "detached",
       reviewStartResponse: reviewStartResponse({
@@ -170,7 +170,7 @@ test("detached review requires a new thread/started before review items", () => 
 });
 
 test("review prompt and final review must not render as ordinary chat transcript", () => {
-  const snapshot = extractCodexReviewStartItemSnapshot(
+  const snapshot = extractReviewStartItemSnapshot(
     baseInput({
       visibleTranscriptItems: [
         {
@@ -197,7 +197,7 @@ test("review prompt and final review must not render as ordinary chat transcript
 });
 
 test("detached review fails closed if thread/started comes after review items", () => {
-  const snapshot = extractCodexReviewStartItemSnapshot(
+  const snapshot = extractReviewStartItemSnapshot(
     baseInput({
       delivery: "detached",
       reviewStartResponse: reviewStartResponse({
@@ -227,7 +227,7 @@ test("detached review fails closed if thread/started comes after review items", 
 });
 
 test("review command approval must bind to the command execution item and review turn", () => {
-  const snapshot = extractCodexReviewStartItemSnapshot(
+  const snapshot = extractReviewStartItemSnapshot(
     baseInput({
       commandExecutionItems: [
         {

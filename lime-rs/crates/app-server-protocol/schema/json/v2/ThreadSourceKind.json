@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "appServer",
+    "cli",
+    "exec",
+    "subAgent",
+    "subAgentCompact",
+    "subAgentOther",
+    "subAgentReview",
+    "subAgentThreadSpawn",
+    "unknown",
+    "vscode"
+  ],
+  "title": "ThreadSourceKind",
+  "type": "string"
+}

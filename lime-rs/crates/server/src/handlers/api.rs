@@ -42,19 +42,25 @@ use agent_protocol::session_context::{
 use lime_core::errors::GatewayErrorCode;
 use lime_core::models::anthropic::AnthropicMessagesRequest;
 use lime_core::models::openai::{ChatCompletionRequest, ContentPart, MessageContent};
-use lime_core::models::{RuntimeCredentialData, RuntimeProviderCredential};
+use lime_core::models::RuntimeProviderCredential;
 use lime_core::plugin_runtime_token::{
     verify_plugin_runtime_token_for_scope, PLUGIN_RUNTIME_SCOPE_MODEL_GENERATION,
 };
 use lime_core::ProviderType;
 use lime_processor::RequestContext;
-use lime_providers::streaming::StreamFormat as StreamingFormat;
 use lime_server_utils::{
     build_error_response_with_meta, build_gateway_error_json, message_content_len,
 };
 use subtle::ConstantTimeEq;
 
 use super::{call_provider_anthropic, call_provider_openai};
+
+#[derive(Clone, Copy)]
+enum StreamingFormat {
+    AnthropicSse,
+    OpenAiSse,
+    AwsEventStream,
+}
 
 async fn select_credential_for_request(
     state: &AppState,
@@ -2913,126 +2919,6 @@ pub async fn anthropic_messages(
         Json(serde_json::json!({ "type": "error", "error": body["error"].clone() })),
     )
         .into_response()
-}
-
-// ============================================================================
-// 流式传输辅助函数
-// ============================================================================
-
-/// 获取目标流式格式
-///
-/// 根据请求路径确定目标流式格式。
-///
-/// # 参数
-/// - `path`: 请求路径
-///
-/// # 返回
-/// 目标流式格式
-fn get_target_stream_format(path: &str) -> StreamingFormat {
-    if path.contains("/v1/messages") {
-        // Anthropic 格式端点
-        StreamingFormat::AnthropicSse
-    } else {
-        // OpenAI 格式端点
-        StreamingFormat::OpenAiSse
-    }
-}
-
-/// 检查是否应该使用真正的流式传输
-///
-/// 根据凭证类型和配置决定是否使用真正的流式传输。
-/// 目前，只有当 Provider 实现了 StreamingProvider trait 时才返回 true。
-///
-/// # 参数
-/// - `credential`: 凭证信息
-///
-/// # 返回
-/// 是否应该使用真正的流式传输
-///
-/// # 注意
-/// 当前所有 Provider 都返回 false，因为 StreamingProvider trait 尚未实现。
-/// 一旦任务 6 完成，此函数将根据凭证类型返回适当的值。
-fn should_use_true_streaming(credential: &RuntimeProviderCredential) -> bool {
-    match &credential.credential {
-        // Claude - 需要实现 StreamingProvider
-        RuntimeCredentialData::ClaudeKey { .. } => false,
-        // OpenAI - 需要实现 StreamingProvider
-        RuntimeCredentialData::OpenAIKey { .. } => false,
-        // 其他类型暂不支持流式
-        _ => false,
-    }
-}
-
-/// 构建流式错误响应
-///
-/// 将错误转换为 SSE 格式的错误事件。
-///
-/// # 参数
-/// - `error_type`: 错误类型
-/// - `message`: 错误消息
-/// - `target_format`: 目标流式格式
-///
-/// # 返回
-/// SSE 格式的错误响应
-///
-/// # 需求覆盖
-/// - 需求 5.3: 流中发生错误时发送错误事件并优雅关闭流
-fn build_stream_error_response(
-    error_type: &str,
-    message: &str,
-    target_format: StreamingFormat,
-) -> Response {
-    let status = match error_type {
-        "authentication_error" => StatusCode::UNAUTHORIZED.as_u16(),
-        "rate_limit_error" => StatusCode::TOO_MANY_REQUESTS.as_u16(),
-        "timeout_error" => StatusCode::GATEWAY_TIMEOUT.as_u16(),
-        _ => StatusCode::BAD_GATEWAY.as_u16(),
-    };
-    let error_body = build_gateway_error_json(status, message, None, None, None);
-
-    let error_event = match target_format {
-        StreamingFormat::AnthropicSse => {
-            format!(
-                "event: error\ndata: {}\n\n",
-                serde_json::json!({
-                    "type": "error",
-                    "error": error_body["error"].clone()
-                })
-            )
-        }
-        // TODO: 任务 6 完成后，添加 GeminiStream 分支
-        StreamingFormat::OpenAiSse => {
-            format!(
-                "data: {}\n\ndata: [DONE]\n\n",
-                serde_json::json!({
-                    "error": error_body["error"].clone()
-                })
-            )
-        }
-        StreamingFormat::AwsEventStream => {
-            // AWS Event Stream 格式的错误（不太可能作为目标格式）
-            format!(
-                "data: {}\n\ndata: [DONE]\n\n",
-                serde_json::json!({
-                    "error": error_body["error"].clone()
-                })
-            )
-        }
-    };
-
-    Response::builder()
-        .status(StatusCode::OK) // SSE 错误仍然返回 200
-        .header(header::CONTENT_TYPE, "text/event-stream")
-        .header(header::CACHE_CONTROL, "no-cache")
-        .header(header::CONNECTION, "keep-alive")
-        .body(Body::from(error_event))
-        .unwrap_or_else(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": {"message": "Failed to build error response"}})),
-            )
-                .into_response()
-        })
 }
 
 /// 将 OpenAI 格式请求转换为 Anthropic 格式

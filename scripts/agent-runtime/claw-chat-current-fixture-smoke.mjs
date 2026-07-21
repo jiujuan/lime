@@ -14,6 +14,7 @@ import {
   APPROVAL_REQUEST_DECLINE_SCENARIO,
   APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
   APPROVAL_REQUEST_FULL_ACCESS_SCENARIO,
+  APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO,
   APPROVAL_REQUEST_RESUME_PROMPT,
   APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
@@ -40,12 +41,10 @@ import {
   REASONING_FIRST_VISIBLE_PROMPT,
   REASONING_FIRST_VISIBLE_SCENARIO,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
-  SESSION_ID,
   SOUL_STYLE_SCENARIO,
   TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
   TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
   TERMINAL_STALE_GUARD_SCENARIO,
-  THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildFixtureAssertionReport } from "./claw-chat-current-fixture-assertions.mjs";
 import { resolveGateBExpectedIdentity } from "./claw-chat-current-fixture-assertion-context.mjs";
@@ -77,6 +76,11 @@ import {
   waitForAppUrlReady,
   waitForRendererReady,
 } from "./claw-chat-current-fixture-rpc.mjs";
+import {
+  mergeInvokeTraceEvidence,
+  startInvokeTraceEvidenceCollector,
+} from "./claw-chat-current-fixture-invoke-trace.mjs";
+import { summarizeHomeHotpathPreTurnTrace } from "./claw-chat-current-fixture-home-hotpath.mjs";
 import { executeScenarioFlow } from "./claw-chat-current-fixture-scenario-flow.mjs";
 import {
   MEDIA_REFERENCE_PROMPT,
@@ -128,7 +132,7 @@ Claw Chat Current Electron Fixture Smoke
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
   --run-id <id>          Gate 项目 run-id；也可通过 LIME_GATE_RUN_ID 注入
-  --scenario <name>      complete | home-hotpath | home-hotpath-greeting | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | inputbar-pending-steer-multi-queue | inputbar-pending-steer-pop-front-resume | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | live-tail-commit | electron-resize-reflow | approval-request-resume | approval-request-decline | approval-request-cancel | approval-request-full-access | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --scenario <name>      complete | home-hotpath | home-hotpath-greeting | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | inputbar-pending-steer-multi-queue | inputbar-pending-steer-pop-front-resume | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | live-tail-commit | electron-resize-reflow | approval-request-resume | approval-request-decline | approval-request-cancel | approval-request-host-interrupt | approval-request-full-access | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
   --prompt <text>        仅 home-hotpath 场景可用，覆盖默认新闻输入
   --soul-style-profile <id>   soul-style 场景使用的 profile，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID}
   --cdp-port <port>      可选 Electron remote debugging port；传入后通过 CDP renderer 执行 GUI 动作
@@ -260,6 +264,7 @@ function parseArgs(argv) {
     APPROVAL_REQUEST_RESUME_SCENARIO,
     APPROVAL_REQUEST_DECLINE_SCENARIO,
     APPROVAL_REQUEST_CANCEL_SCENARIO,
+    APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO,
     APPROVAL_REQUEST_FULL_ACCESS_SCENARIO,
     TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
     TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
@@ -267,7 +272,6 @@ function parseArgs(argv) {
     "web-tools-rendering",
     "mcp-structured-content",
     "skills-runtime",
-    "expert-skills-runtime",
     "expert-plaza-skills-runtime",
     "expert-panel-skills-runtime",
     RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
@@ -328,7 +332,8 @@ function scenarioWaitsForExternalBackendCancel(scenario) {
     scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO ||
     scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO ||
     scenario === INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO ||
-    scenario === TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO
+    scenario === TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO ||
+    scenario === APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO
   );
 }
 
@@ -539,13 +544,16 @@ async function run() {
                 ? LIVE_TAIL_COMMIT_PROMPT
                 : options.scenario === APPROVAL_REQUEST_RESUME_SCENARIO
                   ? APPROVAL_REQUEST_RESUME_PROMPT
-                  : options.scenario === APPROVAL_REQUEST_FULL_ACCESS_SCENARIO
-                    ? APPROVAL_REQUEST_FULL_ACCESS_PROMPT
-                    : options.scenario === HOME_HOTPATH_GREETING_SCENARIO
-                      ? GREETING_PROMPT
-                      : NEWS_PROMPT),
-    sessionId: SESSION_ID,
-    threadId: THREAD_ID,
+                  : options.scenario ===
+                      APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO
+                    ? APPROVAL_REQUEST_RESUME_PROMPT
+                    : options.scenario === APPROVAL_REQUEST_FULL_ACCESS_SCENARIO
+                      ? APPROVAL_REQUEST_FULL_ACCESS_PROMPT
+                      : options.scenario === HOME_HOTPATH_GREETING_SCENARIO
+                        ? GREETING_PROMPT
+                        : NEWS_PROMPT),
+    sessionId: null,
+    threadId: null,
     workspaceId: null,
     workspace: null,
     provider: FIXTURE_PROVIDER,
@@ -609,7 +617,6 @@ async function run() {
     inputbarPendingSteerPopFrontAfterGuiPromote: null,
     inputbarPendingSteerPopFrontActiveCancel: null,
     inputbarPendingSteerPopFrontBackendCancel: null,
-    inputbarPendingSteerPopFrontQueueResume: null,
     inputbarPendingSteerPopFrontRichBackendTurnStart: null,
     inputbarPendingSteerPopFrontReadModelAfterResume: null,
     inputbarPendingSteerPopFrontGuiHydrated: null,
@@ -676,7 +683,6 @@ async function run() {
     readModelSkillsRuntimeCompleted: null,
     readModelExplicitSkillsRuntimeCompleted: null,
     readModelManualEnableSkillsRuntimeCompleted: null,
-    expertSkillsRuntimeSessionCreation: null,
     rightSurfaceVisualMatrixSessionCreation: null,
     guiRightSurfaceVisualMatrixSessionVisible: null,
     guiRightSurfaceVisualMatrixSessionOpened: null,
@@ -712,8 +718,6 @@ async function run() {
     expertSkillsRuntimeTurnStart: null,
     expertPlazaSkillsRuntimeCatalog: null,
     expertPlazaSkillsRuntimeLaunch: null,
-    guiExpertSkillsRuntimeSessionVisible: null,
-    guiExpertSkillsRuntimeSessionOpened: null,
     guiExpertSkillsRuntimeCompleted: null,
     readModelExpertSkillsRuntimeCompleted: null,
     evidencePackSkillsRuntime: null,
@@ -735,6 +739,8 @@ async function run() {
   let page = null;
   let imageProviderFixtureServer = null;
   let textProviderFixtureServer = null;
+  let invokeTraceCollector = null;
+  let collectedInvokeTraceMessages = [];
   let chatProviderPreference = {
     provider: FIXTURE_PROVIDER,
     model: FIXTURE_MODEL,
@@ -887,11 +893,6 @@ async function run() {
       });
     }
 
-    logStage("enable-claw-trace-debug-override");
-    summary.clawTraceDebugOverride = sanitizeJson(
-      await enableClawTraceDebugOverride(page, options),
-    );
-
     logStage("wait-renderer");
     const rendererSnapshot = await waitForRendererReady(
       page,
@@ -901,7 +902,13 @@ async function run() {
       },
     );
     summary.rendererSnapshot = sanitizeJson(rendererSnapshot);
+
+    logStage("enable-claw-trace-debug-override");
+    summary.clawTraceDebugOverride = sanitizeJson(
+      await enableClawTraceDebugOverride(page, options),
+    );
     await clearInvokeBuffers(page);
+    invokeTraceCollector = startInvokeTraceEvidenceCollector(page);
 
     logStage("initialize-app-server");
     summary.initialize = sanitizeJson(
@@ -1011,36 +1018,33 @@ async function run() {
       appServerRequests,
       chatProviderPreference,
     );
+    const fixtureIdentity = sessionCreation.identity;
+    options.sessionId = fixtureIdentity.sessionId;
+    options.threadId = fixtureIdentity.threadId;
+    summary.sessionId = fixtureIdentity.sessionId;
+    summary.threadId = fixtureIdentity.threadId;
     summary.sessionCreation = sanitizeJson({
-      sessionId:
-        sessionCreation.session?.session?.sessionId ??
-        sessionCreation.session?.sessionId ??
-        null,
-      updatedSessionId:
-        sessionCreation.update?.session?.sessionId ??
-        sessionCreation.update?.sessionId ??
-        null,
+      sessionId: fixtureIdentity.sessionId,
+      threadId: fixtureIdentity.threadId,
     });
 
     logStage("verify-session-list");
     const sessionList = await invokeAppServerFromPage(
       page,
       APP_SERVER_METHOD_SESSION_LIST,
-      { includeArchived: true, cwd: workspace.rootPath, limit: 20 },
+      { archived: false, cwd: workspace.rootPath, limit: 20 },
       appServerRequests,
     );
+    const listedThreads = Array.isArray(sessionList.result?.data)
+      ? sessionList.result.data
+      : [];
     summary.sessionListVisibility = sanitizeJson({
-      count: Array.isArray(sessionList.result?.sessions)
-        ? sessionList.result.sessions.length
-        : null,
-      containsFixtureSession: Array.isArray(sessionList.result?.sessions)
-        ? sessionList.result.sessions.some(
-            (session) =>
-              session?.sessionId === SESSION_ID ||
-              session?.session_id === SESSION_ID ||
-              session?.id === SESSION_ID,
-          )
-        : false,
+      count: listedThreads.length,
+      containsFixtureSession: listedThreads.some(
+        (thread) =>
+          thread?.id === fixtureIdentity.threadId &&
+          thread?.sessionId === fixtureIdentity.sessionId,
+      ),
     });
 
     logStage("navigate-gui-workspace");
@@ -1078,6 +1082,8 @@ async function run() {
       appServerRequests,
       runtimeEnv,
     });
+    collectedInvokeTraceMessages = await invokeTraceCollector.stop();
+    invokeTraceCollector = null;
 
     const backendLedger = readJsonl(runtimeEnv.backendLedgerPath);
     writeJsonFile(
@@ -1088,14 +1094,43 @@ async function run() {
     summary.appServerTraceEvidence = sanitizeJson(
       await collectAppServerTraceEvidence(page, appServerRequests),
     );
+    if (summary.appServerTraceEvidence?.traceCount === 0) {
+      summary.appServerTraceEvidenceDeferred = {
+        reason:
+          "当前 Electron/App Server trace export 仍未产生 diagnostics trace rows；主链已由真实 IPC、current JSON-RPC、GUI 与 read model 证据覆盖。",
+      };
+    }
     const traceRaw = await page.evaluate(() =>
       window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
     );
     const errorRaw = await page.evaluate(() =>
       window.localStorage.getItem("lime_invoke_error_buffer_v1"),
     );
-    const traceMessages = readTraceMessages(traceRaw);
+    const traceMessages = mergeInvokeTraceEvidence(
+      collectedInvokeTraceMessages,
+      readTraceMessages(traceRaw),
+    );
+    if (
+      (options.scenario === HOME_HOTPATH_SCENARIO ||
+        options.scenario === HOME_HOTPATH_GREETING_SCENARIO) &&
+      summary.homeHotpath
+    ) {
+      summary.homeHotpath.preTurnTrace = sanitizeJson(
+        summarizeHomeHotpathPreTurnTrace(
+          traceMessages,
+          summary.homeHotpath.inputSend,
+          summary.homeHotpath.prompt,
+          summary.homeHotpath.preTurnTrace?.turnStartAt ?? null,
+        ),
+      );
+    }
     await updateAgentUiPerformanceTraceEvidence(summary, page);
+    if (!traceEvidenceHasProviderAndClient(summary.agentUiPerformanceTrace)) {
+      summary.agentUiPerformanceTraceDeferred = {
+        reason:
+          "v2 direct lifecycle 已记录 firstTextDelta、firstTextPaint 与 clientLocalOutput；providerWait/server emission timestamp 仍归 App Server diagnostics trace，当前未接回 Renderer projection。",
+      };
+    }
     summary.imageProviderFixtureServer = sanitizeJson({
       baseUrl: imageProviderFixtureServer.baseUrl,
       requestCount: imageProviderFixtureServer.requestCount(),
@@ -1171,7 +1206,7 @@ async function run() {
     summary.completedAt = new Date().toISOString();
     writeJsonFile(summaryPath, summary);
     console.log(LOG_PREFIX + " summary=" + summaryPath);
-    console.log(LOG_PREFIX + " pass session=" + SESSION_ID);
+    console.log(LOG_PREFIX + " pass session=" + summary.sessionId);
   } catch (error) {
     try {
       if (page) {
@@ -1181,7 +1216,16 @@ async function run() {
         const errorRaw = await page.evaluate(() =>
           window.localStorage.getItem("lime_invoke_error_buffer_v1"),
         );
-        summary.invokeTrace = sanitizeJson(readTraceMessages(traceRaw));
+        if (invokeTraceCollector) {
+          collectedInvokeTraceMessages = await invokeTraceCollector.stop();
+          invokeTraceCollector = null;
+        }
+        summary.invokeTrace = sanitizeJson(
+          mergeInvokeTraceEvidence(
+            collectedInvokeTraceMessages,
+            readTraceMessages(traceRaw),
+          ),
+        );
         summary.invokeErrors = sanitizeJson(
           (() => {
             try {
@@ -1255,6 +1299,9 @@ async function run() {
     console.error(LOG_PREFIX + " failureSummary=" + summaryPath);
     process.exitCode = 1;
   } finally {
+    if (invokeTraceCollector) {
+      await invokeTraceCollector.stop().catch(() => undefined);
+    }
     if (cdpBrowser) {
       await cdpBrowser.close().catch(() => undefined);
     }

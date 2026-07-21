@@ -71,12 +71,12 @@ async function main() {
     const sessionResponse = await nextResponseForRequest(
       connected.sidecar,
       sessionRequest.id,
-      "agentSession/start",
+      "thread/start",
     );
     const sessionResult = expectResponseResult(
       sessionResponse,
       sessionRequest.id,
-      "agentSession/start",
+      "thread/start",
     );
     assertEqual(sessionResult.session.sessionId, sessionId, "session id");
     assertEqual(sessionResult.session.threadId, threadId, "thread id");
@@ -94,12 +94,12 @@ async function main() {
     const turnResponse = await nextResponseForRequest(
       connected.sidecar,
       turnRequest.id,
-      "agentSession/turn/start",
+      "turn/start",
     );
     expectResponseError(
       turnResponse,
       turnRequest.id,
-      "agentSession/turn/start",
+      "turn/start",
       "standalone app-server backend is not configured",
     );
 

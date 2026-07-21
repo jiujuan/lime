@@ -6,7 +6,6 @@ export type AgentRuntimeCapabilityId =
   | "state.snapshot"
   | "state.delta"
   | "hitl.actions"
-  | "hitl.resume"
   | "reasoning.summary"
   | "reasoning.encrypted-ref"
   | "multimodal.image"
@@ -49,29 +48,4 @@ export interface AgentRuntimeCapabilityManifest {
   sessionId?: string;
   generatedAt: string;
   capabilities: AgentRuntimeCapabilityEntry[];
-}
-
-export type AgentRuntimeResumeMode =
-  | "all-open-actions"
-  | "selected-actions"
-  | "cancel-open-actions"
-  | string;
-
-export interface AgentRuntimeResumeActionDecision {
-  actionId: string;
-  decision: "approved" | "rejected" | "answered" | "cancelled" | string;
-  response?: unknown;
-  metadata?: Record<string, unknown>;
-}
-
-export interface AgentRuntimeResumeContract {
-  schemaVersion: "lime-runtime-resume-contract/v0.1" | string;
-  runtimeId: string;
-  sessionId: string;
-  turnId: string;
-  resumeMode: AgentRuntimeResumeMode;
-  openActionIds: string[];
-  decisions: AgentRuntimeResumeActionDecision[];
-  expiresAt?: string;
-  createdAt: string;
 }

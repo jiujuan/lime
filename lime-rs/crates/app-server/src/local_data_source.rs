@@ -1,4 +1,5 @@
 use crate::gateway_tunnel;
+use crate::plugin_packages;
 use crate::AutomationManagementAppDataSource;
 use crate::AutomationOverviewAppDataSource;
 use crate::ConnectAppDataSource;
@@ -286,7 +287,6 @@ use app_server_protocol::SkillRepositoryListResponse;
 use app_server_protocol::SkillRepositorySaveParams;
 use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::SkillScaffoldCreateResponse;
-use app_server_protocol::SupportBundleExportParams;
 use app_server_protocol::SupportBundleExportResponse;
 use app_server_protocol::UsageStatsDailyTrendsListResponse;
 use app_server_protocol::UsageStatsModelRankingListResponse;
@@ -347,6 +347,7 @@ use lime_core::config::load_config;
 use lime_core::database;
 use lime_core::database::DbConnection;
 use lime_core::logger;
+use lime_core::session_files::SessionFileStorage;
 use lime_gateway::discord::DiscordGatewayState;
 use lime_gateway::feishu::FeishuGatewayState;
 use lime_gateway::telegram::TelegramGatewayState;
@@ -359,19 +360,14 @@ use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::model_registry_service::ModelRegistryService;
 use lime_services::skill_service::SkillService;
 use serde_json::Value;
-use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
-pub(crate) fn export_support_bundle_with_trace_root(
-    params: SupportBundleExportParams,
-    trace_store_root: Option<&Path>,
-) -> Result<SupportBundleExportResponse, String> {
-    diagnostics::export_support_bundle_with_trace_root(params, trace_store_root)
-}
-
 pub struct LocalAppDataSource {
     db: DbConnection,
+    plugin_data_root: std::path::PathBuf,
+    session_files_root: std::path::PathBuf,
+    connect_registry_cache_path: std::path::PathBuf,
     logs: std::sync::Arc<tokio::sync::RwLock<lime_core::logger::LogStore>>,
     api_key_provider_service: ApiKeyProviderService,
     model_registry_service: ModelRegistryService,
@@ -390,22 +386,25 @@ pub struct LocalAppDataSource {
 impl LocalAppDataSource {
     pub async fn initialize() -> Result<Self, String> {
         let db = database::init_database()?;
-        Self::initialize_with_db_and_data_root(db, app_paths::best_effort_data_dir()).await
+        Self::initialize_with_db_and_data_root(db, app_paths::preferred_agent_root()?).await
     }
 
     pub async fn initialize_with_db(db: DbConnection) -> Result<Self, String> {
-        Self::initialize_with_db_and_data_root(db, app_paths::best_effort_data_dir()).await
+        Self::initialize_with_db_and_data_root(db, app_paths::preferred_agent_root()?).await
     }
 
     pub async fn initialize_with_db_and_data_root(
         db: DbConnection,
         data_root: impl Into<std::path::PathBuf>,
     ) -> Result<Self, String> {
-        crate::agent_runtime_registry::initialize_agent_runtime(db.clone())
-            .map_err(|error| format!("初始化 App Server Channels Agent runtime 失败: {error}"))?;
+        let data_root = data_root.into();
+        let plugin_data_root = plugin_packages::plugin_data_dir_for_agent_root(&data_root);
+        let session_files_root = SessionFileStorage::base_dir_for_agent_root(&data_root);
+        let connect_registry_cache_path =
+            connect::connect_registry_cache_path_for_agent_root(&data_root);
         let config = load_config().map_err(|error| error.to_string())?;
         let logs = std::sync::Arc::new(tokio::sync::RwLock::new(
-            logger::create_log_store_from_config(&config.logging),
+            logger::create_log_store_from_config(&data_root, &config.logging)?,
         ));
         let api_key_provider_service = ApiKeyProviderService::new();
         let model_registry_service = ModelRegistryService::new(db.clone());
@@ -415,6 +414,9 @@ impl LocalAppDataSource {
         let memory_backend = Arc::new(LocalMemoryBackend::new(data_root));
         Ok(Self {
             db,
+            plugin_data_root,
+            session_files_root,
+            connect_registry_cache_path,
             logs,
             api_key_provider_service,
             model_registry_service,

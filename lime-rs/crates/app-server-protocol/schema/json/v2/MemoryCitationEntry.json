@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "lineEnd": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "lineStart": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "note": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lineEnd",
+    "lineStart",
+    "note",
+    "path"
+  ],
+  "title": "MemoryCitationEntry",
+  "type": "object"
+}

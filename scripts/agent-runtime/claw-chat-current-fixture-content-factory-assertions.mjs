@@ -10,16 +10,9 @@ import {
   APP_SERVER_METHOD_WORKFLOW_RETRY,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 
@@ -37,6 +30,8 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
     summary.contentFactoryArticleWorkspaceWorkflowCancel ?? {};
   const workflowRetry =
     summary.contentFactoryArticleWorkspaceWorkflowRetry ?? {};
+  const identity =
+    summary.contentFactoryArticleWorkspaceSessionCreation?.identity ?? {};
   const storyboardRendererContract =
     readModel.storyboardArtifact?.rendererContract ?? {};
   return {
@@ -62,11 +57,11 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
         "pending",
     contentFactoryArticleWorkspaceSessionOpenedFromSidebar:
       summary.contentFactoryArticleWorkspaceSessionCreation?.sessionId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+        identity.sessionId &&
       summary.guiContentFactoryArticleWorkspaceSessionVisible
         ?.hasSessionTitle === true &&
       summary.guiContentFactoryArticleWorkspaceSessionOpened?.readModel
-        ?.sessionId === CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+        ?.sessionId === identity.sessionId &&
       pageText.includes(CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE),
     contentFactoryArticleWorkspaceRightSurfaceVisible:
       summary.contentFactoryArticleWorkspaceRightSurface?.activeSurface ===
@@ -93,7 +88,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
     contentFactoryArticleWorkspaceReadModelProjected:
       readModel.hasArticleWorkspace === true &&
       readModel.appId === "content-factory-app" &&
-      readModel.sessionId === CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+      readModel.sessionId === identity.sessionId &&
       readModel.objectCount >= 2 &&
       readModel.hasArticleObject === true &&
       readModel.hasImageSetObject === true &&
@@ -105,17 +100,17 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       readModel.workflowStepCount === 0,
     contentFactoryArticleWorkspaceWorkflowReadModelProjected:
       appServerRequestMethods.includes(APP_SERVER_METHOD_WORKFLOW_READ) &&
-      workflowRead.sessionId === CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+      workflowRead.sessionId === identity.sessionId &&
       workflowRead.runCount >= 1 &&
       workflowRead.stepCount >= 3 &&
       workflowRead.actionCount >= 1 &&
       workflowRead.run?.workflowRunId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID &&
+        identity.workflowRunId &&
       workflowRead.run?.workflowKey === "content_article_workflow" &&
       workflowRead.run?.status === "running" &&
       workflowRead.run?.appId === "content-factory-app" &&
-      workflowRead.run?.taskId === "article_job_1" &&
-      workflowRead.run?.turnId === "turn_content_factory_article_workspace" &&
+      workflowRead.run?.taskId === identity.workerTaskId &&
+      workflowRead.run?.turnId === identity.workerTurnId &&
       workflowRead.run?.stepCounts?.total === 3 &&
       workflowRead.run?.stepCounts?.completed === 2 &&
       workflowRead.run?.stepCounts?.waiting === 1 &&
@@ -123,7 +118,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID &&
       workflowRead.waitingStep?.status === "waiting" &&
       workflowRead.waitingStep?.requestId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID &&
+        identity.workflowReviewRequestId &&
       workflowRead.waitingStep?.agentActionType === "ask_user" &&
       workflowRead.respondAction == null,
     contentFactoryArticleWorkspaceWorkflowRespondHiddenWithoutPendingAction:
@@ -132,9 +127,9 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
     contentFactoryArticleWorkspaceWorkflowCancelProjected:
       appServerRequestMethods.includes(APP_SERVER_METHOD_WORKFLOW_CANCEL) &&
       workflowCancel.sessionId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+        identity.sessionId &&
       workflowCancel.run?.workflowRunId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID &&
+        identity.workflowCancelRunId &&
       workflowCancel.run?.status === "canceled" &&
       workflowCancel.run?.stepCounts?.canceled === 1 &&
       workflowCancel.step?.stepId ===
@@ -143,16 +138,16 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
     contentFactoryArticleWorkspaceWorkflowRetryProjected:
       appServerRequestMethods.includes(APP_SERVER_METHOD_WORKFLOW_RETRY) &&
       workflowRetry.sessionId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+        identity.sessionId &&
       Boolean(workflowRetry.rescheduledTurnId) &&
       workflowRetry.run?.workflowRunId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID &&
+        identity.workflowRetryRunId &&
       workflowRetry.run?.status === "retrying" &&
       workflowRetry.run?.stepCounts?.retrying === 1 &&
       workflowRetry.run?.retrySource === "workflow/retry" &&
       workflowRetry.run?.retryReasonCode === "fixture_retry_requested" &&
       workflowRetry.run?.retrySourceTurnId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID &&
+        identity.workerTurnId &&
       workflowRetry.run?.retryRescheduledTurnId ===
         workflowRetry.rescheduledTurnId &&
       workflowRetry.step?.stepId ===
@@ -162,7 +157,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       workflowRetry.step?.retrySource === "workflow/retry" &&
       workflowRetry.step?.retryReasonCode === "fixture_retry_requested" &&
       workflowRetry.step?.retrySourceTurnId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID &&
+        identity.workerTurnId &&
       workflowRetry.step?.retryRescheduledTurnId ===
         workflowRetry.rescheduledTurnId &&
       summary.contentFactoryArticleWorkspaceWorkerHostGenerationFixture
@@ -262,7 +257,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
     contentFactoryArticleWorkspaceEditedDraftRestored:
       appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_UPDATE) &&
       summary.contentFactoryArticleWorkspaceEditedDraftUpdate?.sessionId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+        identity.sessionId &&
       summary.contentFactoryArticleWorkspaceEditedDraftUpdate?.objectRef
         ?.kind === "articleDraft" &&
       summary.contentFactoryArticleWorkspaceEditedDraftUpdate
@@ -273,7 +268,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
         ?.hasSessionTitle === true &&
       summary.contentFactoryArticleWorkspaceEditedDraftSessionReopened
         ?.readModel?.sessionId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+        identity.sessionId &&
       summary.contentFactoryArticleWorkspaceEditedDraftArtifactFrame
         ?.visible === true &&
       summary.contentFactoryArticleWorkspaceEditedDraftArtifactFrame
@@ -307,22 +302,22 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       summary.contentFactoryArticleWorkspaceInstalledStateSave?.appId ===
         "content-factory-app" &&
       summary.contentFactoryArticleWorkspaceWorkerTurnStart?.turnStatus ===
-        "accepted" &&
+        "inProgress" &&
       summary.contentFactoryArticleWorkspaceWorkerTurnStart?.taskId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID &&
+        identity.workerTaskId &&
       summary.contentFactoryArticleWorkspaceWorkerTurnStart?.readModel
         ?.workerTurnStatus === "completed" &&
       summary.contentFactoryArticleWorkspaceWorkerTurnStart?.readModel
-        ?.workerTurnId === CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID &&
+        ?.workerTurnId === identity.workerTurnId &&
       readModel.workerDogfoodEvidence?.taskId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID &&
+        identity.workerTaskId &&
       readModel.workerDogfoodEvidence?.taskKind ===
         "content.article.generate" &&
       readModel.workerDogfoodEvidence?.status === "completed" &&
       readModel.workerDogfoodEvidence?.artifactKind ===
         "content_factory.workspace_patch" &&
       readModel.workerArticleObject?.sourceTaskId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID &&
+        identity.workerTaskId &&
       readModel.workerArticleObject?.markdownIncludesResearch === true &&
       readModel.workerArticleObject?.markdownIncludesDraft === true &&
       readModel.workerArticleObject?.hostManagedGenerationStatus ===

@@ -3,8 +3,8 @@
 use super::super::*;
 use super::tests_support::*;
 use app_server_protocol::{
-    ClientCapabilities, JsonRpcMessage, RequestId, METHOD_AGENT_SESSION_START,
-    METHOD_CAPABILITY_LIST, METHOD_INITIALIZE, METHOD_INITIALIZED,
+    ClientCapabilities, JsonRpcMessage, RequestId, METHOD_CAPABILITY_LIST, METHOD_INITIALIZE,
+    METHOD_INITIALIZED, METHOD_THREAD_START,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -77,7 +77,7 @@ async fn capability_list_requires_initialized_and_returns_minimal_descriptors() 
             );
             assert_eq!(
                 response.result["capabilities"][0]["methods"][0],
-                METHOD_AGENT_SESSION_START
+                METHOD_THREAD_START
             );
         }
         other => panic!("expected response, got {other:?}"),

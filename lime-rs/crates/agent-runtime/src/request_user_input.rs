@@ -35,6 +35,7 @@ impl RequestUserInputRunRequest {
 pub struct RequestUserInputAction {
     pub prompt: String,
     pub requested_schema: Value,
+    pub auto_resolution_ms: Option<u64>,
     pub scope: Option<ActionRequiredScope>,
     pub timeout: Duration,
 }
@@ -88,6 +89,7 @@ where
     let action = RequestUserInputAction {
         prompt: prompt.clone(),
         requested_schema: build_requested_schema(&run_request.request),
+        auto_resolution_ms: run_request.request.auto_resolution_ms,
         scope: run_request.scope,
         timeout: run_request.timeout,
     };
@@ -153,6 +155,7 @@ mod tests {
                 ],
                 multi_select: false,
             }],
+            auto_resolution_ms: None,
         };
 
         let schema = build_requested_schema(&request);
@@ -185,6 +188,7 @@ mod tests {
                     multi_select: false,
                 },
             ],
+            auto_resolution_ms: None,
         };
 
         let response = extract_response(
@@ -220,6 +224,7 @@ mod tests {
                 ],
                 multi_select: true,
             }],
+            auto_resolution_ms: None,
         };
 
         let response = extract_response(
@@ -261,6 +266,7 @@ mod tests {
                 ],
                 multi_select: false,
             }],
+            auto_resolution_ms: None,
         };
         let scope = Some(ActionRequiredScope {
             session_id: Some("session-1".to_string()),

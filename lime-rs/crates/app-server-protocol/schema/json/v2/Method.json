@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "thread/archive",
+    "thread/goal/clear",
+    "thread/goal/get",
+    "thread/goal/set",
+    "thread/items/list",
+    "thread/list",
+    "thread/memoryMode/set",
+    "thread/read",
+    "thread/resume",
+    "thread/settings/update",
+    "thread/shellCommand",
+    "thread/start",
+    "thread/turns/list",
+    "thread/unarchive",
+    "turn/interrupt",
+    "turn/start",
+    "turn/steer"
+  ],
+  "title": "Method",
+  "type": "string"
+}

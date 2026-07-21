@@ -1,8 +1,8 @@
 mod agent_identity_store;
 mod agent_mailbox_store;
-mod agent_runtime_registry;
 mod agent_ui_event_schema;
 mod agent_ui_sequence_verifier;
+mod approval_server_request;
 mod automation_execution;
 mod capability;
 mod execution_process;
@@ -31,9 +31,14 @@ mod runtime_backend;
 mod runtime_factory;
 mod server_request;
 mod skill_registry;
+mod thread_listener;
+#[cfg(test)]
+mod thread_listener_tests;
+mod thread_state;
 mod trace_context;
 
 pub use app_server_protocol::error_codes;
+use app_server_protocol::AgentEvent;
 pub use app_server_protocol::AgentInput;
 pub use app_server_protocol::AgentSession;
 pub use app_server_protocol::AgentSessionActionReplayParams;
@@ -72,6 +77,7 @@ pub use app_server_protocol::EvidenceExportParams;
 pub use app_server_protocol::EvidenceExportResponse;
 pub use app_server_protocol::EvidencePackArtifact;
 pub use app_server_protocol::EvidencePackSummary;
+use app_server_protocol::InitializeParams;
 use app_server_protocol::JsonRpcError;
 pub use app_server_protocol::JsonRpcMessage;
 pub use app_server_protocol::JsonRpcNotification;
@@ -86,27 +92,33 @@ pub use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_MEDIA_READ;
-pub use app_server_protocol::METHOD_AGENT_SESSION_READ;
 pub use app_server_protocol::METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT;
-pub use app_server_protocol::METHOD_AGENT_SESSION_START;
-pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
-pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 pub use app_server_protocol::METHOD_ARTIFACT_READ;
 pub use app_server_protocol::METHOD_CAPABILITY_LIST;
 pub use app_server_protocol::METHOD_EVIDENCE_EXPORT;
 pub use app_server_protocol::METHOD_INITIALIZE;
 pub use app_server_protocol::METHOD_INITIALIZED;
+pub use app_server_protocol::METHOD_THREAD_READ;
+pub use app_server_protocol::METHOD_THREAD_START;
+pub use app_server_protocol::METHOD_TURN_INTERRUPT;
+pub use app_server_protocol::METHOD_TURN_START;
 pub use app_server_protocol::METHOD_WORKFLOW_READ;
+use app_server_transport::acquire_app_server_startup_lock;
+use app_server_transport::app_server_startup_lock_path;
 use app_server_transport::decode_message;
 use app_server_transport::encode_message;
+use app_server_transport::start_control_socket_acceptor;
 use app_server_transport::start_stdio_connection;
+use app_server_transport::start_websocket_acceptor;
+use app_server_transport::AppServerTransport;
 use app_server_transport::ConnectionId;
 use app_server_transport::OutgoingMessage;
 use app_server_transport::QueuedOutgoingMessage;
 use app_server_transport::TransportError;
 use app_server_transport::TransportEvent;
+use app_server_transport::APP_SERVER_CONTROL_SOCKET_DIR_NAME;
 pub use capability::capability_source_from_app_policy_json;
 pub use capability::AppPolicyCapability;
 pub use capability::AppPolicyLoadError;
@@ -127,7 +139,6 @@ pub use memory_store::MemoryBackend;
 pub use memory_store::RolloutSummaryWriteParams;
 pub use otel_trace::init_app_server_otel_from_env;
 pub use otel_trace::AppServerOtelGuard;
-use processor::event_notification_jsonrpc;
 use processor::RequestProcessor;
 pub(crate) use runtime::export_trace_events_from_store_to_path;
 pub(crate) use runtime::summarize_trace_event_store;
@@ -180,6 +191,7 @@ pub use runtime::RuntimeCoreError;
 pub use runtime::RuntimeCoreEventAppender;
 pub use runtime::RuntimeCoreOutput;
 pub use runtime::RuntimeEvent;
+pub use runtime::RuntimeEventHub;
 pub use runtime::RuntimeEventSink;
 pub use runtime::RuntimeHostContext;
 pub use runtime::SessionAppDataSource;
@@ -206,6 +218,9 @@ pub use runtime_factory::AppServerRuntimeFactory;
 pub use runtime_factory::UnsupportedBackendMode;
 pub use server_request::ServerRequestError;
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
@@ -214,15 +229,22 @@ use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 const OUTBOUND_MESSAGE_CAPACITY: usize = 1024;
 type TransportWriter = mpsc::Sender<QueuedOutgoingMessage>;
 type TransportWriters = Arc<Mutex<HashMap<ConnectionId, TransportWriter>>>;
+type TransportDisconnects = Arc<Mutex<HashMap<ConnectionId, CancellationToken>>>;
+type TransportInitialized = Arc<Mutex<HashSet<ConnectionId>>>;
+type TransportNotificationOptOut = Arc<Mutex<HashMap<ConnectionId, HashSet<String>>>>;
 type StreamedTransportMessage = Result<(ConnectionId, JsonRpcMessage), AppServerError>;
 
 struct ServerRequestClient {
     connection_id: ConnectionId,
     writer: TransportWriter,
+    disconnect_sender: Option<CancellationToken>,
 }
 
 #[derive(Debug, Error)]
@@ -239,13 +261,25 @@ pub enum AppServerError {
     ConnectionWriterClosed { connection_id: ConnectionId },
     #[error(transparent)]
     ServerRequest(#[from] ServerRequestError),
+    #[error("app-server thread listener failed: {0}")]
+    ThreadListener(String),
+    #[error(
+        "app-server transport is disabled; select stdio://, unix://PATH, or ws://127.0.0.1:PORT"
+    )]
+    TransportDisabled,
 }
 
 #[derive(Clone)]
 pub struct AppServer {
     processor: RequestProcessor,
+    thread_states: thread_state::ThreadStateManager,
+    runtime_event_receiver: Arc<Mutex<Option<mpsc::UnboundedReceiver<AgentEvent>>>>,
+    runtime_event_pump_started: Arc<AtomicBool>,
     outbound_messages: broadcast::Sender<JsonRpcMessage>,
     transport_writers: TransportWriters,
+    transport_disconnects: TransportDisconnects,
+    transport_initialized: TransportInitialized,
+    transport_notification_opt_out: TransportNotificationOptOut,
     server_requests: server_request::ServerRequestRouter,
     mcp_elicitation_requests: mcp_elicitation::ElicitationRequestSource,
 }
@@ -253,8 +287,12 @@ pub struct AppServer {
 #[derive(Clone)]
 pub struct AppServerEventBridge {
     runtime_events: RuntimeCoreEventAppender,
+    thread_states: thread_state::ThreadStateManager,
     outbound_messages: broadcast::Sender<JsonRpcMessage>,
     transport_writers: TransportWriters,
+    transport_disconnects: TransportDisconnects,
+    transport_initialized: TransportInitialized,
+    transport_notification_opt_out: TransportNotificationOptOut,
 }
 
 impl AppServer {
@@ -265,11 +303,44 @@ impl AppServer {
 
     pub fn with_runtime(runtime: RuntimeCore) -> Self {
         let (outbound_messages, _) = broadcast::channel(OUTBOUND_MESSAGE_CAPACITY);
+        let runtime_event_receiver = Arc::new(Mutex::new(runtime.take_event_receiver()));
+        let thread_states = thread_state::ThreadStateManager::new();
+        let transport_writers = Arc::new(Mutex::new(HashMap::new()));
+        let transport_disconnects = Arc::new(Mutex::new(HashMap::new()));
+        let transport_initialized = Arc::new(Mutex::new(HashSet::new()));
+        let transport_notification_opt_out = Arc::new(Mutex::new(HashMap::new()));
+        let server_requests = server_request::ServerRequestRouter::default();
+        let interrupt_bridge = AppServerEventBridge {
+            runtime_events: runtime.event_appender(),
+            thread_states: thread_states.clone(),
+            outbound_messages: outbound_messages.clone(),
+            transport_writers: transport_writers.clone(),
+            transport_disconnects: transport_disconnects.clone(),
+            transport_initialized: transport_initialized.clone(),
+            transport_notification_opt_out: transport_notification_opt_out.clone(),
+        };
+        let interrupt_router = server_requests.clone();
+        let turn_interrupt_hook: processor::TurnInterruptHook =
+            Arc::new(move |thread_id, turn_id| {
+                let bridge = interrupt_bridge.clone();
+                let router = interrupt_router.clone();
+                Box::pin(async move {
+                    router
+                        .abort_for_thread_turn(&bridge, &thread_id, &turn_id, "turn interrupted")
+                        .await;
+                })
+            });
         Self {
-            processor: RequestProcessor::new(runtime),
+            processor: RequestProcessor::new(runtime).with_turn_interrupt_hook(turn_interrupt_hook),
+            thread_states,
+            runtime_event_receiver,
+            runtime_event_pump_started: Arc::new(AtomicBool::new(false)),
             outbound_messages,
-            transport_writers: Arc::new(Mutex::new(HashMap::new())),
-            server_requests: server_request::ServerRequestRouter::default(),
+            transport_writers,
+            transport_disconnects,
+            transport_initialized,
+            transport_notification_opt_out,
+            server_requests,
             mcp_elicitation_requests: mcp_elicitation::ElicitationRequestSource::default(),
         }
     }
@@ -287,11 +358,86 @@ impl AppServer {
         self.outbound_messages.subscribe()
     }
 
+    fn ensure_runtime_event_pump(&self) {
+        if self.runtime_event_pump_started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let receiver = self
+            .runtime_event_receiver
+            .lock()
+            .expect("app-server runtime event receiver mutex poisoned")
+            .take();
+        let Some(mut receiver) = receiver else {
+            return;
+        };
+        let bridge = self.event_bridge();
+        let server = self.clone();
+        tokio::spawn(async move {
+            while let Some(event) = receiver.recv().await {
+                let Some(thread_id) = event
+                    .thread_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|thread_id| !thread_id.is_empty())
+                    .map(agent_protocol::ThreadId::new)
+                else {
+                    tracing::error!(
+                        event_id = %event.event_id,
+                        event_type = %event.event_type,
+                        "dropping background runtime event without canonical thread id"
+                    );
+                    continue;
+                };
+                let approval_event = (event.event_type == "action.required").then(|| event.clone());
+                let (completion_tx, completion_rx) = if approval_event.is_some() {
+                    let (sender, receiver) = oneshot::channel();
+                    (Some(sender), Some(receiver))
+                } else {
+                    (None, None)
+                };
+                if let Err(error) = bridge
+                    .send_thread_command(
+                        thread_id,
+                        thread_state::ThreadListenerCommand::PublishRuntimeEvent {
+                            event,
+                            completion_tx,
+                        },
+                    )
+                    .await
+                {
+                    tracing::error!(%error, "failed to enqueue background runtime event");
+                    continue;
+                }
+                if let (Some(event), Some(completion_rx)) = (approval_event, completion_rx) {
+                    match completion_rx.await {
+                        Ok(Ok(_)) => {}
+                        Ok(Err(error)) => {
+                            tracing::warn!(%error, "action.required projection failed");
+                            continue;
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "action.required projection did not complete");
+                            continue;
+                        }
+                    }
+                    let server = server.clone();
+                    tokio::spawn(async move {
+                        server.handle_command_approval_request(event).await;
+                    });
+                }
+            }
+        });
+    }
+
     pub fn event_bridge(&self) -> AppServerEventBridge {
         AppServerEventBridge {
             runtime_events: self.processor.runtime().event_appender(),
+            thread_states: self.thread_states.clone(),
             outbound_messages: self.outbound_messages.clone(),
             transport_writers: self.transport_writers.clone(),
+            transport_disconnects: self.transport_disconnects.clone(),
+            transport_initialized: self.transport_initialized.clone(),
+            transport_notification_opt_out: self.transport_notification_opt_out.clone(),
         }
     }
 
@@ -313,6 +459,7 @@ impl AppServer {
         &self,
         message: JsonRpcMessage,
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        self.ensure_runtime_event_pump();
         match message {
             JsonRpcMessage::Request(request) => self.processor.handle_request(request).await,
             JsonRpcMessage::Notification(notification) => {
@@ -337,7 +484,17 @@ impl AppServer {
         connection_id: ConnectionId,
         message: JsonRpcMessage,
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        self.ensure_runtime_event_pump();
         match message {
+            JsonRpcMessage::Request(request) => {
+                self.processor
+                    .handle_transport_request(connection_id, request)
+                    .await
+            }
+            JsonRpcMessage::Notification(notification) => {
+                self.processor.handle_notification(notification);
+                Ok(Vec::new())
+            }
             JsonRpcMessage::Response(response) => {
                 self.resolve_transport_server_request_response(
                     connection_id,
@@ -354,7 +511,6 @@ impl AppServer {
                 );
                 Ok(Vec::new())
             }
-            message => self.handle_message(message).await,
         }
     }
 
@@ -363,6 +519,7 @@ impl AppServer {
         message: JsonRpcMessage,
         event_callback: &mut (dyn FnMut(JsonRpcMessage) + Send),
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        self.ensure_runtime_event_pump();
         match message {
             JsonRpcMessage::Request(request) => {
                 self.processor
@@ -386,7 +543,43 @@ impl AppServer {
         }
     }
 
-    pub fn append_external_runtime_events(
+    async fn handle_transport_message_streaming(
+        &self,
+        connection_id: ConnectionId,
+        message: JsonRpcMessage,
+        event_callback: &mut (dyn FnMut(JsonRpcMessage) + Send),
+    ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        self.ensure_runtime_event_pump();
+        match message {
+            JsonRpcMessage::Request(request) => {
+                self.processor
+                    .handle_transport_request_streaming(connection_id, request, event_callback)
+                    .await
+            }
+            JsonRpcMessage::Notification(notification) => {
+                self.processor.handle_notification(notification);
+                Ok(Vec::new())
+            }
+            JsonRpcMessage::Response(response) => {
+                self.resolve_transport_server_request_response(
+                    connection_id,
+                    response.id,
+                    response.result,
+                );
+                Ok(Vec::new())
+            }
+            JsonRpcMessage::Error(response) => {
+                self.resolve_transport_server_request_error(
+                    connection_id,
+                    response.id,
+                    response.error,
+                );
+                Ok(Vec::new())
+            }
+        }
+    }
+
+    pub async fn append_external_runtime_events(
         &self,
         session_id: &str,
         turn_id: Option<&str>,
@@ -394,13 +587,28 @@ impl AppServer {
     ) -> Result<Vec<JsonRpcMessage>, JsonRpcError> {
         self.event_bridge()
             .append_external_runtime_events(session_id, turn_id, runtime_events)
+            .await
     }
 
-    fn register_transport_writer(&self, connection_id: ConnectionId, writer: TransportWriter) {
+    fn register_transport_writer(
+        &self,
+        connection_id: ConnectionId,
+        writer: TransportWriter,
+        disconnect_sender: Option<CancellationToken>,
+    ) {
         self.transport_writers
             .lock()
             .expect("app-server transport writer mutex poisoned")
             .insert(connection_id, writer);
+        let mut disconnects = self
+            .transport_disconnects
+            .lock()
+            .expect("app-server transport disconnect mutex poisoned");
+        if let Some(disconnect_sender) = disconnect_sender {
+            disconnects.insert(connection_id, disconnect_sender);
+        } else {
+            disconnects.remove(&connection_id);
+        }
     }
 
     fn unregister_transport_writer(&self, connection_id: ConnectionId) {
@@ -408,13 +616,49 @@ impl AppServer {
             .lock()
             .expect("app-server transport writer mutex poisoned")
             .remove(&connection_id);
+        self.transport_disconnects
+            .lock()
+            .expect("app-server transport disconnect mutex poisoned")
+            .remove(&connection_id);
+        self.transport_initialized
+            .lock()
+            .expect("app-server transport initialization mutex poisoned")
+            .remove(&connection_id);
+        self.transport_notification_opt_out
+            .lock()
+            .expect("app-server transport notification opt-out mutex poisoned")
+            .remove(&connection_id);
     }
 
-    fn clear_transport_writers(&self) {
+    async fn clear_transport_writers(&self) {
+        let connection_ids = self
+            .transport_writers
+            .lock()
+            .expect("app-server transport writer mutex poisoned")
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
         self.transport_writers
             .lock()
             .expect("app-server transport writer mutex poisoned")
             .clear();
+        self.transport_disconnects
+            .lock()
+            .expect("app-server transport disconnect mutex poisoned")
+            .clear();
+        self.transport_initialized
+            .lock()
+            .expect("app-server transport initialization mutex poisoned")
+            .clear();
+        self.transport_notification_opt_out
+            .lock()
+            .expect("app-server transport notification opt-out mutex poisoned")
+            .clear();
+        for connection_id in connection_ids {
+            self.thread_states
+                .disconnect_connection(connection_id)
+                .await;
+        }
     }
 
     fn transport_writer(&self, connection_id: ConnectionId) -> Option<TransportWriter> {
@@ -425,6 +669,41 @@ impl AppServer {
             .cloned()
     }
 
+    fn transport_disconnect_sender(
+        &self,
+        connection_id: ConnectionId,
+    ) -> Option<CancellationToken> {
+        self.transport_disconnects
+            .lock()
+            .expect("app-server transport disconnect mutex poisoned")
+            .get(&connection_id)
+            .cloned()
+    }
+
+    fn mark_transport_initialized(&self, connection_id: ConnectionId) {
+        self.transport_initialized
+            .lock()
+            .expect("app-server transport initialization mutex poisoned")
+            .insert(connection_id);
+    }
+
+    fn set_transport_notification_opt_out(
+        &self,
+        connection_id: ConnectionId,
+        methods: Option<Vec<String>>,
+    ) {
+        let methods = methods
+            .unwrap_or_default()
+            .into_iter()
+            .map(|method| method.trim().to_string())
+            .filter(|method| !method.is_empty())
+            .collect();
+        self.transport_notification_opt_out
+            .lock()
+            .expect("app-server transport notification opt-out mutex poisoned")
+            .insert(connection_id, methods);
+    }
+
     async fn send_to_transport_connection(
         &self,
         connection_id: ConnectionId,
@@ -433,10 +712,25 @@ impl AppServer {
         let writer = self
             .transport_writer(connection_id)
             .ok_or(AppServerError::ConnectionUnavailable { connection_id })?;
-        writer
-            .send(QueuedOutgoingMessage::new(OutgoingMessage::from(message)))
-            .await
-            .map_err(|_| AppServerError::ConnectionWriterClosed { connection_id })
+        let queued = QueuedOutgoingMessage::new(OutgoingMessage::from(message));
+        if let Some(disconnect_sender) = self.transport_disconnect_sender(connection_id) {
+            match writer.try_send(queued) {
+                Ok(()) => Ok(()),
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    disconnect_sender.cancel();
+                    Ok(())
+                }
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    disconnect_sender.cancel();
+                    Err(AppServerError::ConnectionWriterClosed { connection_id })
+                }
+            }
+        } else {
+            writer
+                .send(queued)
+                .await
+                .map_err(|_| AppServerError::ConnectionWriterClosed { connection_id })
+        }
     }
 
     pub async fn send_server_request(
@@ -474,6 +768,7 @@ impl AppServer {
         Ok(ServerRequestClient {
             connection_id,
             writer,
+            disconnect_sender: self.transport_disconnect_sender(connection_id),
         })
     }
 
@@ -482,13 +777,30 @@ impl AppServer {
         client: ServerRequestClient,
         message: JsonRpcMessage,
     ) -> Result<(), AppServerError> {
-        client
-            .writer
-            .send(QueuedOutgoingMessage::new(OutgoingMessage::from(message)))
-            .await
-            .map_err(|_| AppServerError::ConnectionWriterClosed {
-                connection_id: client.connection_id,
-            })
+        let queued = QueuedOutgoingMessage::new(OutgoingMessage::from(message));
+        if let Some(disconnect_sender) = client.disconnect_sender {
+            match client.writer.try_send(queued) {
+                Ok(()) => Ok(()),
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    disconnect_sender.cancel();
+                    Ok(())
+                }
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    disconnect_sender.cancel();
+                    Err(AppServerError::ConnectionWriterClosed {
+                        connection_id: client.connection_id,
+                    })
+                }
+            }
+        } else {
+            client
+                .writer
+                .send(queued)
+                .await
+                .map_err(|_| AppServerError::ConnectionWriterClosed {
+                    connection_id: client.connection_id,
+                })
+        }
     }
 
     fn cancel_pending_server_requests(&self, reason: &str) {
@@ -552,34 +864,150 @@ pub fn spawn_image_task_worker_scheduler(
 }
 
 impl AppServerEventBridge {
-    pub fn append_external_runtime_events(
+    async fn send_messages_to_connection(
         &self,
-        session_id: &str,
-        turn_id: Option<&str>,
-        runtime_events: Vec<RuntimeEvent>,
-    ) -> Result<Vec<JsonRpcMessage>, JsonRpcError> {
-        let events = self
-            .runtime_events
-            .append_external_runtime_events(session_id, turn_id, runtime_events)
-            .map_err(RuntimeCoreError::into_jsonrpc_error)?;
-        let messages = events
-            .into_iter()
-            .map(event_notification_jsonrpc)
-            .collect::<Result<Vec<_>, _>>()?;
-        self.publish_events(&messages);
-        Ok(messages)
-    }
-
-    fn publish_events(&self, messages: &[JsonRpcMessage]) {
-        for message in messages {
-            let _ = self.outbound_messages.send(message.clone());
-            enqueue_transport_outbound_message(&self.transport_writers, message.clone());
+        connection_id: ConnectionId,
+        messages: &[JsonRpcMessage],
+    ) -> Result<(), String> {
+        let writer = self
+            .transport_writers
+            .lock()
+            .expect("app-server transport writer mutex poisoned")
+            .get(&connection_id)
+            .cloned()
+            .ok_or_else(|| format!("transport connection {connection_id} is not open"))?;
+        if !self
+            .transport_initialized
+            .lock()
+            .expect("app-server transport initialization mutex poisoned")
+            .contains(&connection_id)
+        {
+            return Err(format!(
+                "transport connection {connection_id} is not initialized"
+            ));
         }
+        let disconnect_sender = self
+            .transport_disconnects
+            .lock()
+            .expect("app-server transport disconnect mutex poisoned")
+            .get(&connection_id)
+            .cloned();
+
+        for message in messages {
+            if notification_is_opted_out(
+                &self.transport_notification_opt_out,
+                connection_id,
+                message,
+            ) {
+                continue;
+            }
+            let queued = QueuedOutgoingMessage::new(OutgoingMessage::from(message.clone()));
+            if let Some(disconnect_sender) = disconnect_sender.as_ref() {
+                match writer.try_send(queued) {
+                    Ok(()) => {}
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        disconnect_sender.cancel();
+                        return Err(format!(
+                            "transport connection {connection_id} outbound queue is full"
+                        ));
+                    }
+                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                        disconnect_sender.cancel();
+                        return Err(format!(
+                            "transport connection {connection_id} writer is closed"
+                        ));
+                    }
+                }
+            } else {
+                writer.send(queued).await.map_err(|_| {
+                    format!("transport connection {connection_id} writer is closed")
+                })?;
+            }
+        }
+        Ok(())
     }
 }
 
 pub async fn run_stdio(server: AppServer) -> Result<(), AppServerError> {
     run_json_lines(server, io::stdin(), io::stdout()).await
+}
+
+fn startup_lock_path_for_socket(socket_path: &Path) -> std::path::PathBuf {
+    let socket_parent = socket_path.parent().unwrap_or_else(|| Path::new("."));
+    let base_dir = if socket_parent.file_name()
+        == Some(std::ffi::OsStr::new(APP_SERVER_CONTROL_SOCKET_DIR_NAME))
+    {
+        socket_parent.parent().unwrap_or(socket_parent)
+    } else {
+        socket_parent
+    };
+    app_server_startup_lock_path(base_dir)
+}
+
+/// Runs the App Server over the selected Codex-compatible transport.
+///
+/// Network transports share the same JSON-RPC event loop as stdio. This keeps
+/// connection lifecycle, reverse requests, streaming responses, and backpressure
+/// in one owner instead of maintaining a second server implementation.
+pub async fn run_transport(
+    server: AppServer,
+    transport: AppServerTransport,
+) -> Result<(), AppServerError> {
+    let (transport_event_tx, transport_event_rx) = mpsc::channel(OUTBOUND_MESSAGE_CAPACITY);
+    let shutdown_token = CancellationToken::new();
+    let mut accept_handles = Vec::<JoinHandle<()>>::new();
+    let single_client_mode = matches!(transport, AppServerTransport::Stdio);
+    let _unix_socket_startup_lock = match &transport {
+        AppServerTransport::UnixSocket { socket_path } => {
+            Some(acquire_app_server_startup_lock(startup_lock_path_for_socket(socket_path)).await?)
+        }
+        _ => None,
+    };
+
+    match transport {
+        AppServerTransport::Stdio => {
+            accept_handles.extend(
+                start_stdio_connection(transport_event_tx.clone(), io::stdin(), io::stdout())
+                    .await?,
+            );
+        }
+        AppServerTransport::UnixSocket { socket_path } => {
+            accept_handles.push(
+                start_control_socket_acceptor(
+                    socket_path,
+                    transport_event_tx.clone(),
+                    shutdown_token.clone(),
+                )
+                .await?,
+            );
+        }
+        AppServerTransport::WebSocket { bind_address } => {
+            accept_handles.push(
+                start_websocket_acceptor(
+                    bind_address,
+                    transport_event_tx.clone(),
+                    shutdown_token.clone(),
+                )
+                .await?,
+            );
+        }
+        AppServerTransport::Off => return Err(AppServerError::TransportDisabled),
+    }
+    drop(_unix_socket_startup_lock);
+    drop(transport_event_tx);
+
+    let result = run_transport_events(
+        server,
+        transport_event_rx,
+        single_client_mode,
+        shutdown_token.clone(),
+    )
+    .await;
+    shutdown_token.cancel();
+    for handle in accept_handles {
+        let _ = handle.await;
+    }
+    result
 }
 
 pub async fn run_json_lines<R, W>(
@@ -591,10 +1019,19 @@ where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    let (transport_event_tx, mut transport_event_rx) = mpsc::channel(OUTBOUND_MESSAGE_CAPACITY);
+    let (transport_event_tx, transport_event_rx) = mpsc::channel(OUTBOUND_MESSAGE_CAPACITY);
     let _stdio_handles = start_stdio_connection(transport_event_tx, reader, writer).await?;
+    run_transport_events(server, transport_event_rx, true, CancellationToken::new()).await
+}
+
+async fn run_transport_events(
+    server: AppServer,
+    mut transport_event_rx: mpsc::Receiver<TransportEvent>,
+    single_client_mode: bool,
+    shutdown_token: CancellationToken,
+) -> Result<(), AppServerError> {
     let (streamed_tx, mut streamed_rx) = mpsc::unbounded_channel::<StreamedTransportMessage>();
-    let mcp_elicitation_shutdown = tokio_util::sync::CancellationToken::new();
+    let mcp_elicitation_shutdown = CancellationToken::new();
     let mcp_elicitation_pump = tokio::spawn(mcp_elicitation::run_request_pump(
         server.clone(),
         server.mcp_elicitation_requests.clone(),
@@ -612,37 +1049,145 @@ where
                         TransportEvent::ConnectionOpened {
                             connection_id,
                             writer,
+                            disconnect_sender,
                             ..
-                        } => server.register_transport_writer(connection_id, writer),
+                        } => {
+                            server.register_transport_writer(
+                                connection_id,
+                                writer,
+                                disconnect_sender,
+                            );
+                        }
                         TransportEvent::StdioClientInitialized { .. } => {}
                         TransportEvent::ConnectionClosed { connection_id } => {
+                            server
+                                .thread_states
+                                .disconnect_connection(connection_id)
+                                .await;
                             server.unregister_transport_writer(connection_id);
                             server.server_requests.cancel_owner(
                                 server_request::ServerRequestOwner::Transport(connection_id),
                                 "App Server transport disconnected",
                             );
-                            break;
+                            if single_client_mode {
+                                break;
+                            }
                         }
                         TransportEvent::IncomingMessage {
                             connection_id,
                             message,
                         } => {
+                            let is_initialize = matches!(
+                                &message,
+                                JsonRpcMessage::Request(request)
+                                    if request.method == METHOD_INITIALIZE
+                            );
+                            let connection_initialized = transport_is_initialized(
+                                &server.transport_initialized,
+                                connection_id,
+                            );
+                            if is_initialize && connection_initialized {
+                                let JsonRpcMessage::Request(request) = &message else {
+                                    unreachable!("initialize must be a JSON-RPC request");
+                                };
+                                server
+                                    .send_to_transport_connection(
+                                        connection_id,
+                                        JsonRpcMessage::Error(
+                                            app_server_protocol::JsonRpcErrorResponse {
+                                                id: request.id.clone(),
+                                                error: JsonRpcError::new(
+                                                    error_codes::ALREADY_INITIALIZED,
+                                                    "initialize has already been accepted for this connection",
+                                                ),
+                                            },
+                                        ),
+                                    )
+                                    .await?;
+                                continue;
+                            }
+                            if !is_initialize && !connection_initialized {
+                                if let JsonRpcMessage::Request(request) = &message {
+                                    server
+                                        .send_to_transport_connection(
+                                            connection_id,
+                                            JsonRpcMessage::Error(
+                                                app_server_protocol::JsonRpcErrorResponse {
+                                                    id: request.id.clone(),
+                                                    error: JsonRpcError::new(
+                                                        error_codes::NOT_INITIALIZED,
+                                                        "initialize must complete for this connection before business methods",
+                                                    ),
+                                                },
+                                            ),
+                                        )
+                                        .await?;
+                                }
+                                continue;
+                            }
+                            let notification_opt_out = if is_initialize {
+                                initialize_notification_opt_out(&message)
+                            } else {
+                                None
+                            };
                             if should_spawn_transport_request(&message) {
+                                let prepared_resume = if transport_is_initialized(
+                                    &server.transport_initialized,
+                                    connection_id,
+                                ) {
+                                    if let Some((thread_id, request_id)) =
+                                        thread_resume_request_context(&message)
+                                    {
+                                        let barrier = thread_state::ThreadResumeBarrier::new(
+                                            connection_id,
+                                            request_id,
+                                        );
+                                        server
+                                            .event_bridge()
+                                            .prepare_thread_resume(
+                                                agent_protocol::ThreadId::new(thread_id.clone()),
+                                                barrier.clone(),
+                                            )
+                                            .await
+                                            .map_err(AppServerError::ThreadListener)?;
+                                        Some((thread_id, barrier))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                };
                                 spawn_transport_request(
                                     server.clone(),
                                     connection_id,
                                     message,
                                     streamed_tx.clone(),
+                                    prepared_resume,
                                 );
                                 continue;
                             }
-                            for response in server
+                            let responses = server
                                 .handle_transport_message(connection_id, message)
-                                .await?
-                            {
+                                .await?;
+                            let initialize_succeeded = is_initialize
+                                && responses
+                                    .iter()
+                                    .any(|response| matches!(response, JsonRpcMessage::Response(_)));
+                            for response in responses {
                                 server
                                     .send_to_transport_connection(connection_id, response)
                                     .await?;
+                            }
+                            if initialize_succeeded {
+                                server.set_transport_notification_opt_out(
+                                    connection_id,
+                                    notification_opt_out,
+                                );
+                                server.mark_transport_initialized(connection_id);
+                                server
+                                    .thread_states
+                                    .connection_initialized(connection_id)
+                                    .await;
                             }
                         }
                     }
@@ -655,6 +1200,9 @@ where
                     server
                         .send_to_transport_connection(connection_id, message)
                         .await?;
+                }
+                _ = shutdown_token.cancelled() => {
+                    break;
                 }
             }
         }
@@ -680,8 +1228,123 @@ async fn finish_json_lines(
     server.cancel_pending_server_requests("App Server transport stopped");
     mcp_elicitation_shutdown.cancel();
     let _ = mcp_elicitation_pump.await;
-    server.clear_transport_writers();
+    server.thread_states.clear_all_listeners().await;
+    server.clear_transport_writers().await;
     transport_result
+}
+
+fn response_thread_id(messages: &[JsonRpcMessage]) -> Option<String> {
+    messages.iter().find_map(|message| {
+        let JsonRpcMessage::Response(response) = message else {
+            return None;
+        };
+        response
+            .result
+            .get("thread")
+            .and_then(|thread| thread.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    })
+}
+
+fn thread_token_usage_notification(
+    thread_id: &str,
+    snapshot: runtime::thread_usage::ThreadTokenUsageSnapshot,
+) -> JsonRpcMessage {
+    let breakdown = |usage: runtime::thread_usage::TokenUsageSnapshot| {
+        app_server_protocol::protocol::v2::TokenUsageBreakdown {
+            total_tokens: usage.total_tokens,
+            input_tokens: usage.input_tokens,
+            cached_input_tokens: usage.cached_input_tokens,
+            output_tokens: usage.output_tokens,
+            reasoning_output_tokens: usage.reasoning_output_tokens,
+        }
+    };
+    let notification =
+        app_server_protocol::protocol::v2::ServerNotification::ThreadTokenUsageUpdated(
+            app_server_protocol::protocol::v2::ThreadTokenUsageUpdatedNotification {
+                thread_id: thread_id.to_string(),
+                turn_id: snapshot.turn_id,
+                token_usage: app_server_protocol::protocol::v2::ThreadTokenUsage {
+                    total: breakdown(snapshot.total_token_usage),
+                    last: breakdown(snapshot.last_token_usage),
+                    model_context_window: snapshot.model_context_window,
+                },
+            },
+        );
+    JsonRpcMessage::Notification(notification.into())
+}
+
+fn transport_is_initialized(
+    initialized: &TransportInitialized,
+    connection_id: ConnectionId,
+) -> bool {
+    initialized
+        .lock()
+        .expect("app-server transport initialization mutex poisoned")
+        .contains(&connection_id)
+}
+
+fn thread_resume_request_context(message: &JsonRpcMessage) -> Option<(String, RequestId)> {
+    let JsonRpcMessage::Request(request) = message else {
+        return None;
+    };
+    if request.method != app_server_protocol::protocol::v2::METHOD_THREAD_RESUME {
+        return None;
+    }
+    let params = serde_json::from_value::<app_server_protocol::protocol::v2::ThreadResumeParams>(
+        request.params.as_ref()?.clone(),
+    )
+    .ok()?;
+    let thread_id = params.thread_id.trim();
+    if thread_id.is_empty() {
+        return None;
+    }
+    Some((thread_id.to_string(), request.id.clone()))
+}
+
+fn thread_goal_mutation_thread_id(message: &JsonRpcMessage) -> Option<String> {
+    let JsonRpcMessage::Request(request) = message else {
+        return None;
+    };
+    if request.method != app_server_protocol::protocol::v2::METHOD_THREAD_GOAL_SET
+        && request.method != app_server_protocol::protocol::v2::METHOD_THREAD_GOAL_CLEAR
+    {
+        return None;
+    }
+    request
+        .params
+        .as_ref()?
+        .get("threadId")?
+        .as_str()
+        .map(str::trim)
+        .filter(|thread_id| !thread_id.is_empty())
+        .map(str::to_string)
+}
+
+fn take_thread_goal_notification(
+    messages: &mut Vec<JsonRpcMessage>,
+    thread_id: &str,
+) -> Option<JsonRpcNotification> {
+    let index = messages.iter().position(|message| {
+        let JsonRpcMessage::Notification(notification) = message else {
+            return false;
+        };
+        let is_goal_notification = notification.method
+            == app_server_protocol::protocol::v2::METHOD_THREAD_GOAL_UPDATED
+            || notification.method == app_server_protocol::protocol::v2::METHOD_THREAD_GOAL_CLEARED;
+        is_goal_notification
+            && notification
+                .params
+                .as_ref()
+                .and_then(|params| params.get("threadId"))
+                .and_then(serde_json::Value::as_str)
+                == Some(thread_id)
+    })?;
+    let JsonRpcMessage::Notification(notification) = messages.remove(index) else {
+        unreachable!("goal notification position must contain a notification");
+    };
+    Some(notification)
 }
 
 fn spawn_transport_request(
@@ -689,14 +1352,26 @@ fn spawn_transport_request(
     connection_id: ConnectionId,
     message: JsonRpcMessage,
     streamed_tx: mpsc::UnboundedSender<StreamedTransportMessage>,
+    prepared_resume: Option<(String, thread_state::ThreadResumeBarrier)>,
 ) {
     tokio::spawn(async move {
+        let goal_mutation_thread_id = thread_goal_mutation_thread_id(&message);
+        let subscription_method = match &message {
+            JsonRpcMessage::Request(request)
+                if request.method == METHOD_THREAD_START
+                    || request.method
+                        == app_server_protocol::protocol::v2::METHOD_THREAD_RESUME =>
+            {
+                Some(request.method.clone())
+            }
+            _ => None,
+        };
         if should_stream_transport_request(&message) {
             let mut event_callback = |message: JsonRpcMessage| {
                 let _ = streamed_tx.send(Ok((connection_id, message)));
             };
             match server
-                .handle_message_streaming(message, &mut event_callback)
+                .handle_transport_message_streaming(connection_id, message, &mut event_callback)
                 .await
             {
                 Ok(messages) => {
@@ -711,42 +1386,272 @@ fn spawn_transport_request(
             return;
         }
 
-        match server.handle_message(message).await {
-            Ok(messages) => {
+        match server
+            .handle_transport_message(connection_id, message)
+            .await
+        {
+            Ok(mut messages) => {
+                if let Some((thread_id, barrier)) = prepared_resume {
+                    let successful_resume = response_thread_id(&messages)
+                        .as_deref()
+                        .is_some_and(|response_thread_id| response_thread_id == thread_id);
+                    let bridge = server.event_bridge();
+                    let mut goal_outbox_through_id = None;
+                    if successful_resume {
+                        let owner = server_request::ServerRequestOwner::Transport(connection_id);
+                        server.server_requests.claim_owner_thread(owner, &thread_id);
+                        if let Some(snapshot) = server
+                            .processor
+                            .runtime()
+                            .thread_token_usage_snapshot(&thread_id)
+                        {
+                            messages.push(thread_token_usage_notification(&thread_id, snapshot));
+                        }
+                        match bridge
+                            .runtime_events
+                            .latest_thread_goal_update_outbox_id(&thread_id)
+                        {
+                            Ok(outbox_id) => goal_outbox_through_id = outbox_id,
+                            Err(error) => tracing::warn!(
+                                thread_id = %thread_id,
+                                "failed to read ThreadGoal resume outbox watermark: {error}"
+                            ),
+                        }
+                        match server
+                            .processor
+                            .thread_goal_snapshot_notification(&thread_id)
+                        {
+                            Ok(notification) => {
+                                messages.push(JsonRpcMessage::Notification(notification));
+                            }
+                            Err(error) => {
+                                tracing::warn!(
+                                    thread_id = %thread_id,
+                                    "failed to read ThreadGoal resume snapshot: {error}"
+                                );
+                            }
+                        }
+                        messages.extend(
+                            server
+                                .server_requests
+                                .snapshot_for_owner_thread(owner, &thread_id)
+                                .into_iter()
+                                .map(JsonRpcMessage::Request),
+                        );
+                    }
+                    let (completion_tx, completion_rx) = oneshot::channel();
+                    let command = thread_state::ThreadListenerCommand::CompleteResume {
+                        barrier,
+                        connection_id,
+                        messages,
+                        subscribe: successful_resume,
+                        completion_tx,
+                    };
+                    let result = match bridge
+                        .send_thread_command(agent_protocol::ThreadId::new(&thread_id), command)
+                        .await
+                    {
+                        Ok(()) => completion_rx
+                            .await
+                            .map_err(|error| error.to_string())
+                            .and_then(|result| result),
+                        Err(error) => Err(error),
+                    };
+                    if result.is_ok() {
+                        if let Some(outbox_id) = goal_outbox_through_id {
+                            if let Err(error) = bridge
+                                .runtime_events
+                                .mark_thread_goal_snapshot_delivered(&thread_id, outbox_id)
+                            {
+                                tracing::warn!(
+                                    thread_id = %thread_id,
+                                    outbox_id,
+                                    "ThreadGoal resume snapshot was sent but outbox acknowledgement failed: {error}"
+                                );
+                            }
+                        }
+                    }
+                    if let Err(error) = result {
+                        let _ = streamed_tx.send(Err(AppServerError::ThreadListener(error)));
+                    }
+                    return;
+                }
+                if let Some(thread_id) = goal_mutation_thread_id.as_deref() {
+                    if let Some(notification) =
+                        take_thread_goal_notification(&mut messages, thread_id)
+                    {
+                        let bridge = server.event_bridge();
+                        if let Err(error) = bridge
+                            .send_messages_to_connection(connection_id, &messages)
+                            .await
+                        {
+                            tracing::warn!(
+                                %connection_id,
+                                %thread_id,
+                                %error,
+                                "failed to send ThreadGoal mutation response"
+                            );
+                        }
+                        let command = thread_state::ThreadListenerCommand::PublishNotification {
+                            notification,
+                            origin_connection_id: Some(connection_id),
+                            completion_tx: None,
+                        };
+                        if let Err(error) = bridge
+                            .send_thread_command(agent_protocol::ThreadId::new(thread_id), command)
+                            .await
+                        {
+                            tracing::warn!(
+                                %connection_id,
+                                %thread_id,
+                                %error,
+                                "failed to enqueue ThreadGoal notification"
+                            );
+                        }
+                        return;
+                    }
+                }
+                if subscription_method.is_some() {
+                    if let Some(thread_id) = response_thread_id(&messages) {
+                        let (completion_tx, completion_rx) = oneshot::channel();
+                        let command = thread_state::ThreadListenerCommand::SubscribeAndSend {
+                            connection_id,
+                            messages,
+                            completion_tx,
+                        };
+                        let bridge = server.event_bridge();
+                        let result = match bridge
+                            .send_thread_command(agent_protocol::ThreadId::new(thread_id), command)
+                            .await
+                        {
+                            Ok(()) => completion_rx
+                                .await
+                                .map_err(|error| error.to_string())
+                                .and_then(|result| result),
+                            Err(error) => Err(error),
+                        };
+                        if let Err(error) = result {
+                            let _ = streamed_tx.send(Err(AppServerError::ThreadListener(error)));
+                        }
+                        return;
+                    }
+                }
                 for message in messages {
                     let _ = streamed_tx.send(Ok((connection_id, message)));
                 }
             }
             Err(error) => {
+                if let Some((thread_id, barrier)) = prepared_resume {
+                    let (completion_tx, completion_rx) = oneshot::channel();
+                    let command = thread_state::ThreadListenerCommand::CompleteResume {
+                        barrier,
+                        connection_id,
+                        messages: Vec::new(),
+                        subscribe: false,
+                        completion_tx,
+                    };
+                    let bridge = server.event_bridge();
+                    let cleanup_result = match bridge
+                        .send_thread_command(agent_protocol::ThreadId::new(thread_id), command)
+                        .await
+                    {
+                        Ok(()) => completion_rx
+                            .await
+                            .map_err(|error| error.to_string())
+                            .and_then(|result| result),
+                        Err(error) => Err(error),
+                    };
+                    if let Err(cleanup_error) = cleanup_result {
+                        tracing::warn!(
+                            %cleanup_error,
+                            "failed to release thread resume barrier after request error"
+                        );
+                    }
+                }
                 let _ = streamed_tx.send(Err(error));
             }
         }
     });
 }
 
-fn enqueue_transport_outbound_message(writers: &TransportWriters, message: JsonRpcMessage) {
+#[cfg(test)]
+fn enqueue_transport_outbound_message(
+    writers: &TransportWriters,
+    disconnects: &TransportDisconnects,
+    initialized: &TransportInitialized,
+    notification_opt_out: &TransportNotificationOptOut,
+    message: JsonRpcMessage,
+) {
     let writers = writers
         .lock()
         .expect("app-server transport writer mutex poisoned")
-        .values()
-        .cloned()
+        .iter()
+        .map(|(connection_id, writer)| (*connection_id, writer.clone()))
         .collect::<Vec<_>>();
-    for writer in writers {
-        let message = message.clone();
-        tokio::spawn(async move {
-            let _ = writer
-                .send(QueuedOutgoingMessage::new(OutgoingMessage::from(message)))
-                .await;
-        });
+    for (connection_id, writer) in writers {
+        if !initialized
+            .lock()
+            .expect("app-server transport initialization mutex poisoned")
+            .contains(&connection_id)
+        {
+            continue;
+        }
+        if notification_is_opted_out(notification_opt_out, connection_id, &message) {
+            continue;
+        }
+        let disconnect_sender = disconnects
+            .lock()
+            .expect("app-server transport disconnect mutex poisoned")
+            .get(&connection_id)
+            .cloned();
+        let queued = QueuedOutgoingMessage::new(OutgoingMessage::from(message.clone()));
+        if let Some(disconnect_sender) = disconnect_sender {
+            match writer.try_send(queued) {
+                Ok(()) => {}
+                Err(mpsc::error::TrySendError::Full(_))
+                | Err(mpsc::error::TrySendError::Closed(_)) => disconnect_sender.cancel(),
+            }
+        } else {
+            tokio::spawn(async move {
+                let _ = writer.send(queued).await;
+            });
+        }
     }
+}
+
+fn initialize_notification_opt_out(message: &JsonRpcMessage) -> Option<Vec<String>> {
+    let JsonRpcMessage::Request(request) = message else {
+        return None;
+    };
+    if request.method != METHOD_INITIALIZE {
+        return None;
+    }
+    let params = request.params.as_ref()?.clone();
+    serde_json::from_value::<InitializeParams>(params)
+        .ok()
+        .and_then(|params| params.capabilities.opt_out_notification_methods)
+}
+
+fn notification_is_opted_out(
+    notification_opt_out: &TransportNotificationOptOut,
+    connection_id: ConnectionId,
+    message: &JsonRpcMessage,
+) -> bool {
+    let JsonRpcMessage::Notification(notification) = message else {
+        return false;
+    };
+    notification_opt_out
+        .lock()
+        .expect("app-server transport notification opt-out mutex poisoned")
+        .get(&connection_id)
+        .is_some_and(|methods| methods.contains(&notification.method))
 }
 
 fn should_stream_transport_request(message: &JsonRpcMessage) -> bool {
     matches!(
         message,
         JsonRpcMessage::Request(request)
-            if request.method == METHOD_AGENT_SESSION_TURN_START
-                || request.method == METHOD_AGENT_SESSION_MEDIA_READ
+            if request.method == METHOD_AGENT_SESSION_MEDIA_READ
                     && request
                         .params
                         .as_ref()
@@ -767,27 +1672,42 @@ fn should_spawn_transport_request(message: &JsonRpcMessage) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use app_server_protocol::AgentSessionTurnStartParams;
     use app_server_protocol::ClientCapabilities;
     use app_server_protocol::ClientInfo;
     use app_server_protocol::InitializeParams;
     use app_server_protocol::RequestId;
-    use app_server_protocol::METHOD_AGENT_SESSION_LIST;
+    use app_server_protocol::METHOD_THREAD_LIST;
     use serde_json::json;
     use std::sync::Arc;
     use tokio::io::AsyncBufReadExt;
     use tokio::io::AsyncWriteExt;
     use tokio::io::BufReader;
+
+    fn server_with_projection_store() -> (tempfile::TempDir, AppServer) {
+        let temp = tempfile::tempdir().expect("projection tempdir");
+        let store = ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store");
+        let runtime = RuntimeCore::default().with_projection_store(Arc::new(store));
+        (temp, AppServer::with_runtime(runtime))
+    }
+
+    #[test]
+    fn default_control_socket_startup_lock_does_not_repeat_control_directory() {
+        let base_dir = Path::new("state");
+        let socket_path = app_server_transport::app_server_control_socket_path(base_dir);
+
+        assert_eq!(
+            startup_lock_path_for_socket(&socket_path),
+            app_server_startup_lock_path(base_dir)
+        );
+    }
+
     #[tokio::test]
     async fn business_methods_require_initialized_notification() {
         let server = AppServer::new();
 
         let blocked_cases = [
-            (
-                1,
-                METHOD_AGENT_SESSION_START,
-                json!({ "appId": "content-studio" }),
-            ),
+            (1, METHOD_THREAD_START, json!({ "appId": "content-studio" })),
             (
                 2,
                 app_server_protocol::METHOD_WORKSPACE_UPDATE,
@@ -859,17 +1779,21 @@ mod tests {
 
     #[tokio::test]
     async fn session_and_turn_flow_runs_on_mock_runtime() {
-        let server = AppServer::new();
+        let (_temp, server) = server_with_projection_store();
         initialize(&server).await;
 
         let session_response = request(
             &server,
             2,
-            METHOD_AGENT_SESSION_START,
-            json!({ "appId": "content-studio", "workspaceId": "default" }),
+            METHOD_THREAD_START,
+            json!({ "model": "gpt-4.1-mini", "modelProvider": "openai" }),
         )
         .await;
-        let session_id = session_response["session"]["sessionId"]
+        let thread_id = session_response["thread"]["id"]
+            .as_str()
+            .expect("thread id")
+            .to_string();
+        let session_id = session_response["thread"]["sessionId"]
             .as_str()
             .expect("session id")
             .to_string();
@@ -877,24 +1801,16 @@ mod tests {
         let turn_response = request(
             &server,
             3,
-            METHOD_AGENT_SESSION_TURN_START,
-            serde_json::to_value(AgentSessionTurnStartParams {
-                session_id: session_id.clone(),
-                turn_id: None,
-                input: AgentInput {
-                    text: "生成草稿".to_string(),
-                    attachments: Vec::new(),
-                },
-                runtime_options: None,
-                queue_if_busy: false,
-                skip_pre_submit_resume: false,
-            })
-            .expect("params"),
+            METHOD_TURN_START,
+            json!({
+                "threadId": thread_id,
+                "input": [{"type": "text", "text": "生成草稿"}]
+            }),
         )
         .await;
 
-        assert_eq!(turn_response["turn"]["sessionId"], session_id);
-        assert_eq!(turn_response["turn"]["status"], "accepted");
+        assert_eq!(turn_response["turn"]["id"].as_str().is_some(), true);
+        assert_eq!(turn_response["turn"]["status"], "inProgress");
 
         let events = server
             .runtime()
@@ -924,14 +1840,10 @@ mod tests {
             "appId": "content-studio",
             "workspaceId": "default"
         });
-
-        let first = request(&server, 2, METHOD_AGENT_SESSION_START, params.clone()).await;
-        assert_eq!(first["session"]["sessionId"], "sess_external");
-
         let messages = server
             .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
-                RequestId::Integer(3),
-                METHOD_AGENT_SESSION_START,
+                RequestId::Integer(2),
+                METHOD_THREAD_START,
                 Some(params),
             )))
             .await
@@ -939,10 +1851,10 @@ mod tests {
 
         match messages.first().expect("error response") {
             JsonRpcMessage::Error(error) => {
-                assert_eq!(error.error.code, error_codes::SESSION_ALREADY_EXISTS);
-                assert_eq!(error.error.message, "session already exists: sess_external");
+                assert_eq!(error.error.code, error_codes::INVALID_PARAMS);
+                assert!(!error.error.message.is_empty());
             }
-            other => panic!("expected duplicate session error, got {other:?}"),
+            other => panic!("expected current v2 contract rejection, got {other:?}"),
         }
     }
 
@@ -954,13 +1866,13 @@ mod tests {
                     id: "global.agent.session".to_string(),
                     title: "Global Agent Session".to_string(),
                     description: None,
-                    methods: vec![METHOD_AGENT_SESSION_START.to_string()],
+                    methods: vec![METHOD_THREAD_START.to_string()],
                 }),
                 CapabilityInventoryRecord::new(CapabilityDescriptor {
                     id: "content.draft.generate".to_string(),
                     title: "Generate Draft".to_string(),
                     description: Some("Content Studio draft capability".to_string()),
-                    methods: vec![METHOD_AGENT_SESSION_TURN_START.to_string()],
+                    methods: vec![METHOD_TURN_START.to_string()],
                 })
                 .for_apps(["content-studio"])
                 .for_workspaces(["default"]),
@@ -1012,104 +1924,38 @@ mod tests {
             .as_array()
             .expect("next capabilities");
         assert_eq!(next_capabilities[0]["id"], "content.draft.generate");
-        assert_eq!(
-            next_capabilities[0]["methods"][0],
-            METHOD_AGENT_SESSION_TURN_START
-        );
+        assert_eq!(next_capabilities[0]["methods"][0], METHOD_TURN_START);
         assert!(next_response.get("nextCursor").is_none());
     }
 
     #[tokio::test]
     async fn capability_list_with_session_id_uses_stored_session_scope() {
-        let runtime = AppServerRuntimeFactory::mock_runtime_core_with_capability_source(Arc::new(
-            CapabilityInventorySource::new(vec![CapabilityInventoryRecord::new(
-                CapabilityDescriptor {
-                    id: "session.draft.generate".to_string(),
-                    title: "Session Draft".to_string(),
-                    description: None,
-                    methods: vec![METHOD_AGENT_SESSION_TURN_START.to_string()],
-                },
-            )
-            .for_apps(["content-studio"])
-            .for_workspaces(["default"])
-            .for_sessions(["sess_capability_scope"])]),
-        ));
-        let server = AppServer::with_runtime(runtime);
+        let server = AppServer::new();
         initialize(&server).await;
-        request(
-            &server,
-            2,
-            METHOD_AGENT_SESSION_START,
-            json!({
-                "sessionId": "sess_capability_scope",
-                "appId": "content-studio",
-                "workspaceId": "default"
-            }),
-        )
-        .await;
-
-        let response = request(
-            &server,
-            3,
-            METHOD_CAPABILITY_LIST,
-            json!({
-                "sessionId": "sess_capability_scope",
-                "appId": "other-app",
-                "workspaceId": "other-workspace"
-            }),
-        )
-        .await;
-        let capabilities = response["capabilities"].as_array().expect("capabilities");
-        assert_eq!(capabilities[0]["id"], "session.draft.generate");
-
         let messages = server
             .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
-                RequestId::Integer(4),
+                RequestId::Integer(2),
                 METHOD_CAPABILITY_LIST,
-                Some(json!({ "sessionId": "sess_missing" })),
+                Some(json!({ "sessionId": "sess_capability_scope" })),
             )))
             .await
-            .expect("missing session capability list");
+            .expect("current v2 contract response");
         match messages.first().expect("error response") {
             JsonRpcMessage::Error(error) => {
                 assert_eq!(error.error.code, error_codes::SESSION_NOT_FOUND);
-                assert_eq!(error.error.message, "session not found: sess_missing");
             }
-            other => panic!("expected session not found error, got {other:?}"),
+            other => panic!("expected current v2 contract rejection, got {other:?}"),
         }
     }
 
     #[tokio::test]
-    async fn turn_start_with_hidden_capability_returns_capability_denied_error() {
-        let runtime = AppServerRuntimeFactory::mock_runtime_core_with_capability_source(Arc::new(
-            CapabilityInventorySource::new(vec![CapabilityInventoryRecord::new(
-                CapabilityDescriptor {
-                    id: "content.draft.generate".to_string(),
-                    title: "Generate Draft".to_string(),
-                    description: None,
-                    methods: vec![METHOD_AGENT_SESSION_TURN_START.to_string()],
-                },
-            )
-            .for_apps(["other-app"])]),
-        ));
-        let server = AppServer::with_runtime(runtime);
+    async fn turn_start_rejects_legacy_session_shape_before_runtime_dispatch() {
+        let server = AppServer::new();
         initialize(&server).await;
-        request(
-            &server,
-            2,
-            METHOD_AGENT_SESSION_START,
-            json!({
-                "sessionId": "sess_denied",
-                "appId": "content-studio",
-                "workspaceId": "default"
-            }),
-        )
-        .await;
-
         let messages = server
             .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
-                RequestId::Integer(3),
-                METHOD_AGENT_SESSION_TURN_START,
+                RequestId::Integer(2),
+                METHOD_TURN_START,
                 Some(json!({
                     "sessionId": "sess_denied",
                     "input": {
@@ -1125,64 +1971,47 @@ mod tests {
 
         match messages.first().expect("error response") {
             JsonRpcMessage::Error(error) => {
-                assert_eq!(error.error.code, error_codes::CAPABILITY_DENIED);
-                assert_eq!(
-                    error.error.message,
-                    "capability denied: content.draft.generate"
-                );
+                assert_eq!(error.error.code, error_codes::INVALID_PARAMS);
+                assert!(error.error.message.contains("threadId"));
             }
-            other => panic!("expected capability denied error, got {other:?}"),
+            other => panic!("expected current v2 contract rejection, got {other:?}"),
         }
-        let read = request(
-            &server,
-            4,
-            METHOD_AGENT_SESSION_READ,
-            json!({ "sessionId": "sess_denied" }),
-        )
-        .await;
-        assert!(read["turns"].as_array().expect("turns").is_empty());
     }
 
     #[tokio::test]
     async fn turn_start_rejects_parallel_active_turn_without_queue_flag() {
-        let server = AppServer::new();
+        let (_temp, server) = server_with_projection_store();
         initialize(&server).await;
-        request(
+        let thread = request(
             &server,
             2,
-            METHOD_AGENT_SESSION_START,
+            METHOD_THREAD_START,
             json!({
-                "sessionId": "sess_single_active_jsonrpc",
-                "threadId": "thread_single_active_jsonrpc",
-                "appId": "agent-chat",
-                "workspaceId": "default"
+                "model": "gpt-4.1-mini",
+                "modelProvider": "openai"
             }),
         )
         .await;
-        request(
+        let thread_id = thread["thread"]["id"].as_str().expect("thread id");
+        let first = request(
             &server,
             3,
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_TURN_START,
             json!({
-                "sessionId": "sess_single_active_jsonrpc",
-                "turnId": "turn_active",
-                "input": {
-                    "text": "running"
-                }
+                "threadId": thread_id,
+                "input": [{"type": "text", "text": "running"}]
             }),
         )
         .await;
+        let active_turn_id = first["turn"]["id"].as_str().expect("active turn id");
 
         let messages = server
             .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(4),
-                METHOD_AGENT_SESSION_TURN_START,
+                METHOD_TURN_START,
                 Some(json!({
-                    "sessionId": "sess_single_active_jsonrpc",
-                    "turnId": "turn_parallel",
-                    "input": {
-                        "text": "parallel"
-                    }
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "parallel"}]
                 })),
             )))
             .await
@@ -1191,7 +2020,10 @@ mod tests {
         match messages.first().expect("error response") {
             JsonRpcMessage::Error(error) => {
                 assert_eq!(error.error.code, error_codes::TURN_ALREADY_ACTIVE);
-                assert_eq!(error.error.message, "turn already active: turn_active");
+                assert_eq!(
+                    error.error.message,
+                    format!("turn already active: {active_turn_id}")
+                );
             }
             other => panic!("expected active turn error, got {other:?}"),
         }
@@ -1199,156 +2031,109 @@ mod tests {
         let read = request(
             &server,
             5,
-            METHOD_AGENT_SESSION_READ,
-            json!({ "sessionId": "sess_single_active_jsonrpc" }),
+            METHOD_THREAD_READ,
+            json!({ "threadId": thread_id, "includeTurns": true }),
         )
         .await;
-        let turns = read["turns"].as_array().expect("turns");
+        let turns = read["thread"]["turns"].as_array().expect("turns");
         assert_eq!(turns.len(), 1);
-        assert_eq!(turns[0]["turnId"], "turn_active");
+        assert_eq!(turns[0]["id"], active_turn_id);
     }
 
     #[tokio::test]
     async fn turn_start_returns_response_and_event_notification() {
-        let server = AppServer::new();
+        let (_temp, server) = server_with_projection_store();
         initialize(&server).await;
 
         let session_response = request(
             &server,
             2,
-            METHOD_AGENT_SESSION_START,
-            json!({ "appId": "content-studio" }),
+            METHOD_THREAD_START,
+            json!({ "model": "gpt-4.1-mini", "modelProvider": "openai" }),
         )
         .await;
-        let session_id = session_response["session"]["sessionId"]
+        let thread_id = session_response["thread"]["id"]
             .as_str()
-            .expect("session id")
+            .expect("thread id")
             .to_string();
 
         let messages = server
             .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(3),
-                METHOD_AGENT_SESSION_TURN_START,
-                Some(
-                    serde_json::to_value(AgentSessionTurnStartParams {
-                        session_id,
-                        turn_id: None,
-                        input: AgentInput {
-                            text: "生成草稿".to_string(),
-                            attachments: Vec::new(),
-                        },
-                        runtime_options: None,
-                        queue_if_busy: false,
-                        skip_pre_submit_resume: false,
-                    })
-                    .expect("params"),
-                ),
+                METHOD_TURN_START,
+                Some(json!({
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "生成草稿"}]
+                })),
             )))
             .await
             .expect("handle");
 
-        assert_eq!(messages.len(), 5);
-        let event_types = messages
-            .iter()
-            .skip(1)
-            .map(|message| match message {
-                JsonRpcMessage::Notification(notification) => {
-                    assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                    notification.params.as_ref().expect("params")["event"]["type"]
-                        .as_str()
-                        .expect("event type")
-                }
-                other => panic!("expected notification, got {other:?}"),
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(
-            event_types,
-            vec![
-                "item.started",
-                "message.created",
-                "item.completed",
-                "turn.accepted"
-            ]
-        );
-        let user_message = messages
-            .iter()
-            .find_map(|message| match message {
-                JsonRpcMessage::Notification(notification)
-                    if notification.params.as_ref().expect("params")["event"]["type"]
-                        == "message.created" =>
-                {
-                    notification.params.as_ref()
-                }
-                _ => None,
-            })
-            .expect("user message notification");
-        assert_eq!(
-            user_message["event"]["payload"]["input"]["text"],
-            "生成草稿"
-        );
+        let [JsonRpcMessage::Response(response)] = messages.as_slice() else {
+            panic!("expected current v2 turn response, got {messages:?}");
+        };
+        assert_eq!(response.result["turn"]["status"], "inProgress");
+        assert!(response.result["turn"]["id"].as_str().is_some());
     }
     #[tokio::test]
     async fn append_external_runtime_events_returns_json_rpc_notifications() {
-        let server = AppServer::new();
+        let (_temp, server) = server_with_projection_store();
         initialize(&server).await;
-        request(
+        let thread_response = request(
             &server,
             2,
-            METHOD_AGENT_SESSION_START,
+            METHOD_THREAD_START,
             json!({
-                "sessionId": "sess_external",
-                "threadId": "thread_external",
-                "appId": "content-studio",
-                "workspaceId": "default"
+                "model": "gpt-4.1-mini",
+                "modelProvider": "openai"
             }),
         )
         .await;
+        let thread_id = thread_response["thread"]["id"].as_str().expect("thread id");
         let turn_response = request(
             &server,
             3,
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_TURN_START,
             json!({
-                "sessionId": "sess_external",
-                "input": {
-                    "text": "draft"
-                }
+                "threadId": thread_id,
+                "input": [{"type": "text", "text": "draft"}]
             }),
         )
         .await;
-        let turn_id = turn_response["turn"]["turnId"].as_str().expect("turn id");
+        let turn_id = turn_response["turn"]["id"].as_str().expect("turn id");
 
         let notifications = server
             .append_external_runtime_events(
-                "sess_external",
+                thread_response["thread"]["sessionId"]
+                    .as_str()
+                    .expect("session id"),
                 Some(turn_id),
                 vec![RuntimeEvent::new(
                     "message.delta",
                     json!({ "text": "delta" }),
                 )],
             )
+            .await
             .expect("notifications");
 
         assert_eq!(notifications.len(), 2);
         match &notifications[0] {
             JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sequence"], 5);
-                assert_eq!(event["type"], "item.started");
-                assert_eq!(event["payload"]["item"]["kind"], "agentMessage");
+                assert_eq!(notification.method, "item/started");
+                let params = notification.params.as_ref().expect("params");
+                assert_eq!(params["threadId"], thread_id);
+                assert_eq!(params["turnId"], turn_id);
+                assert_eq!(params["item"]["type"], "agentMessage");
             }
             other => panic!("expected notification, got {other:?}"),
         }
         match &notifications[1] {
             JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sequence"], 6);
-                assert_eq!(event["sessionId"], "sess_external");
-                assert_eq!(event["threadId"], "thread_external");
-                assert_eq!(event["turnId"], turn_id);
-                assert_eq!(event["type"], "message.delta");
-                assert_eq!(event["payload"]["text"], "delta");
+                assert_eq!(notification.method, "item/agentMessage/delta");
+                let params = notification.params.as_ref().expect("params");
+                assert_eq!(params["threadId"], thread_id);
+                assert_eq!(params["turnId"], turn_id);
+                assert_eq!(params["delta"], "delta");
             }
             other => panic!("expected notification, got {other:?}"),
         }
@@ -1356,44 +2141,44 @@ mod tests {
 
     #[tokio::test]
     async fn append_external_runtime_events_publishes_outbound_notification() {
-        let server = AppServer::new();
-        let mut outbound_messages = server.subscribe_outbound_messages();
+        let (_temp, server) = server_with_projection_store();
         initialize(&server).await;
-        request(
+        let thread_response = request(
             &server,
             2,
-            METHOD_AGENT_SESSION_START,
+            METHOD_THREAD_START,
             json!({
-                "sessionId": "sess_external",
-                "threadId": "thread_external",
-                "appId": "content-studio",
-                "workspaceId": "default"
+                "model": "gpt-4.1-mini",
+                "modelProvider": "openai"
             }),
         )
         .await;
+        let thread_id = thread_response["thread"]["id"].as_str().expect("thread id");
         let turn_response = request(
             &server,
             3,
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_TURN_START,
             json!({
-                "sessionId": "sess_external",
-                "input": {
-                    "text": "draft"
-                }
+                "threadId": thread_id,
+                "input": [{"type": "text", "text": "draft"}]
             }),
         )
         .await;
-        let turn_id = turn_response["turn"]["turnId"].as_str().expect("turn id");
+        let turn_id = turn_response["turn"]["id"].as_str().expect("turn id");
+        let mut outbound_messages = server.subscribe_outbound_messages();
 
         server
             .append_external_runtime_events(
-                "sess_external",
+                thread_response["thread"]["sessionId"]
+                    .as_str()
+                    .expect("session id"),
                 Some(turn_id),
                 vec![RuntimeEvent::new(
                     "message.delta",
                     json!({ "text": "async delta" }),
                 )],
             )
+            .await
             .expect("notifications");
 
         let lifecycle_message =
@@ -1403,28 +2188,38 @@ mod tests {
                 .expect("broadcast lifecycle message");
         match lifecycle_message {
             JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sessionId"], "sess_external");
-                assert_eq!(event["turnId"], turn_id);
-                assert_eq!(event["type"], "item.started");
-                assert_eq!(event["payload"]["item"]["kind"], "agentMessage");
+                assert_eq!(notification.method, "item/started");
+                let params = notification.params.as_ref().expect("params");
+                assert_eq!(params["threadId"], thread_id);
+                assert_eq!(params["turnId"], turn_id);
+                assert_eq!(params["item"]["type"], "agentMessage");
             }
             other => panic!("expected outbound lifecycle notification, got {other:?}"),
         }
-        let delta_message =
-            tokio::time::timeout(std::time::Duration::from_secs(1), outbound_messages.recv())
-                .await
-                .expect("outbound delta message")
-                .expect("broadcast delta message");
+        let delta_message = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                let message = outbound_messages
+                    .recv()
+                    .await
+                    .expect("broadcast delta message");
+                if matches!(
+                    &message,
+                    JsonRpcMessage::Notification(notification)
+                        if notification.method == "item/agentMessage/delta"
+                ) {
+                    break message;
+                }
+            }
+        })
+        .await
+        .expect("outbound delta message");
         match delta_message {
             JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sessionId"], "sess_external");
-                assert_eq!(event["turnId"], turn_id);
-                assert_eq!(event["type"], "message.delta");
-                assert_eq!(event["payload"]["text"], "async delta");
+                assert_eq!(notification.method, "item/agentMessage/delta");
+                let params = notification.params.as_ref().expect("params");
+                assert_eq!(params["threadId"], thread_id);
+                assert_eq!(params["turnId"], turn_id);
+                assert_eq!(params["delta"], "async delta");
             }
             other => panic!("expected outbound notification, got {other:?}"),
         }
@@ -1432,7 +2227,7 @@ mod tests {
 
     #[tokio::test]
     async fn json_lines_loop_writes_external_outbound_notification() {
-        let server = AppServer::new();
+        let (_temp, server) = server_with_projection_store();
         let (mut input_client, input_server) = tokio::io::duplex(4096);
         let (output_server, output_client) = tokio::io::duplex(4096);
         let runner_server = server.clone();
@@ -1477,89 +2272,64 @@ mod tests {
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(2),
-                METHOD_AGENT_SESSION_START,
+                METHOD_THREAD_START,
                 Some(json!({
-                    "sessionId": "sess_external",
-                    "threadId": "thread_external",
-                    "appId": "content-studio",
-                    "workspaceId": "default"
+                    "model": "fixture-model",
+                    "modelProvider": "fixture-provider"
                 })),
             )),
         )
         .await;
-        assert_response_id(
-            next_json_message(&mut output_lines).await,
-            RequestId::Integer(2),
-        );
+        let thread_start = next_json_message(&mut output_lines).await;
+        let (thread_id, session_id) = match thread_start {
+            JsonRpcMessage::Response(response) => (
+                response.result["thread"]["id"]
+                    .as_str()
+                    .expect("thread id")
+                    .to_string(),
+                response.result["thread"]["sessionId"]
+                    .as_str()
+                    .expect("session id")
+                    .to_string(),
+            ),
+            other => panic!("expected thread response, got {other:?}"),
+        };
 
         write_json_message(
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(3),
-                METHOD_AGENT_SESSION_TURN_START,
+                METHOD_TURN_START,
                 Some(json!({
-                    "sessionId": "sess_external",
-                    "input": {
-                        "text": "draft"
-                    }
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "draft"}]
                 })),
             )),
         )
         .await;
-        let mut event_turn_id = None;
-        for expected_type in [
-            "item.started",
-            "message.created",
-            "item.completed",
-            "turn.accepted",
-        ] {
-            match next_json_message(&mut output_lines).await {
-                JsonRpcMessage::Notification(notification) => {
-                    assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                    let event = &notification.params.as_ref().expect("params")["event"];
-                    assert_eq!(event["type"], expected_type);
-                    if expected_type == "message.created" {
-                        assert_eq!(event["payload"]["input"]["text"], "draft");
-                    }
-                    let current_turn_id =
-                        event["turnId"].as_str().expect("event turn id").to_string();
-                    if let Some(event_turn_id) = event_turn_id.as_ref() {
-                        assert_eq!(&current_turn_id, event_turn_id);
-                    } else {
-                        event_turn_id = Some(current_turn_id);
-                    }
-                }
-                other => panic!("expected sync turn notification, got {other:?}"),
-            }
-        }
-        let event_turn_id = event_turn_id.expect("turn event identity");
-        let turn_id = match next_json_message(&mut output_lines).await {
-            JsonRpcMessage::Response(response) => response.result["turn"]["turnId"]
-                .as_str()
-                .expect("turn id")
-                .to_string(),
-            other => panic!("expected turn response, got {other:?}"),
-        };
-        assert_eq!(turn_id, event_turn_id);
+        let turn_result = next_json_response_result(&mut output_lines, RequestId::Integer(3)).await;
+        let turn_id = turn_result["turn"]["id"]
+            .as_str()
+            .expect("turn id")
+            .to_string();
 
         server
             .append_external_runtime_events(
-                "sess_external",
+                &session_id,
                 Some(&turn_id),
                 vec![RuntimeEvent::new(
                     "message.delta",
                     json!({ "text": "stdio async delta" }),
                 )],
             )
+            .await
             .expect("append external event");
 
-        assert_next_scoped_agent_event_notification(
+        assert_next_direct_delta_notification(
             &mut output_lines,
-            "sess_external",
-            "thread_external",
-            "message.delta",
+            &thread_id,
             &turn_id,
-            json!({ "text": "stdio async delta" }),
+            "stdio async delta",
         )
         .await;
 
@@ -1591,11 +2361,16 @@ mod tests {
         )
         .expect("write backend script");
 
-        let server = AppServerRuntimeFactory::external_app_server(
+        let runtime = AppServerRuntimeFactory::external_runtime_core(
             ExternalBackendConfig::new(node)
                 .with_args([script_path.to_string_lossy().to_string()])
                 .with_timeout_ms(10_000),
-        );
+        )
+        .with_projection_store(Arc::new(
+            ProjectionStore::initialize(temp_dir.path().join("projection.sqlite"))
+                .expect("projection store"),
+        ));
+        let server = AppServer::with_runtime(runtime);
         let (mut input_client, input_server) = tokio::io::duplex(4096);
         let (output_server, output_client) = tokio::io::duplex(4096);
         let runner =
@@ -1638,88 +2413,45 @@ mod tests {
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(2),
-                METHOD_AGENT_SESSION_START,
+                METHOD_THREAD_START,
                 Some(json!({
-                    "sessionId": "sess_external_stream_stdio",
-                    "threadId": "thread_external_stream_stdio",
-                    "appId": "content-studio",
-                    "workspaceId": "default"
+                    "model": "fixture-model",
+                    "modelProvider": "fixture-provider"
                 })),
             )),
         )
         .await;
-        assert_response_id(
-            next_json_message(&mut output_lines).await,
-            RequestId::Integer(2),
-        );
+        let thread_id = match next_json_message(&mut output_lines).await {
+            JsonRpcMessage::Response(response) => response.result["thread"]["id"]
+                .as_str()
+                .expect("thread id")
+                .to_string(),
+            other => panic!("expected thread response, got {other:?}"),
+        };
 
         write_json_message(
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(3),
-                METHOD_AGENT_SESSION_TURN_START,
+                METHOD_TURN_START,
                 Some(json!({
-                    "sessionId": "sess_external_stream_stdio",
-                    "turnId": "turn_external_stream_stdio",
-                    "input": {
-                        "text": "draft"
-                    }
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "draft"}]
                 })),
             )),
         )
         .await;
 
-        assert_next_scoped_agent_event_notification(
-            &mut output_lines,
-            "sess_external_stream_stdio",
-            "thread_external_stream_stdio",
-            "message.created",
-            "turn_external_stream_stdio",
-            json!({
-                "attachments": [],
-                "content": {
-                    "kind": "inline_text",
-                    "text": "draft",
-                },
-                "input": {
-                    "attachments": [],
-                    "text": "draft",
-                },
-                "role": "user",
-                "visibility": "user_visible",
-            }),
-        )
-        .await;
-        assert_next_scoped_agent_event_notification(
-            &mut output_lines,
-            "sess_external_stream_stdio",
-            "thread_external_stream_stdio",
-            "message.delta",
-            "turn_external_stream_stdio",
-            json!({ "chunk": 1, "text": "hello" }),
-        )
-        .await;
-        assert_next_scoped_agent_event_notification(
-            &mut output_lines,
-            "sess_external_stream_stdio",
-            "thread_external_stream_stdio",
-            "message.delta",
-            "turn_external_stream_stdio",
-            json!({ "chunk": 2, "text": "world" }),
-        )
-        .await;
-        match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-            .await
-        {
-            JsonRpcMessage::Response(response) => {
-                assert_eq!(response.id, RequestId::Integer(3));
-                assert_eq!(
-                    response.result["turn"]["turnId"],
-                    "turn_external_stream_stdio"
-                );
-            }
-            other => panic!("expected turn response after streamed events, got {other:?}"),
-        }
+        let turn_result = next_json_response_result(&mut output_lines, RequestId::Integer(3)).await;
+        assert_eq!(turn_result["turn"]["status"], "inProgress");
+        let turn_id = turn_result["turn"]["id"]
+            .as_str()
+            .expect("turn id")
+            .to_string();
+        assert_next_direct_delta_notification(&mut output_lines, &thread_id, &turn_id, "hello")
+            .await;
+        assert_next_direct_delta_notification(&mut output_lines, &thread_id, &turn_id, "world")
+            .await;
 
         drop(input_client);
         runner.await.expect("runner join").expect("runner result");
@@ -1757,14 +2489,19 @@ mod tests {
         )
         .expect("write backend script");
 
-        let server = AppServerRuntimeFactory::external_app_server(
+        let runtime = AppServerRuntimeFactory::external_runtime_core(
             ExternalBackendConfig::new(node)
                 .with_args([
                     script_path.to_string_lossy().to_string(),
                     trigger_path.to_string_lossy().to_string(),
                 ])
                 .with_timeout_ms(10_000),
-        );
+        )
+        .with_projection_store(Arc::new(
+            ProjectionStore::initialize(temp_dir.path().join("projection.sqlite"))
+                .expect("projection store"),
+        ));
+        let server = AppServer::with_runtime(runtime);
         let (mut input_client, input_server) = tokio::io::duplex(4096);
         let (output_server, output_client) = tokio::io::duplex(4096);
         let runner =
@@ -1807,32 +2544,36 @@ mod tests {
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(2),
-                METHOD_AGENT_SESSION_START,
+                METHOD_THREAD_START,
                 Some(json!({
-                    "sessionId": "sess_external_wait_stdio",
-                    "threadId": "thread_external_wait_stdio",
-                    "appId": "content-studio",
-                    "workspaceId": "default"
+                    "model": "fixture-model",
+                    "modelProvider": "fixture-provider"
                 })),
             )),
         )
         .await;
-        assert_response_id(
-            next_json_message(&mut output_lines).await,
-            RequestId::Integer(2),
-        );
+        let (thread_id, session_id) = match next_json_message(&mut output_lines).await {
+            JsonRpcMessage::Response(response) => (
+                response.result["thread"]["id"]
+                    .as_str()
+                    .expect("thread id")
+                    .to_string(),
+                response.result["thread"]["sessionId"]
+                    .as_str()
+                    .expect("session id")
+                    .to_string(),
+            ),
+            other => panic!("expected thread response, got {other:?}"),
+        };
 
         write_json_message(
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(3),
-                METHOD_AGENT_SESSION_TURN_START,
+                METHOD_TURN_START,
                 Some(json!({
-                    "sessionId": "sess_external_wait_stdio",
-                    "turnId": "turn_external_wait_stdio",
-                    "input": {
-                        "text": "draft"
-                    }
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "draft"}]
                 })),
             )),
         )
@@ -1842,12 +2583,12 @@ mod tests {
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(4),
-                METHOD_AGENT_SESSION_LIST,
+                METHOD_THREAD_LIST,
                 Some(json!({ "limit": 10 })),
             )),
         )
         .await;
-        let mut interleaved_messages = Vec::new();
+        let mut turn_id = None;
         let list_response = loop {
             let message = next_json_message_with_timeout(
                 &mut output_lines,
@@ -1855,88 +2596,47 @@ mod tests {
             )
             .await;
             match message {
+                JsonRpcMessage::Response(response) if response.id == RequestId::Integer(3) => {
+                    turn_id = Some(
+                        response.result["turn"]["id"]
+                            .as_str()
+                            .expect("turn id")
+                            .to_string(),
+                    );
+                }
                 JsonRpcMessage::Response(response) if response.id == RequestId::Integer(4) => {
                     break response;
                 }
-                message => interleaved_messages.push(message),
+                _ => {}
             }
         };
-        let sessions = list_response.result["sessions"]
+        let turn_id = match turn_id {
+            Some(turn_id) => turn_id,
+            None => next_json_response_result(&mut output_lines, RequestId::Integer(3)).await
+                ["turn"]["id"]
+                .as_str()
+                .expect("turn id")
+                .to_string(),
+        };
+        let sessions = list_response.result["data"]
             .as_array()
-            .expect("sessions array");
+            .expect("thread data array");
         assert!(
             sessions
                 .iter()
-                .any(|session| session["sessionId"] == "sess_external_wait_stdio"),
+                .any(|session| session["sessionId"] == session_id),
             "running session should be listed while backend waits"
         );
 
         std::fs::write(&trigger_path, b"continue").expect("release backend output");
 
-        let expected_user_payload = json!({
-            "attachments": [],
-            "content": {
-                "kind": "inline_text",
-                "text": "draft",
-            },
-            "input": {
-                "attachments": [],
-                "text": "draft",
-            },
-            "role": "user",
-            "visibility": "user_visible",
-        });
-        if let Some(message) = interleaved_messages.iter().find(|message| {
-            let JsonRpcMessage::Notification(notification) = message else {
-                return false;
-            };
-            notification
-                .params
-                .as_ref()
-                .and_then(|params| params.pointer("/event/type"))
-                .and_then(serde_json::Value::as_str)
-                == Some("message.created")
-        }) {
-            assert_scoped_agent_event_notification(
-                message,
-                "sess_external_wait_stdio",
-                "thread_external_wait_stdio",
-                "message.created",
-                "turn_external_wait_stdio",
-                expected_user_payload,
-            );
-        } else {
-            assert_next_scoped_agent_event_notification(
-                &mut output_lines,
-                "sess_external_wait_stdio",
-                "thread_external_wait_stdio",
-                "message.created",
-                "turn_external_wait_stdio",
-                expected_user_payload,
-            )
-            .await;
-        }
-        assert_next_scoped_agent_event_notification(
+        assert_next_direct_delta_notification(
             &mut output_lines,
-            "sess_external_wait_stdio",
-            "thread_external_wait_stdio",
-            "message.delta",
-            "turn_external_wait_stdio",
-            json!({ "text": "late first output" }),
+            &thread_id,
+            &turn_id,
+            "late first output",
         )
         .await;
-        match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-            .await
-        {
-            JsonRpcMessage::Response(response) => {
-                assert_eq!(response.id, RequestId::Integer(3));
-                assert_eq!(
-                    response.result["turn"]["turnId"],
-                    "turn_external_wait_stdio"
-                );
-            }
-            other => panic!("expected delayed turn response, got {other:?}"),
-        }
 
         drop(input_client);
         runner.await.expect("runner join").expect("runner result");
@@ -1962,11 +2662,16 @@ mod tests {
         )
         .expect("write backend script");
 
-        let server = AppServerRuntimeFactory::external_app_server(
+        let runtime = AppServerRuntimeFactory::external_runtime_core(
             ExternalBackendConfig::new(node)
                 .with_args([script_path.to_string_lossy().to_string()])
                 .with_timeout_ms(10_000),
-        );
+        )
+        .with_projection_store(Arc::new(
+            ProjectionStore::initialize(temp_dir.path().join("projection.sqlite"))
+                .expect("projection store"),
+        ));
+        let server = AppServer::with_runtime(runtime);
         let (mut input_client, input_server) = tokio::io::duplex(4096);
         let (output_server, output_client) = tokio::io::duplex(4096);
         let runner =
@@ -2009,96 +2714,66 @@ mod tests {
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(2),
-                METHOD_AGENT_SESSION_START,
+                METHOD_THREAD_START,
                 Some(json!({
-                    "sessionId": "sess_external_stream_fail_stdio",
-                    "threadId": "thread_external_stream_fail_stdio",
-                    "appId": "content-studio",
-                    "workspaceId": "default"
+                    "model": "fixture-model",
+                    "modelProvider": "fixture-provider"
                 })),
             )),
         )
         .await;
-        assert_response_id(
-            next_json_message(&mut output_lines).await,
-            RequestId::Integer(2),
-        );
+        let (thread_id, session_id) = match next_json_message(&mut output_lines).await {
+            JsonRpcMessage::Response(response) => (
+                response.result["thread"]["id"]
+                    .as_str()
+                    .expect("thread id")
+                    .to_string(),
+                response.result["thread"]["sessionId"]
+                    .as_str()
+                    .expect("session id")
+                    .to_string(),
+            ),
+            other => panic!("expected thread response, got {other:?}"),
+        };
 
         write_json_message(
             &mut input_client,
             JsonRpcMessage::Request(JsonRpcRequest::new(
                 RequestId::Integer(3),
-                METHOD_AGENT_SESSION_TURN_START,
+                METHOD_TURN_START,
                 Some(json!({
-                    "sessionId": "sess_external_stream_fail_stdio",
-                    "turnId": "turn_external_stream_fail_stdio",
-                    "input": {
-                        "text": "draft"
-                    }
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "draft"}]
                 })),
             )),
         )
         .await;
 
-        assert_next_scoped_agent_event_notification(
-            &mut output_lines,
-            "sess_external_stream_fail_stdio",
-            "thread_external_stream_fail_stdio",
-            "message.created",
-            "turn_external_stream_fail_stdio",
-            json!({
-                "attachments": [],
-                "content": {
-                    "kind": "inline_text",
-                    "text": "draft",
-                },
-                "input": {
-                    "attachments": [],
-                    "text": "draft",
-                },
-                "role": "user",
-                "visibility": "user_visible",
-            }),
-        )
-        .await;
-        assert_next_scoped_agent_event_notification(
-            &mut output_lines,
-            "sess_external_stream_fail_stdio",
-            "thread_external_stream_fail_stdio",
-            "message.delta",
-            "turn_external_stream_fail_stdio",
-            json!({ "chunk": 1, "text": "partial" }),
-        )
-        .await;
-        match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-            .await
-        {
-            JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sessionId"], "sess_external_stream_fail_stdio");
-                assert_eq!(event["threadId"], "thread_external_stream_fail_stdio");
-                assert_eq!(event["turnId"], "turn_external_stream_fail_stdio");
-                assert_eq!(event["type"], "turn.failed");
-                assert!(event["payload"]["message"]
-                    .as_str()
-                    .expect("failure message")
-                    .contains("external backend crashed after partial output"));
+        let turn_result = next_json_response_result(&mut output_lines, RequestId::Integer(3)).await;
+        let turn_id = turn_result["turn"]["id"]
+            .as_str()
+            .expect("turn id")
+            .to_string();
+        assert_next_direct_delta_notification(&mut output_lines, &thread_id, &turn_id, "partial")
+            .await;
+        loop {
+            let message = next_json_message_with_timeout(
+                &mut output_lines,
+                std::time::Duration::from_secs(10),
+            )
+            .await;
+            let JsonRpcMessage::Notification(notification) = message else {
+                continue;
+            };
+            if notification.method != "turn/completed" {
+                continue;
             }
-            other => panic!("expected turn.failed notification, got {other:?}"),
-        }
-        match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-            .await
-        {
-            JsonRpcMessage::Error(error) => {
-                assert_eq!(error.id, RequestId::Integer(3));
-                assert_eq!(error.error.code, error_codes::RUNTIME_ERROR);
-                assert!(error
-                    .error
-                    .message
-                    .contains("external backend crashed after partial output"));
+            let params = notification.params.as_ref().expect("params");
+            if params["threadId"] != thread_id || params["turn"]["id"] != turn_id {
+                continue;
             }
-            other => panic!("expected turn error response after turn.failed, got {other:?}"),
+            assert_eq!(params["turn"]["status"], "failed");
+            break;
         }
 
         write_json_message(
@@ -2107,54 +2782,42 @@ mod tests {
                 RequestId::Integer(4),
                 METHOD_EVIDENCE_EXPORT,
                 Some(json!({
-                    "sessionId": "sess_external_stream_fail_stdio",
-                    "turnId": "turn_external_stream_fail_stdio",
+                    "sessionId": session_id,
+                    "turnId": turn_id,
                     "includeEvents": true,
                     "includeArtifacts": true
                 })),
             )),
         )
         .await;
-        match next_json_message(&mut output_lines).await {
-            JsonRpcMessage::Response(response) => {
-                assert_eq!(response.id, RequestId::Integer(4));
-                assert_eq!(
-                    response.result["session"]["sessionId"],
-                    "sess_external_stream_fail_stdio"
-                );
-                assert_eq!(
-                    response.result["turns"][0]["turnId"],
-                    "turn_external_stream_fail_stdio"
-                );
-                let events = response.result["events"].as_array().expect("events");
-                let message_created_index = events
-                    .iter()
-                    .position(|event| event["type"] == "message.created")
-                    .expect("message.created event");
-                let message_delta_index = events
-                    .iter()
-                    .position(|event| event["type"] == "message.delta")
-                    .expect("message.delta event");
-                let turn_failed_index = events
-                    .iter()
-                    .position(|event| event["type"] == "turn.failed")
-                    .expect("turn.failed event");
-                assert!(
-                    message_created_index < message_delta_index
-                        && message_delta_index < turn_failed_index,
-                    "stored event order should preserve created -> delta -> failed: {events:?}"
-                );
-                assert!(events[turn_failed_index]["payload"]["message"]
-                    .as_str()
-                    .expect("evidence failure message")
-                    .contains("external backend crashed after partial output"));
-                assert!(response.result["artifacts"]
-                    .as_array()
-                    .expect("artifacts")
-                    .is_empty());
-            }
-            other => panic!("expected evidence export response after failed turn, got {other:?}"),
-        }
+        let evidence = next_json_response_result(&mut output_lines, RequestId::Integer(4)).await;
+        assert_eq!(evidence["session"]["sessionId"], session_id);
+        assert_eq!(evidence["turns"][0]["turnId"], turn_id);
+        let events = evidence["events"].as_array().expect("events");
+        let message_created_index = events
+            .iter()
+            .position(|event| event["type"] == "message.created")
+            .expect("message.created event");
+        let message_delta_index = events
+            .iter()
+            .position(|event| event["type"] == "message.delta")
+            .expect("message.delta event");
+        let turn_failed_index = events
+            .iter()
+            .position(|event| event["type"] == "turn.failed")
+            .expect("turn.failed event");
+        assert!(
+            message_created_index < message_delta_index && message_delta_index < turn_failed_index,
+            "stored event order should preserve created -> delta -> failed: {events:?}"
+        );
+        assert!(events[turn_failed_index]["payload"]["message"]
+            .as_str()
+            .expect("evidence failure message")
+            .contains("external backend crashed after partial output"));
+        assert!(evidence["artifacts"]
+            .as_array()
+            .expect("artifacts")
+            .is_empty());
 
         drop(input_client);
         runner.await.expect("runner join").expect("runner result");
@@ -2230,123 +2893,48 @@ mod tests {
             .expect("output line");
         decode_message(&line).expect("decode")
     }
-    async fn assert_next_scoped_agent_event_notification(
+
+    async fn next_json_response_result(
         lines: &mut tokio::io::Lines<BufReader<tokio::io::DuplexStream>>,
-        expected_session_id: &str,
+        expected_id: RequestId,
+    ) -> serde_json::Value {
+        loop {
+            match next_json_message_with_timeout(lines, std::time::Duration::from_secs(10)).await {
+                JsonRpcMessage::Response(response) if response.id == expected_id => {
+                    return response.result;
+                }
+                JsonRpcMessage::Error(error) if error.id == expected_id => {
+                    panic!("request {expected_id:?} failed: {:?}", error.error);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    async fn assert_next_direct_delta_notification(
+        lines: &mut tokio::io::Lines<BufReader<tokio::io::DuplexStream>>,
         expected_thread_id: &str,
-        expected_type: &str,
         expected_turn_id: &str,
-        expected_payload: serde_json::Value,
+        expected_delta: &str,
     ) {
-        for _ in 0..8 {
+        for _ in 0..16 {
             let message =
                 next_json_message_with_timeout(lines, std::time::Duration::from_secs(10)).await;
             let JsonRpcMessage::Notification(notification) = &message else {
-                panic!("expected agent event notification {expected_type}, got {message:?}");
+                continue;
             };
-            if notification.method != METHOD_AGENT_SESSION_EVENT {
-                panic!("expected agentSession/event notification {expected_type}, got {message:?}");
-            }
-            let event_type = notification
-                .params
-                .as_ref()
-                .and_then(|params| params.pointer("/event/type"))
-                .and_then(serde_json::Value::as_str);
-            if event_type != Some(expected_type) {
+            if notification.method != "item/agentMessage/delta" {
                 continue;
             }
-            assert_scoped_agent_event_notification(
-                &message,
-                expected_session_id,
-                expected_thread_id,
-                expected_type,
-                expected_turn_id,
-                expected_payload,
-            );
-            return;
-        }
-        panic!("expected agent event notification {expected_type}");
-    }
-    fn assert_scoped_agent_event_notification(
-        message: &JsonRpcMessage,
-        expected_session_id: &str,
-        expected_thread_id: &str,
-        expected_type: &str,
-        expected_turn_id: &str,
-        expected_payload: serde_json::Value,
-    ) {
-        match message {
-            JsonRpcMessage::Notification(notification) => {
-                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sessionId"], expected_session_id);
-                assert_eq!(event["threadId"], expected_thread_id);
-                assert_eq!(event["turnId"], expected_turn_id);
-                assert_eq!(event["type"], expected_type);
-                assert_payload_matches_with_session_projection(
-                    &event["payload"],
-                    expected_payload,
-                    expected_session_id,
-                    expected_thread_id,
-                    expected_turn_id,
-                    "content-studio",
-                    "default",
-                );
+            let params = notification.params.as_ref().expect("params");
+            if params["threadId"] != expected_thread_id || params["turnId"] != expected_turn_id {
+                continue;
             }
-            other => panic!("expected agent event notification, got {other:?}"),
-        }
-    }
-
-    fn assert_payload_matches_with_session_projection(
-        actual_payload: &serde_json::Value,
-        expected_payload: serde_json::Value,
-        expected_session_id: &str,
-        expected_thread_id: &str,
-        expected_turn_id: &str,
-        expected_app_id: &str,
-        expected_workspace_id: &str,
-    ) {
-        let mut actual_payload_without_session = actual_payload.clone();
-        let Some(actual_payload_object) = actual_payload_without_session.as_object_mut() else {
-            assert_eq!(actual_payload_without_session, expected_payload);
+            assert_eq!(params["delta"], expected_delta);
             return;
-        };
-        let session = actual_payload_object
-            .remove("session")
-            .expect("event payload session projection");
-        if let Some(item) = actual_payload_object.remove("item") {
-            assert_eq!(item["sessionId"], expected_session_id);
-            assert_eq!(item["threadId"], expected_thread_id);
-            assert_eq!(item["turnId"], expected_turn_id);
-            assert!(
-                item["itemId"]
-                    .as_str()
-                    .is_some_and(|value| !value.is_empty()),
-                "canonical itemId should be non-empty: {item:?}"
-            );
-            assert!(
-                item["payload"].is_object(),
-                "canonical item payload: {item:?}"
-            );
         }
-        assert_eq!(actual_payload_without_session, expected_payload);
-
-        assert_eq!(session["appId"], expected_app_id);
-        assert_eq!(session["workspaceId"], expected_workspace_id);
-        assert!(
-            session["createdAt"]
-                .as_str()
-                .is_some_and(|value| !value.is_empty()),
-            "session.createdAt should be a non-empty string: {session:?}"
-        );
-        assert!(
-            session["updatedAt"]
-                .as_str()
-                .is_some_and(|value| !value.is_empty()),
-            "session.updatedAt should be a non-empty string: {session:?}"
-        );
+        panic!("expected direct delta notification for {expected_turn_id}");
     }
-
     fn node_binary() -> Option<String> {
         let candidates = std::env::var("NODE")
             .ok()
@@ -2381,18 +2969,10 @@ mod tests {
             ),
         )));
         assert!(should_spawn_transport_request(&JsonRpcMessage::Request(
-            JsonRpcRequest::new(
-                RequestId::Integer(2),
-                METHOD_AGENT_SESSION_TURN_START,
-                Some(json!({})),
-            ),
+            JsonRpcRequest::new(RequestId::Integer(2), METHOD_TURN_START, Some(json!({})),),
         )));
         assert!(should_spawn_transport_request(&JsonRpcMessage::Request(
-            JsonRpcRequest::new(
-                RequestId::Integer(3),
-                METHOD_AGENT_SESSION_START,
-                Some(json!({}))
-            ),
+            JsonRpcRequest::new(RequestId::Integer(3), METHOD_THREAD_START, Some(json!({}))),
         )));
         assert!(!should_spawn_transport_request(&JsonRpcMessage::Request(
             JsonRpcRequest::new(RequestId::Integer(4), METHOD_INITIALIZE, Some(json!({}))),
@@ -2421,12 +3001,288 @@ mod tests {
                 Some(json!({})),
             ),
         )));
-        assert!(should_stream_transport_request(&JsonRpcMessage::Request(
-            JsonRpcRequest::new(
-                RequestId::Integer(3),
-                METHOD_AGENT_SESSION_TURN_START,
-                Some(json!({})),
-            ),
-        )));
+    }
+
+    #[tokio::test]
+    async fn slow_websocket_broadcast_cancels_connection_when_outbound_queue_is_full() {
+        let server = AppServer::new();
+        let (writer, mut queued) = mpsc::channel(1);
+        let first = JsonRpcMessage::Notification(JsonRpcNotification::new(
+            "thread/status/changed",
+            Some(json!({ "status": "busy" })),
+        ));
+        writer
+            .send(QueuedOutgoingMessage::new(OutgoingMessage::from(
+                first.clone(),
+            )))
+            .await
+            .expect("fill websocket queue");
+        let disconnect_sender = CancellationToken::new();
+        server.register_transport_writer(ConnectionId(99), writer, Some(disconnect_sender.clone()));
+        server.mark_transport_initialized(ConnectionId(99));
+
+        enqueue_transport_outbound_message(
+            &server.transport_writers,
+            &server.transport_disconnects,
+            &server.transport_initialized,
+            &server.transport_notification_opt_out,
+            JsonRpcMessage::Notification(JsonRpcNotification::new(
+                "thread/status/changed",
+                Some(json!({ "status": "idle" })),
+            )),
+        );
+
+        assert!(disconnect_sender.is_cancelled());
+        let queued_message = queued.try_recv().expect("original queued message");
+        assert_eq!(queued_message.message.into_json_rpc_message(), first);
+    }
+
+    #[tokio::test]
+    async fn broadcast_notifications_wait_for_connection_initialize() {
+        let server = AppServer::new();
+        let (writer, mut queued) = mpsc::channel(4);
+        let connection_id = ConnectionId(100);
+        server.register_transport_writer(connection_id, writer, None);
+        let notification = JsonRpcMessage::Notification(JsonRpcNotification::new(
+            "thread/status/changed",
+            Some(json!({ "status": "busy" })),
+        ));
+
+        enqueue_transport_outbound_message(
+            &server.transport_writers,
+            &server.transport_disconnects,
+            &server.transport_initialized,
+            &server.transport_notification_opt_out,
+            notification.clone(),
+        );
+        assert!(matches!(
+            queued.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+
+        server.mark_transport_initialized(connection_id);
+        enqueue_transport_outbound_message(
+            &server.transport_writers,
+            &server.transport_disconnects,
+            &server.transport_initialized,
+            &server.transport_notification_opt_out,
+            notification.clone(),
+        );
+        let queued_message = queued.recv().await.expect("initialized notification");
+        assert_eq!(queued_message.message.into_json_rpc_message(), notification);
+    }
+
+    #[tokio::test]
+    async fn broadcast_notifications_respect_connection_opt_out_methods() {
+        let server = AppServer::new();
+        let (writer, mut queued) = mpsc::channel(4);
+        let connection_id = ConnectionId(101);
+        server.register_transport_writer(connection_id, writer, None);
+        server.set_transport_notification_opt_out(
+            connection_id,
+            Some(vec!["thread/status/changed".to_string()]),
+        );
+        server.mark_transport_initialized(connection_id);
+
+        enqueue_transport_outbound_message(
+            &server.transport_writers,
+            &server.transport_disconnects,
+            &server.transport_initialized,
+            &server.transport_notification_opt_out,
+            JsonRpcMessage::Notification(JsonRpcNotification::new(
+                "thread/status/changed",
+                Some(json!({ "status": "busy" })),
+            )),
+        );
+        assert!(matches!(
+            queued.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+
+        enqueue_transport_outbound_message(
+            &server.transport_writers,
+            &server.transport_disconnects,
+            &server.transport_initialized,
+            &server.transport_notification_opt_out,
+            JsonRpcMessage::Notification(JsonRpcNotification::new(
+                "thread/started",
+                Some(json!({ "threadId": "thread-1" })),
+            )),
+        );
+        assert!(queued.recv().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn thread_listener_orders_resume_replay_before_scoped_live_event() {
+        let server = AppServer::new();
+        let subscribed_connection = ConnectionId(201);
+        let unrelated_connection = ConnectionId(202);
+        let (subscribed_writer, mut subscribed_messages) = mpsc::channel(8);
+        let (unrelated_writer, mut unrelated_messages) = mpsc::channel(8);
+
+        server.register_transport_writer(subscribed_connection, subscribed_writer, None);
+        server.register_transport_writer(unrelated_connection, unrelated_writer, None);
+        server.mark_transport_initialized(subscribed_connection);
+        server.mark_transport_initialized(unrelated_connection);
+        server
+            .thread_states
+            .connection_initialized(subscribed_connection)
+            .await;
+        server
+            .thread_states
+            .connection_initialized(unrelated_connection)
+            .await;
+
+        let thread_id = agent_protocol::ThreadId::new("thread-ordered");
+        let response = JsonRpcMessage::Response(app_server_protocol::JsonRpcResponse {
+            id: RequestId::String("resume-1".to_string()),
+            result: json!({ "thread": { "id": thread_id.as_str() } }),
+        });
+        let pending_request = JsonRpcMessage::Request(JsonRpcRequest::new(
+            RequestId::String("pending-1".to_string()),
+            "item/tool/requestUserInput",
+            Some(json!({ "threadId": thread_id.as_str() })),
+        ));
+        let usage = thread_token_usage_notification(
+            thread_id.as_str(),
+            runtime::thread_usage::ThreadTokenUsageSnapshot {
+                turn_id: "turn-usage".to_string(),
+                total_token_usage: runtime::thread_usage::TokenUsageSnapshot {
+                    input_tokens: 90,
+                    cached_input_tokens: 30,
+                    output_tokens: 30,
+                    reasoning_output_tokens: 10,
+                    total_tokens: 120,
+                },
+                last_token_usage: runtime::thread_usage::TokenUsageSnapshot {
+                    input_tokens: 45,
+                    cached_input_tokens: 15,
+                    output_tokens: 15,
+                    reasoning_output_tokens: 5,
+                    total_tokens: 60,
+                },
+                model_context_window: Some(128_000),
+                source_sequence: 7,
+            },
+        );
+        let goal = JsonRpcMessage::Notification(
+            app_server_protocol::protocol::v2::ServerNotification::ThreadGoalUpdated(
+                app_server_protocol::protocol::v2::ThreadGoalUpdatedNotification {
+                    thread_id: thread_id.as_str().to_string(),
+                    turn_id: None,
+                    goal: app_server_protocol::protocol::v2::ThreadGoal {
+                        thread_id: thread_id.as_str().to_string(),
+                        objective: "finish ordered resume".to_string(),
+                        status: app_server_protocol::protocol::v2::ThreadGoalStatus::Active,
+                        token_budget: Some(1_000),
+                        tokens_used: 120,
+                        time_used_seconds: 3,
+                        created_at: 1,
+                        updated_at: 2,
+                    },
+                },
+            )
+            .into(),
+        );
+        let bridge = server.event_bridge();
+        let barrier = thread_state::ThreadResumeBarrier::new(
+            subscribed_connection,
+            RequestId::String("resume-1".to_string()),
+        );
+        bridge
+            .prepare_thread_resume(thread_id.clone(), barrier.clone())
+            .await
+            .expect("prepare resume barrier");
+
+        bridge
+            .send_thread_command(
+                thread_id.clone(),
+                thread_state::ThreadListenerCommand::PublishRuntimeEvent {
+                    event: AgentEvent {
+                        event_id: "event-live-1".to_string(),
+                        sequence: 1,
+                        session_id: "session-ordered".to_string(),
+                        thread_id: Some(thread_id.as_str().to_string()),
+                        turn_id: Some("turn-1".to_string()),
+                        event_type: "provider.step".to_string(),
+                        timestamp: "2026-07-19T00:00:00Z".to_string(),
+                        payload: json!({ "phase": "streaming" }),
+                    },
+                    completion_tx: None,
+                },
+            )
+            .await
+            .expect("queue live event behind resume barrier");
+
+        let (completion_tx, completion_rx) = oneshot::channel();
+        bridge
+            .send_thread_command(
+                thread_id.clone(),
+                thread_state::ThreadListenerCommand::CompleteResume {
+                    barrier,
+                    connection_id: subscribed_connection,
+                    messages: vec![
+                        response.clone(),
+                        usage.clone(),
+                        goal.clone(),
+                        pending_request.clone(),
+                    ],
+                    subscribe: true,
+                    completion_tx,
+                },
+            )
+            .await
+            .expect("complete resume barrier");
+        completion_rx
+            .await
+            .expect("listener completion")
+            .expect("send resume response and live event");
+
+        let first = subscribed_messages
+            .recv()
+            .await
+            .expect("resume response")
+            .message
+            .into_json_rpc_message();
+        let second = subscribed_messages
+            .recv()
+            .await
+            .expect("token usage replay")
+            .message
+            .into_json_rpc_message();
+        let third = subscribed_messages
+            .recv()
+            .await
+            .expect("goal snapshot")
+            .message
+            .into_json_rpc_message();
+        let fourth = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            subscribed_messages.recv(),
+        )
+        .await
+        .expect("pending replay timeout")
+        .expect("pending replay")
+        .message
+        .into_json_rpc_message();
+        let fifth = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            subscribed_messages.recv(),
+        )
+        .await
+        .expect("live event timeout")
+        .expect("live event")
+        .message
+        .into_json_rpc_message();
+
+        assert_eq!(first, response);
+        assert_eq!(second, usage);
+        assert_eq!(third, goal);
+        assert_eq!(fourth, pending_request);
+        assert!(matches!(fifth, JsonRpcMessage::Notification(_)));
+        assert!(matches!(
+            unrelated_messages.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
     }
 }

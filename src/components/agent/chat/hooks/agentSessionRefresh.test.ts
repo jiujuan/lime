@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   createAgentSessionReadModelSnapshot,
+  hydrateFreshAgentSessionReadModel,
   refreshAgentSessionDetailState,
   refreshAgentSessionReadModelState,
   resolveDefaultAgentSessionDetailMergeMode,
@@ -13,7 +14,7 @@ describe("agentSessionRefresh", () => {
     expect(resolveDefaultAgentSessionDetailMergeMode()).toBe("history_hydrate");
   });
 
-  it("应把 thread_read 归一成可消费快照", () => {
+  it("应把 canonical thread_read 作为唯一刷新快照", () => {
     const snapshot = createAgentSessionReadModelSnapshot({
       thread_id: "thread-1",
       status: "queued",
@@ -21,7 +22,6 @@ describe("agentSessionRefresh", () => {
       incidents: [],
       queued_turns: [
         {
-          queuedTurnId: "queued-1",
           messagePreview: "继续执行",
           messageText: "继续执行当前任务",
           createdAt: 1700000000000,
@@ -35,16 +35,36 @@ describe("agentSessionRefresh", () => {
       thread_id: "thread-1",
       status: "queued",
     });
-    expect(snapshot.queuedTurns).toEqual([
-      {
-        queued_turn_id: "queued-1",
-        message_preview: "继续执行",
-        message_text: "继续执行当前任务",
-        created_at: 1700000000000,
-        image_count: 0,
-        position: 1,
-      },
-    ]);
+  });
+
+  it("新会话应在 submit 前 hydrate canonical threadId", async () => {
+    const getSessionReadModel = vi.fn(async () => ({
+      thread_id: " thread-1 ",
+      status: "idle" as const,
+      pending_requests: [],
+      incidents: [],
+      queued_turns: [],
+    }));
+
+    await expect(
+      hydrateFreshAgentSessionReadModel({ getSessionReadModel }, " session-1 "),
+    ).resolves.toMatchObject({ thread_id: "thread-1", status: "idle" });
+    expect(getSessionReadModel).toHaveBeenCalledWith("session-1");
+  });
+
+  it("新会话缺少 canonical threadId 时应 fail closed", async () => {
+    await expect(
+      hydrateFreshAgentSessionReadModel(
+        {
+          getSessionReadModel: vi.fn(async () => ({
+            thread_id: "",
+          })),
+        },
+        "session-1",
+      ),
+    ).rejects.toThrow(
+      "fresh session read model did not include a canonical threadId",
+    );
   });
 
   it("刷新 detail 时应应用 detail 并把 legacy executionStrategy 归一后同步", async () => {
@@ -159,7 +179,6 @@ describe("agentSessionRefresh", () => {
     ).resolves.toBe(true);
 
     expect(applyReadModelSnapshot).toHaveBeenCalledWith({
-      queuedTurns: [],
       threadRead: expect.objectContaining({
         thread_id: "thread-1",
         status: "idle",

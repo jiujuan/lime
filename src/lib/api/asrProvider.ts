@@ -238,18 +238,6 @@ function mergeVoiceInputConfig(
   } as Config;
 }
 
-// ============ 麦克风设备类型 ============
-
-/** 麦克风设备信息 */
-export interface AudioDeviceInfo {
-  /** 设备 ID */
-  id: string;
-  /** 设备名称 */
-  name: string;
-  /** 是否为默认设备 */
-  is_default: boolean;
-}
-
 // ============ Desktop Host / App Server 命令封装 ============
 
 function failClosedRetiredVoiceInputCommand(): never {
@@ -325,73 +313,6 @@ function asrCredentialCreateToAppServer(
     ...credential,
     provider: asrProviderToAppServer(credential.provider),
   };
-}
-
-function describeMediaDeviceError(error: unknown): string {
-  return error instanceof Error && error.message.trim()
-    ? error.message
-    : String(error || "未知错误");
-}
-
-function normalizeAudioInputDevice(
-  device: MediaDeviceInfo,
-  index: number,
-): AudioDeviceInfo {
-  const rawLabel = device.label.trim();
-  const label =
-    device.deviceId.trim() === "default"
-      ? rawLabel.replace(/^(default|system default)\s*[-:]\s*/iu, "").trim() ||
-        rawLabel
-      : rawLabel;
-  const browserDeviceId = device.deviceId.trim();
-  const fallbackName =
-    browserDeviceId === "default"
-      ? "系统默认麦克风"
-      : `麦克风设备 ${index + 1}`;
-  const name = label || fallbackName;
-  return {
-    // 录音服务当前按设备名称匹配；有权限时浏览器 label 与 cpal 设备名保持同源。
-    id: label || browserDeviceId || fallbackName,
-    name,
-    is_default: browserDeviceId === "default" || index === 0,
-  };
-}
-
-/** 获取所有可用的麦克风设备 */
-export async function listAudioDevices(): Promise<AudioDeviceInfo[]> {
-  const mediaDevices = globalThis.navigator?.mediaDevices;
-  if (!mediaDevices?.enumerateDevices) {
-    throw new Error("当前环境不支持麦克风设备枚举");
-  }
-
-  let stream: MediaStream | null = null;
-  try {
-    if (mediaDevices.getUserMedia) {
-      stream = await mediaDevices.getUserMedia({ audio: true });
-    }
-    const devices = await mediaDevices.enumerateDevices();
-    const result: AudioDeviceInfo[] = [];
-    const seenIds = new Set<string>();
-    devices
-      .filter((device) => device.kind === "audioinput")
-      .map((device, index) => normalizeAudioInputDevice(device, index))
-      .forEach((device) => {
-        if (seenIds.has(device.id)) {
-          return;
-        }
-        seenIds.add(device.id);
-        result.push(device);
-      });
-    return result;
-  } catch (error) {
-    throw new Error(
-      `无法获取麦克风设备列表：${describeMediaDeviceError(error)}`,
-    );
-  } finally {
-    for (const track of stream?.getTracks() ?? []) {
-      track.stop();
-    }
-  }
 }
 
 /** 获取 ASR 凭证列表 */

@@ -16,7 +16,6 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, AgentThreadTurn } from "../types";
 
 interface CanvasSessionOverviewPanelProps {
@@ -24,7 +23,6 @@ interface CanvasSessionOverviewPanelProps {
   activityItems?: readonly CanvasSessionOverviewActivity[];
   currentTurnId?: string | null;
   pendingActions?: readonly ActionRequired[];
-  queuedTurns?: readonly QueuedTurnSnapshot[];
   isSending?: boolean;
   focusedItemId?: string | null;
 }
@@ -241,7 +239,6 @@ export function CanvasSessionOverviewPanel({
   activityItems = [],
   currentTurnId = null,
   pendingActions = [],
-  queuedTurns = [],
   isSending = false,
   focusedItemId = null,
 }: CanvasSessionOverviewPanelProps) {
@@ -285,19 +282,13 @@ export function CanvasSessionOverviewPanel({
     const formattedPendingCount = formatNumber(pendingActions.length, {
       locale,
     });
-    const formattedQueuedCount = formatNumber(queuedTurns.length, { locale });
-
     return {
       followUp:
         pendingActions.length > 0
           ? t("agentChat.sessionOverview.metrics.pending", {
               countLabel: formattedPendingCount,
             })
-          : queuedTurns.length > 0
-            ? t("agentChat.sessionOverview.metrics.queued", {
-                countLabel: formattedQueuedCount,
-              })
-            : t("agentChat.sessionOverview.metrics.noFollowUp"),
+          : t("agentChat.sessionOverview.metrics.noFollowUp"),
       progress:
         projectedActivityInProgressCount > 0
           ? t("agentChat.sessionOverview.metrics.inProgress", {
@@ -310,7 +301,6 @@ export function CanvasSessionOverviewPanel({
   }, [
     locale,
     pendingActions.length,
-    queuedTurns.length,
     recentActivity.length,
     projectedActivityInProgressCount,
     t,
@@ -490,36 +480,6 @@ export function CanvasSessionOverviewPanel({
                     </div>
                     <div className="mt-2 text-sm leading-6 text-amber-950">
                       {resolvePendingActionPreview(action)}
-                    </div>
-                  </div>
-                ))
-              ) : queuedTurns.length > 0 ? (
-                queuedTurns.slice(0, 4).map((item, index) => (
-                  <div
-                    key={item.queued_turn_id}
-                    className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                        {t("agentChat.sessionOverview.queue.itemLabel", {
-                          index: formatNumber(index + 1, { locale }),
-                        })}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {item.image_count > 0
-                          ? t("agentChat.sessionOverview.queue.imageCount", {
-                              countLabel: formatNumber(item.image_count, {
-                                locale,
-                              }),
-                            })
-                          : t("agentChat.sessionOverview.queue.textInput")}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-sm leading-6 text-slate-700">
-                      {shortenText(
-                        item.message_preview || item.message_text,
-                        120,
-                      )}
                     </div>
                   </div>
                 ))

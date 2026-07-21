@@ -120,6 +120,11 @@ pub(super) fn merge_lifecycle_metadata(object: &mut Map<String, Value>, event: &
     let Some(metadata) = metadata.as_object_mut() else {
         return;
     };
+    if let Some(source_metadata) = event.payload.get("metadata").and_then(Value::as_object) {
+        for (key, value) in source_metadata {
+            metadata.insert(key.clone(), value.clone());
+        }
+    }
     merge_metadata_array(
         metadata,
         "source_event_ids",

@@ -1,8 +1,6 @@
 import type { MutableRefObject } from "react";
 import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
-import { normalizeQueuedTurnSnapshots } from "@/lib/api/queuedTurn";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import type { AgentAccessMode } from "./agentChatStorage";
 import { createSessionAccessModeFromExecutionRuntime } from "../utils/sessionExecutionRuntime";
@@ -15,7 +13,6 @@ export interface AgentSessionDetailRefreshRequest {
 }
 
 export interface AgentSessionReadModelSnapshot {
-  queuedTurns: QueuedTurnSnapshot[];
   threadRead: AgentRuntimeThreadReadModel | null;
 }
 
@@ -23,9 +20,27 @@ export function createAgentSessionReadModelSnapshot(
   threadRead?: AgentRuntimeThreadReadModel | null,
 ): AgentSessionReadModelSnapshot {
   return {
-    queuedTurns: normalizeQueuedTurnSnapshots(threadRead?.queued_turns),
     threadRead: threadRead ?? null,
   };
+}
+
+export async function hydrateFreshAgentSessionReadModel(
+  runtime: Pick<AgentRuntimeAdapter, "getSessionReadModel">,
+  sessionId: string,
+): Promise<AgentRuntimeThreadReadModel> {
+  const normalizedSessionId = sessionId.trim();
+  if (!normalizedSessionId) {
+    throw new Error("sessionId is required to hydrate a fresh session");
+  }
+
+  const threadRead = await runtime.getSessionReadModel(normalizedSessionId);
+  const threadId = threadRead?.thread_id?.trim();
+  if (!threadId) {
+    throw new Error(
+      "fresh session read model did not include a canonical threadId",
+    );
+  }
+  return { ...threadRead, thread_id: threadId };
 }
 
 export function resolveDefaultAgentSessionDetailMergeMode(): AgentSessionDetailMergeMode {

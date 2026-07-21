@@ -127,7 +127,7 @@ fn capability_list_with_session_id_uses_stored_session_scope() {
                 id: "session.draft.write".to_string(),
                 title: "Session Draft Write".to_string(),
                 description: None,
-                methods: vec![METHOD_AGENT_SESSION_TURN_START.to_string()],
+                methods: vec![METHOD_TURN_START.to_string()],
             })
             .for_apps(["content-studio"])
             .for_workspaces(["workspace-main"])

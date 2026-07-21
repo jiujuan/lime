@@ -1,7 +1,9 @@
 import { useCallback, type MutableRefObject } from "react";
 import { toast } from "sonner";
 import {
+  archiveAgentRuntimeSession,
   deleteAgentRuntimeSession,
+  unarchiveAgentRuntimeSession,
   updateAgentRuntimeSession,
 } from "@/lib/api/agentRuntime/sessionClient";
 import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
@@ -11,9 +13,7 @@ import {
   buildHomeAgentParams,
 } from "@/lib/workspace/navigation";
 import { requestTaskCenterDraftTask } from "@/components/agent/chat/taskCenterDraftTaskEvents";
-import {
-  requestExplicitInitialSessionNavigation,
-} from "@/components/agent/chat/workspace/useWorkspaceInitialSessionNavigation";
+import { requestExplicitInitialSessionNavigation } from "@/components/agent/chat/workspace/useWorkspaceInitialSessionNavigation";
 import type { Page, PageParams } from "@/types/page";
 import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sidebarConversationGroups";
 import {
@@ -380,10 +380,11 @@ export function useAppSidebarConversationActions({
       moveSidebarSessionArchiveStateOptimistically(nextSession);
 
       try {
-        await updateAgentRuntimeSession({
-          session_id: session.id,
-          archived,
-        });
+        if (archived) {
+          await archiveAgentRuntimeSession(session.id);
+        } else {
+          await unarchiveAgentRuntimeSession(session.id);
+        }
         await refreshSidebarSessions();
       } catch (error) {
         console.error(archived ? "归档会话失败:" : "恢复会话失败:", error);

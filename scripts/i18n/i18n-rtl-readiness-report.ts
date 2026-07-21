@@ -88,7 +88,6 @@ const RTL_SURFACE_GROUPS = [
       "src/components/settings-v2/_layout/index.tsx",
       "src/components/settings-v2/_layout/SettingsSidebar.tsx",
       "src/components/settings-v2/general/appearance/index.tsx",
-      "src/components/settings-v2/general/hotkeys/index.tsx",
       "src/components/settings-v2/general/memory/index.tsx",
       "src/components/settings-v2/agent/providers/index.tsx",
       "src/components/settings-v2/system/channels/ChannelsDebugWorkbench.tsx",

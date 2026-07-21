@@ -1,4 +1,3 @@
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type {
   ActionRequired,
@@ -44,12 +43,6 @@ export interface ThreadReliabilityOutcomeDisplay {
   outcomeType?: string | null;
 }
 
-export interface ThreadReliabilityQueuedTurnDisplay {
-  id: string;
-  title: string;
-  positionLabel?: string | null;
-}
-
 export interface ThreadReliabilityViewModel {
   shouldRender: boolean;
   statusLabel: string;
@@ -60,12 +53,10 @@ export interface ThreadReliabilityViewModel {
   interruptStateLabel?: string | null;
   pendingRequestCount: number;
   activeIncidentCount: number;
-  queuedTurnCount: number;
   pendingRequests: ThreadReliabilityRequestDisplay[];
   submittedRequests: ThreadReliabilityRequestDisplay[];
   incidents: ThreadReliabilityIncidentDisplay[];
   outcome: ThreadReliabilityOutcomeDisplay | null;
-  nextQueuedTurn: ThreadReliabilityQueuedTurnDisplay | null;
   recommendations: string[];
 }
 
@@ -81,7 +72,6 @@ export interface BuildThreadReliabilityViewParams {
   currentTurnId?: string | null;
   pendingActions?: ActionRequired[];
   submittedActionsInFlight?: ActionRequired[];
-  queuedTurns?: QueuedTurnSnapshot[];
   t?: ThreadReliabilityViewTranslation;
   locale?: string | null;
 }

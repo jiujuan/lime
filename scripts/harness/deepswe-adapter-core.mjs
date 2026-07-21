@@ -756,7 +756,7 @@ export function createCurrentChainRpc({
     startTurn: (options, params) =>
       startAgentSessionTurnCurrent(options, params, invoke),
     cancelTurn: (options, params) =>
-      invoke(options, "agentSession/turn/cancel", params),
+      invoke(options, "turn/interrupt", params),
     updateSession: (options, params) =>
       updateAgentSessionRuntimeCurrent(options, params, invoke),
     sleep,
@@ -801,7 +801,7 @@ export async function runCurrentChainTask({
   const provider = await rpc.resolveProvider(options);
   const sessionId = `deepswe-${runId}`;
   const turnId = `deepswe-turn-${runId}`;
-  const sessionResponse = await rpc.invoke(options, "agentSession/start", {
+  const sessionResponse = await rpc.invoke(options, "thread/start", {
     sessionId,
     threadId: sessionId,
     appId: "desktop",
@@ -828,7 +828,7 @@ export async function runCurrentChainTask({
   });
   const actualSessionId = normalizeString(sessionResponse?.session?.sessionId);
   if (actualSessionId !== sessionId) {
-    throw new Error("agentSession/start did not return requested sessionId");
+    throw new Error("thread/start did not return requested sessionId");
   }
   await rpc.updateSession(options, {
     sessionId,
@@ -893,7 +893,7 @@ export async function runCurrentChainTask({
   let nextBudgetEvidenceAt = pollStartedAt;
   while (Date.now() - pollStartedAt < options.timeoutMs) {
     [sessionRead, threadRead] = await Promise.all([
-      rpc.invoke(options, "agentSession/read", {
+      rpc.invoke(options, "thread/read", {
         sessionId,
         historyLimit: 500,
       }),
@@ -958,7 +958,7 @@ export async function runCurrentChainTask({
       const cancelDeadline = Date.now() + 10_000;
       while (Date.now() < cancelDeadline) {
         [sessionRead, threadRead] = await Promise.all([
-          rpc.invoke(options, "agentSession/read", {
+          rpc.invoke(options, "thread/read", {
             sessionId,
             historyLimit: 500,
           }),

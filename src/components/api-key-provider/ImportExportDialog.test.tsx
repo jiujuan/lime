@@ -132,6 +132,78 @@ describe("ImportExportDialog", () => {
     expect(document.body.textContent ?? "").toContain("下载文件");
   });
 
+  it("下载 Provider 配置使用短领域文件名", async () => {
+    const createObjectURLDescriptor = Object.getOwnPropertyDescriptor(
+      URL,
+      "createObjectURL",
+    );
+    const revokeObjectURLDescriptor = Object.getOwnPropertyDescriptor(
+      URL,
+      "revokeObjectURL",
+    );
+    const createObjectURL = vi.fn().mockReturnValue("blob:provider-config");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    const appendChild = vi.spyOn(document.body, "appendChild");
+
+    try {
+      renderDialog();
+
+      await act(async () => {
+        findByTestId<HTMLButtonElement>("export-button").click();
+        await flushEffects(2);
+      });
+      await act(async () => {
+        findByTestId<HTMLButtonElement>("download-button").click();
+      });
+
+      const anchor = appendChild.mock.calls
+        .map(([node]) => node)
+        .find(
+          (node): node is HTMLAnchorElement =>
+            node instanceof HTMLAnchorElement,
+        );
+      expect(anchor?.download).toMatch(
+        /^provider-config-\d{4}-\d{2}-\d{2}\.json$/,
+      );
+      expect(anchor?.download).not.toContain("lime-providers");
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:provider-config");
+      expect(click).toHaveBeenCalledOnce();
+    } finally {
+      appendChild.mockRestore();
+      click.mockRestore();
+      if (createObjectURLDescriptor) {
+        Object.defineProperty(
+          URL,
+          "createObjectURL",
+          createObjectURLDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(URL, "createObjectURL");
+      }
+      if (revokeObjectURLDescriptor) {
+        Object.defineProperty(
+          URL,
+          "revokeObjectURL",
+          revokeObjectURLDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(URL, "revokeObjectURL");
+      }
+    }
+  });
+
   it("导入页展示结果摘要并使用插值文案", async () => {
     const { onImport } = renderDialog({
       onImport: vi.fn().mockResolvedValue({

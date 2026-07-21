@@ -290,11 +290,11 @@ describe("agent runtime current fixture regression smoke guard", () => {
     );
   });
 
-  it("runs the media contentParts reference Claw fixture in the current regression set", () => {
+  it("runs the media item reference Claw fixture in the current regression set", () => {
     const content = readSmokeScript();
 
     expect(content).toContain(
-      "Claw media contentParts reference Agent Chat GUI Electron fixture",
+      "Claw media item reference Agent Chat GUI Electron fixture",
     );
     expect(content).toContain(
       "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -305,7 +305,7 @@ describe("agent runtime current fixture regression smoke guard", () => {
       "claw-chat-current-fixture-media-reference-regression",
     );
     expect(content).toContain(
-      "media contentParts 引用到 Agent Chat 卡片与 Workbench source 预览 Electron fixture",
+      "media item / imageView 引用到 Agent Chat 卡片与 Workbench source 预览 Electron fixture",
     );
   });
 
@@ -353,20 +353,14 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain(
       "Claw Expert Plaza Skills Runtime click-through Electron fixture",
     );
-    expect(content).toContain(
+    expect(content).not.toContain(
       "Claw Inputbar pending steer multi queue order Electron fixture",
     );
-    expect(content).toContain('"inputbar-pending-steer-multi-queue"');
-    expect(content).toContain(
-      "claw-chat-current-fixture-inputbar-pending-steer-multi-queue-regression",
-    );
-    expect(content).toContain(
+    expect(content).not.toContain('"inputbar-pending-steer-multi-queue"');
+    expect(content).not.toContain(
       "Claw Inputbar pending steer pop-front resume hydrate Electron fixture",
     );
-    expect(content).toContain('"inputbar-pending-steer-pop-front-resume"');
-    expect(content).toContain(
-      "claw-chat-current-fixture-inputbar-pending-steer-pop-front-resume-regression",
-    );
+    expect(content).not.toContain('"inputbar-pending-steer-pop-front-resume"');
   });
 
   it("does not opt into live provider or mock backend evidence", () => {

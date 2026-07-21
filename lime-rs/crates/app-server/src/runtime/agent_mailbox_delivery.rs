@@ -4,13 +4,12 @@
 //! deterministic canonical Item can be read from the canonical ThreadStore.
 
 use super::*;
-use agent_protocol::{ItemId, ThreadId, ThreadTurnsView};
-use app_server_protocol::{
-    AgentInput, AgentSession, AgentSessionTurnStartParams, AgentTurn, RuntimeOptions,
-};
+use agent_protocol::{AgentInput as UserInput, ItemId, ThreadId, ThreadTurnsView};
+use app_server_protocol::{AgentSession, AgentTurn, RuntimeOptions};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Mutex, Weak};
 use thread_store::{
     AgentGraphStore, AgentIdentity, AgentIdentityStore, AgentMailboxDeliveryMode,
     AgentMailboxMessage, AgentMailboxStore, ReadThreadParams, ThreadSpawnEdgeStatus, ThreadStore,
@@ -19,13 +18,53 @@ use thread_store::{
 const MAILBOX_ITEM_PREFIX: &str = "mailbox-item-";
 const MAILBOX_TURN_PREFIX: &str = "mailbox-turn-";
 
+#[derive(Clone, Default)]
+pub(in crate::runtime) struct MailboxTriggerFlights {
+    gates: Arc<Mutex<std::collections::HashMap<String, Weak<tokio::sync::Mutex<()>>>>>,
+}
+
+impl MailboxTriggerFlights {
+    pub(in crate::runtime) fn for_session(&self, session_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut gates = self
+            .gates
+            .lock()
+            .expect("mailbox trigger flight mutex poisoned");
+        gates.retain(|_, gate| gate.strong_count() > 0);
+        if let Some(gate) = gates.get(session_id).and_then(Weak::upgrade) {
+            return gate;
+        }
+        let gate = Arc::new(tokio::sync::Mutex::new(()));
+        gates.insert(session_id.to_string(), Arc::downgrade(&gate));
+        gate
+    }
+}
+
 #[derive(Default)]
 pub(in crate::runtime) struct MailboxTurnDelivery {
     pub(in crate::runtime) events: Vec<app_server_protocol::AgentEvent>,
     consumed_messages: Vec<AgentMailboxMessage>,
 }
 
+impl MailboxTurnDelivery {
+    pub(in crate::runtime) fn consumed_messages(&self) -> &[AgentMailboxMessage] {
+        &self.consumed_messages
+    }
+}
+
 impl RuntimeCore {
+    pub(in crate::runtime) fn wake_pending_session_work(
+        &self,
+        session_id: String,
+        host: RuntimeHostContext,
+        runtime_options: Option<RuntimeOptions>,
+    ) {
+        let core = self.clone();
+        drop(tokio::spawn(async move {
+            core.schedule_pending_agent_mailbox_triggers(session_id, host, runtime_options)
+                .await;
+        }));
+    }
+
     pub(crate) async fn schedule_pending_agent_mailbox_triggers(
         &self,
         session_id: String,
@@ -35,23 +74,86 @@ impl RuntimeCore {
         let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
         let core = self.clone();
         tokio::spawn(async move {
-            if let Err(error) = core
-                .process_pending_agent_mailbox_triggers_with_options(
+            let result = core
+                .process_pending_session_work_with_options(
                     &session_id,
                     host,
                     runtime_options,
                     Some(admitted_tx),
                 )
-                .await
-            {
-                tracing::warn!(
-                    session_id = %session_id,
-                    error = %error,
-                    "background agent mailbox TriggerTurn processing failed"
-                );
+                .await;
+            if let Err(error) = result {
+                if matches!(&error, RuntimeCoreError::PendingRoute { .. }) {
+                    tracing::debug!(
+                        session_id = %session_id,
+                        error = %error,
+                        "background agent mailbox TriggerTurn recovery is waiting for a route"
+                    );
+                } else {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        error = %error,
+                        "background agent mailbox TriggerTurn processing failed"
+                    );
+                }
             }
         });
         let _ = admitted_rx.await;
+    }
+
+    pub(in crate::runtime) async fn process_pending_session_work_with_options(
+        &self,
+        session_id: &str,
+        host: RuntimeHostContext,
+        runtime_options: Option<RuntimeOptions>,
+        mut admitted_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    ) -> Result<usize, RuntimeCoreError> {
+        let flight = self.mailbox_trigger_flights.for_session(session_id);
+        let _flight_guard = flight.lock_owned().await;
+        let mut started = 0;
+        loop {
+            let resume = self
+                .resume_next_queued_turn_if_idle(session_id, host.clone())
+                .await;
+            match resume {
+                Ok(super::session_control::QueuedTurnResume::Started {
+                    queued_turn_id,
+                    events,
+                }) => {
+                    tracing::debug!(
+                        %session_id,
+                        %queued_turn_id,
+                        event_count = events.len(),
+                        "resumed queued turn while draining pending session work"
+                    );
+                    started += 1;
+                    if let Some(admitted_tx) = admitted_tx.take() {
+                        let _ = admitted_tx.send(());
+                    }
+                }
+                Ok(super::session_control::QueuedTurnResume::Blocked) => {
+                    if let Some(admitted_tx) = admitted_tx.take() {
+                        let _ = admitted_tx.send(());
+                    }
+                    return Ok(started);
+                }
+                Ok(super::session_control::QueuedTurnResume::Empty) => break,
+                Err(error) => {
+                    if let Some(admitted_tx) = admitted_tx.take() {
+                        let _ = admitted_tx.send(());
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        self.process_pending_agent_mailbox_triggers_with_options(
+            session_id,
+            host,
+            runtime_options,
+            admitted_tx,
+        )
+        .await
+        .map(|mailbox_started| started + mailbox_started)
     }
 
     /// Starts durable TriggerTurn messages for one recipient session.
@@ -77,6 +179,26 @@ impl RuntimeCore {
     ) -> Result<usize, RuntimeCoreError> {
         self.ensure_current_session_hydrated(session_id).await?;
         let (session, _) = self.session_snapshot(session_id)?;
+        let runtime_options =
+            super::agent_control::runtime_options_with_agent_control_session_defaults(
+                runtime_options,
+                &session,
+            );
+        if self.backend.requires_provider_selection()
+            && !super::agent_control::has_agent_control_runtime_route(runtime_options.as_ref())
+        {
+            if let Some(admitted_tx) = admitted_tx.take() {
+                let _ = admitted_tx.send(());
+            }
+            tracing::warn!(
+                session_id = %session_id,
+                "deferring pending agent control recovery until provider/model defaults are available"
+            );
+            return Err(RuntimeCoreError::pending_route_for_session(
+                session.session_id.clone(),
+                runtime_options.as_ref(),
+            ));
+        }
         let Some((store, identity)) = self.mailbox_context(&session).await? else {
             return Ok(0);
         };
@@ -110,13 +232,10 @@ impl RuntimeCore {
             };
             match self
                 .start_turn_with_event_callback(
-                    AgentSessionTurnStartParams {
+                    TurnStartRequest {
                         session_id: session.session_id.clone(),
                         turn_id: Some(turn_id),
-                        input: AgentInput {
-                            text: message.content.clone(),
-                            attachments: Vec::new(),
-                        },
+                        input: vec![UserInput::text(message.content.clone())],
                         runtime_options: runtime_options.clone(),
                         queue_if_busy: false,
                         skip_pre_submit_resume: false,
@@ -159,7 +278,28 @@ impl RuntimeCore {
         &self,
         session: &AgentSession,
         turn: &AgentTurn,
-        current_input: &AgentInput,
+        current_input: &[UserInput],
+    ) -> Result<MailboxTurnDelivery, RuntimeCoreError> {
+        self.deliver_pending_agent_mailbox_for_turn_with_mode(session, turn, current_input, true)
+            .await
+    }
+
+    pub(in crate::runtime) async fn deliver_pending_agent_trigger_mailbox_for_turn(
+        &self,
+        session: &AgentSession,
+        turn: &AgentTurn,
+        current_input: &[UserInput],
+    ) -> Result<MailboxTurnDelivery, RuntimeCoreError> {
+        self.deliver_pending_agent_mailbox_for_turn_with_mode(session, turn, current_input, false)
+            .await
+    }
+
+    async fn deliver_pending_agent_mailbox_for_turn_with_mode(
+        &self,
+        session: &AgentSession,
+        turn: &AgentTurn,
+        current_input: &[UserInput],
+        include_queue_only: bool,
     ) -> Result<MailboxTurnDelivery, RuntimeCoreError> {
         self.recover_direct_child_terminal_activity(session).await?;
         let Some((store, identity)) = self.mailbox_context(session).await? else {
@@ -175,7 +315,7 @@ impl RuntimeCore {
         let messages = messages
             .into_iter()
             .filter(|message| {
-                message.delivery_mode == AgentMailboxDeliveryMode::QueueOnly
+                (include_queue_only && message.delivery_mode == AgentMailboxDeliveryMode::QueueOnly)
                     || mailbox_turn_id(&message.message_id) == turn.turn_id
             })
             .collect::<Vec<_>>();
@@ -331,13 +471,17 @@ impl RuntimeCore {
                         ))
                     })?;
             }
-            store
+            let terminal_activities = store
                 .append_terminal_agent_results_sync(&child_thread_id, &context.stored.events)
                 .map_err(|error| {
                     RuntimeCoreError::Backend(format!(
                         "failed to recover durable child terminal activity: {error}"
                     ))
                 })?;
+            super::agent_terminal_activity::publish_terminal_agent_activities(
+                &self.session_loops,
+                terminal_activities,
+            );
         }
         Ok(())
     }
@@ -346,7 +490,7 @@ impl RuntimeCore {
         &self,
         session: &AgentSession,
         turn: &AgentTurn,
-        current_input: Option<&AgentInput>,
+        current_input: Option<&[UserInput]>,
         store: &ProjectionStore,
         messages: Vec<AgentMailboxMessage>,
     ) -> Result<MailboxTurnDelivery, RuntimeCoreError> {
@@ -520,26 +664,28 @@ pub(super) fn mailbox_message_runtime_events(
         },
     });
     match message.kind {
-        thread_store::AgentMailboxMessageKind::Message => vec![RuntimeEvent::new(
-            "message.created",
-            json!({
-                "role": "user",
-                "visibility": "user_visible",
-                "itemId": item_id,
-                "messageId": message.message_id,
-                "input": {
-                    "text": message.content,
-                    "attachments": [],
-                },
-                "content": {
-                    "kind": "inline_text",
-                    "text": message.content,
-                },
-                "attachments": [],
-                "mailbox": mailbox.clone(),
-                "metadata": { "mailbox": mailbox },
-            }),
-        )],
+        thread_store::AgentMailboxMessageKind::Message => {
+            let input = vec![UserInput::text(message.content.clone())];
+            let mut payload = super::turn_input_events::runtime_event_for_turn_input(&input)
+                .map(|event| event.payload)
+                .unwrap_or_else(|| {
+                    json!({
+                        "role": "user",
+                        "visibility": "user_visible",
+                        "input": input,
+                        "content": {
+                            "kind": "inline_text",
+                            "text": message.content,
+                        },
+                    })
+                });
+            payload["itemId"] = json!(item_id);
+            payload["messageId"] = json!(message.message_id);
+            payload["attachments"] = json!([]);
+            payload["mailbox"] = mailbox.clone();
+            payload["metadata"] = json!({ "mailbox": mailbox });
+            vec![RuntimeEvent::new("message.created", payload)]
+        }
         thread_store::AgentMailboxMessageKind::Result => {
             let terminal_status = message
                 .result_status
@@ -620,7 +766,12 @@ fn mailbox_event_matches_message(
             ))
         && match message.kind {
             thread_store::AgentMailboxMessageKind::Message => {
-                event.payload.pointer("/input/text") == Some(&json!(message.content))
+                (event.payload.pointer("/input/text") == Some(&json!(message.content))
+                    || event.payload.get("input")
+                        == Some(&json!([{
+                            "type": "text",
+                            "text": message.content,
+                        }])))
                     && event.payload.get("role") == Some(&json!("user"))
             }
             thread_store::AgentMailboxMessageKind::Result => {

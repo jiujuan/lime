@@ -41,7 +41,6 @@ export type AppServerCapabilityDescriptor = protocol.CapabilityDescriptor;
 export type AppServerCapabilityListResponse = protocol.CapabilityListResponse;
 export type AppServerRuntimeCapabilityManifest =
   protocol.RuntimeCapabilityManifest;
-export type AppServerRuntimeResumeContract = protocol.RuntimeResumeContract;
 export type AppServerArtifactReadParams = protocol.ArtifactReadParams;
 export type AppServerArtifactContentStatus = protocol.ArtifactContentStatus;
 export type AppServerArtifactSummary = protocol.ArtifactSummary;
@@ -112,7 +111,7 @@ export type AppServerAgentSessionReviewDecisionSaveParams =
   protocol.AgentSessionReviewDecisionSaveParams;
 export type AppServerAgentSessionReviewDecision =
   protocol.AgentSessionReviewDecision;
-export type AppServerAgentSessionStartParams = protocol.AgentSessionStartParams;
+export type AppServerThreadStartParams = protocol.ThreadStartParams;
 export type AppServerAgentSessionListParams = protocol.AgentSessionListParams;
 export type AppServerAgentSessionListResponse =
   protocol.AgentSessionListResponse;
@@ -130,6 +129,8 @@ export type AppServerAgentSessionTurnStartParams =
   protocol.AgentSessionTurnStartParams;
 export type AppServerAgentSessionTurnCancelParams =
   protocol.AgentSessionTurnCancelParams;
+export type AppServerTurnSteerParams = protocol.TurnSteerParams;
+export type AppServerTurnSteerResponse = protocol.TurnSteerResponse;
 export type AppServerAgentSessionRuntimeEventInput =
   protocol.AgentSessionRuntimeEventInput;
 export type AppServerAgentSessionRuntimeEventAppendParams =
@@ -145,8 +146,7 @@ export type AppServerAgentSession = protocol.AgentSession;
 export type AppServerAgentTurnStatus = protocol.AgentTurnStatus;
 export type AppServerAgentTurn = protocol.AgentTurn;
 export type AppServerAgentEvent = protocol.AgentEvent;
-export type AppServerAgentSessionStartResponse =
-  protocol.AgentSessionStartResponse;
+export type AppServerThreadStartResponse = protocol.ThreadStartResponse;
 export type AppServerAgentSessionReadResponse =
   protocol.AgentSessionReadResponse;
 export type AppServerThread = protocol.Thread;
@@ -154,16 +154,28 @@ export type AppServerThreadListParams = protocol.ThreadListParams;
 export type AppServerThreadListResponse = protocol.ThreadListResponse;
 export type AppServerThreadReadParams = protocol.ThreadReadParams;
 export type AppServerThreadReadResponse = protocol.ThreadReadResponse;
+export type AppServerThreadSettingsUpdateParams =
+  protocol.ThreadSettingsUpdateParams;
+export type AppServerThreadSettingsUpdateResponse =
+  protocol.ThreadSettingsUpdateResponse;
+export type AppServerThreadMemoryModeSetParams =
+  protocol.ThreadMemoryModeSetParams;
+export type AppServerThreadMemoryModeSetResponse =
+  protocol.ThreadMemoryModeSetResponse;
+export type AppServerThreadShellCommandParams =
+  protocol.ThreadShellCommandParams;
+export type AppServerThreadShellCommandResponse =
+  protocol.ThreadShellCommandResponse;
+export type AppServerThreadArchiveParams = protocol.ThreadArchiveParams;
+export type AppServerThreadArchiveResponse = protocol.ThreadArchiveResponse;
+export type AppServerThreadUnarchiveParams = protocol.ThreadUnarchiveParams;
+export type AppServerThreadUnarchiveResponse = protocol.ThreadUnarchiveResponse;
 export type AppServerAgentSessionToolInventoryReadResponse =
   protocol.AgentSessionToolInventoryReadResponse;
 export type AppServerAgentSessionUpdateParams =
   protocol.AgentSessionUpdateParams;
 export type AppServerAgentSessionUpdateResponse =
   protocol.AgentSessionUpdateResponse;
-export type AppServerAgentSessionArchiveManyParams =
-  protocol.AgentSessionArchiveManyParams;
-export type AppServerAgentSessionArchiveManyResponse =
-  protocol.AgentSessionArchiveManyResponse;
 export type AppServerAgentSessionDeleteParams =
   protocol.AgentSessionDeleteParams;
 export type AppServerAgentSessionDeleteResponse =
@@ -198,10 +210,8 @@ export type AppServerAgentSessionCompactParams =
   protocol.AgentSessionCompactParams;
 export type AppServerAgentSessionCompactResponse =
   protocol.AgentSessionCompactResponse;
-export type AppServerAgentSessionThreadResumeParams =
-  protocol.AgentSessionThreadResumeParams;
-export type AppServerAgentSessionThreadResumeResponse =
-  protocol.AgentSessionThreadResumeResponse;
+export type AppServerThreadResumeParams = protocol.ThreadResumeParams;
+export type AppServerThreadResumeResponse = protocol.ThreadResumeResponse;
 export type AppServerAgentSessionQueuedTurnRemoveParams =
   protocol.AgentSessionQueuedTurnRemoveParams;
 export type AppServerAgentSessionQueuedTurnRemoveResponse =

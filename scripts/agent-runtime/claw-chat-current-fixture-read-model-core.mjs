@@ -7,7 +7,9 @@ import {
 } from "./claw-chat-current-fixture-utils.mjs";
 
 export function readModelLatestTurnStatus(readModel) {
+  const turns = collectReadModelTurns(readModel);
   return (
+    turns.at(-1)?.status ??
     readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
     readModel?.detail?.threadRead?.runtimeSummary?.latestTurnStatus ??
     readModel?.detail?.thread_read?.status ??
@@ -19,10 +21,12 @@ export function readModelLatestTurnStatus(readModel) {
 
 export function collectReadModelTurns(readModel) {
   const detail = readRecord(readModel?.detail) ?? readRecord(readModel) ?? {};
+  const thread = readRecord(readModel?.thread) ?? {};
   const threadRead =
     readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
   return [
     ...readArray(readModel, "turns"),
+    ...readArray(thread, "turns"),
     ...readArray(detail, "turns"),
     ...readArray(threadRead, "turns"),
   ]
@@ -32,11 +36,15 @@ export function collectReadModelTurns(readModel) {
 
 export function collectReadModelItems(readModel) {
   const detail = readRecord(readModel?.detail) ?? readRecord(readModel) ?? {};
+  const canonicalTurnItems = collectReadModelTurns(readModel).flatMap((turn) =>
+    readArray(turn, "items"),
+  );
   const threadRead =
     readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
   return [
     ...readArray(readModel, "items"),
     ...readArray(readModel, "thread_items", "threadItems"),
+    ...canonicalTurnItems,
     ...readArray(detail, "items"),
     ...readArray(detail, "thread_items", "threadItems"),
     ...readArray(threadRead, "items"),
@@ -60,7 +68,13 @@ export function readModelQueuedTurns(readModel) {
 }
 
 export function readModelQueuedTurnId(value) {
-  return readString(value, "queued_turn_id", "queuedTurnId", "turn_id", "turnId");
+  return readString(
+    value,
+    "queued_turn_id",
+    "queuedTurnId",
+    "turn_id",
+    "turnId",
+  );
 }
 
 export function readModelQueuedTurnText(value) {
@@ -89,11 +103,15 @@ export function findReadModelQueuedTurnForPrompt(readModel, prompt) {
 
 export function summarizeReadModelQueueState(readModel) {
   const detail = readRecord(readModel?.detail) ?? readRecord(readModel) ?? {};
+  const thread = readRecord(readModel?.thread) ?? {};
   const threadRead =
     readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
   return sanitizeJson({
-    sessionId: readString(readModel?.session, "session_id", "sessionId"),
+    sessionId:
+      readString(thread, "sessionId", "session_id") ??
+      readString(readModel?.session, "session_id", "sessionId"),
     threadId:
+      readString(thread, "id") ??
       readString(threadRead, "thread_id", "threadId") ??
       readString(detail, "thread_id", "threadId"),
     detailStatus: readString(detail, "status"),
@@ -133,7 +151,9 @@ export function readModelTurnStatus(value) {
 
 export function isReadModelTerminalTurnStatus(status) {
   return ["completed", "failed", "canceled", "cancelled"].includes(
-    String(status ?? "").trim().toLowerCase(),
+    String(status ?? "")
+      .trim()
+      .toLowerCase(),
   );
 }
 
@@ -235,7 +255,47 @@ export function collectReadModelToolCalls(readResult) {
   const detail = readRecord(readResult?.detail) ?? readRecord(readResult) ?? {};
   const threadRead =
     readRecord(detail.thread_read) ?? readRecord(detail.threadRead) ?? {};
+  const canonicalToolCalls = collectReadModelTurns(readResult).flatMap(
+    (turn) => {
+      const turnId = readModelTurnId(turn);
+      return readArray(turn, "items").flatMap((itemValue) => {
+        const item = readRecord(itemValue);
+        if (!item) {
+          return [];
+        }
+        const type = readString(item, "type");
+        if (
+          type !== "commandExecution" &&
+          type !== "dynamicToolCall" &&
+          type !== "mcpToolCall" &&
+          type !== "webSearch"
+        ) {
+          return [];
+        }
+        const toolName = readString(item, "tool", "name", "command") ?? type;
+        const output =
+          item.result ??
+          item.contentItems ??
+          item.aggregatedOutput ??
+          item.error ??
+          null;
+        return [
+          {
+            ...item,
+            toolName,
+            tool_name: toolName,
+            turnId,
+            turn_id: turnId,
+            output,
+            outputPreview:
+              typeof output === "string" ? output : JSON.stringify(output),
+          },
+        ];
+      });
+    },
+  );
   return [
+    ...canonicalToolCalls,
     ...(Array.isArray(detail.tool_calls) ? detail.tool_calls : []),
     ...(Array.isArray(detail.toolCalls) ? detail.toolCalls : []),
     ...(Array.isArray(threadRead.tool_calls) ? threadRead.tool_calls : []),
@@ -253,7 +313,11 @@ export function findReadModelToolCall(readResult, toolCallId, toolName) {
         "",
     );
     const name = String(
-      toolCall.tool_name ?? toolCall.toolName ?? toolCall.name ?? "",
+      toolCall.tool_name ??
+        toolCall.toolName ??
+        toolCall.tool ??
+        toolCall.name ??
+        "",
     );
     return id === toolCallId && name === toolName;
   });

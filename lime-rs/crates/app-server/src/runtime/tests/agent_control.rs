@@ -1,6 +1,12 @@
 use super::*;
 use agent_protocol::{ItemKind, ItemStatus, ThreadItemPayload, ThreadTurnsView};
-use app_server_protocol::{AgentSessionReadParams, AgentSessionTurnStartParams};
+use agent_runtime::session_loop::{
+    RuntimeSessionClosureTask, RuntimeSessionInterAgentDeliveryMode, RuntimeSessionInterAgentInput,
+    RuntimeSessionInterAgentMessageKind,
+};
+use app_server_protocol::{
+    AgentInput, AgentSessionReadParams, AgentSessionReadResponse, AgentSessionTurnStartParams,
+};
 use futures::executor::block_on;
 use serde_json::json;
 use std::sync::Arc;
@@ -194,6 +200,39 @@ async fn spawned_child_identity(
         .expect("spawned child identity")
 }
 
+async fn wait_for_session_turn(
+    core: &RuntimeCore,
+    session_id: &str,
+    expected_turn_id: Option<&str>,
+) -> AgentSessionReadResponse {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            match core.read_session(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            }) {
+                Ok(response)
+                    if response.turns.iter().any(|turn| {
+                        expected_turn_id
+                            .map(|expected| turn.turn_id == expected)
+                            .unwrap_or(true)
+                    }) =>
+                {
+                    return response;
+                }
+                Ok(_) | Err(RuntimeCoreError::SessionNotFound(_)) => {
+                    tokio::task::yield_now().await;
+                }
+                Err(error) => panic!("child session read failed: {error}"),
+            }
+        }
+    })
+    .await
+    .expect("child session did not expose the expected turn")
+}
+
 #[tokio::test]
 async fn spawn_gateway_returns_before_child_terminal_and_inherits_runtime_request() {
     let (child_started_tx, mut child_started_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -305,7 +344,7 @@ async fn spawn_gateway_returns_before_child_terminal_and_inherits_runtime_reques
             .provider_config
             .as_ref()
             .and_then(|config| config.base_url.as_deref()),
-        Some("http://127.0.0.1:43123/v1")
+        None
     );
 
     let child_identity = spawned_child_identity(&store, "parent-thread", "research").await;
@@ -462,11 +501,9 @@ async fn spawn_forks_all_last_n_or_no_parent_turns_into_canonical_history() {
                     stored
                         .turn_inputs
                         .get(&turn.turn_id)
+                        .map(|input| super::super::turn_start::user_input_text(input))
                         .expect("forked turn input")
-                        .text
-                        .as_str()
                 })
-                .map(str::to_string)
                 .collect::<Vec<_>>()
         };
         assert_eq!(actual_users, expected_users);
@@ -887,15 +924,8 @@ async fn spawn_gateway_projects_and_starts_the_initial_child_task_before_success
     assert!(block_on(store.read_agent_identity(child_thread_id.clone()))
         .expect("child identity")
         .is_some());
-    let child = core
-        .read_session(AgentSessionReadParams {
-            session_id: child_session_id,
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("child session");
     let initial_turn_id = super::super::agent_mailbox_delivery::mailbox_turn_id(message_id);
+    let child = wait_for_session_turn(&core, &child_session_id, Some(&initial_turn_id)).await;
     assert!(child
         .turns
         .iter()
@@ -1148,6 +1178,146 @@ async fn gateway_persists_root_identity_and_hides_closed_child_targets() {
 }
 
 #[tokio::test]
+async fn direct_message_publishes_activity_only_to_an_existing_recipient_session_loop() {
+    let (_temp, core, store) = core();
+    let session = core
+        .start_session(start_params("root-session", "root-thread"))
+        .expect("root")
+        .session;
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("root-turn".to_string()),
+                input: AgentInput {
+                    text: "delegate".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("root turn")
+        .response
+        .turn;
+    let child = core
+        .create_open_agent_control_child_for_test(AgentControlSpawnRequest {
+            parent_session_id: session.session_id.clone(),
+            child_session_id: Some("child-session".to_string()),
+            child_thread_id: Some("child-thread".to_string()),
+            fork_mode: SpawnAgentForkMode::None,
+        })
+        .await
+        .expect("child");
+    store
+        .upsert_agent_identity(thread_store::AgentIdentity {
+            root_thread_id: ThreadId::new(session.thread_id.clone()),
+            thread_id: ThreadId::new(child.session.thread_id.clone()),
+            agent_path: "/root/child".to_string(),
+            nickname: None,
+            role: None,
+            last_task_message: Some("work".to_string()),
+        })
+        .await
+        .expect("child identity");
+    let gateway =
+        core.agent_control_gateway_for_turn(&session, &turn, RuntimeHostContext::default());
+    let caller = AgentControlCaller {
+        session_id: session.session_id.clone(),
+        thread_id: session.thread_id.clone(),
+        turn_id: turn.turn_id.clone(),
+        call_id: "cold-send".to_string(),
+    };
+
+    gateway
+        .gateway()
+        .execute(AgentControlGatewayRequest {
+            caller: caller.clone(),
+            command: AgentControlCommand::SendMessage {
+                target: "child".to_string(),
+                message: "persist without a live loop".to_string(),
+            },
+            cancel_token: None,
+        })
+        .await
+        .expect("queue message without recipient loop");
+    assert!(
+        !core
+            .session_loops
+            .notify_inter_agent_communication(
+                &child.session.session_id,
+                RuntimeSessionInterAgentInput {
+                    message_id: "cold-notification-probe".to_string(),
+                    root_thread_id: session.thread_id.clone(),
+                    sender_thread_id: session.thread_id.clone(),
+                    recipient_thread_id: child.session.thread_id.clone(),
+                    content: "probe".to_string(),
+                    kind: RuntimeSessionInterAgentMessageKind::Message,
+                    source_turn_id: Some(turn.turn_id.clone()),
+                    result_status: None,
+                    delivery_mode: RuntimeSessionInterAgentDeliveryMode::QueueOnly,
+                },
+            )
+            .await
+            .expect("check absent recipient loop"),
+        "durable mailbox append must not create a recipient session loop"
+    );
+
+    let (activity_tx, activity_rx) = tokio::sync::oneshot::channel();
+    let activity_tx = Arc::new(tokio::sync::Mutex::new(Some(activity_tx)));
+    let task = RuntimeSessionClosureTask::new(
+        "mailbox-activity-turn",
+        Vec::new(),
+        move |context, _input, _cancellation_token| {
+            let activity_tx = Arc::clone(&activity_tx);
+            Box::pin(async move {
+                context.wait_for_pending_input().await;
+                if let Some(activity_tx) = activity_tx.lock().await.take() {
+                    let _ = activity_tx.send(());
+                }
+                Ok(())
+            })
+        },
+    );
+    let recipient_loop = core
+        .session_loops
+        .get_or_create(&child.session.session_id)
+        .await;
+    let submission = recipient_loop
+        .submit_replacing(Arc::new(task))
+        .await
+        .expect("start recipient mailbox waiter");
+
+    gateway
+        .gateway()
+        .execute(AgentControlGatewayRequest {
+            caller: AgentControlCaller {
+                call_id: "live-send".to_string(),
+                ..caller
+            },
+            command: AgentControlCommand::SendMessage {
+                target: "child".to_string(),
+                message: "wake the existing loop".to_string(),
+            },
+            cancel_token: None,
+        })
+        .await
+        .expect("queue message with recipient loop");
+    tokio::time::timeout(Duration::from_secs(1), activity_rx)
+        .await
+        .expect("recipient loop activity timeout")
+        .expect("recipient loop activity sender");
+    tokio::time::timeout(Duration::from_secs(1), submission.completion)
+        .await
+        .expect("recipient waiter completion timeout")
+        .expect("recipient waiter completion sender")
+        .expect("recipient waiter completion");
+}
+
+#[tokio::test]
 async fn gateway_queue_followup_and_interrupt_keep_the_durable_contract() {
     let (_temp, core, store) = core();
     let session = core
@@ -1208,17 +1378,8 @@ async fn gateway_queue_followup_and_interrupt_keep_the_durable_contract() {
         .expect("child thread exists")
         .session_id
         .to_string();
-    let initial_turn_count = core
-        .read_session(AgentSessionReadParams {
-            session_id: child_session_id.clone(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("child session")
-        .turns
-        .len();
-    assert!(initial_turn_count > 0);
+    let child = wait_for_session_turn(&core, &child_session_id, None).await;
+    let initial_turn_count = child.turns.len();
 
     let queued = gateway
         .gateway()

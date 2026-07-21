@@ -1,27 +1,35 @@
-import type {
+import {
+  agentSessionEventNotification,
+  agentSessionMediaReadEventNotification,
+  serverNotification,
   AgentRuntimeClient,
   AgentRuntimeClientSubscription,
   AgentRuntimeEventListener,
-  CanonicalThreadEventListener,
-  CanonicalThreadEventNotification,
+  AgentRuntimeLifecycleEventListener,
+  AgentRuntimeNotification,
   AgentSessionActionRespondParams,
   AgentSessionActionRespondResponse,
   AgentSessionEventNotification,
   ThreadReadParams,
   ThreadReadResponse,
+  ThreadMemoryModeSetParams,
+  ThreadMemoryModeSetResponse,
+  ThreadSettingsUpdateParams,
+  ThreadSettingsUpdateResponse,
   AgentSessionToolInventoryReadParams,
   AgentSessionToolInventoryReadResponse,
-  AgentSessionTurnCancelParams,
-  AgentSessionTurnCancelResponse,
-  AgentSessionTurnStartParams,
-  AgentSessionTurnStartResponse,
+  TurnInterruptParams,
+  TurnInterruptResponse,
+  TurnStartParams,
+  TurnStartResponse,
+  TurnSteerParams,
+  TurnSteerResponse,
   AppServerRequestOptions,
   AppServerRequestResult,
   EvidenceExportParams,
   EvidenceExportResponse,
   JsonRpcMessage,
-  JsonRpcNotification,
-} from "@limecloud/app-server-client";
+} from "@limecloud/app-server-client/browser";
 import {
   AgentRuntimeEventPipeline,
   type AgentRuntimeEventAdapter,
@@ -37,13 +45,12 @@ import {
 export {
   AgentRuntimeEventSequenceGate,
   AgentRuntimeSequenceViolationError,
-  runtimeExecutionEventFromCanonicalEvent,
+  runtimeExecutionEventFromLifecycleNotification,
   type AgentRuntimeSequenceVerifierLike,
   type AgentRuntimeSequenceVerifierMode,
 } from "./eventVerifier.js";
 export {
   AgentRuntimeEventPipeline,
-  withEvent,
   type AgentRuntimeEventAdapter,
   type AgentRuntimeEventMiddleware,
   type AgentRuntimeEventMiddlewareFunction,
@@ -52,11 +59,9 @@ export {
   type AgentRuntimeEventPipelineOptions,
 } from "./eventPipeline.js";
 
-const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
-
 export type AgentRuntimeLifecycleClient = Pick<
   AgentRuntimeClient,
-  "startTurn" | "readThread" | "cancelTurn" | "respondAction"
+  "startTurn" | "steerTurn" | "readThread" | "cancelTurn" | "respondAction"
 >;
 
 type AgentRuntimeGatewayMethod<Params, Result> = (
@@ -65,21 +70,24 @@ type AgentRuntimeGatewayMethod<Params, Result> = (
 ) => Promise<AppServerRequestResult<Result>>;
 
 export type AgentRuntimeSessionGateway = {
-  startTurn: AgentRuntimeGatewayMethod<
-    AgentSessionTurnStartParams,
-    AgentSessionTurnStartResponse
+  startTurn: AgentRuntimeGatewayMethod<TurnStartParams, TurnStartResponse>;
+  steerTurn: AgentRuntimeGatewayMethod<TurnSteerParams, TurnSteerResponse>;
+  readThread: AgentRuntimeGatewayMethod<ThreadReadParams, ThreadReadResponse>;
+  updateThreadSettings: AgentRuntimeGatewayMethod<
+    ThreadSettingsUpdateParams,
+    ThreadSettingsUpdateResponse
   >;
-  readThread: AgentRuntimeGatewayMethod<
-    ThreadReadParams,
-    ThreadReadResponse
+  setThreadMemoryMode: AgentRuntimeGatewayMethod<
+    ThreadMemoryModeSetParams,
+    ThreadMemoryModeSetResponse
   >;
   readToolInventory?: AgentRuntimeGatewayMethod<
     AgentSessionToolInventoryReadParams,
     AgentSessionToolInventoryReadResponse
   >;
   cancelTurn: AgentRuntimeGatewayMethod<
-    AgentSessionTurnCancelParams,
-    AgentSessionTurnCancelResponse
+    TurnInterruptParams,
+    TurnInterruptResponse
   >;
   respondAction: AgentRuntimeGatewayMethod<
     AgentSessionActionRespondParams,
@@ -89,7 +97,7 @@ export type AgentRuntimeSessionGateway = {
     EvidenceExportParams,
     EvidenceExportResponse
   >;
-  nextEvent?(timeoutMs?: number): Promise<AgentSessionEventNotification>;
+  nextEvent?(timeoutMs?: number): Promise<AgentRuntimeNotification>;
   drainEvents?(limit?: number): Promise<JsonRpcMessage[]>;
 };
 
@@ -108,8 +116,22 @@ export function createAgentRuntimeClientFromSessionGateway(
   return {
     startTurn: (params, options) =>
       callAgentRuntimeSessionGateway(gateway.startTurn, params, options),
+    steerTurn: (params, options) =>
+      callAgentRuntimeSessionGateway(gateway.steerTurn, params, options),
     readThread: (params, options) =>
       callAgentRuntimeSessionGateway(gateway.readThread, params, options),
+    updateThreadSettings: (params, options) =>
+      callAgentRuntimeSessionGateway(
+        gateway.updateThreadSettings,
+        params,
+        options,
+      ),
+    setThreadMemoryMode: (params, options) =>
+      callAgentRuntimeSessionGateway(
+        gateway.setThreadMemoryMode,
+        params,
+        options,
+      ),
     readToolInventory: (params = {}, options) =>
       callOptionalAgentRuntimeSessionGateway(
         gateway.readToolInventory,
@@ -131,8 +153,8 @@ export function createAgentRuntimeClientFromSessionGateway(
     subscribeEvents(listener) {
       return eventRouter.subscribe(listener);
     },
-    subscribeCanonicalEvents(listener) {
-      return eventRouter.subscribeCanonical(listener);
+    subscribeLifecycleEvents(listener) {
+      return eventRouter.subscribeLifecycle(listener);
     },
     async dispatchEvent(message) {
       const result = await eventRouter.dispatch(message);
@@ -165,7 +187,7 @@ export function createAgentRuntimeClientFromSessionGateway(
         );
       }
       throw new Error(
-        "AgentRuntime session gateway does not expose agentSession/event subscription.",
+        "AgentRuntime session gateway does not expose direct lifecycle notifications.",
       );
     },
   };
@@ -203,38 +225,35 @@ async function nextDrainedAgentRuntimeEvent(
   gateway: AgentRuntimeSessionGateway,
   eventRouter: AgentRuntimeGatewayEventRouter,
   timeoutMs?: number,
-): Promise<AgentSessionEventNotification> {
+): Promise<AgentRuntimeNotification> {
   const pending = eventRouter.takePendingNextEvent();
   if (pending) {
     return pending;
   }
   const messages = await gateway.drainEvents?.(1);
   for (const message of messages ?? []) {
-    const notification = agentSessionEventNotificationFromMessage(message);
-    if (notification) {
-      const result = await eventRouter.dispatch(notification);
-      if (result.accepted) {
-        const [next, ...rest] = result.notifications;
-        eventRouter.queuePendingNextEvents(rest);
-        return next;
-      }
-      if (result.reason === "sequence_violation") {
-        throw eventRouter.sequenceViolationError();
-      }
+    const result = await eventRouter.dispatch(message);
+    if (result.accepted) {
+      const [next, ...rest] = result.notifications;
+      eventRouter.queuePendingNextEvents(rest);
+      return next;
+    }
+    if (result.reason === "sequence_violation") {
+      throw eventRouter.sequenceViolationError();
     }
   }
   throw new Error(
     timeoutMs === undefined
-      ? "AgentRuntime session gateway drainEvents did not return agentSession/event."
-      : `AgentRuntime session gateway drainEvents did not return agentSession/event within ${timeoutMs}ms.`,
+      ? "AgentRuntime session gateway drainEvents did not return a direct lifecycle notification."
+      : `AgentRuntime session gateway drainEvents did not return a direct lifecycle notification within ${timeoutMs}ms.`,
   );
 }
 
 class AgentRuntimeGatewayEventRouter {
   readonly #listeners = new Set<AgentRuntimeEventListener>();
-  readonly #canonicalListeners = new Set<CanonicalThreadEventListener>();
+  readonly #lifecycleListeners = new Set<AgentRuntimeLifecycleEventListener>();
   readonly #eventPipeline: AgentRuntimeEventPipeline;
-  readonly #pendingNextEvents: AgentSessionEventNotification[] = [];
+  readonly #pendingNextEvents: AgentRuntimeNotification[] = [];
 
   constructor(options: AgentRuntimeClientFromGatewayOptions = {}) {
     this.#eventPipeline = new AgentRuntimeEventPipeline({
@@ -245,7 +264,9 @@ class AgentRuntimeGatewayEventRouter {
     });
   }
 
-  subscribe(listener: AgentRuntimeEventListener): AgentRuntimeClientSubscription {
+  subscribe(
+    listener: AgentRuntimeEventListener,
+  ): AgentRuntimeClientSubscription {
     this.#listeners.add(listener);
     return {
       unsubscribe: () => {
@@ -254,27 +275,27 @@ class AgentRuntimeGatewayEventRouter {
     };
   }
 
-  subscribeCanonical(
-    listener: CanonicalThreadEventListener,
+  subscribeLifecycle(
+    listener: AgentRuntimeLifecycleEventListener,
   ): AgentRuntimeClientSubscription {
-    this.#canonicalListeners.add(listener);
+    this.#lifecycleListeners.add(listener);
     return {
       unsubscribe: () => {
-        this.#canonicalListeners.delete(listener);
+        this.#lifecycleListeners.delete(listener);
       },
     };
   }
 
   async dispatch(
     message: JsonRpcMessage,
-  ): Promise<AgentRuntimeEventPipelineResult> {
-    const notification = agentSessionEventNotificationFromMessage(message);
-    if (!notification) {
-      return { accepted: false, reason: "dropped" };
-    }
-    const canonicalEvent = canonicalThreadEventNotificationFromMessage(notification);
-    if (!canonicalEvent) {
-      if (!isNonThreadNotification(notification)) {
+  ): Promise<AgentRuntimeGatewayDispatchResult> {
+    const lifecycle = serverNotification(message);
+    if (!lifecycle) {
+      const notification = agentSessionEventNotification(message);
+      if (
+        !notification ||
+        !agentSessionMediaReadEventNotification(notification)
+      ) {
         return { accepted: false, reason: "dropped" };
       }
       for (const listener of this.#listeners) {
@@ -286,25 +307,25 @@ class AgentRuntimeGatewayEventRouter {
         notifications: [notification],
       };
     }
-    const pipelineResult = await this.#eventPipeline.process(notification);
+    const pipelineResult = await this.#eventPipeline.process(lifecycle);
     if (!pipelineResult.accepted) {
       return pipelineResult;
     }
     for (const notification of pipelineResult.notifications) {
-      const event = canonicalThreadEventNotificationFromMessage(notification);
-      if (!event) continue;
-      for (const listener of this.#canonicalListeners) {
-        await listener(event, notification);
+      for (const listener of this.#lifecycleListeners) {
+        await listener(notification, notification);
       }
     }
     return pipelineResult;
   }
 
-  takePendingNextEvent(): AgentSessionEventNotification | undefined {
+  takePendingNextEvent(): AgentRuntimeNotification | undefined {
     return this.#pendingNextEvents.shift();
   }
 
-  queuePendingNextEvents(notifications: readonly AgentSessionEventNotification[]): void {
+  queuePendingNextEvents(
+    notifications: readonly AgentRuntimeNotification[],
+  ): void {
     this.#pendingNextEvents.push(...notifications);
   }
 
@@ -313,49 +334,10 @@ class AgentRuntimeGatewayEventRouter {
   }
 }
 
-function canonicalThreadEventNotificationFromMessage(
-  notification: AgentSessionEventNotification,
-): CanonicalThreadEventNotification | undefined {
-  return notification.params.canonicalEvent;
-}
-
-function isNonThreadNotification(
-  notification: AgentSessionEventNotification,
-): boolean {
-  const event = notification.params.event;
-  if (!isRecord(event.payload) || typeof event.payload.streamId !== "string") {
-    return false;
-  }
-  if (event.type === "media.read.chunk") {
-    return event.payload.done === false && isRecord(event.payload.chunk);
-  }
-  if (event.type === "media.read.completed") {
-    return event.payload.done === true && isRecord(event.payload.media);
-  }
-  return false;
-}
-
-function agentSessionEventNotificationFromMessage(
-  message: JsonRpcMessage,
-): AgentSessionEventNotification | undefined {
-  if (!isJsonRpcNotification(message)) {
-    return undefined;
-  }
-  if (message.method !== METHOD_AGENT_SESSION_EVENT) {
-    return undefined;
-  }
-  if (!isRecord(message.params) || !("event" in message.params)) {
-    return undefined;
-  }
-  return message as AgentSessionEventNotification;
-}
-
-function isJsonRpcNotification(
-  message: JsonRpcMessage,
-): message is JsonRpcNotification {
-  return isRecord(message) && "method" in message && !("id" in message);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+type AgentRuntimeGatewayDispatchResult =
+  | AgentRuntimeEventPipelineResult
+  | {
+      accepted: true;
+      notification: AgentSessionEventNotification;
+      notifications: AgentSessionEventNotification[];
+    };

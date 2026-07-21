@@ -3,6 +3,7 @@ use super::NoopAppDataSource;
 use super::RuntimeCoreError;
 use app_server_protocol::*;
 use async_trait::async_trait;
+use std::path::PathBuf;
 
 #[async_trait]
 pub trait DiagnosticsAppDataSource: Send + Sync {
@@ -34,6 +35,7 @@ pub trait DiagnosticsAppDataSource: Send + Sync {
     async fn export_support_bundle(
         &self,
         _params: SupportBundleExportParams,
+        _trace_store_root: Option<PathBuf>,
     ) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
         Err(unavailable("diagnostics/supportBundle/export"))
     }

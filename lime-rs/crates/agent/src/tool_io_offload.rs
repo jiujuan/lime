@@ -25,7 +25,8 @@ use tool_runtime::tool_io::{
     DEFAULT_TOOL_IO_PREVIEW_MAX_LINES, DEFAULT_TOOL_TOKEN_LIMIT_BEFORE_EVICT,
 };
 
-const TOOL_IO_OFFLOAD_DIR: &str = "harness/tool-io";
+#[cfg(test)]
+const TOOL_IO_OFFLOAD_TEST_DIR: &str = "harness/tool-io";
 const TOOL_ARGUMENTS_DIR: &str = "inputs";
 const TOOL_RESULTS_DIR: &str = "results";
 const TOOL_RESULT_SAFETY_TRIGGER_BYTES: usize = 64 * 1024;
@@ -219,21 +220,30 @@ pub fn resolve_tool_io_eviction_policy_for_model(model_name: Option<&str>) -> To
 }
 
 fn resolve_offload_root() -> Result<PathBuf, String> {
-    if let Some(override_dir) = env_compat::var_nonempty(TOOL_IO_OFFLOAD_DIR_ENV_KEYS) {
-        return Ok(PathBuf::from(override_dir));
-    }
+    let configured_root = env_compat::var_nonempty(TOOL_IO_OFFLOAD_DIR_ENV_KEYS).map(PathBuf::from);
 
     #[cfg(test)]
     {
-        Ok(std::env::temp_dir()
-            .join("lime-tests")
-            .join(TOOL_IO_OFFLOAD_DIR))
+        Ok(configured_root.unwrap_or_else(|| {
+            std::env::temp_dir()
+                .join("lime-tests")
+                .join(TOOL_IO_OFFLOAD_TEST_DIR)
+        }))
     }
 
     #[cfg(not(test))]
     {
-        Ok(lime_core::app_paths::preferred_data_dir()?.join(TOOL_IO_OFFLOAD_DIR))
+        require_explicit_tool_io_offload_root(configured_root)
     }
+}
+
+fn require_explicit_tool_io_offload_root(root: Option<PathBuf>) -> Result<PathBuf, String> {
+    root.ok_or_else(|| {
+        format!(
+            "tool I/O offload 已冻结隐式平台目录；必须显式设置 {}",
+            TOOL_IO_OFFLOAD_DIR_ENV_KEYS[0]
+        )
+    })
 }
 
 fn ensure_dir(path: &Path) -> Result<(), String> {
@@ -752,6 +762,14 @@ mod tests {
         assert_eq!(record.get("path"), Some(&json!("docs/output.md")));
         assert_eq!(record.get("preview"), Some(&json!("preview text")));
         assert!(record.contains_key(LIME_TOOL_ARGUMENTS_OFFLOAD_KEY));
+    }
+
+    #[test]
+    fn missing_explicit_offload_root_fails_closed_without_platform_fallback() {
+        let error = require_explicit_tool_io_offload_root(None)
+            .expect_err("缺少显式 root 时不得猜测平台目录");
+
+        assert!(error.contains(TOOL_IO_OFFLOAD_DIR_ENV_KEYS[0]));
     }
 
     #[test]

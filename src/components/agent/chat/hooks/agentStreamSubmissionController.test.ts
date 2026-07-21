@@ -15,7 +15,6 @@ describe("agentStreamSubmissionController", () => {
         effectiveModel: "deepseek-chat",
         effectiveProviderType: "deepseek",
         eventName: "event-a",
-        expectingQueue: false,
         timing: {
           requestStartedAt: 100,
           listenerBoundAt: 140,
@@ -25,7 +24,6 @@ describe("agentStreamSubmissionController", () => {
     ).toEqual({
       elapsedMs: 75,
       eventName: "event-a",
-      expectingQueue: false,
       listenerBoundDeltaMs: 35,
       model: "deepseek-chat",
       provider: "deepseek",
@@ -40,7 +38,6 @@ describe("agentStreamSubmissionController", () => {
         effectiveModel: "gpt-5.4",
         effectiveProviderType: "openai",
         eventName: "event-a",
-        expectingQueue: true,
         timing: {
           requestStartedAt: 100,
           listenerBoundAt: null,

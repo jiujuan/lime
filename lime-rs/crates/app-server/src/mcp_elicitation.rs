@@ -1,10 +1,11 @@
 //! MCP elicitation adapter for the App Server reverse-request transport.
 
 use crate::{AppServer, AppServerError, ServerRequestError};
-use app_server_protocol::{
-    error_codes, McpServerElicitationAction, McpServerElicitationRequest,
-    McpServerElicitationRequestParams, McpServerElicitationResponse, ServerNotification,
-    ServerRequestResolvedNotification, METHOD_MCP_SERVER_ELICITATION_REQUEST,
+use app_server_protocol::error_codes;
+use app_server_protocol::protocol::v2::{
+    McpServerElicitationAction, McpServerElicitationRequest, McpServerElicitationRequestParams,
+    McpServerElicitationRequestResponse, ServerNotification, ServerRequestResolvedNotification,
+    METHOD_MCP_SERVER_ELICITATION_REQUEST,
 };
 use lime_mcp::{
     ElicitationAction, ElicitationRequest, ElicitationRequestRouter, ElicitationResponse,
@@ -122,26 +123,38 @@ async fn forward_request(
         }
     };
     let terminal = wait_for_outer_terminal(pending, request.closed(), request_id.to_string()).await;
-    settle_outer_terminal(&server, &router, &request_id, terminal).await;
+    settle_outer_terminal(&server, &router, &request_id, &request.thread_id, terminal).await;
 }
 
 struct OuterTerminal {
     response: Option<ElicitationResponse>,
-    owner: crate::server_request::ServerRequestOwner,
+    owner: Option<crate::server_request::ServerRequestOwner>,
     outer_request_id: app_server_protocol::RequestId,
 }
 
 async fn wait_for_outer_terminal(
-    pending: crate::server_request::PendingServerRequest,
+    mut pending: crate::server_request::PendingServerRequest,
     closed: CancellationToken,
     domain_request_id: String,
 ) -> OuterTerminal {
     let outer_request_id = pending.id().clone();
-    let owner = pending.owner();
-    let outer_response = tokio::select! {
+    let terminal = tokio::select! {
         biased;
         _ = closed.cancelled() => None,
-        response = pending.wait() => Some(response.map_err(AppServerError::from)),
+        terminal = pending.wait_terminal() => Some(terminal),
+    };
+    let (owner, outer_response) = match terminal {
+        None => {
+            let owner = match pending.cancel_with_owner() {
+                Some(owner) => Some(owner),
+                None => pending.wait_terminal().await.owner,
+            };
+            (owner, None)
+        }
+        Some(terminal) => (
+            terminal.owner,
+            Some(terminal.result.map_err(AppServerError::from)),
+        ),
     };
 
     let response = match outer_response {
@@ -169,13 +182,18 @@ async fn wait_for_outer_terminal(
 
 async fn notify_resolved(
     server: &AppServer,
-    owner: crate::server_request::ServerRequestOwner,
+    owner: Option<crate::server_request::ServerRequestOwner>,
+    thread_id: &str,
     request_id: app_server_protocol::RequestId,
 ) {
+    let Some(owner) = owner else {
+        return;
+    };
     if let Err(error) = server
         .send_server_notification_to_owner(
             owner,
             ServerNotification::ServerRequestResolved(ServerRequestResolvedNotification {
+                thread_id: thread_id.to_string(),
                 request_id: request_id.clone(),
             }),
         )
@@ -203,7 +221,7 @@ fn request_params(
 }
 
 fn parse_response(value: serde_json::Value) -> Result<ElicitationResponse, String> {
-    let response: McpServerElicitationResponse =
+    let response: McpServerElicitationRequestResponse =
         serde_json::from_value(value).map_err(|error| error.to_string())?;
     response.validate().map_err(str::to_string)?;
     let action = match response.action {
@@ -259,6 +277,7 @@ async fn settle_outer_terminal(
     server: &AppServer,
     router: &ElicitationRequestRouter,
     request_id: &lime_mcp::ElicitationRequestId,
+    thread_id: &str,
     terminal: OuterTerminal,
 ) {
     let response = terminal.response.unwrap_or(ElicitationResponse::Cancel);
@@ -278,7 +297,7 @@ async fn settle_outer_terminal(
         // have already released the waiter. The outer request still has one
         // owner and must receive its terminal notification exactly once.
         Err(ElicitationRouterError::UnknownRequest(_)) => {
-            notify_resolved(server, terminal.owner, terminal.outer_request_id).await;
+            notify_resolved(server, terminal.owner, thread_id, terminal.outer_request_id).await;
             return;
         }
         Err(error) => {
@@ -286,7 +305,7 @@ async fn settle_outer_terminal(
             return;
         }
     };
-    notify_resolved(server, terminal.owner, terminal.outer_request_id).await;
+    notify_resolved(server, terminal.owner, thread_id, terminal.outer_request_id).await;
     if let Err(error) = claim.consume() {
         tracing::warn!(%request_id, %error, "failed to consume claimed MCP elicitation terminal");
     }
@@ -296,9 +315,10 @@ async fn settle_outer_terminal(
 mod tests {
     use super::*;
     use app_server_protocol::{
-        JsonRpcError, JsonRpcErrorResponse, JsonRpcMessage, JsonRpcRequest, JsonRpcResponse,
-        METHOD_SERVER_REQUEST_RESOLVED,
+        protocol::v2::METHOD_SERVER_REQUEST_RESOLVED, JsonRpcError, JsonRpcErrorResponse,
+        JsonRpcMessage, JsonRpcRequest, JsonRpcResponse,
     };
+    use app_server_transport::{ConnectionId, QueuedOutgoingMessage};
     use serde_json::json;
     use tokio::time::{timeout, Duration};
 
@@ -332,6 +352,7 @@ mod tests {
         else {
             panic!("expected typed resolved notification");
         };
+        assert_eq!(params.thread_id, "thread-1");
         params
     }
 
@@ -366,7 +387,13 @@ mod tests {
         let terminal = tokio::spawn(async move {
             let terminal =
                 wait_for_outer_terminal(pending, closed, "test-domain-request".to_string()).await;
-            notify_resolved(&wait_server, terminal.owner, terminal.outer_request_id).await;
+            notify_resolved(
+                &wait_server,
+                terminal.owner,
+                "thread-1",
+                terminal.outer_request_id,
+            )
+            .await;
             terminal.response
         });
         (request, terminal)
@@ -376,6 +403,31 @@ mod tests {
         assert!(timeout(Duration::from_millis(100), outbound.recv())
             .await
             .is_err());
+    }
+
+    async fn next_transport_resolved(
+        outbound: &mut mpsc::Receiver<QueuedOutgoingMessage>,
+    ) -> ServerRequestResolvedNotification {
+        let JsonRpcMessage::Notification(notification) = timeout(Duration::from_secs(2), async {
+            outbound
+                .recv()
+                .await
+                .expect("transport resolved notification")
+                .message
+                .into_json_rpc_message()
+        })
+        .await
+        .expect("transport resolved notification timeout") else {
+            panic!("expected transport resolved notification");
+        };
+        assert_eq!(notification.method, METHOD_SERVER_REQUEST_RESOLVED);
+        let ServerNotification::ServerRequestResolved(params) =
+            ServerNotification::try_from(notification).expect("typed resolved notification")
+        else {
+            panic!("expected typed resolved notification");
+        };
+        assert_eq!(params.thread_id, "thread-1");
+        params
     }
 
     fn assert_private_identity_absent(value: &serde_json::Value) {
@@ -599,5 +651,172 @@ mod tests {
         );
         assert_eq!(terminal.await.expect("terminal join"), None);
         assert_no_duplicate(&mut outbound).await;
+    }
+
+    #[tokio::test]
+    async fn resolved_notification_targets_migrated_owner_after_resume() {
+        let server = AppServer::new();
+        let first_connection = ConnectionId(11);
+        let second_connection = ConnectionId(12);
+        let (first_writer, mut first_outbound) = mpsc::channel(4);
+        let (second_writer, mut second_outbound) = mpsc::channel(4);
+        server.register_transport_writer(first_connection, first_writer, None);
+        server.register_transport_writer(second_connection, second_writer, None);
+        server.mark_transport_initialized(first_connection);
+        server.mark_transport_initialized(second_connection);
+        let first_owner = crate::server_request::ServerRequestOwner::Transport(first_connection);
+        let second_owner = crate::server_request::ServerRequestOwner::Transport(second_connection);
+        let pending = server.server_requests.register_for_owner(
+            first_owner,
+            METHOD_MCP_SERVER_ELICITATION_REQUEST,
+            Some(json!({ "threadId": "thread-1" })),
+        );
+        let request_id = pending.id().clone();
+
+        assert_eq!(
+            server
+                .server_requests
+                .cancel_owner(first_owner, "disconnected"),
+            0
+        );
+        assert_eq!(
+            server
+                .server_requests
+                .claim_owner_thread(second_owner, "thread-1")
+                .len(),
+            1
+        );
+        server.resolve_transport_server_request_response(
+            second_connection,
+            request_id.clone(),
+            json!({ "action": "decline" }),
+        );
+
+        let terminal = wait_for_outer_terminal(
+            pending,
+            CancellationToken::new(),
+            "migrated-domain-request".to_string(),
+        )
+        .await;
+        assert_eq!(terminal.owner, Some(second_owner));
+        notify_resolved(
+            &server,
+            terminal.owner,
+            "thread-1",
+            terminal.outer_request_id,
+        )
+        .await;
+
+        assert_eq!(
+            next_transport_resolved(&mut second_outbound)
+                .await
+                .request_id,
+            request_id
+        );
+        assert!(timeout(Duration::from_millis(100), first_outbound.recv())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn domain_close_targets_current_claimed_owner() {
+        let server = AppServer::new();
+        let first_connection = ConnectionId(21);
+        let second_connection = ConnectionId(22);
+        let (first_writer, mut first_outbound) = mpsc::channel(4);
+        let (second_writer, mut second_outbound) = mpsc::channel(4);
+        server.register_transport_writer(first_connection, first_writer, None);
+        server.register_transport_writer(second_connection, second_writer, None);
+        server.mark_transport_initialized(first_connection);
+        server.mark_transport_initialized(second_connection);
+        let first_owner = crate::server_request::ServerRequestOwner::Transport(first_connection);
+        let second_owner = crate::server_request::ServerRequestOwner::Transport(second_connection);
+        let pending = server.server_requests.register_for_owner(
+            first_owner,
+            METHOD_MCP_SERVER_ELICITATION_REQUEST,
+            Some(json!({ "threadId": "thread-1" })),
+        );
+        let request_id = pending.id().clone();
+        let closed = CancellationToken::new();
+
+        assert_eq!(
+            server
+                .server_requests
+                .cancel_owner(first_owner, "disconnected"),
+            0
+        );
+        assert_eq!(
+            server
+                .server_requests
+                .claim_owner_thread(second_owner, "thread-1")
+                .len(),
+            1
+        );
+        closed.cancel();
+
+        let terminal =
+            wait_for_outer_terminal(pending, closed, "closed-domain-request".to_string()).await;
+        assert_eq!(terminal.owner, Some(second_owner));
+        assert_eq!(terminal.response, None);
+        notify_resolved(
+            &server,
+            terminal.owner,
+            "thread-1",
+            terminal.outer_request_id,
+        )
+        .await;
+
+        assert_eq!(
+            next_transport_resolved(&mut second_outbound)
+                .await
+                .request_id,
+            request_id
+        );
+        assert!(timeout(Duration::from_millis(100), first_outbound.recv())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn domain_close_after_routed_response_preserves_actual_owner() {
+        let server = AppServer::new();
+        let first_owner = crate::server_request::ServerRequestOwner::Transport(ConnectionId(31));
+        let second_owner = crate::server_request::ServerRequestOwner::Transport(ConnectionId(32));
+        let pending = server.server_requests.register_for_owner(
+            first_owner,
+            METHOD_MCP_SERVER_ELICITATION_REQUEST,
+            Some(json!({ "threadId": "thread-1" })),
+        );
+        let request_id = pending.id().clone();
+        let closed = CancellationToken::new();
+
+        assert_eq!(
+            server
+                .server_requests
+                .cancel_owner(first_owner, "disconnected"),
+            0
+        );
+        assert_eq!(
+            server
+                .server_requests
+                .claim_owner_thread(second_owner, "thread-1")
+                .len(),
+            1
+        );
+        server.resolve_transport_server_request_response(
+            ConnectionId(32),
+            request_id,
+            json!({ "action": "decline" }),
+        );
+        closed.cancel();
+
+        let terminal = wait_for_outer_terminal(
+            pending,
+            closed,
+            "closed-after-response-domain-request".to_string(),
+        )
+        .await;
+        assert_eq!(terminal.owner, Some(second_owner));
+        assert_eq!(terminal.response, None);
     }
 }

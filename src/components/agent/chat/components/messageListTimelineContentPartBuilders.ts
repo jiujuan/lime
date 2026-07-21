@@ -1,6 +1,7 @@
 import type { AgentToolCallState } from "@/lib/api/agentProtocol";
 import type { AgentThreadItem } from "../types";
 import {
+  aggregateCanonicalPatchChanges,
   aggregateFileChanges,
   type FileChangesAggregate,
 } from "../utils/fileChangeSummary";
@@ -174,6 +175,18 @@ export function buildTimelinePatchContentPart(
   }
 
   const metadata = timelineItemMetadata(item, "thread_item_patch");
+  const canonicalAggregate = aggregateCanonicalPatchChanges(
+    item.changes ?? [],
+    resolveTimelineToolStatus(item.status),
+    item.file_status,
+  );
+  if (canonicalAggregate.fileCount > 0) {
+    return {
+      type: "file_changes_batch",
+      aggregate: canonicalAggregate,
+      metadata,
+    };
+  }
   const aggregate = aggregateFileChanges([buildTimelinePatchToolCall(item)]);
   if (aggregate.fileCount === 0) {
     const fallbackAggregate = buildTimelinePatchFallbackAggregate(item);
@@ -239,6 +252,7 @@ function buildTimelinePatchFallbackAggregate(
     truncated: false,
     source: "backend" as const,
     status: resolveTimelineToolStatus(item.status),
+    fileStatus: item.file_status,
   }));
 
   return {

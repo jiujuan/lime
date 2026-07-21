@@ -1,8 +1,8 @@
 use super::events::{visible_tool_output_text, CodexRolloutEvent, CodexToolCall, CodexToolPhase};
 use super::history_builder::tool_output_text;
 use agent_protocol::{
-    CollabAgentOperation, ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload,
-    ToolArgument, ToolOutput, TurnId,
+    AgentInput, CollabAgentOperation, ItemId, ItemStatus, SessionId, ThreadId, ThreadItem,
+    ThreadItemPayload, ToolArgument, ToolOutput, TurnId,
 };
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -142,6 +142,10 @@ fn lowered_message_item_events(
         .get("attachments")
         .cloned()
         .unwrap_or_else(|| json!([]));
+    let input = source
+        .get("input")
+        .and_then(|value| serde_json::from_value::<Vec<AgentInput>>(value.clone()).ok())
+        .unwrap_or_else(|| vec![AgentInput::text(text.clone())]);
     let phase = source.get("phase").cloned().unwrap_or(Value::Null);
     let client_id = source.get("clientId").cloned().unwrap_or(Value::Null);
     let source_event_type = source_provenance
@@ -212,7 +216,7 @@ fn lowered_message_item_events(
                     "ordinal": ordinal,
                     "role": "user",
                     "visibility": "user_visible",
-                    "input": {"text": text, "attachments": attachments},
+                    "input": input,
                     "content": {"kind": "inline_text", "text": text},
                     "attachments": attachments,
                 }),

@@ -588,10 +588,7 @@
   "agentChat.threadReliability.panel.actions.replaying": "再起動中",
   "agentChat.threadReliability.panel.actions.replayRequest": "リクエストを再起動",
   "agentChat.threadReliability.panel.actions.locatePendingRequest": "保留中リクエストへ移動",
-  "agentChat.threadReliability.panel.actions.resuming": "再開中",
-  "agentChat.threadReliability.panel.actions.resumeThread": "実行を再開",
-  "agentChat.threadReliability.panel.actions.promoteQueuedWithPosition": "{{position}} を優先実行",
-  "agentChat.threadReliability.panel.actions.promoteQueued": "キュー中ターンを優先実行",
+  "agentChat.threadReliability.panel.actions.promotingQueued": "キューを優先中",
   "agentChat.threadReliability.panel.requests.title": "今すぐ対応が必要なリクエスト",
   "agentChat.threadReliability.panel.submitted.title": "応答を送信済み。スレッドの続行待ち",
   "agentChat.threadReliability.panel.toast.clipboardUnsupported": "この環境ではクリップボードコピーをサポートしていません",
@@ -835,7 +832,7 @@
   "agentChat.threadReliability.view.recommendation.failedIncident": "高優先度 incident を先に処理してください",
   "agentChat.threadReliability.view.recommendation.approvalTimeout": "承認待ちが長すぎます。早めに処理するか、この実行を停止してください",
   "agentChat.threadReliability.view.recommendation.userInputTimeout": "ユーザー入力待ちが長すぎます。入力を追加してスレッドを続行してください",
-  "agentChat.threadReliability.view.recommendation.turnStuck": "現在のターンは長時間進捗がありません。停止してから実行を再開してください",
+  "agentChat.threadReliability.view.recommendation.turnStuck": "現在のターンは長時間進捗がありません。停止してから再送信してください",
   "agentChat.threadReliability.view.recommendation.providerError": "Provider 障害は通常再試行できます。後で再開するかターンを再送してください",
   "agentChat.threadReliability.view.recommendation.toolFailed": "再試行前に失敗したツールのパラメータまたは環境を確認してください",
   "agentChat.threadReliability.view.recommendation.interrupting": "現在の実行を停止中です。ランタイムが最終状態を反映するまで待ってください",
@@ -1196,5 +1193,8 @@
   "agentChat.toolCall.actionOverride.runScript.running": "スクリプト実行中",
   "agentChat.toolCall.actionOverride.getLog.failed": "ログ取得失敗",
   "agentChat.toolCall.actionOverride.getLog.completed": "ログ取得済み",
-  "agentChat.toolCall.actionOverride.getLog.running": "ログ取得中"
+  "agentChat.toolCall.actionOverride.getLog.running": "ログ取得中",
+  "agentChat.runtimeWarning.skillNotAvailable": "選択した Skill は現在利用できません。",
+  "agentChat.runtimeWarning.skillLoadFailed": "選択した Skill を読み込めませんでした。",
+  "agentChat.runtimeWarning.mentionNotAvailable": "選択した Mention を解決できませんでした。"
 }

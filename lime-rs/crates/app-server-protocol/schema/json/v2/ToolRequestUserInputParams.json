@@ -1,0 +1,90 @@
+{
+  "$defs": {
+    "ToolRequestUserInputOption": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "label"
+      ],
+      "type": "object"
+    },
+    "ToolRequestUserInputQuestion": {
+      "properties": {
+        "header": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isOther": {
+          "default": false,
+          "type": "boolean"
+        },
+        "isSecret": {
+          "default": false,
+          "type": "boolean"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/ToolRequestUserInputOption"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "question": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "header",
+        "id",
+        "question"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "autoResolutionMs": {
+      "default": null,
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "itemId": {
+      "type": "string"
+    },
+    "questions": {
+      "items": {
+        "$ref": "#/$defs/ToolRequestUserInputQuestion"
+      },
+      "type": "array"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "itemId",
+    "questions",
+    "threadId",
+    "turnId"
+  ],
+  "title": "ToolRequestUserInputParams",
+  "type": "object"
+}

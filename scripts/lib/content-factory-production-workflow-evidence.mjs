@@ -21,17 +21,7 @@ function parseJson(raw, fallback = null) {
 
 function workflowResumeCandidates(metadata) {
   if (!isRecord(metadata)) return [];
-  return [
-    metadata,
-    metadata.workflowResume,
-    metadata.workflow_resume,
-    metadata.workflowResumeLifecycle,
-    metadata.workflow_resume_lifecycle,
-    metadata.workerLifecycle,
-    metadata.worker_lifecycle,
-    metadata.pluginWorkflow,
-    metadata.plugin_workflow,
-  ].filter(isRecord);
+  return isRecord(metadata.workflowResume) ? [metadata.workflowResume] : [];
 }
 
 export function workflowResumeEvidenceFromMetadata(metadata) {
@@ -60,27 +50,8 @@ export function workflowResumeEvidenceFromMetadata(metadata) {
   return null;
 }
 
-function projectResumeDecision(decision) {
-  if (!isRecord(decision)) return null;
-  const actionId = readString(decision.actionId, decision.action_id);
-  const explicitDecision = readString(decision.decision);
-  const workflowResume = workflowResumeEvidenceFromMetadata(decision.metadata);
-  if (!actionId && !explicitDecision && !workflowResume) return null;
-  return {
-    actionId: actionId || null,
-    decision: explicitDecision || null,
-    workflowResume,
-  };
-}
-
 export function projectAppServerParamsForEvidence(params = {}) {
   if (!isRecord(params)) return {};
-  const resumeContract = isRecord(params.resumeContract)
-    ? params.resumeContract
-    : params.resume_contract;
-  const decisions = Array.isArray(resumeContract?.decisions)
-    ? resumeContract.decisions.map(projectResumeDecision).filter(Boolean)
-    : [];
   return {
     actionId: readString(params.actionId, params.action_id) || null,
     approved:
@@ -89,16 +60,8 @@ export function projectAppServerParamsForEvidence(params = {}) {
       typeof params.confirmed === "boolean" ? params.confirmed : undefined,
     decision: readString(params.decision) || null,
     requestId: readString(params.requestId, params.request_id) || null,
-    resumeContract:
-      decisions.length > 0
-        ? {
-            decisions,
-            resumeMode:
-              readString(resumeContract?.resumeMode, resumeContract?.mode) ||
-              null,
-          }
-        : null,
     sessionId: readString(params.sessionId, params.session_id) || null,
+    threadId: readString(params.threadId) || null,
     turnId: readString(params.turnId, params.turn_id) || null,
     workflowResume: workflowResumeEvidenceFromMetadata(params.metadata),
   };
@@ -136,69 +99,28 @@ function workflowResumeBindingFromRequest(request) {
       candidate.id,
     );
     if (workflowRunId && workflowKey && stepId && actionId && decision) {
-      return { actionId, decision, stepId, workflowKey, workflowRunId };
+      return {
+        actionId,
+        decision,
+        method: request.method,
+        stepId,
+        workflowKey,
+        workflowRunId,
+      };
     }
   }
   return null;
 }
 
-function workflowResumeBindingsFromResumeContract(request) {
-  const contract =
-    request?.params?.resumeContract || request?.params?.resume_contract;
-  if (!isRecord(contract) || !Array.isArray(contract.decisions)) return [];
-  return contract.decisions
-    .map((decision) => {
-      const actionId = readString(decision?.actionId, decision?.action_id);
-      const explicitDecision = readString(decision?.decision);
-      if (!actionId || !explicitDecision) return null;
-      for (const candidate of workflowResumeCandidates(decision?.metadata)) {
-        const workflowRunId = readString(
-          candidate.workflowRunId,
-          candidate.workflow_run_id,
-          candidate.runId,
-          candidate.run_id,
-        );
-        const workflowKey = readString(
-          candidate.workflowKey,
-          candidate.workflow_key,
-          candidate.key,
-          candidate.workflow,
-        );
-        const stepId = readString(
-          candidate.stepId,
-          candidate.step_id,
-          candidate.id,
-        );
-        if (workflowRunId && workflowKey && stepId) {
-          return {
-            actionId,
-            decision: explicitDecision,
-            stepId,
-            workflowKey,
-            workflowRunId,
-          };
-        }
-      }
-      return null;
-    })
-    .filter(Boolean);
-}
-
 export function workflowResumeBindingsFromTrace(traceEntries) {
-  const requests = traceEntries
+  return traceEntries
     .flatMap((entry) => entry.appServerRequests || [])
     .filter((request) =>
-      ["agentSession/action/respond", "agentSession/thread/resume"].includes(
+      ["agentSession/action/respond", "workflow/respond"].includes(
         request.method,
       ),
-    );
-  return requests
-    .flatMap((request) => [
-      ...(request.method === "agentSession/thread/resume"
-        ? workflowResumeBindingsFromResumeContract(request)
-        : []),
-      workflowResumeBindingFromRequest(request),
-    ])
+    )
+    .map(workflowResumeBindingFromRequest)
     .filter(Boolean);
 }
 
@@ -292,7 +214,7 @@ export function summarizeWorkflowResumeLifecycle(traceBindings, eventBindings) {
       matchingEvents.some(
         (event) => event.eventType === "workflow.run.resuming",
       ),
-    contractMetadataPresent: traceBindings.length > 0,
+    actionMetadataPresent: traceBindings.length > 0,
     decision: matched?.decision || null,
     stepId: matched?.stepId || null,
     workflowKey: matched?.workflowKey || null,

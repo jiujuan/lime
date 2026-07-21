@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::session_control::QueuedTurnResume;
 
 struct ReasoningHistoryBackend;
 
@@ -13,7 +14,7 @@ impl ExecutionBackend for ReasoningHistoryBackend {
         sink.emit(RuntimeEvent::new(
             "reasoning.delta",
             json!({
-                "text": format!("reasoning：{}", request.input.text),
+                "text": format!("reasoning：{}", request.input.concat_text()),
                 "metadata": {
                     "source": "reasoning"
                 }
@@ -22,7 +23,7 @@ impl ExecutionBackend for ReasoningHistoryBackend {
         sink.emit(RuntimeEvent::new(
             "message.delta",
             json!({
-                "text": format!("最终答复：{}", request.input.text),
+                "text": format!("最终答复：{}", request.input.concat_text()),
                 "phase": "final"
             }),
         ))?;
@@ -47,7 +48,7 @@ impl ExecutionBackend for ReasoningHistoryBackend {
 }
 
 #[tokio::test]
-async fn resume_hydrated_projection_history_read_preserves_messages_and_items() {
+async fn queued_resume_helper_hydrates_projection_history_without_mutation() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
@@ -109,16 +110,13 @@ async fn resume_hydrated_projection_history_read_preserves_messages_and_items() 
     assert_projection_history_detail(before.detail.as_ref().expect("before detail"), true);
 
     let resume = restarted_core
-        .resume_agent_session_thread(
-            AgentSessionThreadResumeParams {
-                session_id: "sess_resume_projection_history".to_string(),
-                resume_contract: None,
-            },
+        .resume_next_queued_turn_if_idle(
+            "sess_resume_projection_history",
             RuntimeHostContext::default(),
         )
         .await
         .expect("resume hydrated session");
-    assert!(!resume.response.resumed);
+    assert!(matches!(resume, QueuedTurnResume::Empty));
 
     let after = restarted_core
         .read_session_current(AgentSessionReadParams {

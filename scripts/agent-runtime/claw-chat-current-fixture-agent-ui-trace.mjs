@@ -157,6 +157,12 @@ function compactTraceEvents(events) {
               : typeof metrics.w3cTraceparent === "string"
                 ? metrics.w3cTraceparent
                 : null;
+          const elapsedMs = finiteNumber(
+            metrics.elapsed_ms ?? metrics.elapsedMs,
+          );
+          const serverEventEmittedAt = finiteNumber(
+            metrics.server_event_emitted_at ?? metrics.serverEventEmittedAt,
+          );
           return {
             seq: typeof event?.seq === "number" ? event.seq : null,
             checkpoint:
@@ -171,6 +177,8 @@ function compactTraceEvents(events) {
               typeof event?.redaction?.mode === "string"
                 ? event.redaction.mode
                 : null,
+            elapsedMs,
+            serverEventEmittedAt,
             w3cTraceId,
             hasW3cTraceparent:
               typeof w3cTraceparent === "string" &&
@@ -234,7 +242,7 @@ function compactSupportBundleWithTrace(result) {
   };
 }
 
-function summarizeTraceEvidence({
+export function summarizeTraceEvidence({
   listResult,
   readResult,
   exportResult,
@@ -247,6 +255,16 @@ function summarizeTraceEvidence({
     compactTraceSummary(readResult?.trace) ?? traces[0] ?? null;
   const events = compactTraceEvents(readResult?.events);
   const checkpoints = events.map((event) => event.checkpoint).filter(Boolean);
+  const providerFirstTextDelta = events.find(
+    (event) => event.checkpoint === "provider.first_text_delta.received",
+  );
+  const appServerMessageDelta = events.find(
+    (event) => event.checkpoint === "app_server.message_delta.emitted",
+  );
+  const providerWaitMs = finiteNumber(providerFirstTextDelta?.elapsedMs);
+  const serverEventEmittedAt = finiteNumber(
+    appServerMessageDelta?.serverEventEmittedAt,
+  );
   const evidence = {
     available: listResult?.available === true,
     traceCount: traces.length,
@@ -265,6 +283,10 @@ function summarizeTraceEvidence({
     hasAppServerMessageDelta: checkpoints.includes(
       "app_server.message_delta.emitted",
     ),
+    providerWaitMs,
+    hasProviderWaitMs: providerWaitMs !== null,
+    serverEventEmittedAt,
+    hasServerEventEmittedAt: serverEventEmittedAt !== null,
     hasW3cTraceContext: events.some(
       (event) =>
         typeof event.w3cTraceId === "string" &&
@@ -382,6 +404,10 @@ export async function collectAppServerTraceEvidence(
             : null,
         hasProviderFirstTextDelta: false,
         hasAppServerMessageDelta: false,
+        providerWaitMs: null,
+        hasProviderWaitMs: false,
+        serverEventEmittedAt: null,
+        hasServerEventEmittedAt: false,
         hasW3cTraceContext: false,
         export: {
           available: false,
@@ -452,6 +478,10 @@ export async function collectAppServerTraceEvidence(
       redactionMode: null,
       hasProviderFirstTextDelta: false,
       hasAppServerMessageDelta: false,
+      providerWaitMs: null,
+      hasProviderWaitMs: false,
+      serverEventEmittedAt: null,
+      hasServerEventEmittedAt: false,
       hasW3cTraceContext: false,
       export: {
         available: false,

@@ -25,6 +25,9 @@ pub struct ClientCapabilities {
     pub event_methods: Vec<String>,
     #[serde(default)]
     pub experimental: bool,
+    /// Exact notification method names suppressed for this connection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opt_out_notification_methods: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

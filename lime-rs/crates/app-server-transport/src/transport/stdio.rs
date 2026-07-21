@@ -62,6 +62,7 @@ where
             connection_id,
             origin: ConnectionOrigin::Stdio,
             writer: writer_tx,
+            disconnect_sender: None,
         })
         .await
         .map_err(|_| {
@@ -233,6 +234,7 @@ mod tests {
                 connection_id,
                 origin: ConnectionOrigin::Stdio,
                 writer,
+                ..
             } => (connection_id, writer),
             other => panic!("expected opened event, got {other:?}"),
         };

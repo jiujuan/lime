@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "CollaborationMode": {
+      "description": "Collaboration mode for a session or turn.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/ModeKind"
+        },
+        "settings": {
+          "$ref": "#/$defs/CollaborationModeSettings"
+        }
+      },
+      "required": [
+        "mode",
+        "settings"
+      ],
+      "type": "object"
+    },
+    "CollaborationModeSettings": {
+      "description": "Collaboration mode settings copied from the Codex protocol shape.",
+      "properties": {
+        "developer_instructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "type": "object"
+    },
+    "ModeKind": {
+      "description": "Initial collaboration mode for a turn or session.",
+      "enum": [
+        "default",
+        "plan"
+      ],
+      "type": "string"
+    },
+    "ThreadSettings": {
+      "properties": {
+        "activePermissionProfile": true,
+        "approvalPolicy": true,
+        "approvalsReviewer": true,
+        "collaborationMode": {
+          "$ref": "#/$defs/CollaborationMode"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "effort": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "modelProvider": {
+          "type": "string"
+        },
+        "personality": true,
+        "sandboxPolicy": true,
+        "serviceTier": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "summary": true
+      },
+      "required": [
+        "approvalPolicy",
+        "approvalsReviewer",
+        "collaborationMode",
+        "cwd",
+        "model",
+        "modelProvider",
+        "sandboxPolicy"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "threadId": {
+      "type": "string"
+    },
+    "threadSettings": {
+      "$ref": "#/$defs/ThreadSettings"
+    }
+  },
+  "required": [
+    "threadId",
+    "threadSettings"
+  ],
+  "title": "ThreadSettingsUpdatedNotification",
+  "type": "object"
+}

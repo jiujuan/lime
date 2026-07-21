@@ -1,0 +1,378 @@
+import type {
+  AppServerAgentEvent,
+  AppServerJsonRpcNotification,
+} from "@/lib/api/appServer";
+import { readCanonicalThreadItem } from "./appServerCanonicalItemReader";
+
+const DIRECT_V2_NOTIFICATION_METHODS = new Set([
+  "thread/started",
+  "turn/started",
+  "turn/completed",
+  "item/started",
+  "item/completed",
+  "item/agentMessage/delta",
+  "thread/tokenUsage/updated",
+]);
+
+export type AppServerV2NotificationRoute = {
+  itemId?: string;
+  terminal: boolean;
+  threadId: string;
+  turnId?: string;
+};
+
+export function isAppServerV2Notification(
+  notification: AppServerJsonRpcNotification,
+): boolean {
+  return readAppServerV2NotificationRoute(notification) !== null;
+}
+
+export function readAppServerV2NotificationRoute(
+  notification: AppServerJsonRpcNotification,
+): AppServerV2NotificationRoute | null {
+  if (!DIRECT_V2_NOTIFICATION_METHODS.has(notification.method)) {
+    return null;
+  }
+
+  const params = asRecord(notification.params);
+  if (!params) {
+    return null;
+  }
+
+  switch (notification.method) {
+    case "thread/started": {
+      const thread = asRecord(params.thread);
+      const threadId = readString(thread, "id");
+      return threadId ? { terminal: false, threadId } : null;
+    }
+    case "turn/started":
+    case "turn/completed": {
+      const threadId = readString(params, "threadId");
+      const turn = asRecord(params.turn);
+      const turnId = readString(turn, "id");
+      const status = readString(turn, "status");
+      const validStatus =
+        notification.method === "turn/started"
+          ? status === "inProgress"
+          : status === "completed" ||
+            status === "failed" ||
+            status === "interrupted";
+      return threadId && turnId && validStatus
+        ? {
+            terminal: notification.method === "turn/completed",
+            threadId,
+            turnId,
+          }
+        : null;
+    }
+    case "item/started":
+    case "item/completed": {
+      const threadId = readString(params, "threadId");
+      const turnId = readString(params, "turnId");
+      const item = asRecord(params.item);
+      const itemId = readString(item, "id");
+      const timestampKey =
+        notification.method === "item/started"
+          ? "startedAtMs"
+          : "completedAtMs";
+      const timestampMs = readFiniteNumber(params, timestampKey);
+      return threadId && turnId && itemId && timestampMs !== undefined
+        ? { itemId, terminal: false, threadId, turnId }
+        : null;
+    }
+    case "item/agentMessage/delta": {
+      const threadId = readString(params, "threadId");
+      const turnId = readString(params, "turnId");
+      const itemId = readString(params, "itemId");
+      return threadId && turnId && itemId && typeof params.delta === "string"
+        ? { itemId, terminal: false, threadId, turnId }
+        : null;
+    }
+    case "thread/tokenUsage/updated": {
+      const threadId = readString(params, "threadId");
+      const turnId = readString(params, "turnId");
+      const tokenUsage = asRecord(params.tokenUsage);
+      const last = asRecord(tokenUsage?.last);
+      return threadId && turnId && last
+        ? { terminal: false, threadId, turnId }
+        : null;
+    }
+    default:
+      return null;
+  }
+}
+
+export function projectAppServerV2NotificationPayload(
+  notification: AppServerJsonRpcNotification,
+): Record<string, unknown> | null {
+  const route = readAppServerV2NotificationRoute(notification);
+  const params = asRecord(notification.params);
+  if (!route || !params) {
+    return null;
+  }
+
+  const receivedAtMs = Date.now();
+  const emittedAtMs = notificationTimestampMs(notification.method, params);
+  const timestamp = timestampFromMs(emittedAtMs ?? receivedAtMs);
+  const basePayload = {
+    renderer_event_received_at: receivedAtMs,
+    server_event_emitted_at: emittedAtMs ?? null,
+    session_id: route.threadId,
+    thread_id: route.threadId,
+    timestamp,
+    ...(route.turnId ? { turn_id: route.turnId } : {}),
+  };
+
+  switch (notification.method) {
+    case "thread/started":
+      return {
+        ...basePayload,
+        type: "thread_started",
+      };
+    case "turn/started":
+    case "turn/completed": {
+      const sourceTurn = asRecord(params.turn);
+      const turn = projectTurn(sourceTurn, route, timestamp);
+      if (!turn) {
+        return null;
+      }
+      const text =
+        notification.method === "turn/completed"
+          ? completedTurnFinalAnswerText(sourceTurn)
+          : undefined;
+      return {
+        ...basePayload,
+        type: turnEventType(turn.status),
+        turn,
+        ...(text ? { text } : {}),
+      };
+    }
+    case "item/started":
+    case "item/completed": {
+      const itemRecord = asRecord(params.item);
+      if (!itemRecord || !route.turnId) {
+        return null;
+      }
+      const sequence = Math.max(0, Math.trunc(emittedAtMs ?? receivedAtMs));
+      const event: AppServerAgentEvent = {
+        eventId: "direct-v2",
+        payload: params,
+        sequence,
+        sessionId: route.threadId,
+        threadId: route.threadId,
+        timestamp,
+        turnId: route.turnId,
+        type:
+          notification.method === "item/started"
+            ? "item.started"
+            : "item.completed",
+      };
+      const item = readCanonicalThreadItem(itemRecord, event);
+      if (!item) {
+        return null;
+      }
+      return {
+        ...basePayload,
+        sequence,
+        type:
+          notification.method === "item/started"
+            ? "item_started"
+            : "item_completed",
+        item,
+      };
+    }
+    case "item/agentMessage/delta":
+      return {
+        ...basePayload,
+        type: "text_delta",
+        text: params.delta,
+        itemId: route.itemId,
+        item_id: route.itemId,
+      };
+    case "thread/tokenUsage/updated": {
+      const tokenUsage = asRecord(params.tokenUsage);
+      const last = asRecord(tokenUsage?.last);
+      if (!last) {
+        return null;
+      }
+      const inputTokens = readFiniteNumber(last, "inputTokens");
+      const outputTokens = readFiniteNumber(last, "outputTokens");
+      if (inputTokens === undefined || outputTokens === undefined) {
+        return null;
+      }
+      return {
+        ...basePayload,
+        type: "token_usage_updated",
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cached_input_tokens: readFiniteNumber(last, "cachedInputTokens"),
+        },
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+function projectTurn(
+  turn: Record<string, unknown> | undefined,
+  route: AppServerV2NotificationRoute,
+  fallbackTimestamp: string,
+): Record<string, unknown> | null {
+  const id = readString(turn, "id");
+  const status = readString(turn, "status");
+  if (!turn || !id || !status || id !== route.turnId) {
+    return null;
+  }
+
+  const projectedStatus = turnStatus(status);
+  if (!projectedStatus) {
+    return null;
+  }
+  const startedAt = timestampFromUnixSeconds(
+    readFiniteNumber(turn, "startedAt"),
+  );
+  const completedAt = timestampFromUnixSeconds(
+    readFiniteNumber(turn, "completedAt"),
+  );
+  const error = asRecord(turn.error);
+  const startedTimestamp = startedAt ?? completedAt ?? fallbackTimestamp;
+  const completedTimestamp =
+    projectedStatus === "running"
+      ? undefined
+      : (completedAt ?? fallbackTimestamp);
+
+  return {
+    id,
+    thread_id: route.threadId,
+    prompt_text: "",
+    status: projectedStatus,
+    started_at: startedTimestamp,
+    ...(completedTimestamp ? { completed_at: completedTimestamp } : {}),
+    error_message:
+      readString(error, "message") ??
+      (projectedStatus === "failed" ? "App Server turn failed" : undefined),
+    created_at: startedTimestamp,
+    updated_at: completedTimestamp ?? startedTimestamp,
+  };
+}
+
+function notificationTimestampMs(
+  method: string,
+  params: Record<string, unknown>,
+): number | undefined {
+  if (method === "thread/started") {
+    return unixSecondsToMs(
+      readFiniteNumber(asRecord(params.thread), "createdAt"),
+    );
+  }
+  if (method === "turn/started" || method === "turn/completed") {
+    const turn = asRecord(params.turn);
+    return unixSecondsToMs(
+      readFiniteNumber(
+        turn,
+        method === "turn/started" ? "startedAt" : "completedAt",
+      ),
+    );
+  }
+  if (method === "item/started") {
+    return readFiniteNumber(params, "startedAtMs");
+  }
+  if (method === "item/completed") {
+    return readFiniteNumber(params, "completedAtMs");
+  }
+  return undefined;
+}
+
+function turnStatus(status: string): string | undefined {
+  switch (status) {
+    case "inProgress":
+      return "running";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "interrupted":
+      return "canceled";
+    default:
+      return undefined;
+  }
+}
+
+function turnEventType(status: unknown): string {
+  switch (status) {
+    case "completed":
+      return "turn_completed";
+    case "failed":
+      return "turn_failed";
+    case "canceled":
+      return "turn_canceled";
+    default:
+      return "turn_started";
+  }
+}
+
+function completedTurnFinalAnswerText(
+  turn: Record<string, unknown> | undefined,
+): string | undefined {
+  const items = Array.isArray(turn?.items) ? turn.items : [];
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = asRecord(items[index]);
+    if (readString(item, "type") !== "agentMessage") {
+      continue;
+    }
+    const phase = readString(item, "phase")?.trim().toLowerCase();
+    if (phase !== "final_answer" && phase !== "final") {
+      continue;
+    }
+    const text = readString(item, "text");
+    if (text) {
+      return text;
+    }
+  }
+  return undefined;
+}
+
+function timestampFromUnixSeconds(
+  value: number | undefined,
+): string | undefined {
+  return value === undefined ? undefined : timestampFromMs(value * 1_000);
+}
+
+function unixSecondsToMs(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : value * 1_000;
+}
+
+function timestampFromMs(value: number): string {
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime())
+    ? new Date(0).toISOString()
+    : timestamp.toISOString();
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readString(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
+function readFiniteNumber(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}

@@ -1,8 +1,6 @@
 import {
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 
 const CONTENT_FACTORY_APP_ID = "content-factory-app";
@@ -15,29 +13,30 @@ const CONTENT_FACTORY_ARTICLE_WORKSPACE_STORYBOARD_ARTIFACT_ID =
 const CONTENT_FACTORY_ARTICLE_WORKSPACE_CHECKLIST_ARTIFACT_ID =
   "artifact-delivery-checklist";
 
-export function buildContentFactoryWorkspacePatch(workspace) {
+export function buildContentFactoryWorkspacePatch(workspace, identity) {
+  const { sessionId, workerTurnId, workerTaskId } = identity;
   return {
     schemaVersion: "article-workspace.v1",
     appId: CONTENT_FACTORY_APP_ID,
-    sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+    sessionId,
     workspaceId: workspace.workspaceId,
     primaryObjectRef: {
       appId: CONTENT_FACTORY_APP_ID,
       kind: "articleDraft",
       id: ARTICLE_OBJECT_ID,
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId,
       artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID],
-      sourceTurnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
-      sourceTaskId: "article_job_1",
+      sourceTurnId: workerTurnId,
+      sourceTaskId: workerTaskId,
     },
     selectedObjectRef: {
       appId: CONTENT_FACTORY_APP_ID,
       kind: "articleDraft",
       id: ARTICLE_OBJECT_ID,
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId,
       artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID],
-      sourceTurnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
-      sourceTaskId: "article_job_1",
+      sourceTurnId: workerTurnId,
+      sourceTaskId: workerTaskId,
     },
     objects: [
       {
@@ -45,10 +44,10 @@ export function buildContentFactoryWorkspacePatch(workspace) {
           appId: CONTENT_FACTORY_APP_ID,
           kind: "articleDraft",
           id: ARTICLE_OBJECT_ID,
-          sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+          sessionId,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID],
-          sourceTurnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
-          sourceTaskId: "article_job_1",
+          sourceTurnId: workerTurnId,
+          sourceTaskId: workerTaskId,
         },
         title: "公众号文章草稿",
         status: "ready",
@@ -56,8 +55,8 @@ export function buildContentFactoryWorkspacePatch(workspace) {
         previewArtifactId: CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
         source: {
           taskKind: "content.article.generate",
-          taskId: "article_job_1",
-          turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+          taskId: workerTaskId,
+          turnId: workerTurnId,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID],
           markdown:
             "# 内容工厂首版文章\n\n这是由 Plugin worker 写回的公众号文章草稿。",
@@ -127,9 +126,9 @@ export function buildContentFactoryWorkspacePatch(workspace) {
           appId: CONTENT_FACTORY_APP_ID,
           kind: "imageGenerationSet",
           id: IMAGE_SET_OBJECT_ID,
-          sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+          sessionId,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID],
-          sourceTurnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+          sourceTurnId: workerTurnId,
           sourceTaskId: "image_job_1",
         },
         title: "配图组",
@@ -139,7 +138,7 @@ export function buildContentFactoryWorkspacePatch(workspace) {
         source: {
           taskKind: "content.image.generate",
           taskId: "image_job_1",
-          turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+          turnId: workerTurnId,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID],
           images: [
             {
@@ -157,9 +156,9 @@ export function buildContentFactoryWorkspacePatch(workspace) {
           appId: CONTENT_FACTORY_APP_ID,
           kind: "videoStoryboard",
           id: STORYBOARD_OBJECT_ID,
-          sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+          sessionId,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_STORYBOARD_ARTIFACT_ID],
-          sourceTurnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+          sourceTurnId: workerTurnId,
           sourceTaskId: "storyboard_job_1",
         },
         title: "视频分镜",
@@ -170,7 +169,7 @@ export function buildContentFactoryWorkspacePatch(workspace) {
         source: {
           taskKind: "content.video.storyboard.generate",
           taskId: "storyboard_job_1",
-          turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+          turnId: workerTurnId,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_STORYBOARD_ARTIFACT_ID],
           rendererContract: {
             pluginId: CONTENT_FACTORY_APP_ID,
@@ -205,9 +204,9 @@ export function buildContentFactoryWorkspacePatch(workspace) {
           appId: CONTENT_FACTORY_APP_ID,
           kind: "deliveryChecklist",
           id: CHECKLIST_OBJECT_ID,
-          sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+          sessionId,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_CHECKLIST_ARTIFACT_ID],
-          sourceTurnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+          sourceTurnId: workerTurnId,
           sourceTaskId: "delivery_checklist_job_1",
         },
         title: "交付检查清单",
@@ -218,7 +217,7 @@ export function buildContentFactoryWorkspacePatch(workspace) {
         source: {
           taskKind: "content.delivery.review",
           taskId: "delivery_checklist_job_1",
-          turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+          turnId: workerTurnId,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_CHECKLIST_ARTIFACT_ID],
           items: [
             {
@@ -247,17 +246,21 @@ export function buildContentFactoryWorkspacePatch(workspace) {
   };
 }
 
-export function buildContentFactoryActionResultWorkspacePatch(workspace) {
+export function buildContentFactoryActionResultWorkspacePatch(
+  workspace,
+  identity,
+) {
+  const { sessionId, workerTurnId } = identity;
   return {
     schemaVersion: "article-workspace.v1",
     appId: CONTENT_FACTORY_APP_ID,
-    sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+    sessionId,
     workspaceId: workspace.workspaceId,
     selectedObjectRef: {
       appId: CONTENT_FACTORY_APP_ID,
       kind: "imageGenerationSet",
       id: IMAGE_SET_OBJECT_ID,
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId,
     },
     objects: [
       {
@@ -265,9 +268,9 @@ export function buildContentFactoryActionResultWorkspacePatch(workspace) {
           appId: CONTENT_FACTORY_APP_ID,
           kind: "imageGenerationSet",
           id: IMAGE_SET_OBJECT_ID,
-          sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+          sessionId,
           artifactIds: ["artifact-image-regenerated"],
-          sourceTurnId: "turn_content_factory_article_workspace_action",
+          sourceTurnId: workerTurnId,
           sourceTaskId: "image_regenerate_job_1",
           version: "2",
         },
@@ -278,7 +281,7 @@ export function buildContentFactoryActionResultWorkspacePatch(workspace) {
         source: {
           taskKind: "content.image.generate",
           taskId: "image_regenerate_job_1",
-          turnId: "turn_content_factory_article_workspace_action",
+          turnId: workerTurnId,
           artifactIds: ["artifact-image-regenerated"],
           images: [
             {

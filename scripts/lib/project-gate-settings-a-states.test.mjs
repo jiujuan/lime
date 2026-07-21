@@ -14,22 +14,27 @@ function payload(message) {
 }
 
 describe("project Gate SETTINGS-01 component-state fixture", () => {
-  it("only intercepts archived agentSession/list reads", () => {
+  it("only intercepts archived thread/list reads", () => {
     const archived = {
       id: 7,
-      method: "agentSession/list",
-      params: { archivedOnly: true },
+      method: "thread/list",
+      params: { archived: true },
     };
 
     expect(readSettingsGateAStateRequest(payload(archived))).toEqual(archived);
     expect(
       readSettingsGateAStateRequest(
-        payload({ id: 8, method: "agentSession/list", params: {} }),
+        payload({ id: 8, method: "thread/list", params: { archived: false } }),
       ),
     ).toBeNull();
     expect(
       readSettingsGateAStateRequest(
-        payload({ id: 9, method: "agentSession/read", params: {} }),
+        payload({ id: 9, method: "thread/list", params: { archivedOnly: true } }),
+      ),
+    ).toBeNull();
+    expect(
+      readSettingsGateAStateRequest(
+        payload({ id: 10, method: "thread/read", params: {} }),
       ),
     ).toBeNull();
   });
@@ -48,7 +53,7 @@ describe("project Gate SETTINGS-01 component-state fixture", () => {
     const request = { id: 42 };
     const resultEnvelope = JSON.parse(
       buildSettingsGateAStateBridgeResponse(request, {
-        result: { sessions: [] },
+        result: { data: [], nextCursor: null },
       }),
     );
     const errorEnvelope = JSON.parse(
@@ -60,7 +65,7 @@ describe("project Gate SETTINGS-01 component-state fixture", () => {
     expect(JSON.parse(resultEnvelope.result.lines[0])).toEqual({
       jsonrpc: "2.0",
       id: 42,
-      result: { sessions: [] },
+      result: { data: [], nextCursor: null },
     });
     expect(JSON.parse(errorEnvelope.result.lines[0])).toEqual({
       jsonrpc: "2.0",

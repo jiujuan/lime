@@ -113,6 +113,44 @@ describe("imageTaskPreviewRuntimeMessages", () => {
     expect(messages[0].isThinking).not.toBe(true);
   });
 
+  it("恢复 snapshot 自带 runtime turn 时应合并回原 assistant 消息", () => {
+    const runtimeMessage = createMessage({
+      id: "assistant-runtime",
+      runtimeTurnId: "turn-restore",
+      usage: {
+        input_tokens: 31_000,
+        output_tokens: 0,
+      },
+    });
+    const restoredPreviewMessage = createMessage({
+      id: "image-workbench:task-restore:assistant",
+      runtimeTurnId: "turn-restore",
+      imageWorkbenchPreview: createPreview({
+        taskId: "task-restore",
+        status: "complete",
+      }),
+    });
+
+    const messages = upsertPreviewMessage(
+      [runtimeMessage],
+      restoredPreviewMessage,
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: "assistant-runtime",
+      runtimeTurnId: "turn-restore",
+      usage: {
+        input_tokens: 31_000,
+        output_tokens: 0,
+      },
+      imageWorkbenchPreview: {
+        taskId: "task-restore",
+        status: "complete",
+      },
+    });
+  });
+
   it("应保留已有过程 content parts，并合并 thinking 与 tool calls", () => {
     const existingMessage = createMessage({
       id: "assistant-runtime",
@@ -175,6 +213,57 @@ describe("imageTaskPreviewRuntimeMessages", () => {
     ]);
     expect(merged.thinkingContent).toBe("第一步\n\n第二步");
     expect(merged.imageWorkbenchPreview?.status).toBe("complete");
+  });
+
+  it("preview shell 与 runtime 消息合并时应保留后到的 token usage", () => {
+    const previewShell = createMessage({
+      id: "image-workbench:task-1:assistant",
+      imageWorkbenchPreview: createPreview({ status: "complete" }),
+    });
+    const runtimeMessage = createMessage({
+      id: "assistant-runtime",
+      runtimeTurnId: "turn-1",
+      usage: {
+        input_tokens: 31_000,
+        output_tokens: 0,
+      },
+      imageWorkbenchPreview: createPreview({ status: "complete" }),
+    });
+
+    const merged = mergeImageWorkbenchPreviewMessage({
+      existingMessage: previewShell,
+      nextMessage: runtimeMessage,
+    });
+
+    expect(merged.usage).toEqual({
+      input_tokens: 31_000,
+      output_tokens: 0,
+    });
+  });
+
+  it("preview shell 与 runtime snapshot 合并时应保留后到的 runtime turn", () => {
+    const previewShell = createMessage({
+      id: "image-workbench:task-1:assistant",
+      imageWorkbenchPreview: createPreview({
+        status: "complete",
+        caption: null,
+      }),
+    });
+    const runtimeSnapshot = createMessage({
+      id: "image-workbench:task-1:assistant",
+      runtimeTurnId: "turn-1",
+      imageWorkbenchPreview: createPreview({
+        status: "complete",
+        caption: null,
+      }),
+    });
+
+    const merged = mergeImageWorkbenchPreviewMessage({
+      existingMessage: previewShell,
+      nextMessage: runtimeSnapshot,
+    });
+
+    expect(merged.runtimeTurnId).toBe("turn-1");
   });
 
   it("完成态 preview 没有 caption 时应保留 presentation 生成的结果描述", () => {

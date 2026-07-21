@@ -58,8 +58,8 @@ export const REQUIRED_BACKEND_METHODS = [
   "conversationImport/thread/preview",
   "conversationImport/thread/commit",
   "conversationImport/job/read",
-  "agentSession/read",
-  "agentSession/turn/start",
+  "thread/read",
+  "turn/start",
 ];
 
 export function createClickThroughFixtureRuntimeEnv() {

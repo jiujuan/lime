@@ -174,8 +174,8 @@ describe("codex import click-through Electron fixture smoke guard", () => {
     expect(content).toContain('"conversationImport/thread/preview"');
     expect(content).toContain('"conversationImport/thread/commit"');
     expect(content).toContain('"conversationImport/job/read"');
-    expect(content).toContain('"agentSession/read"');
-    expect(content).toContain('"agentSession/turn/start"');
+    expect(content).toContain('"thread/read"');
+    expect(content).toContain('"turn/start"');
     expect(content).toContain("extractInvokeTraceMethods");
     expect(content).toContain("REQUIRED_BACKEND_METHODS");
     expect(content).toContain("LEGACY_CONTINUATION_SENTINEL");

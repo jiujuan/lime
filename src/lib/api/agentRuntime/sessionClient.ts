@@ -55,7 +55,13 @@ export const AGENT_RUNTIME_SESSIONS_CHANGED_EVENT =
   "lime:agent-runtime-sessions-changed";
 
 export interface AgentRuntimeSessionsChangedDetail {
-  reason: "created" | "updated" | "archived" | "deleted" | "external";
+  reason:
+    | "created"
+    | "updated"
+    | "archived"
+    | "unarchived"
+    | "deleted"
+    | "external";
   sessionId?: string;
   workspaceId?: string;
 }
@@ -311,7 +317,6 @@ export function createSessionClient({
         durationMs: Date.now() - startedAt,
         itemsCount: normalizedSessionDetail.items?.length ?? 0,
         messagesCount: normalizedSessionDetail.messages?.length ?? 0,
-        queuedTurnsCount: normalizedSessionDetail.queued_turns?.length ?? 0,
         turnsCount: normalizedSessionDetail.turns?.length ?? 0,
       });
       logAgentDebug("AgentApi", "runtimeGetSession.success", {
@@ -321,7 +326,6 @@ export function createSessionClient({
         historyBeforeMessageId: historyBeforeMessageId ?? null,
         itemsCount: normalizedSessionDetail.items?.length ?? 0,
         messagesCount: normalizedSessionDetail.messages?.length ?? 0,
-        queuedTurnsCount: normalizedSessionDetail.queued_turns?.length ?? 0,
         resumeSessionStartHooks,
         sessionId,
         source,
@@ -368,15 +372,22 @@ export function createSessionClient({
     });
   }
 
-  async function archiveManyAgentRuntimeSessions(
-    sessionIds: string[],
-  ): Promise<AgentSessionInfo[]> {
-    const sessions =
-      await appServerSessionClient.archiveManyAgentRuntimeSessions(sessionIds);
+  async function archiveAgentRuntimeSession(sessionId: string): Promise<void> {
+    await appServerSessionClient.archiveAgentRuntimeSession(sessionId);
     notifyAgentRuntimeSessionsChanged({
       reason: "archived",
+      sessionId: sessionId.trim(),
     });
-    return sessions;
+  }
+
+  async function unarchiveAgentRuntimeSession(
+    sessionId: string,
+  ): Promise<void> {
+    await appServerSessionClient.unarchiveAgentRuntimeSession(sessionId);
+    notifyAgentRuntimeSessionsChanged({
+      reason: "unarchived",
+      sessionId: sessionId.trim(),
+    });
   }
 
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
@@ -388,20 +399,22 @@ export function createSessionClient({
   }
 
   return {
-    archiveManyAgentRuntimeSessions,
+    archiveAgentRuntimeSession,
     createAgentRuntimeSession,
     deleteAgentRuntimeSession,
     getAgentRuntimeSession,
     listAgentRuntimeSessions,
+    unarchiveAgentRuntimeSession,
     updateAgentRuntimeSession,
   };
 }
 
 export const {
-  archiveManyAgentRuntimeSessions,
+  archiveAgentRuntimeSession,
   createAgentRuntimeSession,
   deleteAgentRuntimeSession,
   getAgentRuntimeSession,
   listAgentRuntimeSessions,
+  unarchiveAgentRuntimeSession,
   updateAgentRuntimeSession,
 } = createSessionClient();

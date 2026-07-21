@@ -142,6 +142,38 @@ pub fn select_agent_skills_by_name_candidates(
     selections
 }
 
+pub fn select_structured_agent_skill(
+    name: &str,
+    path: &Path,
+    snapshot: &AgentSkillSnapshot,
+) -> Option<AgentSkillSelection> {
+    let skill = find_skill_by_path(snapshot, path)?;
+    Some(AgentSkillSelection {
+        locator: agent_skill_body_locator_from_metadata(skill),
+        trigger: AgentSkillSelectionTrigger::SkillFilePath,
+        reason: format!("结构化 Skill `{name}` 显式引用 {}", path.display()),
+    })
+}
+
+pub fn select_mentioned_agent_skill(
+    name: &str,
+    path: &str,
+    snapshot: &AgentSkillSnapshot,
+) -> Option<AgentSkillSelection> {
+    let (path, trigger) = if path.starts_with("skill://") {
+        (parse_skill_uri(path)?, AgentSkillSelectionTrigger::SkillUri)
+    } else {
+        (
+            parse_skill_file_path(path)?,
+            AgentSkillSelectionTrigger::SkillFilePath,
+        )
+    };
+    let mut selection = select_structured_agent_skill(name, &path, snapshot)?;
+    selection.trigger = trigger;
+    selection.reason = format!("结构化 Mention `{name}` 显式引用 {}", path.display());
+    Some(selection)
+}
+
 pub fn select_implicit_agent_skills(
     user_input: &str,
     snapshot: &AgentSkillSnapshot,
@@ -706,6 +738,30 @@ mod tests {
             selections[0].trigger,
             AgentSkillSelectionTrigger::SkillFilePath
         );
+    }
+
+    #[test]
+    fn structured_selection_requires_an_enabled_snapshot_path() {
+        let root = TempDir::new().expect("root");
+        let skill_file = write_skill(root.path(), "analysis", "Analysis");
+        let mut snapshot = snapshot_from_root(root.path());
+
+        let selection = select_structured_agent_skill("wire-name", &skill_file, &snapshot)
+            .expect("structured selection");
+        assert_eq!(selection.locator.name, "analysis");
+        assert_eq!(
+            selection.locator.skill_file_path,
+            std::fs::canonicalize(&skill_file).expect("canonical skill path")
+        );
+
+        snapshot.skills[0].enabled = false;
+        assert!(select_structured_agent_skill("analysis", &skill_file, &snapshot).is_none());
+        assert!(select_structured_agent_skill(
+            "analysis",
+            &root.path().join("missing/SKILL.md"),
+            &snapshot,
+        )
+        .is_none());
     }
 
     #[test]

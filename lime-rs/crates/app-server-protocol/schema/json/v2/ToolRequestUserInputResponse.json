@@ -1,0 +1,32 @@
+{
+  "$defs": {
+    "ToolRequestUserInputAnswer": {
+      "properties": {
+        "answers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "answers"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "answers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ToolRequestUserInputAnswer"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "answers"
+  ],
+  "title": "ToolRequestUserInputResponse",
+  "type": "object"
+}

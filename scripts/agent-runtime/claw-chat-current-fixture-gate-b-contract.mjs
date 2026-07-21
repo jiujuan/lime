@@ -26,6 +26,14 @@ export function buildGateBContractEvidence({
       entry?.transport === "electron-ipc" &&
       entry?.status === "success",
   );
+  const successfulAppServerRequests = (
+    Array.isArray(appServerRequests) ? appServerRequests : []
+  ).filter(
+    (entry) =>
+      typeof entry?.method === "string" &&
+      entry.method.trim().length > 0 &&
+      !entry?.error,
+  );
   const legacyCommandHits = traces
     .map((entry) => entry?.command)
     .filter((command) => RETIRED_COMMANDS.has(command));
@@ -72,6 +80,10 @@ export function buildGateBContractEvidence({
     },
     appServerIpcHitCount: appServerIpcEntries.length,
     appServerIpcMethods: collectTraceRequestMethods(appServerIpcEntries),
+    appServerRequestCount: successfulAppServerRequests.length,
+    appServerRequestMethods: [
+      ...new Set(successfulAppServerRequests.map((entry) => entry.method)),
+    ].sort(),
     legacyCommandHitCount: legacyCommandHits.length,
     legacyCommands: [...new Set(legacyCommandHits)].sort(),
     mockFallbackHitCount: mockFallbackHits.length,

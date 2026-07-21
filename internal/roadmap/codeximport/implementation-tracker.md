@@ -1,8 +1,8 @@
 ---
 title: Codex 对话兼容实施跟踪
-status: active
+status: ready-for-gate
 owner: app-server-runtime
-updated: 2026-07-17
+updated: 2026-07-21
 ---
 
 # 实施跟踪
@@ -12,11 +12,11 @@ updated: 2026-07-17
 主目标：用 Codex canonical Thread / Turn / Item 语义重建历史，并让导入后续聊进入 Lime
 current tool executor。
 
-当前阶段：`S4 验证与架构确认`。
+当前阶段：`S4 候选门禁`。
 
-完成度：`99%`。导入 fidelity、普通/导入续聊同构、GUI 单轨、响应式单面板、有界真实样本 Gate B 与超大 rollout 后台导入均已完成；剩余为责任开发者架构确认。
+完成度：`99%`。导入 fidelity、普通/导入续聊同构、GUI 单轨、响应式单面板、有界真实样本 Gate B 与超大 rollout 后台导入均已完成；责任开发者架构确认已于 2026-07-21 记录。Windows 真实 Electron 路径证据仍是平台 follow-up，不在 macOS 候选中伪造。
 
-下一刀：由责任开发者完成架构确认；随后在 Windows runner 补路径与压缩历史的真实 Electron 证据。本机不伪造 Windows 平台证据。
+下一刀：冻结并复核 release candidate；随后在 Windows runner 补路径与压缩历史的真实 Electron 证据。本机不伪造 Windows 平台证据。
 
 ## 写集
 

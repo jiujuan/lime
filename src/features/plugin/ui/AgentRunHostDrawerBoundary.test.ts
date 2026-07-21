@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { describe, expect, it } from "vitest";
@@ -40,14 +40,11 @@ describe("AgentRunHostDrawer 边界", () => {
     expect(source).not.toContain("shouldRenderProjection ? (");
   });
 
-  it("退场中的 fallback 和 projection input enrichment 保持为独立小模块", () => {
-    const fallbackSource = readSource(FILES.fallback);
+  it("fallback 文件已删除，projection input enrichment 保持为独立小模块", () => {
     const projectionInputSource = readSource(FILES.projectionInput);
 
-    expect(lineCount(fallbackSource)).toBeLessThan(800);
+    expect(existsSync(resolve(process.cwd(), FILES.fallback))).toBe(false);
     expect(lineCount(projectionInputSource)).toBeLessThan(800);
-    expect(fallbackSource).toContain("InlineToolProcessStep");
-    expect(fallbackSource).toContain("MarkdownRenderer");
     expect(projectionInputSource).toContain("buildSharedProjectionInput");
   });
 });

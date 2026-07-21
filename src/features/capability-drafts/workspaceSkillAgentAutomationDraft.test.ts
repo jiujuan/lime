@@ -171,7 +171,7 @@ describe("workspaceSkillAgentAutomationDraft", () => {
         successCriteriaEvidence: "Completion depends on evidence.",
         successCriteriaRuntimeEnable: "Runtime enable must be explicit.",
         successCriteriaSubmitTurn:
-          "Use agentSession/turn/start current JSON-RPC.",
+          "Use turn/start current JSON-RPC.",
       },
     });
 
@@ -190,7 +190,7 @@ describe("workspaceSkillAgentAutomationDraft", () => {
         managed_objective: {
           objective: "Run 只读 CLI 报告 on schedule.",
           success_criteria: [
-            "Use agentSession/turn/start current JSON-RPC.",
+            "Use turn/start current JSON-RPC.",
             "Runtime enable must be explicit.",
             "Completion depends on evidence.",
             "Controlled GET evidence is required.",

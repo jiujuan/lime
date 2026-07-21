@@ -7,7 +7,8 @@ import {
 
 import {
   createAppServerClient,
-  type AppServerAgentSessionStartResponse,
+  type AppServerThreadStartParams,
+  type AppServerThreadStartResponse,
   type AppServerClient,
   type AppServerRequestResult,
 } from "@/lib/api/appServer";
@@ -15,7 +16,14 @@ import type { AgentRuntimeSessionResolver } from "./agentRuntimeCapabilityHost";
 
 type PluginRuntimeAppServerClient = Pick<
   AppServerClient,
-  "startSession" | "startTurn" | "readThread" | "cancelTurn" | "respondAction"
+  | "startSession"
+  | "startTurn"
+  | "steerTurn"
+  | "readThread"
+  | "updateThreadSettings"
+  | "setThreadMemoryMode"
+  | "cancelTurn"
+  | "respondAction"
 >;
 
 export interface PluginRuntimeHostOptions {
@@ -43,31 +51,16 @@ export function createPluginRuntimeSessionResolver(
   appServerClient: Pick<AppServerClient, "startSession">,
 ): AgentRuntimeSessionResolver {
   return async (request) => {
-    const response = await appServerClient.startSession({
-      appId: request.appId,
-      workspaceId: request.workspaceId,
-      businessObjectRef: {
-        kind: "plugin.task",
-        id: buildPluginRuntimeBusinessObjectId(request),
-        title: request.title || request.prompt || request.taskKind,
-        metadata: {
-          source: "plugin_runtime_page",
-          appId: request.appId,
-          entryKey: request.entryKey,
-          taskId: request.taskId,
-          taskKind: request.taskKind,
-          prompt: request.prompt,
-          metadata: request.metadata,
-        },
-      },
-    });
-    const sessionId = readSessionId(response);
-    if (!sessionId) {
+    const response = await appServerClient.startSession(
+      pluginThreadStartParams(request),
+    );
+    const identity = readThreadIdentity(response);
+    if (!identity) {
       throw new Error(
-        "agentSession/start did not return an Plugin runtime session",
+        "thread/start did not return a valid Plugin runtime identity",
       );
     }
-    return sessionId;
+    return identity;
   };
 }
 
@@ -80,21 +73,23 @@ export function createDefaultPluginRuntimeHostOptions(
   };
 }
 
-function buildPluginRuntimeBusinessObjectId(
+function pluginThreadStartParams(
   request: Parameters<AgentRuntimeSessionResolver>[0],
-): string {
-  const taskId = request.taskId?.trim();
-  if (taskId) {
-    return `${request.appId}:${taskId}`;
-  }
-  return `${request.appId}:${request.taskKind}:${Date.now()}`;
+): AppServerThreadStartParams {
+  return {
+    serviceName:
+      request.title?.trim() || request.prompt?.trim() || request.taskKind,
+    threadSource: "plugin",
+    historyMode: "paginated",
+  };
 }
 
-function readSessionId(
-  response: AppServerRequestResult<AppServerAgentSessionStartResponse>,
-): string | undefined {
-  const sessionId = response.result.session.sessionId?.trim();
-  return sessionId || undefined;
+function readThreadIdentity(
+  response: AppServerRequestResult<AppServerThreadStartResponse>,
+): { sessionId: string; threadId: string } | undefined {
+  const threadId = response.result.thread.id?.trim();
+  const sessionId = response.result.thread.sessionId?.trim();
+  return threadId && sessionId ? { sessionId, threadId } : undefined;
 }
 
 function createPluginRuntimeSessionGateway(
@@ -102,7 +97,12 @@ function createPluginRuntimeSessionGateway(
 ): AgentRuntimeSessionGateway {
   return {
     startTurn: (params) => appServerClient.startTurn(params),
+    steerTurn: (params) => appServerClient.steerTurn(params),
     readThread: (params) => appServerClient.readThread(params),
+    updateThreadSettings: (params) =>
+      appServerClient.updateThreadSettings(params),
+    setThreadMemoryMode: (params) =>
+      appServerClient.setThreadMemoryMode(params),
     cancelTurn: (params) => appServerClient.cancelTurn(params),
     respondAction: (params) => appServerClient.respondAction(params),
   };

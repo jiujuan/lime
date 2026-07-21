@@ -5,6 +5,7 @@
 
 use crate::types::ScheduledTask;
 use agent_protocol::turn_context::{TurnContextOverride, TurnOutputSchemaSource};
+use agent_protocol::{CollaborationMode, CollaborationModeSettings, ModeKind};
 use lime_agent::{
     merge_system_prompt_with_request_tool_policy,
     merge_system_prompt_with_runtime_agents_for_project, resolve_request_tool_policy_with_mode,
@@ -442,13 +443,30 @@ fn build_turn_context(
     });
     let output_schema_source = output_schema.as_ref().map(|_| TurnOutputSchemaSource::Turn);
 
+    let collaboration_mode =
+        string_at(&task.params, COLLABORATION_MODE_POINTERS).and_then(|mode| {
+            let mode = match mode.as_str() {
+                "plan" => ModeKind::Plan,
+                "default" => ModeKind::Default,
+                _ => return None,
+            };
+            Some(CollaborationMode {
+                mode,
+                settings: CollaborationModeSettings {
+                    model: task.model.clone(),
+                    reasoning_effort: reasoning_effort.clone(),
+                    developer_instructions: None,
+                },
+            })
+        });
+
     TurnContextOverride {
         cwd: working_dir,
         model: Some(task.model.clone()),
         effort: reasoning_effort,
         approval_policy: string_at(&task.params, APPROVAL_POLICY_POINTERS),
         sandbox_policy: string_at(&task.params, SANDBOX_POLICY_POINTERS),
-        collaboration_mode: string_at(&task.params, COLLABORATION_MODE_POINTERS),
+        collaboration_mode,
         user_visible_input_text: user_visible_input_text
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -620,7 +638,7 @@ mod tests {
             "reasoningEffort": "high",
             "approvalPolicy": "on-request",
             "sandboxPolicy": "workspace-write",
-            "collaborationMode": "solo",
+            "collaborationMode": "default",
             "systemPromptOverride": true,
             "maxTurns": 4,
             "outputSchema": {
@@ -648,7 +666,13 @@ mod tests {
             turn_context.sandbox_policy.as_deref(),
             Some("workspace-write")
         );
-        assert_eq!(turn_context.collaboration_mode.as_deref(), Some("solo"));
+        assert_eq!(
+            turn_context
+                .collaboration_mode
+                .as_ref()
+                .map(|mode| mode.mode),
+            Some(ModeKind::Default)
+        );
         assert_eq!(
             turn_context
                 .output_schema

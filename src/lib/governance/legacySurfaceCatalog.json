@@ -50,10 +50,189 @@
       "allowedPaths": []
     },
     {
+      "id": "frontend-image-search-retired-facade-surface",
+      "classification": "dead",
+      "description": "已删除的前端 Image Search fail-closed 空壳与正向测试；GUI 图片搜索没有 App Server current owner，不得恢复旧 Tauri facade，独立 lime_search_web_images Agent tool 不受影响",
+      "targets": [
+        "src/lib/api/imageSearch.ts",
+        "src/lib/api/imageSearch.test.ts",
+        "src/lib/api/imageSearch.diagnostic.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "frontend-open-url-redundant-helper-surface",
+      "classification": "dead",
+      "description": "已删除的 openUrl 重复转发 helper 与自身测试；外链唯一 current frontend owner 是 src/lib/api/externalUrl.ts",
+      "targets": ["src/lib/openUrl.ts", "src/lib/openUrl.test.ts"],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-context-layer-directory-surface",
+      "classification": "dead",
+      "description": "已删除的 SceneApp context layer 类型与 barrel；历史执行摘要只保留只读 payload 投影，不得恢复平行 context owner",
+      "targets": [
+        "src/lib/context-layer/index.ts",
+        "src/lib/context-layer/types.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "compact-right-panel-legacy-shell-surface",
+      "classification": "dead",
+      "description": "已删除的 compact right panel 事件、dock button 与 drawer header 旧壳；右侧用户界面继续由 current workspace/right surface 承接",
+      "targets": [
+        "src/lib/compactRightPanelEvents.ts",
+        "src/components/ui/compact-right-dock-button.tsx",
+        "src/components/ui/compact-right-drawer-header.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-generic-artifact-frame-shell-surface",
+      "classification": "dead",
+      "description": "已删除的通用 ArtifactFrame 旧壳；Agent Chat artifact frame 唯一 current owner 是 artifactFrameRegistry + 具体 renderer",
+      "targets": ["src/components/agent/chat/components/ArtifactFrame.tsx"],
+      "allowedPaths": []
+    },
+    {
+      "id": "artifact-fenced-response-parser-surface",
+      "classification": "dead",
+      "description": "已删除的前端 artifact/code fence response parser 与自身测试；结构化 artifact 只允许由 App Server item/artifact payload、artifact-document 与 renderer registry 承接",
+      "targets": [
+        "src/lib/artifact/parser.ts",
+        "src/lib/artifact/parser.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "static-system-provider-config-surface",
+      "classification": "dead",
+      "description": "已删除的静态 System Provider 预设、正向测试与旧 README；Provider catalog 唯一 current owner 是 App Server modelProvider/catalog/list",
+      "targets": [
+        "src/lib/config/README.md",
+        "src/lib/config/providers.ts",
+        "src/lib/config/providers.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "voice-unused-preview-device-ui-surface",
+      "classification": "dead",
+      "description": "已删除的 Voice live preview helper、麦克风选择组件与随机波形组件；录音与转写继续由 Inputbar dictation 和 App Server voiceTranscription current 主链承接",
+      "targets": [
+        "src/lib/voiceLivePreview.ts",
+        "src/lib/voiceLivePreview.test.ts",
+        "src/components/voice/MicrophoneTest.tsx",
+        "src/components/voice/VolumeWaveform.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "connect-relay-registry-disabled-hook-surface",
+      "classification": "dead",
+      "description": "已删除的 Relay registry 空列表禁用 Hook；Connect registry 只允许由 useDeepLink -> src/lib/api/connect.ts -> App Server 按需解析",
+      "targets": ["src/hooks/useRelayRegistry.ts"],
+      "allowedPaths": []
+    },
+    {
+      "id": "settings-hotkeys-retired-page-surface",
+      "classification": "dead",
+      "description": "已删除的 Settings Hotkeys 页面、catalog 与自身测试；现役快捷键定义继续由各工作区 owner 直接持有，不得恢复独立设置页",
+      "targets": [
+        "src/components/settings-v2/general/hotkeys/index.tsx",
+        "src/components/settings-v2/general/hotkeys/index.test.tsx",
+        "src/components/settings-v2/general/hotkeys/hotkeyCatalog.ts",
+        "src/components/settings-v2/general/hotkeys/hotkeyCatalog.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "settings-shortcut-editor-retired-surface",
+      "classification": "dead",
+      "description": "已删除的共享 ShortcutSettings 录制编辑器与自身测试；无 current 设置页需要快捷键录制 UI",
+      "targets": [
+        "src/components/settings-v2/shared/ShortcutSettings.tsx",
+        "src/components/settings-v2/shared/ShortcutSettings.test.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "renderer-hotkey-voice-shortcut-facade-surface",
+      "classification": "dead",
+      "description": "已删除的 Renderer hotkeys API 与 voice shortcut event facade；Inputbar dictation 的显式录音交互为 current 入口",
+      "targets": [
+        "src/lib/api/hotkeys.ts",
+        "src/lib/api/hotkeys.test.ts",
+        "src/lib/api/voiceShortcutEvents.ts",
+        "src/lib/api/voiceShortcutEvents.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-ui-subagents-view-model-surface",
+      "classification": "dead",
+      "description": "已删除的零生产入口 AgentUiSubagentsViewModel；Subagents 展示继续由 current Agent UI projection/shared view 承接，不得恢复孤立 ViewModel",
+      "targets": [
+        "src/components/agent/chat/projection/agentUiSubagentsViewModel.ts",
+        "src/components/agent/chat/projection/agentUiSubagentsViewModel.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "workspace-article-workflow-read-model-surface",
+      "classification": "dead",
+      "description": "已删除的零生产入口 Workspace article workflow read hook 与自身测试；current article workspace read model 不再保留孤立 workflow/read Hook",
+      "targets": [
+        "src/components/agent/chat/workspace/useWorkspaceArticleWorkflowReadModel.ts",
+        "src/components/agent/chat/workspace/useWorkspaceArticleWorkflowReadModel.test.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "workspace-article-editor-orchestration-model-surface",
+      "classification": "dead",
+      "description": "已删除的零生产入口 article editor/plugin orchestration model 与自身测试；workflow facts 与现役 WorkspacePluginOrchestrationRail 不再通过孤立别名承接",
+      "targets": [
+        "src/components/agent/chat/workspace/workspaceArticleEditorOrchestrationModel.ts",
+        "src/components/agent/chat/workspace/workspaceArticleEditorOrchestrationModel.unit.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "rust-agent-duplicate-protocol-agent-control",
       "classification": "dead",
       "description": "已删除的 lime-agent 根层 AgentControl protocol 重复实现；唯一 current owner 是 src/protocol/protocol_agent_control.rs，不得恢复平级旧副本",
       "targets": ["lime-rs/crates/agent/src/protocol_agent_control.rs"],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-runtime-queue-legacy-surface",
+      "classification": "dead",
+      "description": "已删除的 agent-runtime 旧 runtime queue 实现；session 串行提交、steer 与 mailbox 输入统一由 agent_runtime::session_loop::RuntimeSessionRegistry 承接",
+      "targets": [
+        "lime-rs/crates/agent-runtime/src/runtime_queue.rs",
+        "lime-rs/crates/agent-runtime/src/runtime_queue/in_memory.rs",
+        "lime-rs/crates/agent-runtime/src/runtime_queue/sqlite.rs"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-agent-queue-legacy-surface",
+      "classification": "dead",
+      "description": "已删除的 lime-agent queued turn、runtime queue 与初始化 support 旧面；turn 执行与 session 生命周期只允许通过 current App Server/session loop 主链",
+      "targets": [
+        "lime-rs/crates/agent/src/queued_turn.rs",
+        "lime-rs/crates/agent/src/runtime_queue.rs",
+        "lime-rs/crates/agent/src/runtime_support.rs"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-app-server-agent-runtime-registry-legacy-surface",
+      "classification": "dead",
+      "description": "已删除的 App Server agent runtime registry 旧包装；session loop registry 是 current session 调度 owner，不得恢复第二套 runtime registry",
+      "targets": ["lime-rs/crates/app-server/src/agent_runtime_registry.rs"],
       "allowedPaths": []
     },
     {
@@ -100,6 +279,13 @@
         "src/features/plugin/PluginMarketplaceRegistrationPanelModel.ts",
         "src/features/plugin/PluginMarketplaceSkillPanel.tsx"
       ],
+      "allowedPaths": []
+    },
+    {
+      "id": "plugin-host-drawer-fallback-module-surface",
+      "classification": "dead",
+      "description": "已删除的 Plugin HostDrawer 本地 fallback 模块；AgentRunProjectionPanel 是唯一 current renderer，不得恢复 AgentRunFactRail 或 AgentRunLocalProcessFallback 文件入口",
+      "targets": ["src/features/plugin/ui/AgentRunHostDrawerFallback.tsx"],
       "allowedPaths": []
     },
     {
@@ -229,8 +415,8 @@
     },
     {
       "id": "voice-asr-provider-management-ui",
-      "classification": "dead-candidate",
-      "description": "已删除的旧 ASR 凭证管理 UI 与目录级 barrel；语音输入设置当前收敛到 VoiceSettings、MicrophoneTest、InstructionEditor 与 audio_transcription 合同主链",
+      "classification": "dead",
+      "description": "已删除的旧 ASR 凭证管理 UI 与目录级 barrel；语音输入设置当前收敛到 VoiceSettings、InstructionEditor 与 audio_transcription 合同主链",
       "targets": [
         "src/components/voice/AddAsrCredentialModal.tsx",
         "src/components/voice/AsrCredentialCard.tsx",
@@ -2688,7 +2874,7 @@
     {
       "id": "smart-input-screenshot-command-surface",
       "classification": "dead",
-      "description": "已删除的截图对话 / smart-input 命令族；语音快捷键只保留 current voice_input 主链和通用 validate_shortcut",
+      "description": "已删除的截图对话 / smart-input 命令族；语音录音只保留 current voice_input 主链",
       "commands": [
         "send_screenshot_chat",
         "close_screenshot_chat_window",
@@ -2716,9 +2902,45 @@
         "sceneapp_get_scorecard"
       ],
       "allowedPaths": []
+    },
+    {
+      "id": "voice-shortcut-retired-host-commands",
+      "classification": "dead",
+      "description": "已删除的语音快捷键运行状态与快捷键校验 Electron Host 命令；旧设置页与 Renderer facade 已下线，不得恢复 IPC/Host/DevBridge/mock 入口",
+      "commands": ["get_voice_shortcut_runtime_status", "validate_shortcut"],
+      "allowedPaths": [
+        "src/lib/desktop-host/voiceMocks.test.ts",
+        "src/lib/desktop-host/core.unhandled-mock.test.ts"
+      ]
     }
   ],
   "frontendText": [
+    {
+      "id": "voice-audio-device-list-helper-surface",
+      "classification": "dead",
+      "description": "asrProvider 不得恢复无产品消费者的麦克风设备列表 helper；Inputbar dictation 直接使用 renderer mediaDevices 完成录音",
+      "patterns": [
+        "listAudioDevices",
+        "AudioDeviceInfo",
+        "normalizeAudioInputDevice",
+        "describeMediaDeviceError"
+      ],
+      "includePathPrefixes": ["src/lib/api/asrProvider.ts"],
+      "allowedPaths": []
+    },
+    {
+      "id": "connect-relay-registry-legacy-patch-copy",
+      "classification": "dead",
+      "description": "已删除 Relay registry Hook 的 legacy patch 文案不得恢复",
+      "patterns": [
+        "hooks\\\\useRelayRegistry.ts",
+        "加载中转商列表失败",
+        "注册表已刷新",
+        "刷新注册表失败"
+      ],
+      "includePathPrefixes": ["src/i18n/legacy-patch"],
+      "allowedPaths": []
+    },
     {
       "id": "plugin-marketplace-page-legacy-i18n-keys",
       "classification": "dead",
@@ -2752,6 +2974,14 @@
         "provider-pool/api-key"
       ],
       "includePathPrefixes": ["src"],
+      "allowedPaths": []
+    },
+    {
+      "id": "frontend-provider-export-retired-brand-filename",
+      "classification": "dead",
+      "description": "Provider 导出文件名使用短领域名 provider-config；不得恢复旧产品品牌或 lime-providers crate 前缀",
+      "patterns": ["lime-providers-"],
+      "includePathPrefixes": ["src/components/api-key-provider"],
       "allowedPaths": []
     },
     {
@@ -4093,8 +4323,7 @@
         "src/components/agent/chat/hooks/agentSessionRefresh.test.ts",
         "src/components/agent/chat/hooks/agentChatStorage.test.ts",
         "src/components/agent/chat/hooks/agentSessionTopicViewModel.unit.test.ts",
-        "src/components/agent/chat/utils/sessionExecutionRuntime.test.ts",
-        "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts"
+        "src/components/agent/chat/utils/sessionExecutionRuntime.test.ts"
       ]
     },
     {
@@ -4479,6 +4708,7 @@
       "patterns": ["general_chat_sessions", "general_chat_messages"],
       "allowedPaths": [
         "lime-rs/crates/core/src/app_paths.rs",
+        "lime-rs/crates/core/src/database_path_migration.rs",
         "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
         "lime-rs/crates/core/src/database/migration.rs",
         "lime-rs/crates/core/src/database/schema.rs"
@@ -5227,7 +5457,7 @@
     {
       "id": "rust-agent-messages-product-read-fallback-leak",
       "classification": "deprecated",
-      "description": "agent_messages 不保留长期产品读取 fallback；agentSession/read、evidence/export、usage 统计和 GUI read 必须走 JSONL Event Log + Projection DB / Telemetry DB，旧表只允许 migration/backfill/export 输入",
+      "description": "agent_messages 不保留长期产品读取 fallback；thread/read、evidence/export、usage 统计和 GUI read 必须走 JSONL Event Log + Projection DB / Telemetry DB，旧表只允许 migration/backfill/export 输入",
       "patterns": [
         "FROM agent_messages",
         "JOIN agent_messages",

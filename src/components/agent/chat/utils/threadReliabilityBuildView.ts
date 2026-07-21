@@ -16,7 +16,6 @@ import {
   buildSummary,
   deriveStatusFromRuntime,
   normalizeInterruptStateLabel,
-  resolveNextQueuedTurn,
 } from "./threadReliabilityStatus";
 import type {
   BuildThreadReliabilityViewParams,
@@ -57,8 +56,6 @@ export function buildThreadReliabilityView(
     submittedActionsInFlight,
     context,
   );
-  const queuedTurnCount =
-    params.threadRead?.queued_turns?.length ?? params.queuedTurns?.length ?? 0;
   const outcome = normalizeOutcome(
     params.threadRead?.last_outcome,
     latestTurn,
@@ -70,11 +67,6 @@ export function buildThreadReliabilityView(
   );
   const interruptStateLabel = normalizeInterruptStateLabel(
     params.threadRead?.interrupt_state,
-    context,
-  );
-  const nextQueuedTurn = resolveNextQueuedTurn(
-    params.threadRead,
-    params.queuedTurns ?? [],
     context,
   );
   const incidents = normalizeIncidents(
@@ -90,7 +82,6 @@ export function buildThreadReliabilityView(
     latestTurn,
     pendingRequests,
     submittedRequests,
-    queuedTurnCount,
     context,
   });
 
@@ -100,8 +91,7 @@ export function buildThreadReliabilityView(
       turns.length > 0 ||
       pendingRequests.length > 0 ||
       submittedRequests.length > 0 ||
-      incidents.length > 0 ||
-      queuedTurnCount > 0,
+      incidents.length > 0,
     statusLabel: statusMeta.label,
     statusTone: statusMeta.tone,
     summary: buildSummary({
@@ -111,10 +101,8 @@ export function buildThreadReliabilityView(
       submittedRequests,
       incidents,
       outcome,
-      queuedTurnCount,
       interruptState: params.threadRead?.interrupt_state,
       interruptStateLabel,
-      nextQueuedTurn,
       context,
     }),
     activeTurnLabel:
@@ -126,18 +114,15 @@ export function buildThreadReliabilityView(
     interruptStateLabel,
     pendingRequestCount: pendingRequests.length,
     activeIncidentCount: incidents.length,
-    queuedTurnCount,
     pendingRequests,
     submittedRequests,
     incidents,
     outcome,
-    nextQueuedTurn,
     recommendations: buildRecommendations({
       pendingRequests,
       submittedRequests,
       incidents,
       outcome,
-      nextQueuedTurn,
       interruptState: params.threadRead?.interrupt_state,
       interruptStateLabel,
       context,
@@ -177,8 +162,6 @@ export function buildThreadReliabilitySummary(
     submittedActionsInFlight,
     context,
   );
-  const queuedTurnCount =
-    params.threadRead?.queued_turns?.length ?? params.queuedTurns?.length ?? 0;
   const outcome = normalizeOutcome(
     params.threadRead?.last_outcome,
     latestTurn,
@@ -188,17 +171,11 @@ export function buildThreadReliabilitySummary(
     params.threadRead?.interrupt_state,
     context,
   );
-  const nextQueuedTurn = resolveNextQueuedTurn(
-    params.threadRead,
-    params.queuedTurns ?? [],
-    context,
-  );
   const statusMeta = deriveStatusFromRuntime({
     threadRead: params.threadRead,
     latestTurn,
     pendingRequests,
     submittedRequests,
-    queuedTurnCount,
     context,
   });
 
@@ -207,8 +184,7 @@ export function buildThreadReliabilitySummary(
       Boolean(params.threadRead) ||
       turns.length > 0 ||
       pendingRequests.length > 0 ||
-      submittedRequests.length > 0 ||
-      queuedTurnCount > 0,
+      submittedRequests.length > 0,
     statusLabel: statusMeta.label,
     statusTone: statusMeta.tone,
     summary: buildSummary({
@@ -218,10 +194,8 @@ export function buildThreadReliabilitySummary(
       submittedRequests,
       incidents: [],
       outcome,
-      queuedTurnCount,
       interruptState: params.threadRead?.interrupt_state,
       interruptStateLabel,
-      nextQueuedTurn,
       context,
     }),
   };

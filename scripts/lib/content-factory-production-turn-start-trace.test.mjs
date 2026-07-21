@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { summarizeProductionTurnStartTrace } from "./content-factory-production-turn-start-trace.mjs";
 
 describe("content factory production turn-start trace", () => {
-  it("accepts Gate B matchingTurn evidence for the requested session", () => {
+  it("accepts Gate B matchingTurn evidence for the requested thread", () => {
     const result = summarizeProductionTurnStartTrace(
       {
         matchingTurn: {
@@ -11,50 +11,47 @@ describe("content factory production turn-start trace", () => {
           metadata: {
             secret: "should not be copied",
           },
-          sessionId: "sess_prod",
           status: "success",
           text: "@写文章 should not be copied",
+          threadId: "thread_prod",
           transport: "electron-ipc",
-          turnId: "turn_prod",
         },
       },
-      { expectedSessionId: "sess_prod" },
+      { expectedThreadId: "thread_prod" },
     );
 
     expect(result).toEqual({
       command: "app_server_handle_json_lines",
       matched: true,
-      method: "agentSession/turn/start",
+      method: "turn/start",
       present: true,
-      sessionId: "sess_prod",
-      sessionMatched: true,
       status: "success",
+      threadId: "thread_prod",
+      threadMatched: true,
       transport: "electron-ipc",
-      turnId: "turn_prod",
     });
     expect(JSON.stringify(result)).not.toContain("@写文章");
     expect(JSON.stringify(result)).not.toContain("should not be copied");
   });
 
-  it("fails closed when the trace belongs to another session", () => {
+  it("fails closed when the trace belongs to another thread", () => {
     const result = summarizeProductionTurnStartTrace(
       {
         matchingTurn: {
           command: "app_server_handle_json_lines",
-          sessionId: "sess_other",
           status: "success",
+          threadId: "thread_other",
           transport: "electron-ipc",
-          turnId: "turn_other",
         },
       },
-      { expectedSessionId: "sess_prod" },
+      { expectedThreadId: "thread_prod" },
     );
 
     expect(result).toMatchObject({
       matched: false,
       present: true,
-      sessionId: "sess_other",
-      sessionMatched: false,
+      threadId: "thread_other",
+      threadMatched: false,
     });
   });
 
@@ -65,10 +62,9 @@ describe("content factory production turn-start trace", () => {
           {
             appServerRequests: [
               {
-                method: "agentSession/turn/start",
+                method: "turn/start",
                 params: {
-                  sessionId: "sess_prod",
-                  turnId: "turn_prod",
+                  threadId: "thread_prod",
                 },
               },
             ],
@@ -78,15 +74,14 @@ describe("content factory production turn-start trace", () => {
           },
         ],
       },
-      { expectedSessionId: "sess_prod" },
+      { expectedThreadId: "thread_prod" },
     );
 
     expect(result).toMatchObject({
       matched: true,
-      method: "agentSession/turn/start",
+      method: "turn/start",
       present: true,
-      sessionId: "sess_prod",
-      turnId: "turn_prod",
+      threadId: "thread_prod",
     });
   });
 
@@ -100,11 +95,10 @@ describe("content factory production turn-start trace", () => {
                 JSON.stringify({
                   id: "turn",
                   jsonrpc: "2.0",
-                  method: "agentSession/turn/start",
+                  method: "turn/start",
                   params: {
                     prompt: "@写文章 should not be copied",
-                    sessionId: "sess_prod",
-                    turnId: "turn_prod",
+                    threadId: "thread_prod",
                   },
                 }),
               ],
@@ -115,14 +109,13 @@ describe("content factory production turn-start trace", () => {
           transport: "electron-ipc",
         },
       ],
-      { expectedSessionId: "sess_prod" },
+      { expectedThreadId: "thread_prod" },
     );
 
     expect(result).toMatchObject({
       matched: true,
       present: true,
-      sessionId: "sess_prod",
-      turnId: "turn_prod",
+      threadId: "thread_prod",
     });
     expect(JSON.stringify(result)).not.toContain("prompt");
     expect(JSON.stringify(result)).not.toContain("@写文章");

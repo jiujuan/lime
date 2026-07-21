@@ -111,7 +111,7 @@ fn readiness_from_configured_provider(provider: &ProviderWithKeys) -> ProviderRe
 }
 
 fn provider_requires_enabled_api_key(provider: &ProviderWithKeys) -> bool {
-    ModelRegistryService::requires_api_key_for_model_fetch(
+    ModelRegistryService::requires_api_key_for_runtime(
         &provider.provider.id,
         &provider.provider.api_host,
         provider.provider.provider_type,
@@ -347,5 +347,57 @@ mod tests {
                 "openai/gpt-4.1-mini".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn custom_openai_localhost_without_key_is_unready_for_runtime() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Local OpenAI-compatible Gateway".to_string(),
+                ApiProviderType::Openai,
+                "http://127.0.0.1:56599/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("custom provider");
+        service
+            .update_provider(
+                &db,
+                &provider.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(vec!["pending-route-model".to_string()]),
+            )
+            .expect("declared model");
+
+        let readiness = resolve_provider_readiness(
+            &db,
+            &service,
+            &RuntimeModelSelection {
+                provider: provider.id.clone(),
+                model: "pending-route-model".to_string(),
+                source: "runtime_request",
+                reasoning_effort: None,
+            },
+            None,
+        )
+        .expect("readiness");
+
+        assert!(!readiness.ready);
+        assert_eq!(readiness.reason_code, Some("missing_enabled_api_key"));
     }
 }

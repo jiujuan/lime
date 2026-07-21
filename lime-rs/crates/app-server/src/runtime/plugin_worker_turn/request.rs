@@ -88,7 +88,7 @@ impl PaneActionWorkerTurn {
         }
 
         let prompt = json_string(activation, &["body"])
-            .unwrap_or_else(|| request.input.text.clone())
+            .unwrap_or_else(|| request.input.concat_text())
             .trim()
             .to_string();
         if prompt.is_empty() {
@@ -191,7 +191,8 @@ impl PaneActionWorkerTurn {
         };
         let task_kind = json_string(action, &["task_kind", "taskKind"])
             .unwrap_or_else(|| DEFAULT_ARTICLE_WORKSPACE_TASK_KIND.to_string());
-        let prompt = json_string(action, &["prompt"]).unwrap_or_else(|| request.input.text.clone());
+        let prompt =
+            json_string(action, &["prompt"]).unwrap_or_else(|| request.input.concat_text());
         if prompt.trim().is_empty() {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
@@ -330,7 +331,8 @@ impl PaneActionWorkerTurn {
         }
         let task_kind = json_string(action, &["task_kind", "taskKind"])
             .unwrap_or_else(|| DEFAULT_ARTICLE_WORKSPACE_TASK_KIND.to_string());
-        let prompt = json_string(action, &["prompt"]).unwrap_or_else(|| request.input.text.clone());
+        let prompt =
+            json_string(action, &["prompt"]).unwrap_or_else(|| request.input.concat_text());
         if prompt.trim().is_empty() {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,

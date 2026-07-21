@@ -5,7 +5,6 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
   APP_SERVER_METHOD_AGENT_SESSION_COMPACT,
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-  APP_SERVER_METHOD_AGENT_SESSION_LIST,
   APP_SERVER_METHOD_AGENT_SESSION_MEDIA_READ,
   APP_SERVER_METHOD_CANCEL_REQUEST,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
@@ -14,13 +13,17 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
   APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
   APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
-  APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME,
+  APP_SERVER_METHOD_THREAD_RESUME,
   APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
   APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
-  APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
-  APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+  APP_SERVER_METHOD_TURN_INTERRUPT,
+  APP_SERVER_METHOD_TURN_START,
+  APP_SERVER_METHOD_TURN_STEER,
+  APP_SERVER_METHOD_THREAD_ARCHIVE,
   APP_SERVER_METHOD_THREAD_LIST,
   APP_SERVER_METHOD_THREAD_READ,
+  APP_SERVER_METHOD_THREAD_SHELL_COMMAND,
+  APP_SERVER_METHOD_THREAD_UNARCHIVE,
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_CAPABILITY_LIST,
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
@@ -129,6 +132,70 @@ describe("App Server API", () => {
       }),
     );
     expect(result.result.thread.threadId).toBe("thread-1");
+  });
+
+  it("thread settings control 应通过 v2 typed methods", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ lines: [line({ id: 1, result: {} })] })
+      .mockResolvedValueOnce({ lines: [line({ id: 2, result: {} })] });
+
+    const client = new AppServerClient();
+    await client.updateThreadSettings({
+      threadId: "thread-1",
+      collaborationMode: {
+        mode: "plan",
+        settings: {
+          model: "gpt-5.4",
+          reasoning_effort: "high",
+          developer_instructions: null,
+        },
+      },
+    });
+    await client.setThreadMemoryMode({
+      threadId: "thread-1",
+      mode: "disabled",
+    });
+
+    expect(vi.mocked(safeInvoke).mock.calls).toEqual([
+      [
+        "app_server_handle_json_lines",
+        {
+          request: {
+            lines: [
+              line({
+                id: 1,
+                method: "thread/settings/update",
+                params: {
+                  threadId: "thread-1",
+                  collaborationMode: {
+                    mode: "plan",
+                    settings: {
+                      model: "gpt-5.4",
+                      reasoning_effort: "high",
+                      developer_instructions: null,
+                    },
+                  },
+                },
+              }),
+            ],
+          },
+        },
+      ],
+      [
+        "app_server_handle_json_lines",
+        {
+          request: {
+            lines: [
+              line({
+                id: 2,
+                method: "thread/memoryMode/set",
+                params: { threadId: "thread-1", mode: "disabled" },
+              }),
+            ],
+          },
+        },
+      ],
+    ]);
   });
 
   it("listThreads 应通过 canonical thread/list typed method", async () => {
@@ -266,7 +333,7 @@ describe("App Server API", () => {
               {
                 id: "session.draft.write",
                 title: "Session Draft Write",
-                methods: [APP_SERVER_METHOD_AGENT_SESSION_TURN_START],
+                methods: [APP_SERVER_METHOD_TURN_START],
               },
             ],
             nextCursor: "1",
@@ -483,7 +550,7 @@ describe("App Server API", () => {
     );
   });
 
-  it("listSessions 应通过 App Server JSON-RPC agentSession/list", async () => {
+  it("listSessions 应通过 App Server JSON-RPC thread/list", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       lines: [
         line({
@@ -519,7 +586,7 @@ describe("App Server API", () => {
         lines: [
           line({
             id: 5,
-            method: APP_SERVER_METHOD_AGENT_SESSION_LIST,
+            method: APP_SERVER_METHOD_THREAD_LIST,
             params: {
               includeArchived: true,
               workspaceId: "workspace-1",
@@ -1480,10 +1547,10 @@ describe("App Server API", () => {
           id: 7,
           result: {
             turn: {
-              turnId: "turn-1",
-              sessionId: "session-1",
-              threadId: "thread-1",
-              status: "accepted",
+              id: "turn-1",
+              items: [],
+              itemsView: "notLoaded",
+              status: "inProgress",
             },
           },
         }),
@@ -1507,19 +1574,11 @@ describe("App Server API", () => {
 
     const client = new AppServerClient({ initialRequestId: 7 });
     const result = await client.startTurn({
-      sessionId: "session-1",
-      turnId: "turn-1",
-      input: {
-        text: "hello",
-      },
-      runtimeOptions: {
-        stream: true,
-      },
-      queueIfBusy: true,
-      skipPreSubmitResume: true,
+      threadId: "thread-1",
+      input: [{ type: "text", text: "hello" }],
     });
 
-    expect(result.result.turn.turnId).toBe("turn-1");
+    expect(result.result.turn.id).toBe("turn-1");
     expect(result.notifications).toHaveLength(1);
     expect(result.notifications[0].method).toBe(
       APP_SERVER_METHOD_AGENT_SESSION_EVENT,
@@ -1529,18 +1588,10 @@ describe("App Server API", () => {
         lines: [
           line({
             id: 7,
-            method: APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+            method: APP_SERVER_METHOD_TURN_START,
             params: {
-              sessionId: "session-1",
-              turnId: "turn-1",
-              input: {
-                text: "hello",
-              },
-              runtimeOptions: {
-                stream: true,
-              },
-              queueIfBusy: true,
-              skipPreSubmitResume: true,
+              threadId: "thread-1",
+              input: [{ type: "text", text: "hello" }],
             },
           }),
         ],
@@ -1613,9 +1664,10 @@ describe("App Server API", () => {
           line({
             id: 11,
             result: {
-              session,
-              turns: [],
-              resumed: true,
+              thread: { id: "thread-1", sessionId: "session-1", turns: [] },
+              model: "gpt-5.4",
+              modelProvider: "openai",
+              cwd: "/tmp/workspace",
             },
           }),
         ],
@@ -1656,8 +1708,10 @@ describe("App Server API", () => {
       }),
     ).resolves.toMatchObject({ result: { compacted: true } });
     await expect(
-      client.resumeAgentSessionThread({ sessionId: "session-1" }),
-    ).resolves.toMatchObject({ result: { resumed: true } });
+      client.resumeThread({ threadId: "thread-1", excludeTurns: true }),
+    ).resolves.toMatchObject({
+      result: { thread: { id: "thread-1", sessionId: "session-1" } },
+    });
     await expect(
       client.removeAgentSessionQueuedTurn({
         sessionId: "session-1",
@@ -1697,8 +1751,8 @@ describe("App Server API", () => {
           lines: [
             line({
               id: 11,
-              method: APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME,
-              params: { sessionId: "session-1" },
+              method: APP_SERVER_METHOD_THREAD_RESUME,
+              params: { threadId: "thread-1", excludeTurns: true },
             }),
           ],
         },
@@ -1748,7 +1802,7 @@ describe("App Server API", () => {
 
     const client = new AppServerClient({ initialRequestId: 8 });
     const result = await client.cancelTurn({
-      sessionId: "session-1",
+      threadId: "thread-1",
       turnId: "turn-1",
     });
 
@@ -1758,10 +1812,40 @@ describe("App Server API", () => {
         lines: [
           line({
             id: 8,
-            method: APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+            method: APP_SERVER_METHOD_TURN_INTERRUPT,
             params: {
-              sessionId: "session-1",
+              threadId: "thread-1",
               turnId: "turn-1",
+            },
+          }),
+        ],
+      },
+    });
+  });
+
+  it("steerTurn 应通过 v2 turn/steer 追加当前 turn 输入", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [line({ id: 9, result: { turnId: "turn-1" } })],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 9 });
+    const result = await client.steerTurn({
+      threadId: "thread-1",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "follow up" }],
+    });
+
+    expect(result.result).toEqual({ turnId: "turn-1" });
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 9,
+            method: APP_SERVER_METHOD_TURN_STEER,
+            params: {
+              threadId: "thread-1",
+              expectedTurnId: "turn-1",
+              input: [{ type: "text", text: "follow up" }],
             },
           }),
         ],
@@ -1793,7 +1877,6 @@ describe("App Server API", () => {
     const result = await client.updateSession({
       sessionId: "session-1",
       title: "新标题",
-      archived: true,
     });
 
     expect(result.result.session.sessionId).toBe("session-1");
@@ -1807,7 +1890,93 @@ describe("App Server API", () => {
             params: {
               sessionId: "session-1",
               title: "新标题",
-              archived: true,
+            },
+          }),
+        ],
+      },
+    });
+  });
+
+  it("archiveThread / unarchiveThread 应通过 v2 thread 生命周期方法", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        lines: [line({ id: 9, result: {} })],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 10,
+            result: {
+              thread: {
+                id: "thread-1",
+                sessionId: "session-1",
+                createdAt: 1780704000,
+                updatedAt: 1780704000,
+                status: { type: "idle" },
+                turns: [],
+              },
+            },
+          }),
+        ],
+      });
+
+    const client = new AppServerClient({ initialRequestId: 9 });
+    await client.archiveThread({ threadId: "thread-1" });
+    const restored = await client.unarchiveThread({ threadId: "thread-1" });
+
+    expect(restored.result.thread.id).toBe("thread-1");
+    expect(vi.mocked(safeInvoke).mock.calls).toEqual([
+      [
+        "app_server_handle_json_lines",
+        {
+          request: {
+            lines: [
+              line({
+                id: 9,
+                method: APP_SERVER_METHOD_THREAD_ARCHIVE,
+                params: { threadId: "thread-1" },
+              }),
+            ],
+          },
+        },
+      ],
+      [
+        "app_server_handle_json_lines",
+        {
+          request: {
+            lines: [
+              line({
+                id: 10,
+                method: APP_SERVER_METHOD_THREAD_UNARCHIVE,
+                params: { threadId: "thread-1" },
+              }),
+            ],
+          },
+        },
+      ],
+    ]);
+  });
+
+  it("runThreadShellCommand 应通过 typed thread method 提交用户命令", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [line({ id: 9, result: {} })],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 9 });
+    await client.runThreadShellCommand({
+      threadId: "thread-1",
+      command: "printf ready",
+    });
+
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 9,
+            method: APP_SERVER_METHOD_THREAD_SHELL_COMMAND,
+            params: {
+              threadId: "thread-1",
+              command: "printf ready",
             },
           }),
         ],
@@ -2875,7 +3044,7 @@ describe("App Server API", () => {
   });
 
   it("JSON-RPC 编解码与 response matcher 保持稳定", () => {
-    const request = createAppServerRequest(3, "agentSession/read", {
+    const request = createAppServerRequest(3, "thread/read", {
       sessionId: "session-1",
     });
 
@@ -2893,7 +3062,7 @@ describe("App Server API", () => {
           },
         ],
         3,
-        "agentSession/read",
+        "thread/read",
       ).result.ok,
     ).toBe(true);
     expect(() =>

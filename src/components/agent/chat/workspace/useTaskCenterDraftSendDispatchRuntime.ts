@@ -357,7 +357,6 @@ export function useTaskCenterDraftSendDispatchRuntime({
           targetSessionId: dispatchSessionId,
           skipSessionRestore: true,
           skipSessionStartHooks: true,
-          skipPreSubmitResume: true,
           requestMetadata: bindInputbarThreadGoalMetadata(
             mergeAgentUiPerformanceTraceMetadata(
               latestRequest.sendOptions?.requestMetadata,

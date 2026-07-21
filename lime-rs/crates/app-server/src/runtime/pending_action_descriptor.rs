@@ -23,6 +23,41 @@ pub(in crate::runtime) fn identity_from_stored_session(
     identity_from_event(stored, event)
 }
 
+pub(in crate::runtime) fn pending_identity_for_turn(
+    stored: &super::StoredSession,
+    turn_id: &str,
+) -> Option<(String, PendingActionIdentity)> {
+    if stored.session.status != AgentSessionStatus::WaitingAction {
+        return None;
+    }
+    stored.events.iter().rev().find_map(|event| {
+        if event.event_type != "action.required" || event.turn_id.as_deref() != Some(turn_id) {
+            return None;
+        }
+        let request_id = string_from_keys(
+            &event.payload,
+            &["requestId", "request_id", "actionId", "action_id", "id"],
+        )?;
+        let identity = identity_from_event(stored, event)?;
+        Some((request_id, identity))
+    })
+}
+
+pub(in crate::runtime) fn pending_tool_id_for_turn(
+    stored: &super::StoredSession,
+    turn_id: &str,
+) -> Option<String> {
+    let (request_id, _) = pending_identity_for_turn(stored, turn_id)?;
+    let event = pending_action_event(stored, &request_id)?;
+    let data = event.payload.get("data").unwrap_or(&event.payload);
+    string_from_keys(data, &["toolCallId", "tool_call_id", "toolId", "tool_id"]).or_else(|| {
+        string_from_keys(
+            &event.payload,
+            &["toolCallId", "tool_call_id", "toolId", "tool_id"],
+        )
+    })
+}
+
 pub(in crate::runtime) fn from_stored_session(
     stored: &super::StoredSession,
     request_id: &str,
@@ -299,5 +334,30 @@ mod tests {
             payload: json!({ "requestId": "approval-1" }),
         });
         assert!(from_stored_session(&terminal, "approval-1").is_none());
+    }
+
+    #[test]
+    fn pending_identity_for_turn_uses_only_the_waiting_turn() {
+        let mut stored = stored_session();
+        stored.events.push(AgentEvent {
+            event_id: "event-approval-other-turn".to_string(),
+            sequence: 2,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-other".to_string()),
+            event_type: "action.required".to_string(),
+            timestamp: "2026-07-12T15:01:00Z".to_string(),
+            payload: json!({
+                "requestId": "approval-other-turn",
+                "actionType": "tool_confirmation",
+                "toolCallId": "tool-other",
+            }),
+        });
+
+        let (request_id, identity) =
+            pending_identity_for_turn(&stored, "turn-1").expect("waiting turn action");
+        assert_eq!(request_id, "approval-1");
+        assert_eq!(identity.scope.turn_id.as_deref(), Some("turn-1"));
+        assert!(pending_identity_for_turn(&stored, "turn-other").is_none());
     }
 }

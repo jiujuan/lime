@@ -3,7 +3,6 @@
 use super::types::{
     HookResult, Plugin, PluginConfig, PluginContext, PluginError, PluginManifest, PluginType,
 };
-use crate::app_paths;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -17,14 +16,6 @@ pub struct PluginLoader {
 impl PluginLoader {
     pub fn new(plugins_dir: PathBuf) -> Self {
         Self { plugins_dir }
-    }
-
-    pub fn default_plugins_dir() -> PathBuf {
-        app_paths::best_effort_runtime_subdir("plugins")
-    }
-
-    pub fn with_defaults() -> Self {
-        Self::new(Self::default_plugins_dir())
     }
 
     pub async fn ensure_plugins_dir(&self) -> Result<(), PluginError> {

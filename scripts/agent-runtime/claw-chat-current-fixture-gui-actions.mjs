@@ -471,9 +471,7 @@ async function sampleInputbarSubmitState(
             error: entry?.error || null,
             methods: messages.map((message) => message?.method).filter(Boolean),
             turnStarts: messages
-              .filter(
-                (message) => message?.method === "agentSession/turn/start",
-              )
+              .filter((message) => message?.method === "turn/start")
               .map((message) => ({
                 id: message?.id || null,
                 sessionId: message?.params?.sessionId || null,
@@ -601,6 +599,9 @@ async function waitForInputbarSubmitEffect(
       firstSubmitEffectSnapshot = snapshot;
     }
     if (snapshot.matchingTurnStartTrace) {
+      return snapshot;
+    }
+    if (constraints.requireTurnStart !== true && firstSubmitEffectSnapshot) {
       return snapshot;
     }
     await sleep(options.intervalMs);

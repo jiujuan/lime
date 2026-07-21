@@ -37,6 +37,7 @@ function payloadShape() {
     persistedLogTail: true,
     serverDiagnostics: true,
     logStorageDiagnostics: true,
+    currentLogPathAtAgentRoot: true,
     windowsStartupDiagnostics: true,
     runtimeSnapshot: true,
     configSummary: true,
@@ -136,7 +137,10 @@ describe("Settings Developer Gate B evidence", () => {
         ...passingFacts(),
         clipboard: {
           ...passingFacts().clipboard,
-          payloadShape: { ...payloadShape(), mcpSummary: false },
+          payloadShape: {
+            ...payloadShape(),
+            currentLogPathAtAgentRoot: false,
+          },
         },
         trace: summarizeSettingsDeveloperTrace(
           traceRaw("renderer-mock", ["log/list"]),

@@ -10,7 +10,6 @@ export {
 export type {
   ThreadReliabilityIncidentDisplay,
   ThreadReliabilityOutcomeDisplay,
-  ThreadReliabilityQueuedTurnDisplay,
   ThreadReliabilityRequestDisplay,
   ThreadReliabilitySummaryModel,
   ThreadReliabilityTone,

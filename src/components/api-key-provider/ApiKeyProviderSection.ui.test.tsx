@@ -886,15 +886,20 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(hookState.selectProvider).toHaveBeenCalledWith("custom-1");
   });
 
-  it("添加流程在保存成功但连接测试失败时仍应进入 Provider 配置页", async () => {
+  it("添加流程在保存成功但连接测试失败时应保留表单并给出恢复路径", async () => {
     mockTestConnection.mockResolvedValueOnce({
       success: false,
       error: "模型无权限",
     });
     const hookState = createHookState();
-    renderSection();
+    const container = renderSection();
 
     await openCustomProviderForm();
+    const activateButton = findByTestId<HTMLButtonElement>(
+      "model-activate-button",
+    );
+    expect(activateButton.className).toContain("bg-slate-950");
+    expect(activateButton.className).toContain("text-white");
     await submitCustomProviderDraft({
       name: "My API",
       apiHost: "https://api.example.com/v1",
@@ -910,7 +915,37 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
       }),
     );
     expect(mockTestConnection).toHaveBeenCalledWith("custom-1", "my-model");
-    expect(hookState.selectProvider).toHaveBeenCalledWith("custom-1");
-    expect(document.body.textContent ?? "").not.toContain("模型无权限");
+    expect(hookState.selectProvider).not.toHaveBeenCalled();
+    const error = maybeByTestId(container, "model-add-error");
+    expect(error?.getAttribute("role")).toBe("alert");
+    expect(error?.textContent ?? "").toContain(
+      "配置已保存，但连接测试未通过：模型无权限",
+    );
+    expect(maybeByTestId(container, "model-add-configure")).not.toBeNull();
+  });
+
+  it("添加流程连接超时时不应向用户暴露 Desktop Host 内部命令", async () => {
+    mockTestConnection.mockRejectedValueOnce(
+      new Error(
+        '[Electron] Desktop Host IPC 命令 "app_server_handle_json_lines" 在 5000ms 内未返回，已按 fail-closed 结束。',
+      ),
+    );
+    const hookState = createHookState();
+    const container = renderSection();
+
+    await openCustomProviderForm();
+    await submitCustomProviderDraft({
+      name: "My API",
+      apiHost: "https://api.example.com/v1",
+      model: "my-model",
+    });
+
+    expect(hookState.selectProvider).not.toHaveBeenCalled();
+    const errorText =
+      maybeByTestId(container, "model-add-error")?.textContent ?? "";
+    expect(errorText).toContain("配置已保存，但连接测试未通过");
+    expect(errorText).toContain("连接测试超时");
+    expect(errorText).not.toContain("app_server_handle_json_lines");
+    expect(errorText).not.toContain("fail-closed");
   });
 });

@@ -20,6 +20,7 @@ impl fmt::Display for ConnectionId {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ConnectionOrigin {
     Stdio,
+    WebSocket,
     InProcess,
 }
 

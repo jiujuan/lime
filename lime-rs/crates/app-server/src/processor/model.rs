@@ -99,6 +99,8 @@ impl RequestProcessor {
             .create_model_provider(params)
             .await
             .map_err(to_jsonrpc_error)?;
+        self.runtime
+            .schedule_pending_route_recovery(self.runtime_host_context());
         dispatch_result(response)
     }
 
@@ -113,6 +115,8 @@ impl RequestProcessor {
             .update_model_provider(params)
             .await
             .map_err(to_jsonrpc_error)?;
+        self.runtime
+            .schedule_pending_route_recovery(self.runtime_host_context());
         dispatch_result(response)
     }
 
@@ -127,6 +131,8 @@ impl RequestProcessor {
             .delete_model_provider(params)
             .await
             .map_err(to_jsonrpc_error)?;
+        self.runtime
+            .schedule_pending_route_recovery(self.runtime_host_context());
         dispatch_result(response)
     }
 
@@ -169,6 +175,8 @@ impl RequestProcessor {
             .import_model_provider_config(params)
             .await
             .map_err(to_jsonrpc_error)?;
+        self.runtime
+            .schedule_pending_route_recovery(self.runtime_host_context());
         dispatch_result(response)
     }
 
@@ -211,6 +219,8 @@ impl RequestProcessor {
             .fetch_model_provider_models(params)
             .await
             .map_err(to_jsonrpc_error)?;
+        self.runtime
+            .schedule_pending_route_recovery(self.runtime_host_context());
         dispatch_result(response)
     }
 
@@ -225,6 +235,8 @@ impl RequestProcessor {
             .create_model_provider_key(params)
             .await
             .map_err(to_jsonrpc_error)?;
+        self.runtime
+            .schedule_pending_route_recovery(self.runtime_host_context());
         dispatch_result(response)
     }
 
@@ -239,6 +251,8 @@ impl RequestProcessor {
             .update_model_provider_key(params)
             .await
             .map_err(to_jsonrpc_error)?;
+        self.runtime
+            .schedule_pending_route_recovery(self.runtime_host_context());
         dispatch_result(response)
     }
 
@@ -253,6 +267,8 @@ impl RequestProcessor {
             .delete_model_provider_key(params)
             .await
             .map_err(to_jsonrpc_error)?;
+        self.runtime
+            .schedule_pending_route_recovery(self.runtime_host_context());
         dispatch_result(response)
     }
 

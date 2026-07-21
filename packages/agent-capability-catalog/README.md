@@ -15,7 +15,7 @@
 
 这个包不负责：
 
-- 启动 `agentSession/turn/start`。
+- 启动 `turn/start`。
 - 订阅 runtime events。
 - 持久化 session。
 - 渲染工作台。
@@ -55,4 +55,3 @@ const policy = buildAgentCapabilityPolicy({
 - `lime.capability.summary.generate`
 - `lime.capability.webpage.generate`
 - `lime.capability.presentation.generate`
-

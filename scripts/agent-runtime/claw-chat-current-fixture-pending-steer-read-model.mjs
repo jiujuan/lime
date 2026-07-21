@@ -204,7 +204,7 @@ export async function waitForInputbarPendingSteerQueuedReadModel(
   page,
   options,
   requestLog,
-  sessionId,
+  threadId,
   { requireSecondQueued = false } = {},
 ) {
   const startedAt = Date.now();
@@ -215,8 +215,8 @@ export async function waitForInputbarPendingSteerQueuedReadModel(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId,
-        historyLimit: 100,
+        threadId,
+        includeTurns: true,
       },
       requestLog,
     );
@@ -292,7 +292,7 @@ export async function waitForInputbarPendingSteerPopFrontReadModel(
   page,
   options,
   requestLog,
-  sessionId,
+  threadId,
 ) {
   const startedAt = Date.now();
   let lastRead = null;
@@ -302,8 +302,8 @@ export async function waitForInputbarPendingSteerPopFrontReadModel(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId,
-        historyLimit: 100,
+        threadId,
+        includeTurns: true,
       },
       requestLog,
     );

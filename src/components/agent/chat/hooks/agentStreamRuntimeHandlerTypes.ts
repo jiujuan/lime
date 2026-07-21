@@ -8,7 +8,6 @@ import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
 } from "@/lib/api/agentExecutionRuntime";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { AgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
@@ -36,7 +35,6 @@ export interface StreamRequestState extends AgentStreamReasoningTimelineState {
   hasMeaningfulCompletionSignal?: boolean;
   hasFinalAnswerRequiredProcessBoundary?: boolean;
   hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary?: boolean;
-  queuedTurnId: string | null;
   requestLogId: string | null;
   requestStartedAt: number;
   submissionDispatchedAt?: number | null;
@@ -53,7 +51,6 @@ export interface StreamRequestState extends AgentStreamReasoningTimelineState {
   textDeltaFlushCount?: number;
   maxTextDeltaBacklogChars?: number;
   requestFinished: boolean;
-  queuedDraftCleanupTimerId?: ReturnType<typeof setTimeout> | null;
   pendingTextRenderTimerId?: ReturnType<typeof setTimeout> | null;
   prefilledMessageSnapshotReplayOffset?: number;
   prefilledMessageSnapshotText?: string | null;
@@ -89,10 +86,7 @@ export interface StreamLifecycleCallbacks {
   clearOptimisticItem: () => void;
   clearOptimisticTurn: () => void;
   disposeListener: () => void;
-  removeQueuedDraftMessages: () => void;
   clearActiveStreamIfMatch: (eventName: string) => boolean;
-  upsertQueuedTurn: (queuedTurn: QueuedTurnSnapshot) => void;
-  removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
   appendThinkingToParts: (
     parts: MessageParts,
     textDelta: string,

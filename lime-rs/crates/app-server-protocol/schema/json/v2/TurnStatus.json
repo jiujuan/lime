@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "completed",
+    "failed",
+    "inProgress",
+    "interrupted"
+  ],
+  "title": "TurnStatus",
+  "type": "string"
+}

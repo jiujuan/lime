@@ -4,7 +4,6 @@ import { cwd } from "node:process";
 import { beforeAll, describe, expect, it } from "vitest";
 import { readAppServerApiSources } from "../../test/appServerApiSources";
 
-const RETIRED_AUDIO_DEVICE_FACADE_COMMAND = "list_audio_devices";
 const RETIRED_VOICE_INPUT_CONFIG_FACADE_COMMANDS = [
   "get_voice_input_config",
   "save_voice_input_config",
@@ -301,23 +300,6 @@ describe("ASR / Voice current boundary", () => {
       productionFiles.map((path) => [path, readRepoFile(path)]),
     );
   }, 20_000);
-
-  it("麦克风设备列表应固定走 renderer mediaDevices current", () => {
-    const asrProviderSource = readRepoFile("src/lib/api/asrProvider.ts");
-    const restrictedSources = [
-      asrProviderSource,
-      readElectronSources(),
-      readDevBridgeAndMockSources(),
-      readLegacyVoiceSources(),
-    ].join("\n");
-
-    expect(asrProviderSource).toContain("navigator?.mediaDevices");
-    expect(asrProviderSource).toContain("enumerateDevices()");
-    expect(asrProviderSource).toContain("getUserMedia({ audio: true })");
-    expectStringLiteralsAbsent(restrictedSources, [
-      RETIRED_AUDIO_DEVICE_FACADE_COMMAND,
-    ]);
-  });
 
   it("Voice Input config 应固定走 app config current 网关", () => {
     const asrProviderSource = readRepoFile("src/lib/api/asrProvider.ts");

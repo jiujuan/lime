@@ -222,7 +222,7 @@ async function resolveWorkspaceRoot(options, workspace, workspaceId) {
 }
 
 async function createAutomationThreadLineage(options, workspaceId) {
-  const response = await invokeAppServerJsonRpc(options, "agentSession/start", {
+  const response = await invokeAppServerJsonRpc(options, "thread/start", {
     appId: "desktop",
     workspaceId,
     businessObjectRef: {
@@ -246,8 +246,8 @@ async function createAutomationThreadLineage(options, workspaceId) {
   const threadId = String(
     response?.session?.threadId || response?.session?.thread_id || "",
   ).trim();
-  assertSmoke(sessionId, "agentSession/start 未返回 automation sessionId");
-  assertSmoke(threadId, "agentSession/start 未返回 automation threadId");
+  assertSmoke(sessionId, "thread/start 未返回 automation sessionId");
+  assertSmoke(threadId, "thread/start 未返回 automation threadId");
   return { session_id: sessionId, thread_id: threadId };
 }
 

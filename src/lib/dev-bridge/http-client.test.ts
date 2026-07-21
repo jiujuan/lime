@@ -401,7 +401,7 @@ describe("http-client", () => {
         lines: [
           JSON.stringify({
             id: 1,
-            method: "agentSession/turn/start",
+            method: "turn/start",
             params: {},
           }),
         ],
@@ -438,7 +438,7 @@ describe("http-client", () => {
         lines: [
           JSON.stringify({
             id: "list-sessions",
-            method: "agentSession/list",
+            method: "thread/list",
             params: { workspaceId: "workspace-1", limit: 21 },
           }),
         ],
@@ -631,13 +631,45 @@ describe("http-client", () => {
           lines: [
             JSON.stringify({
               id: "read-session",
-              method: "agentSession/read",
+              method: "thread/read",
               params: { sessionId: "session-1" },
             }),
           ],
         },
       }),
     ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "save-provider",
+              method: "modelProvider/create",
+              params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
+    for (const method of [
+      "modelProvider/testConnection",
+      "modelProvider/testChat",
+      "modelProvider/fetchModels",
+    ]) {
+      expect(
+        resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+          request: {
+            lines: [
+              JSON.stringify({
+                id: `provider-network-${method}`,
+                method,
+                params: { providerId: "provider-1" },
+              }),
+            ],
+          },
+        }),
+      ).toBe(60000);
+    }
     expect(
       resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
         request: {
@@ -689,7 +721,7 @@ describe("http-client", () => {
           lines: [
             JSON.stringify({
               id: "list-sessions",
-              method: "agentSession/list",
+              method: "thread/list",
               params: { limit: 20 },
             }),
           ],
@@ -777,7 +809,7 @@ describe("http-client", () => {
           lines: [
             JSON.stringify({
               id: 1,
-              method: "agentSession/turn/start",
+              method: "turn/start",
               params: {},
             }),
           ],
@@ -858,7 +890,7 @@ describe("http-client", () => {
           lines: [
             JSON.stringify({
               id: 4,
-              method: "agentSession/read",
+              method: "thread/read",
               params: {},
             }),
           ],

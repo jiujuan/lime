@@ -8,17 +8,17 @@ import {
   rejectRetiredExecutionRunCommandForTest,
 } from "./executionRun";
 
-const { appServerListSessionsMock, appServerReadSessionMock } = vi.hoisted(
+const { appServerListThreadsMock, appServerReadThreadMock } = vi.hoisted(
   () => ({
-    appServerListSessionsMock: vi.fn(),
-    appServerReadSessionMock: vi.fn(),
+    appServerListThreadsMock: vi.fn(),
+    appServerReadThreadMock: vi.fn(),
   }),
 );
 
 vi.mock("./appServer", () => ({
   createAppServerClient: () => ({
-    listSessions: appServerListSessionsMock,
-    readSession: appServerReadSessionMock,
+    listThreads: appServerListThreadsMock,
+    readThread: appServerReadThreadMock,
   }),
 }));
 
@@ -27,32 +27,46 @@ vi.mock("@/lib/dev-bridge", () => ({
 }));
 
 function sessionListResult() {
+  const unixSeconds = (value: string) => Date.parse(value) / 1000;
   return {
     id: 1,
     result: {
-      sessions: [
+      data: [
         {
+          id: "thread-2",
           sessionId: "session-2",
-          threadId: "thread-2",
-          title: "第二个会话",
-          model: "gpt-5.4",
-          createdAt: "2026-06-09T10:00:00.000Z",
-          updatedAt: "2026-06-09T10:02:00.000Z",
-          archivedAt: null,
-          workspaceId: "workspace-1",
-          workingDir: "/tmp/workspace-1",
-          executionStrategy: "react",
-          messagesCount: 4,
+          preview: "第二个会话",
+          modelProvider: "gpt-5.4",
+          cwd: "/tmp/workspace-1",
+          createdAt: unixSeconds("2026-06-09T10:00:00.000Z"),
+          updatedAt: unixSeconds("2026-06-09T10:02:00.000Z"),
+          status: { type: "idle" },
+          turns: [
+            {
+              id: "turn-2",
+              status: "completed",
+              items: [{ id: "item-2", type: "agentMessage", text: "done" }],
+            },
+          ],
         },
         {
+          id: "thread-1",
           sessionId: "session-1",
-          threadId: "thread-1",
-          title: "第一个会话",
-          model: "",
-          createdAt: "2026-06-09T09:00:00.000Z",
-          updatedAt: "2026-06-09T09:01:00.000Z",
-          archivedAt: null,
-          messagesCount: 2,
+          preview: "第一个会话",
+          modelProvider: "",
+          createdAt: unixSeconds("2026-06-09T09:00:00.000Z"),
+          updatedAt: unixSeconds("2026-06-09T09:01:00.000Z"),
+          status: { type: "idle" },
+          turns: [
+            {
+              id: "turn-1",
+              status: "completed",
+              items: [
+                { id: "item-1", type: "agentMessage", text: "done" },
+                { id: "item-2", type: "agentMessage", text: "done" },
+              ],
+            },
+          ],
         },
       ],
     },
@@ -63,71 +77,59 @@ function sessionListResult() {
 }
 
 function sessionReadResult() {
+  const unixSeconds = (value: string) => Date.parse(value) / 1000;
   return {
     id: 2,
     result: {
-      session: {
+      thread: {
+        id: "thread-1",
         sessionId: "session-1",
-        threadId: "thread-1",
-        appId: "desktop",
-        workspaceId: "workspace-1",
-        businessObjectRef: {
-          kind: "agent.session",
-          id: "agent-session:workspace-1:1",
-          title: "内容工作台",
-        },
-        status: "running",
-        createdAt: "2026-06-09T09:00:00.000Z",
-        updatedAt: "2026-06-09T09:04:00.000Z",
-      },
-      turns: [
-        {
-          turnId: "turn-completed",
-          sessionId: "session-1",
-          threadId: "thread-1",
-          status: "completed",
-          startedAt: "2026-06-09T09:00:30.000Z",
-          completedAt: "2026-06-09T09:01:10.000Z",
-        },
-        {
-          turnId: "turn-running",
-          sessionId: "session-1",
-          threadId: "thread-1",
-          status: "running",
-          startedAt: "2026-06-09T09:03:00.000Z",
-        },
-      ],
-      detail: {
-        title: "内容工作台",
-        thread_read: {
-          execution_runs: [
-            {
-              run_id: "session-1",
-              execution_id: "turn-running",
-              session_id: "session-1",
-              artifact_paths: ["drafts/article.md"],
-              title: "写作中",
-              gate_key: "write_mode",
-              status: "running",
-              source: "chat",
-              source_ref: "agent.session",
-              started_at: "2026-06-09T09:03:00.000Z",
-            },
-            {
-              run_id: "session-1",
-              execution_id: "turn-completed",
-              session_id: "session-1",
-              artifact_paths: ["drafts/brief.md"],
-              title: "选题完成",
-              gate_key: "topic_select",
-              status: "success",
-              source: "chat",
-              source_ref: "agent.session",
-              started_at: "2026-06-09T09:00:30.000Z",
-              finished_at: "2026-06-09T09:01:10.000Z",
-            },
-          ],
-        },
+        name: "内容工作台",
+        modelProvider: "gpt-5.4",
+        cwd: "/tmp/workspace-1",
+        status: { type: "active", activeFlags: [] },
+        createdAt: unixSeconds("2026-06-09T09:00:00.000Z"),
+        updatedAt: unixSeconds("2026-06-09T09:04:00.000Z"),
+        turns: [
+          {
+            id: "turn-completed",
+            status: "completed",
+            startedAt: unixSeconds("2026-06-09T09:00:30.000Z"),
+            completedAt: unixSeconds("2026-06-09T09:01:10.000Z"),
+          },
+          {
+            id: "turn-running",
+            status: "inProgress",
+            startedAt: unixSeconds("2026-06-09T09:03:00.000Z"),
+          },
+        ],
+        execution_runs: [
+          {
+            run_id: "session-1",
+            execution_id: "turn-running",
+            session_id: "session-1",
+            artifact_paths: ["drafts/article.md"],
+            title: "写作中",
+            gate_key: "write_mode",
+            status: "running",
+            source: "chat",
+            source_ref: "agent.session",
+            started_at: "2026-06-09T09:03:00.000Z",
+          },
+          {
+            run_id: "session-1",
+            execution_id: "turn-completed",
+            session_id: "session-1",
+            artifact_paths: ["drafts/brief.md"],
+            title: "选题完成",
+            gate_key: "topic_select",
+            status: "success",
+            source: "chat",
+            source_ref: "agent.session",
+            started_at: "2026-06-09T09:00:30.000Z",
+            finished_at: "2026-06-09T09:01:10.000Z",
+          },
+        ],
       },
     },
     response: { id: 2, result: {} },
@@ -141,8 +143,8 @@ describe("executionRun API current read model", () => {
     vi.clearAllMocks();
   });
 
-  it("executionRunList 通过 agentSession/list 投影 chat run 列表", async () => {
-    appServerListSessionsMock.mockResolvedValueOnce(sessionListResult());
+  it("executionRunList 通过 thread/list 投影 chat run 列表", async () => {
+    appServerListThreadsMock.mockResolvedValueOnce(sessionListResult());
 
     await expect(executionRunList(1, 1)).resolves.toEqual([
       expect.objectContaining({
@@ -156,15 +158,15 @@ describe("executionRun API current read model", () => {
       }),
     ]);
 
-    expect(appServerListSessionsMock).toHaveBeenCalledWith({
-      includeArchived: true,
+    expect(appServerListThreadsMock).toHaveBeenCalledWith({
+      archived: true,
       limit: 2,
     });
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("executionRunGet 通过 agentSession/read 投影单个 run", async () => {
-    appServerReadSessionMock.mockResolvedValueOnce(sessionReadResult());
+  it("executionRunGet 通过 thread/read 投影单个 run", async () => {
+    appServerReadThreadMock.mockResolvedValueOnce(sessionReadResult());
 
     await expect(executionRunGet(" session-1 ")).resolves.toEqual(
       expect.objectContaining({
@@ -177,14 +179,15 @@ describe("executionRun API current read model", () => {
       }),
     );
 
-    expect(appServerReadSessionMock).toHaveBeenCalledWith({
-      sessionId: "session-1",
+    expect(appServerReadThreadMock).toHaveBeenCalledWith({
+      threadId: "session-1",
+      includeTurns: true,
     });
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("executionRunGet 找不到 session 时返回 null，不回退旧 native 命令", async () => {
-    appServerReadSessionMock.mockRejectedValueOnce(
+    appServerReadThreadMock.mockRejectedValueOnce(
       new Error("session not found"),
     );
 
@@ -192,8 +195,8 @@ describe("executionRun API current read model", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("executionRunGetGeneralWorkbenchState 从 agentSession/read detail 投影工作台状态", async () => {
-    appServerReadSessionMock.mockResolvedValueOnce(sessionReadResult());
+  it("executionRunGetGeneralWorkbenchState 从 thread/read detail 投影工作台状态", async () => {
+    appServerReadThreadMock.mockResolvedValueOnce(sessionReadResult());
 
     await expect(
       executionRunGetGeneralWorkbenchState("session-1", 3),
@@ -223,14 +226,15 @@ describe("executionRun API current read model", () => {
       updated_at: "2026-06-09T09:04:00.000Z",
     });
 
-    expect(appServerReadSessionMock).toHaveBeenCalledWith({
-      sessionId: "session-1",
+    expect(appServerReadThreadMock).toHaveBeenCalledWith({
+      threadId: "session-1",
+      includeTurns: true,
     });
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("executionRunListGeneralWorkbenchHistory 从 agentSession/read 分页返回终态 runs", async () => {
-    appServerReadSessionMock.mockResolvedValueOnce(sessionReadResult());
+  it("executionRunListGeneralWorkbenchHistory 从 thread/read 分页返回终态 runs", async () => {
+    appServerReadThreadMock.mockResolvedValueOnce(sessionReadResult());
 
     await expect(
       executionRunListGeneralWorkbenchHistory("session-1", 1, 0),
@@ -248,8 +252,8 @@ describe("executionRun API current read model", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("agentSession/read 返回假成功 envelope 时应 fail closed", async () => {
-    appServerReadSessionMock.mockResolvedValueOnce({
+  it("thread/read 返回假成功 envelope 时应 fail closed", async () => {
+    appServerReadThreadMock.mockResolvedValueOnce({
       id: 2,
       result: { success: true },
       response: { id: 2, result: {} },
@@ -259,7 +263,7 @@ describe("executionRun API current read model", () => {
 
     await expect(
       executionRunGetGeneralWorkbenchState("session-1"),
-    ).rejects.toThrow("agentSession/read did not return session read model");
+    ).rejects.toThrow("thread/read did not return thread read model");
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 

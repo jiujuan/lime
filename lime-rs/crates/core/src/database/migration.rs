@@ -4,9 +4,7 @@ mod mcp_migration;
 mod model_registry_migration;
 
 use crate::app_paths;
-pub use api_key_migration::{
-    cleanup_legacy_api_key_credentials, migrate_api_keys_to_pool, migrate_provider_ids,
-};
+pub use api_key_migration::{migrate_api_keys_to_pool, migrate_provider_ids};
 pub use general_chat_migration::{
     check_general_chat_migration_status, is_general_chat_migration_completed,
     migrate_general_chat_to_unified, GeneralChatMigrationStatus,

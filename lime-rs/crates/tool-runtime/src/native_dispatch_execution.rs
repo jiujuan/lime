@@ -9,6 +9,7 @@ use crate::tool_executor::{
 };
 use crate::tool_result_projection::{
     runtime_tool_result_to_call_tool_result, RuntimeToolResultParts,
+    TOOL_HANDLER_EXECUTED_METADATA_KEY,
 };
 use rmcp::model::{CallToolResult, ErrorCode, ErrorData};
 use serde_json::Value;
@@ -26,8 +27,19 @@ pub struct RuntimeNativeDispatchToolRequest<'a> {
 
 pub type RuntimeNativeDispatchToolResult = Result<CallToolResult, ErrorData>;
 
-fn runtime_native_dispatch_error(message: impl Into<String>) -> ErrorData {
-    ErrorData::new(ErrorCode::INTERNAL_ERROR, message.into(), None)
+fn runtime_native_dispatch_error(message: impl Into<String>, handler_executed: bool) -> ErrorData {
+    ErrorData::new(
+        ErrorCode::INTERNAL_ERROR,
+        message.into(),
+        Some(Value::Object(
+            [(
+                TOOL_HANDLER_EXECUTED_METADATA_KEY.to_string(),
+                Value::Bool(handler_executed),
+            )]
+            .into_iter()
+            .collect(),
+        )),
+    )
 }
 
 pub async fn execute_runtime_native_dispatch_tool(
@@ -45,11 +57,11 @@ pub async fn execute_runtime_native_dispatch_tool(
         ) {
             RuntimeNativePermissionDecision::Allow => {}
             RuntimeNativePermissionDecision::Deny(message) => {
-                return Some(Err(runtime_native_dispatch_error(message)));
+                return Some(Err(runtime_native_dispatch_error(message, false)));
             }
             RuntimeNativePermissionDecision::Ask(message) => {
                 if !turn_context_has_tool_approval(request.turn_context) {
-                    return Some(Err(runtime_native_dispatch_error(message)));
+                    return Some(Err(runtime_native_dispatch_error(message, false)));
                 }
             }
         }
@@ -62,6 +74,7 @@ pub async fn execute_runtime_native_dispatch_tool(
     {
         return Some(Err(runtime_native_dispatch_error(
             "Tool execution cancelled",
+            false,
         )));
     }
 
@@ -89,7 +102,10 @@ pub async fn execute_runtime_native_dispatch_tool(
                 metadata: result.metadata,
             },
         )),
-        Err(error) => Err(runtime_native_dispatch_error(error.message().to_string())),
+        Err(error) => Err(runtime_native_dispatch_error(
+            error.message().to_string(),
+            true,
+        )),
     })
 }
 
@@ -157,5 +173,12 @@ mod tests {
             panic!("cancelled dispatch should fail before executing sleep");
         };
         assert!(error.message.contains("cancelled"));
+        assert_eq!(
+            error
+                .data
+                .as_ref()
+                .and_then(|data| data.get(TOOL_HANDLER_EXECUTED_METADATA_KEY)),
+            Some(&Value::Bool(false))
+        );
     }
 }

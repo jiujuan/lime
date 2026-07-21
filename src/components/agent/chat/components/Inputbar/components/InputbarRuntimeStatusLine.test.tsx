@@ -109,7 +109,6 @@ function buildRuntime(
       countLabel: "读 2",
       rawDetailLabel: "读 2",
     },
-    queuedTurnCount: 0,
     pendingRequestCount: 0,
     subtaskStats: null,
     usage,
@@ -184,7 +183,6 @@ describe("InputbarRuntimeStatusLine", () => {
       status: "waiting_input",
       detail,
       batchDescriptor: null,
-      queuedTurnCount: 0,
       pendingRequestCount: 1,
       subtaskStats: null,
       startedAt: "2026-04-15T09:00:00Z",
@@ -196,7 +194,9 @@ describe("InputbarRuntimeStatusLine", () => {
     );
     expect(statusLine?.textContent).toContain(detail);
     expect(statusLine?.querySelector(`[title="${detail}"]`)).toBeNull();
-    expect(statusLine?.querySelector(`[aria-label="${detail}"]`)).not.toBeNull();
+    expect(
+      statusLine?.querySelector(`[aria-label="${detail}"]`),
+    ).not.toBeNull();
   });
 
   it("失败状态行应保持简短，不重复展示长错误详情", () => {
@@ -206,7 +206,6 @@ describe("InputbarRuntimeStatusLine", () => {
       status: "failed",
       detail,
       batchDescriptor: null,
-      queuedTurnCount: 0,
       pendingRequestCount: 0,
       subtaskStats: null,
       startedAt: "2026-04-15T09:00:00Z",

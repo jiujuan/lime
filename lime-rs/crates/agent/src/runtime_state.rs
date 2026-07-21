@@ -295,12 +295,12 @@ impl AgentRuntimeState {
         &self,
         session_id: &str,
         request_id: &str,
-        user_data: serde_json::Value,
+        _user_data: serde_json::Value,
         action_scope: Option<AgentActionRequiredScope>,
     ) -> Result<(), ActionRequiredError> {
         let scope = require_action_scope(session_id, request_id, action_scope)?;
         self.action_required
-            .submit_response(request_id, Some(&scope), user_data)
+            .resolve_action(request_id, Some(&scope))
             .await
     }
 
@@ -332,16 +332,12 @@ impl AgentRuntimeState {
         &self,
         session_id: &str,
         request_id: &str,
-        confirmed: bool,
+        _confirmed: bool,
         action_scope: Option<AgentActionRequiredScope>,
     ) -> Result<(), ActionRequiredError> {
         let scope = require_action_scope(session_id, request_id, action_scope)?;
         self.action_required
-            .submit_response(
-                request_id,
-                Some(&scope),
-                serde_json::json!({ "confirmed": confirmed }),
-            )
+            .resolve_action(request_id, Some(&scope))
             .await
     }
 

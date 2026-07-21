@@ -41,11 +41,11 @@ describe("plugin runtime Electron fixture smoke guard", () => {
     expect(content).toContain('input.kind === "actionRespond"');
     expect(content).toContain('input.kind === "turnCancel"');
     expect(content).toContain("assertBackendLedger(");
-    expect(content).toContain('"agentSession/start"');
-    expect(content).toContain('"agentSession/turn/start"');
-    expect(content).toContain('"agentSession/read"');
+    expect(content).toContain('"thread/start"');
+    expect(content).toContain('"turn/start"');
+    expect(content).toContain('"thread/read"');
     expect(content).toContain('"agentSession/action/respond"');
-    expect(content).toContain('"agentSession/turn/cancel"');
+    expect(content).toContain('"turn/interrupt"');
   });
 
   it("locks typed runtime request evidence", () => {

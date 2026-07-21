@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  contentFactoryHostGenerationAgentRuntimeRequest,
   startContentFactoryHostGenerationFixture,
 } from "../lib/content-factory-host-generation-fixture.mjs";
 import {
@@ -9,13 +8,10 @@ import {
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_TURN_START,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
-import { sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
+import { assert, sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
 const WORKER_APP_ID = "content-factory-app";
 const ARTICLE_OBJECT_ID = "article-1";
@@ -52,6 +48,7 @@ export async function runWorkspacePatchWorkerDogfoodTurn({
   options,
   workspace,
   requestLog,
+  identity,
   hostGenerationFixture: providedHostGenerationFixture,
 }) {
   const hostGenerationFixture =
@@ -59,50 +56,66 @@ export async function runWorkspacePatchWorkerDogfoodTurn({
     (await startContentFactoryHostGenerationFixture());
   const ownsHostGenerationFixture = !providedHostGenerationFixture;
   try {
+    assert(identity?.threadId, "内容工厂 worker fixture 缺少 canonical threadId");
+    assert(identity?.sessionId, "内容工厂 worker fixture 缺少 canonical sessionId");
     const response = await invokeAppServerFromPage(
       page,
       APP_SERVER_METHOD_SESSION_TURN_START,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
-        input: {
-          text: "通过已安装内容工厂 worker 写一篇完整公众号文章。",
-        },
-        runtimeOptions: {
-          runtimeRequest: {
-            ...contentFactoryHostGenerationAgentRuntimeRequest(
-              hostGenerationFixture.baseUrl,
+        threadId: identity.threadId,
+        clientUserMessageId: `content-factory-worker-${identity.sessionId}`,
+        input: [
+          {
+            type: "text",
+            text: "通过已安装内容工厂 worker 写一篇完整公众号文章。",
+          },
+        ],
+        cwd: workspace.rootPath,
+        runtimeWorkspaceRoots: [workspace.rootPath],
+        approvalPolicy: "never",
+        sandboxPolicy: "workspace-write",
+        additionalContext: {
+          metadata: {
+            kind: "application",
+            value: JSON.stringify(
+              buildArticleWorkspaceWorkerMetadata(workspace, identity),
             ),
-            metadata: buildArticleWorkspaceWorkerMetadata(workspace),
           },
         },
-        queueIfBusy: false,
-        skipPreSubmitResume: true,
       },
       requestLog,
     );
 
     const eventTypes = response.messages
-      .filter((message) => message?.method === "agentSession/event")
-      .map((message) => message?.params?.event?.type)
+      .map((message) =>
+        message?.method === "turn/completed"
+          ? "turn.completed"
+          : message?.method,
+      )
       .filter(Boolean);
     const turn =
       response.result?.turn && typeof response.result.turn === "object"
         ? response.result.turn
         : {};
+    const turnId = String(turn.id ?? turn.turnId ?? turn.turn_id ?? "").trim();
+    assert(turnId, "turn/start 未返回内容工厂 worker canonical turn.id");
+    const taskId = `${turnId}:${CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY}`;
     const readModel = options
       ? await waitForWorkspacePatchWorkerTurnCompleted(
           page,
           options,
           requestLog,
+          { threadId: identity.threadId, turnId },
         )
       : null;
 
     return sanitizeJson({
       method: APP_SERVER_METHOD_SESSION_TURN_START,
-      turnId: turn.turnId ?? turn.turn_id ?? null,
+      sessionId: identity.sessionId,
+      threadId: identity.threadId,
+      turnId,
       turnStatus: turn.status ?? null,
-      taskId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+      taskId,
       eventTypes,
       completed: eventTypes.includes("turn.completed"),
       artifactSnapshotEmitted: eventTypes.includes("artifact.snapshot"),
@@ -121,6 +134,7 @@ async function waitForWorkspacePatchWorkerTurnCompleted(
   page,
   options,
   requestLog,
+  identity,
 ) {
   const startedAt = Date.now();
   let lastSummary = null;
@@ -129,13 +143,14 @@ async function waitForWorkspacePatchWorkerTurnCompleted(
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-        historyLimit: 20,
+        threadId: identity.threadId,
+        includeTurns: true,
       },
       requestLog,
     );
     const summary = summarizeWorkspacePatchWorkerTurnReadModel(
       readModel.result,
+      identity.turnId,
     );
     lastSummary = summary;
     if (
@@ -151,20 +166,26 @@ async function waitForWorkspacePatchWorkerTurnCompleted(
   );
 }
 
-function summarizeWorkspacePatchWorkerTurnReadModel(result) {
+function summarizeWorkspacePatchWorkerTurnReadModel(result, workerTurnId) {
   const detail =
     result?.detail && typeof result.detail === "object" ? result.detail : {};
+  const thread =
+    result?.thread && typeof result.thread === "object" ? result.thread : {};
   const threadRead =
     detail.threadRead && typeof detail.threadRead === "object"
       ? detail.threadRead
       : detail.thread_read && typeof detail.thread_read === "object"
         ? detail.thread_read
-        : {};
-  const turns = Array.isArray(threadRead.turns) ? threadRead.turns : [];
+        : thread;
+  const turns = Array.isArray(threadRead.turns)
+    ? threadRead.turns
+    : Array.isArray(thread.turns)
+      ? thread.turns
+      : [];
   const workerTurn = turns.find(
     (turn) =>
       (turn?.turnId ?? turn?.turn_id ?? turn?.id) ===
-      CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
+      workerTurnId,
   );
   return sanitizeJson({
     hasActiveTurn: Boolean(
@@ -203,12 +224,13 @@ function buildWorkspacePatchInstalledState() {
   };
 }
 
-function buildArticleWorkspaceWorkerMetadata(workspace) {
+function buildArticleWorkspaceWorkerMetadata(workspace, identity) {
   return {
     plugin: {
       source: "right_surface_article_workspace",
       app_id: WORKER_APP_ID,
-      session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      session_id: identity.sessionId,
+      thread_id: identity.threadId,
       workspace_id: workspace.workspaceId,
       article_workspace_action: {
         key: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY,
@@ -222,7 +244,7 @@ function buildArticleWorkspaceWorkerMetadata(workspace) {
           app_id: WORKER_APP_ID,
           kind: "articleDraft",
           id: ARTICLE_OBJECT_ID,
-          session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+          session_id: identity.sessionId,
           artifact_ids: [CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID],
           preview_artifact_id:
             CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,

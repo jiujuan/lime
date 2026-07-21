@@ -23,8 +23,9 @@ pub mod ecommerce_review_reply;
 
 pub use agent_body::{
     agent_skill_body_locator_from_metadata, estimate_agent_skill_body_tokens,
-    evaluate_agent_skill_body, read_agent_skill_body, AgentSkillBody, AgentSkillBodyBudgetDecision,
-    AgentSkillBodyBudgetDecisionKind, AgentSkillBodyEvaluation, AgentSkillBodyLocator,
+    evaluate_agent_skill_body, read_agent_skill_body, read_agent_skill_instructions,
+    AgentSkillBody, AgentSkillBodyBudgetDecision, AgentSkillBodyBudgetDecisionKind,
+    AgentSkillBodyEvaluation, AgentSkillBodyLocator, AgentSkillInstructions,
     DEFAULT_AGENT_SKILL_BODY_TOKEN_BUDGET,
 };
 pub use agent_render::{
@@ -39,8 +40,9 @@ pub use agent_search::{
 };
 pub use agent_selection::{
     evaluate_agent_skill_selection_bodies, select_agent_skills_by_name_candidates,
-    select_explicit_agent_skills, select_implicit_agent_skills, AgentSkillSelection,
-    AgentSkillSelectionEvaluation, AgentSkillSelectionTrigger,
+    select_explicit_agent_skills, select_implicit_agent_skills, select_mentioned_agent_skill,
+    select_structured_agent_skill, AgentSkillSelection, AgentSkillSelectionEvaluation,
+    AgentSkillSelectionTrigger,
 };
 pub use agent_snapshot::{
     agent_skill_roots_for_workspace, build_agent_skill_snapshot,
@@ -69,3 +71,5 @@ pub use skill_matcher::{SkillMatch, SkillMatcher};
 pub use skill_summary::{
     load_skill_summaries_from_directory, load_skill_summary_from_file, LoadedSkillSummary,
 };
+
+pub const SKILL_SNAPSHOT_TURN_METADATA_KEY: &str = "skill_snapshot";

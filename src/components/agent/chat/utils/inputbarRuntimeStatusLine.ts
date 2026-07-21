@@ -1,6 +1,5 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type {
   ActionRequired,
@@ -36,7 +35,6 @@ export interface InputbarRuntimeStatusLineModel {
   latestRuntimePhase?: LatestRuntimePhase | null;
   detail: string | null;
   batchDescriptor: ToolBatchSummaryDescriptor | null;
-  queuedTurnCount: number;
   pendingRequestCount: number;
   subtaskStats: AgentTaskRuntimeSubtaskStats | null;
   usage?: AgentTokenUsage;
@@ -52,7 +50,6 @@ interface BuildInputbarRuntimeStatusLineModelParams {
   threadRead?: AgentRuntimeThreadReadModel | null;
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
-  queuedTurns?: readonly QueuedTurnSnapshot[];
   canonicalChildren?: CanonicalChildThreadSummary[];
   isSending?: boolean;
 }
@@ -123,7 +120,6 @@ function resolveFallbackStatus(params: {
   threadRead?: AgentRuntimeThreadReadModel | null;
   pendingActions: readonly ActionRequired[];
   submittedActionsInFlight: readonly ActionRequired[];
-  queuedTurnCount: number;
   isSending: boolean;
 }): AgentTaskRuntimeStatus | null {
   const {
@@ -133,7 +129,6 @@ function resolveFallbackStatus(params: {
     threadRead,
     pendingActions,
     submittedActionsInFlight,
-    queuedTurnCount,
     isSending,
   } = params;
   const visiblePendingActions = resolveVisiblePendingActions(pendingActions);
@@ -174,7 +169,7 @@ function resolveFallbackStatus(params: {
     return hasPendingRuntimeConfirmation ? "waiting_input" : null;
   }
 
-  if (threadRead?.status === "queued" || queuedTurnCount > 0) {
+  if (threadRead?.status === "queued") {
     return "queued";
   }
 
@@ -337,7 +332,6 @@ export function buildInputbarRuntimeStatusLineModel({
   threadRead = null,
   pendingActions = [],
   submittedActionsInFlight = [],
-  queuedTurns = [],
   canonicalChildren = [],
   isSending = false,
 }: BuildInputbarRuntimeStatusLineModelParams): InputbarRuntimeStatusLineModel | null {
@@ -366,7 +360,6 @@ export function buildInputbarRuntimeStatusLineModel({
     threadRead,
     pendingActions,
     submittedActionsInFlight,
-    queuedTurns,
     canonicalChildren,
     isSending,
   });
@@ -386,7 +379,6 @@ export function buildInputbarRuntimeStatusLineModel({
           ? builtTask.detail
           : null,
       batchDescriptor: builtTask.batchDescriptor,
-      queuedTurnCount: builtTask.queuedTurnCount,
       pendingRequestCount: builtTask.pendingRequestCount,
       subtaskStats: builtTask.subtaskStats,
       usage: resolveVisibleUsage(builtTask.status, latestAssistant),
@@ -402,7 +394,6 @@ export function buildInputbarRuntimeStatusLineModel({
     threadRead,
     pendingActions,
     submittedActionsInFlight,
-    queuedTurnCount: queuedTurns.length,
     isSending,
   });
   if (!status) {
@@ -431,7 +422,6 @@ export function buildInputbarRuntimeStatusLineModel({
       threadRead,
     }),
     batchDescriptor: fallbackBatchDescriptor,
-    queuedTurnCount: queuedTurns.length,
     pendingRequestCount:
       resolveVisiblePendingActions(pendingActions).length ||
       resolveVisiblePendingRequestCount(threadRead, submittedActionsInFlight),

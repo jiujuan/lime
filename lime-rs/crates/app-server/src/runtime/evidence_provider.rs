@@ -19,6 +19,8 @@ use super::timestamp;
 use super::EvidenceExportProvider;
 use super::EvidencePackRequest;
 use super::RuntimeCoreError;
+use agent_protocol::provider_trace::ProviderTraceEvent;
+use agent_protocol::ThreadItem;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::EvidencePackArtifact;
 use app_server_protocol::EvidencePackSummary;
@@ -27,6 +29,7 @@ use lime_infra::telemetry::RequestStatus;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Default)]
@@ -129,6 +132,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
     let skill_searches = skill_searches_summary(&request.events);
     let mcp_tool_results = mcp_tool_results_summary(&request.events);
     let mcp_resource_reads = mcp_resource_reads_summary(&request.events);
+    let canonical_provenance = canonical_provenance_summary(request);
     let team_facts = team_facts_summary(&request.events);
     let workflow_audit = workflow_audit_summary(&request.workflow_audit_events);
     let workspace_skill_tool_call_count = skill_invocations
@@ -165,6 +169,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         "skill_searches": skill_searches,
         "mcp_tool_results": mcp_tool_results,
         "mcp_resource_reads": mcp_resource_reads,
+        "canonical_provenance": canonical_provenance,
         "team_facts": team_facts,
         "workflow_audit": workflow_audit,
     });
@@ -235,6 +240,176 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         })),
         artifacts: evidence_artifacts,
     }
+}
+
+fn canonical_provenance_summary(request: &EvidencePackRequest) -> Value {
+    let mut event_refs = Vec::with_capacity(request.events.len());
+    let mut canonical_items = Vec::new();
+    let mut provider_attempts = Vec::new();
+    let mut turn_ids = Vec::new();
+    let mut sequences = Vec::with_capacity(request.events.len());
+
+    for event in &request.events {
+        sequences.push(event.sequence);
+        if let Some(turn_id) = event.turn_id.as_deref() {
+            push_unique(&mut turn_ids, turn_id.to_string());
+        }
+
+        event_refs.push(json!({
+            "eventId": event.event_id,
+            "eventType": event.event_type,
+            "sequence": event.sequence,
+            "turnId": event.turn_id,
+            "timestamp": event.timestamp,
+            "payloadSha256": sha256_json(&event.payload),
+        }));
+
+        if let Some((item, raw_item)) = canonical_item_from_event(event) {
+            canonical_items.push(json!({
+                "sourceEventId": event.event_id,
+                "sourceEventType": event.event_type,
+                "eventSequence": event.sequence,
+                "itemId": item.item_id.as_str(),
+                "turnId": item.turn_id.as_str(),
+                "kind": item.kind,
+                "status": item.status,
+                "ordinal": item.ordinal,
+                "item": raw_item,
+            }));
+        }
+
+        if let Some(attempt) = provider_trace_provenance(event) {
+            provider_attempts.push(attempt);
+        }
+    }
+
+    provider_attempts.extend(request.request_logs.iter().map(request_log_provenance));
+
+    let route_metadata = route_metadata_snapshot(&request.turn_runtime_metadata);
+    let replay_input = json!({
+        "eventRefs": event_refs,
+        "canonicalItems": canonical_items,
+        "providerAttempts": provider_attempts,
+        "routeMetadata": route_metadata,
+    });
+
+    json!({
+        "schemaVersion": "canonical-provenance.v1",
+        "source": "app-server-event-log",
+        "sessionId": request.session.session_id,
+        "threadId": request.session.thread_id,
+        "turnIds": turn_ids,
+        "eventCount": request.events.len(),
+        "canonicalItemCount": canonical_items.len(),
+        "sequence": {
+            "first": sequences.first(),
+            "last": sequences.last(),
+            "monotonic": sequences.windows(2).all(|pair| pair[0] <= pair[1]),
+        },
+        "eventRefs": event_refs,
+        "canonicalItems": canonical_items,
+        "providerAttempts": provider_attempts,
+        "routeMetadata": route_metadata,
+        "replayDigest": sha256_json(&replay_input),
+    })
+}
+
+fn canonical_item_from_event(event: &AgentEvent) -> Option<(ThreadItem, Value)> {
+    let raw_item = event.payload.get("item")?.clone();
+    let item = serde_json::from_value::<ThreadItem>(raw_item.clone()).ok()?;
+    Some((item, raw_item))
+}
+
+fn provider_trace_provenance(event: &AgentEvent) -> Option<Value> {
+    let raw_trace = event
+        .payload
+        .get("runtimeEvent")
+        .unwrap_or(&event.payload)
+        .clone();
+    let trace = serde_json::from_value::<ProviderTraceEvent>(raw_trace).ok()?;
+    Some(json!({
+        "source": "provider_trace",
+        "sourceEventId": event.event_id,
+        "eventSequence": event.sequence,
+        "turnId": event.turn_id,
+        "stage": trace.stage,
+        "provider": trace.provider,
+        "model": trace.model,
+        "attempt": trace.attempt,
+        "elapsedMs": trace.elapsed_ms,
+        "textChars": trace.text_chars,
+        "status": trace.status,
+        "failureCategory": trace.failure_category,
+        "retryable": trace.retryable,
+        "providerRequestId": trace.provider_request_id,
+        "route": {
+            "backend": trace.runtime_provider_backend,
+            "selector": trace.runtime_provider_selector,
+            "protocol": trace.runtime_provider_protocol,
+            "activeModel": trace.runtime_provider_active_model,
+        },
+    }))
+}
+
+fn request_log_provenance(log: &lime_infra::telemetry::RequestLog) -> Value {
+    json!({
+        "source": "request_log",
+        "requestId": log.id,
+        "sessionId": log.session_id,
+        "threadId": log.thread_id,
+        "turnId": log.turn_id,
+        "timestamp": log.timestamp,
+        "provider": log.provider.to_string(),
+        "model": log.model,
+        "status": log.status.to_string(),
+        "httpStatus": log.http_status,
+        "durationMs": log.duration_ms,
+        "inputTokens": log.input_tokens,
+        "outputTokens": log.output_tokens,
+        "totalTokens": log.total_tokens,
+        "retryCount": log.retry_count,
+        "credentialFingerprint": log
+            .credential_id
+            .as_deref()
+            .and_then(credential_fingerprint),
+    })
+}
+
+fn route_metadata_snapshot(metadata: &BTreeMap<String, Value>) -> Value {
+    const ROUTE_KEYS: &[&str] = &[
+        "effectiveRoute",
+        "effective_route",
+        "resolvedRoute",
+        "resolved_route",
+        "modelRoute",
+        "model_route",
+        "providerRoute",
+        "provider_route",
+        "routeSource",
+        "route_source",
+    ];
+
+    let mut route = Map::new();
+    for key in ROUTE_KEYS {
+        if let Some(value) = metadata.get(*key) {
+            route.insert((*key).to_string(), value.clone());
+        }
+    }
+    Value::Object(route)
+}
+
+fn credential_fingerprint(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| sha256_bytes(value.as_bytes()))
+}
+
+fn sha256_json(value: &Value) -> String {
+    let bytes = serde_json::to_vec(value).unwrap_or_default();
+    sha256_bytes(&bytes)
+}
+
+fn sha256_bytes(bytes: &[u8]) -> String {
+    format!("sha256:{}", hex::encode(Sha256::digest(bytes)))
 }
 
 #[derive(Debug, Default)]

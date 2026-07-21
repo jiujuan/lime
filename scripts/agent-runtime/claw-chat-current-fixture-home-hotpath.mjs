@@ -5,16 +5,16 @@ import {
 import { waitForBackendLedgerTurnStart } from "./claw-chat-current-fixture-backend-ledger.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
 import { waitForGuiChatCompleted } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
-import { waitForSessionReadCompleted } from "./claw-chat-current-fixture-read-model-waits.mjs";
+import {
+  waitForCanonicalThreadIdBySessionId,
+  waitForSessionReadCompleted,
+} from "./claw-chat-current-fixture-read-model-waits.mjs";
 import {
   decodeJsonRpcLines,
   evaluatePageSnapshot,
   readTraceMessages,
 } from "./claw-chat-current-fixture-rpc.mjs";
-import {
-  sanitizeJson,
-  sleep,
-} from "./claw-chat-current-fixture-utils.mjs";
+import { sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
 
 const DEFAULT_HOME_HOTPATH_SCENARIO_CONFIG = Object.freeze({
   doneText: ASSISTANT_DONE_TEXT,
@@ -69,18 +69,22 @@ function readHomeHotpathSnapshot(matchers = {}) {
     typeof matchers?.summaryText === "string" ? matchers.summaryText : "";
   const bodyText = document.body?.innerText || "";
   const mainText = document.querySelector("main")?.innerText || bodyText;
-  const textarea = document.querySelector('textarea[name="agent-chat-message"]');
+  const textarea = document.querySelector(
+    'textarea[name="agent-chat-message"]',
+  );
   const textareaRect = textarea?.getBoundingClientRect();
   const textareaStyle = textarea ? window.getComputedStyle(textarea) : null;
-  const mainArea = document.querySelector('[data-testid="workspace-main-area"]');
+  const mainArea = document.querySelector(
+    '[data-testid="workspace-main-area"]',
+  );
   const mainAreaRect = mainArea?.getBoundingClientRect();
   const textareaVisible = Boolean(
     textarea &&
-      textareaRect &&
-      textareaRect.width > 16 &&
-      textareaRect.height > 16 &&
-      textareaStyle?.visibility !== "hidden" &&
-      textareaStyle?.display !== "none",
+    textareaRect &&
+    textareaRect.width > 16 &&
+    textareaRect.height > 16 &&
+    textareaStyle?.visibility !== "hidden" &&
+    textareaStyle?.display !== "none",
   );
   const assistantMessages = Array.from(
     document.querySelectorAll('[data-message-role="assistant"]'),
@@ -109,7 +113,7 @@ function readHomeHotpathSnapshot(matchers = {}) {
     ),
     hasMessageList: Boolean(
       document.querySelector('[data-testid="message-list"]') ||
-        document.querySelector('[data-testid="message-list-frame"]'),
+      document.querySelector('[data-testid="message-list-frame"]'),
     ),
     imperativePendingShellCount: document.querySelectorAll(
       "[data-home-hotpath-pending-shell]",
@@ -213,11 +217,7 @@ async function openNewConversationHome(page, options, matchers) {
 
 async function sampleHomeHotpathProjection(page, matchers) {
   return sanitizeJson(
-    await evaluatePageSnapshot(
-      page,
-      readHomeHotpathSnapshot,
-      matchers,
-    ),
+    await evaluatePageSnapshot(page, readHomeHotpathSnapshot, matchers),
   );
 }
 
@@ -244,8 +244,7 @@ function summarizeHomeHotpathStabilitySample(snapshot, startedAt, index) {
     hasConnectedComposer: snapshot?.hasConnectedComposer === true,
     hasMessageTurnGroup: snapshot?.hasMessageTurnGroup === true,
     hasMessageList: snapshot?.hasMessageList === true,
-    imperativePendingShellCount:
-      snapshot?.imperativePendingShellCount ?? null,
+    imperativePendingShellCount: snapshot?.imperativePendingShellCount ?? null,
     mainAreaBounds: snapshot?.mainAreaBounds ?? null,
     hasTaskCenterHomeText: snapshot?.hasTaskCenterHomeText === true,
     hasEmptyConversationText: snapshot?.hasEmptyConversationText === true,
@@ -364,8 +363,7 @@ function analyzeHomeHotpathMainAreaBounds(samples, baselineBounds) {
   const finiteDrifts = Object.values(maxDriftByKey).filter(
     (value) => typeof value === "number" && Number.isFinite(value),
   );
-  const maxDriftPx =
-    finiteDrifts.length > 0 ? Math.max(...finiteDrifts) : null;
+  const maxDriftPx = finiteDrifts.length > 0 ? Math.max(...finiteDrifts) : null;
 
   return sanitizeJson({
     stable:
@@ -434,7 +432,7 @@ async function installHomeHotpathSubmitFrameSampler(
           ),
           hasMessageList: Boolean(
             document.querySelector('[data-testid="message-list"]') ||
-              document.querySelector('[data-testid="message-list-frame"]'),
+            document.querySelector('[data-testid="message-list-frame"]'),
           ),
           imperativePendingShellCount: document.querySelectorAll(
             "[data-home-hotpath-pending-shell]",
@@ -554,7 +552,9 @@ export function analyzeHomeHotpathSubmitToConversationSamples(
       ? samples.slice(0, conversationStartedIndex)
       : samples;
   const conversationSamples =
-    conversationStartedIndex >= 0 ? samples.slice(conversationStartedIndex) : [];
+    conversationStartedIndex >= 0
+      ? samples.slice(conversationStartedIndex)
+      : [];
   const invalidBeforeConversationSamples = beforeConversationSamples.filter(
     (sample) =>
       sample.hasTaskCenterHomeText !== true ||
@@ -715,13 +715,14 @@ function traceEntryStartMs(entry) {
   return endMs - durationMs;
 }
 
-async function collectHomeHotpathPreTurnTrace(page, inputSend, prompt) {
-  const traceRaw = await page.evaluate(() =>
-    window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
-  );
-  const traceMessages = readTraceMessages(traceRaw);
+export function summarizeHomeHotpathPreTurnTrace(
+  traceMessages,
+  inputSend,
+  prompt,
+  backendTurnStartRecordedAt = null,
+) {
   const clickMs = timestampToMs(inputSend?.clicked?.clickedAt);
-  const decodedRequests = traceMessages
+  const decodedRequests = (Array.isArray(traceMessages) ? traceMessages : [])
     .filter((entry) => entry?.command === "app_server_handle_json_lines")
     .flatMap((entry) => {
       const startMs = traceEntryStartMs(entry);
@@ -750,10 +751,30 @@ async function collectHomeHotpathPreTurnTrace(page, inputSend, prompt) {
     });
   const turnStartRequest = decodedRequests.find(
     (request) =>
-      request.method === "agentSession/turn/start" &&
+      request.method === "turn/start" &&
       String(request.inputText || "").includes(prompt),
   );
-  const turnStartMs = turnStartRequest?.startMs ?? null;
+  const rendererTurnStartMs = turnStartRequest?.startMs ?? null;
+  const backendTurnStartMs = timestampToMs(backendTurnStartRecordedAt);
+  const turnStartMs =
+    typeof rendererTurnStartMs === "number" &&
+    Number.isFinite(rendererTurnStartMs)
+      ? rendererTurnStartMs
+      : backendTurnStartMs;
+  const turnStartAt =
+    typeof rendererTurnStartMs === "number" &&
+    Number.isFinite(rendererTurnStartMs)
+      ? (turnStartRequest?.timestamp ?? null)
+      : backendTurnStartMs === null
+        ? null
+        : backendTurnStartRecordedAt;
+  const turnStartSource =
+    typeof rendererTurnStartMs === "number" &&
+    Number.isFinite(rendererTurnStartMs)
+      ? "renderer-safe-invoke"
+      : backendTurnStartMs === null
+        ? null
+        : "external-backend-ledger";
   const preTurnRequests =
     clickMs === null || turnStartMs === null
       ? []
@@ -775,8 +796,9 @@ async function collectHomeHotpathPreTurnTrace(page, inputSend, prompt) {
   return sanitizeJson({
     clickAt: inputSend?.clicked?.clickedAt ?? null,
     clickMs,
-    turnStartAt: turnStartRequest?.timestamp ?? null,
+    turnStartAt,
     turnStartMs,
+    turnStartSource,
     traceRequestCount: decodedRequests.length,
     methodsBeforeTurnStart: Array.from(
       new Set(preTurnRequests.map((request) => request.method).filter(Boolean)),
@@ -805,6 +827,23 @@ async function collectHomeHotpathPreTurnTrace(page, inputSend, prompt) {
       }),
     ),
   });
+}
+
+async function collectHomeHotpathPreTurnTrace(
+  page,
+  inputSend,
+  prompt,
+  backendTurnStartRecordedAt,
+) {
+  const traceRaw = await page.evaluate(() =>
+    window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+  );
+  return summarizeHomeHotpathPreTurnTrace(
+    readTraceMessages(traceRaw),
+    inputSend,
+    prompt,
+    backendTurnStartRecordedAt,
+  );
 }
 
 export async function runHomeHotpathScenario({
@@ -836,7 +875,7 @@ export async function runHomeHotpathScenario({
   const inputSend = sanitizeJson(
     await sendPromptFromGui(page, options, config.prompt, {
       allowTaskCenterHomeInput: true,
-      requireTurnStart: true,
+      requireTurnStart: false,
       afterClick: async () => {
         submitFrameSamplerInstalled = true;
         await installHomeHotpathSubmitFrameSampler(page, matchers, 1600);
@@ -877,6 +916,14 @@ export async function runHomeHotpathScenario({
     options,
   );
   const sessionId = backendTurnStart.entry.sessionId ?? null;
+  const threadId = sessionId
+    ? await waitForCanonicalThreadIdBySessionId(
+        page,
+        options,
+        appServerRequests,
+        sessionId,
+      )
+    : null;
   let guiCompletedRaw = null;
   try {
     guiCompletedRaw = await waitForGuiChatCompleted(page, options, {
@@ -888,9 +935,9 @@ export async function runHomeHotpathScenario({
     stabilitySamplingDone = true;
   }
   const guiCompleted = sanitizeJson(guiCompletedRaw);
-  const readModelCompleted = sessionId
+  const readModelCompleted = threadId
     ? await waitForSessionReadCompleted(page, options, appServerRequests, {
-        sessionId,
+        threadId,
         prompt: config.prompt,
         doneText: config.doneText,
         summaryText: config.summaryText,
@@ -900,17 +947,13 @@ export async function runHomeHotpathScenario({
   const completedProjection = await sampleHomeHotpathProjection(page, matchers);
   const postCompletionStability =
     analyzeHomeHotpathPostCompletionStabilitySamples(
-      await collectHomeHotpathFixedWindowSamples(
-        page,
-        options,
-        matchers,
-        1500,
-      ),
+      await collectHomeHotpathFixedWindowSamples(page, options, matchers, 1500),
     );
   const preTurnTrace = await collectHomeHotpathPreTurnTrace(
     page,
     inputSend,
     config.prompt,
+    backendTurnStart.entry.recordedAt,
   );
 
   return sanitizeJson({
@@ -923,6 +966,7 @@ export async function runHomeHotpathScenario({
     postSubmitProjection,
     backendTurnStart: {
       sessionId,
+      threadId,
       turnId: backendTurnStart.entry.turnId ?? null,
       providerPreference: backendTurnStart.entry.providerPreference ?? null,
       modelPreference: backendTurnStart.entry.modelPreference ?? null,

@@ -42,9 +42,7 @@ describe("agentStreamErrorController", () => {
     ).toMatchObject({
       isThinking: false,
       content: "已输出一半",
-      contentParts: [
-        { type: "text", text: "已输出一半" },
-      ],
+      contentParts: [{ type: "text", text: "已输出一半" }],
       runtimeStatus: {
         phase: "failed",
         title: "当前处理失败",
@@ -195,7 +193,6 @@ describe("agentStreamErrorController", () => {
     expect(
       buildAgentStreamErrorFailurePlan({
         errorMessage: "provider failed",
-        queuedTurnId: "queued-1",
       }),
     ).toEqual({
       errorMessage: "provider failed",

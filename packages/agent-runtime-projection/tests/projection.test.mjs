@@ -9,8 +9,6 @@ import {
   buildAgentUiPlanApprovalRequiredEvent,
   buildAgentUiPlanApprovalResolvedEvent,
   buildAgentUiProjectionBase,
-  buildAgentUiQueueAddedEvents,
-  buildAgentUiQueueLifecycleEvents,
   buildAgentUiReasoningDeltaEvent,
   buildAgentUiRunFailedEvent,
   buildAgentUiRunFinishedEvent,
@@ -315,6 +313,48 @@ test("projectCodingWorkbenchViewFromEvents consumes current thread read model co
   assert.equal(view.tests[0].suite, "unit");
   assert.equal(view.actions.length, 1);
   assert.equal(view.actions[0].actionId, "action-approve-command");
+  assert.equal(view.ui.preferredTab, "outputs");
+});
+
+test("projectCodingWorkbenchViewFromEvents consumes canonical ThreadItems", () => {
+  const view = projectCodingWorkbenchViewFromEvents({
+    executionEvents: [],
+    threadItems: [
+      {
+        id: "item-patch",
+        type: "patch",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 10,
+        status: "completed",
+        started_at: "2026-06-07T00:00:00.000Z",
+        updated_at: "2026-06-07T00:00:01.000Z",
+        paths: ["src/coding-target.ts"],
+        text: "export const codingWorkbenchSmoke = true;",
+      },
+      {
+        id: "item-command",
+        type: "command_execution",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 15,
+        status: "completed",
+        started_at: "2026-06-07T00:00:00.000Z",
+        updated_at: "2026-06-07T00:00:01.000Z",
+        command: "npm test -- coding-target",
+        cwd: ".",
+        exit_code: 1,
+        aggregated_output:
+          "FAIL coding-target.test.ts: expected codingWorkbenchSmoke to be true",
+      },
+    ],
+  });
+
+  assert.equal(view.changes[0].path, "src/coding-target.ts");
+  assert.equal(view.commands[0].command, "npm test -- coding-target");
+  assert.equal(view.commands[0].status, "failed");
+  assert.equal(view.tests[0].suite, "coding-target");
+  assert.equal(view.tests[0].result, "failed");
   assert.equal(view.ui.preferredTab, "outputs");
 });
 
@@ -1800,140 +1840,6 @@ test("conversation event helpers build standard message and model output events"
   assert.deepEqual(reasoning.payload, {
     textLength: 3,
     preview: "先分析",
-  });
-});
-
-test("queue event helpers build standard queue and steer task events", () => {
-  const context = {
-    sessionId: "session-queue",
-    timestamp: "2026-06-07T00:00:00.000Z",
-  };
-
-  const added = buildAgentUiQueueAddedEvents(
-    {
-      sessionId: "session-queue",
-      queuedTurn: {
-        queuedTurnId: "queued-1",
-        messagePreview: "下一轮",
-        messageText: "下一轮",
-        createdAt: 0,
-        imageCount: 0,
-        position: 1,
-      },
-    },
-    context,
-  );
-
-  assert.equal(added.length, 2);
-  assert.equal(added[0].sourceType, "queue_added");
-  assert.equal(added[0].type, "queue.changed");
-  assert.equal(added[0].taskId, "queued-1");
-  assert.equal(added[0].owner, "task");
-  assert.equal(added[0].scope, "task");
-  assert.equal(added[0].phase, "waiting");
-  assert.equal(added[0].surface, "task_capsule");
-  assert.equal(added[0].persistence, "snapshot");
-  assert.equal(added[0].control, "queue");
-  assert.equal(added[0].runtimeStatus, "queued");
-  assert.equal(added[0].queuedTurnCount, 2);
-  assert.deepEqual(added[0].payload, {
-    runtimeEntity: "agent_turn",
-    queueEvent: "queue_added",
-    queuedTurnCount: 2,
-    queuedTurnId: "queued-1",
-    position: 1,
-    messagePreview: "下一轮",
-    imageCount: 0,
-    createdAt: 0,
-  });
-
-  assert.equal(added[1].type, "task.changed");
-  assert.equal(added[1].taskId, "queued-1");
-  assert.equal(added[1].owner, "task");
-  assert.equal(added[1].scope, "turn");
-  assert.equal(added[1].phase, "submitted");
-  assert.equal(added[1].surface, "task_capsule");
-  assert.equal(added[1].persistence, "snapshot");
-  assert.equal(added[1].control, "steer");
-  assert.equal(added[1].runtimeStatus, "queued");
-  assert.equal(added[1].queuedTurnCount, 2);
-  assert.deepEqual(added[1].payload, {
-    runtimeEntity: "agent_turn",
-    taskEvent: "steer_intent",
-    intentKind: "queued_user_input",
-    queuedTurnId: "queued-1",
-    position: 1,
-    messagePreview: "下一轮",
-    messageLength: 3,
-    imageCount: 0,
-    createdAt: 0,
-  });
-
-  const started = buildAgentUiQueueLifecycleEvents(
-    {
-      eventType: "queue_started",
-      sessionId: "session-queue",
-      queuedTurnId: "queued-1",
-    },
-    context,
-  );
-
-  assert.equal(started.length, 2);
-  assert.equal(started[0].type, "queue.changed");
-  assert.equal(started[0].phase, "accepted");
-  assert.equal(started[0].runtimeStatus, "running");
-  assert.equal(started[1].type, "task.changed");
-  assert.equal(started[1].phase, "accepted");
-  assert.equal(started[1].control, "steer");
-  assert.deepEqual(started[1].payload, {
-    runtimeEntity: "agent_turn",
-    taskEvent: "steer_started",
-    intentKind: "queued_user_input",
-    queueEvent: "queue_started",
-    queuedTurnId: "queued-1",
-  });
-
-  const removed = buildAgentUiQueueLifecycleEvents(
-    {
-      eventType: "queue_removed",
-      sessionId: "session-queue",
-      queuedTurnId: "queued-1",
-    },
-    context,
-  );
-
-  assert.equal(removed[1].type, "task.changed");
-  assert.equal(removed[1].phase, "cancelled");
-  assert.equal(removed[1].control, "remove");
-  assert.deepEqual(removed[1].payload, {
-    runtimeEntity: "agent_turn",
-    taskEvent: "steer_removed",
-    intentKind: "queued_user_input",
-    queueEvent: "queue_removed",
-    queuedTurnId: "queued-1",
-  });
-
-  const cleared = buildAgentUiQueueLifecycleEvents(
-    {
-      eventType: "queue_cleared",
-      sessionId: "session-queue",
-      queuedTurnIds: ["queued-1", "queued-2"],
-    },
-    context,
-  );
-
-  assert.equal(cleared.length, 3);
-  assert.equal(cleared[0].type, "queue.changed");
-  assert.equal(cleared[0].queuedTurnCount, 2);
-  assert.equal(cleared[1].taskId, "queued-1");
-  assert.deepEqual(cleared[1].payload, {
-    runtimeEntity: "agent_turn",
-    taskEvent: "steer_removed",
-    intentKind: "queued_user_input",
-    queueEvent: "queue_cleared",
-    queuedTurnId: "queued-1",
-    clearedIndex: 0,
-    clearedCount: 2,
   });
 });
 

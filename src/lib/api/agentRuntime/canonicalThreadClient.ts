@@ -70,15 +70,14 @@ async function listCanonicalThreads(
 
   do {
     const params: AppServerThreadListParams = {
-      includeArchived: false,
+      archived: false,
       limit: THREAD_PAGE_LIMIT,
-      turnsView: "summary",
       ...(cursor ? { cursor } : {}),
     };
     const response: AppServerRequestResult<AppServerThreadListResponse> =
       await client.listThreads(params);
     for (const thread of response.result.data) {
-      threads.set(thread.threadId, thread);
+      threads.set(thread.id, thread);
     }
 
     const nextCursor = response.result.nextCursor?.trim() || undefined;

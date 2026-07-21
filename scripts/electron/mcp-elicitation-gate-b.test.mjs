@@ -12,7 +12,7 @@ describe("MCP elicitation Gate B guard", () => {
     expect(content).toContain('backendMode: "runtime"');
     expect(content).toContain("launchElectronFixture");
     expect(content).toContain("app_server_handle_json_lines");
-    expect(content).toContain('"agentSession/turn/start"');
+    expect(content).toContain('"turn/start"');
     expect(content).toContain('"mcpServer/create"');
     expect(content).toContain('"mcpServer/start"');
     expect(content).toContain("mcp__${serverName}__${TOOL_SUFFIX}");

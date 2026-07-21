@@ -286,11 +286,8 @@ fn backend_start_prepares_session_metadata() {
     let session_config = SessionConfigBuilder::new("session-backend").build();
     let start_request = RuntimeReplyStartRequest::new(request, session_config, None, true);
     let mut backend_start = RuntimeReplyBackendStart::from_start_request(start_request);
-    let preparation = backend_start.prepare_session_metadata([
-        "exec_command",
-        "write_stdin",
-        "EXEC_COMMAND",
-    ]);
+    let preparation =
+        backend_start.prepare_session_metadata(["exec_command", "write_stdin", "EXEC_COMMAND"]);
 
     assert!(preparation.provider_wire_shape_requested);
     assert!(preparation.provider_wire_shape_attached);

@@ -50,7 +50,7 @@ function completeStateObservations() {
     tab: "archived-conversations",
     viewport: "desktop",
     locale: "zh-CN",
-    fixtureMethod: "agentSession/list",
+    fixtureMethod: "thread/list",
     fixtureOutcome: requirement.fixtureOutcome,
     testOnly: true,
     testId: requirement.testId,

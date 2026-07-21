@@ -7,7 +7,6 @@ interface UseAgentChatStateSnapshotDebugOptions {
   isSending: boolean;
   messagesCount: number;
   pendingActionsCount: number;
-  queuedTurnsCount: number;
   sessionId: string | null;
   threadTurnsCount: number;
   topicsCount: number;
@@ -23,7 +22,6 @@ export function useAgentChatStateSnapshotDebug(
     isSending,
     messagesCount,
     pendingActionsCount,
-    queuedTurnsCount,
     sessionId,
     threadTurnsCount,
     topicsCount,
@@ -37,7 +35,6 @@ export function useAgentChatStateSnapshotDebug(
       isSending,
       messagesCount,
       pendingActionsCount,
-      queuedTurnsCount,
       sessionId,
       threadTurnsCount,
       topicsCount,
@@ -54,7 +51,6 @@ export function useAgentChatStateSnapshotDebug(
     isSending,
     messagesCount,
     pendingActionsCount,
-    queuedTurnsCount,
     sessionId,
     threadTurnsCount,
     topicsCount,

@@ -70,6 +70,7 @@ mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
+    use tokio_util::sync::CancellationToken;
 
     #[derive(Default)]
     struct RecordingEmitter {
@@ -94,6 +95,8 @@ mod tests {
     }
 
     struct StructuredExecutor;
+
+    struct PendingExecutor;
 
     fn structured_result(text: impl Into<String>) -> RuntimeToolExecutionResult {
         RuntimeToolExecutionResult::new(true, text.into(), None, HashMap::new())
@@ -137,6 +140,15 @@ mod tests {
                     call.call_id()
                 )))
             })
+        }
+    }
+
+    impl RuntimeToolExecutor for PendingExecutor {
+        fn execute<'a>(
+            &'a self,
+            _request: RuntimeToolExecutionRequest<'a>,
+        ) -> RuntimeToolExecutionFuture<'a> {
+            Box::pin(std::future::pending())
         }
     }
 
@@ -193,6 +205,12 @@ mod tests {
                 .map(|sidecar| sidecar.reference.as_str()),
             Some("sidecar://tool-output-1")
         );
+        assert_eq!(
+            output
+                .metadata
+                .get(crate::tool_result_projection::TOOL_HANDLER_EXECUTED_METADATA_KEY),
+            Some(&Value::Bool(true))
+        );
 
         let events = emitter.events();
         assert_eq!(events.len(), 2);
@@ -234,9 +252,64 @@ mod tests {
 
         assert!(!output.success);
         assert!(output.text.contains("does not match bound runtime"));
+        assert_eq!(
+            output
+                .metadata
+                .get(crate::tool_result_projection::TOOL_HANDLER_EXECUTED_METADATA_KEY),
+            Some(&Value::Bool(false))
+        );
         let events = emitter.events();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].phase, ToolLifecyclePhase::Started);
+        assert_eq!(events[1].phase, ToolLifecyclePhase::Completed);
+        assert_eq!(events[1].output, Some(output));
+    }
+
+    #[tokio::test]
+    async fn canonical_tool_contract_projects_inflight_cancel_as_aborted() {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let call = ToolCall::new(
+            "turn-cancel",
+            "call-cancel",
+            "wait",
+            serde_json::json!({}),
+            Vec::new(),
+            emitter.clone(),
+        );
+        let runtime = RuntimeToolExecutorHandle::new(Arc::new(PendingExecutor)).bind(
+            RuntimeToolDefinition::new(
+                "wait",
+                "Wait until cancellation",
+                serde_json::json!({ "type": "object" }),
+            ),
+            RuntimeToolExposure::Direct,
+        );
+        let cancel_token = CancellationToken::new();
+        let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
+            working_directory: PathBuf::from("/tmp/workspace"),
+            session_id: "session-cancel".to_string(),
+            cancel_token: Some(cancel_token.clone()),
+            workspace_sandbox: None,
+        });
+        tokio::spawn(async move {
+            tokio::task::yield_now().await;
+            cancel_token.cancel();
+        });
+
+        let output = runtime.execute_call(&call, &context, None).await;
+
+        assert!(!output.success);
+        assert_eq!(output.error, None);
+        assert_eq!(
+            output
+                .metadata
+                .get(crate::tool_result_projection::TOOL_OUTCOME_METADATA_KEY),
+            Some(&Value::String(
+                crate::tool_result_projection::TOOL_OUTCOME_ABORTED.to_string()
+            ))
+        );
+        let events = emitter.events();
+        assert_eq!(events.len(), 2);
         assert_eq!(events[1].phase, ToolLifecyclePhase::Completed);
         assert_eq!(events[1].output, Some(output));
     }

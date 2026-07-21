@@ -2,25 +2,35 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { containsForbiddenTraceEvidenceFragment } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import {
+  APP_SERVER_METHOD_SESSION_TURN_CANCEL,
   APPROVAL_REQUEST_RESUME_REQUEST_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   HOME_HOTPATH_GREETING_SCENARIO,
   HOME_HOTPATH_SCENARIO,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { resolveGateBExpectedIdentity } from "./claw-chat-current-fixture-assertion-context.mjs";
 import {
   buildCanonicalToolItem,
+  runtimeInputText,
   summarizeRequestInput,
 } from "./claw-chat-current-fixture-backend-script.mjs";
 import {
   summarizeApprovalDecisionReadModel,
   summarizeApprovalSessionCacheReadModel,
 } from "./claw-chat-current-fixture-approval-read-model.mjs";
+import { summarizeHostInterruptCanonicalEventSequence } from "./claw-chat-current-fixture-approval-resume.mjs";
 import {
   buildApprovalRequestDecisionScenarioAssertions,
+  buildApprovalRequestHostInterruptScenarioAssertions,
   buildApprovalRequestResumeScenarioAssertions,
 } from "./claw-chat-current-fixture-approval-assertions.mjs";
+import {
+  summarizeApprovalHostInterruptLifecycle,
+  summarizeApprovalServerRequestLifecycle,
+} from "./claw-chat-current-fixture-approval-trace.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
+import { serializeReadModelSummary } from "./claw-chat-current-fixture-image-command.mjs";
+import { summarizeReadModelMediaReference } from "./claw-chat-current-fixture-media-reference.mjs";
+import { buildScenarioAssertions } from "./claw-chat-current-fixture-scenario-assertions.mjs";
 import { registerImageContentSmokeGuards } from "./claw-chat-current-fixture-smoke-domain-guards.mjs";
 import { registerSkillsRuntimeSmokeGuards } from "./claw-chat-current-fixture-smoke-skills-runtime-guards.mjs";
 import {
@@ -29,7 +39,12 @@ import {
   SOUL_STYLE_TRANSCRIPT_SURFACES,
 } from "./claw-chat-current-fixture-soul-style-transcript-golden.mjs";
 import { SOUL_STYLE_FIXTURE_PROFILE_IDS } from "./claw-chat-current-fixture-soul-style.mjs";
-import { analyzeHomeHotpathSubmitToConversationSamples } from "./claw-chat-current-fixture-home-hotpath.mjs";
+import {
+  analyzeHomeHotpathSubmitToConversationSamples,
+  summarizeHomeHotpathPreTurnTrace,
+} from "./claw-chat-current-fixture-home-hotpath.mjs";
+import { runtimeEventFromDirectNotification } from "./claw-chat-current-fixture-rpc.mjs";
+import { isGuiChatCompletedSnapshotReady } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
 
 const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -41,6 +56,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-backend-tool-skill-events.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-ledger.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-invoke-trace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-agent-ui-trace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-read-model-core.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-read-model-waits.mjs",
@@ -94,6 +110,54 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-gate-b-contract.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gate-b-execution-evidence.mjs",
 ];
+
+describe("Claw GUI canonical completion guard", () => {
+  const completedSnapshot = {
+    hasPrompt: true,
+    hasAssistantSummary: true,
+    hasDoneText: false,
+    requiredVisibleTextHits: [],
+    assistantScopeDedupeGuardHits: [],
+    disallowedVisibleTextHits: [],
+    textareaVisible: true,
+    textareaDisabled: false,
+    textareaSessionId: "session-expert",
+    stopButtonVisible: false,
+    completionScope: {
+      runtimeTurnId: "turn-expert",
+      runtimeTurnStatus: "completed",
+      assistantRuntimeTurnId: "turn-expert",
+    },
+  };
+
+  it("rejects visible expert output until the assistant leaves its pending turn", () => {
+    expect(
+      isGuiChatCompletedSnapshotReady(
+        {
+          ...completedSnapshot,
+          completionScope: {
+            ...completedSnapshot.completionScope,
+            assistantRuntimeTurnId: "pending-turn:expert",
+          },
+        },
+        {
+          expectedIdentity: {
+            sessionId: "session-expert",
+            turnId: "turn-expert",
+          },
+        },
+      ),
+    ).toBe(false);
+    expect(
+      isGuiChatCompletedSnapshotReady(completedSnapshot, {
+        expectedIdentity: {
+          sessionId: "session-expert",
+          turnId: "turn-expert",
+        },
+      }),
+    ).toBe(true);
+  });
+});
 
 function readSmokeScript() {
   return fixtureSourceFiles
@@ -180,8 +244,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
         ],
         appServerRequests: [
           {
-            method: "agentSession/read",
-            params: { sessionId: "home-session" },
+            method: "thread/read",
+            params: { threadId: "wrong-thread" },
             response: {
               sessionId: "different-session",
               threadId: "wrong-thread",
@@ -189,8 +253,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
             },
           },
           {
-            method: "agentSession/read",
-            params: { sessionId: "home-session" },
+            method: "thread/read",
+            params: { threadId: "other-turn-thread" },
             response: {
               sessionId: "home-session",
               threadId: "other-turn-thread",
@@ -198,8 +262,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
             },
           },
           {
-            method: "agentSession/read",
-            params: { sessionId: "home-session" },
+            method: "thread/read",
+            params: { threadId: "" },
             response: {
               sessionId: "home-session",
               threadId: null,
@@ -207,8 +271,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
             },
           },
           {
-            method: "agentSession/read",
-            params: { sessionId: "home-session" },
+            method: "thread/read",
+            params: { threadId: "home-thread" },
             response: {
               sessionId: "home-session",
               threadId: "home-thread",
@@ -216,8 +280,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
             },
           },
           {
-            method: "agentSession/read",
-            params: { sessionId: "latest-session" },
+            method: "thread/read",
+            params: { threadId: "latest-thread" },
             response: {
               sessionId: "latest-session",
               threadId: "latest-thread",
@@ -282,8 +346,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
         ],
         appServerRequests: [
           {
-            method: "agentSession/read",
-            params: { sessionId: "skills-session" },
+            method: "thread/read",
+            params: { threadId: "skills-thread" },
             response: {
               sessionId: "skills-session",
               threadId: "skills-thread",
@@ -303,6 +367,12 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(
       resolveGateBExpectedIdentity({
         summary: {
+          contentFactoryArticleWorkspaceSessionCreation: {
+            identity: {
+              sessionId: "content-session",
+              threadId: "content-thread",
+            },
+          },
           contentFactoryArticleWorkspaceWorkerTurnStart: {
             turnId: "worker-turn",
           },
@@ -311,22 +381,19 @@ describe("claw chat current Electron fixture smoke guard", () => {
         backendLedger: [],
         appServerRequests: [
           {
-            method: "agentSession/turn/start",
+            method: "turn/start",
             params: {
-              sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-              turnId: "worker-turn",
+              threadId: "content-thread",
             },
             response: {
-              sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-              threadId: "content-thread",
               turnId: "worker-turn",
             },
           },
           {
-            method: "agentSession/read",
-            params: { sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID },
+            method: "thread/read",
+            params: { threadId: "content-thread" },
             response: {
-              sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+              sessionId: "content-session",
               threadId: "content-thread",
               turns: [{ turnId: "worker-turn" }],
             },
@@ -334,7 +401,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
         ],
       }),
     ).toEqual({
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      sessionId: "content-session",
       threadId: "content-thread",
       turnId: "worker-turn",
     });
@@ -356,8 +423,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
         options: { scenario: HOME_HOTPATH_SCENARIO },
         appServerRequests: [
           {
-            method: "agentSession/read",
-            params: { sessionId: "home-session" },
+            method: "thread/read",
+            params: { threadId: "home-thread" },
             response: {
               sessionId: "home-session",
               threadId: "home-thread",
@@ -380,7 +447,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
           },
         ],
       }),
-    ).toThrow(/matching backend turnStart and agentSession\/read evidence/);
+    ).toThrow(/matching backend turnStart and thread\/read evidence/);
   });
 
   it("fails closed when no session read binds the home session and turn", () => {
@@ -405,8 +472,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
         ],
         appServerRequests: [
           {
-            method: "agentSession/read",
-            params: { sessionId: "home-session" },
+            method: "thread/read",
+            params: { threadId: "wrong-thread" },
             response: {
               sessionId: "home-session",
               threadId: "wrong-thread",
@@ -414,8 +481,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
             },
           },
           {
-            method: "agentSession/read",
-            params: { sessionId: "different-session" },
+            method: "thread/read",
+            params: { threadId: "different-thread" },
             response: {
               sessionId: "home-session",
               threadId: "wrong-thread",
@@ -424,7 +491,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
           },
         ],
       }),
-    ).toThrow(/matching backend turnStart and agentSession\/read evidence/);
+    ).toThrow(/matching backend turnStart and thread\/read evidence/);
   });
 
   it("binds Gate B artifacts to one run before assertions", () => {
@@ -541,6 +608,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
     expect(content).toContain("window.electronAPI.supportsCommand");
     expect(content).toContain("app_server_handle_json_lines");
+    expect(content).toContain("startInvokeTraceEvidenceCollector");
     expect(content).toContain('"initialize"');
     expect(content).toContain('"initialized"');
   });
@@ -585,6 +653,18 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("collectAppServerTraceEvidence");
     expect(content).toContain("appServerTraceEvidenceAvailable");
     expect(content).toContain("appServerTraceEvidenceUsesCurrentMethods");
+    expect(content).toContain(
+      "appServerTraceEvidenceHasProviderFirstTextCheckpoint",
+    );
+    expect(content).toContain(
+      "appServerTraceEvidenceHasMessageDeltaCheckpoint",
+    );
+    expect(content).toContain("appServerTraceEvidenceHasProviderWaitMs");
+    expect(content).toContain(
+      "appServerTraceEvidenceHasServerEmissionTimestamp",
+    );
+    expect(content).toContain("serverEventEmittedAt");
+    expect(content).toContain("providerWaitMs");
     expect(content).toContain("appServerTraceEvidenceHasW3cCarrier");
     expect(content).toContain("appServerTraceEvidenceExportedSummaryOnly");
     expect(content).toContain(
@@ -653,6 +733,81 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
   });
 
+  it("rebuilds the home hotpath pre-turn window from collected invoke trace", () => {
+    const prompt = "整理今天的国际新闻";
+    const inputSend = {
+      clicked: { clickedAt: "2026-07-20T12:00:00.100Z" },
+    };
+    const preTurnTrace = summarizeHomeHotpathPreTurnTrace(
+      [
+        {
+          command: "app_server_handle_json_lines",
+          timestamp: "2026-07-20T12:00:01.000Z",
+          duration_ms: 500,
+          status: "success",
+          transport: "electron-ipc",
+          args_preview: {
+            request: {
+              lines: [
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "turn/start",
+                  params: {
+                    threadId: "thread-current",
+                    input: { text: prompt },
+                  },
+                }),
+              ],
+            },
+          },
+        },
+      ],
+      inputSend,
+      prompt,
+    );
+
+    expect(preTurnTrace).toMatchObject({
+      clickAt: "2026-07-20T12:00:00.100Z",
+      turnStartAt: "2026-07-20T12:00:01.000Z",
+      turnStartMs: Date.parse("2026-07-20T12:00:00.500Z"),
+      turnStartSource: "renderer-safe-invoke",
+      traceRequestCount: 1,
+      blockedAuxiliaryMethodsBeforeTurnStart: [],
+    });
+    expect(
+      summarizeHomeHotpathPreTurnTrace(
+        [],
+        inputSend,
+        prompt,
+        "2026-07-20T12:00:02.000Z",
+      ),
+    ).toMatchObject({
+      turnStartAt: "2026-07-20T12:00:02.000Z",
+      turnStartMs: Date.parse("2026-07-20T12:00:02.000Z"),
+      turnStartSource: "external-backend-ledger",
+    });
+    expect(
+      summarizeHomeHotpathPreTurnTrace([], inputSend, prompt).turnStartAt,
+    ).toBeNull();
+
+    const assertions = buildScenarioAssertions({
+      appServerRequestMethods: [],
+      isHomeHotpathScenario: true,
+      summary: {
+        agentUiPerformanceTraceDeferred: { reason: "unrelated trace gap" },
+        homeHotpath: {
+          preTurnTrace: {
+            clickAt: inputSend.clicked.clickedAt,
+            turnStartAt: null,
+            blockedAuxiliaryMethodsBeforeTurnStart: [],
+          },
+        },
+      },
+    });
+    expect(assertions.homeHotpathPreTurnTraceWindowAvailable).toBe(false);
+  });
+
   it("passes home hotpath text matchers into page.evaluate instead of closing over Node imports", () => {
     const content = fs.readFileSync(
       "scripts/agent-runtime/claw-chat-current-fixture-home-hotpath.mjs",
@@ -699,6 +854,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "options.scenario === HOME_HOTPATH_GREETING_SCENARIO",
     );
     expect(content).toContain("!isHomeHotpathScenario");
+    expect(content).toContain(
+      "options.scenario !== APPROVAL_REQUEST_HOST_INTERRUPT_SCENARIO",
+    );
     expect(content.indexOf("runElectronResizeReflowScenario")).toBeLessThan(
       content.indexOf("wait-gui-completed"),
     );
@@ -726,11 +884,16 @@ describe("claw chat current Electron fixture smoke guard", () => {
     ).toBe(true);
   });
 
-  it("uses a local external fixture backend and current Agent Session methods", () => {
+  it("uses a local external fixture backend and current direct v2 methods", () => {
     const content = readSmokeScript();
 
     expect(content).toContain('"app_server_drain_events"');
-    expect(content).toContain('"agentSession/event"');
+    expect(content).toContain('"turn/started"');
+    expect(content).toContain('"turn/completed"');
+    expect(content).toContain('"item/started"');
+    expect(content).toContain('"item/completed"');
+    expect(content).toContain('"item/agentMessage/delta"');
+    expect(content).not.toContain('"agentSession/event"');
     expect(content).toContain('APP_SERVER_BACKEND_MODE: "external"');
     expect(content).toContain('APP_SERVER_BACKEND_MODE: "runtime"');
     expect(content).toContain("resolveScenarioBackendEnv");
@@ -738,12 +901,12 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("writeFixtureBackend");
     expect(content).toContain('const FIXTURE_PROVIDER = "fixture-provider"');
     expect(content).toContain('const FIXTURE_MODEL = "fixture-model"');
-    expect(content).toContain('"agentSession/start"');
+    expect(content).toContain('"thread/start"');
     expect(content).toContain('"agentSession/update"');
-    expect(content).toContain('"agentSession/turn/start"');
-    expect(content).toContain('"agentSession/turn/cancel"');
-    expect(content).toContain('"agentSession/read"');
-    expect(content).toContain('"agentSession/list"');
+    expect(content).toContain('"turn/start"');
+    expect(content).toContain('"turn/interrupt"');
+    expect(content).toContain('"thread/read"');
+    expect(content).toContain('"thread/list"');
     expect(content).toContain('"workspace/default/ensure"');
     expect(content).toContain('kind === "turnStart"');
     expect(content).toContain('kind === "turnCancel"');
@@ -786,14 +949,78 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("AAAAEAAAABCAQAAAC1HAw");
   });
 
-  it("proves agentSession/event notifications align with the same turn read model", () => {
+  it("reads canonical image task output from dynamicToolCall contentItems", () => {
+    const summary = serializeReadModelSummary({
+      thread: {
+        turns: [
+          {
+            status: "completed",
+            items: [
+              {
+                type: "dynamicToolCall",
+                name: "lime_create_image_generation_task",
+                status: "completed",
+                contentItems: [
+                  {
+                    type: "inputText",
+                    inputText: {
+                      text: JSON.stringify({
+                        task_id: "image-task-1",
+                        artifact_path:
+                          ".lime/tasks/image_generate/image-task-1.json",
+                      }),
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(summary.createTaskOutputContainsTaskId).toBe(true);
+    expect(summary.createTaskOutputContainsTaskFile).toBe(true);
+  });
+
+  it("binds image workflow audit to the current runtime session", () => {
+    const workflowRead = {
+      sessionId: "sess-current",
+      activeWorkflowRunId: "",
+      matchedRun: {
+        workflowKey: "image_command_workflow",
+        status: "completed",
+        stepCounts: { total: 5 },
+      },
+    };
+    const buildAssertions = (sessionId) =>
+      buildScenarioAssertions({
+        appServerRequestMethods: ["workflow/read"],
+        isImageCommandScenario: true,
+        pageText: "",
+        summary: {
+          sessionId,
+          imageCommandWorkflowRead: workflowRead,
+        },
+      });
+
+    expect(
+      buildAssertions("sess-current")
+        .imageCommandWorkflowAuditReadModelProjected,
+    ).toBe(true);
+    expect(
+      buildAssertions("sess-stale").imageCommandWorkflowAuditReadModelProjected,
+    ).toBe(false);
+  });
+
+  it("proves runtime notifications align with the same turn read model", () => {
     const content = readSmokeScript();
 
     expect(content).toContain("runEventReadProbe");
-    expect(content).toContain("waitForAgentSessionEventsForTurn");
+    expect(content).toContain("waitForRuntimeEventsForTurn");
     expect(content).toContain("waitForSessionReadContainsTurn");
     expect(content).toContain("drainAppServerEventsFromPage");
-    expect(content).toContain("EVENT_READ_PROBE_TURN_ID");
+    expect(content).toContain("clientUserMessageId");
     expect(content).toContain("EVENT_READ_PROBE_DONE_TEXT");
     expect(content).toContain("EVENT_READ_PROBE_TOOL_CALL_ID");
     expect(content).toContain('const EVENT_READ_PROBE_TOOL_NAME = "WebFetch"');
@@ -808,7 +1035,55 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("readModelEventReadAligned");
     expect(content).toContain("readModelToolCallAligned");
     expect(content).toContain("containsToolOutput");
-    expect(content).toContain("agentSession/event 与 read model 同 turn 对齐");
+    expect(content).toContain(
+      "direct v2 notification 与 read model 同 turn 对齐",
+    );
+    expect(content).not.toContain("eventReadProbe?.deferred === true");
+  });
+
+  it("normalizes direct v2 lifecycle notifications for the event/read probe", () => {
+    expect(
+      runtimeEventFromDirectNotification({
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          delta: "hello",
+        },
+      }),
+    ).toMatchObject({
+      threadId: "thread-1",
+      turnId: "turn-1",
+      type: "message.delta",
+    });
+    expect(
+      runtimeEventFromDirectNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: { id: "tool-1", type: "commandExecution" },
+        },
+      }),
+    ).toMatchObject({
+      threadId: "thread-1",
+      turnId: "turn-1",
+      type: "item.completed",
+    });
+    expect(
+      runtimeEventFromDirectNotification({
+        method: "turn/completed",
+        params: {
+          threadId: "thread-1",
+          turn: { id: "turn-1", status: "completed" },
+        },
+      }),
+    ).toMatchObject({
+      threadId: "thread-1",
+      turnId: "turn-1",
+      type: "turn.completed",
+    });
   });
 
   it("keeps scenario-specific assertions out of unrelated evidence", () => {
@@ -919,6 +1194,68 @@ describe("claw chat current Electron fixture smoke guard", () => {
     ).toBe(true);
     expect(
       buildAssertions(true).approvalRequestResumeSecondNoPendingApproval,
+    ).toBe(false);
+  });
+
+  it("binds approval response scope to the canonical generated session", () => {
+    const sessionId = "sess_generated";
+    const turnId = "turn_generated";
+    const buildAssertions = (requestSessionId) =>
+      buildApprovalRequestResumeScenarioAssertions({
+        appServerRequestMethods: [],
+        approvalRequestResumeTurnStart: { sessionId, turnId },
+        pageText: "",
+        summary: {
+          sessionId,
+          approvalRequestResumeRespondActionRequest: {
+            params: {
+              sessionId: requestSessionId,
+              requestId: APPROVAL_REQUEST_RESUME_REQUEST_ID,
+              actionType: "tool_confirmation",
+              decision: "allow_for_session",
+              actionScope: { turnId },
+            },
+          },
+        },
+      });
+
+    expect(
+      buildAssertions(sessionId).approvalRequestResumeRespondPayloadScoped,
+    ).toBe(true);
+    expect(
+      buildAssertions("sess_other").approvalRequestResumeRespondPayloadScoped,
+    ).toBe(false);
+  });
+
+  it("binds decline response scope to the canonical generated session", () => {
+    const sessionId = "sess_generated";
+    const turnId = "turn_generated";
+    const buildAssertions = (requestSessionId) =>
+      buildApprovalRequestDecisionScenarioAssertions({
+        appServerRequestMethods: [],
+        approvalRequestResumeTurnStart: { sessionId, turnId },
+        backendLedger: [],
+        isApprovalRequestCancelScenario: false,
+        isApprovalRequestDeclineScenario: true,
+        summary: {
+          sessionId,
+          approvalRequestDecisionRespondActionRequest: {
+            params: {
+              sessionId: requestSessionId,
+              requestId: APPROVAL_REQUEST_RESUME_REQUEST_ID,
+              actionType: "tool_confirmation",
+              decision: "decline",
+              actionScope: { turnId },
+            },
+          },
+        },
+      });
+
+    expect(
+      buildAssertions(sessionId).approvalRequestDecisionRespondPayloadScoped,
+    ).toBe(true);
+    expect(
+      buildAssertions("sess_other").approvalRequestDecisionRespondPayloadScoped,
     ).toBe(false);
   });
 
@@ -1078,18 +1415,36 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
   });
 
-  it("counts current AgentAttachment images by protocol kind", () => {
+  it("extracts current ordered runtime input parts", () => {
+    expect(
+      runtimeInputText({
+        input: {
+          parts: [
+            { Text: { text: "first", text_elements: [] } },
+            { Skill: { name: "demo", path: "/skills/demo" } },
+            { Text: { text: "second", text_elements: [] } },
+          ],
+          agent_only: false,
+        },
+      }),
+    ).toBe("firstsecond");
+  });
+
+  it("counts current runtime image parts by protocol variant", () => {
     expect(
       summarizeRequestInput({
         input: {
-          text: "inspect image",
-          attachments: [
+          parts: [
             {
-              kind: "image",
-              uri: "data:image/png;base64,abc",
-              metadata: { mediaType: "image/png", index: 0 },
+              Image: {
+                uri: "data:image/png;base64,abc",
+                media_type: "image/png",
+                provider_data: null,
+                detail: null,
+              },
             },
           ],
+          agent_only: false,
         },
       }),
     ).toMatchObject({
@@ -1144,101 +1499,252 @@ describe("claw chat current Electron fixture smoke guard", () => {
     }
   });
 
-  it("reads session-cache auto-resolution from canonical Approval", () => {
+  it("keeps session-cache control audit out of the current v2 read model", () => {
     expect(
       summarizeApprovalSessionCacheReadModel(
         {
-          detail: {
-            thread_read: {
-              items: [
-                {
-                  kind: "approval",
-                  status: "completed",
-                  payload: {
-                    type: "approval",
-                    request_id: "permission-turn-2",
-                    action: { kind: "tool_confirmation", description: "" },
-                    decision: "approvedForSession",
-                  },
-                },
-              ],
-            },
+          thread: {
+            turns: [{ id: "turn-2", items: [], status: "completed" }],
           },
         },
         "turn-2",
       ),
     ).toMatchObject({
-      includesApprovalSessionCacheHit: true,
-      includesAllowForSession: true,
-      includesSecondPermissionRequestId: true,
+      includesApprovalSessionCacheHit: false,
+      includesAllowForSession: false,
+      includesSecondPermissionRequestId: false,
       includesActionRequiredForSecondPermission: false,
-      includesActionResolvedForSecondPermission: true,
+      includesActionResolvedForSecondPermission: false,
     });
   });
 
-  it.each([
-    ["decline", "denied", false],
-    ["cancel", "abort", true],
-  ])(
-    "reads %s resolution from canonical Approval",
-    (decision, canonicalDecision, includesCanceled) => {
-      expect(
-        summarizeApprovalDecisionReadModel(
-          {
-            detail: {
-              thread_read: {
-                runtime_summary: {
-                  latestTurnStatus:
-                    decision === "cancel" ? "canceled" : "completed",
-                },
-                items: [
-                  {
-                    kind: "approval",
-                    status: "completed",
-                    payload: {
-                      type: "approval",
-                      request_id: APPROVAL_REQUEST_RESUME_REQUEST_ID,
-                      action: { kind: "tool_confirmation", description: "" },
-                      decision: canonicalDecision,
-                    },
-                  },
-                ],
-              },
-            },
-          },
-          decision,
-        ),
-      ).toMatchObject({
-        includesActionResolved: true,
-        includesDecision: true,
-        includesCanceled,
-      });
-    },
-  );
-
-  it("reads terminal Approval from the canonical session read model", () => {
-    expect(
-      summarizeApprovalDecisionReadModel(
+  it("proves session-cache auto-resolution with backend audit and filtered read model", () => {
+    const secondTurnId = "turn-2";
+    const assertions = buildApprovalRequestResumeScenarioAssertions({
+      appServerRequestMethods: [],
+      approvalRequestResumeTurnStart: null,
+      backendLedger: [
         {
-          detail: {
-            thread_read: {
-              runtime_summary: { latestTurnStatus: "completed" },
-              thread_items: [
-                {
-                  type: "approval_request",
-                  request_id: APPROVAL_REQUEST_RESUME_REQUEST_ID,
-                  status: "completed",
-                  response: "denied",
-                },
-              ],
-            },
+          kind: "backendEmit",
+          turnId: secondTurnId,
+          eventTypes: ["approval.session_cache.hit", "action.resolved"],
+        },
+      ],
+      pageText: "",
+      summary: {
+        approvalRequestResumeSecondBackendTurnStart: { turnId: secondTurnId },
+        readModelApprovalRequestResumeSecondCompleted: {
+          pendingRequestCount: 0,
+          includesApprovalSessionCacheHit: false,
+          includesAllowForSession: false,
+          includesSecondPermissionRequestId: false,
+          includesActionRequiredForSecondPermission: false,
+          includesActionResolvedForSecondPermission: false,
+        },
+      },
+    });
+
+    expect(assertions.approvalRequestResumeSecondReadModelAutoResolved).toBe(
+      true,
+    );
+  });
+
+  it("matches approval reverse response with resolved before runtime terminal", () => {
+    const lifecycle = summarizeApprovalServerRequestLifecycle({
+      traceMessages: [],
+      lifecycleEntries: [
+        {
+          sequence: 1,
+          kind: "terminal",
+          method: "item/completed",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        {
+          sequence: 2,
+          kind: "request",
+          id: "app-server-request:boot:1",
+          method: "item/commandExecution/requestApproval",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        {
+          sequence: 3,
+          kind: "response",
+          id: "app-server-request:boot:1",
+          decision: "acceptForSession",
+        },
+        {
+          sequence: 4,
+          kind: "resolved",
+          method: "serverRequest/resolved",
+          id: "app-server-request:boot:1",
+          threadId: "thread-1",
+        },
+        {
+          sequence: 5,
+          kind: "terminal",
+          method: "item/completed",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+      ],
+      notifications: [
+        {
+          jsonrpc: "2.0",
+          method: "serverRequest/resolved",
+          params: {
+            requestId: "app-server-request:boot:1",
+            threadId: "thread-1",
           },
         },
-        "decline",
-      ),
+        {
+          jsonrpc: "2.0",
+          method: "item/completed",
+          params: { threadId: "thread-1", turnId: "turn-1" },
+        },
+      ],
+      wireDecision: "acceptForSession",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+
+    expect(lifecycle).toMatchObject({
+      request: {
+        id: "app-server-request:boot:1",
+        method: "item/commandExecution/requestApproval",
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+      response: {
+        id: "app-server-request:boot:1",
+        decision: "acceptForSession",
+      },
+      resolved: {
+        method: "serverRequest/resolved",
+        requestId: "app-server-request:boot:1",
+        threadId: "thread-1",
+      },
+      responseMatchesResolved: true,
+      responseBeforeResolved: true,
+      runtimeTerminalMethod: "item/completed",
+      resolvedBeforeRuntimeTerminal: true,
+    });
+  });
+
+  it("aborts a pending approval through turn/interrupt without a renderer response", () => {
+    const lifecycle = summarizeApprovalHostInterruptLifecycle({
+      lifecycleEntries: [
+        {
+          sequence: 1,
+          kind: "request",
+          id: "app-server-request:boot:1",
+          method: "item/commandExecution/requestApproval",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        {
+          sequence: 2,
+          kind: "resolved",
+          method: "serverRequest/resolved",
+          id: "app-server-request:boot:1",
+          threadId: "thread-1",
+        },
+        {
+          sequence: 3,
+          kind: "terminal",
+          method: "item/completed",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+      ],
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+
+    expect(lifecycle).toMatchObject({
+      request: {
+        id: "app-server-request:boot:1",
+        method: "item/commandExecution/requestApproval",
+      },
+      resolved: {
+        method: "serverRequest/resolved",
+        requestId: "app-server-request:boot:1",
+        threadId: "thread-1",
+      },
+      responseCount: 0,
+      noRendererResponse: true,
+      resolvedBeforeRuntimeTerminal: true,
+    });
+
+    const assertions = buildApprovalRequestHostInterruptScenarioAssertions({
+      appServerRequestMethods: [APP_SERVER_METHOD_SESSION_TURN_CANCEL],
+      approvalRequestResumeTurnStart: {
+        inputText: "验证审批请求 hydrate 后允许继续",
+        turnId: "turn-1",
+      },
+      summary: {
+        threadId: "thread-1",
+        approvalRequestDecisionInputSend: {
+          afterFill: { promptVisibleInTextarea: true },
+          clicked: { clicked: true },
+        },
+        approvalRequestDecisionPendingGui: {
+          hasSection: true,
+          hasApprovalContent: true,
+          hasPrompt: true,
+          textareaVisible: false,
+          singleLine: true,
+        },
+        approvalRequestDecisionPendingReadModel: {
+          hasPendingRequest: true,
+          payloadActionType: "tool_confirmation",
+          includesRequestId: true,
+          includesToolCallId: true,
+        },
+        approvalRequestHostInterruptRequest: {
+          method: APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+          params: { threadId: "thread-1", turnId: "turn-1" },
+        },
+        approvalRequestHostInterruptLifecycle: lifecycle,
+        approvalRequestHostInterruptBackend: { actionRespondCount: 0 },
+        guiApprovalRequestCancelCompleted: {
+          hasPrompt: true,
+          textareaVisible: true,
+          textareaDisabled: false,
+          stopButtonVisible: false,
+          completionScope: { assistantText: "" },
+        },
+        readModelApprovalRequestCancelCanceled: {
+          pendingRequestCount: 0,
+          latestTurnCanceled: true,
+          includesPrompt: true,
+          includesToolCallId: true,
+          includesCanceled: true,
+          includesToolResult: false,
+        },
+        approvalRequestHostInterruptCanonicalEvents: { ordered: true },
+      },
+    });
+
+    expect(Object.values(assertions).every(Boolean)).toBe(true);
+  });
+
+  it("requires canonical host interrupt events in canceled item order", () => {
+    expect(
+      summarizeHostInterruptCanonicalEventSequence([
+        { type: "action.canceled", payload: {} },
+        {
+          type: "item.completed",
+          payload: { item: { status: "cancelled" } },
+        },
+        { type: "turn.canceled", payload: {} },
+      ]),
     ).toMatchObject({
-      includesActionResolved: true,
-      includesDecision: true,
+      actionCanceledIndex: 0,
+      itemCompletedCanceledIndex: 1,
+      turnCanceledIndex: 2,
+      ordered: true,
     });
   });
 
@@ -1266,18 +1772,38 @@ describe("claw chat current Electron fixture smoke guard", () => {
         .guiApprovalRequestDeclineHistoricalDetailsHidden,
     ).toBe(true);
     expect(
+      buildAssertions({ previewCount: 0, recordCount: 0 })
+        .guiApprovalRequestDeclineHistoricalDetailsHidden,
+    ).toBe(true);
+    expect(
       buildAssertions({ previewCount: 1, recordCount: 1 })
         .guiApprovalRequestDeclineHistoricalDetailsHidden,
     ).toBe(false);
     expect(
       buildAssertions({ previewCount: 0, recordCount: 0 })
         .guiApprovalRequestDeclineHistoricalDetailsHidden,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("covers Inputbar pending steer rich draft queue and restore", () => {
     const content = readSmokeScript();
     const regressionContent = readCurrentFixtureRegressionSmokeScript();
+    const readModelWaitsContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-read-model-waits.mjs",
+      "utf8",
+    );
+    const rpcContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
+      "utf8",
+    );
+    const skillsRuntimeFlowContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-skills-runtime-flow.mjs",
+      "utf8",
+    );
+    const pendingSteerAssertionsContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-pending-steer-assertions.mjs",
+      "utf8",
+    );
 
     expect(content).toContain("inputbar-pending-steer-rich-restore");
     expect(content).toContain("inputbar-pending-steer-multi-queue");
@@ -1321,11 +1847,16 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("inputbarPendingSteerSecondTextQueued");
     expect(content).toContain("inputbarPendingSteerPopFrontGuiPromoteClicked");
     expect(content).toContain("inputbarPendingSteerPopFrontUsedCurrentResume");
-    expect(content).not.toMatch(
-      /summary\.inputbarPendingSteerPopFrontActiveCancel\s*=\s*await cancelActivePendingSteerTurn/u,
+    expect(skillsRuntimeFlowContent).toContain("waitForBackendLedgerTurnStart");
+    expect(readModelWaitsContent).not.toContain(
+      "APP_SERVER_METHOD_SESSION_THREAD_RESUME",
+    );
+    expect(rpcContent).not.toContain("APP_SERVER_METHOD_SESSION_THREAD_RESUME");
+    expect(pendingSteerAssertionsContent).not.toContain(
+      "APP_SERVER_METHOD_SESSION_THREAD_RESUME",
     );
     expect(content).not.toMatch(
-      /summary\.inputbarPendingSteerPopFrontQueueResume\s*=\s*await resumeQueuedTurnForPromptIfNeeded/u,
+      /summary\.inputbarPendingSteerPopFrontActiveCancel\s*=\s*await cancelActivePendingSteerTurn/u,
     );
     expect(content).toContain("inputbarPendingSteerPopFrontSecondReindexed");
     expect(content).toContain(
@@ -1356,30 +1887,14 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "options.scenario !== INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO",
     );
-    expect(regressionContent).toContain(
+    expect(regressionContent).not.toContain(
       "Claw Inputbar pending steer rich draft queue + restore Electron fixture",
     );
-    expect(regressionContent).toContain(
-      '"inputbar-pending-steer-rich-restore"',
+    expect(regressionContent).not.toContain(
+      '"inputbar-pending-steer-multi-queue"',
     );
-    expect(regressionContent).toContain(
-      "claw-chat-current-fixture-inputbar-pending-steer-rich-restore-regression",
-    );
-    expect(regressionContent).toContain(
-      "Claw Inputbar pending steer multi queue order Electron fixture",
-    );
-    expect(regressionContent).toContain('"inputbar-pending-steer-multi-queue"');
-    expect(regressionContent).toContain(
-      "claw-chat-current-fixture-inputbar-pending-steer-multi-queue-regression",
-    );
-    expect(regressionContent).toContain(
-      "Claw Inputbar pending steer pop-front resume hydrate Electron fixture",
-    );
-    expect(regressionContent).toContain(
+    expect(regressionContent).not.toContain(
       '"inputbar-pending-steer-pop-front-resume"',
-    );
-    expect(regressionContent).toContain(
-      "claw-chat-current-fixture-inputbar-pending-steer-pop-front-resume-regression",
     );
   });
 
@@ -1515,6 +2030,35 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
   it("covers web tool WebSearch/WebFetch rendering in the real Electron fixture", () => {
     const content = readSmokeScript();
+    const backendContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-backend-tool-skill-events.mjs",
+      "utf8",
+    );
+    const webToolsBranchStart = backendContent.indexOf(
+      "if (isWebToolsRenderingPrompt)",
+    );
+    const webToolsBranchEnd = backendContent.indexOf(
+      "if (isMcpStructuredContentPrompt)",
+      webToolsBranchStart,
+    );
+    const webToolsBranch = backendContent.slice(
+      webToolsBranchStart,
+      webToolsBranchEnd,
+    );
+    const reasoningBuilderIndex = webToolsBranch.indexOf(
+      "const buildWebToolsReasoningItem",
+    );
+    const reasoningStartedIndex = webToolsBranch.indexOf(
+      'type: "item.started"',
+      reasoningBuilderIndex,
+    );
+    const reasoningUpdatedIndex = webToolsBranch.indexOf(
+      'type: "item.updated"',
+      reasoningStartedIndex,
+    );
+    const reasoningCompletedIndex = webToolsBranch.lastIndexOf(
+      'type: "item.completed"',
+    );
 
     expect(content).toContain("web-tools-rendering");
     expect(content).toContain("WEB_TOOLS_RENDERING_PROMPT");
@@ -1531,14 +2075,39 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("hasFetchPageUrl");
     expect(content).toContain("hasFetchMarkdownHidden");
     expect(content).toContain("rawJsonEnvelopeVisible");
-    expect(content).toContain("guiWebSearchProcessDefaultCollapsed");
-    expect(content).toContain("guiWebSearchProcessShowsSourcesAfterExpand");
-    expect(content).toContain("guiWebFetchProcessShowsReadPagesAfterExpand");
-    expect(content).toContain("guiWebToolsTimelineOrderPreserved");
-    expect(content).toContain("guiWebSearchFinalTextInterleaved");
+    expect(content).toContain("guiWebToolsLiveRunningStateCaptured");
+    expect(content).toContain("guiWebToolsLiveNoLegacyTextAfterProcess");
+    expect(content).toContain("guiWebToolsLiveSourcesVisible");
+    expect(content).toContain("guiWebToolsLiveReadPagesVisible");
+    expect(content).toContain("guiWebToolsLiveTimelineOrderPreserved");
+    expect(content).toContain("guiWebToolsCompletedProcessCompacted");
+    expect(content).toContain("guiWebToolsFinalTextVisibleAfterCompletion");
+    expect(content).toContain("historicalTimelinePreviewVisible");
+    expect(content).toContain(
+      "${WEB_TOOLS_BROKEN_MARKDOWN_TEXT}\\n${WEB_TOOLS_RENDERING_DONE_TEXT}\\n",
+    );
+    expect(content).toContain(
+      "text: isWebToolsRenderingPrompt ? followupText : assistantDoneText",
+    );
+    expect(content).not.toContain("expandAndInspectGuiWebToolsProcess");
+    expect(content).not.toContain("fastCompletedBeforeLiveCapture");
+    expect(content).not.toContain("guiWebSearchProcessShowsSourcesAfterExpand");
+    expect(content).not.toContain(
+      "guiWebFetchProcessShowsReadPagesAfterExpand",
+    );
+    expect(content).not.toContain("expandedDetails?.hasSearchTitle");
     expect(content).toContain("guiWebFetchTransportEnvelopeHidden");
     expect(content).toContain('type: "item.updated"');
     expect(content).toContain('type: "item.completed"');
+    expect(webToolsBranchStart).toBeGreaterThan(-1);
+    expect(webToolsBranchEnd).toBeGreaterThan(webToolsBranchStart);
+    expect(reasoningBuilderIndex).toBeGreaterThan(-1);
+    expect(reasoningStartedIndex).toBeGreaterThan(reasoningBuilderIndex);
+    expect(reasoningUpdatedIndex).toBeGreaterThan(reasoningStartedIndex);
+    expect(reasoningCompletedIndex).toBeGreaterThan(reasoningUpdatedIndex);
+    expect(webToolsBranch).not.toContain('type: "reasoning.final"');
+    expect(content).not.toContain("WEB_TOOLS_REASONING_FINAL_ID");
+    expect(content).not.toContain("WEB_TOOLS_REASONING_FINAL_SIGNATURE");
     expect(content).toContain("hasTimelineOrderPreserved");
     expect(content).toContain("WEB_TOOLS_RENDERING_ASSERTION_KEYS");
     expect(content).toContain("bytes: 2048");
@@ -1746,7 +2315,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("agent_runtime_");
   });
 
-  it("covers media contentParts references in Agent Chat and Workbench preview", () => {
+  it("covers current media items in Agent Chat and Workbench preview", () => {
     const content = readSmokeScript();
     const backendContent = fs.readFileSync(
       "scripts/agent-runtime/claw-chat-current-fixture-backend-script.mjs",
@@ -1757,10 +2326,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("MEDIA_REFERENCE_PROMPT");
     expect(content).toContain("验证媒体引用展示");
     expect(content).toContain("CLAW_MEDIA_REFERENCE_FIXTURE_DONE");
-    expect(content).toContain("contentParts");
-    expect(content).toContain('type: "media"');
-    expect(content).toContain("sidecar://media/fixture-image-1");
-    expect(content).toContain("fixture-image-1.png");
+    expect(content).toContain("runtimeEnv.mediaReferenceSourcePath");
+    expect(backendContent).toContain('type: "item.completed"');
+    expect(backendContent).toContain('type: "media"');
+    expect(backendContent).toContain("mediaReferenceSourcePath");
     expect(content).toContain("streaming-media-reference-card");
     expect(content).toContain("runMediaReferenceScenario");
     expect(content).toContain("summarizeGuiMediaReferenceSnapshot");
@@ -1771,28 +2340,55 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("guiMediaReferenceDoesNotExposeInlinePayload");
     expect(content).toContain("guiMediaReferencePreviewOpened");
     expect(content).toContain("readModelMediaReferenceObserved");
-    expect(content).toContain("source_path");
+    expect(content).toContain("imageViewPaths");
     expect(content).toContain("hasSourceOwner");
     expect(content).toContain("preview-artifact-image");
     const mediaBranchIndex = backendContent.indexOf(
       "if (isMediaReferencePrompt)",
     );
-    const mediaStartedIndex = backendContent.indexOf(
-      'type: "item.started"',
-      mediaBranchIndex,
-    );
     const mediaCompletedIndex = backendContent.indexOf(
       'type: "item.completed"',
-      mediaStartedIndex,
+      mediaBranchIndex,
+    );
+    const turnCompletedIndex = backendContent.indexOf(
+      'type: "turn.completed"',
+      mediaCompletedIndex,
     );
     expect(mediaBranchIndex).toBeGreaterThan(-1);
-    expect(mediaStartedIndex).toBeGreaterThan(mediaBranchIndex);
-    expect(mediaCompletedIndex).toBeGreaterThan(mediaStartedIndex);
+    expect(mediaCompletedIndex).toBeGreaterThan(mediaBranchIndex);
+    expect(turnCompletedIndex).toBeGreaterThan(mediaCompletedIndex);
     expect(
-      backendContent.slice(mediaStartedIndex, mediaCompletedIndex),
+      backendContent.slice(mediaCompletedIndex, turnCompletedIndex),
     ).toContain('id: "agent-media-reference-1"');
     expect(content).toContain("!isMediaReferenceScenario");
     expect(content).not.toContain("data:image/png;base64,fixture-image-1");
+  });
+
+  it("summarizes current imageView media and v2 turn status", () => {
+    const referencePath = "/tmp/fixture-media-reference.png";
+    expect(
+      summarizeReadModelMediaReference(
+        {
+          thread: {
+            turns: [
+              {
+                status: "completed",
+                items: [{ type: "imageView", path: referencePath }],
+              },
+            ],
+          },
+        },
+        referencePath,
+      ),
+    ).toMatchObject({
+      latestTurnStatus: "completed",
+      imageViewCount: 1,
+      matchingImageViewCount: 1,
+      hasMediaReference: true,
+      hasSourceOwner: true,
+      contentPartsKeyObserved: false,
+      noInlinePayload: true,
+    });
   });
 
   registerImageContentSmokeGuards({

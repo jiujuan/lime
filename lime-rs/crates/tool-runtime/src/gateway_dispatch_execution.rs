@@ -8,6 +8,7 @@ use crate::tool_executor::{
 };
 use crate::tool_result_projection::{
     runtime_tool_result_to_call_tool_result, RuntimeToolResultParts,
+    TOOL_HANDLER_EXECUTED_METADATA_KEY,
 };
 use rmcp::model::{CallToolResult, ErrorCode, ErrorData};
 use serde_json::Value;
@@ -142,10 +143,10 @@ pub async fn execute_runtime_gateway_dispatch_tool(
     ) {
         RuntimeNativePermissionDecision::Allow => {}
         RuntimeNativePermissionDecision::Deny(message) => {
-            return Some(Err(runtime_gateway_dispatch_error(message)));
+            return Some(Err(runtime_gateway_dispatch_error(message, false)));
         }
         RuntimeNativePermissionDecision::Ask(message) => {
-            return Some(Err(runtime_gateway_dispatch_error(message)));
+            return Some(Err(runtime_gateway_dispatch_error(message, false)));
         }
     }
 
@@ -156,6 +157,7 @@ pub async fn execute_runtime_gateway_dispatch_tool(
     {
         return Some(Err(runtime_gateway_dispatch_error(
             "Tool execution cancelled",
+            false,
         )));
     }
 
@@ -184,12 +186,26 @@ pub async fn execute_runtime_gateway_dispatch_tool(
                 metadata: result.metadata,
             },
         )),
-        Err(error) => Err(runtime_gateway_dispatch_error(error.message().to_string())),
+        Err(error) => Err(runtime_gateway_dispatch_error(
+            error.message().to_string(),
+            true,
+        )),
     })
 }
 
-fn runtime_gateway_dispatch_error(message: impl Into<String>) -> ErrorData {
-    ErrorData::new(ErrorCode::INTERNAL_ERROR, message.into(), None)
+fn runtime_gateway_dispatch_error(message: impl Into<String>, handler_executed: bool) -> ErrorData {
+    ErrorData::new(
+        ErrorCode::INTERNAL_ERROR,
+        message.into(),
+        Some(Value::Object(
+            [(
+                TOOL_HANDLER_EXECUTED_METADATA_KEY.to_string(),
+                Value::Bool(handler_executed),
+            )]
+            .into_iter()
+            .collect(),
+        )),
+    )
 }
 
 fn register_lookup_name(lookup: &mut HashMap<String, usize>, name: &str, index: usize) {
@@ -312,7 +328,14 @@ mod tests {
         .await
         .expect("memory_read should be registered");
 
-        assert!(result.is_err());
+        let error = result.expect_err("permission denial should fail");
+        assert_eq!(
+            error
+                .data
+                .as_ref()
+                .and_then(|data| data.get(TOOL_HANDLER_EXECUTED_METADATA_KEY)),
+            Some(&Value::Bool(false))
+        );
         assert_eq!(executor.calls.load(Ordering::SeqCst), 0);
     }
 
@@ -389,5 +412,12 @@ mod tests {
             panic!("gateway executor failure should be projected as ErrorData");
         };
         assert!(error.message.contains("failed from gateway"));
+        assert_eq!(
+            error
+                .data
+                .as_ref()
+                .and_then(|data| data.get(TOOL_HANDLER_EXECUTED_METADATA_KEY)),
+            Some(&Value::Bool(true))
+        );
     }
 }

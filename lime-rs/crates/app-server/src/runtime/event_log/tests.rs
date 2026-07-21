@@ -36,6 +36,73 @@ fn append_and_read_session_events() {
 }
 
 #[test]
+fn lists_exact_session_ids_from_durable_events() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+    let first = event(1);
+    let mut second = event(1);
+    second.event_id = "evt-unsafe-session".to_string();
+    second.session_id = "session/unsafe".to_string();
+
+    writer.append(&first).expect("first append");
+    writer.append(&second).expect("second append");
+    std::fs::write(temp.path().join("sessions/session_empty.jsonl"), b"\n").expect("empty log");
+    std::fs::create_dir_all(temp.path().join("sessions/session_audit-only"))
+        .expect("workflow audit directory");
+
+    assert_eq!(
+        writer.list_session_ids().expect("list session ids"),
+        vec!["session-a".to_string(), "session/unsafe".to_string()]
+    );
+}
+
+#[test]
+fn discovers_only_sessions_with_unresolved_durable_queued_turns() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+
+    let mut queued = event(1);
+    queued.event_type = "queue.added".to_string();
+    queued.turn_id = Some("queued-a".to_string());
+    writer.append(&queued).expect("queued session");
+
+    let mut removed = event(1);
+    removed.session_id = "session-b".to_string();
+    removed.event_id = "evt-session-b-queued".to_string();
+    removed.event_type = "queue.added".to_string();
+    removed.turn_id = Some("queued-b".to_string());
+    let mut removal = removed.clone();
+    removal.event_id = "evt-session-b-removed".to_string();
+    removal.sequence = 2;
+    removal.event_type = "queue.removed".to_string();
+    removal.turn_id = None;
+    removal.payload = json!({ "queuedTurnId": "queued-b" });
+    writer
+        .append_events(&[removed, removal])
+        .expect("removed queued session");
+
+    let mut completed = event(1);
+    completed.session_id = "session-c".to_string();
+    completed.event_id = "evt-session-c-queued".to_string();
+    completed.event_type = "queue.added".to_string();
+    completed.turn_id = Some("queued-c".to_string());
+    let mut terminal = completed.clone();
+    terminal.event_id = "evt-session-c-completed".to_string();
+    terminal.sequence = 2;
+    terminal.event_type = "turn.completed".to_string();
+    writer
+        .append_events(&[completed, terminal])
+        .expect("completed queued session");
+
+    assert_eq!(
+        writer
+            .list_queued_session_ids()
+            .expect("discover queued sessions"),
+        vec!["session-a".to_string()]
+    );
+}
+
+#[test]
 fn cloned_writer_blocks_repair_until_an_inflight_record_is_complete() {
     use std::sync::mpsc;
     use std::time::Duration;

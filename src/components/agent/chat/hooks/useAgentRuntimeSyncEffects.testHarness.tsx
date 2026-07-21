@@ -118,6 +118,13 @@ export function createAppServerThreadClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
+    runThreadShellCommand: vi.fn().mockResolvedValue({
+      id: 4,
+      result: {},
+      response: { id: 4, result: {} },
+      messages: [],
+      notifications: [],
+    }),
     startTurn: vi.fn().mockResolvedValue({}),
     cancelTurn: vi.fn().mockResolvedValue({}),
     replayAction: vi.fn().mockResolvedValue({
@@ -153,63 +160,13 @@ export function createAppServerThreadClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
-    resumeAgentSessionThread: vi.fn().mockResolvedValue({
+    resumeThread: vi.fn().mockResolvedValue({
       id: 1,
       result: {
-        session: {
-          sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "agent-chat",
-          status: "running",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:00.000Z",
-        },
-        turns: [],
-        resumed: true,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    removeAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        session: {
-          sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "agent-chat",
-          status: "idle",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:00.000Z",
-        },
-        turns: [],
-        queuedTurnId: "queued-1",
-        removed: true,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    promoteAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        session: {
-          sessionId: "session-1",
-          threadId: "thread-1",
-          appId: "agent-chat",
-          status: "running",
-          createdAt: "2026-06-06T00:00:00.000Z",
-          updatedAt: "2026-06-06T00:00:00.000Z",
-        },
-        turns: [],
-        queuedTurnId: "queued-1",
-        promoted: true,
+        thread: { id: "thread-1", sessionId: "session-1", turns: [] },
+        model: "gpt-5.4",
+        modelProvider: "openai",
+        cwd: "/tmp/workspace",
       },
       response: {
         id: 1,

@@ -1,0 +1,341 @@
+{
+  "$defs": {
+    "CommandExecutionApprovalDecision": {
+      "enum": [
+        "accept",
+        "acceptForSession",
+        "cancel",
+        "decline"
+      ],
+      "type": "string"
+    },
+    "CommandExecutionRequestApprovalParams": {
+      "properties": {
+        "approvalId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "availableDecisions": {
+          "items": {
+            "$ref": "#/$defs/CommandExecutionApprovalDecision"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "command": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "startedAtMs": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "itemId",
+        "startedAtMs",
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
+    },
+    "FileChangeRequestApprovalParams": {
+      "properties": {
+        "grantRoot": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "startedAtMs": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "itemId",
+        "startedAtMs",
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
+    },
+    "McpServerElicitationRequestParams": {
+      "oneOf": [
+        {
+          "properties": {
+            "_meta": {
+              "default": null
+            },
+            "message": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "mode": {
+              "const": "form",
+              "type": "string"
+            },
+            "requestedSchema": {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          },
+          "required": [
+            "message",
+            "mode",
+            "requestedSchema"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "serverName": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "threadId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "turnId": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "serverName",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "RequestId": {
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "ToolRequestUserInputOption": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "label"
+      ],
+      "type": "object"
+    },
+    "ToolRequestUserInputParams": {
+      "properties": {
+        "autoResolutionMs": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/ToolRequestUserInputQuestion"
+          },
+          "type": "array"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "itemId",
+        "questions",
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
+    },
+    "ToolRequestUserInputQuestion": {
+      "properties": {
+        "header": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isOther": {
+          "default": false,
+          "type": "boolean"
+        },
+        "isSecret": {
+          "default": false,
+          "type": "boolean"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/ToolRequestUserInputOption"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "question": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "header",
+        "id",
+        "question"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Requests initiated by the server and sent to a v2 client. Unknown methods\nfail closed until their typed params and response contracts are added.",
+  "oneOf": [
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "mcpServer/elicitation/request",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/McpServerElicitationRequestParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "item/commandExecution/requestApproval",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/CommandExecutionRequestApprovalParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "item/fileChange/requestApproval",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/FileChangeRequestApprovalParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "item/tool/requestUserInput",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ToolRequestUserInputParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "ServerRequest"
+}

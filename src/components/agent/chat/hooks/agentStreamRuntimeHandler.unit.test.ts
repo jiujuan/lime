@@ -59,7 +59,6 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent: "",
       currentTurnId: "pending-turn-local",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -81,10 +80,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-test",
@@ -181,7 +177,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: Date.now() - 300,
       firstEventReceivedAt: Date.now() - 250,
@@ -199,10 +194,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -297,7 +289,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -350,10 +341,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -407,6 +395,18 @@ describe("agentStreamRuntimeHandler", () => {
         isThinking: true,
         contentParts: [],
       },
+      {
+        id: "image-workbench:task-image-workflow-terminal:assistant",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-02T10:00:00.000Z"),
+        imageWorkbenchPreview: {
+          taskId: "task-image-workflow-terminal",
+          prompt: "画一张广州夏天的图",
+          mode: "generate",
+          status: "running",
+        },
+      },
     ];
     const setMessages = vi.fn(
       (value: Message[] | ((prev: Message[]) => Message[])) => {
@@ -416,7 +416,6 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent: "",
       currentTurnId: "pending-turn-local",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -432,10 +431,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -481,6 +477,32 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
     });
 
+    requestState.currentTurnId = null;
+    requestState.activeTextSegmentTurnId = "turn-image-workflow-terminal";
+    messages = messages.map((message) => ({
+      ...message,
+      runtimeTurnId: undefined,
+    }));
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "token_usage_updated",
+        usage: {
+          input_tokens: 31_000,
+          output_tokens: 0,
+          cached_input_tokens: 0,
+        },
+      } as AgentEvent,
+    });
+
+    expect(messages[0]).toMatchObject({
+      runtimeTurnId: "turn-image-workflow-terminal",
+      usage: {
+        input_tokens: 31_000,
+        output_tokens: 0,
+      },
+    });
+
     handleTurnStreamEvent({
       ...baseOptions,
       data: {
@@ -503,6 +525,13 @@ describe("agentStreamRuntimeHandler", () => {
       "turn-image-workflow-terminal",
     );
     expect(messages[0]?.runtimeTurnId).toBe("turn-image-workflow-terminal");
+    expect(messages[0]).toMatchObject({
+      runtimeTurnId: "turn-image-workflow-terminal",
+      usage: {
+        input_tokens: 31_000,
+        output_tokens: 0,
+      },
+    });
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalled();
   });
@@ -532,7 +561,6 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent:
         "好啊，先来Generate深圳夏day午后的城市照片，阳光明亮，真实摄影Style。",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -579,10 +607,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -627,7 +652,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -656,10 +680,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -712,7 +733,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -725,10 +745,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -859,7 +876,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -885,10 +901,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -963,7 +976,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "我先按花城汇视角构图，保留春花、广场和广州塔。",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -989,10 +1001,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -1056,7 +1065,6 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent:
         "好啊，先来Generate 深圳夏day午后的城市照片，阳光明亮，真实摄影Style。",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -1084,10 +1092,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -1142,7 +1147,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -1157,10 +1161,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -1327,7 +1328,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "好啊，我来画一张深圳夏天的城市画面。",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -1340,10 +1340,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -1424,7 +1421,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -1459,10 +1455,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -1525,7 +1518,6 @@ describe("agentStreamRuntimeHandler", () => {
     const toolNameByToolId = new Map<string, string>();
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -1536,10 +1528,7 @@ describe("agentStreamRuntimeHandler", () => {
       clearOptimisticItem: () => {},
       clearOptimisticTurn: () => {},
       disposeListener: () => {},
-      removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
-      upsertQueuedTurn: () => {},
-      removeQueuedTurnsFromProjection: () => {},
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,
     };
@@ -1660,7 +1649,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -1673,10 +1661,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -1821,7 +1806,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: "turn-legacy-tool",
       currentTurnId: "turn-legacy-tool",
       requestLogId: null,
       requestStartedAt: 0,
@@ -1835,10 +1819,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -1970,7 +1951,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: "turn-1",
       currentTurnId: "turn-1",
       requestLogId: null,
       requestStartedAt: 0,
@@ -1984,10 +1964,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -2171,7 +2148,7 @@ describe("agentStreamRuntimeHandler", () => {
       data: parsed as AgentEvent,
       requestState: {
         accumulatedContent: "",
-        queuedTurnId: "turn-1",
+        currentTurnId: "turn-1",
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -2182,10 +2159,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-test",
@@ -2316,7 +2290,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",
-        queuedTurnId: "turn-1",
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -2327,10 +2300,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-item-tool-sync-test",
@@ -2423,7 +2393,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "图片已经生成完成",
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -2434,10 +2403,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-test",
@@ -2490,7 +2456,6 @@ describe("agentStreamRuntimeHandler", () => {
       accumulatedContent:
         "我先给出计划，不会直接改代码：\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 proposed_plan\n</proposed_plan>",
       currentTurnId: "turn-news",
-      queuedTurnId: "queued-news",
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -2538,9 +2503,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection,
         appendThinkingToParts: (parts) => parts,
       },
@@ -2618,7 +2581,6 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent: partialAnswer,
       currentTurnId: "turn-failed",
-      queuedTurnId: "queued-failed",
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -2655,9 +2617,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection,
         appendThinkingToParts: (parts) => parts,
       },
@@ -2724,7 +2684,6 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent: "",
       currentTurnId: "turn-empty",
-      queuedTurnId: "queued-empty-turn",
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -2759,9 +2718,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection,
         appendThinkingToParts: (parts) => parts,
       },
@@ -2816,7 +2773,6 @@ describe("agentStreamRuntimeHandler", () => {
       hasFinalAnswerRequiredProcessBoundary: false,
       hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
       currentTurnId: "turn-search-no-final",
-      queuedTurnId: "queued-search-no-final",
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -2835,9 +2791,7 @@ describe("agentStreamRuntimeHandler", () => {
       clearOptimisticItem: () => {},
       clearOptimisticTurn: () => {},
       disposeListener,
-      removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
-      upsertQueuedTurn: () => {},
       removeQueuedTurnsFromProjection,
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,
@@ -2951,7 +2905,6 @@ describe("agentStreamRuntimeHandler", () => {
       accumulatedContent: "",
       hasFinalAnswerRequiredProcessBoundary: false,
       hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -2990,10 +2943,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-commentary",
@@ -3051,7 +3001,6 @@ describe("agentStreamRuntimeHandler", () => {
     let threadItems: AgentThreadItem[] = [];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -3078,10 +3027,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -3180,7 +3126,6 @@ describe("agentStreamRuntimeHandler", () => {
       accumulatedContent: "",
       hasFinalAnswerRequiredProcessBoundary: false,
       hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
-      queuedTurnId: "queued-search-final",
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -3207,9 +3152,7 @@ describe("agentStreamRuntimeHandler", () => {
       clearOptimisticItem: () => {},
       clearOptimisticTurn: () => {},
       disposeListener: () => {},
-      removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
-      upsertQueuedTurn: () => {},
       removeQueuedTurnsFromProjection,
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,
@@ -3372,7 +3315,6 @@ describe("agentStreamRuntimeHandler", () => {
       accumulatedContent: "",
       hasFinalAnswerRequiredProcessBoundary: false,
       hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
-      queuedTurnId: "queued-late-legacy-final",
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -3390,9 +3332,7 @@ describe("agentStreamRuntimeHandler", () => {
       clearOptimisticItem: () => {},
       clearOptimisticTurn: () => {},
       disposeListener: () => {},
-      removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
-      upsertQueuedTurn: () => {},
       removeQueuedTurnsFromProjection,
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,
@@ -3447,9 +3387,9 @@ describe("agentStreamRuntimeHandler", () => {
     expect(
       requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
     ).toBe(true);
-    expect(getAgentStreamTextOverlay("assistant-late-legacy-final")?.content).toBe(
-      "你好！有什么我可以帮你的吗？",
-    );
+    expect(
+      getAgentStreamTextOverlay("assistant-late-legacy-final")?.content,
+    ).toBe("你好！有什么我可以帮你的吗？");
 
     handleTurnStreamEvent({
       ...baseOptions,
@@ -3505,7 +3445,6 @@ describe("agentStreamRuntimeHandler", () => {
       accumulatedContent: "",
       hasFinalAnswerRequiredProcessBoundary: false,
       hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -3524,10 +3463,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -3629,7 +3565,6 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent: "",
       hasMeaningfulCompletionSignal: true,
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -3664,10 +3599,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       observer: {
@@ -3742,7 +3674,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "整理完成",
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -3753,10 +3684,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-final-first",
@@ -3825,8 +3753,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const setIsSending = vi.fn();
@@ -3849,7 +3776,6 @@ describe("agentStreamRuntimeHandler", () => {
       requestState: {
         accumulatedContent: "已经输出的内容",
         currentTurnId: "turn-canceled",
-        queuedTurnId: "queued-canceled",
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -3860,10 +3786,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: vi.fn(),
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-turn-canceled",
@@ -3941,7 +3864,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "旧请求完成",
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -3952,10 +3874,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-stale-final",
@@ -4004,7 +3923,6 @@ describe("agentStreamRuntimeHandler", () => {
       accumulatedContent: "新请求正在输出",
       activeTextSegmentTurnId: "turn-current",
       currentTurnId: "turn-current",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -4045,10 +3963,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem,
         clearOptimisticTurn,
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-reused-stream",
@@ -4126,7 +4041,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -4137,10 +4051,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-message-test",
@@ -4191,7 +4102,6 @@ describe("agentStreamRuntimeHandler", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -4210,10 +4120,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -4319,7 +4226,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -4332,10 +4238,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -4433,7 +4336,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -4446,10 +4348,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -4571,7 +4470,6 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -4584,10 +4482,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -4720,7 +4615,6 @@ describe("agentStreamRuntimeHandler", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -4739,10 +4633,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: () => {
           throw new Error("thinking 关闭时不应追加 thinking part");
         },
@@ -4814,7 +4705,6 @@ describe("agentStreamRuntimeHandler", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -4832,10 +4722,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -4907,7 +4794,6 @@ describe("agentStreamRuntimeHandler", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -4925,10 +4811,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -5027,7 +4910,6 @@ describe("agentStreamRuntimeHandler", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -5045,10 +4927,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -5140,7 +5019,6 @@ describe("agentStreamRuntimeHandler", () => {
     let threadItems: AgentThreadItem[] = [];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -5177,10 +5055,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -5241,7 +5116,6 @@ describe("agentStreamRuntimeHandler", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -5259,10 +5133,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
       },
@@ -5345,7 +5216,6 @@ describe("agentStreamRuntimeHandler", () => {
     ];
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -5363,10 +5233,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -5449,7 +5316,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -5460,10 +5326,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-reasoning-test",
@@ -5519,7 +5382,7 @@ describe("agentStreamRuntimeHandler", () => {
 
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: "turn-1",
+      currentTurnId: "turn-1",
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -5532,10 +5395,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -5626,7 +5486,7 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const requestState = {
       accumulatedContent: "",
-      queuedTurnId: "turn-ordered",
+      currentTurnId: "turn-ordered",
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -5639,10 +5499,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -5820,7 +5677,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",
-        queuedTurnId: "turn-1",
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -5831,10 +5687,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-action-resolved-test",
@@ -5921,7 +5774,6 @@ describe("agentStreamRuntimeHandler", () => {
       requestState: {
         accumulatedContent:
           '<tool_result>{"output":"saved"}</tool_result>\n\n已保存到项目目录。',
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -5932,10 +5784,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-test",
@@ -6000,7 +5849,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -6011,10 +5859,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-test",
@@ -6071,7 +5916,6 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent: "",
       hasMeaningfulCompletionSignal: false,
-      queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
       requestFinished: false,
@@ -6083,10 +5927,7 @@ describe("agentStreamRuntimeHandler", () => {
       clearOptimisticItem: () => {},
       clearOptimisticTurn: () => {},
       disposeListener: () => {},
-      removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
-      upsertQueuedTurn: () => {},
-      removeQueuedTurnsFromProjection: () => {},
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,
     };
@@ -6217,7 +6058,6 @@ describe("agentStreamRuntimeHandler", () => {
       requestState: {
         accumulatedContent: "",
         hasMeaningfulCompletionSignal: true,
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -6228,10 +6068,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-test",
@@ -6308,7 +6145,6 @@ describe("agentStreamRuntimeHandler", () => {
       requestState: {
         accumulatedContent: "",
         hasMeaningfulCompletionSignal: true,
-        queuedTurnId: "queued-provider-error",
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -6319,10 +6155,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem: () => {},
         clearOptimisticTurn: () => {},
         disposeListener: () => {},
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-provider-error",
@@ -6414,7 +6247,6 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",
-        queuedTurnId: null,
         requestLogId: null,
         requestStartedAt: 0,
         requestFinished: false,
@@ -6425,10 +6257,7 @@ describe("agentStreamRuntimeHandler", () => {
         clearOptimisticItem,
         clearOptimisticTurn: () => {},
         disposeListener,
-        removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
         appendThinkingToParts: (parts) => parts,
       },
       eventName: "agent-runtime-permission-wait",
@@ -6465,173 +6294,5 @@ describe("agentStreamRuntimeHandler", () => {
     expect(messages[0]?.runtimeStatus).toBeUndefined();
     expect(messages[0]?.actionRequests?.[0]?.status).toBe("pending");
     expect(mockToast.error).not.toHaveBeenCalled();
-  });
-
-  it("收到 queue_removed 时不应立刻清空当前 assistant 草稿", () => {
-    vi.useFakeTimers();
-    const disposeListener = vi.fn();
-    const removeQueuedDraftMessages = vi.fn();
-
-    handleTurnStreamEvent({
-      data: {
-        type: "queue_removed",
-        queued_turn_id: "queued-1",
-      } as AgentEvent,
-      requestState: {
-        accumulatedContent: "",
-        queuedTurnId: "queued-1",
-        queuedDraftCleanupTimerId: null,
-        requestLogId: null,
-        requestStartedAt: 0,
-        requestFinished: false,
-      },
-      callbacks: {
-        activateStream: () => {},
-        isStreamActivated: () => false,
-        clearOptimisticItem: () => {},
-        clearOptimisticTurn: () => {},
-        disposeListener,
-        removeQueuedDraftMessages,
-        clearActiveStreamIfMatch: () => true,
-        upsertQueuedTurn: () => {},
-        removeQueuedTurnsFromProjection: () => {},
-        appendThinkingToParts: (parts) => parts,
-      },
-      eventName: "agent-runtime-test",
-      pendingTurnKey: "pending-turn",
-      pendingItemKey: "pending-item",
-      assistantMsgId: "assistant-queue-removed",
-      activeSessionId: "session-1",
-      resolvedWorkspaceId: "workspace-1",
-      effectiveExecutionStrategy: "react",
-      content: "继续执行",
-      runtime: {} as never,
-      warnedKeysRef: { current: new Set<string>() },
-      actionLoggedKeys: new Set<string>(),
-      toolLogIdByToolId: new Map<string, string>(),
-      toolStartedAtByToolId: new Map<string, number>(),
-      toolNameByToolId: new Map<string, string>(),
-      setMessages: vi.fn() as never,
-      setPendingActions: vi.fn() as never,
-      setThreadItems: vi.fn() as never,
-      setThreadTurns: vi.fn() as never,
-      setCurrentTurnId: vi.fn() as never,
-      setExecutionRuntime: vi.fn() as never,
-      setIsSending: vi.fn() as never,
-    });
-
-    expect(disposeListener).not.toHaveBeenCalled();
-    expect(removeQueuedDraftMessages).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1799);
-    expect(disposeListener).not.toHaveBeenCalled();
-    expect(removeQueuedDraftMessages).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1);
-    expect(disposeListener).toHaveBeenCalledTimes(1);
-    expect(removeQueuedDraftMessages).toHaveBeenCalledTimes(1);
-  });
-
-  it("queue_removed 后若很快收到 turn_started，则不应清空 assistant 草稿", () => {
-    vi.useFakeTimers();
-    const disposeListener = vi.fn();
-    const removeQueuedDraftMessages = vi.fn();
-    const requestState = {
-      accumulatedContent: "",
-      queuedTurnId: "queued-1",
-      queuedDraftCleanupTimerId: null,
-      requestLogId: null,
-      requestStartedAt: 0,
-      requestFinished: false,
-    };
-    let activated = false;
-
-    const baseCallbacks = {
-      activateStream: () => {
-        activated = true;
-      },
-      isStreamActivated: () => activated,
-      clearOptimisticItem: () => {},
-      clearOptimisticTurn: () => {},
-      disposeListener,
-      removeQueuedDraftMessages,
-      clearActiveStreamIfMatch: () => true,
-      upsertQueuedTurn: () => {},
-      removeQueuedTurnsFromProjection: () => {},
-      appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
-        parts,
-    };
-
-    handleTurnStreamEvent({
-      data: {
-        type: "queue_removed",
-        queued_turn_id: "queued-1",
-      } as AgentEvent,
-      requestState,
-      callbacks: baseCallbacks,
-      eventName: "agent-runtime-test",
-      pendingTurnKey: "pending-turn",
-      pendingItemKey: "pending-item",
-      assistantMsgId: "assistant-queue-removed",
-      activeSessionId: "session-1",
-      resolvedWorkspaceId: "workspace-1",
-      effectiveExecutionStrategy: "react",
-      content: "继续执行",
-      runtime: {} as never,
-      warnedKeysRef: { current: new Set<string>() },
-      actionLoggedKeys: new Set<string>(),
-      toolLogIdByToolId: new Map<string, string>(),
-      toolStartedAtByToolId: new Map<string, number>(),
-      toolNameByToolId: new Map<string, string>(),
-      setMessages: vi.fn() as never,
-      setPendingActions: vi.fn() as never,
-      setThreadItems: vi.fn() as never,
-      setThreadTurns: vi.fn() as never,
-      setCurrentTurnId: vi.fn() as never,
-      setExecutionRuntime: vi.fn() as never,
-      setIsSending: vi.fn() as never,
-    });
-
-    handleTurnStreamEvent({
-      data: {
-        type: "turn_started",
-        turn: {
-          id: "turn-1",
-          thread_id: "session-1",
-          prompt_text: "继续执行",
-          status: "running",
-          started_at: "2026-04-09T08:00:00.000Z",
-          created_at: "2026-04-09T08:00:00.000Z",
-          updated_at: "2026-04-09T08:00:00.000Z",
-        },
-      } as AgentEvent,
-      requestState,
-      callbacks: baseCallbacks,
-      eventName: "agent-runtime-test",
-      pendingTurnKey: "pending-turn",
-      pendingItemKey: "pending-item",
-      assistantMsgId: "assistant-queue-removed",
-      activeSessionId: "session-1",
-      resolvedWorkspaceId: "workspace-1",
-      effectiveExecutionStrategy: "react",
-      content: "继续执行",
-      runtime: {} as never,
-      warnedKeysRef: { current: new Set<string>() },
-      actionLoggedKeys: new Set<string>(),
-      toolLogIdByToolId: new Map<string, string>(),
-      toolStartedAtByToolId: new Map<string, number>(),
-      toolNameByToolId: new Map<string, string>(),
-      setMessages: vi.fn() as never,
-      setPendingActions: vi.fn() as never,
-      setThreadItems: vi.fn() as never,
-      setThreadTurns: vi.fn() as never,
-      setCurrentTurnId: vi.fn() as never,
-      setExecutionRuntime: vi.fn() as never,
-      setIsSending: vi.fn() as never,
-    });
-
-    vi.advanceTimersByTime(5000);
-    expect(disposeListener).not.toHaveBeenCalled();
-    expect(removeQueuedDraftMessages).not.toHaveBeenCalled();
   });
 });

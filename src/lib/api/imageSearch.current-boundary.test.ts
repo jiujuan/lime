@@ -25,16 +25,10 @@ function expectStringLiteralsAbsent(source: string, literals: string[]): void {
 }
 
 describe("image search current boundary", () => {
-  it("前端 imageSearch 网关应 fail closed，不再生产调用旧 Tauri facade", () => {
-    const source = readRepoFile("src/lib/api/imageSearch.ts");
-
-    expect(source).toContain(
-      "Image Search 尚未接入 App Server / RuntimeCore current 通道",
+  it("前端 imageSearch 空壳不得恢复", () => {
+    expect(existsSync(resolve(cwd(), "src/lib/api/imageSearch.ts"))).toBe(
+      false,
     );
-    expect(source).toContain("旧 Tauri in-process command 已退役");
-    expect(source).not.toContain("safeInvoke");
-    expect(source).not.toContain("createAppServerClient");
-    expectStringLiteralsAbsent(source, RETIRED_IMAGE_SEARCH_COMMANDS);
   });
 
   it("旧图片搜索命令不应回到 Electron Host、DevBridge、mock 或 legacy Rust 注册", () => {

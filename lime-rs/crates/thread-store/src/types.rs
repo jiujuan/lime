@@ -146,6 +146,19 @@ pub struct ItemPage {
     pub backwards_cursor: Option<StoreCursor>,
 }
 
+/// Parameters for appending already-canonical items to one thread.
+///
+/// The outer sequence is the caller-owned durable event sequence used for
+/// idempotency. Item contents are persisted as supplied; metadata and turn
+/// snapshots must be changed through their dedicated APIs.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AppendThreadItemsParams {
+    pub session_id: SessionId,
+    pub thread_id: ThreadId,
+    pub sequence: u64,
+    pub items: Vec<ThreadItem>,
+}
+
 /// Parameters for atomically applying one canonical materializer change set.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ApplyThreadHistoryParams {
@@ -258,6 +271,7 @@ pub struct DeleteThreadParams {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_protocol::ThreadItemPayload;
     use serde_json::json;
 
     #[test]
@@ -325,5 +339,30 @@ mod tests {
 
         current.merge(ThreadMetadataPatch::default());
         assert_eq!(current.forked_from_id, Some(next_fork));
+    }
+
+    #[test]
+    fn append_params_round_trip_canonical_items() {
+        let params = AppendThreadItemsParams {
+            session_id: SessionId::new("session-append"),
+            thread_id: ThreadId::new("thread-append"),
+            sequence: 7,
+            items: vec![ThreadItem::new(
+                SessionId::new("session-append"),
+                ThreadId::new("thread-append"),
+                TurnId::new("turn-append"),
+                7,
+                11,
+                ThreadItemPayload::AgentMessage {
+                    text: "canonical".to_string(),
+                    phase: None,
+                    content_parts: Vec::new(),
+                },
+            )],
+        };
+        let value = serde_json::to_value(&params).expect("serialize append params");
+        let decoded: AppendThreadItemsParams =
+            serde_json::from_value(value).expect("deserialize append params");
+        assert_eq!(decoded, params);
     }
 }

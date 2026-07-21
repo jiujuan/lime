@@ -1,23 +1,30 @@
 import {
   agentSessionEventNotification,
-  canonicalThreadEventNotification,
+  agentSessionMediaReadEventNotification,
   type AgentEvent,
   type AgentSessionActionRespondParams,
   type AgentSessionActionRespondResponse,
   type AgentSessionEventNotification,
   type ThreadReadParams,
   type ThreadReadResponse,
+  type ThreadMemoryModeSetParams,
+  type ThreadMemoryModeSetResponse,
+  type ThreadSettingsUpdateParams,
+  type ThreadSettingsUpdateResponse,
   type AgentSessionToolInventoryReadParams,
   type AgentSessionToolInventoryReadResponse,
-  type AgentSessionTurnCancelParams,
-  type AgentSessionTurnCancelResponse,
-  type AgentSessionTurnStartParams,
-  type AgentSessionTurnStartResponse,
-  type CanonicalThreadEventNotification,
+  type TurnInterruptParams,
+  type TurnInterruptResponse,
+  type TurnStartParams,
+  type TurnStartResponse,
+  type TurnSteerParams,
+  type TurnSteerResponse,
+  type ServerNotification,
   type EvidenceExportParams,
   type EvidenceExportResponse,
   type JsonRpcMessage,
 } from "./protocol.js";
+import { serverNotification } from "./server-notifications.js";
 import {
   AppServerConnection,
   type AppServerRequestOptions,
@@ -31,9 +38,27 @@ export type AgentEventListener = (
 
 export type AgentRuntimeEventListener = AgentEventListener;
 
-export type CanonicalThreadEventListener = (
-  event: CanonicalThreadEventNotification,
-  notification: AgentSessionEventNotification,
+export type AgentRuntimeLifecycleNotification = Extract<
+  ServerNotification,
+  {
+    method:
+      | "thread/started"
+      | "turn/started"
+      | "turn/completed"
+      | "item/started"
+      | "item/completed"
+      | "item/agentMessage/delta"
+      | "thread/settings/updated";
+  }
+>;
+
+export type AgentRuntimeNotification =
+  | AgentRuntimeLifecycleNotification
+  | AgentSessionEventNotification;
+
+export type AgentRuntimeLifecycleEventListener = (
+  event: AgentRuntimeLifecycleNotification,
+  notification: AgentRuntimeLifecycleNotification,
 ) => void | Promise<void>;
 
 export type AgentRuntimeClientOptions = {
@@ -46,13 +71,17 @@ export type AgentRuntimeClientSubscription = {
 
 export interface AgentRuntimeClient {
   startTurn(
-    params: AgentSessionTurnStartParams,
+    params: TurnStartParams,
     options?: AppServerRequestOptions,
-  ): Promise<AppServerRequestResult<AgentSessionTurnStartResponse>>;
+  ): Promise<AppServerRequestResult<TurnStartResponse>>;
+  steerTurn(
+    params: TurnSteerParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<TurnSteerResponse>>;
   cancelTurn(
-    params: AgentSessionTurnCancelParams,
+    params: TurnInterruptParams,
     options?: AppServerRequestOptions,
-  ): Promise<AppServerRequestResult<AgentSessionTurnCancelResponse>>;
+  ): Promise<AppServerRequestResult<TurnInterruptResponse>>;
   respondAction(
     params: AgentSessionActionRespondParams,
     options?: AppServerRequestOptions,
@@ -61,6 +90,14 @@ export interface AgentRuntimeClient {
     params: ThreadReadParams,
     options?: AppServerRequestOptions,
   ): Promise<AppServerRequestResult<ThreadReadResponse>>;
+  updateThreadSettings(
+    params: ThreadSettingsUpdateParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<ThreadSettingsUpdateResponse>>;
+  setThreadMemoryMode(
+    params: ThreadMemoryModeSetParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<ThreadMemoryModeSetResponse>>;
   readToolInventory(
     params?: AgentSessionToolInventoryReadParams,
     options?: AppServerRequestOptions,
@@ -72,16 +109,16 @@ export interface AgentRuntimeClient {
   subscribeEvents(
     listener: AgentRuntimeEventListener,
   ): AgentRuntimeClientSubscription;
-  subscribeCanonicalEvents(
-    listener: CanonicalThreadEventListener,
+  subscribeLifecycleEvents(
+    listener: AgentRuntimeLifecycleEventListener,
   ): AgentRuntimeClientSubscription;
   dispatchEvent(message: JsonRpcMessage): Promise<boolean>;
-  nextEvent(timeoutMs?: number): Promise<AgentSessionEventNotification>;
+  nextEvent(timeoutMs?: number): Promise<AgentRuntimeNotification>;
 }
 
 export class AppServerAgentEventRouter {
   #listeners = new Set<AgentEventListener>();
-  #canonicalListeners = new Set<CanonicalThreadEventListener>();
+  #lifecycleListeners = new Set<AgentRuntimeLifecycleEventListener>();
 
   subscribe(listener: AgentEventListener): () => void {
     this.#listeners.add(listener);
@@ -90,23 +127,27 @@ export class AppServerAgentEventRouter {
     };
   }
 
-  subscribeCanonical(listener: CanonicalThreadEventListener): () => void {
-    this.#canonicalListeners.add(listener);
+  subscribeLifecycle(listener: AgentRuntimeLifecycleEventListener): () => void {
+    this.#lifecycleListeners.add(listener);
     return () => {
-      this.#canonicalListeners.delete(listener);
+      this.#lifecycleListeners.delete(listener);
     };
   }
 
   async dispatch(message: JsonRpcMessage): Promise<boolean> {
-    const notification = agentSessionEventNotification(message);
-    if (!notification) {
-      return false;
-    }
-    const canonicalEvent = canonicalThreadEventNotification(notification);
-    if (canonicalEvent) {
-      for (const listener of this.#canonicalListeners) {
-        await listener(canonicalEvent, notification);
+    const lifecycle = agentRuntimeLifecycleNotification(message);
+    if (lifecycle) {
+      for (const listener of this.#lifecycleListeners) {
+        await listener(lifecycle, lifecycle);
       }
+      return true;
+    }
+    const notification = agentSessionEventNotification(message);
+    if (
+      !notification ||
+      !agentSessionMediaReadEventNotification(notification)
+    ) {
+      return false;
     }
     for (const listener of this.#listeners) {
       await listener(notification.params.event, notification);
@@ -130,19 +171,29 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
   }
 
   async startTurn(
-    params: AgentSessionTurnStartParams,
+    params: TurnStartParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<AgentSessionTurnStartResponse>> {
+  ): Promise<AppServerRequestResult<TurnStartResponse>> {
     return await this.connection.startTurn(
       params,
       mergeRequestOptions(this.defaultRequestOptions, options),
     );
   }
 
-  async cancelTurn(
-    params: AgentSessionTurnCancelParams,
+  async steerTurn(
+    params: TurnSteerParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<AgentSessionTurnCancelResponse>> {
+  ): Promise<AppServerRequestResult<TurnSteerResponse>> {
+    return await this.connection.steerTurn(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  async cancelTurn(
+    params: TurnInterruptParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<TurnInterruptResponse>> {
     return await this.connection.cancelTurn(
       params,
       mergeRequestOptions(this.defaultRequestOptions, options),
@@ -164,6 +215,26 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<ThreadReadResponse>> {
     return await this.connection.readThread(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  async updateThreadSettings(
+    params: ThreadSettingsUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ThreadSettingsUpdateResponse>> {
+    return await this.connection.updateThreadSettings(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  async setThreadMemoryMode(
+    params: ThreadMemoryModeSetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ThreadMemoryModeSetResponse>> {
+    return await this.connection.setThreadMemoryMode(
       params,
       mergeRequestOptions(this.defaultRequestOptions, options),
     );
@@ -196,10 +267,10 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     return { unsubscribe };
   }
 
-  subscribeCanonicalEvents(
-    listener: CanonicalThreadEventListener,
+  subscribeLifecycleEvents(
+    listener: AgentRuntimeLifecycleEventListener,
   ): AgentRuntimeClientSubscription {
-    const unsubscribe = this.eventRouter.subscribeCanonical(listener);
+    const unsubscribe = this.eventRouter.subscribeLifecycle(listener);
     return { unsubscribe };
   }
 
@@ -207,16 +278,30 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     return await this.eventRouter.dispatch(message);
   }
 
-  async nextEvent(timeoutMs?: number): Promise<AgentSessionEventNotification> {
+  async nextEvent(timeoutMs?: number): Promise<AgentRuntimeNotification> {
     for (;;) {
       const notification = await this.connection.nextNotification(timeoutMs);
+      const lifecycle = agentRuntimeLifecycleNotification(notification);
+      if (lifecycle) {
+        await this.dispatchEvent(lifecycle);
+        return lifecycle;
+      }
       const agentNotification = agentSessionEventNotification(notification);
-      if (agentNotification) {
+      if (
+        agentNotification &&
+        agentSessionMediaReadEventNotification(agentNotification)
+      ) {
         await this.dispatchEvent(agentNotification);
         return agentNotification;
       }
     }
   }
+}
+
+export function agentRuntimeLifecycleNotification(
+  message: JsonRpcMessage,
+): AgentRuntimeLifecycleNotification | undefined {
+  return serverNotification(message);
 }
 
 export function createAgentRuntimeClient(

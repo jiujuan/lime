@@ -1,5 +1,4 @@
 use crate::plugin_packages;
-use crate::plugin_packages::plugin_data_dir;
 use crate::plugin_packages::read_json_string;
 use crate::plugin_packages::safe_hash_path_segment;
 use crate::plugin_packages::validate_plugin_id_for_storage;
@@ -27,9 +26,10 @@ fn now_iso() -> String {
     Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-pub(crate) fn list_plugin_installed_state() -> Result<PluginInstalledListResponse, String> {
-    let data_root = plugin_data_dir()?;
-    list_plugin_installed_state_from_data_root(&data_root)
+pub(crate) fn list_plugin_installed_state(
+    plugin_data_root: &Path,
+) -> Result<PluginInstalledListResponse, String> {
+    list_plugin_installed_state_from_data_root(plugin_data_root)
 }
 
 fn list_plugin_installed_state_from_data_root(
@@ -122,37 +122,42 @@ fn plugin_persistence_issue(
 }
 
 pub(crate) fn save_plugin_installed_state(
+    plugin_data_root: &Path,
     params: PluginInstalledSaveParams,
 ) -> Result<Value, String> {
     let state = plugin_packages::migrate_plugin_installed_state_for_runtime(params.state);
     let app_id = read_state_app_id(&state)?;
     validate_plugin_id_for_storage(&app_id)?;
-    plugin_packages::materialize_seeded_plugin_runtime_package(&state)?;
+    plugin_packages::materialize_seeded_plugin_runtime_package_from_data_root(
+        &state,
+        plugin_data_root,
+    )?;
     let saved_at = now_iso();
-    write_installed_plugin_state(&app_id, &state, &saved_at)?;
+    write_installed_plugin_state(plugin_data_root, &app_id, &state, &saved_at)?;
     Ok(state)
 }
 
 pub(crate) fn set_plugin_installed_disabled(
+    plugin_data_root: &Path,
     params: PluginInstalledDisabledSetParams,
 ) -> Result<PluginInstalledListResponse, String> {
     validate_plugin_id_for_storage(&params.app_id)?;
-    let path = installed_plugin_state_path(&params.app_id)?;
+    let path = installed_plugin_state_path_from_data_root(plugin_data_root, &params.app_id)?;
     let Some(mut state) = read_plugin_installed_state_path(&path)? else {
         return Err(format!("Plugin 未安装: {}", params.app_id));
     };
     let updated_at = params.updated_at.unwrap_or_else(now_iso);
     set_object_field(&mut state, "disabled", Value::Bool(params.disabled))?;
     set_object_field(&mut state, "updatedAt", Value::String(updated_at.clone()))?;
-    write_installed_plugin_state(&params.app_id, &state, &updated_at)?;
-    list_plugin_installed_state()
+    write_installed_plugin_state(plugin_data_root, &params.app_id, &state, &updated_at)?;
+    list_plugin_installed_state(plugin_data_root)
 }
 
 pub(crate) fn uninstall_plugin(
+    plugin_data_root: &Path,
     params: PluginUninstallParams,
 ) -> Result<PluginUninstallResponse, String> {
-    let data_root = plugin_data_dir()?;
-    uninstall_plugin_from_data_root(params, &data_root)
+    uninstall_plugin_from_data_root(params, plugin_data_root)
 }
 
 fn uninstall_plugin_from_data_root(
@@ -210,11 +215,11 @@ fn uninstall_plugin_from_data_root(
 }
 
 pub(crate) fn build_plugin_uninstall_rehearsal(
+    plugin_data_root: &Path,
     app_id: String,
     mode: String,
 ) -> Result<PluginUninstallRehearsalResponse, String> {
-    let data_root = plugin_data_dir()?;
-    build_plugin_uninstall_rehearsal_from_data_root(app_id, mode, &data_root)
+    build_plugin_uninstall_rehearsal_from_data_root(app_id, mode, plugin_data_root)
 }
 
 fn build_plugin_uninstall_rehearsal_from_data_root(
@@ -384,30 +389,12 @@ fn plugin_uninstall_target(
     }
 }
 
-fn installed_plugin_dir() -> Result<PathBuf, String> {
-    Ok(installed_plugin_dir_from_data_root(&plugin_data_dir()?))
-}
-
-fn setup_plugin_dir() -> Result<PathBuf, String> {
-    Ok(setup_plugin_dir_from_data_root(&plugin_data_dir()?))
-}
-
 fn installed_plugin_dir_from_data_root(data_root: &Path) -> PathBuf {
     data_root.join("installed")
 }
 
 fn setup_plugin_dir_from_data_root(data_root: &Path) -> PathBuf {
     data_root.join("setup")
-}
-
-fn installed_plugin_state_path(app_id: &str) -> Result<PathBuf, String> {
-    let data_root = plugin_data_dir()?;
-    installed_plugin_state_path_from_data_root(&data_root, app_id)
-}
-
-fn setup_plugin_state_path(app_id: &str) -> Result<PathBuf, String> {
-    let data_root = plugin_data_dir()?;
-    setup_plugin_state_path_from_data_root(&data_root, app_id)
 }
 
 fn installed_plugin_state_path_from_data_root(
@@ -431,10 +418,15 @@ fn read_state_app_id(state: &Value) -> Result<String, String> {
         .ok_or_else(|| "Installed Plugin state 缺少 appId。".to_string())
 }
 
-fn write_installed_plugin_state(app_id: &str, state: &Value, saved_at: &str) -> Result<(), String> {
-    fs::create_dir_all(installed_plugin_dir()?)
+fn write_installed_plugin_state(
+    plugin_data_root: &Path,
+    app_id: &str,
+    state: &Value,
+    saved_at: &str,
+) -> Result<(), String> {
+    fs::create_dir_all(installed_plugin_dir_from_data_root(plugin_data_root))
         .map_err(|error| format!("创建 Plugin installed 目录失败: {error}"))?;
-    fs::create_dir_all(setup_plugin_dir()?)
+    fs::create_dir_all(setup_plugin_dir_from_data_root(plugin_data_root))
         .map_err(|error| format!("创建 Plugin setup 目录失败: {error}"))?;
 
     let envelope = json!({
@@ -443,7 +435,7 @@ fn write_installed_plugin_state(app_id: &str, state: &Value, saved_at: &str) -> 
         "state": state,
     });
     fs::write(
-        installed_plugin_state_path(app_id)?,
+        installed_plugin_state_path_from_data_root(plugin_data_root, app_id)?,
         serde_json::to_string_pretty(&envelope)
             .map_err(|error| format!("序列化 installed state 失败: {error}"))?,
     )
@@ -456,7 +448,7 @@ fn write_installed_plugin_state(app_id: &str, state: &Value, saved_at: &str) -> 
         "setup": state.get("setup").cloned().unwrap_or_else(|| json!({})),
     });
     fs::write(
-        setup_plugin_state_path(app_id)?,
+        setup_plugin_state_path_from_data_root(plugin_data_root, app_id)?,
         serde_json::to_string_pretty(&setup_content)
             .map_err(|error| format!("序列化 setup state 失败: {error}"))?,
     )

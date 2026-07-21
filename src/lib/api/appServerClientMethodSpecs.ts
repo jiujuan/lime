@@ -13,12 +13,12 @@ export type AppServerClientMethodSpec = {
 export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   {
     name: "startSession",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_START,
+    method: constants.APP_SERVER_METHOD_THREAD_START,
     params: "required",
   },
   {
     name: "listSessions",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_LIST,
+    method: constants.APP_SERVER_METHOD_THREAD_LIST,
     params: "optional-empty",
   },
   {
@@ -174,7 +174,7 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   },
   {
     name: "readSession",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_READ,
+    method: constants.APP_SERVER_METHOD_THREAD_READ,
     params: "required",
   },
   {
@@ -185,6 +185,31 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   {
     name: "readThread",
     method: constants.APP_SERVER_METHOD_THREAD_READ,
+    params: "required",
+  },
+  {
+    name: "updateThreadSettings",
+    method: constants.APP_SERVER_METHOD_THREAD_SETTINGS_UPDATE,
+    params: "required",
+  },
+  {
+    name: "setThreadMemoryMode",
+    method: constants.APP_SERVER_METHOD_THREAD_MEMORY_MODE_SET,
+    params: "required",
+  },
+  {
+    name: "runThreadShellCommand",
+    method: constants.APP_SERVER_METHOD_THREAD_SHELL_COMMAND,
+    params: "required",
+  },
+  {
+    name: "archiveThread",
+    method: constants.APP_SERVER_METHOD_THREAD_ARCHIVE,
+    params: "required",
+  },
+  {
+    name: "unarchiveThread",
+    method: constants.APP_SERVER_METHOD_THREAD_UNARCHIVE,
     params: "required",
   },
   {
@@ -200,11 +225,6 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   {
     name: "updateSession",
     method: constants.APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
-    params: "required",
-  },
-  {
-    name: "archiveManySessions",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_ARCHIVE_MANY,
     params: "required",
   },
   {
@@ -248,8 +268,8 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
     params: "required",
   },
   {
-    name: "resumeAgentSessionThread",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME,
+    name: "resumeThread",
+    method: constants.APP_SERVER_METHOD_THREAD_RESUME,
     params: "required",
   },
   {
@@ -319,12 +339,17 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   },
   {
     name: "startTurn",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+    method: constants.APP_SERVER_METHOD_TURN_START,
     params: "required",
   },
   {
     name: "cancelTurn",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+    method: constants.APP_SERVER_METHOD_TURN_INTERRUPT,
+    params: "required",
+  },
+  {
+    name: "steerTurn",
+    method: constants.APP_SERVER_METHOD_TURN_STEER,
     params: "required",
   },
   {

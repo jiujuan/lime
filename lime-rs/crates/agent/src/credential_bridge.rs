@@ -83,17 +83,29 @@ impl CredentialBridge {
         db: &DbConnection,
         provider_type: &str,
         model: &str,
+        credential_ref: Option<&str>,
     ) -> Result<RuntimeProviderConfig, CredentialBridgeError> {
-        let credential = self
-            .api_key_service
-            .select_credential_for_provider(db, provider_type, Some(provider_type), None)
-            .await
-            .map_err(CredentialBridgeError::DatabaseError)?
-            .ok_or_else(|| {
-                CredentialBridgeError::NoCredentials(format!(
-                    "没有找到 {provider_type} 类型的可用凭证"
-                ))
-            })?;
+        let credential = match credential_ref {
+            Some(credential_ref) => self
+                .api_key_service
+                .select_runtime_credential_by_ref(db, provider_type, credential_ref)
+                .map_err(CredentialBridgeError::DatabaseError)?,
+            None => self
+                .api_key_service
+                .select_credential_for_provider(db, provider_type, Some(provider_type), None)
+                .await
+                .map_err(CredentialBridgeError::DatabaseError)?,
+        }
+        .ok_or_else(|| {
+            let selection = if credential_ref.is_some() {
+                "指定的 durable"
+            } else {
+                "可用"
+            };
+            CredentialBridgeError::NoCredentials(format!(
+                "没有找到 {provider_type} 类型{selection}凭证"
+            ))
+        })?;
 
         // 2. 转换为 runtime provider 配置，传递 provider_type 以便正确识别 Provider
         self.credential_to_config(&credential, model, provider_type, db)
@@ -180,10 +192,94 @@ impl CredentialBridge {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lime_core::database::dao::api_key_provider::ApiProviderType;
+    use lime_core::database::schema;
+    use lime_core::models::runtime_api_key_credential_uuid;
+    use rusqlite::Connection;
+    use std::sync::{Arc, Mutex};
+
+    fn test_db() -> DbConnection {
+        let connection = Connection::open_in_memory().expect("open credential bridge database");
+        schema::create_tables(&connection).expect("create credential bridge schema");
+        Arc::new(Mutex::new(connection))
+    }
 
     #[test]
     fn test_credential_bridge_error_display() {
         let err = CredentialBridgeError::NoCredentials("test".to_string());
         assert!(err.to_string().contains("没有可用凭证"));
+    }
+
+    #[tokio::test]
+    async fn exact_credential_ref_configures_that_key_without_advancing_round_robin() {
+        let db = test_db();
+        let setup = ApiKeyProviderService::new();
+        let provider = setup
+            .add_custom_provider(
+                &db,
+                "Bridge Exact Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://bridge.example/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create bridge provider");
+        let first_key = setup
+            .add_api_key(&db, &provider.id, "sk-bridge-first-key", None, false)
+            .expect("add first bridge key");
+        let exact_key = setup
+            .add_api_key(&db, &provider.id, "sk-bridge-exact-key", None, false)
+            .expect("add exact bridge key");
+        let credential_ref = runtime_api_key_credential_uuid(&exact_key.id);
+        let bridge = CredentialBridge::new();
+
+        let exact = bridge
+            .select_and_configure(&db, &provider.id, "fixture-model", Some(&credential_ref))
+            .await
+            .expect("configure exact credential");
+        assert_eq!(exact.credential_uuid, credential_ref);
+        assert_eq!(exact.api_key.as_deref(), Some("sk-bridge-exact-key"));
+
+        let round_robin = bridge
+            .select_and_configure(&db, &provider.id, "fixture-model", None)
+            .await
+            .expect("configure round-robin credential");
+        assert_eq!(
+            round_robin.credential_uuid,
+            runtime_api_key_credential_uuid(&first_key.id)
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_exact_credential_ref_never_falls_back_to_round_robin() {
+        let db = test_db();
+        let setup = ApiKeyProviderService::new();
+        let provider = setup
+            .add_custom_provider(
+                &db,
+                "Bridge No Fallback Provider".to_string(),
+                ApiProviderType::Openai,
+                "https://bridge.example/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create bridge provider");
+        setup
+            .add_api_key(&db, &provider.id, "sk-bridge-available-key", None, false)
+            .expect("add available bridge key");
+        let missing_ref = runtime_api_key_credential_uuid("missing-key");
+        let bridge = CredentialBridge::new();
+
+        let error = bridge
+            .select_and_configure(&db, &provider.id, "fixture-model", Some(&missing_ref))
+            .await
+            .expect_err("invalid exact ref must fail closed");
+        assert!(matches!(error, CredentialBridgeError::NoCredentials(_)));
     }
 }

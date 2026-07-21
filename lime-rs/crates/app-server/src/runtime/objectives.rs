@@ -149,15 +149,60 @@ impl RuntimeCore {
         }
     }
 
+    pub(in crate::runtime) async fn maybe_submit_managed_objective_auto_continuation_with_hub(
+        &self,
+        session_id: &str,
+        host: RuntimeHostContext,
+        hub: RuntimeEventHub,
+    ) {
+        let mut event_callback = move |event: AgentEvent| {
+            hub.publish(event);
+            Ok(())
+        };
+        if let Err(error) = self
+            .submit_managed_objective_auto_continuation_until_stopped_with_callback(
+                session_id,
+                host,
+                &mut event_callback,
+            )
+            .await
+        {
+            tracing::warn!(
+                "[AppServer][Objective] managed objective background auto-continuation skipped: session_id={}, error={}",
+                session_id,
+                error
+            );
+        }
+    }
+
     async fn submit_managed_objective_auto_continuation_until_stopped(
         &self,
         session_id: &str,
         host: RuntimeHostContext,
     ) -> Result<(), RuntimeCoreError> {
+        let mut event_callback = |_event: AgentEvent| Ok(());
+        self.submit_managed_objective_auto_continuation_until_stopped_with_callback(
+            session_id,
+            host,
+            &mut event_callback,
+        )
+        .await
+    }
+
+    async fn submit_managed_objective_auto_continuation_until_stopped_with_callback(
+        &self,
+        session_id: &str,
+        host: RuntimeHostContext,
+        event_callback: &mut RuntimeEventCallback<'_>,
+    ) -> Result<(), RuntimeCoreError> {
         const MAX_AUTO_CONTINUATION_ITERATIONS: usize = 8;
         for _ in 0..MAX_AUTO_CONTINUATION_ITERATIONS {
             let Some(turn) = self
-                .submit_managed_objective_auto_continuation_once(session_id, host.clone())
+                .submit_managed_objective_auto_continuation_once(
+                    session_id,
+                    host.clone(),
+                    event_callback,
+                )
                 .await?
             else {
                 return Ok(());
@@ -175,6 +220,7 @@ impl RuntimeCore {
         &self,
         session_id: &str,
         host: RuntimeHostContext,
+        event_callback: &mut RuntimeEventCallback<'_>,
     ) -> Result<Option<AgentTurn>, RuntimeCoreError> {
         let objective = self
             .app_data_source
@@ -234,30 +280,28 @@ impl RuntimeCore {
                     Some(queued_turn_id.as_str()),
                 )
                 .await?;
-                let output = Box::pin(self.start_turn_inner(
-                    AgentSessionTurnStartParams {
-                        session_id: session_id.to_string(),
-                        turn_id: Some(turn_id),
-                        input: AgentInput {
-                            text: message,
-                            attachments: Vec::new(),
-                        },
-                        runtime_options: Some(app_server_protocol::RuntimeOptions {
-                            capability_id: None,
-                            stream: true,
-                            event_name: Some(event_name),
-                            queued_turn_id: Some(queued_turn_id.clone()),
-                            runtime_request: Some(runtime_request),
-                            ..app_server_protocol::RuntimeOptions::default()
-                        }),
-                        queue_if_busy: false,
-                        skip_pre_submit_resume: true,
-                    },
-                    host,
-                    None,
-                    false,
-                ))
-                .await?;
+                let params = TurnStartRequest {
+                    session_id: session_id.to_string(),
+                    turn_id: Some(turn_id),
+                    input: vec![agent_protocol::AgentInput::text(message)],
+                    runtime_options: Some(app_server_protocol::RuntimeOptions {
+                        capability_id: None,
+                        stream: true,
+                        event_name: Some(event_name),
+                        queued_turn_id: Some(queued_turn_id.clone()),
+                        runtime_request: Some(runtime_request),
+                        ..app_server_protocol::RuntimeOptions::default()
+                    }),
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: true,
+                };
+                let output = self
+                    .start_turn_with_event_callback_without_auto_continuation(
+                        params,
+                        host,
+                        event_callback,
+                    )
+                    .await?;
                 Ok(Some(output.response.turn))
             }
             crate::objective::AutoContinuationGuardDecision::BudgetLimited(_) => {
@@ -509,13 +553,10 @@ impl RuntimeCore {
 
         let output = self
             .start_turn(
-                AgentSessionTurnStartParams {
+                TurnStartRequest {
                     session_id: session_id.clone(),
                     turn_id: Some(turn_id),
-                    input: AgentInput {
-                        text: message,
-                        attachments: Vec::new(),
-                    },
+                    input: vec![agent_protocol::AgentInput::text(message)],
                     runtime_options: Some(app_server_protocol::RuntimeOptions {
                         capability_id: None,
                         stream: true,

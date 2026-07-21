@@ -37,6 +37,8 @@ import {
   findActionRequestSourceMessageId,
 } from "../utils/currentTurnActionRequests";
 import type { AgentSessionDetailRefreshRequest } from "./agentSessionRefresh";
+import { getDefaultAgentApprovalServerRequestController } from "@/lib/api/agentApprovalServerRequest";
+import { getDefaultAgentUserInputServerRequestController } from "@/lib/api/agentUserInputServerRequest";
 
 interface UseAgentToolsOptions {
   runtime: AgentRuntimeAdapter;
@@ -109,10 +111,79 @@ export function useAgentTools(options: UseAgentToolsOptions) {
   const [submittedActionsInFlight, setSubmittedActionsInFlight] = useState<
     ActionRequired[]
   >([]);
+  const approvalServerRequestController =
+    getDefaultAgentApprovalServerRequestController();
+  const userInputServerRequestController =
+    getDefaultAgentUserInputServerRequestController();
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const projectedServerRequestIdsRef = useRef<Set<string>>(new Set());
   const warnedKeysRef = useRef<Set<string>>(new Set());
   const queuedFallbackResponsesRef = useRef<
     Map<string, QueuedFallbackActionResponse>
   >(new Map());
+
+  useEffect(() => {
+    const detach = approvalServerRequestController.attach();
+    const detachUserInput = userInputServerRequestController.attach();
+    const syncServerRequests = () => {
+      const latestActions = [
+        ...approvalServerRequestController.getSnapshot(),
+        ...userInputServerRequestController.getSnapshot(),
+      ];
+      const latestRequestIds = new Set(
+        latestActions.map((action) => action.requestId),
+      );
+      const resolvedRequestIds = new Set(
+        [...projectedServerRequestIdsRef.current].filter(
+          (requestId) => !latestRequestIds.has(requestId),
+        ),
+      );
+      if (resolvedRequestIds.size > 0) {
+        setPendingActions((prev) =>
+          removeActionsByRequestIds(prev, resolvedRequestIds),
+        );
+        setMessages((prev) =>
+          applyAcknowledgedActionRequests({
+            messages: prev,
+            requestIds: resolvedRequestIds,
+            shouldPersistSubmittedAction: false,
+          }),
+        );
+      }
+      const assistantMessage = [...messagesRef.current]
+        .reverse()
+        .find((message) => message.role === "assistant");
+      if (!assistantMessage) {
+        projectedServerRequestIdsRef.current = new Set();
+        return;
+      }
+      for (const actionData of latestActions) {
+        upsertAssistantActionRequest({
+          assistantMsgId: assistantMessage.id,
+          actionData,
+          setPendingActions,
+          setMessages,
+        });
+      }
+      projectedServerRequestIdsRef.current = latestRequestIds;
+    };
+    const unsubscribe =
+      approvalServerRequestController.subscribe(syncServerRequests);
+    const unsubscribeUserInput =
+      userInputServerRequestController.subscribe(syncServerRequests);
+    syncServerRequests();
+    return () => {
+      unsubscribe();
+      unsubscribeUserInput();
+      detach();
+      detachUserInput();
+    };
+  }, [
+    approvalServerRequestController,
+    setMessages,
+    userInputServerRequestController,
+  ]);
 
   const refreshActionResponseSession = useCallback(
     async (targetSessionId: string) => {
@@ -185,44 +256,56 @@ export function useAgentTools(options: UseAgentToolsOptions) {
 
           submittedUserData = userData;
 
-          const fallbackPlan = resolveFallbackActionResponsePlan({
-            actionType,
-            pendingActions,
-            persistedAction,
-            response,
-            userData,
-          });
-
-          if (fallbackPlan.kind === "queue") {
-            queuedFallbackResponsesRef.current.set(
-              fallbackPlan.promptKey,
-              fallbackPlan.queuedResponse,
-            );
-            setPendingActions((prev) =>
-              markQueuedFallbackActionInPendingActions(
-                prev,
-                fallbackPlan.queuedResponse.requestId,
-                normalizedResponse || undefined,
-                submittedUserData,
-              ),
-            );
-            setMessages((prev) =>
-              markQueuedFallbackActionInMessages({
-                messages: prev,
-                requestId: fallbackPlan.queuedResponse.requestId,
-                submittedResponse: normalizedResponse || undefined,
-                submittedUserData,
-              }),
-            );
-            await refreshSessionReadModel(activeSessionId);
-            toast.info("已记录你的回答，等待系统请求就绪后自动提交");
-            return;
+          const handledByServerRequest =
+            actionType === "ask_user" &&
+            userInputServerRequestController.respond({
+              ...response,
+              userData,
+            });
+          if (actionType === "ask_user" && !handledByServerRequest) {
+            throw new Error("用户输入请求已失效，请等待当前 typed request");
           }
 
-          if (fallbackPlan.kind === "submit_resolved") {
-            effectiveRequestId = fallbackPlan.resolvedAction.requestId;
-            metadataAction = governActionRequest(fallbackPlan.resolvedAction);
-            acknowledgedRequestIds.add(fallbackPlan.resolvedAction.requestId);
+          if (!handledByServerRequest) {
+            const fallbackPlan = resolveFallbackActionResponsePlan({
+              actionType,
+              pendingActions,
+              persistedAction,
+              response,
+              userData,
+            });
+
+            if (fallbackPlan.kind === "queue") {
+              queuedFallbackResponsesRef.current.set(
+                fallbackPlan.promptKey,
+                fallbackPlan.queuedResponse,
+              );
+              setPendingActions((prev) =>
+                markQueuedFallbackActionInPendingActions(
+                  prev,
+                  fallbackPlan.queuedResponse.requestId,
+                  normalizedResponse || undefined,
+                  submittedUserData,
+                ),
+              );
+              setMessages((prev) =>
+                markQueuedFallbackActionInMessages({
+                  messages: prev,
+                  requestId: fallbackPlan.queuedResponse.requestId,
+                  submittedResponse: normalizedResponse || undefined,
+                  submittedUserData,
+                }),
+              );
+              await refreshSessionReadModel(activeSessionId);
+              toast.info("已记录你的回答，等待系统请求就绪后自动提交");
+              return;
+            }
+
+            if (fallbackPlan.kind === "submit_resolved") {
+              effectiveRequestId = fallbackPlan.resolvedAction.requestId;
+              metadataAction = governActionRequest(fallbackPlan.resolvedAction);
+              acknowledgedRequestIds.add(fallbackPlan.resolvedAction.requestId);
+            }
           }
 
           setSubmittedActionsInFlight((prev) =>
@@ -250,18 +333,20 @@ export function useAgentTools(options: UseAgentToolsOptions) {
           const submissionEventName =
             activeEventName || metadataAction?.eventName;
 
-          await runtime.respondToAction({
-            sessionId: activeSessionId,
-            requestId: effectiveRequestId,
-            actionType,
-            confirmed: response.confirmed,
-            decision: response.decision,
-            response: response.response,
-            userData,
-            metadata: submissionContext?.requestMetadata,
-            eventName: submissionEventName || undefined,
-            actionScope: metadataAction?.scope,
-          });
+          if (!handledByServerRequest) {
+            await runtime.respondToAction({
+              sessionId: activeSessionId,
+              requestId: effectiveRequestId,
+              actionType,
+              confirmed: response.confirmed,
+              decision: response.decision,
+              response: response.response,
+              userData,
+              metadata: submissionContext?.requestMetadata,
+              eventName: submissionEventName || undefined,
+              actionScope: metadataAction?.scope,
+            });
+          }
         } else {
           const activeSessionId =
             currentStreamingSessionIdRef.current || sessionIdRef.current;
@@ -280,23 +365,12 @@ export function useAgentTools(options: UseAgentToolsOptions) {
               submittedUserData,
             }),
           );
-          const activeEventName =
-            currentStreamingSessionIdRef.current === activeSessionId
-              ? currentStreamingEventNameRef.current
-              : null;
-          const submissionEventName =
-            activeEventName || metadataAction?.eventName;
-          await runtime.respondToAction({
-            sessionId: refreshSessionId || "",
-            requestId: effectiveRequestId,
-            actionType,
-            confirmed: response.confirmed,
-            decision: response.decision,
-            response: response.response,
-            userData: response.userData,
-            eventName: submissionEventName || undefined,
-            actionScope: metadataAction?.scope,
-          });
+          const handledByServerRequest =
+            actionType === "tool_confirmation" &&
+            approvalServerRequestController.respond(response);
+          if (!handledByServerRequest) {
+            throw new Error("审批请求已失效，请等待当前 typed request");
+          }
         }
 
         setPendingActions((prev) =>
@@ -350,6 +424,8 @@ export function useAgentTools(options: UseAgentToolsOptions) {
       sessionIdRef,
       setMessages,
       setThreadItems,
+      approvalServerRequestController,
+      userInputServerRequestController,
     ],
   );
 

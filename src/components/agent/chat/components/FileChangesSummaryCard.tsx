@@ -57,6 +57,13 @@ function resolveDisplayPath(path: string): string {
   return normalized || path;
 }
 
+function resolveDisplayFilePath(file: FileChangeSummary): string {
+  const path = resolveDisplayPath(file.path);
+  return file.movePath
+    ? `${path} -> ${resolveDisplayPath(file.movePath)}`
+    : path;
+}
+
 function resolveDiffStatus(file: FileChangeSummary): DiffReviewFile["status"] {
   if (file.kind === "add") return "added";
   if (file.kind === "delete") return "deleted";
@@ -194,6 +201,7 @@ export function FileChangesSummaryCard({
   return (
     <div
       data-testid="file-changes-summary-card"
+      data-file-status={files[0]?.fileStatus}
       className="overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900"
     >
       <div
@@ -342,16 +350,19 @@ export function FileChangesSummaryCard({
                 key={file.path}
                 type="button"
                 data-testid="file-changes-summary-file-row"
+                data-file-status={file.fileStatus}
                 aria-expanded={isSelected}
                 className={cn(
                   "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-slate-50",
                   isSelected && "bg-slate-50",
                 )}
                 onClick={() => openFileReview(file)}
-                title={file.path}
+                title={
+                  file.movePath ? `${file.path} -> ${file.movePath}` : file.path
+                }
               >
                 <span className="min-w-0 truncate text-[13px] leading-5 text-slate-800">
-                  {resolveDisplayPath(file.path)}
+                  {resolveDisplayFilePath(file)}
                 </span>
                 <span className="shrink-0 text-[12px] leading-5">
                   <span className="text-emerald-600">+{file.linesAdded}</span>

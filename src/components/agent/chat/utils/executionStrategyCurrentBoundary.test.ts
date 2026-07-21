@@ -22,7 +22,6 @@ const CONSUMER_PATHS = [
   "src/components/agent/chat/hooks/agentStreamRuntimeContextController.ts",
   "src/components/agent/chat/hooks/agentStreamRuntimeHandlerActions.ts",
   "src/components/agent/chat/utils/accessModeRuntime.ts",
-  "src/components/agent/chat/utils/submitOpToolPreferenceCompaction.ts",
   "src/components/agent/chat/workspace/useWorkspaceChatToolPreferencesRuntime.ts",
   "src/components/agent/chat/components/Inputbar/components/InputbarComposerSection.tsx",
   "src/components/agent/chat/components/Inputbar/index.tsx",

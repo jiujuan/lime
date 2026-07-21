@@ -8,7 +8,7 @@ use app_server_protocol::{
 };
 use async_trait::async_trait;
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 use thread_store::{
     AgentGraphStore, AgentIdentity, AgentIdentityStore, AgentMailboxDeliveryMode,
@@ -283,12 +283,15 @@ impl RuntimeCore {
             ]),
         );
         let response = self
-            .stage_agent_control_spawn(AgentControlSpawnRequest {
-                parent_session_id: caller.session.session_id.clone(),
-                child_session_id: Some(child_session_id),
-                child_thread_id: Some(child_thread_id),
-                fork_mode,
-            })
+            .stage_agent_control_spawn_with_runtime_options(
+                AgentControlSpawnRequest {
+                    parent_session_id: caller.session.session_id.clone(),
+                    child_session_id: Some(child_session_id),
+                    child_thread_id: Some(child_thread_id),
+                    fork_mode,
+                },
+                child_runtime_options.clone(),
+            )
             .await?;
         let store = self.agent_control_store()?;
         let identity = AgentIdentity {
@@ -318,6 +321,7 @@ impl RuntimeCore {
         let message_id = match self
             .append_agent_control_message(
                 caller,
+                &response.session.session_id,
                 ThreadId::new(response.session.thread_id.clone()),
                 message,
                 AgentMailboxDeliveryMode::TriggerTurn,
@@ -355,12 +359,11 @@ impl RuntimeCore {
             })?;
             return Err(error);
         }
-        self.schedule_pending_agent_mailbox_triggers(
+        self.wake_pending_session_work(
             response.session.session_id.clone(),
             host.clone(),
             child_runtime_options,
-        )
-        .await;
+        );
         let task_name = identity.agent_path.clone();
         Ok((
             json!({
@@ -398,6 +401,7 @@ impl RuntimeCore {
         let message_id = self
             .append_agent_control_message(
                 caller,
+                &target.session_id,
                 target.thread_id.clone(),
                 message,
                 delivery_mode,
@@ -407,12 +411,11 @@ impl RuntimeCore {
         if delivery_mode == AgentMailboxDeliveryMode::TriggerTurn {
             let runtime_options = self
                 .agent_control_followup_runtime_options(&target.session_id, child_runtime_options);
-            self.schedule_pending_agent_mailbox_triggers(
+            self.wake_pending_session_work(
                 target.session_id.clone(),
                 host.clone(),
                 runtime_options,
-            )
-            .await;
+            );
         }
         Ok((
             json!({ "message_id": message_id }),
@@ -595,34 +598,104 @@ impl RuntimeCore {
         host: RuntimeHostContext,
         runtime_options: Option<RuntimeOptions>,
     ) -> Result<(), RuntimeCoreError> {
-        let Some(store) = self.projection_store.clone() else {
-            return Ok(());
-        };
-        let pending_spawns = store
-            .list_pending_thread_spawn_intents_sync()
-            .map_err(agent_control_store_error)?;
-        for (parent_thread_id, child_thread_id, child_session_id) in pending_spawns {
-            let root_thread_id = match store
-                .read_agent_identity(child_thread_id.clone())
-                .await
-                .map_err(agent_control_store_error)?
-            {
-                Some(identity) => identity.root_thread_id,
-                None => store
-                    .read_agent_identity(parent_thread_id.clone())
+        let store = self.projection_store.clone();
+        if let Some(store) = store.as_ref() {
+            let pending_spawns = store
+                .list_pending_thread_spawn_intents_sync()
+                .map_err(agent_control_store_error)?;
+            for (parent_thread_id, child_thread_id, child_session_id) in pending_spawns {
+                let root_thread_id = match store
+                    .read_agent_identity(child_thread_id.clone())
                     .await
                     .map_err(agent_control_store_error)?
-                    .map(|identity| identity.root_thread_id)
-                    .unwrap_or(parent_thread_id),
-            };
-            self.cleanup_unusable_agent_control_child(
-                &root_thread_id,
-                Some(&child_session_id),
-                child_thread_id,
-            )
-            .await?;
+                {
+                    Some(identity) => identity.root_thread_id,
+                    None => store
+                        .read_agent_identity(parent_thread_id.clone())
+                        .await
+                        .map_err(agent_control_store_error)?
+                        .map(|identity| identity.root_thread_id)
+                        .unwrap_or(parent_thread_id),
+                };
+                self.cleanup_unusable_agent_control_child(
+                    &root_thread_id,
+                    Some(&child_session_id),
+                    child_thread_id,
+                )
+                .await?;
+            }
         }
 
+        let mut queued_session_ids = {
+            let state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            state
+                .sessions
+                .iter()
+                .filter(|(_, stored)| {
+                    stored
+                        .turns
+                        .iter()
+                        .any(|turn| matches!(turn.status, AgentTurnStatus::Queued))
+                })
+                .map(|(session_id, _)| session_id.clone())
+                .collect::<BTreeSet<_>>()
+        };
+        let mut recovery_error = None;
+        if let Some(store) = store.as_ref() {
+            match store.list_queued_session_ids() {
+                Ok(session_ids) => queued_session_ids.extend(session_ids),
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "failed to discover durable queued sessions from the projection store"
+                    );
+                    recovery_error.get_or_insert(agent_control_store_error(error));
+                }
+            }
+        }
+
+        let mut recovered_pending_work_sessions = BTreeSet::new();
+        let mut pending_route = None;
+        for session_id in queued_session_ids {
+            recovered_pending_work_sessions.insert(session_id.clone());
+            let recovery = self
+                .process_pending_session_work_with_options(
+                    &session_id,
+                    host.clone(),
+                    runtime_options.clone(),
+                    None,
+                )
+                .await;
+            match recovery {
+                Ok(_) => {}
+                Err(error @ RuntimeCoreError::PendingRoute { .. }) => {
+                    tracing::debug!(
+                        session_id = %session_id,
+                        error = %error,
+                        "queued turn recovery is pending provider/model route"
+                    );
+                    pending_route.get_or_insert(error);
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        error = %error,
+                        "queued turn recovery failed; continuing with remaining pending work"
+                    );
+                    recovery_error.get_or_insert(error);
+                }
+            }
+        }
+
+        let Some(store) = store else {
+            if let Some(error) = recovery_error {
+                return Err(error);
+            }
+            return pending_route.map_or(Ok(()), Err);
+        };
         let recipients = store
             .list_pending_agent_mailbox_trigger_recipients()
             .await
@@ -671,8 +744,11 @@ impl RuntimeCore {
                     identity.thread_id
                 )));
             }
+            if recovered_pending_work_sessions.contains(thread.session_id.as_str()) {
+                continue;
+            }
             let recovery = self
-                .process_pending_agent_mailbox_triggers_with_options(
+                .process_pending_session_work_with_options(
                     thread.session_id.as_str(),
                     host.clone(),
                     runtime_options.clone(),
@@ -689,10 +765,28 @@ impl RuntimeCore {
                     )
                     .await?;
                 }
-                Err(error) => return Err(error),
+                Err(error @ RuntimeCoreError::PendingRoute { .. }) => {
+                    tracing::debug!(
+                        session_id = %thread.session_id,
+                        error = %error,
+                        "agent control recovery is pending provider/model route"
+                    );
+                    pending_route.get_or_insert(error);
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        session_id = %thread.session_id,
+                        error = %error,
+                        "agent control recovery failed; continuing with remaining recipients"
+                    );
+                    recovery_error.get_or_insert(error);
+                }
             }
         }
-        Ok(())
+        if let Some(error) = recovery_error {
+            return Err(error);
+        }
+        pending_route.map_or(Ok(()), Err)
     }
 
     async fn agent_control_identity_or_root(
@@ -814,6 +908,7 @@ impl RuntimeCore {
     async fn append_agent_control_message(
         &self,
         caller: &ResolvedAgentControlCaller,
+        recipient_session_id: &str,
         recipient_thread_id: ThreadId,
         content: String,
         delivery_mode: AgentMailboxDeliveryMode,
@@ -828,7 +923,7 @@ impl RuntimeCore {
             &recipient_thread_id,
         );
         let store = self.agent_control_store()?;
-        store
+        let stored_message = store
             .append_agent_mailbox_message(AppendAgentMailboxMessageParams {
                 message: AgentMailboxMessage {
                     message_id: message_id.clone(),
@@ -847,6 +942,23 @@ impl RuntimeCore {
             })
             .await
             .map_err(agent_control_store_error)?;
+        if let Err(error) = self
+            .session_loops
+            .notify_inter_agent_communication(
+                recipient_session_id,
+                super::inter_agent_input::from_mailbox_message(&stored_message),
+            )
+            .await
+        {
+            // The durable mailbox is authoritative. A wake-up failure must not turn a committed
+            // message into a caller-visible send failure; recovery and the next boundary will
+            // still observe the pending record.
+            tracing::warn!(
+                session_id = recipient_session_id,
+                error = %error,
+                "failed to publish durable mailbox activity"
+            );
+        }
         Ok(message_id)
     }
 
@@ -928,6 +1040,12 @@ fn agent_control_child_runtime_options(mut options: RuntimeOptions) -> RuntimeOp
     options.expected_output = None;
     options.structured_output = None;
     options.output_schema = None;
+    if let Some(request) = options.runtime_request.as_mut() {
+        if let Some(provider_config) = request.provider_config.as_mut() {
+            provider_config.api_key = None;
+            provider_config.base_url = None;
+        }
+    }
     options
 }
 

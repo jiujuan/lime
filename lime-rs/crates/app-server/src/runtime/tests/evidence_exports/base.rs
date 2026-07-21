@@ -74,7 +74,7 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
         .iter()
         .find(|event| event.event_type == "message.created")
         .expect("user message event");
-    assert_eq!(user_message.payload["input"]["text"], "生成 evidence");
+    assert_eq!(user_message.payload["input"][0]["text"], "生成 evidence");
     assert!(response
         .events
         .iter()
@@ -408,14 +408,14 @@ async fn export_evidence_repairs_and_reads_jsonl_projection() {
     assert_eq!(response.turns.len(), 1);
     assert_eq!(response.turns[0].turn_id, "turn_evidence_projection");
     assert_eq!(response.turns[0].status, AgentTurnStatus::Completed);
-    assert_eq!(response.events.len(), 7);
+    assert_eq!(response.events.len(), 8);
     let user_message = response
         .events
         .iter()
         .find(|event| event.event_type == "message.created")
         .expect("user message event");
     assert_eq!(
-        user_message.payload["input"]["text"],
+        user_message.payload["input"][0]["text"],
         "生成 projection evidence"
     );
     assert!(response

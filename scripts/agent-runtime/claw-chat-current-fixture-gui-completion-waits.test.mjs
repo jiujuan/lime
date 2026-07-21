@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  isGuiCanceledSnapshotReady,
-} from "./claw-chat-current-fixture-gui-completion-waits.mjs";
+import { isGuiCanceledSnapshotReady } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
+import { waitForGuiWebToolsRenderingCompleted } from "./claw-chat-current-fixture-gui-web-tools-waits.mjs";
 
 const BASE_CANCELED_SNAPSHOT = {
   hasPrompt: true,
@@ -15,6 +14,39 @@ const BASE_CANCELED_SNAPSHOT = {
     recordCount: 0,
   },
   compactTimelinePreviewCount: 0,
+};
+
+const BASE_WEB_TOOLS_COMPLETED_SNAPSHOT = {
+  hasPrompt: true,
+  hasAssistantSummary: true,
+  hasDoneText: false,
+  historicalTimelinePreviewVisible: true,
+  historicalTimelinePreviewCount: 1,
+  hasProcessTitle: false,
+  processGroupCount: 0,
+  webProcessGroupExpanded: false,
+  hasSearchSourceSection: false,
+  hasFetchPageSection: false,
+  hasSearchTitle: false,
+  hasMidThinkingText: false,
+  hasSearchSourceLabel: false,
+  hasFullSearchUrlVisible: false,
+  hasFetchPageUrl: false,
+  hasFetchMarkdownHidden: true,
+  latestAssistantMessageContentPartTypes:
+    "tool:WebSearch|thinking|tool:WebFetch|text",
+  latestAssistantRendererContentPartTypes: "text",
+  hasTimelineOrderPreserved: false,
+  processGroupExcludesFinalMarkdown: true,
+  rawJsonEnvelopeVisible: false,
+  searchNoiseVisible: false,
+  rawMarkdownVisible: false,
+  markdownHeadingVisible: true,
+  markdownStrongVisible: true,
+  markdownTableVisible: true,
+  textareaVisible: true,
+  textareaDisabled: false,
+  stopButtonVisible: false,
 };
 
 describe("claw chat GUI canceled waits", () => {
@@ -49,23 +81,40 @@ describe("claw chat GUI canceled waits", () => {
 
   it("approval cancel 终态不依赖历史 operational record", () => {
     expect(
-      isGuiCanceledSnapshotReady(
-        {
-          ...BASE_CANCELED_SNAPSHOT,
-          hasStoppedCopy: true,
-          compactTimelinePreviewCount: 1,
-        },
-      ),
+      isGuiCanceledSnapshotReady({
+        ...BASE_CANCELED_SNAPSHOT,
+        hasStoppedCopy: true,
+        compactTimelinePreviewCount: 1,
+      }),
     ).toBe(true);
     expect(
-      isGuiCanceledSnapshotReady(
-        {
-          ...BASE_CANCELED_SNAPSHOT,
-          hasStoppedCopy: true,
-          compactTimelinePreviewCount: 1,
-          approvalRecordShape: { recordCount: 1 },
-        },
-      ),
+      isGuiCanceledSnapshotReady({
+        ...BASE_CANCELED_SNAPSHOT,
+        hasStoppedCopy: true,
+        compactTimelinePreviewCount: 1,
+        approvalRecordShape: { recordCount: 1 },
+      }),
     ).toBe(true);
+  });
+});
+
+describe("claw chat GUI web tools completion waits", () => {
+  it("摘要先出现时继续等待最终完成标记", async () => {
+    let snapshotCount = 0;
+    const page = {
+      evaluate: async () => ({
+        ...BASE_WEB_TOOLS_COMPLETED_SNAPSHOT,
+        hasDoneText: ++snapshotCount >= 2,
+      }),
+    };
+
+    const snapshot = await waitForGuiWebToolsRenderingCompleted(page, {
+      timeoutMs: 100,
+      intervalMs: 0,
+    });
+
+    expect(snapshotCount).toBe(2);
+    expect(snapshot.hasAssistantSummary).toBe(true);
+    expect(snapshot.hasDoneText).toBe(true);
   });
 });

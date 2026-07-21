@@ -12,7 +12,6 @@ function createRequestState(): StreamRequestState {
     requestLogId: null,
     requestStartedAt: 0,
     requestFinished: false,
-    queuedTurnId: null,
     performanceTrace: {
       requestId: "request-a",
       sessionId: "session-a",
@@ -33,7 +32,6 @@ describe("agentStreamRequestStartController", () => {
         effectiveModel: "deepseek-chat",
         effectiveProviderType: "deepseek",
         eventName: "event-a",
-        expectingQueue: false,
         resolvedWorkspaceId: "workspace-a",
         skipUserMessage: false,
         systemPrompt: "0123456789".repeat(6),
@@ -41,7 +39,6 @@ describe("agentStreamRequestStartController", () => {
     ).toEqual({
       contentLength: 6,
       eventName: "event-a",
-      expectingQueue: false,
       model: "deepseek-chat",
       provider: "deepseek",
       sessionId: "session-a",
@@ -68,7 +65,6 @@ describe("agentStreamRequestStartController", () => {
         effectiveModel: "gpt-5.4",
         effectiveProviderType: "openai",
         eventName: "event-a",
-        expectingQueue: true,
         resolvedWorkspaceId: "workspace-a",
         skipUserMessage: true,
         systemPrompt: "system",
@@ -90,7 +86,6 @@ describe("agentStreamRequestStartController", () => {
         systemPromptLength: 6,
         autoContinueEnabled: true,
         autoContinue,
-        queuedSubmission: true,
       },
     });
   });
@@ -107,7 +102,6 @@ describe("agentStreamRequestStartController", () => {
       effectiveModel: "deepseek-chat",
       effectiveProviderType: "deepseek",
       eventName: "event-a",
-      expectingQueue: false,
       requestState,
       resolvedWorkspaceId: "workspace-a",
       skipUserMessage: false,

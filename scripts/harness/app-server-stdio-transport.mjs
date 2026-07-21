@@ -60,7 +60,6 @@ export async function createAppServerStdioTransport({
         cwd: repoRoot,
         env: {
           APP_SERVER_BACKEND_MODE: "runtime",
-          APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP: "retain",
         },
       },
     );
@@ -120,13 +119,6 @@ function createIsolatedAppServerDataDir(sourceDataDir) {
       [sourceDatabase, `VACUUM INTO '${escapedDatabasePath}'`],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
-    const migrationMarker = path.join(sourceDataDir, ".migration_completed");
-    if (fs.existsSync(migrationMarker)) {
-      fs.copyFileSync(
-        migrationMarker,
-        path.join(isolatedDataDir, ".migration_completed"),
-      );
-    }
     return isolatedDataDir;
   } catch (error) {
     fs.rmSync(isolatedDataDir, { recursive: true, force: true });

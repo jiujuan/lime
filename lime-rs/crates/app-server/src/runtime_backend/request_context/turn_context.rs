@@ -1,5 +1,6 @@
 use crate::trace_context::w3c_trace_context;
 use crate::ExecutionRequest;
+use agent_protocol::CollaborationMode;
 use lime_agent::{
     build_agent_turn_context, AgentTurnContext, AgentTurnContextConfigurationRequest,
 };
@@ -8,8 +9,8 @@ use std::collections::HashMap;
 
 use super::{
     host_approval_policy, host_metadata_value, host_sandbox_policy, host_thinking_enabled,
-    json_pointer_string, non_empty, request_tool_policy_from_request, request_workspace_scope,
-    RuntimeModelSelection, RuntimeRequest, RuntimeSessionScope,
+    non_empty, request_tool_policy_from_request, request_workspace_scope, RuntimeModelSelection,
+    RuntimeRequest, RuntimeSessionScope,
 };
 
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
@@ -72,7 +73,7 @@ pub(in crate::runtime_backend) fn turn_context_from_request(
         approval_policy: host_request.and_then(host_approval_policy),
         sandbox_policy: host_request.and_then(host_sandbox_policy),
         collaboration_mode: collaboration_mode_from_request(request, host_request),
-        user_visible_input_text: non_empty(Some(&request.input.text)),
+        user_visible_input_text: non_empty(Some(&request.input.concat_text())),
         output_schema: output_schema_from_request(request, host_request),
         metadata,
     })
@@ -257,29 +258,16 @@ fn output_schema_from_request(
 fn collaboration_mode_from_request(
     request: &ExecutionRequest,
     host_request: Option<&RuntimeRequest>,
-) -> Option<String> {
+) -> Option<CollaborationMode> {
     host_request
-        .and_then(|host| collaboration_mode_from_metadata(host.metadata.as_ref()))
-        .or_else(|| collaboration_mode_from_metadata(request.runtime_metadata()))
-}
-
-fn collaboration_mode_from_metadata(metadata: Option<&Value>) -> Option<String> {
-    let metadata = metadata?;
-    json_pointer_string(
-        metadata,
-        &[
-            "/collaboration_mode",
-            "/collaborationMode",
-            "/harness/collaboration_mode/mode",
-            "/harness/collaborationMode/mode",
-            "/harness/collaboration_mode",
-            "/harness/collaborationMode",
-        ],
-    )
-    .map(|value| match value.as_str() {
-        "planning" => "plan".to_string(),
-        _ => value,
-    })
+        .and_then(|host| host.collaboration_mode.clone())
+        .or_else(|| {
+            request
+                .runtime_options
+                .as_ref()
+                .and_then(|options| options.runtime_request())
+                .and_then(|runtime_request| runtime_request.collaboration_mode.clone())
+        })
 }
 
 fn positive_i64_field(value: &Value, keys: &[&str]) -> Option<i64> {

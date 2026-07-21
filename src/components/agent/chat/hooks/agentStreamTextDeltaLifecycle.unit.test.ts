@@ -19,7 +19,6 @@ function createRequestState(
 ): StreamRequestState {
   return {
     accumulatedContent: "",
-    queuedTurnId: null,
     requestLogId: null,
     requestStartedAt: 0,
     requestFinished: false,
@@ -167,8 +166,7 @@ describe("agentStreamTextDeltaLifecycle", () => {
     requestState.hasFinalAnswerRequiredProcessBoundary = true;
     expect(shouldCommitActiveTextSegmentAsFinal(requestState)).toBe(false);
 
-    requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
-      true;
+    requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary = true;
     expect(shouldCommitActiveTextSegmentAsFinal(requestState)).toBe(false);
 
     requestState.activeTextSegmentSequence = 4;

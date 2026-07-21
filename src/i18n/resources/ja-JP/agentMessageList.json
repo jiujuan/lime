@@ -296,9 +296,6 @@
   "agentChat.messageList.artifact.sourceCount": "{{count}} 件のソース",
   "agentChat.messageList.artifact.locateBlock": "{{label}} に移動",
   "agentChat.messageList.artifact.documentSyncedPreview": "ワークスペースに同期済みです。キャンバスで読み続け、編集し、対応ブロックへ移動できます。",
-  "agentChat.messageList.artifactFrame.badge": "成果物フレーム",
-  "agentChat.messageList.artifactFrame.open": "エディターを開く",
-  "agentChat.messageList.artifactFrame.openAria": "成果物エディターを開く: {{title}}",
   "agentChat.messageList.artifactFrame.streaming": "ストリーミング中",
   "agentChat.messageList.articleArtifact.documentCreatedPrefix": "ドキュメントを作成しました:",
   "agentChat.messageList.articleArtifact.documentCreatingPrefix": "ドキュメントを作成中:",
@@ -465,5 +462,7 @@
   "agentChat.toolCall.group.collapseSearch": "検索バッチを閉じる",
   "agentChat.toolCall.group.expandSearch": "検索バッチを展開",
   "agentChat.toolCall.group.hiddenSearchGroups": " ほか {{count}} 件",
-  "agentChat.toolCall.error.openExternalUnsupported": "現在の環境では外部リンクを開けません"
+  "agentChat.toolCall.error.openExternalUnsupported": "現在の環境では外部リンクを開けません",
+  "agentChat.inputbar.shellCommand.empty": "実行するコマンドを入力してください",
+  "agentChat.inputbar.shellCommand.error": "コマンドの送信に失敗しました: {{message}}"
 }

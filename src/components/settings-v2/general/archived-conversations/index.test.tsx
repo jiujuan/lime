@@ -5,11 +5,11 @@ import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
   mockListAgentRuntimeSessions,
-  mockUpdateAgentRuntimeSession,
+  mockUnarchiveAgentRuntimeSession,
   mockToast,
 } = vi.hoisted(() => ({
   mockListAgentRuntimeSessions: vi.fn(),
-  mockUpdateAgentRuntimeSession: vi.fn(),
+  mockUnarchiveAgentRuntimeSession: vi.fn(),
   mockToast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -18,7 +18,7 @@ const {
 
 vi.mock("@/lib/api/agentRuntime/sessionClient", () => ({
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
-  updateAgentRuntimeSession: mockUpdateAgentRuntimeSession,
+  unarchiveAgentRuntimeSession: mockUnarchiveAgentRuntimeSession,
 }));
 
 vi.mock("sonner", () => ({
@@ -82,7 +82,7 @@ beforeEach(async () => {
       workspace_id: null,
     },
   ]);
-  mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
+  mockUnarchiveAgentRuntimeSession.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -185,10 +185,9 @@ describe("ArchivedConversationsSettings", () => {
     });
     await flushEffects();
 
-    expect(mockUpdateAgentRuntimeSession).toHaveBeenCalledWith({
-      session_id: "session-archived",
-      archived: false,
-    });
+    expect(mockUnarchiveAgentRuntimeSession).toHaveBeenCalledWith(
+      "session-archived",
+    );
     expect(mockToast.success).toHaveBeenCalledWith("已恢复对话");
     expect(container.textContent).not.toContain("归档会话");
   });

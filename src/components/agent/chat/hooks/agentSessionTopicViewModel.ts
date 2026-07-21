@@ -1,7 +1,4 @@
-import type {
-  AgentRuntimeThreadReadModel,
-  AgentSessionDetail,
-} from "@/lib/api/agentRuntime/sessionTypes";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
@@ -99,17 +96,6 @@ export function resolveRestoreCandidateSanitizationPlan(options: {
   };
 }
 
-export function shouldAutoResumeHydratedRuntimeThread(
-  threadRead: AgentRuntimeThreadReadModel | null | undefined,
-): boolean {
-  const status = threadRead?.status?.trim().toLowerCase();
-  return (
-    status === "queued" ||
-    status === "running" ||
-    (threadRead?.queued_turns?.length ?? 0) > 0
-  );
-}
-
 export function resolveRuntimeThreadStatusFromSessionDetail(
   detail: AgentSessionDetail,
 ): Topic["status"] | null {
@@ -124,11 +110,7 @@ export function resolveRuntimeThreadStatusFromSessionDetail(
     return "waiting";
   }
 
-  if (
-    status === "queued" ||
-    (detail.thread_read?.queued_turns?.length ?? 0) > 0 ||
-    (detail.queued_turns?.length ?? 0) > 0
-  ) {
+  if (status === "queued") {
     return "queued";
   }
 
@@ -138,19 +120,6 @@ export function resolveRuntimeThreadStatusFromSessionDetail(
 
   if (status === "failed") {
     return "failed";
-  }
-
-  return null;
-}
-
-export function resolveRuntimePreviewFromSessionDetail(
-  detail: AgentSessionDetail,
-): string | null {
-  const queuedPreview =
-    detail.queued_turns?.[0]?.message_preview ||
-    detail.thread_read?.queued_turns?.[0]?.message_preview;
-  if (queuedPreview?.trim()) {
-    return queuedPreview.trim();
   }
 
   return null;
@@ -181,8 +150,6 @@ export function mapSessionDetailToTopic(
     ...topic,
     status: runtimeStatus,
     statusReason: runtimeStatus === "waiting" ? "user_action" : "default",
-    lastPreview:
-      resolveRuntimePreviewFromSessionDetail(detail) ?? topic.lastPreview,
   };
 }
 
@@ -235,6 +202,8 @@ export function upsertTopicFromSessionDetail(
           : detailTopic.title,
         workspaceId: detailTopic.workspaceId ?? existingTopic.workspaceId,
         workingDir: detailTopic.workingDir ?? existingTopic.workingDir,
+        queuedTurnCount:
+          detailTopic.queuedTurnCount ?? existingTopic.queuedTurnCount,
         isPinned: existingTopic.isPinned,
         hasUnread: existingTopic.hasUnread,
         tag: existingTopic.tag,
@@ -345,6 +314,7 @@ export type TopicSnapshotPatch = Partial<
     | "messagesCount"
     | "status"
     | "statusReason"
+    | "queuedTurnCount"
     | "lastPreview"
     | "hasUnread"
   >
@@ -372,6 +342,7 @@ export function applyTopicSnapshotToTopics(
       nextTopic.messagesCount === topic.messagesCount &&
       nextTopic.status === topic.status &&
       nextTopic.statusReason === topic.statusReason &&
+      nextTopic.queuedTurnCount === topic.queuedTurnCount &&
       nextTopic.lastPreview === topic.lastPreview &&
       nextTopic.hasUnread === topic.hasUnread &&
       nextTopic.updatedAt?.getTime() === topic.updatedAt?.getTime();

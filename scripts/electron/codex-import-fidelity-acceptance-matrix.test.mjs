@@ -81,7 +81,7 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(matrix).toContain("conversationImport/thread/commit");
     expect(matrix).toContain("conversationImport/job/read");
     expect(matrix).toContain("RuntimeCore StoredSession + AgentEvent");
-    expect(matrix).toContain("agentSession/read + thread/items/list");
+    expect(matrix).toContain("thread/read + thread/items/list");
     expect(matrix).toContain("Preview Artifact Contract");
     expect(matrix).toContain("evidence/export / replay current 主链");
     expect(matrix).toContain("Renderer 不直接扫描 `.codex`");
@@ -280,7 +280,7 @@ describe("codex import fidelity acceptance matrix guard", () => {
       CLICK_THROUGH_SMOKE_PATH,
     );
 
-    expect(matrix).toContain("`agentSession/turn/start` current 主链");
+    expect(matrix).toContain("`turn/start` current 主链");
     expect(matrix).toContain(
       "`evidence/export` / replay 使用 Lime canonical events",
     );
@@ -293,7 +293,7 @@ describe("codex import fidelity acceptance matrix guard", () => {
     expect(evidenceTests).toContain(
       "imported_codex_thread_exports_evidence_with_source_provenance",
     );
-    expect(clickThroughSurface).toContain('"agentSession/turn/start"');
+    expect(clickThroughSurface).toContain('"turn/start"');
     expect(clickThroughSurface).toContain("backendMetadataImported");
     expect(clickThroughSurface).toContain("hasContinueUserMessage");
     expect(clickThroughSurface).toContain("hasContinueAssistantMessage");

@@ -10,6 +10,7 @@ use crate::request_tool_policy::{is_same_tool, RequestToolPolicy};
 use crate::runtime_state::AgentRuntimeState;
 use agent_protocol::action_required::tool_confirmation_action;
 use agent_protocol::ThreadId;
+use agent_runtime::session_loop::{RuntimeSessionInputHandle, RuntimeSessionResponseKind};
 use rmcp::model::{CallToolRequestParam, CallToolResult, ErrorData};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -40,6 +41,7 @@ pub(super) struct CurrentTurnToolExecutor {
     pub(super) deferred_tools: mcp_step_snapshot::DeferredToolSelections,
     pub(super) agent_control_gateway:
         Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
+    pub(super) pending_input: Option<RuntimeSessionInputHandle>,
 }
 
 impl RuntimeToolExecutor for CurrentTurnToolExecutor {
@@ -54,7 +56,8 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                     Some(RuntimeToolPolicyErrorKind::PermissionDenied(
                         "request_tool_policy".to_string(),
                     )),
-                ));
+                )
+                .before_handler());
             }
             if !self.policy.allows_web_search() && is_web_tool(request.tool_name) {
                 return Err(RuntimeToolExecutionError::new(
@@ -62,7 +65,8 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                     Some(RuntimeToolPolicyErrorKind::PermissionDenied(
                         "web_search_disabled".to_string(),
                     )),
-                ));
+                )
+                .before_handler());
             }
 
             if tool_runtime::request_user_input::request_user_input_canonical_tool_name(
@@ -70,9 +74,21 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
             )
             .is_some()
             {
-                let (scope, _request_call_id) = action_scope(request, &self.thread_id)?;
+                let (scope, request_call_id) = action_scope(request, &self.thread_id)
+                    .map_err(RuntimeToolExecutionError::before_handler)?;
+                let response_handle = self.pending_input.clone().ok_or_else(|| {
+                    RuntimeToolExecutionError::new(
+                        "request_user_input requires the active session response owner",
+                        Some(RuntimeToolPolicyErrorKind::ExecutionFailed(
+                            "session_response_owner_missing".to_string(),
+                        )),
+                    )
+                    .before_handler()
+                })?;
                 let callback = crate::request_user_input_bridge::create_request_user_input_callback(
                     self.state.action_required_state(),
+                    response_handle,
+                    request_call_id,
                     scope,
                     self.event_sender.clone(),
                 );
@@ -109,9 +125,11 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                         &self.event_sender,
                         request,
                         &self.thread_id,
+                        self.pending_input.as_ref(),
                         decision.reason,
                     )
-                    .await?;
+                    .await
+                    .map_err(RuntimeToolExecutionError::before_handler)?;
                 }
                 ToolExecutionDecisionKind::Deny => {
                     return Err(RuntimeToolExecutionError::new(
@@ -119,7 +137,8 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                         Some(RuntimeToolPolicyErrorKind::PermissionDenied(
                             decision.reason_code,
                         )),
-                    ));
+                    )
+                    .before_handler());
                 }
                 ToolExecutionDecisionKind::SandboxBlocked => {
                     return Err(RuntimeToolExecutionError::new(
@@ -127,7 +146,8 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                         Some(RuntimeToolPolicyErrorKind::ExecutionFailed(
                             decision.reason_code,
                         )),
-                    ));
+                    )
+                    .before_handler());
                 }
             }
 
@@ -154,6 +174,7 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                             "unified_exec_identity_missing".to_string(),
                         )),
                     )
+                    .before_handler()
                 })?;
                 let gateway = self
                     .state
@@ -166,6 +187,7 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                                 "unified_exec_gateway_unavailable".to_string(),
                             )),
                         )
+                        .before_handler()
                     })?;
                 return tool_runtime::unified_exec::execute_runtime_unified_exec_tool(
                     gateway,
@@ -217,7 +239,7 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                             .await;
                     }
                 }
-                return project_call_result(result);
+                return project_runtime_dispatch_result(result);
             }
 
             if let Some(result) =
@@ -231,7 +253,7 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                 })
                 .await
             {
-                return project_call_result(result);
+                return project_runtime_dispatch_result(result);
             }
 
             let cancel_token = request_cancel_token(request.context.cancel_token());
@@ -239,12 +261,13 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                 name: request.tool_name.to_string().into(),
                 arguments: request.params.as_object().cloned(),
             };
-            let mcp_scope = mcp_call_scope(request)?;
+            let mcp_scope =
+                mcp_call_scope(request).map_err(RuntimeToolExecutionError::before_handler)?;
             let call = self
                 .mcp_snapshot
                 .dispatch(mcp_request, mcp_scope, cancel_token)
                 .await
-                .map_err(project_mcp_error)?;
+                .map_err(|error| project_mcp_error(error).before_handler())?;
             project_call_result(call.response.await)
         })
     }
@@ -308,17 +331,28 @@ async fn wait_for_tool_approval(
     event_sender: &UnboundedSender<AgentEvent>,
     request: RuntimeToolExecutionRequest<'_>,
     thread_id: &ThreadId,
+    pending_input: Option<&RuntimeSessionInputHandle>,
     prompt: String,
 ) -> Result<(), RuntimeToolExecutionError> {
+    let response_handle = pending_input.cloned().ok_or_else(|| {
+        RuntimeToolExecutionError::new(
+            "tool approval requires the active session response owner",
+            Some(RuntimeToolPolicyErrorKind::ExecutionFailed(
+                "session_response_owner_missing".to_string(),
+            )),
+        )
+    })?;
     let (scope, tool_call_id) = action_scope(request, thread_id)?;
     let tool_name = request.tool_name.to_string();
     let arguments = request.params.clone();
     let response = state
         .action_required_state()
         .request_action_and_wait_with_notification(
+            response_handle,
+            RuntimeSessionResponseKind::Approval,
             agent_protocol::action_required::TOOL_CONFIRMATION_ACTION_TYPE,
             Some(tool_call_id),
-            vec!["allow_once".to_string(), "decline".to_string()],
+            tool_approval_decisions(),
             scope,
             prompt.clone(),
             serde_json::json!({
@@ -377,6 +411,13 @@ async fn wait_for_tool_approval(
             "tool_approval_declined".to_string(),
         )),
     ))
+}
+
+fn tool_approval_decisions() -> Vec<String> {
+    ["allow_once", "decline", "cancel"]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 pub(super) fn action_scope(
@@ -455,6 +496,31 @@ pub(super) fn project_call_result(
     })
 }
 
+fn project_runtime_dispatch_result(
+    result: Result<CallToolResult, ErrorData>,
+) -> Result<RuntimeToolExecutionResult, RuntimeToolExecutionError> {
+    result
+        .map_err(project_runtime_dispatch_error)
+        .and_then(|result| project_call_result(Ok(result)))
+}
+
+fn project_runtime_dispatch_error(error: ErrorData) -> RuntimeToolExecutionError {
+    let handler_executed = error
+        .data
+        .as_ref()
+        .and_then(|data| {
+            data.get(tool_runtime::tool_result_projection::TOOL_HANDLER_EXECUTED_METADATA_KEY)
+        })
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let error = project_mcp_error(error);
+    if handler_executed {
+        error
+    } else {
+        error.before_handler()
+    }
+}
+
 fn call_result_text(result: &CallToolResult) -> String {
     let value = serde_json::to_value(result).unwrap_or(Value::Null);
     let mut text = Vec::new();
@@ -485,5 +551,22 @@ fn collect_text_fields(value: &Value, target: &mut Vec<String>) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tool_approval_exposes_cancel_without_session_grant() {
+        assert_eq!(
+            tool_approval_decisions(),
+            vec![
+                "allow_once".to_string(),
+                "decline".to_string(),
+                "cancel".to_string(),
+            ]
+        );
     }
 }

@@ -359,7 +359,7 @@ fn insert_optional_string(
 mod tests {
     use super::*;
     use app_server_protocol::{
-        AgentInput, AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
+        AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
     };
     use lime_agent::{HOST_MANAGED_GENERATION_SCHEMA, HOST_MANAGED_GENERATION_SOURCE};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -695,10 +695,9 @@ mod tests {
                 started_at: None,
                 completed_at: None,
             },
-            input: AgentInput {
-                text: "写一篇关于内容工厂插件化写作的文章".to_string(),
-                attachments: Vec::new(),
-            },
+            input: agent_runtime::reply_input::RuntimeReplyInput::text(
+                "写一篇关于内容工厂插件化写作的文章",
+            ),
             runtime_options: Some(RuntimeOptions {
                 stream: true,
                 runtime_request: Some(app_server_protocol::RuntimeRequest {
@@ -708,6 +707,17 @@ mod tests {
                         model_name: Some("lime-fixture-chat".to_string()),
                         api_key: Some("fixture-key".to_string()),
                         base_url: Some(base_url.to_string()),
+                        model_capabilities: Some(json!({
+                            "capabilities": {
+                                "tools": true,
+                                "streaming": true,
+                                "functionCalling": true
+                            },
+                            "taskFamilies": ["chat"],
+                            "inputModalities": ["text"],
+                            "outputModalities": ["text"],
+                            "runtimeFeatures": ["streaming", "tool_calling"]
+                        })),
                         tool_call_strategy: Some(
                             app_server_protocol::RuntimeToolCallStrategy::Native,
                         ),

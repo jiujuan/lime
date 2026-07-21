@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn session_config_appends_explicit_agent_skill_body_to_system_prompt() {
+fn session_config_forwards_skill_snapshot_without_system_body() {
     let workspace = TempDir::new().expect("workspace");
     let skill_dir = workspace.path().join(".agents/skills/writer");
     std::fs::create_dir_all(&skill_dir).expect("skill dir");
@@ -46,12 +46,20 @@ Use concise language.
     );
 
     let prompt = config.system_prompt.expect("system prompt");
-    assert!(prompt.contains("<selected_skill_instructions>"));
-    assert!(prompt.contains("`writer`"));
-    assert!(prompt.contains("# Writer Skill"));
-    assert!(prompt.contains("Use concise language."));
     assert!(prompt.contains("## 可用 Agent Skills"));
+    assert!(!prompt.contains("<selected_skill_instructions>"));
+    assert!(!prompt.contains("# Writer Skill"));
+    assert!(!prompt.contains("Use concise language."));
     assert!(!prompt.contains("allow_model_skills"));
+    let turn_context = config.turn_context.expect("turn context");
+    let snapshot = turn_context
+        .metadata
+        .get(lime_skills::SKILL_SNAPSHOT_TURN_METADATA_KEY)
+        .and_then(|value| {
+            serde_json::from_value::<lime_skills::AgentSkillSnapshot>(value.clone()).ok()
+        })
+        .expect("skill snapshot");
+    assert!(snapshot.skills.iter().any(|skill| skill.name == "writer"));
 }
 
 #[test]
@@ -194,8 +202,20 @@ Use article workflow rules.
     assert!(prompt.contains("plugin_id: content-factory-app"));
     assert!(prompt.contains("id=article-writing"));
     assert!(prompt.contains("server_id=browser"));
-    assert!(prompt.contains("<selected_skill_instructions>"));
-    assert!(prompt.contains("Use article workflow rules."));
+    assert!(!prompt.contains("<selected_skill_instructions>"));
+    assert!(!prompt.contains("Use article workflow rules."));
+    let turn_context = config.turn_context.expect("turn context");
+    let snapshot = turn_context
+        .metadata
+        .get(lime_skills::SKILL_SNAPSHOT_TURN_METADATA_KEY)
+        .and_then(|value| {
+            serde_json::from_value::<lime_skills::AgentSkillSnapshot>(value.clone()).ok()
+        })
+        .expect("skill snapshot");
+    assert!(snapshot
+        .skills
+        .iter()
+        .any(|skill| skill.name.eq_ignore_ascii_case("article-writing")));
 }
 
 #[test]
@@ -250,12 +270,16 @@ Use concise language.
     );
 
     let prompt = config.system_prompt.expect("system prompt");
-    assert!(prompt.contains("Use concise language."));
+    assert!(prompt.contains("## 可用 Agent Skills"));
+    assert!(!prompt.contains("Use concise language."));
     let turn_context = config.turn_context.expect("turn context");
     assert!(
         turn_context.metadata.get("tool_scope").is_none(),
         "App Server must not duplicate Agent Skill allowed-tools as a main-turn scope"
     );
+    assert!(turn_context
+        .metadata
+        .contains_key(lime_skills::SKILL_SNAPSHOT_TURN_METADATA_KEY));
 }
 
 #[test]

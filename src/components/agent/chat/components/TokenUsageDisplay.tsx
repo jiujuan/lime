@@ -87,17 +87,17 @@ export const TokenUsageDisplay: React.FC<TokenUsageDisplayProps> = ({
   );
   const missingPromptCacheNotice =
     totalPromptCacheTokens > 0 ? null : (promptCacheNotice ?? null);
+  const totalUsageText = resolveTokenUsageTotalText(usage, tokenUsageCopy);
 
   return (
     <UsageContainer
       className={className}
+      data-testid="token-usage-display"
       style={inline ? { marginTop: 0 } : undefined}
       title={missingPromptCacheNotice?.detail}
     >
       <UsageIcon />
-      <UsageText>
-        {resolveTokenUsageTotalText(usage, tokenUsageCopy)}
-      </UsageText>
+      <UsageText>{totalUsageText}</UsageText>
       {promptCacheMetaText ? (
         <UsageMeta>{`· ${promptCacheMetaText}`}</UsageMeta>
       ) : null}

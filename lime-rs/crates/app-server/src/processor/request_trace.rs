@@ -4,7 +4,7 @@ use crate::trace_context::W3cTraceContext;
 use crate::trace_context::W3cTraceContextParse;
 use app_server_protocol::ClientInfo;
 use app_server_protocol::JsonRpcRequest;
-use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
+use app_server_protocol::METHOD_TURN_START;
 use serde_json::Map;
 use serde_json::Value;
 use tracing::field;
@@ -82,7 +82,7 @@ pub(super) fn request_span(request: &JsonRpcRequest, client_info: Option<&Client
 }
 
 pub(super) fn request_trace_context(request: &JsonRpcRequest) -> Option<RequestTraceContext> {
-    if request.method != METHOD_AGENT_SESSION_TURN_START {
+    if request.method != METHOD_TURN_START {
         return None;
     }
     let params = request.params.as_ref()?.as_object()?;
@@ -202,7 +202,7 @@ mod tests {
     fn extracts_turn_start_trace_context_from_runtime_metadata() {
         let request = JsonRpcRequest::new(
             RequestId::String("rpc-1".to_string()),
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_TURN_START,
             Some(json!({
                 "sessionId": "sess-a",
                 "turnId": "turn-a",
@@ -239,7 +239,7 @@ mod tests {
     fn flags_invalid_w3c_traceparent_without_dropping_lime_trace_identity() {
         let request = JsonRpcRequest::new(
             RequestId::String("rpc-2".to_string()),
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_TURN_START,
             Some(json!({
                 "sessionId": "sess-invalid",
                 "input": { "text": "hello", "attachments": [] },
@@ -267,7 +267,7 @@ mod tests {
     fn ignores_non_turn_start_methods() {
         let request = JsonRpcRequest::new(
             RequestId::String("rpc-3".to_string()),
-            "agentSession/read",
+            "thread/read",
             Some(json!({ "sessionId": "sess-a" })),
         );
 
@@ -281,7 +281,7 @@ mod tests {
         let remote_parent_span_id = SpanId::from_hex("bbbbbbbbbbbbbbbb").expect("parent span id");
         let request = JsonRpcRequest::new(
             RequestId::String("rpc-otel".to_string()),
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_TURN_START,
             Some(json!({
                 "sessionId": "sess-otel",
                 "turnId": "turn-otel",
@@ -303,7 +303,7 @@ mod tests {
         );
 
         let spans = export_request_span(&request);
-        let span = find_request_span(&spans, METHOD_AGENT_SESSION_TURN_START);
+        let span = find_request_span(&spans, METHOD_TURN_START);
 
         assert_eq!(span.span_kind, SpanKind::Server);
         assert_eq!(span.span_context.trace_id(), remote_trace_id);
@@ -332,7 +332,7 @@ mod tests {
     fn invalid_w3c_traceparent_is_not_exported_as_remote_parent() {
         let request = JsonRpcRequest::new(
             RequestId::String("rpc-invalid-otel".to_string()),
-            METHOD_AGENT_SESSION_TURN_START,
+            METHOD_TURN_START,
             Some(json!({
                 "sessionId": "sess-invalid-otel",
                 "runtimeOptions": {
@@ -349,7 +349,7 @@ mod tests {
         );
 
         let spans = export_request_span(&request);
-        let span = find_request_span(&spans, METHOD_AGENT_SESSION_TURN_START);
+        let span = find_request_span(&spans, METHOD_TURN_START);
 
         assert_ne!(
             span.span_context.trace_id(),

@@ -2,7 +2,7 @@ use super::*;
 use crate::runtime::RuntimeHostContext;
 use crate::{ExecutionBackend, RuntimeEventSink};
 use app_server_protocol::{
-    AgentInput, AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
+    AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
     RuntimeProviderConfig, RuntimeRequest,
 };
 use lime_core::database::schema::create_tables;
@@ -181,10 +181,7 @@ fn execution_request(base_url: &str, turn_index: usize) -> ExecutionRequest {
             started_at: None,
             completed_at: None,
         },
-        input: AgentInput {
-            text: format!("turn {turn_index}"),
-            attachments: Vec::new(),
-        },
+        input: agent_runtime::reply_input::RuntimeReplyInput::text(format!("turn {turn_index}")),
         runtime_options: Some(RuntimeOptions {
             stream: true,
             runtime_request: Some(RuntimeRequest {

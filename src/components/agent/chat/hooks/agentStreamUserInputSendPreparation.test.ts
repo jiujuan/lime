@@ -5,10 +5,8 @@ import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities"
 import type { Message, MessageImage } from "../types";
 import {
   prepareAgentStreamUserInputSend,
-  resolvePreparedSendExpectingQueue,
   type AgentStreamUserInputSendPreparationEnv,
 } from "./agentStreamUserInputSendPreparation";
-import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
 
 function createStateSetter<T>(getValue: () => T, setValue: (value: T) => void) {
   return (next: T | ((prev: T) => T)) => {
@@ -64,9 +62,6 @@ describe("agentStreamUserInputSendPreparation", () => {
 
   function createEnv(options?: {
     sessionId?: string | null;
-    activeStream?: ActiveStreamState | null;
-    queuedTurnsCount?: number;
-    threadBusy?: boolean;
     providerType?: string;
     model?: string;
     reasoningEffort?: string;
@@ -92,12 +87,6 @@ describe("agentStreamUserInputSendPreparation", () => {
       executionRuntime: options?.executionRuntime ?? null,
       clawTraceEnabled: false,
       getWorkspaceIdForSubmit: () => "workspace-1",
-      activeStreamRef: {
-        current: options?.activeStream ?? null,
-      } as MutableRefObject<ActiveStreamState | null>,
-      getQueuedTurnsCount: () => options?.queuedTurnsCount ?? 0,
-      isThreadBusy: () => options?.threadBusy ?? false,
-      hasPendingPreparedSubmit: () => false,
       getSyncedSessionModelPreference: () => ({
         providerType: "openai",
         model: "gpt-5.4",
@@ -116,66 +105,6 @@ describe("agentStreamUserInputSendPreparation", () => {
       ),
     };
   }
-
-  it("同一会话仅残留 active stream 且 read model 已无活跃工作时不应进入 queue 模式", () => {
-    expect(
-      resolvePreparedSendExpectingQueue({
-        activeStreamSessionId: "session-1",
-        currentSessionId: "session-1",
-        queuedTurnsCount: 0,
-        threadBusy: false,
-        pendingPreparedSubmit: false,
-      }),
-    ).toBe(false);
-  });
-
-  it("同一会话 active stream 已绑定真实 turn 时应立即进入 queue 模式", () => {
-    expect(
-      resolvePreparedSendExpectingQueue({
-        activeStreamSessionId: "session-1",
-        activeStreamTurnId: "turn-active-1",
-        currentSessionId: "session-1",
-        queuedTurnsCount: 0,
-        threadBusy: false,
-        pendingPreparedSubmit: false,
-      }),
-    ).toBe(true);
-  });
-
-  it("跨会话 active stream、真实 queued turn、busy read model 或 pending submit 仍应进入 queue 模式", () => {
-    const base = {
-      activeStreamSessionId: "session-1",
-      currentSessionId: "session-1",
-      queuedTurnsCount: 0,
-      threadBusy: false,
-      pendingPreparedSubmit: false,
-    };
-
-    expect(
-      resolvePreparedSendExpectingQueue({
-        ...base,
-        activeStreamSessionId: "session-other",
-      }),
-    ).toBe(true);
-    expect(
-      resolvePreparedSendExpectingQueue({
-        ...base,
-        queuedTurnsCount: 1,
-      }),
-    ).toBe(true);
-    expect(
-      resolvePreparedSendExpectingQueue({
-        ...base,
-        threadBusy: true,
-      }),
-    ).toBe(true);
-    expect(
-      resolvePreparedSendExpectingQueue({
-        ...base,
-        pendingPreparedSubmit: true,
-      }),
-    ).toBe(true);
-  });
 
   it("应归一化发送参数并注入 draft", () => {
     vi.spyOn(crypto, "randomUUID")
@@ -220,8 +149,6 @@ describe("agentStreamUserInputSendPreparation", () => {
       model: "gpt-5.4",
     });
     expect(result.webSearch).toBe(true);
-    expect(result.searchMode).toBeUndefined();
-    expect(result.expectingQueue).toBe(false);
     expect(result.assistantMsgId).toBe("00000000-0000-0000-0000-000000000001");
     expect(result.userMsgId).toBe("00000000-0000-0000-0000-000000000002");
     expect(messages).toHaveLength(2);
@@ -416,7 +343,6 @@ describe("agentStreamUserInputSendPreparation", () => {
     });
 
     expect(result.webSearch).toBeUndefined();
-    expect(result.searchMode).toBeUndefined();
   });
 
   it("开启 Claw Trace 时应在发送准备阶段补齐 trace metadata", () => {
@@ -642,7 +568,7 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(isSending).toBe(true);
   });
 
-  it("跨会话 active stream 时应进入 queue 模式，归一 legacy 策略并允许 model override", () => {
+  it("应允许跳过 user message 并覆盖 model 与 assistant draft", () => {
     vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(
       "00000000-0000-0000-0000-000000000003",
     );
@@ -652,11 +578,6 @@ describe("agentStreamUserInputSendPreparation", () => {
     const env = {
       ...createEnv({
         sessionId: "session-current",
-        activeStream: {
-          assistantMsgId: "assistant-queued",
-          eventName: "event-queued",
-          sessionId: "session-queued",
-        },
         providerType: "claude",
         model: "sonnet",
       }),
@@ -683,7 +604,7 @@ describe("agentStreamUserInputSendPreparation", () => {
       modelOverride: "opus",
       options: {
         assistantDraft: {
-          content: "队列中",
+          content: "正在整理",
         },
       },
       env,
@@ -693,96 +614,9 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(result.effectiveProviderType).toBe("claude");
     expect(result.effectiveModel).toBe("opus");
     expect(result.syncedSessionModelPreference).toBeNull();
-    expect(result.expectingQueue).toBe(true);
     expect(result.userMsgId).toBeNull();
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.content).toBe("队列中");
-    expect(isSending).toBe(false);
-  });
-
-  it("同一会话 stale active stream 不应让下一轮误入队列", () => {
-    vi.spyOn(crypto, "randomUUID")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000011")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000012");
-
-    let messages: Message[] = [];
-    let isSending = false;
-    const env = {
-      ...createEnv({
-        sessionId: "session-stale",
-        activeStream: {
-          assistantMsgId: "assistant-stale",
-          eventName: "event-stale",
-          sessionId: "session-stale",
-        },
-      }),
-      setMessages: createStateSetter(
-        () => messages,
-        (value) => {
-          messages = value;
-        },
-      ),
-      setIsSending: createStateSetter(
-        () => isSending,
-        (value) => {
-          isSending = value;
-        },
-      ),
-    };
-
-    const result = prepareAgentStreamUserInputSend({
-      content: "继续生成提纲",
-      images: [],
-      skipUserMessage: false,
-      env,
-    });
-
-    expect(result.expectingQueue).toBe(false);
-    expect(messages).toHaveLength(2);
-    expect(isSending).toBe(true);
-  });
-
-  it("同一会话 active stream 带 turnId 时应把下一轮投影为 queued draft", () => {
-    vi.spyOn(crypto, "randomUUID")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000013")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000014");
-
-    let messages: Message[] = [];
-    let isSending = true;
-    const env = {
-      ...createEnv({
-        sessionId: "session-active",
-        activeStream: {
-          assistantMsgId: "assistant-active",
-          eventName: "event-active",
-          sessionId: "session-active",
-          turnId: "turn-active",
-        },
-      }),
-      setMessages: createStateSetter(
-        () => messages,
-        (value) => {
-          messages = value;
-        },
-      ),
-      setIsSending: createStateSetter(
-        () => isSending,
-        (value) => {
-          isSending = value;
-        },
-      ),
-    };
-
-    const result = prepareAgentStreamUserInputSend({
-      content: "排到当前回合之后",
-      images: [],
-      skipUserMessage: false,
-      env,
-    });
-
-    expect(result.expectingQueue).toBe(true);
-    expect(messages).toHaveLength(2);
-    expect(messages[1]?.runtimeStatus?.title).toBe("已加入排队列表");
+    expect(messages[0]?.content).toBe("正在整理");
     expect(isSending).toBe(true);
   });
 
@@ -886,82 +720,5 @@ describe("agentStreamUserInputSendPreparation", () => {
 
     expect(result.assistantMsg.inlineProcessRetention).toBe("skill");
     expect(messages[1]?.inlineProcessRetention).toBe("skill");
-  });
-
-  it("恢复态 thread 仍忙时也应直接进入 queue 模式", () => {
-    vi.spyOn(crypto, "randomUUID")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000004")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000005");
-
-    let messages: Message[] = [];
-    let isSending = false;
-    const env = {
-      ...createEnv({
-        threadBusy: true,
-      }),
-      setMessages: createStateSetter(
-        () => messages,
-        (value) => {
-          messages = value;
-        },
-      ),
-      setIsSending: createStateSetter(
-        () => isSending,
-        (value) => {
-          isSending = value;
-        },
-      ),
-    };
-
-    const result = prepareAgentStreamUserInputSend({
-      content: "继续分析这个项目",
-      images: [],
-      skipUserMessage: false,
-      env,
-    });
-
-    expect(result.expectingQueue).toBe(true);
-    expect(messages).toHaveLength(2);
-    expect(messages[1]?.runtimeStatus?.title).toBe("已加入排队列表");
-    expect(isSending).toBe(false);
-  });
-
-  it("首轮 submit 尚未完成时也应提前进入 queue 模式", () => {
-    vi.spyOn(crypto, "randomUUID")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000006")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000007");
-
-    let messages: Message[] = [];
-    let isSending = false;
-    const env = {
-      ...createEnv({
-        sessionId: null,
-      }),
-      hasPendingPreparedSubmit: () => true,
-      setMessages: createStateSetter(
-        () => messages,
-        (value) => {
-          messages = value;
-        },
-      ),
-      setIsSending: createStateSetter(
-        () => isSending,
-        (value) => {
-          isSending = value;
-        },
-      ),
-    };
-
-    const result = prepareAgentStreamUserInputSend({
-      content: "继续处理首页首轮提交",
-      images: [],
-      skipUserMessage: false,
-      env,
-    });
-
-    expect(result.expectingQueue).toBe(true);
-    expect(messages).toHaveLength(2);
-    expect(messages[1]?.runtimeStatus?.title).toBe("已加入排队列表");
-    expect(isSending).toBe(false);
   });
 });

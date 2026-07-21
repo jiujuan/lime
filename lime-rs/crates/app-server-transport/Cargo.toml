@@ -11,10 +11,17 @@ path = "src/lib.rs"
 doctest = false
 
 [dependencies]
+axum.workspace = true
 app-server-protocol.workspace = true
+futures.workspace = true
+fs2.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-tungstenite = { version = "0.24", default-features = false }
+tokio-util.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile.workspace = true

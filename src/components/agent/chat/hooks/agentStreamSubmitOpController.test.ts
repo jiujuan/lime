@@ -3,16 +3,13 @@ import { buildUserInputSubmitOp } from "../utils/buildUserInputSubmitOp";
 import { buildAgentStreamSubmitOp } from "./agentStreamSubmitOpController";
 
 describe("agentStreamSubmitOpController", () => {
-  it("应按 stream submit 语义构造 runtime submitOp，并默认允许 busy queue", () => {
+  it("应按 current stream submit 语义构造 runtime submitOp", () => {
     const op = buildAgentStreamSubmitOp({
       activeSessionId: "session-fast-1",
+      activeThreadId: "thread-fast-1",
       content: "只回答一个字：好",
       images: [],
       eventName: "agent_stream_fast",
-      submitWorkspaceId: "workspace-1",
-      requestTurnId: "turn-fast-1",
-      skipPreSubmitResume: true,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-chat",
@@ -20,33 +17,34 @@ describe("agentStreamSubmitOpController", () => {
 
     expect(op).toEqual({
       type: "user_input",
-      text: "只回答一个字：好",
-      sessionId: "session-fast-1",
       eventName: "agent_stream_fast",
-      workspaceId: "workspace-1",
-      turnId: "turn-fast-1",
-      images: undefined,
-      preferences: {
-        providerPreference: "deepseek",
-        modelPreference: "deepseek-chat",
-        reasoningEffort: undefined,
-        thinking: undefined,
+      turn: {
+        threadId: "thread-fast-1",
+        input: [{ type: "text", text: "只回答一个字：好" }],
+        model: "deepseek-chat",
         approvalPolicy: "on-request",
         sandboxPolicy: "workspace-write",
-        executionStrategy: undefined,
-        webSearch: undefined,
-        autoContinue: undefined,
       },
-      systemPrompt: undefined,
-      metadata: undefined,
-      queueIfBusy: true,
-      skipPreSubmitResume: true,
     });
+    for (const field of [
+      "text",
+      "images",
+      "preferences",
+      "sessionId",
+      "threadId",
+      "workspaceId",
+      "turnId",
+      "systemPrompt",
+      "metadata",
+    ]) {
+      expect(op).not.toHaveProperty(field);
+    }
   });
 
   it("应与底层 user_input builder 保持 payload 等价", () => {
     const streamOp = buildAgentStreamSubmitOp({
       activeSessionId: "session-social-1",
+      activeThreadId: "thread-social-1",
       content: "继续生成社媒初稿",
       images: [
         {
@@ -55,9 +53,6 @@ describe("agentStreamSubmitOpController", () => {
         },
       ],
       eventName: "agent_stream_x",
-      submitWorkspaceId: undefined,
-      requestTurnId: "turn-1",
-      systemPrompt: "system",
       requestMetadata: {
         harness: {
           preferences: {
@@ -95,17 +90,9 @@ describe("agentStreamSubmitOpController", () => {
         providerType: "openai",
         model: "gpt-4.1",
       },
-      syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1",
-      autoContinue: {
-        enabled: true,
-        fast_mode_enabled: true,
-        continuation_length: 1,
-        sensitivity: 0.25,
-      },
     });
 
     const directOp = buildUserInputSubmitOp({
@@ -116,12 +103,8 @@ describe("agentStreamSubmitOpController", () => {
           mediaType: "image/png",
         },
       ],
-      sessionId: "session-social-1",
+      threadId: "thread-social-1",
       eventName: "agent_stream_x",
-      workspaceId: undefined,
-      turnId: "turn-1",
-      systemPrompt: "system",
-      queueIfBusy: true,
       requestMetadata: {
         harness: {
           preferences: {
@@ -159,70 +142,56 @@ describe("agentStreamSubmitOpController", () => {
         providerType: "openai",
         model: "gpt-4.1",
       },
-      syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1",
-      autoContinue: {
-        enabled: true,
-        fast_mode_enabled: true,
-        continuation_length: 1,
-        sensitivity: 0.25,
-      },
     });
 
     expect(streamOp).toEqual(directOp);
   });
 
-  it("应把 reasoning effort 带入 user_input preferences", () => {
+  it("应把 reasoning effort 带入 typed turn", () => {
     const op = buildAgentStreamSubmitOp({
       activeSessionId: "session-reasoning-1",
+      activeThreadId: "thread-reasoning-1",
       content: "继续",
       images: [],
       eventName: "agent_stream_reasoning",
-      submitWorkspaceId: "workspace-1",
-      requestTurnId: "turn-reasoning-1",
-      skipPreSubmitResume: true,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "o3-mini",
       reasoningEffort: " high ",
     });
 
-    expect(op.preferences?.reasoningEffort).toBe("high");
+    expect(op.turn.effort).toBe("high");
+    expect(op).not.toHaveProperty("preferences");
   });
 
-  it("显式强制搜索命令应把 web search 偏好写入 user_input preferences", () => {
+  it("搜索命令不应把旧 search 偏好写入 typed turn", () => {
     const op = buildAgentStreamSubmitOp({
       activeSessionId: "session-search-1",
+      activeThreadId: "thread-search-1",
       content: "@搜索 关键词:AI 行业新闻",
       images: [],
       eventName: "agent_stream_search",
-      submitWorkspaceId: "workspace-1",
-      requestTurnId: "turn-search-1",
-      skipPreSubmitResume: true,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.5",
-      webSearch: true,
-      searchMode: "required",
-      explicitToolPreferences: true,
     });
 
-    expect(op.preferences?.webSearch).toBe(true);
-    expect(op.preferences?.searchMode).toBe("required");
+    expect(op.turn.model).toBe("gpt-5.5");
+    expect(op).not.toHaveProperty("preferences");
+    expect(op.turn).not.toHaveProperty("webSearch");
+    expect(op.turn).not.toHaveProperty("searchMode");
   });
 
   it("应在最终 submit 边界把 thread goal 绑定到真实 session id", () => {
     const op = buildAgentStreamSubmitOp({
       activeSessionId: "session-real-1",
+      activeThreadId: "thread-real-1",
       content: "请按目标推进",
       images: [],
       eventName: "agent_stream_goal",
-      requestTurnId: "turn-goal-1",
       requestMetadata: {
         harness: {
           goal_mode_enabled: true,
@@ -250,40 +219,42 @@ describe("agentStreamSubmitOpController", () => {
           },
         },
       },
-      skipPreSubmitResume: true,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-chat",
     });
 
-    expect(op.sessionId).toBe("session-real-1");
-    expect(op.metadata).toMatchObject({
-      harness: {
-        goal_mode_enabled: true,
-        thread_goal: {
-          enabled: true,
-          source: "empty_state",
-          status: "active",
-          set: {
-            threadId: "session-real-1",
-            objective: null,
+    expect(op).not.toHaveProperty("sessionId");
+    expect(op.turn.threadId).toBe("thread-real-1");
+    expect(op.turn.additionalContext?.metadata).toEqual({
+      kind: "application",
+      value: JSON.stringify({
+        harness: {
+          goal_mode_enabled: true,
+          thread_goal: {
+            enabled: true,
+            source: "empty_state",
             status: "active",
-            tokenBudget: null,
+            set: {
+              threadId: "session-real-1",
+              objective: null,
+              status: "active",
+              tokenBudget: null,
+            },
+          },
+          goal: {
+            enabled: true,
+            source: "empty_state",
+            status: "active",
+            set: {
+              threadId: "session-real-1",
+              objective: null,
+              status: "active",
+              tokenBudget: null,
+            },
           },
         },
-        goal: {
-          enabled: true,
-          source: "empty_state",
-          status: "active",
-          set: {
-            threadId: "session-real-1",
-            objective: null,
-            status: "active",
-            tokenBudget: null,
-          },
-        },
-      },
+      }),
     });
   });
 });

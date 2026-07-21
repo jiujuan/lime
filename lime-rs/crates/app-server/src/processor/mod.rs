@@ -23,9 +23,13 @@ mod project_shell;
 mod request_serialization;
 mod request_trace;
 mod right_surface;
+mod session_operations;
 mod skill;
 mod soul;
 mod thread;
+mod thread_goal;
+mod turn;
+pub(crate) mod v2_notifications;
 mod voice;
 mod wechat;
 mod workflow;
@@ -62,7 +66,7 @@ use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::PlatformInfo;
 use app_server_protocol::RequestId;
 use app_server_protocol::METHOD_CANCEL_REQUEST;
-use config_warning::{ConfigWarningProvider, ConfigWarningScope};
+use config_warning::ConfigWarningProvider;
 // ProjectGit* 类型已移至 processor/project_git.rs
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
@@ -70,6 +74,7 @@ use app_server_protocol::ServerNotification;
 use app_server_protocol::UsageStatsRangeParams;
 use app_server_protocol::PROTOCOL_VERSION;
 use app_server_protocol::SERVER_NAME;
+use app_server_transport::ConnectionId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -77,10 +82,10 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::Instrument;
 
-use request_serialization::{
-    is_turn_admission_notification, resolve_request_serialization_scope,
-    RequestSerializationQueues, RequestSerializationScope,
-};
+use request_serialization::{resolve_request_serialization_scope, RequestSerializationQueues};
+
+pub(crate) type TurnInterruptHook =
+    Arc<dyn Fn(String, String) -> futures::future::BoxFuture<'static, ()> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct RequestProcessor {
@@ -90,6 +95,7 @@ pub struct RequestProcessor {
     execution_process: ExecutionProcessServer,
     config_warning_provider: ConfigWarningProvider,
     request_serialization_queues: RequestSerializationQueues,
+    turn_interrupt_hook: Option<TurnInterruptHook>,
 }
 
 #[derive(Debug, Default)]
@@ -98,6 +104,21 @@ struct ProcessorState {
     initialized: bool,
     client_info: Option<ClientInfo>,
     canceled_request_ids: HashSet<RequestId>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ConnectionRequestId {
+    pub(crate) connection_id: ConnectionId,
+    pub(crate) request_id: RequestId,
+}
+
+impl ConnectionRequestId {
+    fn new(connection_id: ConnectionId, request_id: RequestId) -> Self {
+        Self {
+            connection_id,
+            request_id,
+        }
+    }
 }
 
 impl RequestProcessor {
@@ -119,6 +140,18 @@ impl RequestProcessor {
             execution_process,
             config_warning_provider: config_warning::default_config_warning_provider(),
             request_serialization_queues: RequestSerializationQueues::default(),
+            turn_interrupt_hook: None,
+        }
+    }
+
+    pub(crate) fn with_turn_interrupt_hook(mut self, hook: TurnInterruptHook) -> Self {
+        self.turn_interrupt_hook = Some(hook);
+        self
+    }
+
+    pub(super) async fn abort_server_requests_for_turn(&self, thread_id: String, turn_id: String) {
+        if let Some(hook) = self.turn_interrupt_hook.as_ref() {
+            hook(thread_id, turn_id).await;
         }
     }
 
@@ -134,67 +167,70 @@ impl RequestProcessor {
         &self,
         request: JsonRpcRequest,
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        self.handle_request_with_context(request, None).await
+    }
+
+    pub(crate) async fn handle_transport_request(
+        &self,
+        connection_id: ConnectionId,
+        request: JsonRpcRequest,
+    ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        let request_id = request.id.clone();
+        self.handle_request_with_context(
+            request,
+            Some(ConnectionRequestId::new(connection_id, request_id)),
+        )
+        .await
+    }
+
+    async fn handle_request_with_context(
+        &self,
+        request: JsonRpcRequest,
+        connection_request_id: Option<ConnectionRequestId>,
+    ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
         let client_info = self.client_info();
         let span = request_trace::request_span(&request, client_info.as_ref());
         let scope = match resolve_request_serialization_scope(&self.runtime, &request).await {
             Ok(scope) => scope,
             Err(message) => return Ok(vec![message]),
         };
-        if request.method == app_server_protocol::METHOD_AGENT_SESSION_TURN_START {
-            return self
-                .handle_turn_request_until_admitted(request, scope, span)
-                .await;
-        }
         self.request_serialization_queues
             .run(
                 scope,
-                self.handle_request_inner(request, None).instrument(span),
-            )
-            .await
-    }
-
-    async fn handle_turn_request_until_admitted(
-        &self,
-        request: JsonRpcRequest,
-        scope: Option<RequestSerializationScope>,
-        span: tracing::Span,
-    ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
-        let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
-        let mut admitted_tx = Some(admitted_tx);
-        let mut streamed_events = Vec::new();
-        let mut admission_callback = |message: JsonRpcMessage| {
-            let admitted = is_turn_admission_notification(&message);
-            streamed_events.push(message);
-            if admitted {
-                if let Some(admitted_tx) = admitted_tx.take() {
-                    let _ = admitted_tx.send(());
-                }
-            }
-        };
-        let mut messages = self
-            .request_serialization_queues
-            .run_until_released(
-                scope,
-                async move {
-                    let _ = admitted_rx.await;
-                },
-                self.handle_request_inner(request, Some(&mut admission_callback))
+                self.handle_request_inner(request, connection_request_id, None)
                     .instrument(span),
             )
-            .await?;
-        drop(admission_callback);
-
-        if matches!(messages.first(), Some(JsonRpcMessage::Response(_))) {
-            let trailing_notifications = messages.split_off(1);
-            messages.append(&mut streamed_events);
-            messages.extend(trailing_notifications);
-        }
-        Ok(messages)
+            .await
     }
 
     pub async fn handle_request_streaming(
         &self,
         request: JsonRpcRequest,
+        event_callback: &mut (dyn FnMut(JsonRpcMessage) + Send),
+    ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        self.handle_request_streaming_with_context(request, None, event_callback)
+            .await
+    }
+
+    pub(crate) async fn handle_transport_request_streaming(
+        &self,
+        connection_id: ConnectionId,
+        request: JsonRpcRequest,
+        event_callback: &mut (dyn FnMut(JsonRpcMessage) + Send),
+    ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        let request_id = request.id.clone();
+        self.handle_request_streaming_with_context(
+            request,
+            Some(ConnectionRequestId::new(connection_id, request_id)),
+            event_callback,
+        )
+        .await
+    }
+
+    async fn handle_request_streaming_with_context(
+        &self,
+        request: JsonRpcRequest,
+        connection_request_id: Option<ConnectionRequestId>,
         event_callback: &mut (dyn FnMut(JsonRpcMessage) + Send),
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
         let client_info = self.client_info();
@@ -203,34 +239,10 @@ impl RequestProcessor {
             Ok(scope) => scope,
             Err(message) => return Ok(vec![message]),
         };
-        if request.method == app_server_protocol::METHOD_AGENT_SESSION_TURN_START {
-            let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
-            let mut admitted_tx = Some(admitted_tx);
-            let mut forwarding_callback = |message: JsonRpcMessage| {
-                let admitted = is_turn_admission_notification(&message);
-                event_callback(message);
-                if admitted {
-                    if let Some(admitted_tx) = admitted_tx.take() {
-                        let _ = admitted_tx.send(());
-                    }
-                }
-            };
-            return self
-                .request_serialization_queues
-                .run_until_released(
-                    scope,
-                    async move {
-                        let _ = admitted_rx.await;
-                    },
-                    self.handle_request_inner(request, Some(&mut forwarding_callback))
-                        .instrument(span),
-                )
-                .await;
-        }
         self.request_serialization_queues
             .run(
                 scope,
-                self.handle_request_inner(request, Some(event_callback))
+                self.handle_request_inner(request, connection_request_id, Some(event_callback))
                     .instrument(span),
             )
             .await
@@ -269,19 +281,6 @@ impl RequestProcessor {
             .expect("app-server state mutex poisoned")
             .canceled_request_ids
             .remove(request_id);
-    }
-
-    fn handle_session_start(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params = parse_params(params)?;
-        let response = self
-            .runtime
-            .start_session(params)
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
     }
 
     fn handle_capability_list(
@@ -496,69 +495,6 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    async fn handle_turn_start(
-        &self,
-        params: Option<serde_json::Value>,
-        event_callback: Option<&mut (dyn FnMut(JsonRpcMessage) + Send)>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params = parse_params(params)?;
-        let host = self.runtime_host_context();
-        let config_warnings = self.config_warning_notifications(ConfigWarningScope::TurnStart);
-        if let Some(event_callback) = event_callback {
-            let mut streamed_event_ids = HashSet::new();
-            let mut runtime_event_callback = |event: AgentEvent| {
-                streamed_event_ids.insert(event.event_id.clone());
-                let message = event_notification_jsonrpc(event).map_err(|error| {
-                    RuntimeCoreError::Backend(format!(
-                        "failed to serialize streaming event notification: {}",
-                        error.message
-                    ))
-                })?;
-                event_callback(message);
-                Ok(())
-            };
-            let output = self
-                .runtime
-                .start_turn_with_event_callback(params, host, &mut runtime_event_callback)
-                .await
-                .map_err(to_jsonrpc_error)?;
-            drop(runtime_event_callback);
-            for event in output
-                .events
-                .iter()
-                .filter(|event| !streamed_event_ids.contains(&event.event_id))
-                .cloned()
-            {
-                event_callback(event_notification_jsonrpc(event)?);
-            }
-            Ok(dispatch_result(output.response)?.with_notifications(config_warnings))
-        } else {
-            let output = self
-                .runtime
-                .start_turn(params, host)
-                .await
-                .map_err(to_jsonrpc_error)?;
-            Ok(dispatch_result_with_events(output.response, output.events)?
-                .with_notifications(config_warnings))
-        }
-    }
-
-    async fn handle_turn_cancel(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params = parse_params(params)?;
-        let host = self.runtime_host_context();
-        let output = self
-            .runtime
-            .cancel_turn(params, host)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result_with_events(output.response, output.events)
-    }
-
     async fn handle_action_respond(
         &self,
         params: Option<serde_json::Value>,
@@ -592,17 +528,34 @@ impl RequestProcessor {
         &self,
         params: Option<serde_json::Value>,
     ) -> Result<serde_json::Value, JsonRpcError> {
+        self.initialize_inner(params, false)
+    }
+
+    fn initialize_transport(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, JsonRpcError> {
+        self.initialize_inner(params, true)
+    }
+
+    fn initialize_inner(
+        &self,
+        params: Option<serde_json::Value>,
+        allow_existing_process_initialization: bool,
+    ) -> Result<serde_json::Value, JsonRpcError> {
         let params: InitializeParams = parse_params(params)?;
         let mut state = self.state.lock().expect("app-server state mutex poisoned");
-        if state.initialize_accepted {
+        if state.initialize_accepted && !allow_existing_process_initialization {
             return Err(JsonRpcError::new(
                 error_codes::ALREADY_INITIALIZED,
                 "initialize has already been accepted",
             ));
         }
 
-        state.initialize_accepted = true;
-        state.client_info = Some(params.client_info);
+        if !state.initialize_accepted {
+            state.initialize_accepted = true;
+            state.client_info = Some(params.client_info);
+        }
 
         serialize_result(InitializeResponse {
             server_info: ServerInfo {
@@ -660,10 +613,15 @@ fn read_cancel_request_id(params: Option<&serde_json::Value>) -> Option<RequestI
     }
 }
 
-pub fn event_notification_jsonrpc(event: AgentEvent) -> Result<JsonRpcMessage, JsonRpcError> {
-    Ok(JsonRpcMessage::Notification(
-        ServerNotification::AgentSessionEvent(AgentSessionEventParams::from_event(event)).into(),
-    ))
+pub(crate) fn project_event_notifications_jsonrpc(
+    projector: &mut v2_notifications::V2NotificationProjector,
+    event: AgentEvent,
+) -> Result<Vec<JsonRpcMessage>, JsonRpcError> {
+    Ok(projector
+        .project(event)?
+        .into_iter()
+        .map(JsonRpcMessage::Notification)
+        .collect())
 }
 
 pub(super) fn parse_params<T>(params: Option<serde_json::Value>) -> Result<T, JsonRpcError>
@@ -734,10 +692,20 @@ pub(super) fn workspace_right_surface_pending_changed_notification(
     Ok(ServerNotification::WorkspaceRightSurfacePendingChanged(params).into())
 }
 
-fn event_notification(event: AgentEvent) -> Result<JsonRpcMessage, AppServerError> {
-    Ok(JsonRpcMessage::Notification(
-        ServerNotification::AgentSessionEvent(AgentSessionEventParams::from_event(event)).into(),
-    ))
+fn event_notifications(
+    projector: &mut v2_notifications::V2NotificationProjector,
+    event: AgentEvent,
+) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+    project_event_notifications_jsonrpc(projector, event).map_err(|error| {
+        AppServerError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            error.message,
+        ))
+    })
+}
+
+pub(super) fn deprecated_agent_event_notification(event: AgentEvent) -> JsonRpcNotification {
+    ServerNotification::AgentSessionEvent(AgentSessionEventParams { event }).into()
 }
 
 pub(super) fn to_jsonrpc_error(error: RuntimeCoreError) -> JsonRpcError {

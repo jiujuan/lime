@@ -18,6 +18,7 @@ const LIME_RUNTIME_MODEL_SLOT_KEY: &str = "model_slot";
 const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
 const LIME_RUNTIME_AUTO_COMPACT_KEY: &str = "auto_compact";
 const LIME_RUNTIME_SOURCE_KEY: &str = "source";
+pub(super) const INPUT_MENTIONS_TURN_METADATA_KEY: &str = "input_mentions";
 const APP_SERVER_TURN_POLICY_SOURCE: &str = "app_server_turn_policy";
 const HARNESS_TURN_TOOL_SURFACE_POINTER: &str = "/harness/turn_policy/tool_surface";
 const HARNESS_TURN_POLICY_SOURCE: &str = "harness_turn_policy";
@@ -213,8 +214,9 @@ pub(super) fn resolve_runtime_model_selection(
         return Ok(selection);
     }
 
-    Err(RuntimeCoreError::Backend(
-        "App Server runtime backend requires provider/model selection. Submit runtimeOptions.runtimeRequest.providerPreference and runtimeOptions.runtimeRequest.modelPreference, runtimeOptions.runtimeRequest.providerConfig, or persist a complete session provider/model default.".to_string(),
+    Err(RuntimeCoreError::pending_route_for_session(
+        request.session.session_id.clone(),
+        request.runtime_options.as_ref(),
     ))
 }
 
@@ -222,12 +224,30 @@ pub(super) fn selection_from_explicit_preferences(
     request: &ExecutionRequest,
 ) -> Option<RuntimeModelSelection> {
     let runtime_request = request.runtime_request()?;
-    let provider = non_empty(runtime_request.provider_preference.as_deref())?;
-    let model = non_empty(runtime_request.model_preference.as_deref())?;
+    let explicit_provider = non_empty(runtime_request.provider_preference.as_deref());
+    let explicit_model = non_empty(runtime_request.model_preference.as_deref());
+    if explicit_provider.is_none() && explicit_model.is_none() {
+        return None;
+    }
+    let session_default = selection_from_session_default(request);
+    let provider = explicit_provider.clone().or_else(|| {
+        session_default
+            .as_ref()
+            .map(|selection| selection.provider.clone())
+    })?;
+    let model = explicit_model.clone().or_else(|| {
+        session_default
+            .as_ref()
+            .map(|selection| selection.model.clone())
+    })?;
     Some(RuntimeModelSelection {
         provider,
         model,
-        source: "runtime_request",
+        source: if explicit_provider.is_some() && explicit_model.is_some() {
+            "runtime_request"
+        } else {
+            "runtime_request_with_session_default"
+        },
         reasoning_effort: reasoning_effort_from_request(request),
     })
 }
@@ -564,7 +584,7 @@ fn should_use_responsive_chat_profile(
             .business_object_ref
             .as_ref()
             .is_none_or(|reference| reference.kind == "agent.session")
-        && request.input.attachments.is_empty()
+        && !request.input.has_images()
         && request.runtime_options.as_ref().is_none_or(|options| {
             options.capability_id.is_none()
                 && options.expected_output.is_none()
@@ -579,6 +599,44 @@ fn should_use_responsive_chat_profile(
         && !request
             .runtime_metadata()
             .is_some_and(metadata_requests_tool_surface)
+}
+
+pub(super) fn structured_control_mentions(request: &ExecutionRequest) -> Vec<Value> {
+    let mut mentions = Vec::new();
+    for part in &request.input.parts {
+        let agent_runtime::reply_input::RuntimeReplyInputPart::Mention { name, path } = part else {
+            continue;
+        };
+        let name = name.trim();
+        let path = path.trim();
+        let Some(kind) = control_mention_kind(path) else {
+            continue;
+        };
+        if name.is_empty()
+            || mentions.iter().any(|mention: &Value| {
+                mention.get("kind").and_then(Value::as_str) == Some(kind)
+                    && mention.get("path").and_then(Value::as_str) == Some(path)
+            })
+        {
+            continue;
+        }
+        mentions.push(serde_json::json!({
+            "kind": kind,
+            "name": name,
+            "path": path,
+        }));
+    }
+    mentions
+}
+
+fn control_mention_kind(path: &str) -> Option<&'static str> {
+    [
+        ("app://", "app"),
+        ("plugin://", "plugin"),
+        ("mcp://", "mcp"),
+    ]
+    .into_iter()
+    .find_map(|(prefix, kind)| path.starts_with(prefix).then_some(kind))
 }
 
 fn request_has_workspace_context(request: &ExecutionRequest) -> bool {

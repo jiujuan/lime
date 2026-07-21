@@ -33,7 +33,7 @@ const STREAM_PROJECTION_FILES = [
   "src/lib/api/agentProtocolParserUtils.ts",
   "src/lib/api/agentProtocolRuntimeParsers.ts",
   "src/lib/api/agentProtocolToolParsers.ts",
-  "src/lib/api/agentRuntime/appServerEventPayloadProjection.ts",
+  "src/lib/api/agentRuntime/appServerEventStreamProjection.ts",
   "src/lib/api/agentRuntime/appServerEventStream.ts",
   "src/lib/api/agentRuntime/appServerEventTimelineReaders.ts",
 ];

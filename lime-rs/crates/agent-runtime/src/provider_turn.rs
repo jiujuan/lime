@@ -1,6 +1,6 @@
 //! 固定 provider 的 current Turn executor。
 //!
-//! 参考 Codex 的 response item 生命周期：每次 provider response 先 materialize 成
+//! 参考上游 response item 生命周期：每次 provider response 先 materialize 成
 //! text/reasoning/tool-call event，所有工具调用完成后把 tool result 追加到同一个
 //! transcript，再开始下一次 sampling。provider wire lowering 留在 model-provider，
 //! 工具执行留在 tool-runtime；本模块不接触 Agent。
@@ -9,6 +9,7 @@ use crate::provider_trace::RuntimeProviderTraceAttempt;
 use crate::reply_execution::{RuntimeReplyAttemptError, RuntimeReplyExecution};
 use crate::reply_loop::{RuntimeReplyLoop, RuntimeReplyLoopStep, MAX_REPLY_TURNS_REACHED_MESSAGE};
 use crate::session_config::AgentSessionConfig;
+use crate::session_loop::RuntimeSessionInputHandle;
 use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceFailure};
 use futures::future::join_all;
 use futures::StreamExt;
@@ -35,7 +36,11 @@ use tool_runtime::tool_executor::{
 };
 use tool_runtime::tool_lifecycle::ToolLifecycleEmitter;
 
+mod input;
 mod output_lifecycle;
+#[cfg(test)]
+use input::runtime_inter_agent_text;
+use input::{escape_xml_text, runtime_session_input_message};
 use output_lifecycle::{
     defer_text_output_item_end, end_reasoning_output_item, finish_active_output_items,
     provider_output_item_id, start_output_item, ProviderOutputFamily,
@@ -107,6 +112,7 @@ pub struct CurrentProviderTurnInput {
     pub tool_lifecycle_emitter: Arc<dyn ToolLifecycleEmitter>,
     pub working_directory: PathBuf,
     pub cancel_token: Option<CancellationToken>,
+    pub pending_input: Option<RuntimeSessionInputHandle>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,6 +154,7 @@ pub enum CurrentProviderTurnEvent {
         accumulated_arguments: String,
     },
     Usage {
+        attempt: u32,
         usage: CurrentProviderUsage,
     },
     ProviderStep {
@@ -178,6 +185,7 @@ where
         tool_lifecycle_emitter,
         working_directory,
         cancel_token,
+        pending_input,
     } = input;
     let turn_id = session_config
         .turn_id
@@ -211,6 +219,10 @@ where
         let attempt = match loop_state.next_attempt() {
             RuntimeReplyLoopStep::Continue { attempt } => attempt,
             RuntimeReplyLoopStep::MaxTurnsReached { .. } => {
+                if let Some(input) = pending_input.as_ref() {
+                    input.mark_mailbox_delivery_for_next_turn().await;
+                    input.mark_finishing().await;
+                }
                 if !text_output.is_empty() {
                     text_output.push('\n');
                 }
@@ -236,6 +248,12 @@ where
                 ));
             }
         };
+
+        if let Some(input) = pending_input.as_ref() {
+            // Context, tool inventory and mailbox phase are captured once per sampling step.
+            // The provider request remains immutable for the lifetime of this attempt.
+            let _step_context = input.capture_step_context().await;
+        }
 
         let tool_step_snapshot = tool_step_snapshot_source
             .capture()
@@ -299,7 +317,11 @@ where
                             trace.failed(provider_trace_failure_from_error(&error)),
                         );
                     }
-                    return Err(RuntimeReplyAttemptError::new(error.message, emitted_any));
+                    return Err(provider_attempt_error(
+                        error.message,
+                        emitted_any,
+                        error.classification,
+                    ));
                 }
             };
         let mut assistant_content = Vec::new();
@@ -317,6 +339,11 @@ where
         loop {
             let event = next_provider_event(&mut stream, cancel_token.as_ref()).await;
             if is_cancelled(&cancel_token) {
+                if let Some(Ok(event)) = event.as_ref() {
+                    if let Some(usage) = provider_usage_from_event(event) {
+                        on_event(CurrentProviderTurnEvent::Usage { attempt, usage });
+                    }
+                }
                 if let Some(trace) = provider_trace_attempt.as_ref() {
                     emit_provider_trace(
                         &mut on_event,
@@ -345,7 +372,11 @@ where
                             trace.failed(provider_trace_failure_from_error(&error)),
                         );
                     }
-                    return Err(RuntimeReplyAttemptError::new(error.message, emitted_any));
+                    return Err(provider_attempt_error(
+                        error.message,
+                        emitted_any,
+                        error.classification,
+                    ));
                 }
             };
             if let Some(event) = provider_trace_attempt
@@ -472,13 +503,13 @@ where
                 CanonicalLlmEvent::Usage { usage } => {
                     let usage = current_provider_usage(usage);
                     step_usage = Some(usage.clone());
-                    on_event(CurrentProviderTurnEvent::Usage { usage });
+                    on_event(CurrentProviderTurnEvent::Usage { attempt, usage });
                 }
                 CanonicalLlmEvent::Finish { reason, usage, .. } => {
                     if let Some(usage) = usage {
                         let usage = current_provider_usage(usage);
                         step_usage = Some(usage.clone());
-                        on_event(CurrentProviderTurnEvent::Usage { usage });
+                        on_event(CurrentProviderTurnEvent::Usage { attempt, usage });
                     }
                     finish_reason = Some(finish_reason_name(reason).to_string());
                     finish_active_output_items(
@@ -504,7 +535,7 @@ where
                             )),
                         );
                     }
-                    return Err(RuntimeReplyAttemptError::new(message, emitted_any));
+                    return Err(provider_attempt_error(message, emitted_any, classification));
                 }
                 CanonicalLlmEvent::StepStart { .. }
                 | CanonicalLlmEvent::ToolInputStart { .. }
@@ -515,7 +546,7 @@ where
                     if let Some(usage) = usage {
                         let usage = current_provider_usage(usage);
                         step_usage = Some(usage.clone());
-                        on_event(CurrentProviderTurnEvent::Usage { usage });
+                        on_event(CurrentProviderTurnEvent::Usage { attempt, usage });
                     }
                     finish_reason = Some(finish_reason_name(reason).to_string());
                 }
@@ -547,6 +578,15 @@ where
             tool_call_count: calls.len().min(u32::MAX as usize) as u32,
             usage: step_usage.clone(),
         });
+        if let (Some(input), Some(usage)) = (pending_input.as_ref(), step_usage.as_ref()) {
+            input
+                .record_token_usage(
+                    u64::from(usage.input_tokens),
+                    u64::from(usage.output_tokens),
+                    0,
+                )
+                .await;
+        }
         provider_budget_tokens_used = provider_budget_tokens_used.saturating_add(
             step_usage
                 .as_ref()
@@ -558,6 +598,34 @@ where
             initial_messages.push(CurrentProviderMessage::assistant(assistant_content));
         }
         if calls.is_empty() {
+            let pending_messages = match pending_input.as_ref() {
+                Some(input) => {
+                    input.mark_mailbox_delivery_for_next_turn().await;
+                    input
+                        .try_take_pending_input(false)
+                        .await
+                        .map_err(|message| RuntimeReplyAttemptError::new(message, emitted_any))?
+                        .into_iter()
+                        .filter_map(runtime_session_input_message)
+                        .collect::<Vec<_>>()
+                }
+                None => Vec::new(),
+            };
+            if !pending_messages.is_empty() {
+                initial_messages.extend(pending_messages);
+                continue;
+            }
+            if let Some(input) = pending_input.as_ref() {
+                if !input.mark_finishing().await {
+                    let steer = input
+                        .try_take_pending_input(false)
+                        .await
+                        .map_err(|message| RuntimeReplyAttemptError::new(message, emitted_any))?;
+                    initial_messages
+                        .extend(steer.into_iter().filter_map(runtime_session_input_message));
+                    continue;
+                }
+            }
             if !completed {
                 errors.push("Provider stream ended without completion event".to_string());
             }
@@ -578,6 +646,9 @@ where
 
         if let Some(limit) = session_config.provider_token_budget {
             if provider_budget_tokens_used >= limit {
+                if let Some(input) = pending_input.as_ref() {
+                    input.mark_finishing().await;
+                }
                 errors.push(format!(
                     "Provider token budget exhausted after attempt {attempt}: used={provider_budget_tokens_used} limit={limit}"
                 ));
@@ -590,6 +661,20 @@ where
                 ));
             }
         }
+
+        let pending_messages = match pending_input.as_ref() {
+            Some(input) => {
+                input.accept_mailbox_delivery_for_current_turn().await;
+                input
+                    .try_take_pending_input(true)
+                    .await
+                    .map_err(|message| RuntimeReplyAttemptError::new(message, emitted_any))?
+                    .into_iter()
+                    .filter_map(runtime_session_input_message)
+                    .collect::<Vec<_>>()
+            }
+            None => Vec::new(),
+        };
 
         let results = execute_calls(
             &tool_step_snapshot.executor,
@@ -613,6 +698,7 @@ where
                 .map(CurrentProviderContent::ToolResult)
                 .collect(),
         ));
+        initial_messages.extend(pending_messages);
     }
 }
 
@@ -649,6 +735,18 @@ fn provider_request_controls(
 
 fn provider_trace_failure_from_error(error: &CurrentProviderError) -> ProviderTraceFailure {
     provider_trace_failure(error.classification, error.retryable)
+}
+
+fn provider_attempt_error(
+    message: impl Into<String>,
+    emitted_any: bool,
+    classification: Option<FailureClassification>,
+) -> RuntimeReplyAttemptError {
+    if classification == Some(FailureClassification::Quota) {
+        RuntimeReplyAttemptError::usage_limit_exceeded(message, emitted_any)
+    } else {
+        RuntimeReplyAttemptError::new(message, emitted_any)
+    }
 }
 
 fn provider_trace_failure(
@@ -700,13 +798,6 @@ fn insert_environment_context_before_current_user(
         messages.len()
     };
     messages.insert(insertion_index, context);
-}
-
-fn escape_xml_text(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
 }
 
 async fn start_provider_stream(
@@ -763,6 +854,19 @@ fn current_provider_usage(usage: Usage) -> CurrentProviderUsage {
         cache_creation_input_tokens: usage
             .cache_write_input_tokens
             .map(|value| value.min(u32::MAX as u64) as u32),
+    }
+}
+
+fn provider_usage_from_event(event: &CanonicalLlmEvent) -> Option<CurrentProviderUsage> {
+    match event {
+        CanonicalLlmEvent::Usage { usage }
+        | CanonicalLlmEvent::Finish {
+            usage: Some(usage), ..
+        }
+        | CanonicalLlmEvent::StepFinish {
+            usage: Some(usage), ..
+        } => Some(current_provider_usage(usage.clone())),
+        _ => None,
     }
 }
 
@@ -875,7 +979,8 @@ impl RuntimeToolExecutor for UnavailableStepToolExecutor {
             Err(RuntimeToolExecutionError::new(
                 message.clone(),
                 Some(RuntimeToolPolicyErrorKind::PermissionDenied(message)),
-            ))
+            )
+            .before_handler())
         })
     }
 }

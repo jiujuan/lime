@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "CollabAgentStatus": {
+      "enum": [
+        "completed",
+        "errored",
+        "interrupted",
+        "notFound",
+        "pendingInit",
+        "running",
+        "shutdown"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "message": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/CollabAgentStatus"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "CollabAgentState",
+  "type": "object"
+}

@@ -91,6 +91,38 @@ function dedupeTimelineReasoningItems(
   return nextItems.length === items.length ? items : nextItems;
 }
 
+function fileChangePartIdentities(
+  part: Extract<MessageContentPart, { type: "file_changes_batch" }>,
+): Set<string> {
+  const identities = new Set<string>();
+  const threadItemId = part.metadata?.threadItemId;
+  if (typeof threadItemId === "string" && threadItemId.trim()) {
+    identities.add(threadItemId.trim());
+  }
+  const threadItemIds = part.metadata?.threadItemIds;
+  if (Array.isArray(threadItemIds)) {
+    for (const value of threadItemIds) {
+      if (typeof value === "string" && value.trim()) {
+        identities.add(value.trim());
+      }
+    }
+  }
+  return identities;
+}
+
+function hasSharedFileChangeIdentity(
+  left: Extract<MessageContentPart, { type: "file_changes_batch" }>,
+  right: Extract<MessageContentPart, { type: "file_changes_batch" }>,
+): boolean {
+  const leftIdentities = fileChangePartIdentities(left);
+  if (leftIdentities.size === 0) {
+    return false;
+  }
+  return Array.from(fileChangePartIdentities(right)).some((identity) =>
+    leftIdentities.has(identity),
+  );
+}
+
 function shouldPrependDisplayContentBeforeActiveTimelineProcess(params: {
   processPrefaceContent: string;
   existingContentParts?: Message["contentParts"];
@@ -384,8 +416,20 @@ export function buildTimelineInlineContentParts(params: {
     displayContent: params.displayContent,
   });
 
+  const timelineFileChangeParts = parts.filter(
+    (
+      part,
+    ): part is Extract<MessageContentPart, { type: "file_changes_batch" }> =>
+      part.type === "file_changes_batch",
+  );
   const fileChangeParts = (params.existingContentParts || []).filter(
-    (part) => part.type === "file_changes_batch",
+    (
+      part,
+    ): part is Extract<MessageContentPart, { type: "file_changes_batch" }> =>
+      part.type === "file_changes_batch" &&
+      !timelineFileChangeParts.some((timelinePart) =>
+        hasSharedFileChangeIdentity(part, timelinePart),
+      ),
   );
   if (fileChangeParts.length > 0) {
     mergedParts.push(...fileChangeParts);

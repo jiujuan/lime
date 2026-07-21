@@ -13,9 +13,9 @@ import {
   setupRuntimeSyncEffectsTestHarness,
   terminalRefreshRequest,
 } from "./useAgentRuntimeSyncEffects.testHarness";
-import { APP_SERVER_METHOD_AGENT_SESSION_EVENT } from "@/lib/api/appServer";
 import { listenAgentRuntimeEvent } from "@/lib/api/agentRuntimeEvents";
 import { createThreadClient } from "@/lib/api/agentRuntime/threadClient";
+import { createApplicationAdditionalContext } from "@/lib/api/agentProtocolOps";
 
 describe("useAgentRuntimeSyncEffects", () => {
   beforeEach(() => {
@@ -619,11 +619,6 @@ describe("useAgentRuntimeSyncEffects", () => {
         });
         listener?.({
           payload: {
-            type: "queue_started",
-          },
-        });
-        listener?.({
-          payload: {
             type: "turn.completed",
             turn: {
               id: "turn-completed",
@@ -697,29 +692,16 @@ describe("useAgentRuntimeSyncEffects", () => {
       messages: [],
       notifications: [
         {
-          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          method: "turn/completed",
           params: {
-            event: {
-              eventId: "evt-completed-1",
-              sequence: 1,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "turn.completed",
-              timestamp: "2026-06-06T00:00:01.000Z",
-              payload: {},
-            },
-            canonicalEvent: {
-              method: "turn/updated",
-              params: {
-                sessionId: "session-1",
-                threadId: "thread-1",
-                turnId: "turn-1",
-                status: "completed",
-                createdAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
-                completedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
-                updatedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
-              },
+            threadId: "thread-1",
+            turn: {
+              id: "turn-1",
+              status: "completed",
+              items: [],
+              itemsView: "full",
+              startedAt: Date.parse("2026-06-06T00:00:00.000Z") / 1_000,
+              completedAt: Date.parse("2026-06-06T00:00:01.000Z") / 1_000,
             },
           },
         },
@@ -753,24 +735,19 @@ describe("useAgentRuntimeSyncEffects", () => {
 
       await act(async () => {
         await threadClient.submitAgentRuntimeTurn({
-          sessionId: "session-1",
-          turnId: "turn-1",
-          input: { text: "继续" },
-          runtimeOptions: {
-            stream: true,
-            eventName,
-          },
+          threadId: "thread-1",
+          input: [{ type: "text", text: "继续" }],
+          additionalContext: createApplicationAdditionalContext({
+            rendererEventName: eventName,
+          }),
         });
         await Promise.resolve();
       });
 
       expect(appServerClient.startTurn).toHaveBeenCalledWith(
         expect.objectContaining({
-          sessionId: "session-1",
-          turnId: "turn-1",
-          runtimeOptions: expect.objectContaining({
-            eventName,
-          }),
+          threadId: "thread-1",
+          input: [{ type: "text", text: "继续" }],
         }),
       );
       expect(refreshSessionDetail).not.toHaveBeenCalled();

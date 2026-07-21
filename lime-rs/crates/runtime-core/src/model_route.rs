@@ -65,6 +65,7 @@ pub fn resolved_route_from_task(
         .unwrap_or(false);
 
     let capability_snapshot = capability_snapshot(routing_payload);
+    let has_capability_snapshot = has_declared_capability_snapshot(routing_payload);
     let protocol = resolve_protocol(
         task_request,
         &capability_snapshot,
@@ -72,13 +73,29 @@ pub fn resolved_route_from_task(
         provider,
         direct_config.as_ref(),
     );
-    let capability_gap = if has_declared_capability_snapshot(routing_payload) {
+    let capability_gap = if has_capability_snapshot {
         route_capability_gap(task_request, &capability_snapshot)
     } else {
         None
     };
+    let unresolved_registry_failure = (ready && !has_capability_snapshot)
+        .then(|| unknown_model_or_capability_failure(&selection, routing_payload));
     let mut decision = routing_decision(routing_payload);
-    decision.capability_gap = capability_gap.clone();
+    decision.capability_gap = capability_gap.clone().or_else(|| {
+        unresolved_registry_failure
+            .as_ref()
+            .and_then(|failure| failure.capability_gap.clone())
+    });
+    let unsupported_protocol_failure =
+        (!protocol_supported_for_task(task_request.task_kind.clone(), &protocol))
+            .then(|| unsupported_protocol_route_failure(&selection, &protocol));
+    let failure = if !ready {
+        Some(route_failure(&selection, readiness))
+    } else {
+        unresolved_registry_failure
+            .or(unsupported_protocol_failure)
+            .or_else(|| capability_gap.map(|gap| capability_route_failure(&selection, gap)))
+    };
 
     ResolvedModelRoute {
         model_ref: task_request.model_ref.clone().unwrap_or_else(|| ModelRef {
@@ -96,11 +113,7 @@ pub fn resolved_route_from_task(
         defaults: route_defaults(&selection, provider, direct_config.as_ref()),
         capability_snapshot,
         decision,
-        failure: if ready {
-            capability_gap.map(|gap| capability_route_failure(&selection, gap))
-        } else {
-            Some(route_failure(&selection, readiness))
-        },
+        failure,
     }
 }
 
@@ -159,7 +172,7 @@ pub fn route_evidence_payload(
     resolved_route: &ResolvedModelRoute,
 ) -> Value {
     let task_request_value = serde_json::to_value(task_request).unwrap_or_else(|_| json!({}));
-    let resolved_route_value = serde_json::to_value(resolved_route).unwrap_or_else(|_| json!({}));
+    let resolved_route_value = safe_route_evidence_value(resolved_route);
     if let Some(object) = payload.as_object_mut() {
         object.insert("modelTaskRequest".to_string(), task_request_value.clone());
         object.insert("model_task_request".to_string(), task_request_value);
@@ -192,6 +205,16 @@ pub fn route_evidence_payload(
         }
     }
     payload
+}
+
+fn safe_route_evidence_value(resolved_route: &ResolvedModelRoute) -> Value {
+    let mut value = serde_json::to_value(resolved_route).unwrap_or_else(|_| json!({}));
+    if let Some(endpoint) = value.get_mut("endpoint").and_then(Value::as_object_mut) {
+        // Routing evidence is durable and may be exported. The endpoint is an execution
+        // detail, so retain its kind and non-sensitive routing hints but never persist its URL.
+        endpoint.remove("baseUrl");
+    }
+    value
 }
 
 fn resolve_protocol(
@@ -245,7 +268,7 @@ fn protocol_from_provider_type(provider_type: &str) -> ProtocolKind {
         Some("fal") => ProtocolKind::Fal,
         Some("openai") | Some("azure_openai") | Some("newapi") | Some("new_api")
         | Some("gateway") => ProtocolKind::OpenaiChat,
-        _ => ProtocolKind::OpenaiChat,
+        _ => ProtocolKind::Unknown,
     }
 }
 
@@ -291,7 +314,7 @@ fn protocol_from_provider_name(provider: &str) -> ProtocolKind {
         Some("fal") => ProtocolKind::Fal,
         Some("openai") | Some("azure_openai") | Some("newapi") | Some("new_api")
         | Some("gateway") => ProtocolKind::OpenaiChat,
-        _ => ProtocolKind::OpenaiChat,
+        _ => ProtocolKind::Unknown,
     }
 }
 
@@ -492,6 +515,81 @@ fn capability_route_failure(
     }
 }
 
+fn unsupported_protocol_route_failure(
+    selection: &ModelRouteSelection<'_>,
+    protocol: &ProtocolKind,
+) -> RouteFailure {
+    let protocol_name = format!("{protocol:?}");
+    RouteFailure {
+        category: RouteFailureCategory::UnsupportedProtocol,
+        reason_code: "unsupported_protocol".to_string(),
+        message: Some(format!(
+            "provider route resolved to unsupported protocol: {protocol_name}"
+        )),
+        provider_id: Some(selection.provider_id.to_string()),
+        model_id: Some(selection.model_id.to_string()),
+        capability_gap: None,
+        retryable: false,
+    }
+}
+
+fn protocol_supported_for_task(task_kind: ModelTaskKind, protocol: &ProtocolKind) -> bool {
+    match task_kind {
+        // Current agent turns are backed by model-provider's three wire adapters. Other
+        // ProtocolKind variants must not be silently lowered to Custom/ChatCompletions.
+        ModelTaskKind::Chat => matches!(
+            protocol,
+            ProtocolKind::OpenaiChat
+                | ProtocolKind::OpenaiResponses
+                | ProtocolKind::AnthropicMessages
+                | ProtocolKind::CodexResponses
+        ),
+        // Media tasks have dedicated lowerings and are validated by their own execution owner.
+        _ => true,
+    }
+}
+
+fn unknown_model_or_capability_failure(
+    selection: &ModelRouteSelection<'_>,
+    routing_payload: &Value,
+) -> RouteFailure {
+    let registry = model_registry(routing_payload);
+    let registry_source = registry.and_then(|value| string_field(value, &["source"]));
+    let registry_status = registry.and_then(|value| string_field(value, &["status"]));
+    let registry_reason =
+        registry.and_then(|value| string_field(value, &["reasonCode", "reason_code"]));
+    let model_is_known = registry_source.as_deref() == Some("direct_provider_config")
+        || registry_status.as_deref() == Some("matched")
+        || registry_reason
+            .as_deref()
+            .is_some_and(|reason| reason.starts_with("matched_"));
+
+    if model_is_known {
+        let capability_gap = "capability_snapshot:missing".to_string();
+        return RouteFailure {
+            category: RouteFailureCategory::CapabilityGap,
+            reason_code: "capability_snapshot_missing".to_string(),
+            message: Some("model capability snapshot is required for routing".to_string()),
+            provider_id: Some(selection.provider_id.to_string()),
+            model_id: Some(selection.model_id.to_string()),
+            capability_gap: Some(capability_gap),
+            retryable: false,
+        };
+    }
+
+    let reason_code =
+        registry_reason.unwrap_or_else(|| "model_registry_metadata_missing".to_string());
+    RouteFailure {
+        category: RouteFailureCategory::ModelUnavailable,
+        message: Some(format!("model is unavailable: {reason_code}")),
+        reason_code,
+        provider_id: Some(selection.provider_id.to_string()),
+        model_id: Some(selection.model_id.to_string()),
+        capability_gap: None,
+        retryable: false,
+    }
+}
+
 fn route_failure_category(reason_code: &str) -> RouteFailureCategory {
     match reason_code {
         "provider_disabled" => RouteFailureCategory::ProviderDisabled,
@@ -503,15 +601,19 @@ fn route_failure_category(reason_code: &str) -> RouteFailureCategory {
 }
 
 fn has_declared_capability_snapshot(routing_payload: &Value) -> bool {
-    routing_payload
-        .get("modelRegistry")
-        .or_else(|| routing_payload.get("model_registry"))
+    model_registry(routing_payload)
         .and_then(|registry| {
             registry
                 .get("modelCapabilities")
                 .or_else(|| registry.get("model_capabilities"))
         })
         .is_some_and(Value::is_object)
+}
+
+fn model_registry(routing_payload: &Value) -> Option<&Value> {
+    routing_payload
+        .get("modelRegistry")
+        .or_else(|| routing_payload.get("model_registry"))
 }
 
 fn framing_for_protocol(protocol: &ProtocolKind) -> FramingKind {
@@ -563,6 +665,201 @@ mod tests {
     use crate::model_task::{build_model_task_request, ModelTaskRequestInput};
     use app_server_protocol::{ModelTaskKind, ModelTaskSource};
     use serde_json::json;
+
+    fn chat_task_request(provider_id: &str, model_id: &str) -> ModelTaskRequest {
+        build_model_task_request(ModelTaskRequestInput {
+            task_kind: ModelTaskKind::Chat,
+            source: ModelTaskSource::AgentTurn,
+            provider_id: Some(provider_id.to_string()),
+            model_id: Some(model_id.to_string()),
+            model_ref_source: ModelRefSource::RuntimeRequest,
+            modality_contract_key: Some("chat".to_string()),
+            routing_slot: Some("coding".to_string()),
+            task_families: vec!["chat".to_string()],
+            input_modalities: vec!["text".to_string()],
+            output_modalities: vec!["text".to_string()],
+            runtime_features: vec!["streaming".to_string()],
+            capabilities: vec!["streaming".to_string()],
+            session_id: None,
+            thread_id: None,
+            turn_id: None,
+            content_id: None,
+            trace_id: None,
+        })
+    }
+
+    #[test]
+    fn direct_route_without_capability_snapshot_fails_closed() {
+        let task_request = chat_task_request("fixture-openai", "fixture-model");
+        let route = resolved_route_from_task(
+            &task_request,
+            ModelRouteSelection {
+                provider_id: "fixture-openai",
+                model_id: "fixture-model",
+                model_ref_source: ModelRefSource::RuntimeRequest,
+                reasoning_effort: None,
+            },
+            &json!({
+                "providerReadiness": {
+                    "ready": true,
+                    "status": "ready"
+                },
+                "modelRegistry": {
+                    "source": "direct_provider_config",
+                    "status": "runtime_selection_only",
+                    "reasonCode": "direct_provider_config_not_in_registry",
+                    "modelCapabilities": null
+                }
+            }),
+            None,
+            Some(DirectRouteConfig {
+                provider_name: "openai",
+                api_key_present: true,
+                base_url: Some("http://127.0.0.1:56599"),
+                credential_ref: None,
+                protocol: Some(ProtocolKind::OpenaiChat),
+                toolshim: false,
+                toolshim_model: None,
+            }),
+        );
+
+        let failure = route.failure.expect("missing capability snapshot failure");
+        assert_eq!(failure.category, RouteFailureCategory::CapabilityGap);
+        assert_eq!(failure.reason_code, "capability_snapshot_missing");
+        assert_eq!(
+            failure.capability_gap.as_deref(),
+            Some("capability_snapshot:missing")
+        );
+    }
+
+    #[test]
+    fn unknown_registry_model_fails_closed() {
+        let task_request = chat_task_request("openai", "unknown-model");
+        let route = resolved_route_from_task(
+            &task_request,
+            ModelRouteSelection {
+                provider_id: "openai",
+                model_id: "unknown-model",
+                model_ref_source: ModelRefSource::RuntimeOptions,
+                reasoning_effort: None,
+            },
+            &json!({
+                "providerReadiness": {
+                    "ready": true,
+                    "status": "ready"
+                },
+                "modelRegistry": {
+                    "source": "runtime_selection_only",
+                    "status": "missing",
+                    "reasonCode": "model_registry_metadata_missing",
+                    "modelCapabilities": null
+                }
+            }),
+            None,
+            None,
+        );
+
+        let failure = route.failure.expect("unknown model failure");
+        assert_eq!(failure.category, RouteFailureCategory::ModelUnavailable);
+        assert_eq!(failure.reason_code, "model_registry_metadata_missing");
+        assert!(failure.capability_gap.is_none());
+    }
+
+    #[test]
+    fn unknown_provider_protocol_fails_closed_instead_of_defaulting_to_chat() {
+        let task_request = chat_task_request("unregistered-gateway", "gateway-model");
+        let route = resolved_route_from_task(
+            &task_request,
+            ModelRouteSelection {
+                provider_id: "unregistered-gateway",
+                model_id: "gateway-model",
+                model_ref_source: ModelRefSource::RuntimeRequest,
+                reasoning_effort: None,
+            },
+            &json!({
+                "providerReadiness": {
+                    "ready": true,
+                    "status": "ready"
+                },
+                "modelRegistry": {
+                    "source": "direct_provider_config",
+                    "status": "matched",
+                    "reasonCode": "matched_direct_provider_config",
+                    "modelCapabilities": {
+                        "taskFamilies": ["chat"],
+                        "inputModalities": ["text"],
+                        "outputModalities": ["text"],
+                        "runtimeFeatures": ["streaming"],
+                        "capabilities": {
+                            "streaming": true
+                        }
+                    }
+                }
+            }),
+            None,
+            None,
+        );
+
+        assert_eq!(route.protocol, ProtocolKind::Unknown);
+        let failure = route.failure.expect("unsupported protocol failure");
+        assert_eq!(failure.category, RouteFailureCategory::UnsupportedProtocol);
+        assert_eq!(failure.reason_code, "unsupported_protocol");
+        assert_eq!(failure.provider_id.as_deref(), Some("unregistered-gateway"));
+        assert_eq!(failure.model_id.as_deref(), Some("gateway-model"));
+    }
+
+    #[test]
+    fn known_non_chat_wire_protocol_fails_closed_for_agent_turns() {
+        let task_request = chat_task_request("gemini", "gemini-pro");
+        let route = resolved_route_from_task(
+            &task_request,
+            ModelRouteSelection {
+                provider_id: "gemini",
+                model_id: "gemini-pro",
+                model_ref_source: ModelRefSource::RuntimeRequest,
+                reasoning_effort: None,
+            },
+            &json!({
+                "providerReadiness": {
+                    "ready": true,
+                    "status": "ready"
+                },
+                "modelRegistry": {
+                    "source": "api",
+                    "status": "matched",
+                    "reasonCode": "matched_model",
+                    "modelCapabilities": {
+                        "taskFamilies": ["chat"],
+                        "inputModalities": ["text"],
+                        "outputModalities": ["text"],
+                        "runtimeFeatures": ["streaming"],
+                        "capabilities": {
+                            "streaming": true
+                        }
+                    }
+                }
+            }),
+            Some(&ModelRouteProvider {
+                provider_id: "gemini",
+                provider_type: Cow::Borrowed("gemini"),
+                base_url: Some("https://generativelanguage.googleapis.com"),
+                api_version: None,
+                project: None,
+                location: None,
+                region: None,
+                credential_ref: Some("credential-gemini".to_string()),
+                auth_header: "x-goog-api-key",
+                auth_prefix: None,
+                prompt_cache_mode: None,
+            }),
+            None,
+        );
+
+        assert_eq!(route.protocol, ProtocolKind::GeminiGenerateContent);
+        let failure = route.failure.expect("unsupported chat protocol failure");
+        assert_eq!(failure.category, RouteFailureCategory::UnsupportedProtocol);
+        assert_eq!(failure.reason_code, "unsupported_protocol");
+    }
 
     #[test]
     fn image_task_route_preserves_task_model_ref_and_reports_capability_gap() {
@@ -1072,6 +1369,8 @@ mod tests {
                 .and_then(Value::as_str),
             Some("openai_chat")
         );
+        assert!(payload.pointer("/resolvedRoute/endpoint/baseUrl").is_none());
+        assert!(!payload.to_string().contains("https://example.com"));
         assert_eq!(
             payload
                 .pointer("/routeFailure/reasonCode")

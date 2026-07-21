@@ -19,7 +19,7 @@
 
 - `api_key_providers` - API Key Provider 配置
 - `api_key_providers` - API Key Provider 配置主表
-- `provider_pool_credentials` - 旧凭证池表；启动期清空，仅保留历史迁移边界
+- `provider_pool_credentials` - 旧凭证池表；启动期只读保留，等待 manifest 驱动迁移
 - `providers` - Provider 配置
 - `settings` - 应用设置
 
@@ -51,9 +51,9 @@
 
 ### API Keys 迁移
 
-旧 `migrate_api_keys_to_pool()` 只属于历史迁移链。当前启动期会清理 `provider_pool_credentials`，运行时不再读取该表选择凭证。
+旧 `migrate_api_keys_to_pool()` 只属于历史迁移链。当前启动期不再清理 `provider_pool_credentials` 或 `AppDataRoot/credentials`；运行时不读取旧表选择凭证，旧数据只作为 `deprecated/read-only migration source` 保留，等待独立 maintenance manifest、备份和确认。
 
-- 当前运行时不再把 `provider_pool_credentials` 自动转换为凭证 DTO；历史记录只服务清理与迁移验证
+- 当前运行时不再把 `provider_pool_credentials` 自动转换为凭证 DTO；历史记录只服务迁移盘点与验证
 - 保留使用统计和错误计数
 - 标记来源为 `imported`
 - 迁移完成后设置 `migrated_api_keys_to_pool` 标记，避免重复迁移

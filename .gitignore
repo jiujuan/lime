@@ -62,6 +62,7 @@ internal/exec-plans/*
 !internal/exec-plans/claw-streaming-rendering-codex-refactor-plan.md
 !internal/exec-plans/claw-trace-system-implementation-plan.md
 !internal/exec-plans/devlime-codex-claude-alignment-gap-list.md
+!internal/exec-plans/codex-alignment-v1-coordination-plan.md
 !internal/exec-plans/app-server-implementation-plan.md
 !internal/exec-plans/production-command-current-migration-plan.md
 !internal/exec-plans/tech-debt-tracker.md
@@ -90,6 +91,8 @@ internal/exec-plans/*
 !internal/exec-plans/refactor-v2-test-phase-2-plan.md
 !internal/exec-plans/codex-conversation-compat-refactor-plan.md
 !internal/exec-plans/codex-app-gui-alignment-plan.md
+!internal/exec-plans/codex-lime-storage-alignment-plan.md
+!internal/exec-plans/dead-code-cleanup-2026-07-18.md
 internal/roadmap/**
 !internal/roadmap/
 !internal/roadmap/long-term/

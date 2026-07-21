@@ -9,13 +9,23 @@ use crate::{
     ExecutionRequest, RuntimeCoreError, RuntimeEvent, RuntimeEventSink,
 };
 use agent_runtime::action_required::{ActionTerminalStatus, PendingActionRestoreOutcome};
+use agent_runtime::session_loop::RuntimeSessionInputHandle;
 use async_trait::async_trait;
 use model_provider::current_client::CurrentProviderMessage;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 #[async_trait]
 impl ExecutionBackend for RuntimeBackend {
+    fn requires_provider_selection(&self) -> bool {
+        true
+    }
+
+    fn has_live_session_responses(&self) -> bool {
+        true
+    }
+
     fn set_app_data_source(
         &self,
         app_data_source: Arc<dyn AppDataSource>,
@@ -36,6 +46,24 @@ impl ExecutionBackend for RuntimeBackend {
             .or_else(|| request.runtime_options.clone())
     }
 
+    async fn preflight_turn(
+        &self,
+        request: &ExecutionRequest,
+        first_sampling_turn: bool,
+    ) -> Result<(), RuntimeCoreError> {
+        self.prepare_turn_route(request, first_sampling_turn)
+            .await
+            .map(|_| ())
+    }
+
+    async fn prepare_turn_runtime_options(
+        &self,
+        request: &ExecutionRequest,
+        first_sampling_turn: bool,
+    ) -> Result<Option<app_server_protocol::RuntimeOptions>, RuntimeCoreError> {
+        self.prepare_turn_route(request, first_sampling_turn).await
+    }
+
     async fn start_turn(
         &self,
         request: ExecutionRequest,
@@ -50,8 +78,26 @@ impl ExecutionBackend for RuntimeBackend {
         provider_history: Vec<CurrentProviderMessage>,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
-        self.handle_turn_start_with_provider_history(request, provider_history, sink)
+        self.handle_turn_start_with_provider_history(request, provider_history, None, None, sink)
             .await
+    }
+
+    async fn start_turn_with_provider_history_and_session_input(
+        &self,
+        request: ExecutionRequest,
+        provider_history: Vec<CurrentProviderMessage>,
+        pending_input: Option<RuntimeSessionInputHandle>,
+        cancellation_token: Option<CancellationToken>,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.handle_turn_start_with_provider_history(
+            request,
+            provider_history,
+            pending_input,
+            cancellation_token,
+            sink,
+        )
+        .await
     }
 
     async fn cancel_turn(

@@ -2142,7 +2142,7 @@ async function runSmoke(options) {
         },
       },
     });
-    assertSmoke(sessionId, "agentSession/start 未返回 sessionId");
+    assertSmoke(sessionId, "thread/start 未返回 sessionId");
 
     await updateAgentSessionRuntimeCurrent(options, {
       sessionId,

@@ -106,9 +106,6 @@ describe("useSettingsCategory", () => {
 
     expect(generalKeys).toContain(SettingsTabs.Appearance);
     expect(generalKeys).toContain(SettingsTabs.Memory);
-    expect(generalKeys).toContain(
-      SettingsTabs.ArchivedConversations,
-    );
-    expect(generalKeys).not.toContain(SettingsTabs.Hotkeys);
+    expect(generalKeys).toContain(SettingsTabs.ArchivedConversations);
   });
 });

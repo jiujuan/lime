@@ -63,7 +63,6 @@ interface AgentStreamCompletionErrorRequestLogPayload {
 export interface AgentStreamMissingFinalReplyPlan {
   type: "missing_final_reply_failure";
   errorMessage: string;
-  queuedTurnIds: string[];
   requestLogPayload: AgentStreamCompletionErrorRequestLogPayload;
   toastMessage: string;
   usage?: Message["usage"];
@@ -72,7 +71,6 @@ export interface AgentStreamMissingFinalReplyPlan {
 export interface AgentStreamMissingFinalReplyFailureSideEffectPlan {
   errorMessage: string;
   observerErrorMessage: string;
-  queuedTurnIds: string[];
   requestLogPayload: AgentStreamCompletionErrorRequestLogPayload;
   shouldClearActiveStream: boolean;
   shouldClearPendingTextRenderTimer: boolean;
@@ -85,7 +83,6 @@ export interface AgentStreamMissingFinalReplyFailureSideEffectPlan {
 interface AgentStreamCompletionSuccessPlan {
   type: "complete";
   finalContent: string;
-  queuedTurnIds: string[];
   requestLogPayload: AgentStreamCompletionRequestLogPayload;
 }
 
@@ -96,9 +93,6 @@ export type AgentStreamTerminalCompletionPlan =
 export type AgentStreamEmptyFinalErrorPlan =
   | AgentStreamMissingFinalReplyPlan
   | AgentStreamCompletionSuccessPlan;
-
-const resolveQueuedTurnIds = (queuedTurnId?: string | null): string[] =>
-  queuedTurnId ? [queuedTurnId] : [];
 
 const TRIVIAL_ASSISTANT_FINAL_TEXT_CHARS = ".,!?;:，。！？；：、…";
 
@@ -137,13 +131,11 @@ function resolveVisibleAssistantFinalText(value: string): string {
 export function buildAgentStreamMissingFinalReplyFailurePlan(params: {
   errorMessage: string;
   toastMessage?: string;
-  queuedTurnId?: string | null;
   usage?: Message["usage"];
 }): AgentStreamMissingFinalReplyPlan {
   return {
     type: "missing_final_reply_failure",
     errorMessage: params.errorMessage,
-    queuedTurnIds: resolveQueuedTurnIds(params.queuedTurnId),
     requestLogPayload: {
       eventType: "chat_request_error",
       status: "error",
@@ -161,7 +153,6 @@ export function buildAgentStreamMissingFinalReplyFailureSideEffectPlan(
   return {
     errorMessage: failurePlan.errorMessage,
     observerErrorMessage: failurePlan.errorMessage,
-    queuedTurnIds: failurePlan.queuedTurnIds,
     requestLogPayload: failurePlan.requestLogPayload,
     shouldClearActiveStream: true,
     shouldClearPendingTextRenderTimer: true,
@@ -211,13 +202,15 @@ export function shouldFailAgentStreamMissingFinalReply(params: {
   );
 
   return (
-    (!cleanedFinalContent || isTrivialAssistantFinalText(cleanedFinalContent)) &&
-    (containsAssistantProtocolResidue(params.accumulatedContent) ||
-      !rawFinalContent ||
-      isTrivialAssistantFinalText(rawFinalContent))
-  ) || Boolean(
-    params.hasFinalAnswerRequiredProcessBoundary &&
+    ((!cleanedFinalContent ||
+      isTrivialAssistantFinalText(cleanedFinalContent)) &&
+      (containsAssistantProtocolResidue(params.accumulatedContent) ||
+        !rawFinalContent ||
+        isTrivialAssistantFinalText(rawFinalContent))) ||
+    Boolean(
+      params.hasFinalAnswerRequiredProcessBoundary &&
       !params.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
+    )
   );
 }
 
@@ -230,7 +223,10 @@ export function resolveAgentStreamGracefulCompletionContent(params: {
     params.accumulatedContent,
   );
 
-  if (cleanedFinalContent && !isTrivialAssistantFinalText(cleanedFinalContent)) {
+  if (
+    cleanedFinalContent &&
+    !isTrivialAssistantFinalText(cleanedFinalContent)
+  ) {
     return cleanedFinalContent;
   }
   if (
@@ -619,7 +615,6 @@ export function buildAgentStreamTerminalCompletionPlan(params: {
   hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary?: boolean;
   hasFinalAnswerRequiredProcessBoundary?: boolean;
   hasMeaningfulCompletionSignal?: boolean;
-  queuedTurnId?: string | null;
   toolCallCount: number;
   usage?: Message["usage"];
 }): AgentStreamTerminalCompletionPlan {
@@ -635,7 +630,6 @@ export function buildAgentStreamTerminalCompletionPlan(params: {
   ) {
     return buildAgentStreamMissingFinalReplyFailurePlan({
       errorMessage: resolveAgentStreamEmptyFinalReplyErrorMessage(),
-      queuedTurnId: params.queuedTurnId,
       usage: params.usage,
     });
   }
@@ -646,7 +640,6 @@ export function buildAgentStreamTerminalCompletionPlan(params: {
       accumulatedContent: params.accumulatedContent,
       fallbackContent: params.fallbackContent ?? undefined,
     }),
-    queuedTurnIds: resolveQueuedTurnIds(params.queuedTurnId),
     requestLogPayload: {
       eventType: "chat_request_complete",
       status: "success",
@@ -660,7 +653,6 @@ export function buildAgentStreamEmptyFinalErrorPlan(params: {
   accumulatedContent: string;
   fallbackContent?: string | null;
   hasMeaningfulCompletionSignal?: boolean;
-  queuedTurnId?: string | null;
 }): AgentStreamEmptyFinalErrorPlan {
   if (
     shouldFailAgentStreamMissingFinalReply({
@@ -670,7 +662,6 @@ export function buildAgentStreamEmptyFinalErrorPlan(params: {
   ) {
     return buildAgentStreamMissingFinalReplyFailurePlan({
       errorMessage: params.errorMessage,
-      queuedTurnId: params.queuedTurnId,
     });
   }
 
@@ -680,7 +671,6 @@ export function buildAgentStreamEmptyFinalErrorPlan(params: {
       accumulatedContent: params.accumulatedContent,
       fallbackContent: params.fallbackContent ?? undefined,
     }),
-    queuedTurnIds: resolveQueuedTurnIds(params.queuedTurnId),
     requestLogPayload: {
       eventType: "chat_request_complete",
       status: "success",

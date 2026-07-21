@@ -652,7 +652,11 @@ async fn browser_control_preflight_cancel_stops_turn() {
         .await
         .expect("cancel permission");
 
-    assert_eq!(responded.events[0].event_type, "action.resolved");
+    assert_eq!(responded.events[0].event_type, "action.canceled");
+    assert!(responded
+        .events
+        .iter()
+        .all(|event| event.event_type != "action.resolved"));
     assert!(responded
         .events
         .iter()

@@ -548,7 +548,7 @@ JSONL 约束：
 - `ArtifactFrame` 不显示普通 assistant 长文 fallback。
 - 右侧 Article Editor 只读取同一 articleDraft，不显示 workflow step、task card 或流程轨。
 - workflow run / step / tool / connector / hook / evidence 事件写入 JSONL，可用于内部审计回放。
-- production ready evidence 需要证明真实 GUI 路径写入 runtime action response `metadata.workflowResume` 或 queued resume `RuntimeResumeContract.decisions[].metadata.workflowResume`，并产生匹配的 `workflow.step.resuming` / `workflow.run.resuming` JSONL audit 事件，不能只给 signed package、live Provider 和 `workflow-events.jsonl` 路径。
+- production ready evidence 需要证明真实 GUI 路径通过 typed action response 或 `workflow/respond` 写入 `metadata.workflowResume`，并产生匹配的 `workflow.step.resuming` / `workflow.run.resuming` JSONL audit 事件；`thread/resume` 只负责 Thread rejoin/history hydrate，不承载 workflow resume metadata，不能只给 signed package、live Provider 和 `workflow-events.jsonl` 路径。
 - `agentSession/read` 普通历史恢复能恢复 artifact refs 和 Article Editor，不恢复 workflow timeline。
 - `hostToolRequests -> WebSearch tool event -> read model tool item/tool_call -> article artifact hostToolEvidence` 必须有稳定 smoke 证据，不能只靠插件 worker 本地输出证明。
 - GUI smoke 覆盖发送、段落流式、最终产物、右侧展开、历史恢复；审计测试覆盖 JSONL 行事件。
@@ -612,9 +612,9 @@ JSONL 约束：
 
 ## 22. 2026-07-05 Resume Audit Contract
 
-本轮补齐 queued resume 与 workflow audit 的边界：普通 `agentSession/thread/resume` 只恢复 App Server queued turn，不自动代表插件 worker workflow resume。`agentSession/thread/resume` 只有在 `RuntimeResumeContract.decisions[].metadata` 显式携带 `workflowRunId / workflowKey / stepId` 时才追加 resume audit；`workflow/respond` / `agentSession/action/respond` 则消费同一 `metadata.workflowResume` 合同并写入同样的 `workflow.step.resuming` 与 `workflow.run.resuming`。这些事件保持 metadata-only 脱敏，不进入普通 session JSONL、聊天 UI、历史 read model 或右侧 Article Editor。
+本轮按 Codex 语义收紧 workflow audit 边界：`thread/resume` 只负责 Thread rejoin/history hydrate，不恢复 queued turn，也不代表插件 worker workflow resume。只有 `workflow/respond` / `agentSession/action/respond` 的 typed response 显式携带 `metadata.workflowResume`，才追加 `workflow.step.resuming` / `workflow.run.resuming`。这些事件保持 metadata-only 脱敏，不进入普通 session JSONL、聊天 UI、历史 read model 或右侧 Article Editor。
 
-`content-factory-signed-release-gate` 已把该 lifecycle 纳入 production ready 门槛：真实 GUI evidence 需要证明 `electron-ipc -> app_server_handle_json_lines -> agentSession/turn/start`，给出 runtime action response `metadata.workflowResume` 或 queued resume `runtimeResumeContract.decisions[].metadata.workflowResume`，并匹配同一 `workflowRunId / workflowKey / stepId / actionId / decision` 的 `workflow.step.resuming`、`workflow.run.resuming` audit 事件。只有签名包、live Provider、Article Workspace 和 `workflow-events.jsonl` 路径不足以关闭 production 缺口。
+`content-factory-signed-release-gate` 已把该 lifecycle 纳入 production ready 门槛：真实 GUI evidence 需要证明 `electron-ipc -> app_server_handle_json_lines -> agentSession/turn/start`，随后由 typed action response 或 `workflow/respond` 给出 `metadata.workflowResume`，并匹配同一 `workflowRunId / workflowKey / stepId / actionId / decision` 的 `workflow.step.resuming`、`workflow.run.resuming` audit 事件。只有签名包、live Provider、Article Workspace 和 `workflow-events.jsonl` 路径不足以关闭 production 缺口。
 
 2026-07-05 live Provider current-turn smoke 已通过：`.lime/qc/gui-evidence/agent-apps/content-factory-current-turn-live-provider-2026-07-05T07-53-24-361Z.json` 显示 `provider=agnes`、`model=agnes-2.0-flash`、`liveProviderUsed=true`、`hostManagedGenerationStatus=completed`。同一 evidence 重新跑 signed release gate 后仍按预期 blocked，但 missing codes 已不包含 `production_host_generation_not_live`；剩余 blocked 项集中在 production catalog、trust roots、fetchCloud、GUI `cloud_release` signature verification 和 resume lifecycle。
 

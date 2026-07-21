@@ -230,7 +230,6 @@ export function useTaskCenterEmptyStateSendRuntime({
           skipWorkspaceCommandRouting: true,
           skipSessionRestore: true,
           skipSessionStartHooks: true,
-          skipPreSubmitResume: true,
           requestMetadata: mergeAgentUiPerformanceTraceMetadata(
             sendOptions?.requestMetadata,
             {
@@ -404,7 +403,6 @@ export function useTaskCenterEmptyStateSendRuntime({
             skipWorkspaceCommandRouting: true,
             skipSessionRestore: true,
             skipSessionStartHooks: true,
-            skipPreSubmitResume: true,
             requestMetadata: mergeAgentUiPerformanceTraceMetadata(
               sendOptions?.requestMetadata,
               {
@@ -538,7 +536,6 @@ export function useTaskCenterEmptyStateSendRuntime({
           skipWorkspaceCommandRouting: true,
           skipSessionRestore: true,
           skipSessionStartHooks: true,
-          skipPreSubmitResume: true,
           requestMetadata: mergeAgentUiPerformanceTraceMetadata(
             sendOptions?.requestMetadata,
             {

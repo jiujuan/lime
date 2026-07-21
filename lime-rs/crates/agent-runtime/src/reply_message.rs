@@ -4,7 +4,8 @@
 //! 后端专用 DTO 必须在 adapter 边界 lowering，不能把外部框架的 Message 类型变成事实源。
 
 use crate::reply_input::{
-    RuntimeActionRequiredResponseInput, RuntimeReplyAttemptInput, RuntimeReplyInput,
+    ImageDetail, RuntimeActionRequiredResponseInput, RuntimeReplyAttemptInput, RuntimeReplyInput,
+    RuntimeReplyInputPart,
 };
 use agent_protocol::action_required::ActionRequiredScope;
 use serde_json::Value;
@@ -21,6 +22,7 @@ pub enum RuntimeReplyMessageContent {
         uri: String,
         media_type: String,
         provider_data: Option<String>,
+        detail: Option<ImageDetail>,
     },
     ActionRequiredResponse {
         request_id: String,
@@ -46,18 +48,22 @@ impl RuntimeReplyMessage {
     }
 
     pub fn from_input(input: RuntimeReplyInput) -> Self {
-        let mut content = Vec::with_capacity(input.images.len() + 1);
-        content.push(RuntimeReplyMessageContent::Text(input.text));
-        content.extend(
-            input
-                .images
-                .into_iter()
-                .map(|image| RuntimeReplyMessageContent::Image {
+        let content = input
+            .parts
+            .into_iter()
+            .filter_map(|part| match part {
+                RuntimeReplyInputPart::Text { text, .. } => {
+                    Some(RuntimeReplyMessageContent::Text(text))
+                }
+                RuntimeReplyInputPart::Image(image) => Some(RuntimeReplyMessageContent::Image {
                     uri: image.uri,
                     media_type: image.media_type,
                     provider_data: image.provider_data,
+                    detail: image.detail,
                 }),
-        );
+                RuntimeReplyInputPart::Skill { .. } | RuntimeReplyInputPart::Mention { .. } => None,
+            })
+            .collect();
 
         Self {
             role: RuntimeReplyMessageRole::User,
@@ -111,18 +117,28 @@ impl From<RuntimeReplyAttemptInput> for RuntimeReplyMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reply_input::{RuntimeReplyInput, RuntimeReplyInputImage};
+    use crate::reply_input::{RuntimeReplyInput, RuntimeReplyInputImage, RuntimeReplyInputPart};
     use serde_json::json;
 
     #[test]
-    fn reply_message_preserves_text_image_and_agent_only() {
+    fn reply_message_preserves_ordered_text_image_and_agent_only() {
         let input = RuntimeReplyInput {
-            text: "look".to_string(),
-            images: vec![RuntimeReplyInputImage {
-                uri: "sidecar://image-1".to_string(),
-                media_type: "image/png".to_string(),
-                provider_data: Some("data:image/png;base64,abc".to_string()),
-            }],
+            parts: vec![
+                RuntimeReplyInputPart::Text {
+                    text: "before".to_string(),
+                    text_elements: Vec::new(),
+                },
+                RuntimeReplyInputPart::Image(RuntimeReplyInputImage {
+                    uri: "sidecar://image-1".to_string(),
+                    media_type: "image/png".to_string(),
+                    provider_data: Some("data:image/png;base64,abc".to_string()),
+                    detail: Some(ImageDetail::High),
+                }),
+                RuntimeReplyInputPart::Text {
+                    text: "after".to_string(),
+                    text_elements: Vec::new(),
+                },
+            ],
             agent_only: true,
         };
 
@@ -131,16 +147,18 @@ mod tests {
         assert_eq!(message.role, RuntimeReplyMessageRole::User);
         assert!(message.agent_only);
         assert!(message.has_images());
-        assert_eq!(message.concat_text(), "look");
+        assert_eq!(message.concat_text(), "beforeafter");
         assert_eq!(
             message.content,
             vec![
-                RuntimeReplyMessageContent::Text("look".to_string()),
+                RuntimeReplyMessageContent::Text("before".to_string()),
                 RuntimeReplyMessageContent::Image {
                     uri: "sidecar://image-1".to_string(),
                     media_type: "image/png".to_string(),
                     provider_data: Some("data:image/png;base64,abc".to_string()),
+                    detail: Some(ImageDetail::High),
                 },
+                RuntimeReplyMessageContent::Text("after".to_string()),
             ]
         );
     }

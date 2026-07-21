@@ -9,6 +9,10 @@ import {
   type AgentRuntimeEventListener,
 } from "@/lib/api/agentRuntimeEvents";
 import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
+import type {
+  TurnSteerParams,
+  TurnSteerResponse,
+} from "@limecloud/app-server-client";
 import {
   createAgentRuntimeClient,
   type AgentRuntimeClient,
@@ -69,7 +73,7 @@ export interface AgentRuntimeAdapter {
   getSessionReadModel(
     sessionId: string,
   ): Promise<AgentSessionDetail["thread_read"]>;
-  getThreadQueueControl(
+  getThreadTurnControl(
     threadId: string,
   ): Promise<ChatRuntimeQueueControlProjection>;
   replayRequest(
@@ -100,15 +104,19 @@ export interface AgentRuntimeAdapter {
     previewText?: string,
   ): Promise<string>;
   submitOp(op: AgentOp): Promise<void>;
+  steerTurn(params: TurnSteerParams): Promise<TurnSteerResponse>;
   compactSession(sessionId: string, eventName: string): Promise<void>;
   interruptTurn(
     sessionId: string,
     turnId?: string,
     eventName?: string,
   ): Promise<boolean>;
-  resumeThread(sessionId: string, turnId?: string): Promise<boolean>;
-  promoteQueuedTurn(sessionId: string, queuedTurnId: string): Promise<boolean>;
-  removeQueuedTurn(sessionId: string, queuedTurnId: string): Promise<boolean>;
+  resumeThread(threadId: string): Promise<boolean>;
+  runUserShellCommand(
+    threadId: string,
+    command: string,
+    eventName: string,
+  ): Promise<void>;
   respondToAction(request: AgentRuntimeActionResponse): Promise<void>;
   listenToTurnEvents(
     eventName: string,
@@ -129,11 +137,11 @@ export interface AgentRuntimeAdapterDeps {
     | "getRuntimeProviderSelection"
     | "interruptAgentRuntimeTurn"
     | "listAgentRuntimeSessions"
-    | "promoteAgentRuntimeQueuedTurn"
     | "replayAgentRuntimeRequest"
-    | "removeAgentRuntimeQueuedTurn"
-    | "resumeAgentRuntimeThread"
+    | "resumeThread"
     | "respondAgentRuntimeAction"
+    | "runUserShellCommand"
+    | "steerAgentRuntimeTurn"
     | "submitAgentRuntimeTurn"
     | "updateAgentRuntimeSession"
   >;
@@ -192,19 +200,26 @@ export function createAgentRuntimeAdapter({
       return request;
     },
     async getSessionReadModel(sessionId) {
-      return client.getAgentRuntimeThreadRead(sessionId);
+      const detail = await client.getAgentRuntimeSession(sessionId);
+      const threadId = detail.thread_id?.trim();
+      if (!threadId) {
+        throw new Error(
+          "canonical session detail did not include a thread_id for thread/read",
+        );
+      }
+      return client.getAgentRuntimeThreadRead(threadId);
     },
-    async getThreadQueueControl(threadId) {
+    async getThreadTurnControl(threadId) {
       const result = projectChatRuntimeQueueControl(
         await client.readAgentRuntimeThread(threadId),
       );
       if (!result.ok) {
         throw new Error(
-          `canonical queue-control projection rejected: ${result.reason}`,
+          `canonical turn-control projection rejected: ${result.reason}`,
         );
       }
       if (result.projection.threadId !== threadId.trim()) {
-        throw new Error("canonical queue-control thread identity mismatch");
+        throw new Error("canonical turn-control thread identity mismatch");
       }
       return result.projection;
     },
@@ -276,6 +291,10 @@ export function createAgentRuntimeAdapter({
           throw new Error(`当前 runtime adapter 尚不支持 AgentOp: ${op.type}`);
       }
     },
+    async steerTurn(params) {
+      const response = await client.steerAgentRuntimeTurn(params);
+      return response.result;
+    },
     async compactSession(sessionId, eventName) {
       await client.compactAgentRuntimeSession({
         session_id: sessionId,
@@ -289,23 +308,15 @@ export function createAgentRuntimeAdapter({
         ...(eventName ? { event_name: eventName } : {}),
       });
     },
-    async resumeThread(sessionId, turnId) {
-      return client.resumeAgentRuntimeThread({
-        session_id: sessionId,
-        ...(turnId ? { turn_id: turnId } : {}),
+    async resumeThread(threadId) {
+      const normalizedThreadId = threadId.trim();
+      const response = await client.resumeThread({
+        threadId: normalizedThreadId,
       });
+      return response.result.thread.id === normalizedThreadId;
     },
-    async promoteQueuedTurn(sessionId, queuedTurnId) {
-      return client.promoteAgentRuntimeQueuedTurn({
-        session_id: sessionId,
-        queued_turn_id: queuedTurnId,
-      });
-    },
-    async removeQueuedTurn(sessionId, queuedTurnId) {
-      return client.removeAgentRuntimeQueuedTurn({
-        session_id: sessionId,
-        queued_turn_id: queuedTurnId,
-      });
+    async runUserShellCommand(threadId, command, eventName) {
+      await client.runUserShellCommand({ threadId, command }, eventName);
     },
     async respondToAction(request) {
       await client.respondAgentRuntimeAction({

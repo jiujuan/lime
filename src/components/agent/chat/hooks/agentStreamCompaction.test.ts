@@ -39,22 +39,23 @@ describe("runAgentStreamCompaction", () => {
     const deferredCompaction = createDeferred<void>();
 
     const runtime: AgentRuntimeAdapter = {
-      init: vi.fn(),
+      getRuntimeProviderSelection: vi.fn(),
       createSession: vi.fn(),
       listSessions: vi.fn(),
       getSession: vi.fn(),
       getSessionReadModel: vi.fn(),
+      getThreadTurnControl: vi.fn(),
       replayRequest: vi.fn(),
       renameSession: vi.fn(),
       deleteSession: vi.fn(),
       setSessionExecutionStrategy: vi.fn(),
       setSessionProviderSelection: vi.fn(),
       submitOp: vi.fn(),
+      steerTurn: vi.fn(),
       compactSession: vi.fn(() => deferredCompaction.promise),
       interruptTurn: vi.fn(),
       resumeThread: vi.fn(),
-      promoteQueuedTurn: vi.fn(),
-      removeQueuedTurn: vi.fn(),
+      runUserShellCommand: vi.fn(),
       respondToAction: vi.fn(),
       listenToTurnEvents: vi.fn(async (_eventName, nextHandler) => {
         handler = nextHandler;

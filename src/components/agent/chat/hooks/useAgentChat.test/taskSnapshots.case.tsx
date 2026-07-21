@@ -1,9 +1,5 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it
-} from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   captureTurnStream,
   createDeferred,
@@ -18,7 +14,7 @@ import {
   mockSubmitAgentRuntimeTurn,
   mountHook,
   seedSession,
-  seedSessionSnapshots
+  seedSessionSnapshots,
 } from "../useAgentChat.testUtils";
 
 describe("useAgentChat 任务快照", () => {
@@ -229,16 +225,6 @@ describe("useAgentChat 任务快照", () => {
       messages: [],
       turns: [],
       items: [],
-      queued_turns: [
-        {
-          queuedTurnId: "queued-hydrated-1",
-          messagePreview: "以后端详情为准继续执行",
-          messageText: "以后端详情为准继续执行，并刷新运行态缓存",
-          createdAt: 1700000200000,
-          imageCount: 0,
-          position: 1,
-        },
-      ],
     });
 
     const harness = mountHook(workspaceId);
@@ -252,16 +238,7 @@ describe("useAgentChat 任务快照", () => {
         sessionId,
         expect.objectContaining({ historyLimit: 40 }),
       );
-      expect(harness.getValue().queuedTurns).toEqual([
-        {
-          queued_turn_id: "queued-hydrated-1",
-          message_preview: "以后端详情为准继续执行",
-          message_text: "以后端详情为准继续执行，并刷新运行态缓存",
-          created_at: 1700000200000,
-          image_count: 0,
-          position: 1,
-        },
-      ]);
+      expect(harness.getValue()).not.toHaveProperty("queuedTurns");
     } finally {
       harness.unmount();
     }
@@ -281,6 +258,8 @@ describe("useAgentChat 任务快照", () => {
         created_at: 1700000100,
         updated_at: 1700000101,
         messages_count: 1,
+        thread_status: "queued",
+        queued_turn_count: 1,
       },
     ]);
     mockGetAgentRuntimeSession.mockResolvedValue({
@@ -291,31 +270,11 @@ describe("useAgentChat 任务快照", () => {
       messages: [],
       turns: [],
       items: [],
-      queued_turns: [
-        {
-          queuedTurnId: "queued-after-reload-1",
-          messagePreview: "刷新后继续完成这个任务",
-          messageText: "刷新后继续完成这个任务",
-          createdAt: 1700000200000,
-          imageCount: 0,
-          position: 1,
-        },
-      ],
       thread_read: {
         thread_id: "thread-after-reload",
         status: "queued",
         pending_requests: [],
         incidents: [],
-        queued_turns: [
-          {
-            queuedTurnId: "queued-after-reload-1",
-            messagePreview: "刷新后继续完成这个任务",
-            messageText: "刷新后继续完成这个任务",
-            createdAt: 1700000200000,
-            imageCount: 0,
-            position: 1,
-          },
-        ],
       },
     });
     const harness = mountHook(workspaceId);
@@ -332,16 +291,7 @@ describe("useAgentChat 任务快照", () => {
         thread_id: "thread-after-reload",
         status: "queued",
       });
-      expect(harness.getValue().queuedTurns).toEqual([
-        {
-          queued_turn_id: "queued-after-reload-1",
-          message_preview: "刷新后继续完成这个任务",
-          message_text: "刷新后继续完成这个任务",
-          created_at: 1700000200000,
-          image_count: 0,
-          position: 1,
-        },
-      ]);
+      expect(harness.getValue().queuedTurnCount).toBe(1);
       expect(
         harness.getValue().topics.find((topic) => topic.id === sessionId),
       ).toMatchObject({

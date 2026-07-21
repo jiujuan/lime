@@ -54,12 +54,21 @@ pub fn build_runtime_agents_prompt_for_project(
     working_dir: Option<&Path>,
     project_root: Option<&Path>,
 ) -> Option<String> {
-    let global_path = app_paths::best_effort_user_memory_path();
+    let global_path = match app_paths::resolve_user_memory_path() {
+        Ok(path) => Some(path),
+        Err(error) => {
+            tracing::warn!(
+                "[AgentRuntime] 解析全局运行时 AGENTS 路径失败，跳过全局指令层: {}",
+                error
+            );
+            None
+        }
+    };
     let workspace_paths = working_dir
         .map(|working_dir| discover_workspace_runtime_agents_paths(working_dir, project_root))
         .unwrap_or_default();
     build_runtime_agents_prompt_with_paths(
-        Some(global_path.as_path()),
+        global_path.as_deref(),
         workspace_paths.iter().map(PathBuf::as_path),
     )
 }
@@ -258,6 +267,21 @@ mod tests {
         assert!(prompt.contains("# AGENTS.md instructions"));
         assert!(prompt.contains("<INSTRUCTIONS>"));
         assert!(prompt.contains("</INSTRUCTIONS>"));
+    }
+
+    #[test]
+    fn should_build_workspace_prompt_without_global_layer() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let workspace_path = tmp.path().join("workspace").join(".lime").join("AGENTS.md");
+        fs::create_dir_all(workspace_path.parent().expect("workspace parent"))
+            .expect("create workspace");
+        fs::write(&workspace_path, "- 工作区指令").expect("write workspace agents");
+
+        let prompt = build_runtime_agents_prompt_with_paths(None, [workspace_path.as_path()])
+            .expect("workspace prompt should exist");
+
+        assert!(prompt.contains("工作区指令"));
+        assert!(!prompt.contains("全局运行时指令"));
     }
 
     #[test]

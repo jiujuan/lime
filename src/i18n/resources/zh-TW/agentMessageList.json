@@ -296,9 +296,6 @@
   "agentChat.messageList.artifact.sourceCount": "{{count}} 條來源",
   "agentChat.messageList.artifact.locateBlock": "定位到 {{label}}",
   "agentChat.messageList.artifact.documentSyncedPreview": "已同步到工作區，可繼續在畫布裡閱讀、編輯和定位到對應區塊。",
-  "agentChat.messageList.artifactFrame.badge": "產物框",
-  "agentChat.messageList.artifactFrame.open": "打開編輯器",
-  "agentChat.messageList.artifactFrame.openAria": "打開產物編輯器：{{title}}",
   "agentChat.messageList.artifactFrame.streaming": "串流輸出中",
   "agentChat.messageList.articleArtifact.documentCreatedPrefix": "已建立文件：",
   "agentChat.messageList.articleArtifact.documentCreatingPrefix": "正在建立文件：",
@@ -465,5 +462,7 @@
   "agentChat.toolCall.group.collapseSearch": "收起搜尋批次",
   "agentChat.toolCall.group.expandSearch": "展開搜尋批次",
   "agentChat.toolCall.group.hiddenSearchGroups": " 等 {{count}} 組",
-  "agentChat.toolCall.error.openExternalUnsupported": "目前環境不支援打開外部連結"
+  "agentChat.toolCall.error.openExternalUnsupported": "目前環境不支援打開外部連結",
+  "agentChat.inputbar.shellCommand.empty": "請輸入要執行的命令",
+  "agentChat.inputbar.shellCommand.error": "命令提交失敗：{{message}}"
 }

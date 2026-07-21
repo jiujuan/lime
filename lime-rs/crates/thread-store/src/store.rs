@@ -8,9 +8,10 @@ use std::pin::Pin;
 use agent_protocol::{Thread, ThreadId};
 
 use crate::{
-    ApplyThreadHistoryParams, ApplyThreadHistoryResult, ArchiveThreadParams, CreateThreadParams,
-    DeleteThreadParams, ItemPage, ListItemsParams, ListThreadsParams, ListTurnsParams,
-    ReadThreadParams, ThreadPage, ThreadStoreResult, TurnPage, UpdateThreadMetadataParams,
+    AppendThreadItemsParams, ApplyThreadHistoryParams, ApplyThreadHistoryResult,
+    ArchiveThreadParams, CreateThreadParams, DeleteThreadParams, ItemPage, ListItemsParams,
+    ListThreadsParams, ListTurnsParams, ReadThreadParams, ThreadPage, ThreadStoreResult, TurnPage,
+    UpdateThreadMetadataParams,
 };
 
 /// Future returned by [`ThreadStore`] operations.
@@ -33,6 +34,15 @@ pub trait ThreadStore: Any + Send + Sync {
 
     /// Lists canonical threads using a store-owned opaque cursor.
     fn list_threads(&self, params: ListThreadsParams) -> ThreadStoreFuture<'_, ThreadPage>;
+
+    /// Appends already-canonical items without deriving or changing thread metadata.
+    ///
+    /// The append is idempotent by `(thread_id, sequence, item contents)` and
+    /// uses the same foreign-key and sequence collision rules as [`Self::apply_history`].
+    fn append_items(
+        &self,
+        params: AppendThreadItemsParams,
+    ) -> ThreadStoreFuture<'_, ApplyThreadHistoryResult>;
 
     /// Applies one typed materializer change set atomically.
     ///

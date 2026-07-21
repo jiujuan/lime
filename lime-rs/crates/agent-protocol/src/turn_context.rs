@@ -1,3 +1,4 @@
+use crate::CollaborationMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -17,7 +18,7 @@ pub struct TurnContextOverride {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sandbox_policy: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub collaboration_mode: Option<String>,
+    pub collaboration_mode: Option<CollaborationMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_visible_input_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

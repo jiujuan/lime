@@ -2,13 +2,10 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 function readCdpGateScript() {
-  return [
+  return fs.readFileSync(
     "scripts/agent-runtime/agent-session-recovery-cdp-gate.mjs",
-    "scripts/agent-runtime/claw-chat-current-fixture-constants.mjs",
-    "scripts/lib/electron-fixture-build.mjs",
-  ]
-    .map((filePath) => fs.readFileSync(filePath, "utf8"))
-    .join("\n");
+    "utf8",
+  );
 }
 
 describe("agent session recovery CDP Gate guard", () => {
@@ -29,19 +26,36 @@ describe("agent session recovery CDP Gate guard", () => {
     expect(content).toContain("app_server_handle_json_lines");
   });
 
-  it("proves current App Server agentSession read/list without live Provider", () => {
+  it("proves canonical App Server thread recovery without live Provider", () => {
     const content = readCdpGateScript();
 
     expect(content).toContain('APP_SERVER_BACKEND_MODE: "unavailable"');
     expect(content).toContain('LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0"');
     expect(content).toContain('LIME_REAL_API_TEST: "0"');
-    expect(content).toContain('"agentSession/start"');
-    expect(content).toContain('"agentSession/update"');
-    expect(content).toContain('"agentSession/read"');
-    expect(content).toContain('"agentSession/list"');
-    expect(content).toContain('"agentSession/thread/resume"');
+    expect(content).toContain('"thread/start"');
+    expect(content).toContain('"thread/read"');
+    expect(content).toContain('"thread/list"');
+    expect(content).toContain('"thread/resume"');
+    expect(content).toContain("model: FIXTURE_MODEL");
+    expect(content).toContain("modelProvider: FIXTURE_PROVIDER");
+    expect(content).toContain("threadId: identity.threadId");
+    expect(content).toContain(
+      `await openSessionFromSidebar(page, options, requestLog, {
+        sessionId: identity.sessionId,
+        threadId: identity.threadId,`,
+    );
+    expect(content).toContain("includeTurns: true");
+    expect(content).toContain("excludeTurns: true");
+    expect(content).toContain("initialTurnsPage");
+    expect(content).toContain("threadResumeNoLegacyFields");
+    expect(content).toContain("threadResumeDoesNotRestartThread");
     expect(content).toContain("workspace/default/ensure");
     expect(content).toContain("noTurnStart");
+    expect(content).not.toContain('"agentSession/update"');
+    expect(content).not.toContain("sessionId: SESSION_ID");
+    expect(content).not.toContain("threadId: THREAD_ID");
+    expect(content).not.toContain("historyLimit:");
+    expect(content).not.toContain("optionalThreadResume");
     expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "mock"');
     expect(content).not.toContain("mockPriorityCommands");
     expect(content).not.toContain("defaultMocks");

@@ -58,7 +58,7 @@ Lime Managed Objective Continuation Smoke
 
 用途:
   通过 DevBridge current 命令验证 Managed Objective 的受控自动续跑：
-  首轮 agentSession/turn/start current JSON-RPC 完成后自动投递下一轮，随后在 maxAutoTurns 下进入 budget_limited。
+  首轮 turn/start current JSON-RPC 完成后自动投递下一轮，随后在 maxAutoTurns 下进入 budget_limited。
 
 用法:
   npm run smoke:managed-objective-continuation
@@ -276,7 +276,7 @@ async function createManagedObjectiveSession(options, provider) {
     workspaceId,
     title: `MO continuation smoke ${new Date().toISOString()}`,
   });
-  assertSmoke(sessionId, "agentSession/start 未返回 sessionId");
+  assertSmoke(sessionId, "thread/start 未返回 sessionId");
 
   await updateAgentSessionRuntimeCurrent(options, { sessionId, provider });
 
@@ -286,7 +286,7 @@ async function createManagedObjectiveSession(options, provider) {
     objectiveText:
       "Managed Objective 自动续跑 smoke：完成首轮、自动续跑一轮，并在预算限制下停止。",
     successCriteria: [
-      "首轮 agentSession/turn/start current JSON-RPC 完成",
+      "首轮 turn/start current JSON-RPC 完成",
       "空闲后自动 continuation 至少提交一次",
       "达到 maxAutoTurns 后目标进入 budget_limited",
     ],

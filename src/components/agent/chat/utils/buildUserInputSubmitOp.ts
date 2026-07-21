@@ -1,101 +1,70 @@
-import type { AgentUserInputOp } from "@/lib/api/agentProtocol";
+import {
+  createApplicationAdditionalContext,
+  type AgentUserInputOp,
+} from "@/lib/api/agentProtocolOps";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 import {
   assertModelInputCapabilityAllowed,
   buildModelCapabilitySendGateInput,
 } from "@/lib/model/modelCapabilitySendGate";
-import type {
-  AgentExecutionStrategy,
-  AgentSessionExecutionRuntime,
-} from "@/lib/api/agentExecutionRuntime";
-import type {
-  AutoContinueRequestPayload,
-  ImageInput,
-} from "@/lib/api/agentRuntime/sessionTypes";
-import type { RuntimeSearchMode } from "@limecloud/app-server-client";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
+import type { CollaborationMode, ModeKind } from "@limecloud/app-server-client";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
 import type { MessageImage } from "../types";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 import { createRuntimePoliciesFromAccessMode } from "./accessModeRuntime";
+import { buildMessageImageDataUrl } from "./imageAttachments";
 import { buildSubmitOpRuntimeCompaction } from "./submitOpRuntimeCompaction";
-import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
-
-function buildSubmitImages(images: MessageImage[]): ImageInput[] | undefined {
-  if (images.length === 0) {
-    return undefined;
-  }
-
-  return images.map((image) => ({
-    data: image.data,
-    media_type: image.mediaType,
-  }));
-}
 
 export interface BuildUserInputSubmitOpOptions {
   content: string;
   images: MessageImage[];
-  sessionId: string;
+  threadId?: string;
+  clientUserMessageId?: string;
   eventName: string;
-  workspaceId?: string;
-  turnId?: string;
-  systemPrompt?: string;
-  queueIfBusy?: boolean;
-  skipPreSubmitResume?: boolean;
   requestMetadata?: Record<string, unknown>;
+  collaborationMode?: ModeKind;
   executionRuntime?: AgentSessionExecutionRuntime | null;
   syncedRecentPreferences?: ChatToolPreferences | null;
   syncedSessionModelPreference?: SessionModelPreference | null;
-  syncedExecutionStrategy?: AgentExecutionStrategy | null;
-  effectiveExecutionStrategy: AgentExecutionStrategy;
   effectiveAccessMode: AgentAccessMode;
   effectiveProviderType: string;
   effectiveModel: string;
   modelOverride?: string;
   reasoningEffort?: string;
-  webSearch?: boolean;
-  searchMode?: RuntimeSearchMode;
-  thinking?: boolean;
-  explicitToolPreferences?: boolean;
-  autoContinue?: AutoContinueRequestPayload;
   modelCapabilitySummary?: ModelCapabilitySummary | null;
 }
 
-export function buildUserInputSubmitOp(
-  options: BuildUserInputSubmitOpOptions,
-): AgentUserInputOp {
-  const {
-    content,
-    images,
-    sessionId,
-    eventName,
-    workspaceId,
-    turnId,
-    systemPrompt,
-    queueIfBusy,
-    skipPreSubmitResume,
-    requestMetadata,
-    executionRuntime,
-    syncedRecentPreferences,
-    syncedSessionModelPreference,
-    syncedExecutionStrategy,
-    effectiveExecutionStrategy,
-    effectiveAccessMode,
-    effectiveProviderType,
-    effectiveModel,
-    modelOverride,
-    reasoningEffort,
-    webSearch,
-    searchMode,
-    thinking,
-    explicitToolPreferences,
-    autoContinue,
-    modelCapabilitySummary,
-  } = options;
-  const normalizedEffectiveExecutionStrategy = normalizeExecutionStrategy(
-    effectiveExecutionStrategy,
-  );
+export interface BuildTurnInputOptions {
+  content: string;
+  images: MessageImage[];
+  modelCapabilitySummary?: ModelCapabilitySummary | null;
+}
 
+function buildCollaborationMode(
+  mode: ModeKind | undefined,
+  model: string,
+  reasoningEffort: string | undefined,
+): CollaborationMode | undefined {
+  if (mode !== "plan") {
+    return undefined;
+  }
+
+  return {
+    mode: "plan",
+    settings: {
+      model,
+      reasoning_effort: reasoningEffort?.trim() || null,
+      developer_instructions: null,
+    },
+  };
+}
+
+export function buildTurnInput(
+  options: BuildTurnInputOptions,
+): AgentUserInputOp["turn"]["input"] {
+  const { content, images, modelCapabilitySummary } = options;
   if (modelCapabilitySummary !== undefined) {
     assertModelInputCapabilityAllowed(
       modelCapabilitySummary,
@@ -107,58 +76,78 @@ export function buildUserInputSubmitOp(
     );
   }
 
+  return [
+    { type: "text", text: content },
+    ...images.map((image) => ({
+      type: "image" as const,
+      url: buildMessageImageDataUrl(image),
+    })),
+  ];
+}
+
+export function buildUserInputSubmitOp(
+  options: BuildUserInputSubmitOpOptions,
+): AgentUserInputOp {
+  const {
+    content,
+    images,
+    threadId,
+    clientUserMessageId,
+    eventName,
+    requestMetadata,
+    collaborationMode: collaborationModeKind,
+    executionRuntime,
+    syncedRecentPreferences,
+    syncedSessionModelPreference,
+    effectiveAccessMode,
+    effectiveProviderType,
+    effectiveModel,
+    modelOverride,
+    reasoningEffort,
+    modelCapabilitySummary,
+  } = options;
+
+  const turnModel = modelOverride?.trim() || effectiveModel.trim();
   const compaction = buildSubmitOpRuntimeCompaction({
     requestMetadata,
     executionRuntime,
     syncedRecentPreferences,
     syncedSessionModelPreference,
-    syncedExecutionStrategy,
-    effectiveExecutionStrategy: normalizedEffectiveExecutionStrategy,
     effectiveProviderType,
-    effectiveModel,
-    modelOverride,
-    requestedWebSearch: explicitToolPreferences ? webSearch : undefined,
-    requestedThinking: explicitToolPreferences ? thinking : undefined,
+    effectiveModel: turnModel,
   });
   const runtimePolicies =
     createRuntimePoliciesFromAccessMode(effectiveAccessMode);
+  const currentThreadId = threadId?.trim();
+  if (!currentThreadId) {
+    throw new Error("threadId is required to build App Server turn/start");
+  }
+  const collaborationMode = buildCollaborationMode(
+    collaborationModeKind,
+    turnModel,
+    reasoningEffort,
+  );
+  const additionalContext = createApplicationAdditionalContext({
+    metadata: compaction.metadata,
+  });
 
   return {
     type: "user_input",
-    text: content,
-    sessionId,
     eventName,
-    workspaceId,
-    turnId,
-    images: buildSubmitImages(images),
-    preferences: {
-      ...(compaction.providerConfig
-        ? { providerConfig: compaction.providerConfig }
+    turn: {
+      threadId: currentThreadId,
+      ...(clientUserMessageId?.trim()
+        ? { clientUserMessageId: clientUserMessageId.trim() }
         : {}),
-      providerPreference: compaction.shouldSubmitProviderPreference
-        ? effectiveProviderType
-        : undefined,
-      modelPreference: compaction.shouldSubmitModelPreference
-        ? effectiveModel
-        : undefined,
-      reasoningEffort: reasoningEffort?.trim() || undefined,
-      thinking: compaction.shouldSubmitThinking
-        ? compaction.thinkingPreference
-        : undefined,
+      input: buildTurnInput({ content, images, modelCapabilitySummary }),
+      ...(collaborationMode ? { collaborationMode } : {}),
+      ...(compaction.shouldSubmitModel ? { model: turnModel } : {}),
+      ...(reasoningEffort?.trim() ? { effort: reasoningEffort.trim() } : {}),
       approvalPolicy: runtimePolicies.approvalPolicy,
       sandboxPolicy: runtimePolicies.sandboxPolicy,
-      executionStrategy: compaction.shouldSubmitExecutionStrategy
-        ? normalizedEffectiveExecutionStrategy
-        : undefined,
-      webSearch: compaction.shouldSubmitWebSearch
-        ? compaction.webSearchPreference
-        : undefined,
-      ...(searchMode ? { searchMode } : {}),
-      autoContinue,
+      ...(Object.keys(additionalContext).length > 0
+        ? { additionalContext }
+        : {}),
     },
-    systemPrompt,
-    metadata: compaction.metadata,
-    queueIfBusy,
-    skipPreSubmitResume,
   };
 }

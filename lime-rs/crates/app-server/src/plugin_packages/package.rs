@@ -17,7 +17,6 @@ use url::Url;
 use zip::ZipArchive;
 
 use super::plugin_manifest::resolve_plugin_package_manifest;
-use crate::plugin_packages::plugin_data_dir;
 use crate::plugin_packages::read_json_string;
 use crate::plugin_packages::safe_hash_path_segment;
 use crate::plugin_packages::validate_plugin_id_for_storage;
@@ -49,6 +48,7 @@ pub(crate) fn inspect_plugin_local_package(
 }
 
 pub(crate) async fn fetch_plugin_cloud_package(
+    plugin_data_root: &Path,
     params: PluginFetchCloudPackageParams,
 ) -> Result<PluginPackageCacheEntry, String> {
     let descriptor = params.descriptor;
@@ -62,9 +62,8 @@ pub(crate) async fn fetch_plugin_cloud_package(
         ));
     }
 
-    let data_root = plugin_data_dir()?;
-    let cache_dir = plugin_package_cache_dir(&descriptor.package_hash)?;
-    let staging_dir = data_root.join("staging").join(format!(
+    let cache_dir = plugin_package_cache_dir(plugin_data_root, &descriptor.package_hash)?;
+    let staging_dir = plugin_data_root.join("staging").join(format!(
         "{}-{}",
         descriptor.app_id,
         safe_hash_path_segment(&descriptor.package_hash)
@@ -372,9 +371,12 @@ fn sha256_prefixed(bytes: &[u8]) -> String {
     format!("sha256:{}", sha256_hex(bytes))
 }
 
-fn plugin_package_cache_dir(package_hash: &str) -> Result<PathBuf, String> {
+fn plugin_package_cache_dir(
+    plugin_data_root: &Path,
+    package_hash: &str,
+) -> Result<PathBuf, String> {
     validate_sha256_hash("packageHash", package_hash)?;
-    Ok(plugin_data_dir()?
+    Ok(plugin_data_root
         .join("packages")
         .join(safe_hash_path_segment(package_hash)))
 }

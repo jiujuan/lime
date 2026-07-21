@@ -5,7 +5,7 @@
 ## 架构说明
 
 Artifact 系统核心库，提供统一的结构化内容抽象层。
-用于从 AI 响应中提取、管理和渲染各种类型的结构化内容。
+用于管理和渲染 current runtime 投影的各种结构化内容。
 
 ## 文件索引
 
@@ -15,15 +15,6 @@ Artifact 系统核心库，提供统一的结构化内容抽象层。
   - Artifact、ArtifactMeta、ArtifactRendererProps 接口
   - RendererEntry 渲染器注册项接口
   - 类型检查辅助函数
-
-- `parser.ts` - AI 响应解析器（Requirements 2.1, 2.2, 2.4, 2.6）
-  - ArtifactParser 类 - 支持流式解析和增量更新
-  - ParseResult、ParserConfig 接口
-  - artifact fence 解析（` ```artifact type="..." `）
-  - 标准 code fence 解析（` ```language `）
-  - 属性提取（type, language, title）
-  - 位置信息记录
-  - serializeArtifact、artifactContentEqual 辅助函数
 
 - `registry.ts` - 渲染器注册表（Requirements 3.1-3.6）
   - ArtifactRegistry 类 - 单例模式管理渲染器
@@ -39,8 +30,6 @@ Artifact 系统核心库，提供统一的结构化内容抽象层。
 - `hooks/` - React Hooks
   - `useDebouncedValue.ts` - 现役防抖 Hook（Requirements 11.2）
   - `index.ts` - 最小公共导出入口
-
-- `index.ts` - 模块导出入口
 
 ## 更新提醒
 

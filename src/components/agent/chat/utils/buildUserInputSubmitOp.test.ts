@@ -2,7 +2,148 @@ import { describe, expect, it } from "vitest";
 import { createAgentSessionTurnStartParamsFromUserInputOp } from "@/lib/api/agentProtocol";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 import { MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX } from "@/lib/model/modelCapabilitySendGate";
+import type { CollaborationMode } from "@limecloud/app-server-client";
 import { buildUserInputSubmitOp } from "./buildUserInputSubmitOp";
+
+type CurrentTurnStartParams = ReturnType<
+  typeof createAgentSessionTurnStartParamsFromUserInputOp
+>;
+type CurrentUserInputOp = ReturnType<typeof buildUserInputSubmitOp>;
+
+interface ExpectedCurrentTurnStartWire {
+  threadId: string;
+  text: string;
+  imageUrls?: string[];
+  model?: string;
+  effort?: string;
+  collaborationMode?: CollaborationMode;
+  approvalPolicy: string;
+  sandboxPolicy: string;
+  eventName: string;
+  metadata?: Record<string, unknown>;
+}
+
+function createImageCommandMetadata(
+  prompt: string,
+  providerId: string,
+  model: string,
+) {
+  return {
+    harness: {
+      image_command_intent: {
+        image_task: {
+          prompt,
+          provider_id: providerId,
+          model,
+          runtime_contract: {
+            contract_key: "image_generation",
+            routing_slot: "image_generation_model",
+          },
+        },
+      },
+    },
+  };
+}
+
+function createExpectedTurn(
+  expected: ExpectedCurrentTurnStartWire,
+  includeRendererEventName: boolean,
+) {
+  const additionalContext = {
+    ...(includeRendererEventName
+      ? {
+          rendererEventName: {
+            kind: "application" as const,
+            value: expected.eventName,
+          },
+        }
+      : {}),
+    ...(expected.metadata
+      ? {
+          metadata: {
+            kind: "application" as const,
+            value: JSON.stringify(expected.metadata),
+          },
+        }
+      : {}),
+  };
+
+  return {
+    threadId: expected.threadId,
+    input: [
+      { type: "text" as const, text: expected.text },
+      ...(expected.imageUrls ?? []).map((url) => ({
+        type: "image" as const,
+        url,
+      })),
+    ],
+    ...(expected.model ? { model: expected.model } : {}),
+    ...(expected.effort ? { effort: expected.effort } : {}),
+    ...(expected.collaborationMode
+      ? { collaborationMode: expected.collaborationMode }
+      : {}),
+    approvalPolicy: expected.approvalPolicy,
+    sandboxPolicy: expected.sandboxPolicy,
+    ...(Object.keys(additionalContext).length > 0 ? { additionalContext } : {}),
+  };
+}
+
+function expectDeadSubmitFieldsAbsent(value: Record<string, unknown>): void {
+  for (const field of [
+    "runtimeOptions",
+    "providerPreference",
+    "providerConfig",
+    "modelProvider",
+    "webSearch",
+    "searchMode",
+    "thinking",
+    "executionStrategy",
+    "autoContinue",
+    "queueIfBusy",
+    "queuedTurnId",
+    "skipPreSubmitResume",
+    "systemPrompt",
+    "sessionId",
+    "workspaceId",
+    "turnId",
+    "metadata",
+  ]) {
+    expect(value).not.toHaveProperty(field);
+  }
+}
+
+function expectCurrentUserInputOp(
+  op: CurrentUserInputOp,
+  expected: ExpectedCurrentTurnStartWire,
+): void {
+  expect(op).toEqual({
+    type: "user_input",
+    eventName: expected.eventName,
+    turn: createExpectedTurn(expected, false),
+  });
+  for (const field of [
+    "text",
+    "images",
+    "preferences",
+    "sessionId",
+    "threadId",
+    "workspaceId",
+    "turnId",
+    "systemPrompt",
+    "metadata",
+  ]) {
+    expect(op).not.toHaveProperty(field);
+  }
+  expectDeadSubmitFieldsAbsent(op.turn as unknown as Record<string, unknown>);
+}
+
+function expectCurrentTurnStartWire(
+  request: CurrentTurnStartParams,
+  expected: ExpectedCurrentTurnStartWire,
+): void {
+  expect(request).toEqual(createExpectedTurn(expected, true));
+  expectDeadSubmitFieldsAbsent(request as unknown as Record<string, unknown>);
+}
 
 describe("buildUserInputSubmitOp", () => {
   const textOnlyModelCapabilitySummary: ModelCapabilitySummary = {
@@ -36,12 +177,8 @@ describe("buildUserInputSubmitOp", () => {
           mediaType: "image/png",
         },
       ],
-      sessionId: "session-social-1",
+      threadId: "thread-social-1",
       eventName: "agent_stream_x",
-      workspaceId: "workspace-1",
-      turnId: "turn-1",
-      systemPrompt: "system",
-      queueIfBusy: true,
       requestMetadata: {
         harness: {
           preferences: {
@@ -81,50 +218,104 @@ describe("buildUserInputSubmitOp", () => {
         providerType: "openai",
         model: "gpt-4.1",
       },
-      syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-4.1",
     });
 
-    expect(op).toEqual({
-      type: "user_input",
+    expectCurrentUserInputOp(op, {
+      threadId: "thread-social-1",
       text: "继续生成社媒初稿",
-      sessionId: "session-social-1",
+      imageUrls: ["data:image/png;base64,base64-image"],
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
       eventName: "agent_stream_x",
-      workspaceId: "workspace-1",
-      turnId: "turn-1",
-      images: [
-        {
-          data: "base64-image",
-          media_type: "image/png",
-        },
-      ],
-      preferences: {
-        providerPreference: undefined,
-        modelPreference: undefined,
-        thinking: undefined,
-        approvalPolicy: "on-request",
-        sandboxPolicy: "workspace-write",
-        executionStrategy: undefined,
-        webSearch: undefined,
-        autoContinue: undefined,
-      },
-      systemPrompt: "system",
-      metadata: undefined,
-      queueIfBusy: true,
-      skipPreSubmitResume: undefined,
     });
+
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    expectCurrentTurnStartWire(request, {
+      threadId: "thread-social-1",
+      text: "继续生成社媒初稿",
+      imageUrls: ["data:image/png;base64,base64-image"],
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_x",
+    });
+  });
+
+  it("应把 renderer user message identity 透传到 typed turn/start", () => {
+    const op = buildUserInputSubmitOp({
+      content: "继续",
+      images: [],
+      threadId: "thread-identity",
+      clientUserMessageId: "user-message-identity",
+      eventName: "agent_stream_identity",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+    });
+
+    expect(op.turn.clientUserMessageId).toBe("user-message-identity");
+    expect(
+      createAgentSessionTurnStartParamsFromUserInputOp(op).clientUserMessageId,
+    ).toBe("user-message-identity");
+  });
+
+  it("应把 typed Plan selection 降为完整 Codex collaboration mode", () => {
+    const op = buildUserInputSubmitOp({
+      content: "先制定计划",
+      images: [],
+      threadId: "thread-plan",
+      eventName: "agent_stream_plan",
+      collaborationMode: "plan",
+      reasoningEffort: "high",
+      requestMetadata: {
+        harness: {
+          plan_implementation_decision: { decision: "adjustment" },
+        },
+      },
+      effectiveAccessMode: "current",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+    });
+    const collaborationMode = {
+      mode: "plan" as const,
+      settings: {
+        model: "gpt-5.4",
+        reasoning_effort: "high",
+        developer_instructions: null,
+      },
+    };
+    const expected = {
+      threadId: "thread-plan",
+      text: "先制定计划",
+      model: "gpt-5.4",
+      effort: "high",
+      collaborationMode,
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_plan",
+      metadata: {
+        harness: {
+          plan_implementation_decision: { decision: "adjustment" },
+        },
+      },
+    } satisfies ExpectedCurrentTurnStartWire;
+
+    expectCurrentUserInputOp(op, expected);
+    expectCurrentTurnStartWire(
+      createAgentSessionTurnStartParamsFromUserInputOp(op),
+      expected,
+    );
+    expect(JSON.stringify(op)).not.toContain("collaboration_mode");
   });
 
   it("应迁移尚未同步到 runtime 的显式偏好并保留其他 metadata", () => {
     const op = buildUserInputSubmitOp({
       content: "切到发布确认",
       images: [],
-      sessionId: "session-social-1",
+      threadId: "thread-social-1",
       eventName: "agent_stream_y",
-      turnId: "turn-2",
       requestMetadata: {
         harness: {
           preferences: {
@@ -159,47 +350,39 @@ describe("buildUserInputSubmitOp", () => {
         providerType: "openai",
         model: "gpt-4.1",
       },
-      syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "full-access",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5",
       modelOverride: "gpt-5",
-      autoContinue: {
-        enabled: true,
-        fast_mode_enabled: false,
-        continuation_length: 2,
-        sensitivity: 0.5,
-      },
     });
 
-    expect(op.preferences).toEqual({
-      providerPreference: undefined,
-      modelPreference: "gpt-5",
-      thinking: true,
+    expectCurrentUserInputOp(op, {
+      threadId: "thread-social-1",
+      text: "切到发布确认",
+      model: "gpt-5",
       approvalPolicy: "never",
       sandboxPolicy: "danger-full-access",
-      executionStrategy: undefined,
-      webSearch: undefined,
-      autoContinue: {
-        enabled: true,
-        fast_mode_enabled: false,
-        continuation_length: 2,
-        sensitivity: 0.5,
-      },
-    });
-    expect(op.metadata).toEqual({
-      harness: {
-        gate_key: "publish_confirm",
-        run_title: "发布确认",
+      eventName: "agent_stream_y",
+      metadata: {
+        harness: {
+          gate_key: "publish_confirm",
+          run_title: "发布确认",
+        },
       },
     });
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-    expect(request.runtimeOptions?.runtimeRequest?.thinkingEnabled).toBe(true);
-    expect(request.runtimeOptions?.runtimeRequest?.metadata).toEqual({
-      harness: {
-        gate_key: "publish_confirm",
-        run_title: "发布确认",
+    expectCurrentTurnStartWire(request, {
+      threadId: "thread-social-1",
+      text: "切到发布确认",
+      model: "gpt-5",
+      approvalPolicy: "never",
+      sandboxPolicy: "danger-full-access",
+      eventName: "agent_stream_y",
+      metadata: {
+        harness: {
+          gate_key: "publish_confirm",
+          run_title: "发布确认",
+        },
       },
     });
   });
@@ -214,10 +397,8 @@ describe("buildUserInputSubmitOp", () => {
             mediaType: "image/png",
           },
         ],
-        sessionId: "session-image-1",
+        threadId: "thread-image-1",
         eventName: "agent_stream_image",
-        turnId: "turn-image-1",
-        effectiveExecutionStrategy: "react",
         effectiveAccessMode: "current",
         effectiveProviderType: "openai",
         effectiveModel: "gpt-4.1-text",
@@ -235,29 +416,30 @@ describe("buildUserInputSubmitOp", () => {
           mediaType: "image/png",
         },
       ],
-      sessionId: "session-image-unknown",
+      threadId: "thread-image-unknown",
       eventName: "agent_stream_image_unknown",
-      turnId: "turn-image-unknown",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "fixture-provider",
       effectiveModel: "fixture-model",
       modelCapabilitySummary: null,
     });
 
-    expect(op.images).toEqual([
-      {
-        data: "base64-image",
-        media_type: "image/png",
-      },
-    ]);
+    expectCurrentUserInputOp(op, {
+      threadId: "thread-image-unknown",
+      text: "描述这张图",
+      imageUrls: ["data:image/png;base64,base64-image"],
+      model: "fixture-model",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_image_unknown",
+    });
   });
 
   it("中途切换模型但会话尚未同步时应在 submit payload 带上当前模型", () => {
     const op = buildUserInputSubmitOp({
       content: "继续",
       images: [],
-      sessionId: "session-model-pending",
+      threadId: "thread-model-pending",
       eventName: "agent_stream_model_pending",
       executionRuntime: {
         session_id: "session-model-pending",
@@ -268,25 +450,27 @@ describe("buildUserInputSubmitOp", () => {
       },
       syncedRecentPreferences: null,
       syncedSessionModelPreference: null,
-      syncedExecutionStrategy: null,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-flash",
     });
 
-    expect(op.preferences?.providerPreference).toBe("deepseek");
-    expect(op.preferences?.modelPreference).toBe("deepseek-v4-flash");
+    expectCurrentUserInputOp(op, {
+      threadId: "thread-model-pending",
+      text: "继续",
+      model: "deepseek-v4-flash",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_model_pending",
+    });
   });
 
-  it("App Server current turn/start 投影应携带完整 provider/model 偏好", () => {
+  it("App Server current turn/start 投影应只提交 typed model，provider 不上 wire", () => {
     const op = buildUserInputSubmitOp({
       content: "继续",
       images: [],
-      sessionId: "session-app-server-current",
+      threadId: "thread-app-server-current",
       eventName: "agent_stream_app_server_current",
-      workspaceId: "workspace-current",
-      turnId: "turn-current-1",
       executionRuntime: {
         session_id: "session-app-server-current",
         source: "runtime_snapshot",
@@ -296,28 +480,27 @@ describe("buildUserInputSubmitOp", () => {
       },
       syncedRecentPreferences: null,
       syncedSessionModelPreference: null,
-      syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "full-access",
       effectiveProviderType: "custom-provider",
       effectiveModel: "mimo-v2.5-pro",
     });
 
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-
-    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBe(
-      "custom-provider",
-    );
-    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBe(
-      "mimo-v2.5-pro",
-    );
+    expectCurrentTurnStartWire(request, {
+      threadId: "thread-app-server-current",
+      text: "继续",
+      model: "mimo-v2.5-pro",
+      approvalPolicy: "never",
+      sandboxPolicy: "danger-full-access",
+      eventName: "agent_stream_app_server_current",
+    });
   });
 
-  it("provider 发生切换时应同时提交 provider/model 偏好", () => {
+  it("显式 modelOverride 应解析为唯一 typed turn model", () => {
     const op = buildUserInputSubmitOp({
       content: "使用翻译服务模型",
       images: [],
-      sessionId: "session-translation-1",
+      threadId: "thread-translation-1",
       eventName: "agent_stream_translation",
       executionRuntime: {
         session_id: "session-translation-1",
@@ -338,40 +521,52 @@ describe("buildUserInputSubmitOp", () => {
         providerType: "openai",
         model: "gpt-4.1",
       },
-      syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "translation-provider",
-      effectiveModel: "translation-model",
+      effectiveModel: "gpt-4.1",
       modelOverride: "translation-model",
     });
 
-    expect(op.preferences?.providerPreference).toBe("translation-provider");
-    expect(op.preferences?.modelPreference).toBe("translation-model");
+    expectCurrentUserInputOp(op, {
+      threadId: "thread-translation-1",
+      text: "使用翻译服务模型",
+      model: "translation-model",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_translation",
+    });
   });
 
-  it("应透传首页首发的 submit 快路径标记", () => {
+  it("首页首发不应把旧 submit 快路径标记带入 current turn/start", () => {
     const op = buildUserInputSubmitOp({
       content: "只回答一个字：好",
       images: [],
-      sessionId: "session-fast-1",
+      threadId: "thread-fast-1",
       eventName: "agent_stream_fast",
-      queueIfBusy: true,
-      skipPreSubmitResume: true,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-chat",
     });
 
-    expect(op.skipPreSubmitResume).toBe(true);
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    const expected = {
+      threadId: "thread-fast-1",
+      text: "只回答一个字：好",
+      model: "deepseek-chat",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_fast",
+    } satisfies ExpectedCurrentTurnStartWire;
+
+    expectCurrentUserInputOp(op, expected);
+    expectCurrentTurnStartWire(request, expected);
   });
 
-  it("应透传配置的 model slot，同时保留当前 provider/model 作为后端 fallback", () => {
+  it("应透传 model slot metadata，并提交 typed model override", () => {
     const op = buildUserInputSubmitOp({
       content: "只回答一个字：好",
       images: [],
-      sessionId: "session-fast-routing-1",
+      threadId: "thread-fast-routing-1",
       eventName: "agent_stream_fast_routing",
       requestMetadata: {
         harness: {
@@ -392,128 +587,107 @@ describe("buildUserInputSubmitOp", () => {
       executionRuntime: null,
       syncedRecentPreferences: null,
       syncedSessionModelPreference: null,
-      syncedExecutionStrategy: null,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-pro",
     });
 
-    expect(op.preferences?.providerPreference).toBe("deepseek");
-    expect(op.preferences?.modelPreference).toBe("deepseek-v4-pro");
-    expect(op.metadata).toEqual({
-      harness: {
-        model_slots: {
-          fast: {
-            provider: "responsive-provider",
-            model: "fast-chat",
-            source: "service_models.responsive_chat",
-            reason: "service_model_preference",
+    expectCurrentUserInputOp(op, {
+      threadId: "thread-fast-routing-1",
+      text: "只回答一个字：好",
+      model: "deepseek-v4-pro",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_fast_routing",
+      metadata: {
+        harness: {
+          model_slots: {
+            fast: {
+              provider: "responsive-provider",
+              model: "fast-chat",
+              source: "service_models.responsive_chat",
+              reason: "service_model_preference",
+            },
           },
-        },
-        browser_assist: {
-          enabled: true,
-          profile_key: "general_browser_assist",
+          browser_assist: {
+            enabled: true,
+            profile_key: "general_browser_assist",
+          },
         },
       },
     });
   });
 
-  it("模型状态不完整时不应提交空 provider 或孤立 model 偏好", () => {
+  it("空 provider 不应阻止提交 typed model", () => {
     const op = buildUserInputSubmitOp({
       content: "分析这个文件夹",
       images: [],
-      sessionId: "session-partial-model",
+      threadId: "thread-partial-model",
       eventName: "agent_stream_partial_model",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "",
       effectiveModel: "gpt-5.5",
     });
 
-    expect(op.preferences?.providerPreference).toBeUndefined();
-    expect(op.preferences?.modelPreference).toBeUndefined();
+    expectCurrentUserInputOp(op, {
+      threadId: "thread-partial-model",
+      text: "分析这个文件夹",
+      model: "gpt-5.5",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_partial_model",
+    });
   });
 
   it("图片生成首发应提交聊天编排模型，避免 presentation 路由缺失或误锁图片模型槽位", () => {
     const op = buildUserInputSubmitOp({
       content: "@Nanobanana Pro 生成一张广州塔春天照片",
       images: [],
-      sessionId: "session-image-1",
+      threadId: "thread-image-1",
       eventName: "agent_stream_image",
-      requestMetadata: {
-        harness: {
-          image_command_intent: {
-            image_task: {
-              prompt: "一张广州塔春天照片",
-              provider_id: "fal",
-              model: "fal-ai/nano-banana-pro",
-              runtime_contract: {
-                contract_key: "image_generation",
-                routing_slot: "image_generation_model",
-              },
-            },
-          },
-        },
-      },
+      requestMetadata: createImageCommandMetadata(
+        "一张广州塔春天照片",
+        "fal",
+        "fal-ai/nano-banana-pro",
+      ),
       executionRuntime: null,
       syncedRecentPreferences: null,
       syncedSessionModelPreference: null,
-      syncedExecutionStrategy: null,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-pro",
     });
 
-    expect(op.preferences?.providerConfig).toEqual({
-      provider_id: "deepseek",
-      provider_name: "deepseek",
-      model_name: "deepseek-v4-pro",
-    });
-    expect(op.preferences?.providerPreference).toBe("deepseek");
-    expect(op.preferences?.modelPreference).toBe("deepseek-v4-pro");
+    const expected = {
+      threadId: "thread-image-1",
+      text: "@Nanobanana Pro 生成一张广州塔春天照片",
+      model: "deepseek-v4-pro",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_image",
+      metadata: createImageCommandMetadata(
+        "一张广州塔春天照片",
+        "fal",
+        "fal-ai/nano-banana-pro",
+      ),
+    } satisfies ExpectedCurrentTurnStartWire;
 
+    expectCurrentUserInputOp(op, expected);
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBe(
-      "deepseek",
-    );
-    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBe(
-      "deepseek-v4-pro",
-    );
-    expect(request.runtimeOptions?.runtimeRequest?.metadata).toMatchObject({
-      harness: {
-        image_command_intent: {
-          image_task: {
-            provider_id: "fal",
-            model: "fal-ai/nano-banana-pro",
-          },
-        },
-      },
-    });
+    expectCurrentTurnStartWire(request, expected);
   });
 
-  it("图片生成命令已同步会话模型时仍应保留编排 provider_config", () => {
+  it("图片生成命令已同步会话模型时不应重复提交 model", () => {
     const op = buildUserInputSubmitOp({
       content: "@Nanobanana Pro 生成一张广州塔春天照片",
       images: [],
-      sessionId: "session-image-2",
+      threadId: "thread-image-2",
       eventName: "agent_stream_image_synced",
-      requestMetadata: {
-        harness: {
-          image_command_intent: {
-            image_task: {
-              prompt: "一张广州塔春天照片",
-              provider_id: "fal",
-              model: "fal-ai/nano-banana-pro",
-              runtime_contract: {
-                contract_key: "image_generation",
-                routing_slot: "image_generation_model",
-              },
-            },
-          },
-        },
-      },
+      requestMetadata: createImageCommandMetadata(
+        "一张广州塔春天照片",
+        "fal",
+        "fal-ai/nano-banana-pro",
+      ),
       executionRuntime: {
         session_id: "session-image-2",
         source: "runtime_snapshot",
@@ -526,189 +700,164 @@ describe("buildUserInputSubmitOp", () => {
         providerType: "deepseek",
         model: "deepseek-v4-pro",
       },
-      syncedExecutionStrategy: null,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-v4-pro",
     });
 
-    expect(op.preferences?.providerConfig).toEqual({
-      provider_id: "deepseek",
-      provider_name: "deepseek",
-      model_name: "deepseek-v4-pro",
-    });
-    expect(op.preferences?.providerPreference).toBeUndefined();
-    expect(op.preferences?.modelPreference).toBeUndefined();
+    const expected = {
+      threadId: "thread-image-2",
+      text: "@Nanobanana Pro 生成一张广州塔春天照片",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_image_synced",
+      metadata: createImageCommandMetadata(
+        "一张广州塔春天照片",
+        "fal",
+        "fal-ai/nano-banana-pro",
+      ),
+    } satisfies ExpectedCurrentTurnStartWire;
 
+    expectCurrentUserInputOp(op, expected);
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-    expect(request.runtimeOptions?.runtimeRequest?.providerConfig).toEqual({
-      providerId: "deepseek",
-      providerName: "deepseek",
-      modelName: "deepseek-v4-pro",
-    });
-    expect(
-      request.runtimeOptions?.runtimeRequest?.providerPreference,
-    ).toBeUndefined();
-    expect(
-      request.runtimeOptions?.runtimeRequest?.modelPreference,
-    ).toBeUndefined();
+    expectCurrentTurnStartWire(request, expected);
   });
 
-  it("图片生成命令当前有效模型为图片通道时应退回会话文本模型编排", () => {
+  it("图片生成命令当前有效模型为图片通道时应抑制 turn model", () => {
     const op = buildUserInputSubmitOp({
       content: "@Agnes Image 2.1 Flash 生成一张广州夏天照片",
       images: [],
-      sessionId: "session-image-agnes",
+      threadId: "thread-image-agnes",
       eventName: "agent_stream_image_agnes",
-      requestMetadata: {
-        harness: {
-          image_command_intent: {
-            image_task: {
-              prompt: "一张广州夏天照片",
-              provider_id: "agnes",
-              model: "agnes-image-2.1-flash",
-              runtime_contract: {
-                contract_key: "image_generation",
-                routing_slot: "image_generation_model",
-              },
-            },
-          },
-        },
-      },
+      requestMetadata: createImageCommandMetadata(
+        "一张广州夏天照片",
+        "agnes",
+        "agnes-image-2.1-flash",
+      ),
       executionRuntime: null,
       syncedRecentPreferences: null,
       syncedSessionModelPreference: {
         providerType: "deepseek",
         model: "deepseek-v4-pro",
       },
-      syncedExecutionStrategy: null,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "agnes",
       effectiveModel: "agnes-image-2.1-flash",
     });
 
-    expect(op.preferences?.providerConfig).toEqual({
-      provider_id: "deepseek",
-      provider_name: "deepseek",
-      model_name: "deepseek-v4-pro",
-    });
-    expect(op.preferences?.providerPreference).toBeUndefined();
-    expect(op.preferences?.modelPreference).toBeUndefined();
+    const expected = {
+      threadId: "thread-image-agnes",
+      text: "@Agnes Image 2.1 Flash 生成一张广州夏天照片",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_image_agnes",
+      metadata: createImageCommandMetadata(
+        "一张广州夏天照片",
+        "agnes",
+        "agnes-image-2.1-flash",
+      ),
+    } satisfies ExpectedCurrentTurnStartWire;
 
+    expectCurrentUserInputOp(op, expected);
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-    expect(request.runtimeOptions?.runtimeRequest?.providerConfig).toEqual({
-      providerId: "deepseek",
-      providerName: "deepseek",
-      modelName: "deepseek-v4-pro",
-    });
-    expect(
-      request.runtimeOptions?.runtimeRequest?.providerPreference,
-    ).toBeUndefined();
-    expect(
-      request.runtimeOptions?.runtimeRequest?.modelPreference,
-    ).toBeUndefined();
+    expectCurrentTurnStartWire(request, expected);
   });
 
   it("图片生成命令没有文本模型候选时不应提交图片 provider 作为编排模型", () => {
     const op = buildUserInputSubmitOp({
       content: "@Agnes Image 2.1 Flash 生成一张广州夏天照片",
       images: [],
-      sessionId: "session-image-no-text-model",
+      threadId: "thread-image-no-text-model",
       eventName: "agent_stream_image_no_text",
-      requestMetadata: {
-        harness: {
-          image_command_intent: {
-            image_task: {
-              prompt: "一张广州夏天照片",
-              provider_id: "agnes",
-              model: "agnes-image-2.1-flash",
-              runtime_contract: {
-                contract_key: "image_generation",
-                routing_slot: "image_generation_model",
-              },
-            },
-          },
-        },
-      },
+      requestMetadata: createImageCommandMetadata(
+        "一张广州夏天照片",
+        "agnes",
+        "agnes-image-2.1-flash",
+      ),
       executionRuntime: null,
       syncedRecentPreferences: null,
       syncedSessionModelPreference: null,
-      syncedExecutionStrategy: null,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "agnes",
       effectiveModel: "agnes-image-2.1-flash",
     });
 
-    expect(op.preferences?.providerConfig).toBeUndefined();
-    expect(op.preferences?.providerPreference).toBeUndefined();
-    expect(op.preferences?.modelPreference).toBeUndefined();
+    const expected = {
+      threadId: "thread-image-no-text-model",
+      text: "@Agnes Image 2.1 Flash 生成一张广州夏天照片",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_image_no_text",
+      metadata: createImageCommandMetadata(
+        "一张广州夏天照片",
+        "agnes",
+        "agnes-image-2.1-flash",
+      ),
+    } satisfies ExpectedCurrentTurnStartWire;
 
+    expectCurrentUserInputOp(op, expected);
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-    expect(
-      request.runtimeOptions?.runtimeRequest?.providerConfig,
-    ).toBeUndefined();
-    expect(
-      request.runtimeOptions?.runtimeRequest?.providerPreference,
-    ).toBeUndefined();
-    expect(
-      request.runtimeOptions?.runtimeRequest?.modelPreference,
-    ).toBeUndefined();
+    expectCurrentTurnStartWire(request, expected);
   });
 
-  it("应同时透传显式搜索开关和搜索模式到 RuntimeRequest", () => {
+  it("搜索请求不应把旧 search 控制字段带入 current turn/start wire", () => {
     const op = buildUserInputSubmitOp({
       content: "请搜索最新 AI 新闻",
       images: [],
-      sessionId: "session-search-1",
+      threadId: "thread-search-1",
       eventName: "agent_stream_search",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
       effectiveModel: "deepseek-chat",
-      webSearch: true,
-      searchMode: "required",
-      explicitToolPreferences: true,
     });
 
-    expect(op.preferences?.webSearch).toBe(true);
-    expect(op.preferences?.searchMode).toBe("required");
+    const expected = {
+      threadId: "thread-search-1",
+      text: "请搜索最新 AI 新闻",
+      model: "deepseek-chat",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_search",
+    } satisfies ExpectedCurrentTurnStartWire;
+
+    expectCurrentUserInputOp(op, expected);
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-    expect(request.runtimeOptions?.runtimeRequest?.webSearch).toBe(true);
-    expect(request.runtimeOptions?.runtimeRequest?.searchMode).toBe("required");
+    expectCurrentTurnStartWire(request, expected);
   });
 
-  it("应把输入框推理强度透传到 App Server RuntimeRequest", () => {
+  it("应把输入框推理强度透传到 current turn/start effort", () => {
     const op = buildUserInputSubmitOp({
       content: "先深入推理再给出实施计划",
       images: [],
-      sessionId: "session-reasoning-effort-1",
+      threadId: "thread-reasoning-effort-1",
       eventName: "agent_stream_reasoning_effort",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.5",
       reasoningEffort: " high ",
     });
 
-    expect(op.preferences?.reasoningEffort).toBe("high");
+    const expected = {
+      threadId: "thread-reasoning-effort-1",
+      text: "先深入推理再给出实施计划",
+      model: "gpt-5.5",
+      effort: "high",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_reasoning_effort",
+    } satisfies ExpectedCurrentTurnStartWire;
 
+    expectCurrentUserInputOp(op, expected);
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-
-    expect(request.runtimeOptions?.runtimeRequest?.reasoningEffort).toBe(
-      "high",
-    );
+    expectCurrentTurnStartWire(request, expected);
   });
 
-  it("应把未同步的显式搜索和思考开关迁移到 App Server RuntimeRequest", () => {
+  it("旧 metadata 搜索和思考偏好不应进入 current turn/start wire", () => {
     const op = buildUserInputSubmitOp({
       content: "搜索并深度分析今天的 AI 新闻",
       images: [],
-      sessionId: "session-search-thinking-1",
+      threadId: "thread-search-thinking-1",
       eventName: "agent_stream_search_thinking",
-      workspaceId: "workspace-search-thinking",
       requestMetadata: {
         harness: {
           preferences: {
@@ -730,32 +879,30 @@ describe("buildUserInputSubmitOp", () => {
         subagent: false,
       },
       syncedSessionModelPreference: null,
-      syncedExecutionStrategy: "react",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.5",
-      webSearch: true,
-      thinking: true,
-      explicitToolPreferences: true,
     });
 
-    expect(op.preferences?.webSearch).toBe(true);
-    expect(op.preferences?.thinking).toBe(true);
-    expect(op.metadata).toBeUndefined();
+    const expected = {
+      threadId: "thread-search-thinking-1",
+      text: "搜索并深度分析今天的 AI 新闻",
+      model: "gpt-5.5",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_search_thinking",
+    } satisfies ExpectedCurrentTurnStartWire;
 
+    expectCurrentUserInputOp(op, expected);
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-
-    expect(request.runtimeOptions?.runtimeRequest?.webSearch).toBe(true);
-    expect(request.runtimeOptions?.runtimeRequest?.thinkingEnabled).toBe(true);
-    expect(request.runtimeOptions?.runtimeRequest?.metadata).toBeUndefined();
+    expectCurrentTurnStartWire(request, expected);
   });
 
-  it("应把旧 metadata 显式偏好迁移到 RuntimeRequest 并清理旧承载", () => {
+  it("应清理旧 metadata 偏好并只把业务 metadata 投影到 additionalContext", () => {
     const op = buildUserInputSubmitOp({
       content: "启用搜索和思考",
       images: [],
-      sessionId: "session-legacy-prefs-1",
+      threadId: "thread-legacy-prefs-1",
       eventName: "agent_stream_legacy_prefs",
       requestMetadata: {
         harness: {
@@ -769,46 +916,52 @@ describe("buildUserInputSubmitOp", () => {
       executionRuntime: null,
       syncedRecentPreferences: null,
       syncedSessionModelPreference: null,
-      syncedExecutionStrategy: null,
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.5",
     });
 
-    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-
-    expect(request.runtimeOptions?.runtimeRequest?.webSearch).toBe(true);
-    expect(request.runtimeOptions?.runtimeRequest?.thinkingEnabled).toBe(true);
-    expect(request.runtimeOptions?.runtimeRequest?.metadata).toEqual({
-      harness: {
-        turn_purpose: "content_review",
+    const expected = {
+      threadId: "thread-legacy-prefs-1",
+      text: "启用搜索和思考",
+      model: "gpt-5.5",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_legacy_prefs",
+      metadata: {
+        harness: {
+          turn_purpose: "content_review",
+        },
       },
-    });
+    } satisfies ExpectedCurrentTurnStartWire;
+
+    expectCurrentUserInputOp(op, expected);
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    expectCurrentTurnStartWire(request, expected);
   });
 
   it("输入框自然语言新闻请求不应提交搜索、思考或旧执行策略选择", () => {
     const op = buildUserInputSubmitOp({
       content: "整理今天的国际新闻",
       images: [],
-      sessionId: "session-news-1",
+      threadId: "thread-news-1",
       eventName: "agent_stream_news",
-      workspaceId: "workspace-news",
-      effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.5",
     });
 
-    expect(op.preferences?.webSearch).toBeUndefined();
-    expect(op.preferences?.thinking).toBeUndefined();
-    expect(op.preferences?.executionStrategy).toBeUndefined();
-    expect(op.preferences?.searchMode).toBeUndefined();
-    expect(op.metadata).toBeUndefined();
+    const expected = {
+      threadId: "thread-news-1",
+      text: "整理今天的国际新闻",
+      model: "gpt-5.5",
+      approvalPolicy: "on-request",
+      sandboxPolicy: "workspace-write",
+      eventName: "agent_stream_news",
+    } satisfies ExpectedCurrentTurnStartWire;
 
+    expectCurrentUserInputOp(op, expected);
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-
-    expect(request.runtimeOptions?.runtimeRequest?.webSearch).toBeUndefined();
-    expect(request.runtimeOptions?.runtimeRequest?.searchMode).toBeUndefined();
+    expectCurrentTurnStartWire(request, expected);
   });
 });

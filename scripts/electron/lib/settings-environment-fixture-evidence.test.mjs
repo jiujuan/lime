@@ -26,7 +26,7 @@ function traceRaw() {
       args_preview: {
         request: {
           lines: [
-            JSON.stringify({ id: 1, method: "agentSession/list", params: {} }),
+            JSON.stringify({ id: 1, method: "thread/list", params: {} }),
           ],
         },
       },
@@ -62,7 +62,7 @@ describe("Settings Environment Gate B evidence", () => {
   it("separates current Host reads from App Server bridge evidence", () => {
     expect(summarizeSettingsEnvironmentTrace(traceRaw())).toMatchObject({
       appServerIpcHitCount: 1,
-      appServerMethods: ["agentSession/list"],
+      appServerMethods: ["thread/list"],
       hostIpcHitCount: 2,
       hostCommands: ["get_config", "get_environment_preview"],
       missingHostCommands: [],

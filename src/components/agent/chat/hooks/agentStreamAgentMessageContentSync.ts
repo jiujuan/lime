@@ -9,7 +9,11 @@ import {
   buildAgentTextDeltaContentPartMetadata,
   readContentPartSequence,
 } from "../utils/contentPartTimeline";
-import { messageContentPartsFromAgentThreadItem } from "./agentThreadMessageContentParts";
+import {
+  mediaReferenceContentPartFromThreadItem,
+  messageContentPartsFromAgentThreadItem,
+} from "./agentThreadMessageContentParts";
+import { resolveThreadItemTimelinePosition } from "./agentChatHistoryPrimitives";
 
 type MessageContentPart = NonNullable<Message["contentParts"]>[number];
 type MessageContentParts = NonNullable<Message["contentParts"]>;
@@ -35,9 +39,7 @@ function threadItemToolSequenceById(
     if (normalizedTurnId && item.turn_id !== normalizedTurnId) {
       continue;
     }
-    if (isComparableSequence(item.sequence)) {
-      sequenceById.set(item.id, item.sequence);
-    }
+    sequenceById.set(item.id, resolveThreadItemTimelinePosition(item));
   }
   return sequenceById;
 }
@@ -127,15 +129,22 @@ function upsertAgentMessageStructuredContentParts(params: {
     params.threadItems ?? [],
     params.item.turn_id,
   );
+  const timelinePosition = resolveThreadItemTimelinePosition(params.item);
   const retainedParts = params.parts.filter(
     (part) => !isAgentMessageStructuredPartForItem(part, params.item.id),
   );
   return itemParts.reduce<MessageContentParts>(
     (parts, nextPart) =>
       insertContentPartBySequence({
-        nextPart,
+        nextPart: {
+          ...nextPart,
+          metadata: {
+            ...(nextPart.metadata ?? {}),
+            sequence: timelinePosition,
+          },
+        },
         parts,
-        sequence: params.item.sequence,
+        sequence: timelinePosition,
         sequenceByToolId,
       }),
     retainedParts,
@@ -147,6 +156,29 @@ function upsertAgentMessageContentPart(params: {
   parts: MessageContentParts;
   threadItems?: readonly AgentThreadItem[];
 }): MessageContentParts {
+  if (params.item.type === "media") {
+    const nextPart = mediaReferenceContentPartFromThreadItem(params.item);
+    if (!nextPart) {
+      return params.parts;
+    }
+    const retainedParts = params.parts.filter(
+      (part) =>
+        !(
+          part.type === "media_reference" &&
+          part.metadata?.threadItemId === params.item.id
+        ),
+    );
+    return insertContentPartBySequence({
+      nextPart,
+      parts: retainedParts,
+      sequence: resolveThreadItemTimelinePosition(params.item),
+      sequenceByToolId: threadItemToolSequenceById(
+        params.threadItems ?? [],
+        params.item.turn_id,
+      ),
+    });
+  }
+
   if (
     params.item.type !== "agent_message" ||
     !shouldSyncAgentMessageContentPartPhase(params.item.phase)
@@ -155,6 +187,7 @@ function upsertAgentMessageContentPart(params: {
   }
 
   const item = params.item;
+  const timelinePosition = resolveThreadItemTimelinePosition(item);
   const structuredParts = upsertAgentMessageStructuredContentParts({
     item,
     parts: params.parts,
@@ -172,7 +205,7 @@ function upsertAgentMessageContentPart(params: {
   const metadata = buildAgentTextDeltaContentPartMetadata({
     itemId: item.id,
     phase: item.phase,
-    sequence: item.sequence,
+    sequence: timelinePosition,
     turnId: item.turn_id,
   });
   const nextPart: MessageContentPart = {
@@ -206,7 +239,7 @@ function upsertAgentMessageContentPart(params: {
   return insertContentPartBySequence({
     nextPart,
     parts: params.parts,
-    sequence: item.sequence,
+    sequence: timelinePosition,
     sequenceByToolId,
   });
 }
@@ -217,17 +250,18 @@ export function mergeAssistantAgentMessageContentPartsFromThreadItems(params: {
   turnId?: string | null;
 }): MessageContentParts | undefined {
   const normalizedTurnId = params.turnId?.trim();
-  const agentMessageItems = params.items.filter(
-    (item): item is Extract<AgentThreadItem, { type: "agent_message" }> =>
-      item.type === "agent_message" &&
+  const contentItems = params.items.filter(
+    (item) =>
       (!normalizedTurnId || item.turn_id === normalizedTurnId) &&
-      shouldSyncAgentMessageContentPartPhase(item.phase),
+      (item.type === "media" ||
+        (item.type === "agent_message" &&
+          shouldSyncAgentMessageContentPartPhase(item.phase))),
   );
-  if (agentMessageItems.length === 0) {
+  if (contentItems.length === 0) {
     return params.parts;
   }
 
-  return agentMessageItems.reduce<MessageContentParts>(
+  return contentItems.reduce<MessageContentParts>(
     (parts, item) =>
       upsertAgentMessageContentPart({
         item,

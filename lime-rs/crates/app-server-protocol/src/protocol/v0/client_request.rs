@@ -52,6 +52,11 @@ macro_rules! app_server_client_request_definitions {
             fn try_from(request: JsonRpcRequest) -> Result<Self, Self::Error> {
                 let JsonRpcRequest { id, method, params } = request;
                 let params = params.unwrap_or_else(|| serde_json::json!({}));
+                if crate::protocol::v2::Method::parse(&method).is_some() {
+                    return Err(format!(
+                        "v2 method requires protocol::v2::ClientRequest: {method}"
+                    ));
+                }
                 match AppServerRequestMethod::parse(&method) {
                     $(
                         Some(AppServerRequestMethod::$variant) => {
@@ -105,13 +110,7 @@ app_server_client_request_definitions! {
     AgentSessionAnalysisHandoffExport => "agentSession/analysisHandoff/export",
     AgentSessionReviewDecisionTemplateExport => "agentSession/reviewDecisionTemplate/export",
     AgentSessionReviewDecisionSave => "agentSession/reviewDecision/save",
-    AgentSessionList => "agentSession/list",
-    ThreadRead => "thread/read",
-    ThreadList => "thread/list",
-    ThreadTurnsList => "thread/turns/list",
-    ThreadItemsList => "thread/items/list",
     AgentSessionUpdate => "agentSession/update",
-    AgentSessionArchiveMany => "agentSession/archiveMany",
     AgentSessionDelete => "agentSession/delete",
     AgentSessionObjectiveRead => "agentSession/objective/read",
     AgentSessionObjectiveSet => "agentSession/objective/set",
@@ -120,7 +119,6 @@ app_server_client_request_definitions! {
     AgentSessionObjectiveContinue => "agentSession/objective/continue",
     AgentSessionObjectiveAudit => "agentSession/objective/audit",
     AgentSessionCompact => "agentSession/compact",
-    AgentSessionThreadResume => "agentSession/thread/resume",
     AgentSessionQueuedTurnRemove => "agentSession/queuedTurn/remove",
     AgentSessionQueuedTurnPromote => "agentSession/queuedTurn/promote",
     AgentSessionFileCheckpointList => "agentSession/fileCheckpoint/list",
@@ -356,11 +354,7 @@ app_server_client_request_definitions! {
     ConversationImportThreadPreview => "conversationImport/thread/preview",
     ConversationImportThreadCommit => "conversationImport/thread/commit",
     ConversationImportJobRead => "conversationImport/job/read",
-    AgentSessionStart => "agentSession/start",
-    AgentSessionRead => "agentSession/read",
     AgentSessionMediaRead => "agentSession/media/read",
-    AgentSessionTurnStart => "agentSession/turn/start",
-    AgentSessionTurnCancel => "agentSession/turn/cancel",
     AgentSessionActionReplay => "agentSession/action/replay",
     AgentSessionActionRespond => "agentSession/action/respond",
     AgentSessionRuntimeEventsAppend => "agentSession/runtimeEvents/append",

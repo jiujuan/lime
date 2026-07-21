@@ -28,8 +28,12 @@
 - 参考运行时主链总计划：`internal/exec-plans/upstream-runtime-alignment-plan.md`
 - 参考运行时主链进度日志：`internal/exec-plans/upstream-runtime-alignment-progress.md`
 - Refactor v2 全项目 Gate A/B 验收计划：`internal/exec-plans/project-gate-a-b-acceptance-plan.md`
+- Lime v1.108.0 发布执行计划：`internal/exec-plans/release-v1.108.0-plan.md`
 - Codex App GUI 对齐执行计划：`internal/exec-plans/codex-app-gui-alignment-plan.md`
 - Codex 对话兼容重构：`internal/exec-plans/codex-conversation-compat-refactor-plan.md`
+- Codex 对齐 v1 并行协调：`internal/exec-plans/codex-alignment-v1-coordination-plan.md`
+- Codex / Lime 存储对齐执行计划：`internal/exec-plans/codex-lime-storage-alignment-plan.md`
+- Codex / Lime 存储一一对照账本：`internal/refactor/data/03-one-to-one-storage-alignment-plan.md`
 - Refactor v2 测试体系第二期计划：`internal/exec-plans/refactor-v2-test-phase-2-plan.md`
 - Agent Runtime 单一投影入口收口计划：`internal/exec-plans/agent-runtime-single-projection-entry-plan.md`
 - Claw Streaming Rendering Codex 对齐重构计划：`internal/exec-plans/claw-streaming-rendering-codex-refactor-plan.md`

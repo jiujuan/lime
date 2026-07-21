@@ -2,8 +2,8 @@ use super::super::raw_string_field;
 use super::super::timestamp_seconds;
 use super::super::turn_input_events;
 use super::super::StoredSession;
+use agent_protocol::AgentInput;
 use app_server_protocol::AgentEvent;
-use app_server_protocol::AgentInput;
 use app_server_protocol::AgentTurn;
 use serde_json::{json, Value};
 
@@ -52,7 +52,7 @@ fn turn_input_event_payload<'a>(events: &'a [AgentEvent], turn_id: &str) -> Opti
 pub(super) fn turn_input_from_events(
     events: &[app_server_protocol::AgentEvent],
     turn_id: &str,
-) -> Option<app_server_protocol::AgentInput> {
+) -> Option<Vec<AgentInput>> {
     events
         .iter()
         .find(|event| {
@@ -76,25 +76,54 @@ pub(super) fn turn_input_from_events(
                         .and_then(serde_json::Value::as_str)
                         .map(str::to_string)
                         .filter(|text| !text.trim().is_empty())
-                        .map(|text| app_server_protocol::AgentInput {
-                            text,
-                            attachments: event
-                                .payload
-                                .get("attachments")
-                                .and_then(|value| serde_json::from_value(value.clone()).ok())
-                                .unwrap_or_default(),
-                        })
+                        .map(|text| vec![AgentInput::text(text)])
                 })
         })
 }
 
 fn runtime_user_message_from_turn(
     turn: &AgentTurn,
-    input: &AgentInput,
+    input: &[AgentInput],
     input_event_payload: Option<&Value>,
 ) -> Option<serde_json::Value> {
-    let text = input.text.trim();
-    if text.is_empty() && input.attachments.is_empty() {
+    let text = input
+        .iter()
+        .filter_map(|part| match part {
+            AgentInput::Text { text, .. } => Some(text.as_str()),
+            AgentInput::Image { .. }
+            | AgentInput::LocalImage { .. }
+            | AgentInput::Skill { .. }
+            | AgentInput::Mention { .. } => None,
+        })
+        .collect::<String>();
+    let text = text.trim();
+    let typed_attachments = input
+        .iter()
+        .filter_map(|part| match part {
+            AgentInput::Image { uri, detail } => Some(json!({
+                "kind": "image",
+                "uri": uri,
+                "detail": detail,
+            })),
+            AgentInput::LocalImage { path, detail } => Some(json!({
+                "kind": "image",
+                "uri": path,
+                "detail": detail,
+                "metadata": {"localPath": path},
+            })),
+            AgentInput::Text { .. } | AgentInput::Skill { .. } | AgentInput::Mention { .. } => None,
+        })
+        .collect::<Vec<_>>();
+    let attachments = if typed_attachments.is_empty() {
+        input_event_payload
+            .and_then(|payload| payload.get("attachments"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        typed_attachments
+    };
+    if text.is_empty() && attachments.is_empty() {
         return None;
     }
     let mut content = Vec::new();
@@ -122,12 +151,16 @@ fn runtime_user_message_from_turn(
             content.push(element.clone());
         }
     }
-    for attachment in &input.attachments {
-        content.push(json!({
-            "type": attachment.kind,
-            "uri": attachment.uri,
-            "metadata": attachment.metadata,
-        }));
+    for attachment in &attachments {
+        let mut projected = attachment.clone();
+        if let Some(object) = projected.as_object_mut() {
+            let kind = object
+                .get("kind")
+                .cloned()
+                .unwrap_or_else(|| Value::String("image".to_string()));
+            object.insert("type".to_string(), kind);
+        }
+        content.push(projected);
     }
 
     let mut message = json!({
@@ -136,7 +169,7 @@ fn runtime_user_message_from_turn(
         "runtimeTurnId": turn.turn_id,
         "runtime_turn_id": turn.turn_id,
         "content": content,
-        "attachments": input.attachments,
+        "attachments": attachments,
         "timestamp": timestamp_seconds(turn.started_at.as_deref()),
     });
     if let Some(elements) = text_elements {

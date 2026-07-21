@@ -14,6 +14,10 @@ import {
   isElectronUpdateCommand,
   type ElectronInvokeResponse,
 } from "./ipcChannels";
+import {
+  LIME_HOST_DATA_DIR_NAME,
+  resolveCurrentDesktopStorageRoots,
+} from "./appDataPaths";
 import { ElectronAppServerHost } from "./appServerHost";
 import {
   ElectronEmbeddedBrowserHost,
@@ -64,14 +68,22 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+const APP_NAME = "Lime";
+const APP_BUNDLE_IDENTIFIER = "com.limecloud.lime";
+const APP_ICON_SOURCE = "lime-rs/icons/icon.png";
+const APP_ICON_PACKAGED_NAME = "icon.png";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isWindowsSquirrelStartup = handleWindowsSquirrelStartup();
-const appServerHost = new ElectronAppServerHost();
 configureElectronUserDataPath();
+const desktopStorageRoots = resolveCurrentDesktopStorageRoots(
+  app.getPath("userData"),
+);
+const appServerHost = new ElectronAppServerHost();
 const hostCommands = new ElectronHostCommands(
   appServerHost,
   app.getPath("userData"),
   broadcast,
+  desktopStorageRoots.appDataRoot,
 );
 const embeddedBrowserHost = new ElectronEmbeddedBrowserHost(broadcast);
 const updateHost = new ElectronUpdateHost(broadcast, {
@@ -81,13 +93,10 @@ const updateHost = new ElectronUpdateHost(broadcast, {
 let devHttpBridge: ElectronDevHttpBridge | null = null;
 const pendingDeepLinks: string[] = [];
 const pendingSkillPackageOpenPaths: string[] = [];
-const APP_NAME = "Lime";
-const APP_BUNDLE_IDENTIFIER = "com.limecloud.lime";
-const APP_ICON_SOURCE = "lime-rs/icons/icon.png";
-const APP_ICON_PACKAGED_NAME = "icon.png";
 const SKILL_PACKAGE_OPEN_EVENT = "skill-package://open";
 const TRAY_MODEL_SELECTED_EVENT = "tray-model-selected";
 const STARTUP_SCREEN_VISIBLE_TIMEOUT_MS = 900;
+const ELECTRON_SMOKE_SHUTDOWN_TIMEOUT_MS = 10_000;
 const UPDATE_NOTIFICATION_ANCHOR_SELECTOR =
   '[data-testid="app-sidebar-update-button"]';
 const UPDATE_NOTIFICATION_WINDOW_SIZE = {
@@ -465,8 +474,22 @@ async function exitElectronSmoke(exitCode: number): Promise<void> {
   tray = null;
   devHttpBridge?.stop();
   devHttpBridge = null;
+  let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await appServerHost.stop();
+    await Promise.race([
+      appServerHost.stop(),
+      new Promise<never>((_, reject) => {
+        shutdownTimer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `app-server stop timed out after ${ELECTRON_SMOKE_SHUTDOWN_TIMEOUT_MS}ms`,
+              ),
+            ),
+          ELECTRON_SMOKE_SHUTDOWN_TIMEOUT_MS,
+        );
+      }),
+    ]);
   } catch (error) {
     console.warn(
       `[electron-smoke] app-server stop failed: ${
@@ -474,6 +497,9 @@ async function exitElectronSmoke(exitCode: number): Promise<void> {
       }`,
     );
   } finally {
+    if (shutdownTimer) {
+      clearTimeout(shutdownTimer);
+    }
     app.exit(exitCode);
   }
 }
@@ -894,19 +920,31 @@ function loadTrayImage(): Electron.NativeImage {
 
 function configureElectronUserDataPath(): void {
   const e2eUserDataDir = process.env.ELECTRON_E2E_USER_DATA_DIR?.trim();
-  if (!e2eUserDataDir) {
-    return;
-  }
-  if (process.env.LIME_ELECTRON_E2E !== "1") {
-    console.warn(
-      "[electron-host] ELECTRON_E2E_USER_DATA_DIR is ignored outside E2E mode",
-    );
-    return;
+  if (e2eUserDataDir) {
+    if (process.env.LIME_ELECTRON_E2E !== "1") {
+      console.warn(
+        "[electron-host] ELECTRON_E2E_USER_DATA_DIR is ignored outside E2E mode",
+      );
+    } else {
+      const resolvedUserDataDir = path.resolve(e2eUserDataDir);
+      mkdirSync(resolvedUserDataDir, { recursive: true });
+      app.setPath("userData", resolvedUserDataDir);
+      return;
+    }
   }
 
-  const resolvedUserDataDir = path.resolve(e2eUserDataDir);
-  mkdirSync(resolvedUserDataDir, { recursive: true });
-  app.setPath("userData", resolvedUserDataDir);
+  // Agent durable data 由独立 resolver 管理；这里仅固定 host profile/config 根，
+  // 并保留 macOS 既有的小写目录。
+  const stableUserDataDir = path.join(
+    app.getPath("appData"),
+    LIME_HOST_DATA_DIR_NAME,
+  );
+  if (
+    path.resolve(app.getPath("userData")) !== path.resolve(stableUserDataDir)
+  ) {
+    mkdirSync(stableUserDataDir, { recursive: true });
+    app.setPath("userData", stableUserDataDir);
+  }
 }
 
 function broadcast(event: string, payload?: unknown): void {

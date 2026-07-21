@@ -38,7 +38,7 @@ export interface ImageInput {
  * 当前 Provider / Model 选择。
  *
  * 这只是 Desktop Host 的配置读取结果；运行时仅由
- * `agentSession/turn/start` 在 App Server 中初始化。
+ * `turn/start` 在 App Server 中初始化。
  */
 export interface RuntimeProviderSelection {
   provider_configured: boolean;

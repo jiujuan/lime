@@ -53,9 +53,7 @@ vi.mock("sonner", () => ({
 vi.mock("@/lib/api/agentRuntime/threadClient", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/api/agentRuntime/threadClient")
-  >(
-    "@/lib/api/agentRuntime/threadClient",
-  );
+  >("@/lib/api/agentRuntime/threadClient");
   return {
     ...actual,
     diffAgentRuntimeFileCheckpoint:
@@ -324,10 +322,8 @@ export function renderPanel(props?: {
   currentTurnId?: string | null;
   canInterrupt?: boolean;
   onInterruptCurrentTurn?: () => void | Promise<void>;
-  onResumeThread?: () => boolean | Promise<boolean>;
   onReplayPendingRequest?: (requestId: string) => boolean | Promise<boolean>;
   onLocatePendingRequest?: (requestId: string) => void;
-  onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
   onManageProviders?: (context?: ProviderSettingsFocusContext) => void;
   onOpenExecutionPolicySettings?: (
     context?: ExecutionPolicyFocusContext,
@@ -359,10 +355,8 @@ export function renderPanel(props?: {
         currentTurnId={props?.currentTurnId}
         canInterrupt={props?.canInterrupt}
         onInterruptCurrentTurn={props?.onInterruptCurrentTurn}
-        onResumeThread={props?.onResumeThread}
         onReplayPendingRequest={props?.onReplayPendingRequest}
         onLocatePendingRequest={props?.onLocatePendingRequest}
-        onPromoteQueuedTurn={props?.onPromoteQueuedTurn}
         onManageProviders={props?.onManageProviders}
         onOpenExecutionPolicySettings={props?.onOpenExecutionPolicySettings}
         harnessState={props?.harnessState}

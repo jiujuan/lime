@@ -83,7 +83,7 @@ Writing v2 的核心结论是：
 - [x] `evidence/export` 能读取 `workflow-events.jsonl` 并输出 metadata-only workflow audit 摘要，供后续审计导出使用。
 - [x] `agentSession/read.detail.thread_read` 不再为右侧 Article Editor 提供 UI-facing `workflow_runs` / `workflow_steps`。
 - [x] WebSearch / connector 执行状态写入同一个 JSONL audit stream。（RuntimeBackend `hostSearchEvidence -> workflow.connector.completed` 已绑定；外部内容工厂包自带 connector executor 未纳入本阶段。）
-- [x] `agentSession/thread/resume` 在 `RuntimeResumeContract.decisions[].metadata` 显式带 `workflowRunId / workflowKey / stepId` 时，只向 `workflow-events.jsonl` 追加 `workflow.step.resuming` / `workflow.run.resuming` metadata-only audit；`workflow/respond` / `agentSession/action/respond` 也消费同一 `metadata.workflowResume` 合同写入同样的 lifecycle；普通 queued resume 无该 metadata 时保持 fail-closed，不伪造 workflow resume。
+- [x] `thread/resume` 只负责 Thread rejoin/history hydrate，不启动 queued turn 或 workflow audit；只有 `workflow/respond` / `agentSession/action/respond` 的 typed response 显式携带 `metadata.workflowResume` 时，才向 `workflow-events.jsonl` 追加 `workflow.step.resuming` / `workflow.run.resuming` metadata-only audit。
 - [x] `ArtifactFrame(articleArtifacts)` 仍只承载最终文章，不回退普通 assistant 长文。
 - [x] 右侧 Article Editor 从 article artifact / workspace patch 恢复，不显示 workflow 步骤。
 - [x] 受控 read model / fixture 历史恢复能看到最终文章和编辑稿；workflow 过程只供审计回放。真实 Electron/CDP 从历史列表重进同一 session 已在 Gate B product acceptance 中通过。
@@ -121,7 +121,7 @@ retry lifecycle 已作为 `workflow.run.retrying` / `workflow.step.retrying` 进
 
 cancel lifecycle 已作为 `workflow.step.canceled` / `workflow.run.canceled` 进入 `workflow-events.jsonl`：`agentSession/turn/cancel` 仍只向普通用户事件流返回 `turn.canceled`，App Server 只对同一 turn 内尚未终态的 workflow run / step 追加 audit-only 取消事件，不向 Article Editor 或 read model 暴露流程状态。
 
-resume lifecycle 已作为显式 metadata contract 进入 `workflow-events.jsonl`：`agentSession/thread/resume` 仍先恢复普通 queued turn；只有 `RuntimeResumeContract.decisions[].metadata.workflowResume`、runtime action response `metadata.workflowResume` 或等价字段能绑定 `workflowRunId / workflowKey / stepId` 时，才追加 audit-only `workflow.step.resuming` / `workflow.run.resuming`。无 worker lifecycle metadata 的普通 resume 不新增 workflow 审计事件；decision response 原文不进入 JSONL。`content-factory-signed-release-gate` 也已把该 contract 纳入 production ready 条件：GUI production evidence 必须同时证明 runtime response/resume metadata 和匹配的 `workflow.step.resuming` / `workflow.run.resuming` JSONL audit 事件，否则 signed release / live Provider 证据仍 blocked。
+resume lifecycle 已作为显式 metadata contract 进入 `workflow-events.jsonl`：`thread/resume` 只做 Thread rejoin/history hydrate，不恢复 queued turn，也不写 workflow 审计事件；只有 typed action response 或 `workflow/respond` 的 `metadata.workflowResume` 能绑定 `workflowRunId / workflowKey / stepId` 时，才追加 audit-only `workflow.step.resuming` / `workflow.run.resuming`。response 原文不进入 JSONL。`content-factory-signed-release-gate` 也已把该 typed response contract 纳入 production ready 条件：GUI production evidence 必须同时证明 runtime response metadata 和匹配的 `workflow.step.resuming` / `workflow.run.resuming` JSONL audit 事件，否则 signed release / live Provider 证据仍 blocked。
 
 2026-07-03 追加验证：App Server host-managed generation 注入链已有离线 localhost OpenAI-compatible provider fixture 回归，证明宿主可以在启动 worker 前完成受控文本生成，并把 `article-draft-document -> articleDraft.documentText` 注入 `hostManagedGeneration.outputs[]` / `runtime.hostManagedGenerationResult`；Lime 内 package-root 与外部 `content-factory-app` worker 包测试也证明该结果会覆盖 deterministic fallback 正文。
 

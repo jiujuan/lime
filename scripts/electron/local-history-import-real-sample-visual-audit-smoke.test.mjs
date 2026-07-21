@@ -197,7 +197,7 @@ describe("local history import real sample visual audit smoke guard", () => {
     expect(content).toContain("waitForConversationImportJob");
     expect(helper).toContain('"conversationImport/job/read"');
     expect(content).toContain("confirmed: true");
-    expect(content).toContain('"agentSession/read"');
+    expect(content).toContain('"thread/read"');
     expect(content).toContain("scorePreview");
     expect(content).toContain("selectStableImportSourceThreads");
     expect(content).toContain("minSourceStabilityMs");

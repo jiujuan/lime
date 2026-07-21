@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use tool_runtime::tool_lifecycle::{ToolLifecycleEvent, ToolLifecyclePhase};
 use tool_runtime::tool_result_projection::NormalizedToolOutput;
 
-use crate::queued_turn::QueuedTurnSnapshot;
 use crate::session_execution_runtime::{
     SessionExecutionRuntimeCostState, SessionExecutionRuntimeLimitEvent,
     SessionExecutionRuntimeLimitState, SessionExecutionRuntimeRoutingDecision,
@@ -497,28 +496,10 @@ pub enum AgentEvent {
         limit_event: SessionExecutionRuntimeLimitEvent,
     },
 
-    #[serde(rename = "queue_added")]
-    QueueAdded {
-        session_id: String,
-        queued_turn: QueuedTurnSnapshot,
-    },
-
-    #[serde(rename = "queue_removed")]
-    QueueRemoved {
-        session_id: String,
-        queued_turn_id: String,
-    },
-
-    #[serde(rename = "queue_started")]
-    QueueStarted {
-        session_id: String,
-        queued_turn_id: String,
-    },
-
-    #[serde(rename = "queue_cleared")]
-    QueueCleared {
-        session_id: String,
-        queued_turn_ids: Vec<String>,
+    #[serde(rename = "provider_usage")]
+    ProviderUsage {
+        attempt: u32,
+        usage: AgentTokenUsage,
     },
 
     #[serde(rename = "provider_step")]
@@ -617,6 +598,10 @@ pub(crate) fn canonical_tool_item_event(
                 metadata: output_metadata,
                 agent_control_projection_facts: _,
             } = output;
+            let aborted = output_metadata
+                .get(tool_runtime::tool_result_projection::TOOL_OUTCOME_METADATA_KEY)
+                .and_then(Value::as_str)
+                == Some(tool_runtime::tool_result_projection::TOOL_OUTCOME_ABORTED);
             metadata.extend(output_metadata);
             metadata.insert("success".to_string(), Value::Bool(success));
             metadata.insert("duration_ms".to_string(), Value::from(duration_ms));
@@ -633,7 +618,9 @@ pub(crate) fn canonical_tool_item_event(
                 );
             }
             (
-                if success {
+                if aborted {
+                    ItemStatus::Cancelled
+                } else if success {
                     ItemStatus::Completed
                 } else {
                     ItemStatus::Failed
@@ -903,6 +890,43 @@ mod tests {
             metadata,
             agent_control_projection_facts: Vec::new(),
         }
+    }
+
+    #[test]
+    fn aborted_tool_output_projects_cancelled_item_status() {
+        let event = canonical_tool_item_event(
+            ToolLifecycleEvent {
+                turn_id: "turn-aborted".to_string(),
+                call_id: "call-aborted".to_string(),
+                tool_name: "sleep".to_string(),
+                arguments: serde_json::json!({}),
+                environments: Vec::new(),
+                phase: ToolLifecyclePhase::Completed,
+                output: Some(NormalizedToolOutput {
+                    success: false,
+                    text: "Tool execution aborted".to_string(),
+                    structured_content: None,
+                    error: None,
+                    duration_ms: 1,
+                    truncation: None,
+                    sidecar_reference: None,
+                    metadata: HashMap::from([(
+                        tool_runtime::tool_result_projection::TOOL_OUTCOME_METADATA_KEY.to_string(),
+                        Value::String(
+                            tool_runtime::tool_result_projection::TOOL_OUTCOME_ABORTED.to_string(),
+                        ),
+                    )]),
+                    agent_control_projection_facts: Vec::new(),
+                }),
+            },
+            tool_item_context(),
+        )
+        .expect("aborted tool lifecycle event");
+
+        let AgentEvent::ItemCompleted { item } = event else {
+            panic!("aborted tool should produce one terminal item");
+        };
+        assert_eq!(item.status, ItemStatus::Cancelled);
     }
 
     #[test]

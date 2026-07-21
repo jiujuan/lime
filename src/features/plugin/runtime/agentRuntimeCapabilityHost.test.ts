@@ -44,6 +44,7 @@ describe("AgentRuntimeCapabilityHost", () => {
         title: "缺少标准 runtime client",
         taskKind: "content.copy.generate",
         sessionId: "session-standard",
+        threadId: "thread-standard",
         taskId: "task-standard",
         input: { projectId: "project-1" },
       }),
@@ -116,12 +117,14 @@ describe("AgentRuntimeCapabilityHost", () => {
       title: "复用当前 Thread",
       taskKind: "content.copy.generate",
       sessionId: "session-current",
+      threadId: "thread-current",
       input: { projectId: "project-1" },
     });
 
     expect(api.startTask).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: "session-current",
+        threadId: "thread-current",
       }),
     );
     expect(started).toMatchObject({
@@ -139,11 +142,11 @@ describe("AgentRuntimeCapabilityHost", () => {
         id: 1,
         result: {
           turn: {
-            turnId: "turn-standard",
-            sessionId: "session-standard",
-            threadId: "thread-standard",
-            status: "accepted" as const,
-            startedAt: "2026-05-15T00:00:00.000Z",
+            id: "turn-standard",
+            items: [],
+            itemsView: "full" as const,
+            status: "inProgress" as const,
+            startedAt: Date.parse("2026-05-15T00:00:00.000Z") / 1_000,
           },
         },
         response: { jsonrpc: "2.0", id: 1, result: {} },
@@ -154,42 +157,26 @@ describe("AgentRuntimeCapabilityHost", () => {
         id: 2,
         result: {
           thread: {
-            archived: false,
-            createdAtMs: 1_747_267_200_000,
+            cliVersion: "0.0.0-test",
+            createdAt: 1_747_267_200,
+            cwd: "/tmp/plugin-runtime",
+            ephemeral: false,
+            id: "thread-standard",
+            modelProvider: "anthropic",
+            preview: "标准 runtime client 任务",
             sessionId: "session-standard",
-            threadId: "thread-standard",
-            status: { type: "active" as const },
-            turnsView: "full" as const,
-            updatedAtMs: 1_747_267_202_000,
-            turns: [{
-              createdAtMs: 1_747_267_200_000,
-              turnId: "turn-standard",
-              sessionId: "session-standard",
-              threadId: "thread-standard",
-              updatedAtMs: 1_747_267_202_000,
-              items: [{
-                itemId: "artifact-standard",
-                threadId: "thread-standard",
-                turnId: "turn-standard",
-                sessionId: "session-standard",
-                ordinal: 1,
-                sequence: 1,
-                createdAtMs: 1_747_267_200_000,
-                updatedAtMs: 1_747_267_202_000,
-                status: "completed" as const,
-                kind: "extension" as const,
-                payload: {
-                  type: "extension" as const,
-                  data: {
-                    path: ".lime/artifacts/standard.json",
-                    title: "标准任务产物",
-                  },
-                },
-              }],
-              itemsView: "full" as const,
-              status: "inProgress" as const,
-              queue: { state: "running" as const },
-            }],
+            source: "plugin",
+            status: { type: "active" as const, activeFlags: [] },
+            updatedAt: 1_747_267_202,
+            turns: [
+              {
+                id: "turn-standard",
+                items: [],
+                itemsView: "full" as const,
+                startedAt: 1_747_267_200,
+                status: "inProgress" as const,
+              },
+            ],
           },
         },
         response: { jsonrpc: "2.0", id: 2, result: {} },
@@ -227,6 +214,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       title: "标准 runtime client 任务",
       taskKind: "content.copy.generate",
       sessionId: "session-standard",
+      threadId: "thread-standard",
       taskId: "task-standard",
       turnId: "turn-standard",
       input: { projectId: "project-1" },
@@ -250,24 +238,18 @@ describe("AgentRuntimeCapabilityHost", () => {
 
     expect(runtimeClient.startTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionId: "session-standard",
-        turnId: "turn-standard",
-        runtimeOptions: expect.objectContaining({
-          runtimeRequest: expect.objectContaining({
-            providerConfig: {
-              providerName: "anthropic",
-              modelName: "claude-sonnet-4",
-            },
-          }),
-        }),
+        threadId: "thread-standard",
+        input: [expect.objectContaining({ type: "text" })],
+        model: "claude-sonnet-4",
+        sandboxPolicy: "workspace-write",
       }),
     );
     expect(runtimeClient.readThread).toHaveBeenCalledWith({
       threadId: "thread-standard",
-      turnsView: "full",
+      includeTurns: true,
     });
     expect(runtimeClient.cancelTurn).toHaveBeenCalledWith({
-      sessionId: "session-standard",
+      threadId: "thread-standard",
       turnId: "turn-standard",
     });
     expect(runtimeClient.respondAction).toHaveBeenCalledWith(
@@ -283,12 +265,7 @@ describe("AgentRuntimeCapabilityHost", () => {
     });
     expect(snapshot).toMatchObject({
       status: "running",
-      events: expect.arrayContaining([
-        expect.objectContaining({
-          type: "artifact:created",
-          refs: [".lime/artifacts/standard.json"],
-        }),
-      ]),
+      sessionId: "session-standard",
     });
   });
 
@@ -1013,34 +990,40 @@ describe("AgentRuntimeCapabilityHost", () => {
         threadRead: {
           threadId: "thread-artifact-replay",
           sessionId: request.sessionId,
-          turns: [{
-            items: [{
-              itemId: "artifact-item-1",
-              threadId: "thread-artifact-replay",
-              turnId: "turn-artifact-replay",
-              sessionId: request.sessionId,
-              ordinal: 1,
-              sequence: 1,
-              createdAtMs: 1_747_267_200_000,
-              updatedAtMs: 1_747_267_203_000,
-              status: "completed",
-              kind: "extension",
-              metadata: {},
-              payload: {
-                type: "extension",
-                data: {
-                  path: ".lime/artifacts/content-batch.json",
-                  title: "内容批次",
-                  artifactDocument: {
-                    blocks: [{
-                      content:
-                        '```json\n{"contentFactoryWorkspacePatch":{"kind":"content_batch","contentBatch":{"count":20,"items":[{"title":"突出"一擦即净"的视觉感"}]}}}\n```',
-                    }],
+          turns: [
+            {
+              items: [
+                {
+                  itemId: "artifact-item-1",
+                  threadId: "thread-artifact-replay",
+                  turnId: "turn-artifact-replay",
+                  sessionId: request.sessionId,
+                  ordinal: 1,
+                  sequence: 1,
+                  createdAtMs: 1_747_267_200_000,
+                  updatedAtMs: 1_747_267_203_000,
+                  status: "completed",
+                  kind: "extension",
+                  metadata: {},
+                  payload: {
+                    type: "extension",
+                    data: {
+                      path: ".lime/artifacts/content-batch.json",
+                      title: "内容批次",
+                      artifactDocument: {
+                        blocks: [
+                          {
+                            content:
+                              '```json\n{"contentFactoryWorkspacePatch":{"kind":"content_batch","contentBatch":{"count":20,"items":[{"title":"突出"一擦即净"的视觉感"}]}}}\n```',
+                          },
+                        ],
+                      },
+                    },
                   },
                 },
-              },
-            }],
-          }],
+              ],
+            },
+          ],
         },
       })),
       cancelTask: vi.fn(async (request) => ({
@@ -1141,26 +1124,30 @@ describe("AgentRuntimeCapabilityHost", () => {
         threadRead: {
           threadId: "thread-tool-replay",
           sessionId: request.sessionId,
-          turns: [{
-            items: [{
-              itemId: "web-fetch-call-1",
-              threadId: "thread-tool-replay",
-              turnId: "turn-tool-replay",
-              sessionId: request.sessionId,
-              ordinal: 1,
-              sequence: 1,
-              createdAtMs: 1_747_267_200_000,
-              updatedAtMs: 1_747_267_201_000,
-              status: "completed",
-              kind: "tool",
-              payload: {
-                type: "tool",
-                call_id: "web-fetch-call-1",
-                name: "WebFetch",
-                output: { text: "fetched https://example.com" },
-              },
-            }],
-          }],
+          turns: [
+            {
+              items: [
+                {
+                  itemId: "web-fetch-call-1",
+                  threadId: "thread-tool-replay",
+                  turnId: "turn-tool-replay",
+                  sessionId: request.sessionId,
+                  ordinal: 1,
+                  sequence: 1,
+                  createdAtMs: 1_747_267_200_000,
+                  updatedAtMs: 1_747_267_201_000,
+                  status: "completed",
+                  kind: "tool",
+                  payload: {
+                    type: "tool",
+                    call_id: "web-fetch-call-1",
+                    name: "WebFetch",
+                    output: { text: "fetched https://example.com" },
+                  },
+                },
+              ],
+            },
+          ],
         },
       })),
       cancelTask: vi.fn(async (request) => ({
@@ -1258,6 +1245,7 @@ describe("AgentRuntimeCapabilityHost", () => {
     const started = await sdk.agent.startTask({
       taskKind: "content.copy.generate",
       sessionId: "session-conflict",
+      threadId: "thread-conflict",
     });
 
     await expect(
@@ -1308,6 +1296,7 @@ describe("AgentRuntimeCapabilityHost", () => {
     const started = await sdk.agent.startTask({
       taskKind: "content.copy.generate",
       sessionId: "session-not-running",
+      threadId: "thread-not-running",
     });
     const result = await sdk.agent.cancelTask(started.taskId);
 
@@ -1319,7 +1308,9 @@ describe("AgentRuntimeCapabilityHost", () => {
       ]),
     );
     expect(result.events).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: "task:cancelled" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ type: "task:cancelled" }),
+      ]),
     );
   });
 });

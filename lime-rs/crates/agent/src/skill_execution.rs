@@ -218,15 +218,14 @@ fn build_reply_input(
     images: &[SkillInputImage],
 ) -> ReplyInput {
     let mut input = ReplyInput::text(user_input);
-    input.images = images
-        .iter()
-        .enumerate()
-        .map(|(index, image)| ReplyInputImage {
+    for (index, image) in images.iter().enumerate() {
+        input.push_image(ReplyInputImage {
             uri: format!("transient://skill-input/image-{index}"),
             media_type: image.media_type.clone(),
             provider_data: Some(image.data.clone()),
-        })
-        .collect();
+            detail: None,
+        });
+    }
     if should_hide_execution_input_from_user(user_input, user_visible_input) {
         input.agent_only = true;
     }

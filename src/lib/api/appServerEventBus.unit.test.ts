@@ -123,11 +123,11 @@ describe("AppServerEventBus", () => {
       const request: JsonRpcRequest = {
         id: "app-server-request:resolved-before-handler",
         method: "mcpServer/elicitation/request",
-        params: {},
+        params: { threadId: "thread-1" },
       };
       const resolved = {
         method: METHOD_SERVER_REQUEST_RESOLVED,
-        params: { requestId: request.id },
+        params: { requestId: request.id, threadId: "thread-1" },
       };
       const drainEvents = vi
         .fn()
@@ -158,11 +158,11 @@ describe("AppServerEventBus", () => {
     const request: JsonRpcRequest = {
       id: "app-server-request:reset-tombstone",
       method: "mcpServer/elicitation/request",
-      params: {},
+      params: { threadId: "thread-1" },
     };
     const resolved = {
       method: METHOD_SERVER_REQUEST_RESOLVED,
-      params: { requestId: request.id },
+      params: { requestId: request.id, threadId: "thread-1" },
     };
     const drainEvents = vi
       .fn()
@@ -199,11 +199,11 @@ describe("AppServerEventBus", () => {
     const request: JsonRpcRequest = {
       id: "app-server-request:old-drain",
       method: "mcpServer/elicitation/request",
-      params: {},
+      params: { threadId: "thread-1" },
     };
     const resolved = {
       method: METHOD_SERVER_REQUEST_RESOLVED,
-      params: { requestId: request.id },
+      params: { requestId: request.id, threadId: "thread-1" },
     };
     let resolveOldDrain: ((messages: unknown[]) => void) | undefined;
     const drainEvents = vi
@@ -230,6 +230,72 @@ describe("AppServerEventBus", () => {
     expect(onServerRequests).toHaveBeenCalledWith([request]);
 
     unsubscribeRequests();
+    eventBus.reset();
+    await vi.runOnlyPendingTimersAsync();
+  });
+
+  it("缺少 threadId 的 resolved 不得撤销后续 server request", async () => {
+    vi.useFakeTimers();
+    const request: JsonRpcRequest = {
+      id: "app-server-request:unscoped-resolved",
+      method: "mcpServer/elicitation/request",
+      params: {},
+    };
+    const drainEvents = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          method: METHOD_SERVER_REQUEST_RESOLVED,
+          params: { requestId: request.id },
+        },
+        request,
+      ])
+      .mockResolvedValue([]);
+    const eventBus = new AppServerEventBus({ drainEvents });
+    const onServerRequests = vi.fn();
+    const unsubscribe = eventBus.subscribe({
+      getDrainOptions: () => ({ intervalMs: 1, limit: 2 }),
+      onServerRequests,
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(onServerRequests).toHaveBeenCalledWith([request]);
+
+    unsubscribe();
+    eventBus.reset();
+    await vi.runOnlyPendingTimersAsync();
+  });
+
+  it("不同 thread 的 resolved 不得吞掉同 outer id 请求", async () => {
+    vi.useFakeTimers();
+    const request: JsonRpcRequest = {
+      id: "app-server-request:thread-scope",
+      method: "mcpServer/elicitation/request",
+      params: { threadId: "thread-2" },
+    };
+    const drainEvents = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          method: METHOD_SERVER_REQUEST_RESOLVED,
+          params: { requestId: request.id, threadId: "thread-1" },
+        },
+        request,
+      ])
+      .mockResolvedValue([]);
+    const eventBus = new AppServerEventBus({ drainEvents });
+    const onServerRequests = vi.fn();
+    const unsubscribe = eventBus.subscribe({
+      getDrainOptions: () => ({ intervalMs: 1, limit: 2 }),
+      onServerRequests,
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(onServerRequests).toHaveBeenCalledWith([request]);
+
+    unsubscribe();
     eventBus.reset();
     await vi.runOnlyPendingTimersAsync();
   });

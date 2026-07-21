@@ -26,7 +26,6 @@ describe("agentStreamReasoningTimeline", () => {
 
   it("应用 queued turn 构造本地临时 reasoning item 并复用稳定 id", () => {
     const requestState: AgentStreamReasoningTimelineState = {
-      queuedTurnId: " turn-1 ",
       streamedReasoningText: " 先分析。 ",
     };
 
@@ -68,7 +67,6 @@ describe("agentStreamReasoningTimeline", () => {
 
   it("有事件 sequence 时应生成 Codex 顺序稳定的 streamed reasoning id", () => {
     const requestState: AgentStreamReasoningTimelineState = {
-      queuedTurnId: "queued-turn",
       currentTurnId: "current-turn",
       streamedReasoningText: "先确认目标。",
     };
@@ -132,7 +130,6 @@ describe("agentStreamReasoningTimeline", () => {
 
   it("reset 应只清空当前片段，不重置本地计数器", () => {
     const requestState: AgentStreamReasoningTimelineState = {
-      queuedTurnId: "turn-1",
       streamedReasoningItemId: "streamed-reasoning:turn-1:local-1",
       streamedReasoningText: "片段一",
       streamedReasoningStartedAt: "2026-06-22T10:00:00.000Z",
@@ -143,7 +140,6 @@ describe("agentStreamReasoningTimeline", () => {
     resetStreamedReasoningSegment(requestState);
 
     expect(requestState).toEqual({
-      queuedTurnId: "turn-1",
       streamedReasoningItemId: null,
       streamedReasoningText: "",
       streamedReasoningStartedAt: null,

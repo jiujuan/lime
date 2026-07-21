@@ -2,7 +2,6 @@ export const STALE_RUNNING_THREAD_READ_MS = 30 * 60 * 1000;
 
 export interface ThreadReadActivityOptions {
   allowThreadStatusWithoutTurn?: boolean;
-  includeQueuedActivity?: boolean;
   nowMs?: number;
   staleRunningMs?: number;
 }
@@ -112,11 +111,8 @@ function readActivityTimestampMs(
   return candidates.length > 0 ? Math.max(...candidates) : null;
 }
 
-function hasPendingOrQueuedActivity(record: Record<string, unknown>): boolean {
-  return (
-    readArray(record, ["pending_requests", "pendingRequests"]).length > 0 ||
-    readArray(record, ["queued_turns", "queuedTurns"]).length > 0
-  );
+function hasPendingRequestActivity(record: Record<string, unknown>): boolean {
+  return readArray(record, ["pending_requests", "pendingRequests"]).length > 0;
 }
 
 function isFreshRunningRecord(
@@ -195,16 +191,11 @@ export function hasRunningThreadReadActivity(
     .map(readRecord)
     .filter((turn): turn is Record<string, unknown> => turn !== null);
   const activeTurnId = readString(record, ["active_turn_id", "activeTurnId"]);
-  const hasPendingOrQueued = hasPendingOrQueuedActivity(record);
-  const hasQueuedTurns =
-    readArray(record, ["queued_turns", "queuedTurns"]).length > 0;
+  const hasPendingRequests = hasPendingRequestActivity(record);
   if (
-    options.includeQueuedActivity !== false &&
-    (hasQueuedTurns ||
-      (isQueuedThreadStatus(threadStatus) &&
-        isFreshRunningRecord(record, options)) ||
-      (isQueuedThreadStatus(profileStatus) &&
-        isFreshRunningRecord(record, options)))
+    (isQueuedThreadStatus(threadStatus) ||
+      isQueuedThreadStatus(profileStatus)) &&
+    isFreshRunningRecord(record, options)
   ) {
     return true;
   }
@@ -220,7 +211,7 @@ export function hasRunningThreadReadActivity(
     }
     return (
       isRunningTurnStatus(activeTurnStatus) &&
-      (hasPendingOrQueued || isFreshRunningRecord(activeTurn, options))
+      (hasPendingRequests || isFreshRunningRecord(activeTurn, options))
     );
   }
 
@@ -228,7 +219,7 @@ export function hasRunningThreadReadActivity(
     turns.some(
       (turn) =>
         isRunningTurnStatus(readTurnStatus(turn)) &&
-        (hasPendingOrQueued || isFreshRunningRecord(turn, options)),
+        (hasPendingRequests || isFreshRunningRecord(turn, options)),
     )
   ) {
     return true;
@@ -238,7 +229,7 @@ export function hasRunningThreadReadActivity(
     options.allowThreadStatusWithoutTurn === true &&
     (threadStatus === "running" || profileStatus === "running")
   ) {
-    return hasPendingOrQueued || isFreshRunningRecord(record, options);
+    return hasPendingRequests || isFreshRunningRecord(record, options);
   }
 
   return false;

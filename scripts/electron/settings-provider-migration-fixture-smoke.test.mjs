@@ -55,21 +55,22 @@ describe("settings provider migration Electron fixture smoke guard", () => {
     const combined = `${content}\n${coreContent}`;
 
     expect(combined).toContain('APP_SERVER_BACKEND_MODE: "unavailable"');
-    expect(combined).toContain(
-      'APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP: "retain"',
-    );
-    expect(content).toContain("APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP");
-    expect(content).toContain("PRODUCT_DB_MIGRATION_CLEANUP_POLICY");
+    expect(combined).not.toContain("APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP");
+    expect(combined).not.toContain("PRODUCT_DB_MIGRATION_CLEANUP_POLICY");
     expect(coreContent).toContain('"modelProvider/create"');
     expect(coreContent).toContain('"modelProvider/update"');
     expect(coreContent).toContain('"modelProviderKey/create"');
     expect(coreContent).toContain('"modelProviderUiState/write"');
     expect(coreContent).toContain('"modelProvider/list"');
     expect(coreContent).toContain('"modelProviderUiState/read"');
-    expect(content).toContain("PRODUCT_DB_MIGRATION_CLEANUP_POLICY");
     expect(content).toContain("oldProductDbUserSchemaObjectCount");
     expect(content).toContain("readProductDbUserSchemaObjectCount");
-    expect(content).toContain("迁移后旧 Product DB 仍保留业务 schema 对象");
+    expect(content).toContain("迁移启动流程修改了旧 Product DB");
+    expect(combined).toContain("migration-manifest.json");
+    expect(combined).toContain("storage-migration.v1");
+    expect(combined).toContain("database-path-v1");
+    expect(combined).toContain("cleanupAuthorizedAt");
+    expect(combined).not.toContain(".migration_completed");
     const requiredMethodsBlock = coreContent.slice(
       coreContent.indexOf("const SEED_REQUIRED_METHODS"),
       coreContent.indexOf("const ELECTRON_REQUIRED_METHODS"),

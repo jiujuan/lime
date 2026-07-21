@@ -54,10 +54,8 @@ describe("AgentThreadReliabilityPanel", () => {
     });
   });
 
-  it("应展示最近刷新时间、运行时中断态，并支持跳转待处理请求与恢复排队回合", async () => {
+  it("应展示最近刷新时间、运行时中断态并支持跳转待处理请求", () => {
     const onLocatePendingRequest = vi.fn();
-    const onResumeThread = vi.fn().mockResolvedValue(true);
-    const onPromoteQueuedTurn = vi.fn().mockResolvedValue(true);
     const container = renderPanel({
       threadRead: {
         thread_id: "thread-1",
@@ -74,58 +72,25 @@ describe("AgentThreadReliabilityPanel", () => {
             created_at: "2026-03-23T09:00:00Z",
           },
         ],
-        queued_turns: [
-          {
-            queued_turn_id: "queued-1",
-            message_preview: "继续执行排队任务",
-            message_text: "继续执行排队任务正文",
-            created_at: 1711184400,
-            image_count: 0,
-            position: 1,
-          },
-        ],
         interrupt_state: "interrupted",
         updated_at: "2026-03-23T09:00:20Z",
         incidents: [],
       },
-      onResumeThread,
       onLocatePendingRequest,
-      onPromoteQueuedTurn,
     });
 
     expect(container.textContent).toContain("最近刷新");
     expect(container.textContent).toContain("运行时已确认中断");
     expect(container.textContent).toContain("前往待处理请求");
-    expect(container.textContent).toContain("恢复执行");
-    expect(container.textContent).toContain("优先执行 队列第 1 位");
 
     const buttons = Array.from(container.querySelectorAll("button"));
     const locateButton = buttons.find((node) =>
       node.textContent?.includes("前往待处理请求"),
     );
-    const resumeButton = buttons.find((node) =>
-      node.textContent?.includes("恢复执行"),
-    );
-    const promoteButton = buttons.find((node) =>
-      node.textContent?.includes("优先执行 队列第 1 位"),
-    );
-
     act(() => {
       locateButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onLocatePendingRequest).toHaveBeenCalledWith("req-1");
-
-    await act(async () => {
-      resumeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(onResumeThread).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      promoteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(onPromoteQueuedTurn).toHaveBeenCalledWith("queued-1");
   });
 
   it("请求已提交待回填时，应压住旧 pending 并展示继续处理中", () => {
@@ -203,7 +168,7 @@ describe("AgentThreadReliabilityPanel", () => {
             severity: "high",
             status: "active",
             title: "当前回合长时间无进展",
-            details: "最近 3 分钟内没有新的线程更新，可尝试停止后恢复执行。",
+            details: "最近 3 分钟内没有新的线程更新，可尝试停止后重新提交。",
           },
         ],
       },
@@ -225,7 +190,7 @@ describe("AgentThreadReliabilityPanel", () => {
 
     expect(container.textContent).toContain("当前回合长时间无进展");
     expect(container.textContent).toContain(
-      "当前回合长时间无进展，建议停止后恢复执行",
+      "当前回合长时间无进展，建议停止后重新提交",
     );
   });
 
@@ -263,5 +228,4 @@ describe("AgentThreadReliabilityPanel", () => {
 
     expect(onReplayPendingRequest).toHaveBeenCalledWith("req-replay-1");
   });
-
- });
+});

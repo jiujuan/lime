@@ -89,7 +89,7 @@ describe("content factory production workflow evidence", () => {
       expect.objectContaining({
         actionId: "article-draft-review",
         auditEventsPresent: true,
-        contractMetadataPresent: true,
+        actionMetadataPresent: true,
         decision: "approved",
         stepId: "draft",
         workflowKey: "content_article_workflow",
@@ -98,27 +98,21 @@ describe("content factory production workflow evidence", () => {
     );
   });
 
-  it("从 queued resume contract 读取 selected-actions resume metadata", () => {
+  it("从 workflow/respond typed action metadata 匹配 resume lifecycle", () => {
     const traceBindings = workflowResumeBindingsFromTrace([
       {
         appServerRequests: [
           {
-            method: "agentSession/thread/resume",
+            method: "workflow/respond",
             params: {
-              resumeContract: {
-                decisions: [
-                  {
-                    actionId: "article-draft-review",
-                    decision: "approved",
-                    metadata: {
-                      workflow_resume: {
-                        step_id: "draft",
-                        workflow_key: "content_article_workflow",
-                        workflow_run_id: "turn_prod:content-article",
-                      },
-                    },
-                  },
-                ],
+              confirmed: true,
+              requestId: "article-draft-review",
+              metadata: {
+                workflowResume: {
+                  stepId: "draft",
+                  workflowKey: "content_article_workflow",
+                  workflowRunId: "turn_prod:content-article",
+                },
               },
             },
           },
@@ -127,14 +121,36 @@ describe("content factory production workflow evidence", () => {
     ]);
 
     expect(traceBindings).toEqual([
-      {
+      expect.objectContaining({
         actionId: "article-draft-review",
         decision: "approved",
-        stepId: "draft",
-        workflowKey: "content_article_workflow",
+        method: "workflow/respond",
         workflowRunId: "turn_prod:content-article",
-      },
+      }),
     ]);
+  });
+
+  it("拒绝非 canonical workflowResume metadata", () => {
+    expect(
+      workflowResumeBindingsFromTrace([
+        {
+          appServerRequests: [
+            {
+              method: "agentSession/action/respond",
+              params: {
+                confirmed: true,
+                requestId: "article-draft-review",
+                metadata: {
+                  stepId: "draft",
+                  workflowKey: "content_article_workflow",
+                  workflowRunId: "turn_prod:content-article",
+                },
+              },
+            },
+          ],
+        },
+      ]),
+    ).toEqual([]);
   });
 
   it("App Server params evidence projection drops prompts, raw text, and secrets", () => {
@@ -144,6 +160,7 @@ describe("content factory production workflow evidence", () => {
       message: "用户原文不应写入 trace evidence",
       prompt: "帮我写一篇生产文章",
       sessionId: "sess_prod",
+      threadId: "thread_prod",
       request_id: "article-draft-review",
       confirmed: true,
       metadata: {
@@ -153,21 +170,6 @@ describe("content factory production workflow evidence", () => {
           workflowRunId: "turn_prod:content-article",
         },
       },
-      resumeContract: {
-        decisions: [
-          {
-            actionId: "article-draft-review",
-            decision: "approved",
-            metadata: {
-              workflowResume: {
-                stepId: "draft",
-                workflowKey: "content_article_workflow",
-                workflowRunId: "turn_prod:content-article",
-              },
-            },
-          },
-        ],
-      },
     });
 
     expect(projected).toEqual({
@@ -176,21 +178,8 @@ describe("content factory production workflow evidence", () => {
       confirmed: true,
       decision: null,
       requestId: "article-draft-review",
-      resumeContract: {
-        decisions: [
-          {
-            actionId: "article-draft-review",
-            decision: "approved",
-            workflowResume: {
-              stepId: "draft",
-              workflowKey: "content_article_workflow",
-              workflowRunId: "turn_prod:content-article",
-            },
-          },
-        ],
-        resumeMode: null,
-      },
       sessionId: "sess_prod",
+      threadId: "thread_prod",
       turnId: null,
       workflowResume: {
         stepId: "draft",

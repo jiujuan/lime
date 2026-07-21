@@ -250,6 +250,29 @@ describe("resolveTaskCenterDraftSurfaceState", () => {
     expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
   });
 
+  it("历史 route 下显式打开新草稿后应由本地 draft surface 接管", () => {
+    const state = resolveTaskCenterDraftSurfaceState({
+      agentEntry: "claw",
+      isTaskCenterEntry: true,
+      activeDraftTabId: "draft-from-sidebar",
+      draftTabs: [createDraftTab("draft-from-sidebar")],
+      draftSurfaceActive: true,
+      initialSessionId: "route-session",
+      sessionId: null,
+      draftSendRequest: null,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      queuedTurnCount: 0,
+    });
+
+    expect(state.isTaskCenterDraftTabActive).toBe(true);
+    expect(state.isTaskCenterDraftSurfaceActive).toBe(true);
+    expect(state.shouldSuppressTaskCenterDraftContent).toBe(true);
+  });
+
   it("首页发送请求已创建时应展示 pending preview 而不是继续压制内容", () => {
     const state = resolveTaskCenterDraftSurfaceState({
       agentEntry: "new-task",

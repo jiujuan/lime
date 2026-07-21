@@ -171,6 +171,26 @@ describe("VoiceModelHost", () => {
     });
   });
 
+  it("模型资产只使用显式 AppDataRoot，不写 HostUserData", async () => {
+    const hostUserData = await createTempUserDataDir();
+    const appDataRoot = await createTempUserDataDir();
+    const host = new VoiceModelHost(appDataRoot);
+
+    const state = await host.getInstallState({
+      modelId: "sensevoice-small-int8-2024-07-17",
+    });
+
+    expect(state.install_dir).toBe(
+      path.join(
+        appDataRoot,
+        "models",
+        "voice",
+        "sensevoice-small-int8-2024-07-17",
+      ),
+    );
+    expect(state.install_dir).not.toContain(hostUserData);
+  });
+
   it("download 下载并安装本地模型文件", async () => {
     const userDataDir = await createTempUserDataDir();
     const emitted: Array<{ event: string; payload?: unknown }> = [];

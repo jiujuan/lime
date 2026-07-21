@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "SortDirection": {
+      "enum": [
+        "asc",
+        "desc"
+      ],
+      "type": "string"
+    },
+    "ThreadListCwdFilter": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "ThreadSortKey": {
+      "enum": [
+        "created_at",
+        "recency_at",
+        "updated_at"
+      ],
+      "type": "string"
+    },
+    "ThreadSourceKind": {
+      "enum": [
+        "appServer",
+        "cli",
+        "exec",
+        "subAgent",
+        "subAgentCompact",
+        "subAgentOther",
+        "subAgentReview",
+        "subAgentThreadSpawn",
+        "unknown",
+        "vscode"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "ancestorThreadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "archived": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "cursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "cwd": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThreadListCwdFilter"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "limit": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "modelProviders": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "parentThreadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "searchTerm": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sortDirection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SortDirection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sortKey": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThreadSortKey"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sourceKinds": {
+      "items": {
+        "$ref": "#/$defs/ThreadSourceKind"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "useStateDbOnly": {
+      "type": "boolean"
+    }
+  },
+  "title": "ThreadListParams",
+  "type": "object"
+}

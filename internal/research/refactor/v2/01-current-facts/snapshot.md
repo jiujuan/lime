@@ -2,10 +2,10 @@
 
 > status: current snapshot (working-tree based)
 > owner: runtime-architecture
-> last_verified: 2026-07-12
+> last_verified: 2026-07-18
 > lime_snapshot: current working tree, not a clean release commit
-> codex_commit: `5c19155cbd93bfa099016e7487259f61669823ff` (2026-07-11)
-> opencode_commit: `9976269ab1accfc9f9dc98a4a688c516934de422` (2026-07-10)
+> codex_commit: `2e4f55608b4ad26d9c48ea45a6fcd20bfd5e9fe8` (2026-07-18)
+> opencode_commit: `08fb47373509ba64b13441061314eeacf4264f51` (2026-07-18)
 
 ## 事实源和限制
 
@@ -27,36 +27,41 @@ src/components / features
 
 证据路径：
 
-| 事实 | 路径 |
-| --- | --- |
-| App Server method 与 scope catalog 已存在 | `lime-rs/crates/app-server-protocol/src/protocol/v0/catalog.rs:1-39,1306-2698` |
-| schema fixture 消费 scope | `lime-rs/crates/app-server-protocol/src/schema_fixtures.rs:1-72` |
-| Desktop Host 只承接 sidecar/IPC | `electron/appServerHost.ts`、`electron/preload.ts`、`src/lib/dev-bridge/safeInvoke.ts` |
-| runtime owner 已拆分 | `lime-rs/crates/agent-runtime/src/**`、`lime-rs/crates/runtime-core/src/**`、`lime-rs/crates/app-server/src/runtime/**` |
-| projection/read model 已成形 | `lime-rs/crates/app-server/src/runtime/projection_store.rs`、`read_model/**`、`thread_item_projection/**` |
-| GUI projection 已有独立目录 | `src/components/agent/chat/projection/**`、`components/**/timeline-utils/**` |
-| provider-neutral content/event 已存在 | `lime-rs/crates/runtime-core/src/llm_protocol/**`、`runtime_content.rs` |
+| 事实                                      | 路径                                                                                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| App Server method 与 scope catalog 已存在 | `lime-rs/crates/app-server-protocol/src/protocol/v0/catalog.rs:1-39,1306-2698`                                          |
+| schema fixture 消费 scope                 | `lime-rs/crates/app-server-protocol/src/schema_fixtures.rs:1-72`                                                        |
+| Desktop Host 只承接 sidecar/IPC           | `electron/appServerHost.ts`、`electron/preload.ts`、`src/lib/dev-bridge/safeInvoke.ts`                                  |
+| runtime owner 已拆分                      | `lime-rs/crates/agent-runtime/src/**`、`lime-rs/crates/runtime-core/src/**`、`lime-rs/crates/app-server/src/runtime/**` |
+| projection/read model 已成形              | `lime-rs/crates/app-server/src/runtime/projection_store.rs`、`read_model/**`、`thread_item_projection/**`               |
+| GUI projection 已有独立目录               | `src/components/agent/chat/projection/**`、`components/**/timeline-utils/**`                                            |
+| provider-neutral content/event 已存在     | `lime-rs/crates/runtime-core/src/llm_protocol/**`、`runtime_content.rs`                                                 |
 
 ## 体量与聚合风险
 
-| 文件 | 当前行数 | v2 判断 |
-| --- | ---: | --- |
-| `lime-rs/crates/app-server-protocol/src/protocol/v0/catalog.rs` | 2698 | 已集中 method/scope，但仍是巨型事实源；拆成按 domain 的声明文件并派生总 catalog |
-| `lime-rs/crates/app-server/src/runtime.rs` | 710 | 接近 800 行门槛；只保留组装和 re-export |
-| `lime-rs/crates/app-server/src/processor/dispatch.rs` | 725 | 只允许薄分派；新增 handler 不得继续堆叠 |
-| `src/components/agent/chat/AgentChatWorkspace.tsx` | 2674 | 仍超过 1000 行；v2 要拆成 scene composition、view model、command wiring 和 projection |
-| `src/components/agent/chat/components/MessageList.tsx` | 456 | 只消费 projection，不解释 runtime 语义 |
-| `src/components/agent/chat/components/AgentThreadTimeline.tsx` | 521 | 只消费 Item/TL projection，不建立第二状态机 |
+| 文件                                                            | 当前行数 | v2 判断                                                                                                                               |
+| --------------------------------------------------------------- | -------: | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `lime-rs/crates/app-server-protocol/src/protocol/v0/catalog.rs` |     2846 | 已集中 method/scope，但仍是巨型事实源；拆成按 domain 的声明文件并派生总 catalog                                                       |
+| `lime-rs/crates/app-server/src/runtime.rs`                      |      669 | 接近 800 行门槛；只保留组装和 re-export                                                                                               |
+| `lime-rs/crates/app-server/src/processor/dispatch.rs`           |      730 | 只允许薄分派；新增 handler 不得继续堆叠                                                                                               |
+| `src/components/agent/chat/AgentChatWorkspace.tsx`              |       13 | 公共入口只委托 `useAgentChatWorkspaceRuntime`；不承接业务逻辑 |
+| `src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx`    |       41 | current composition owner；只按 `Entry -> Setup -> Command -> Scene` 无条件编排 |
+| `src/components/agent/chat/workspace/useAgentChatWorkspaceEntryRuntime.ts` | 624 | current entry/bootstrap owner；项目、内容、技能和入口状态 |
+| `src/components/agent/chat/workspace/useAgentChatWorkspaceSetupRuntime.ts` | 782 | current runtime/read-model setup owner；Agent Chat、Thread/Turn/Item read model 与 workspace runtime |
+| `src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts` | 653 | current command/side-effect owner；send、queue、approval、artifact、shell command wiring |
+| `src/components/agent/chat/workspace/useAgentChatWorkspaceSceneRuntime.tsx` | 684 | current scene projection owner；inputbar、canvas、task center、right surface 和 JSX composition |
+| `src/components/agent/chat/components/MessageList.tsx`          |      456 | 只消费 projection，不解释 runtime 语义                                                                                                |
+| `src/components/agent/chat/components/AgentThreadTimeline.tsx`  |      521 | 只消费 Item/TL projection，不建立第二状态机                                                                                           |
 
 ## 当前分类
 
-| 分类 | 当前事实 | v2 处理 |
-| --- | --- | --- |
-| `current` | `lime-rs/crates/**`、`packages/app-server-client`、`src/lib/api/*`、`electron/**`、ProjectionStore/read model | 继续收敛，不新增平级 owner |
-| `compat` | 少量 barrel、受控 policy、未完成迁移适配 | 在同一切片内迁出并删除；不扩展 |
-| `deprecated` | 数据迁移、旧 settings key、旧 direct DAO 或旧 facade 的受控残留 | 只允许迁出；完成后删除 |
-| `dead` | 旧 `lime-rs/src/**`、旧 Tauri wrapper、旧 `agent_runtime_*` 生产命令、生产 mock fallback | 删除并加负向 guard；禁止恢复 |
-| `test-only` | 旧命令字符串、负向 contract、退役路径扫描 | 仅保留负向证明，不作为生产 API |
+| 分类         | 当前事实                                                                                                      | v2 处理                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `current`    | `lime-rs/crates/**`、`packages/app-server-client`、`src/lib/api/*`、`electron/**`、ProjectionStore/read model | 继续收敛，不新增平级 owner     |
+| `compat`     | 少量 barrel、受控 policy、未完成迁移适配                                                                      | 在同一切片内迁出并删除；不扩展 |
+| `deprecated` | 数据迁移、旧 settings key、旧 direct DAO 或旧 facade 的受控残留                                               | 只允许迁出；完成后删除         |
+| `dead`       | 旧 `lime-rs/src/**`、旧 Tauri wrapper、旧 `agent_runtime_*` 生产命令、生产 mock fallback                      | 删除并加负向 guard；禁止恢复   |
+| `test-only`  | 旧命令字符串、负向 contract、退役路径扫描                                                                     | 仅保留负向证明，不作为生产 API |
 
 ## v1 已失效的事实
 

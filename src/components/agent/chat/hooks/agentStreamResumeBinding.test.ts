@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from "react";
 import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, Message } from "../types";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
 import {
@@ -28,7 +27,6 @@ describe("agentStreamResumeBinding", () => {
       resolveAgentStreamResumeBindingTarget({
         sessionId: "session-1",
         threadBusy: true,
-        queuedTurns: [],
         currentTurnId: null,
         threadRead: {
           thread_id: "thread-1",
@@ -58,7 +56,6 @@ describe("agentStreamResumeBinding", () => {
       resolveAgentStreamResumeBindingTarget({
         sessionId: "session-1",
         threadBusy: true,
-        queuedTurns: [],
         currentTurnId: null,
         threadRead: {
           thread_id: "thread-1",
@@ -88,7 +85,6 @@ describe("agentStreamResumeBinding", () => {
       resolveAgentStreamResumeBindingTarget({
         sessionId: "session-1",
         threadBusy: true,
-        queuedTurns: [],
         currentTurnId: "turn-stale",
         threadRead: {
           thread_id: "thread-1",
@@ -106,16 +102,6 @@ describe("agentStreamResumeBinding", () => {
       resolveAgentStreamResumeBindingTarget({
         sessionId: "session-1",
         threadBusy: true,
-        queuedTurns: [
-          {
-            queued_turn_id: "queued-1",
-            message_preview: "排队中",
-            message_text: "排队中",
-            created_at: 1,
-            image_count: 0,
-            position: 1,
-          },
-        ],
         currentTurnId: null,
         threadRead: {
           thread_id: "thread-1",
@@ -131,7 +117,6 @@ describe("agentStreamResumeBinding", () => {
       resolveAgentStreamResumeBindingTarget({
         sessionId: "session-1",
         threadBusy: true,
-        queuedTurns: [],
         currentTurnId: "turn-stale",
         threadRead: null,
         threadTurns: [
@@ -154,16 +139,6 @@ describe("agentStreamResumeBinding", () => {
       resolveAgentStreamResumeBindingTarget({
         sessionId: "session-1",
         threadBusy: true,
-        queuedTurns: [
-          {
-            queued_turn_id: "queued-1",
-            message_preview: "排队中",
-            message_text: "排队中",
-            created_at: 1,
-            image_count: 0,
-            position: 1,
-          },
-        ],
         currentTurnId: null,
         threadRead: {
           thread_id: "thread-1",
@@ -192,7 +167,6 @@ describe("agentStreamResumeBinding", () => {
       resolveAgentStreamResumeBindingTarget({
         sessionId: "session-1",
         threadBusy: true,
-        queuedTurns: [],
         currentTurnId: "turn-stale",
         threadRead: {
           thread_id: "thread-1",
@@ -238,7 +212,6 @@ describe("agentStreamResumeBinding", () => {
     const messages = { current: [] as Message[] };
     const threadTurns = { current: [] as AgentThreadTurn[] };
     const threadItems = { current: [] as AgentThreadItem[] };
-    const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
     const pendingActions = { current: [] as ActionRequired[] };
     const executionRuntime = {
       current: null as AgentSessionExecutionRuntime | null,
@@ -273,7 +246,6 @@ describe("agentStreamResumeBinding", () => {
       setIsSending,
       setMessages: createStateSetter(messages),
       setPendingActions: createStateSetter(pendingActions),
-      setQueuedTurns: createStateSetter(queuedTurns),
       setThreadItems: createStateSetter(threadItems),
       setThreadTurns: createStateSetter(threadTurns),
       target: {
@@ -308,7 +280,6 @@ describe("agentStreamResumeBinding", () => {
     const messages = { current: [] as Message[] };
     const threadTurns = { current: [] as AgentThreadTurn[] };
     const threadItems = { current: [] as AgentThreadItem[] };
-    const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
     const pendingActions = { current: [] as ActionRequired[] };
     const executionRuntime = {
       current: null as AgentSessionExecutionRuntime | null,
@@ -350,7 +321,6 @@ describe("agentStreamResumeBinding", () => {
       setIsSending,
       setMessages: createStateSetter(messages),
       setPendingActions: createStateSetter(pendingActions),
-      setQueuedTurns: createStateSetter(queuedTurns),
       setThreadItems: createStateSetter(threadItems),
       setThreadTurns: createStateSetter(threadTurns),
       target: {
@@ -382,7 +352,6 @@ describe("agentStreamResumeBinding", () => {
     const messages = { current: [] as Message[] };
     const threadTurns = { current: [] as AgentThreadTurn[] };
     const threadItems = { current: [] as AgentThreadItem[] };
-    const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
     const pendingActions = { current: [] as ActionRequired[] };
     const executionRuntime = {
       current: null as AgentSessionExecutionRuntime | null,
@@ -424,7 +393,6 @@ describe("agentStreamResumeBinding", () => {
       setIsSending,
       setMessages: createStateSetter(messages),
       setPendingActions: createStateSetter(pendingActions),
-      setQueuedTurns: createStateSetter(queuedTurns),
       setThreadItems: createStateSetter(threadItems),
       setThreadTurns: createStateSetter(threadTurns),
       target: {
@@ -461,7 +429,6 @@ describe("agentStreamResumeBinding", () => {
     const messages = { current: [] as Message[] };
     const threadTurns = { current: [] as AgentThreadTurn[] };
     const threadItems = { current: [] as AgentThreadItem[] };
-    const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
     const pendingActions = { current: [] as ActionRequired[] };
     const executionRuntime = {
       current: null as AgentSessionExecutionRuntime | null,
@@ -505,7 +472,6 @@ describe("agentStreamResumeBinding", () => {
       setIsSending,
       setMessages: createStateSetter(messages),
       setPendingActions: createStateSetter(pendingActions),
-      setQueuedTurns: createStateSetter(queuedTurns),
       setThreadItems: createStateSetter(threadItems),
       setThreadTurns: createStateSetter(threadTurns),
       target: {
@@ -528,7 +494,7 @@ describe("agentStreamResumeBinding", () => {
       "agentSession/event/session-1",
       expect.any(Function),
     );
-    expect(runtime.resumeThread).toHaveBeenCalledWith("session-1", "turn-1");
+    expect(runtime.resumeThread).toHaveBeenCalledWith("thread-1");
 
     eventHandler?.({
       payload: {

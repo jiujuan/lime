@@ -381,7 +381,7 @@ describe("AgentThreadTimeline", () => {
         },
         raw_payload: {
           jsonrpc: "2.0",
-          method: "agentSession/turn/start",
+          method: "turn/start",
         },
       },
     } as unknown as AgentThreadItem;
@@ -395,7 +395,7 @@ describe("AgentThreadTimeline", () => {
     expect(container.textContent).not.toContain("request_metadata");
     expect(container.textContent).not.toContain("raw_payload");
     expect(container.textContent).not.toContain("jsonrpc");
-    expect(container.textContent).not.toContain("agentSession/turn/start");
+    expect(container.textContent).not.toContain("turn/start");
   });
   it("应把专家 profile switch 渲染为当前 Thread 内的运行事实", () => {
     const container = renderTimeline([

@@ -48,12 +48,12 @@
     "project_shell_session_kill"
   ],
   "deprecatedCommandReplacements": {
-    "list_agent_sessions": "agentSession/list",
-    "agent_chat_stream": "agentSession/turn/start",
-    "agent_create_session": "agentSession/start",
-    "agent_list_sessions": "agentSession/list",
-    "agent_get_session": "agentSession/read",
-    "agent_get_session_messages": "agentSession/read",
+    "list_agent_sessions": "thread/list",
+    "agent_chat_stream": "turn/start",
+    "agent_create_session": "thread/start",
+    "agent_list_sessions": "thread/list",
+    "agent_get_session": "thread/read",
+    "agent_get_session_messages": "thread/read",
     "agent_delete_session": "agentSession/update",
     "agent_rename_session": "agentSession/update",
     "create_poster_metadata": "galleryMaterialMetadata/create",

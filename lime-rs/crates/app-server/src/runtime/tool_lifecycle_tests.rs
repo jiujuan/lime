@@ -221,6 +221,53 @@ fn rejects_tool_result_after_action_denial() {
 }
 
 #[test]
+fn decline_blocks_completed_tool_result_but_allows_failed_terminal() {
+    let existing = vec![
+        event(
+            "evt_start",
+            "item.started",
+            json!({ "toolCallId": "tool_1" }),
+        ),
+        event(
+            "evt_action",
+            "action.required",
+            json!({
+                "actionId": "action_1",
+                "toolCallId": "tool_1"
+            }),
+        ),
+        event(
+            "evt_action_declined",
+            "action.resolved",
+            json!({
+                "actionId": "action_1",
+                "toolCallId": "tool_1",
+                "decision": "decline"
+            }),
+        ),
+    ];
+    let completed = event(
+        "evt_completed",
+        "item.completed",
+        json!({ "toolCallId": "tool_1", "output": "must not run" }),
+    );
+    let failed = event(
+        "evt_failed",
+        "item.completed",
+        json!({
+            "toolCallId": "tool_1",
+            "failureCategory": "tool_approval_declined"
+        }),
+    );
+
+    let error = validate_tool_lifecycle_event(&existing, &completed)
+        .expect_err("declined approval must reject a completed tool result");
+    assert!(error.contains("tool_result_after_action_denied"));
+    validate_tool_lifecycle_event(&existing, &failed)
+        .expect("declined tool can still close as failed");
+}
+
+#[test]
 fn rejects_tool_result_after_sandbox_blocked() {
     let existing = vec![
         event(

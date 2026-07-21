@@ -296,9 +296,6 @@
   "agentChat.messageList.artifact.sourceCount": "출처 {{count}}개",
   "agentChat.messageList.artifact.locateBlock": "{{label}}로 이동",
   "agentChat.messageList.artifact.documentSyncedPreview": "작업 공간에 동기화되었습니다. 캔버스에서 계속 읽고 편집하며 해당 블록으로 이동할 수 있습니다.",
-  "agentChat.messageList.artifactFrame.badge": "결과물 프레임",
-  "agentChat.messageList.artifactFrame.open": "편집기 열기",
-  "agentChat.messageList.artifactFrame.openAria": "결과물 편집기 열기: {{title}}",
   "agentChat.messageList.artifactFrame.streaming": "스트리밍 중",
   "agentChat.messageList.articleArtifact.documentCreatedPrefix": "문서가 생성됨:",
   "agentChat.messageList.articleArtifact.documentCreatingPrefix": "문서 생성 중:",
@@ -465,5 +462,7 @@
   "agentChat.toolCall.group.collapseSearch": "검색 묶음 접기",
   "agentChat.toolCall.group.expandSearch": "검색 묶음 펼치기",
   "agentChat.toolCall.group.hiddenSearchGroups": " 외 {{count}}개 묶음",
-  "agentChat.toolCall.error.openExternalUnsupported": "현재 환경에서는 외부 링크를 열 수 없습니다"
+  "agentChat.toolCall.error.openExternalUnsupported": "현재 환경에서는 외부 링크를 열 수 없습니다",
+  "agentChat.inputbar.shellCommand.empty": "실행할 명령을 입력하세요",
+  "agentChat.inputbar.shellCommand.error": "명령 제출 실패: {{message}}"
 }

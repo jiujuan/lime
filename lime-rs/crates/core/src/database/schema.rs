@@ -277,7 +277,7 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
         [],
     )?;
 
-    // 旧凭证池表：仅保留历史 schema 与启动清理边界
+    // 旧凭证池表：只读保留为后续 manifest 驱动迁移的 source
     conn.execute(
         "CREATE TABLE IF NOT EXISTS provider_pool_credentials (
             uuid TEXT PRIMARY KEY,

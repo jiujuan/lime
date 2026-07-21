@@ -1,7 +1,7 @@
 import { decodeJsonRpcLines } from "./claw-chat-current-fixture-rpc.mjs";
 
-const TURN_START_METHOD = "agentSession/turn/start";
-const SESSION_READ_METHOD = "agentSession/read";
+const TURN_START_METHOD = "turn/start";
+const SESSION_READ_METHOD = "thread/read";
 const TERMINAL_STATUSES = new Set([
   "canceled",
   "cancelled",

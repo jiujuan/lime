@@ -3,8 +3,12 @@ use async_trait::async_trait;
 
 #[async_trait]
 impl PluginDataSource for LocalAppDataSource {
+    fn plugin_data_root(&self) -> Result<std::path::PathBuf, RuntimeCoreError> {
+        Ok(self.plugin_data_root.clone())
+    }
+
     async fn list_plugin_installed(&self) -> Result<PluginInstalledListResponse, RuntimeCoreError> {
-        plugins::list_plugin_installed_state().map_err(data_error)
+        plugins::list_plugin_installed_state(&self.plugin_data_root).map_err(data_error)
     }
 
     async fn inspect_plugin_local_package(
@@ -25,7 +29,7 @@ impl PluginDataSource for LocalAppDataSource {
         &self,
         params: PluginFetchCloudPackageParams,
     ) -> Result<PluginPackageCacheEntry, RuntimeCoreError> {
-        plugins::fetch_plugin_cloud_package(params)
+        plugins::fetch_plugin_cloud_package(&self.plugin_data_root, params)
             .await
             .map_err(data_error)
     }
@@ -34,27 +38,32 @@ impl PluginDataSource for LocalAppDataSource {
         &self,
         params: PluginInstalledSaveParams,
     ) -> Result<Value, RuntimeCoreError> {
-        plugins::save_plugin_installed_state(params).map_err(data_error)
+        plugins::save_plugin_installed_state(&self.plugin_data_root, params).map_err(data_error)
     }
 
     async fn set_plugin_installed_disabled(
         &self,
         params: PluginInstalledDisabledSetParams,
     ) -> Result<PluginInstalledListResponse, RuntimeCoreError> {
-        plugins::set_plugin_installed_disabled(params).map_err(data_error)
+        plugins::set_plugin_installed_disabled(&self.plugin_data_root, params).map_err(data_error)
     }
 
     async fn preview_plugin_uninstall(
         &self,
         params: PluginUninstallRehearsalParams,
     ) -> Result<PluginUninstallRehearsalResponse, RuntimeCoreError> {
-        plugins::build_plugin_uninstall_rehearsal(params.app_id, params.mode).map_err(data_error)
+        plugins::build_plugin_uninstall_rehearsal(
+            &self.plugin_data_root,
+            params.app_id,
+            params.mode,
+        )
+        .map_err(data_error)
     }
 
     async fn uninstall_plugin(
         &self,
         params: PluginUninstallParams,
     ) -> Result<PluginUninstallResponse, RuntimeCoreError> {
-        plugins::uninstall_plugin(params).map_err(data_error)
+        plugins::uninstall_plugin(&self.plugin_data_root, params).map_err(data_error)
     }
 }

@@ -3,9 +3,14 @@ use super::NoopAppDataSource;
 use super::RuntimeCoreError;
 use app_server_protocol::*;
 use async_trait::async_trait;
+use std::path::PathBuf;
 
 #[async_trait]
 pub trait PluginDataSource: Send + Sync {
+    fn plugin_data_root(&self) -> Result<PathBuf, RuntimeCoreError> {
+        Err(unavailable("pluginData/root"))
+    }
+
     async fn list_plugin_installed(&self) -> Result<PluginInstalledListResponse, RuntimeCoreError> {
         Ok(PluginInstalledListResponse::default())
     }

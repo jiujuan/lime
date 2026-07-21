@@ -9,9 +9,7 @@ import { _electron as electron, chromium } from "playwright";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 import { ensureElectronFixtureBuild } from "../lib/electron-fixture-build.mjs";
-import {
-  createTempRuntimeEnv,
-} from "./claw-chat-current-fixture-backend-file.mjs";
+import { createTempRuntimeEnv } from "./claw-chat-current-fixture-backend-file.mjs";
 import {
   waitForBackendLedgerEntry,
   waitForBackendLedgerTurnStart,
@@ -34,9 +32,7 @@ import {
   SESSION_TITLE,
   THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
-import {
-  sendPromptFromGui,
-} from "./claw-chat-current-fixture-gui-actions.mjs";
+import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
 import {
   waitForGuiChatCanceled,
   waitForStopButtonVisibleAndClick,
@@ -48,20 +44,18 @@ import {
   readModelTurnStatus,
   summarizeReadModelQueueState,
 } from "./claw-chat-current-fixture-read-model-core.mjs";
-import {
-  waitForSessionReadCanceled,
-} from "./claw-chat-current-fixture-read-model-waits.mjs";
+import { waitForSessionReadCanceled } from "./claw-chat-current-fixture-read-model-waits.mjs";
 import {
   bindGuiWorkspaceAndModelPreferences,
   clearInvokeBuffers,
-  collectAgentSessionEvents,
+  collectRuntimeEvents,
   drainAppServerEventsFromPage,
   ensureDefaultWorkspace,
   initializeAppServer,
   invokeAppServerFromPage,
   readTraceMessages,
   reloadRendererDocument,
-  summarizeAgentSessionEvents,
+  summarizeRuntimeEvents,
   waitForAppUrlReady,
   waitForRendererReady,
 } from "./claw-chat-current-fixture-rpc.mjs";
@@ -111,7 +105,7 @@ Reopen Running Turn CDP Gate
   真实 renderer，使用 controlled external fixture 制造 running turn，
   然后 reload renderer 或重启 Electron，验证同一 sessionId/turnId 的
   主区、侧栏、输入框运行态保持一致。reload 模式还要求产品恢复逻辑
-  自动调用 agentSession/thread/resume；restart 模式只声明 cold-start
+  自动调用 thread/resume；restart 模式只声明 cold-start
   后 read model / GUI 恢复，不声明 external backend 子进程跨重启存活。
 
 边界:
@@ -526,7 +520,8 @@ function summarizeTraceMessages(traceMessages) {
       status: entry.status ?? null,
       method: message.method ?? null,
       id: message.id ?? null,
-      sessionId: message.params?.sessionId ?? message.params?.session_id ?? null,
+      sessionId:
+        message.params?.sessionId ?? message.params?.session_id ?? null,
       threadId: message.params?.threadId ?? message.params?.thread_id ?? null,
       turnId: message.params?.turnId ?? message.params?.turn_id ?? null,
       eventName:
@@ -623,19 +618,11 @@ function normalizeText(value) {
 }
 
 function turnStartTraceTurnId(entry) {
-  return (
-    entry?.turnId ??
-    entry?.turn_id ??
-    null
-  );
+  return entry?.turnId ?? entry?.turn_id ?? null;
 }
 
 function turnStartTraceText(entry) {
-  return (
-    entry?.text ??
-    entry?.inputText ??
-    null
-  );
+  return entry?.text ?? entry?.inputText ?? null;
 }
 
 function collectTurnStartTraceEvidence(inputSend) {
@@ -785,7 +772,8 @@ function summarizeReadModelRunningState(readModel, turnId, prompt) {
     sameActiveTurn: queueState.activeTurnId === turnId,
     hasRunningStatus,
     hasTerminalStatus,
-    running: (queueState.activeTurnId === turnId || hasRunningStatus) &&
+    running:
+      (queueState.activeTurnId === turnId || hasRunningStatus) &&
       !hasTerminalStatus,
   });
 }
@@ -795,11 +783,7 @@ async function waitForReadModelRunning(
   options,
   requestLog,
   turnId,
-  {
-    requireContent = true,
-    sessionId = SESSION_ID,
-    prompt = NEWS_PROMPT,
-  } = {},
+  { requireContent = true, sessionId = SESSION_ID, prompt = NEWS_PROMPT } = {},
 ) {
   const startedAt = Date.now();
   let lastSummary = null;
@@ -813,11 +797,7 @@ async function waitForReadModelRunning(
       },
       requestLog,
     );
-    lastSummary = summarizeReadModelRunningState(
-      read.result,
-      turnId,
-      prompt,
-    );
+    lastSummary = summarizeReadModelRunningState(read.result, turnId, prompt);
     if (
       lastSummary.running &&
       (!requireContent ||
@@ -873,7 +853,8 @@ function summarizeSessionList(result, turnId, sessionId = SESSION_ID) {
           sessionId:
             matched.sessionId ?? matched.session_id ?? matched.id ?? null,
           title: matched.title ?? null,
-          runtimeStatus: matched.runtimeStatus ?? matched.runtime_status ?? null,
+          runtimeStatus:
+            matched.runtimeStatus ?? matched.runtime_status ?? null,
           status: matched.status ?? matched.state ?? null,
           latestTurnStatus:
             matched.latestTurnStatus ?? matched.latest_turn_status ?? null,
@@ -886,8 +867,8 @@ function summarizeSessionList(result, turnId, sessionId = SESSION_ID) {
           includesTurnId: turnId ? serialized.includes(turnId) : null,
         }
       : null,
-    running: Boolean(matched) && (running || serialized.includes(turnId)) &&
-      !terminal,
+    running:
+      Boolean(matched) && (running || serialized.includes(turnId)) && !terminal,
     terminal,
   });
 }
@@ -1120,7 +1101,9 @@ async function createSecondaryRunningSession(
 async function sampleGuiSidebarRunningSessions(page, specs) {
   return await page.evaluate((sessionSpecs) => {
     const rows = Array.from(
-      document.querySelectorAll('[data-testid="app-sidebar-conversation-open"]'),
+      document.querySelectorAll(
+        '[data-testid="app-sidebar-conversation-open"]',
+      ),
     );
     return sessionSpecs.map((spec) => {
       const matchingRows = rows.filter((row) => {
@@ -1134,9 +1117,11 @@ async function sampleGuiSidebarRunningSessions(page, specs) {
       const row =
         matchingRows.find((candidate) =>
           Boolean(
-            candidate.querySelector(
-              '[data-testid="app-sidebar-conversation-runtime-status"]',
-            )?.getAttribute("data-status"),
+            candidate
+              .querySelector(
+                '[data-testid="app-sidebar-conversation-runtime-status"]',
+              )
+              ?.getAttribute("data-status"),
           ),
         ) ??
         matchingRows[0] ??
@@ -1156,12 +1141,7 @@ async function sampleGuiSidebarRunningSessions(page, specs) {
   }, specs);
 }
 
-async function waitForGuiSidebarSessionsRunning(
-  page,
-  options,
-  specs,
-  label,
-) {
+async function waitForGuiSidebarSessionsRunning(page, options, specs, label) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -1299,7 +1279,9 @@ async function sampleGuiHomeBackgroundRecoveryState(page, turnId) {
         (textarea) => textarea.dataset.sessionId || null,
       );
       const sidebarRows = Array.from(
-        document.querySelectorAll('[data-testid="app-sidebar-conversation-open"]'),
+        document.querySelectorAll(
+          '[data-testid="app-sidebar-conversation-open"]',
+        ),
       );
       const matchingSidebarRows = sidebarRows.filter((row) => {
         const label = [
@@ -1312,9 +1294,11 @@ async function sampleGuiHomeBackgroundRecoveryState(page, turnId) {
       const sidebarRow =
         matchingSidebarRows.find((row) =>
           Boolean(
-            row.querySelector(
-              '[data-testid="app-sidebar-conversation-runtime-status"]',
-            )?.getAttribute("data-status"),
+            row
+              .querySelector(
+                '[data-testid="app-sidebar-conversation-runtime-status"]',
+              )
+              ?.getAttribute("data-status"),
           ),
         ) ??
         matchingSidebarRows.find((row) => {
@@ -1324,17 +1308,19 @@ async function sampleGuiHomeBackgroundRecoveryState(page, turnId) {
             row.textContent || "",
           ].join("\n");
           return label.includes(title);
-        }) ?? null;
+        }) ??
+        null;
       const sidebarStatusNode = sidebarRow?.querySelector(
         '[data-testid="app-sidebar-conversation-runtime-status"]',
       );
-      const sidebarStatus = sidebarStatusNode?.getAttribute("data-status") || "";
+      const sidebarStatus =
+        sidebarStatusNode?.getAttribute("data-status") || "";
       const mainPromptVisible = mainText.includes(prompt);
-      const mainAssistantOutputVisible = mainText.includes(
-        "以下是今日国际新闻简要整理",
-      );
+      const mainAssistantOutputVisible =
+        mainText.includes("以下是今日国际新闻简要整理");
       const activeSessionTextareaVisible = textareas.some(
-        (textarea) => textarea.dataset.sessionId === sessionId && isVisible(textarea),
+        (textarea) =>
+          textarea.dataset.sessionId === sessionId && isVisible(textarea),
       );
       const activeSessionMessageVisible =
         messageLists.some((list) => isVisible(list)) &&
@@ -1354,7 +1340,7 @@ async function sampleGuiHomeBackgroundRecoveryState(page, turnId) {
         homeRecoveryCardTitle: homeRecoveryCard?.getAttribute("title") || "",
         homeRecoveryCardTitleFound: Boolean(
           homeRecoveryCard &&
-            (homeRecoveryCard.textContent || "").includes(title),
+          (homeRecoveryCard.textContent || "").includes(title),
         ),
         mainPromptVisible,
         mainAssistantOutputVisible,
@@ -1372,7 +1358,12 @@ async function sampleGuiHomeBackgroundRecoveryState(page, turnId) {
         sidebarRowText: sidebarRow?.textContent || "",
       };
     },
-    { prompt: NEWS_PROMPT, title: SESSION_TITLE, sessionId: SESSION_ID, turnId },
+    {
+      prompt: NEWS_PROMPT,
+      title: SESSION_TITLE,
+      sessionId: SESSION_ID,
+      turnId,
+    },
   );
 }
 
@@ -1460,9 +1451,7 @@ async function openFixtureSessionFromHomeRecoveryCard(page, options, turnId) {
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `首页恢复卡未能打开会话详情: ${JSON.stringify(
-      sanitizeJson(lastSnapshot),
-    )}`,
+    `首页恢复卡未能打开会话详情: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
   );
 }
 
@@ -1507,7 +1496,10 @@ async function navigateGuiToNewTaskHome(page, options, turnId) {
       ...(lastSnapshot && typeof lastSnapshot === "object" ? lastSnapshot : {}),
       home: homeSnapshot,
     };
-    if (homeSnapshot.homeStartVisible && !homeSnapshot.activeDetailBoundToSession) {
+    if (
+      homeSnapshot.homeStartVisible &&
+      !homeSnapshot.activeDetailBoundToSession
+    ) {
       return lastSnapshot;
     }
     await sleep(options.intervalMs);
@@ -1573,11 +1565,12 @@ async function sampleGuiRunningState(page, turnId) {
         inputbarText.includes("正在输出") ||
         inputbarText.includes("正在生成") ||
         inputbarButtonLabels.some(
-          (label) =>
-            label.includes("正在输出") || label.includes("正在生成"),
+          (label) => label.includes("正在输出") || label.includes("正在生成"),
         );
       const sidebarRows = Array.from(
-        document.querySelectorAll('[data-testid="app-sidebar-conversation-open"]'),
+        document.querySelectorAll(
+          '[data-testid="app-sidebar-conversation-open"]',
+        ),
       );
       const matchingSidebarRows = sidebarRows.filter((row) => {
         const label = [
@@ -1590,9 +1583,11 @@ async function sampleGuiRunningState(page, turnId) {
       const sidebarRow =
         matchingSidebarRows.find((row) =>
           Boolean(
-            row.querySelector(
-              '[data-testid="app-sidebar-conversation-runtime-status"]',
-            )?.getAttribute("data-status"),
+            row
+              .querySelector(
+                '[data-testid="app-sidebar-conversation-runtime-status"]',
+              )
+              ?.getAttribute("data-status"),
           ),
         ) ??
         matchingSidebarRows.find((row) => {
@@ -1602,11 +1597,13 @@ async function sampleGuiRunningState(page, turnId) {
             row.textContent || "",
           ].join("\n");
           return label.includes(title);
-        }) ?? null;
+        }) ??
+        null;
       const sidebarStatusNode = sidebarRow?.querySelector(
         '[data-testid="app-sidebar-conversation-runtime-status"]',
       );
-      const sidebarStatus = sidebarStatusNode?.getAttribute("data-status") || "";
+      const sidebarStatus =
+        sidebarStatusNode?.getAttribute("data-status") || "";
       const sidebarStatusText = sidebarStatusNode?.textContent || "";
       const globalStopButtonVisible = Array.from(
         document.querySelectorAll("button"),
@@ -1681,7 +1678,8 @@ async function waitForGuiRunningConsistency(page, options, turnId, label) {
     if (
       lastSnapshot.hasPrompt &&
       lastSnapshot.hasAssistantOutput &&
-      (lastSnapshot.mainRunningStatus || lastSnapshot.globalStopButtonVisible) &&
+      (lastSnapshot.mainRunningStatus ||
+        lastSnapshot.globalStopButtonVisible) &&
       lastSnapshot.inputbarHasStopButton &&
       lastSnapshot.sidebarTitleFound &&
       lastSnapshot.sidebarStatus === "running"
@@ -1743,8 +1741,8 @@ async function waitForCanceledEventAfterReload(page, options, turnId) {
   let lastSummary = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const drained = await drainAppServerEventsFromPage(page, 100);
-    events = [...events, ...collectAgentSessionEvents(drained.messages)];
-    lastSummary = summarizeAgentSessionEvents(events, turnId);
+    events = [...events, ...collectRuntimeEvents(drained.messages)];
+    lastSummary = summarizeRuntimeEvents(events, turnId);
     if (lastSummary.terminalTypes?.includes("turn.canceled")) {
       return {
         events: sanitizeJson(events.filter((event) => event.turnId === turnId)),
@@ -1822,7 +1820,7 @@ async function run() {
     proofLevel: "Gate B controlled fixture",
     claimBoundary:
       options.reopenMode === "restart"
-        ? `真实 Electron CDP + preload IPC + app_server_handle_json_lines + App Server JSON-RPC + external controlled fixture；证明 Electron/App Server 重启后同一 running turnId 的 read model 与 GUI 状态可恢复一致；presentation=${options.presentationMode}；不要求 agentSession/thread/resume，不证明后台 backend 子进程跨重启继续存活或 live Provider。`
+        ? `真实 Electron CDP + preload IPC + app_server_handle_json_lines + App Server JSON-RPC + external controlled fixture；证明 Electron/App Server 重启后同一 running turnId 的 read model 与 GUI 状态可恢复一致；presentation=${options.presentationMode}；不要求 thread/resume，不证明后台 backend 子进程跨重启继续存活或 live Provider。`
         : `真实 Electron CDP + preload IPC + app_server_handle_json_lines + App Server JSON-RPC + external controlled fixture；证明 reload 后同一 running turnId 由产品恢复逻辑续接；presentation=${options.presentationMode}；不证明 live Provider。`,
     completedGateB: false,
     backendMode: "external",
@@ -2122,7 +2120,9 @@ async function run() {
       });
     } else {
       logStage("reload-renderer");
-      summary.reload = sanitizeJson(await reloadRendererDocument(page, options));
+      summary.reload = sanitizeJson(
+        await reloadRendererDocument(page, options),
+      );
     }
 
     summary.rendererSnapshotAfterReopen = sanitizeJson(
@@ -2180,7 +2180,7 @@ async function run() {
       summary.threadResumeTraceAfterReopen = sanitizeJson({
         skipped: true,
         reason:
-          "restart 模式只声明 cold-start 后 read model / GUI running 状态恢复；external backend 子进程不作为跨重启存活声明，agentSession/thread/resume 不是 restart Gate B 必需断言。",
+          "restart 模式只声明 cold-start 后 read model / GUI running 状态恢复；external backend 子进程不作为跨重启存活声明，thread/resume 不是 restart Gate B 必需断言。",
       });
     } else {
       summary.threadResumeTraceAfterReopen = sanitizeJson(
@@ -2204,7 +2204,8 @@ async function run() {
     summary.sessionListRunningAfterReopen = sanitizeJson(
       await waitForSessionListRunning(page, options, requestLog, turnId),
     );
-    summary.sessionListRunningAfterReload = summary.sessionListRunningAfterReopen;
+    summary.sessionListRunningAfterReload =
+      summary.sessionListRunningAfterReopen;
     summary.guiRunningAfterReopen = sanitizeJson(
       await waitForGuiRunningConsistency(
         page,
@@ -2324,15 +2325,16 @@ async function run() {
       }),
     );
     if (options.multiRunningSessions) {
-      summary.multiRunningSecondaryStillRunningAfterPrimaryCancel = sanitizeJson(
-        await waitForSessionListRunning(
-          page,
-          options,
-          requestLog,
-          summary.multiRunningSecondary.turnId,
-          MULTI_RUNNING_SECONDARY_SESSION_ID,
-        ),
-      );
+      summary.multiRunningSecondaryStillRunningAfterPrimaryCancel =
+        sanitizeJson(
+          await waitForSessionListRunning(
+            page,
+            options,
+            requestLog,
+            summary.multiRunningSecondary.turnId,
+            MULTI_RUNNING_SECONDARY_SESSION_ID,
+          ),
+        );
       summary.multiRunningSecondarySidebarAfterPrimaryCancel = sanitizeJson(
         await waitForGuiSidebarSessionsRunning(
           page,
@@ -2500,7 +2502,8 @@ async function run() {
       presentationModeKnown: PRESENTATION_MODES.has(summary.presentationMode),
       ...homeBackgroundAssertions,
       sameTurnBeforeReload:
-        summary.readModelRunningBeforeReload?.summary?.sameActiveTurn === true ||
+        summary.readModelRunningBeforeReload?.summary?.sameActiveTurn ===
+          true ||
         summary.readModelRunningBeforeReload?.summary?.matchedTurn?.turnId ===
           turnId,
       sameTurnAfterReopen:

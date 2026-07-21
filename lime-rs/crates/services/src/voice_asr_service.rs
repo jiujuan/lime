@@ -9,7 +9,7 @@
 //! - 讯飞语音识别（WebSocket 流式）
 //!
 //! ## 模型文件路径
-//! Whisper 模型文件存储在：`~/Library/Application Support/lime/models/whisper/`
+//! 本地模型路径由 Desktop Host 或显式 credential 配置提供；服务层不解析平台数据根。
 //!
 //! 支持的模型：
 //! - `ggml-tiny.bin` (~75MB)
@@ -23,11 +23,9 @@
 //! let text = AsrService::transcribe(&credential, &audio_data, 16000).await?;
 //! ```
 
-#[cfg(any(feature = "local-whisper", feature = "local-sensevoice"))]
+#[cfg(feature = "local-sensevoice")]
 use std::path::PathBuf;
 
-#[cfg(feature = "local-sensevoice")]
-use lime_core::app_paths;
 #[cfg(feature = "local-whisper")]
 use lime_core::config::WhisperModelSize;
 use lime_core::config::{AsrCredentialEntry, AsrProviderType};
@@ -183,7 +181,7 @@ impl AsrService {
             .ok_or("Whisper 本地配置缺失")?;
 
         // 获取模型文件路径
-        let model_path = Self::get_whisper_model_path(&whisper_config.model)?;
+        let model_path = voice_config_service::resolve_whisper_model_path(whisper_config)?;
 
         // 将 PCM 字节转换为 i16 采样
         let audio = Self::build_audio_data(audio_data, sample_rate)?;
@@ -231,7 +229,7 @@ impl AsrService {
             .as_ref()
             .ok_or("SenseVoice 本地配置缺失")?;
 
-        let model_dir = Self::get_sensevoice_model_dir(config)?;
+        let model_dir = voice_config_service::resolve_sensevoice_model_dir(config)?;
         let model_path = model_dir.join(SENSEVOICE_MODEL_FILE);
         let tokens_path = model_dir.join(SENSEVOICE_TOKENS_FILE);
         let vad_path = model_dir.join(SENSEVOICE_VAD_FILE);
@@ -318,23 +316,6 @@ impl AsrService {
     }
 
     #[cfg(feature = "local-sensevoice")]
-    fn get_sensevoice_model_dir(
-        config: &lime_core::config::SenseVoiceLocalConfig,
-    ) -> Result<PathBuf, String> {
-        if let Some(model_dir) = config.model_dir.as_ref() {
-            let trimmed = model_dir.trim();
-            if !trimmed.is_empty() {
-                return Ok(PathBuf::from(trimmed));
-            }
-        }
-
-        Ok(app_paths::preferred_data_dir()?
-            .join("models")
-            .join("voice")
-            .join(&config.model_id))
-    }
-
-    #[cfg(feature = "local-sensevoice")]
     fn ensure_sensevoice_required_files(files: &[(&PathBuf, &str)]) -> Result<(), String> {
         let missing_files = files
             .iter()
@@ -357,38 +338,6 @@ impl AsrService {
                 missing_files.join(", ")
             ))
         }
-    }
-
-    /// 获取 Whisper 模型文件路径
-    #[cfg(feature = "local-whisper")]
-    fn get_whisper_model_path(model_size: &WhisperModelSize) -> Result<PathBuf, String> {
-        // 模型文件名
-        let filename = match model_size {
-            WhisperModelSize::Tiny => "ggml-tiny.bin",
-            WhisperModelSize::Base => "ggml-base.bin",
-            WhisperModelSize::Small => "ggml-small.bin",
-            WhisperModelSize::Medium => "ggml-medium.bin",
-        };
-
-        // 模型存储目录：~/Library/Application Support/lime/models/whisper/
-        let models_dir = dirs::data_dir()
-            .ok_or("无法获取数据目录")?
-            .join("lime")
-            .join("models")
-            .join("whisper");
-
-        let model_path = models_dir.join(filename);
-
-        // 检查模型文件是否存在
-        if !model_path.exists() {
-            return Err(format!(
-                "Whisper 模型文件不存在: {}\n请下载模型文件到: {}",
-                filename,
-                models_dir.display()
-            ));
-        }
-
-        Ok(model_path)
     }
 
     /// 转换模型大小枚举
@@ -494,24 +443,6 @@ impl AsrService {
 mod tests {
     #[cfg(feature = "local-sensevoice")]
     use super::{AsrService, SENSEVOICE_MODEL_FILE, SENSEVOICE_TOKENS_FILE, SENSEVOICE_VAD_FILE};
-    #[cfg(feature = "local-sensevoice")]
-    use lime_core::config::SenseVoiceLocalConfig;
-    #[cfg(feature = "local-sensevoice")]
-    use std::path::PathBuf;
-
-    #[cfg(feature = "local-sensevoice")]
-    #[test]
-    fn sensevoice_model_dir_prefers_explicit_config_path() {
-        let config = SenseVoiceLocalConfig {
-            model_dir: Some("/tmp/lime-sensevoice".to_string()),
-            ..SenseVoiceLocalConfig::default()
-        };
-
-        let path = AsrService::get_sensevoice_model_dir(&config).expect("model dir");
-
-        assert_eq!(path, PathBuf::from("/tmp/lime-sensevoice"));
-    }
-
     #[cfg(feature = "local-sensevoice")]
     #[test]
     fn sensevoice_required_files_reports_missing_names() {

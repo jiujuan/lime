@@ -240,7 +240,6 @@ describe("agentSessionState", () => {
         currentTurnId: null,
         hydratedSessionId: "topic-history",
         messagesCount: 0,
-        queuedTurnsCount: 0,
         selectedTopic: {
           messagesCount: 2,
           status: "done",
@@ -258,7 +257,6 @@ describe("agentSessionState", () => {
         currentTurnId: null,
         hydratedSessionId: "topic-history",
         messagesCount: 1,
-        queuedTurnsCount: 0,
         selectedTopic: {
           messagesCount: 2,
           status: "done",
@@ -276,7 +274,6 @@ describe("agentSessionState", () => {
         currentTurnId: null,
         hydratedSessionId: "topic-running",
         messagesCount: 0,
-        queuedTurnsCount: 0,
         selectedTopic: {
           messagesCount: 0,
           status: "running",
@@ -295,7 +292,6 @@ describe("agentSessionState", () => {
         currentTurnId: null,
         hydratedSessionId: "topic-draft",
         messagesCount: 0,
-        queuedTurnsCount: 0,
         selectedTopic: {
           messagesCount: 0,
           status: "draft",
@@ -311,7 +307,6 @@ describe("agentSessionState", () => {
     const base = {
       currentTurnId: null,
       detachedSessionId: null,
-      queuedTurnsCount: 0,
       sessionId: "session-1",
       threadItemsCount: 0,
       threadTurnsCount: 0,
@@ -355,18 +350,9 @@ describe("agentSessionState", () => {
     ).toEqual({ kind: "clear_auxiliary" });
   });
 
-  it("stale queued read model 不应单独阻塞下一轮用户提交", () => {
+  it("canonical queued status 应阻塞下一轮用户提交", () => {
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
-        threadReadStatus: "queued",
-        turns: [createTurn({ status: "completed" })],
-      }),
-    ).toBe(false);
-
-    expect(
-      hasActiveRuntimeTurn({
-        queuedTurnsCount: 1,
         threadReadStatus: "queued",
         turns: [createTurn({ status: "completed" })],
       }),
@@ -374,18 +360,11 @@ describe("agentSessionState", () => {
 
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
         threadRead: {
           thread_id: "thread-queued",
           status: "queued",
           pending_requests: [],
           incidents: [],
-          queued_turns: [
-            {
-              queued_turn_id: "queued-1",
-              message_preview: "继续输出",
-            } as never,
-          ],
         },
         threadReadStatus: "queued",
         turns: [createTurn({ status: "completed" })],
@@ -394,7 +373,6 @@ describe("agentSessionState", () => {
 
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
         threadReadStatus: "queued",
         turns: [
           createTurn({
@@ -410,7 +388,6 @@ describe("agentSessionState", () => {
   it("无权威 read model 时陈旧本地 running turn 不应永久阻塞输入框", () => {
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
         threadReadStatus: null,
         turns: [
           createTurn({
@@ -426,7 +403,6 @@ describe("agentSessionState", () => {
   it("无权威 read model 时近期本地 running turn 可短暂阻塞重复提交", () => {
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
         threadReadStatus: null,
         turns: [
           createTurn({
@@ -442,7 +418,6 @@ describe("agentSessionState", () => {
   it("running read model 只有 active_turn_id 时也应阻塞下一轮用户提交", () => {
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
         threadReadStatus: "running",
         threadRead: {
           thread_id: "thread-running",
@@ -458,7 +433,6 @@ describe("agentSessionState", () => {
   it("read model 已明确 idle 时不应被残留 running turn 判定为 active runtime", () => {
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
         threadReadStatus: "idle",
         threadRead: {
           thread_id: "thread-1",
@@ -476,7 +450,6 @@ describe("agentSessionState", () => {
 
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
         threadReadStatus: "idle",
         threadRead: {
           thread_id: "thread-1",
@@ -492,7 +465,6 @@ describe("agentSessionState", () => {
   it("显式终态 read model 不应被残留 running turn 判定为 active runtime", () => {
     expect(
       hasActiveRuntimeTurn({
-        queuedTurnsCount: 0,
         threadReadStatus: "failed",
         threadRead: {
           thread_id: "thread-1",
@@ -514,7 +486,6 @@ describe("agentSessionState", () => {
     const base = {
       currentTurnId: "turn-1",
       detachedSessionId: null,
-      queuedTurnsCount: 1,
       sessionId: "session-1",
       threadItemsCount: 1,
       threadTurnsCount: 1,
@@ -623,16 +594,7 @@ describe("agentSessionState", () => {
     ]);
     expect(result.snapshot.currentTurnId).toBe("turn-remote");
     expect(result.snapshot.executionRuntime).toEqual(currentExecutionRuntime);
-    expect(result.snapshot.queuedTurns).toEqual([
-      {
-        queued_turn_id: "queued-1",
-        message_preview: "继续执行",
-        message_text: "继续执行当前任务",
-        created_at: 1700000002000,
-        image_count: 0,
-        position: 1,
-      },
-    ]);
+    expect(result.snapshot).not.toHaveProperty("queuedTurns");
   });
 
   it("hydrate 会把 App Server session working_dir 作为会话工作目录事实源", () => {
@@ -1277,7 +1239,6 @@ describe("agentSessionState", () => {
         currentTurnId: null,
         threadTurnsCount: 0,
         threadItemsCount: 0,
-        queuedTurnsCount: 0,
       }),
     ).toBe(false);
     expect(
@@ -1285,7 +1246,6 @@ describe("agentSessionState", () => {
         currentTurnId: "turn-1",
         threadTurnsCount: 0,
         threadItemsCount: 0,
-        queuedTurnsCount: 0,
       }),
     ).toBe(true);
   });

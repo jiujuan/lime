@@ -19,8 +19,6 @@ const {
   mockInterruptAgentRuntimeTurn,
   mockResumeAgentRuntimeThread,
   mockReplayAgentRuntimeRequest,
-  mockPromoteAgentRuntimeQueuedTurn,
-  mockRemoveAgentRuntimeQueuedTurn,
   mockRespondAgentRuntimeAction,
   mockParseAgentEvent,
   mockSafeListen,
@@ -44,8 +42,6 @@ const {
   mockInterruptAgentRuntimeTurn: vi.fn(),
   mockResumeAgentRuntimeThread: vi.fn(),
   mockReplayAgentRuntimeRequest: vi.fn(),
-  mockPromoteAgentRuntimeQueuedTurn: vi.fn(),
-  mockRemoveAgentRuntimeQueuedTurn: vi.fn(),
   mockRespondAgentRuntimeAction: vi.fn(),
   mockParseAgentEvent: vi.fn((payload: unknown) => payload),
   mockSafeListen: vi.fn(),
@@ -79,8 +75,6 @@ export {
   mockInterruptAgentRuntimeTurn,
   mockResumeAgentRuntimeThread,
   mockReplayAgentRuntimeRequest,
-  mockPromoteAgentRuntimeQueuedTurn,
-  mockRemoveAgentRuntimeQueuedTurn,
   mockRespondAgentRuntimeAction,
   mockParseAgentEvent,
   mockSafeListen,
@@ -105,10 +99,8 @@ vi.mock("@/lib/api/agentRuntime/clientFactory", () => ({
     deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
     compactAgentRuntimeSession: mockCompactAgentRuntimeSession,
     interruptAgentRuntimeTurn: mockInterruptAgentRuntimeTurn,
-    resumeAgentRuntimeThread: mockResumeAgentRuntimeThread,
+    resumeThread: mockResumeAgentRuntimeThread,
     replayAgentRuntimeRequest: mockReplayAgentRuntimeRequest,
-    promoteAgentRuntimeQueuedTurn: mockPromoteAgentRuntimeQueuedTurn,
-    removeAgentRuntimeQueuedTurn: mockRemoveAgentRuntimeQueuedTurn,
     respondAgentRuntimeAction: mockRespondAgentRuntimeAction,
   }),
   getRuntimeProviderSelection: mockGetRuntimeProviderSelection,
@@ -122,10 +114,8 @@ vi.mock("@/lib/api/agentRuntime/clientFactory", () => ({
   deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
   compactAgentRuntimeSession: mockCompactAgentRuntimeSession,
   interruptAgentRuntimeTurn: mockInterruptAgentRuntimeTurn,
-  resumeAgentRuntimeThread: mockResumeAgentRuntimeThread,
+  resumeThread: mockResumeAgentRuntimeThread,
   replayAgentRuntimeRequest: mockReplayAgentRuntimeRequest,
-  promoteAgentRuntimeQueuedTurn: mockPromoteAgentRuntimeQueuedTurn,
-  removeAgentRuntimeQueuedTurn: mockRemoveAgentRuntimeQueuedTurn,
   respondAgentRuntimeAction: mockRespondAgentRuntimeAction,
 }));
 
@@ -454,8 +444,6 @@ beforeEach(async () => {
   mockInterruptAgentRuntimeTurn.mockReset();
   mockResumeAgentRuntimeThread.mockReset();
   mockReplayAgentRuntimeRequest.mockReset();
-  mockPromoteAgentRuntimeQueuedTurn.mockReset();
-  mockRemoveAgentRuntimeQueuedTurn.mockReset();
   mockRespondAgentRuntimeAction.mockReset();
   mockParseAgentEvent.mockReset();
   mockSafeListen.mockReset();
@@ -504,8 +492,6 @@ beforeEach(async () => {
   mockInterruptAgentRuntimeTurn.mockResolvedValue(undefined);
   mockResumeAgentRuntimeThread.mockResolvedValue(false);
   mockReplayAgentRuntimeRequest.mockResolvedValue(null);
-  mockPromoteAgentRuntimeQueuedTurn.mockResolvedValue(true);
-  mockRemoveAgentRuntimeQueuedTurn.mockResolvedValue(true);
   mockRespondAgentRuntimeAction.mockResolvedValue(undefined);
   mockParseAgentEvent.mockImplementation((payload: unknown) => payload);
   mockSafeListen.mockResolvedValue(() => {});

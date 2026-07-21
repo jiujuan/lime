@@ -2,11 +2,12 @@ import { THREAD_READ_PAGE_ISOMORPHIC } from "./session-history-thread-read-isomo
 
 const REQUIRED_METHODS = [
   "initialize",
-  "agentSession/read",
-  "agentSession/list",
-  "agentSession/thread/resume",
+  "thread/read",
+  "thread/list",
+  "thread/turns/list",
+  "thread/resume",
 ];
-const FORBIDDEN_METHODS = ["agentSession/start", "agentSession/turn/start"];
+const FORBIDDEN_METHODS = ["thread/start", "turn/start"];
 
 export class ThreadReadPageIsomorphicDomError extends Error {
   constructor(message, evidence) {
@@ -72,6 +73,12 @@ function itemIds(records) {
     .filter((id) => typeof id === "string");
 }
 
+function turnItems(turns) {
+  return (Array.isArray(turns) ? turns : []).flatMap((turn) =>
+    Array.isArray(turn?.items) ? turn.items : [],
+  );
+}
+
 function canonicalItemId(value) {
   return value.startsWith("item_") ? value : `item_${value}`;
 }
@@ -99,8 +106,9 @@ function assertReasoningItems(items, label) {
     );
     assert(item, `${label} 缺少 reasoning item: ${expectedId}`);
     assert(
-      item?.text === turn.reasoningText,
-      `${label} reasoning text 不正确: ${expectedId}`,
+      JSON.stringify(item?.content ?? []) ===
+        JSON.stringify([turn.reasoningText]),
+      `${label} reasoning content 不正确: ${expectedId}`,
     );
     assert(
       JSON.stringify(item?.summary ?? []) ===
@@ -123,13 +131,17 @@ function messageContains(message, text) {
 
 function assertMessagePage(messages, expectedTexts, label) {
   assert(Array.isArray(messages), `${label}.messages 必须是数组`);
+  const visibleMessages = messages.filter(
+    (message) =>
+      message?.type === "userMessage" || message?.type === "agentMessage",
+  );
   assert(
-    messages.length === expectedTexts.length,
-    `${label}.messages 数量不正确: ${messages.length}`,
+    visibleMessages.length === expectedTexts.length,
+    `${label}.messages 数量不正确: ${visibleMessages.length}`,
   );
   for (const text of expectedTexts) {
     assert(
-      messages.some((message) => messageContains(message, text)),
+      visibleMessages.some((message) => messageContains(message, text)),
       `${label}.messages 缺少文本: ${text}`,
     );
   }
@@ -211,38 +223,42 @@ export async function runThreadReadPageIsomorphicReadPhase(page, command) {
           lines: [JSON.stringify({ jsonrpc: "2.0", method: "initialized" })],
         },
       });
-      const fullRead = await call("agentSession/read", {
-        sessionId: fixture.sessionId,
-        historyLimit: 50,
+      const fullRead = await call("thread/read", {
+        threadId: fixture.threadId,
+        includeTurns: true,
       });
-      const newestPage = await call("agentSession/read", {
-        sessionId: fixture.sessionId,
-        historyLimit: 2,
-        historyOffset: 0,
+      const newestPage = await call("thread/turns/list", {
+        threadId: fixture.threadId,
+        limit: 1,
+        sortDirection: "desc",
+        itemsView: "full",
       });
-      const middlePage = await call("agentSession/read", {
-        sessionId: fixture.sessionId,
-        historyLimit: 2,
-        historyOffset: 2,
+      const middlePage = await call("thread/turns/list", {
+        threadId: fixture.threadId,
+        cursor: newestPage.nextCursor,
+        limit: 1,
+        sortDirection: "desc",
+        itemsView: "full",
       });
-      const oldestPage = await call("agentSession/read", {
-        sessionId: fixture.sessionId,
-        historyLimit: 2,
-        historyOffset: 4,
+      const oldestPage = await call("thread/turns/list", {
+        threadId: fixture.threadId,
+        cursor: middlePage.nextCursor,
+        limit: 1,
+        sortDirection: "desc",
+        itemsView: "full",
       });
-      const list = await call(
-        "agentSession/list",
-        fixture.workspaceId
-          ? {
-              workspaceId: fixture.workspaceId,
-              limit: 20,
-            }
-          : {
-              limit: 20,
-            },
-      );
-      const resume = await call("agentSession/thread/resume", {
-        sessionId: fixture.sessionId,
+      const list = await call("thread/list", {
+        archived: false,
+        limit: 20,
+      });
+      const resume = await call("thread/resume", {
+        threadId: fixture.threadId,
+        excludeTurns: true,
+        initialTurnsPage: {
+          limit: fixture.turns.length,
+          sortDirection: "asc",
+          itemsView: "full",
+        },
       });
       return {
         initialize,
@@ -271,15 +287,15 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
     (turn) => turn.turnId,
   );
   const expectedItemIds = expectedCanonicalItemIds();
-  const detail = result?.fullRead?.detail;
-  const threadRead = detail?.thread_read;
-  const detailTurnIds = turnIds(detail?.turns);
-  const threadReadTurnIds = turnIds(threadRead?.turns);
-  const resumeTurnIds = turnIds(result?.resume?.turns);
-  const detailItemIds = itemIds(detail?.items);
-  const threadReadItemIds = itemIds(threadRead?.thread_items);
-  const listedSession = (result?.list?.sessions ?? []).find(
-    (session) => session?.sessionId === THREAD_READ_PAGE_ISOMORPHIC.sessionId,
+  const fullThread = result?.fullRead?.thread;
+  const fullTurnIds = turnIds(fullThread?.turns);
+  const fullItems = turnItems(fullThread?.turns);
+  const fullItemIds = itemIds(fullItems);
+  const resumeTurns = result?.resume?.initialTurnsPage?.data;
+  const resumeTurnIds = turnIds(resumeTurns);
+  const resumeItems = turnItems(resumeTurns);
+  const listedThread = (result?.list?.data ?? []).find(
+    (thread) => thread?.id === THREAD_READ_PAGE_ISOMORPHIC.threadId,
   );
 
   assert(
@@ -295,110 +311,106 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
     ).join(", ")}`,
   );
   assert(
-    result?.fullRead?.session?.sessionId ===
-      THREAD_READ_PAGE_ISOMORPHIC.sessionId,
+    fullThread?.sessionId === THREAD_READ_PAGE_ISOMORPHIC.sessionId,
     "threadReadPageIsomorphic full read sessionId 不正确",
   );
   assert(
-    result?.fullRead?.session?.threadId ===
-      THREAD_READ_PAGE_ISOMORPHIC.threadId,
+    fullThread?.id === THREAD_READ_PAGE_ISOMORPHIC.threadId,
     "threadReadPageIsomorphic full read threadId 不正确",
   );
-  assert(listedSession, "threadReadPageIsomorphic list 未返回 fixture session");
+  assert(listedThread, "threadReadPageIsomorphic list 未返回 fixture thread");
   assert(
-    listedSession?.threadId === THREAD_READ_PAGE_ISOMORPHIC.threadId,
-    "threadReadPageIsomorphic list threadId 不正确",
-  );
-  assert(
-    listedSession?.workspaceId == null,
-    "threadReadPageIsomorphic 应作为 standalone session 出现在最近对话",
+    listedThread?.sessionId === THREAD_READ_PAGE_ISOMORPHIC.sessionId,
+    "threadReadPageIsomorphic list sessionId 不正确",
   );
   assert(
-    Number(listedSession?.messagesCount) >= 6,
-    "threadReadPageIsomorphic list messagesCount 未反映三轮历史",
+    listedThread?.turns?.length === 0,
+    "threadReadPageIsomorphic thread/list 必须保持 metadata-only",
   );
-  assert(
-    threadRead && typeof threadRead === "object",
-    "threadReadPageIsomorphic 缺少 detail.thread_read",
-  );
-  assertEqualArray(detailTurnIds, expectedTurnIds, "detail.turns turn order");
-  assertEqualArray(
-    threadReadTurnIds,
-    expectedTurnIds,
-    "thread_read.turns turn order",
-  );
+  assertEqualArray(fullTurnIds, expectedTurnIds, "thread.turns turn order");
   assertEqualArray(
     resumeTurnIds,
     expectedTurnIds,
-    "thread/resume turns turn order",
+    "thread/resume initialTurnsPage turn order",
   );
-  assertEqualArray(detailItemIds, expectedItemIds, "detail.items item order");
+  assertEqualArray(fullItemIds, expectedItemIds, "thread.turns items order");
   assertEqualArray(
-    threadReadItemIds,
+    itemIds(resumeItems),
     expectedItemIds,
-    "thread_read.thread_items item order",
+    "thread/resume initialTurnsPage items order",
   );
-  assertReasoningItems(detail?.items, "detail.items");
-  assertReasoningItems(threadRead?.thread_items, "thread_read.thread_items");
+  assertReasoningItems(fullItems, "thread.turns items");
+  assertReasoningItems(resumeItems, "thread/resume initialTurnsPage items");
   assert(
-    (detail?.items ?? []).every((item) => item?.status === "completed"),
-    `detail.items 必须完成 canonical lifecycle: ${JSON.stringify(
-      (detail?.items ?? []).map((item) => ({
-        id: itemId(item),
-        type: item?.type ?? null,
-        status: item?.status ?? null,
+    (fullThread?.turns ?? []).every((turn) => turn?.status === "completed"),
+    `thread.turns 必须完成 canonical lifecycle: ${JSON.stringify(
+      (fullThread?.turns ?? []).map((turn) => ({
+        id: turnId(turn),
+        status: turn?.status ?? null,
       })),
     )}`,
   );
   assert(
-    JSON.stringify(detail?.items ?? []) ===
-      JSON.stringify(threadRead?.thread_items ?? []),
-    "detail.items 与 thread_read.thread_items 必须同源",
+    result?.resume?.thread?.id === THREAD_READ_PAGE_ISOMORPHIC.threadId &&
+      result?.resume?.thread?.sessionId ===
+        THREAD_READ_PAGE_ISOMORPHIC.sessionId,
+    "thread/resume response identity 不正确",
   );
   assert(
-    result?.resume?.resumed === false,
-    "无 queued turn 时 resume 应 no-op",
+    Array.isArray(result?.resume?.thread?.turns) &&
+      result.resume.thread.turns.length === 0,
+    "thread/resume excludeTurns 必须返回 metadata-only thread",
   );
   assert(
-    result?.resume?.session?.sessionId ===
-      THREAD_READ_PAGE_ISOMORPHIC.sessionId,
-    "thread/resume response sessionId 不正确",
+    result?.resume?.model === "fixture-model" &&
+      result?.resume?.modelProvider === "fixture-provider" &&
+      result?.resume?.cwd === fullThread?.cwd,
+    "thread/resume route metadata 不正确",
+  );
+  assert(
+    !Object.hasOwn(result?.resume ?? {}, "resumed") &&
+      !Object.hasOwn(result?.resume ?? {}, "session") &&
+      !Object.hasOwn(result?.resume ?? {}, "turns"),
+    "thread/resume 不得返回 legacy queued resume 字段",
+  );
+  assert(
+    !(result?.messages ?? []).some(
+      (message) => message?.method === "thread/started",
+    ),
+    "thread/resume 不得发送 thread/started",
   );
 
   const [newestTexts, middleTexts, oldestTexts] =
     expectedMessageTextsNewestPageFirst();
   assertMessagePage(
-    result?.newestPage?.detail?.messages,
+    turnItems(result?.newestPage?.data),
     newestTexts,
     "newest page",
   );
   assertMessagePage(
-    result?.middlePage?.detail?.messages,
+    turnItems(result?.middlePage?.data),
     middleTexts,
     "middle page",
   );
   assertMessagePage(
-    result?.oldestPage?.detail?.messages,
+    turnItems(result?.oldestPage?.data),
     oldestTexts,
     "oldest page",
   );
 
   return {
     requestMethods,
-    sessionId: result?.fullRead?.session?.sessionId ?? null,
-    threadId: result?.fullRead?.session?.threadId ?? null,
-    listedSessionFound: Boolean(listedSession),
-    listedMessagesCount: listedSession?.messagesCount ?? null,
-    detailTurnIds,
-    threadReadTurnIds,
+    sessionId: fullThread?.sessionId ?? null,
+    threadId: fullThread?.id ?? null,
+    listedThreadFound: Boolean(listedThread),
+    fullTurnIds,
     resumeTurnIds,
-    detailItemIds,
-    threadReadItemIds,
-    resumeNoop: result?.resume?.resumed === false,
+    fullItemIds,
+    resumeMetadataOnly: result?.resume?.thread?.turns?.length === 0,
     pageCursors: [
-      result?.newestPage?.detail?.history_cursor ?? null,
-      result?.middlePage?.detail?.history_cursor ?? null,
-      result?.oldestPage?.detail?.history_cursor ?? null,
+      result?.newestPage?.nextCursor ?? null,
+      result?.middlePage?.nextCursor ?? null,
+      result?.oldestPage?.nextCursor ?? null,
     ],
   };
 }

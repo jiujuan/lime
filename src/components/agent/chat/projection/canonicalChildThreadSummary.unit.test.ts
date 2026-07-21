@@ -6,22 +6,38 @@ import {
   summarizeCanonicalChildThreads,
 } from "./canonicalChildThreadSummary";
 
+const THREAD_UPDATED_AT_SECONDS = 1_780_704_000;
+
+function agentExtra(
+  threadId: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    agentPath: `/root/${threadId}`,
+    agentState: { status: "pendingInit" },
+    ...overrides,
+  };
+}
+
 function child(
   threadId: string,
   overrides: Partial<AppServerThread> = {},
 ): AppServerThread {
   return {
-    agentPath: `/root/${threadId}`,
-    agentState: { status: "pendingInit" },
-    archived: false,
-    createdAtMs: 100,
+    cliVersion: "1.0.0",
+    createdAt: THREAD_UPDATED_AT_SECONDS - 100,
+    cwd: "/tmp",
+    ephemeral: false,
+    extra: agentExtra(threadId),
+    id: threadId,
+    modelProvider: "",
     parentThreadId: "parent",
+    preview: "",
     sessionId: `session-${threadId}`,
+    source: "appServer",
     status: { type: "idle" },
-    threadId,
     turns: [],
-    turnsView: "summary",
-    updatedAtMs: 200,
+    updatedAt: THREAD_UPDATED_AT_SECONDS,
     ...overrides,
   };
 }
@@ -33,32 +49,31 @@ describe("selectCanonicalChildThreadSummaries", () => {
       threads: [
         child("zeta", {
           agentNickname: "Nash",
-          agentPath: "/root/zeta",
           agentRole: "reviewer",
-          agentState: { status: "interrupted" },
-          lastTaskMessage: "review projection",
+          extra: agentExtra("zeta", {
+            agentState: { status: "interrupted" },
+            lastTaskMessage: "review projection",
+          }),
           modelProvider: "openai",
           turns: [
             {
-              createdAtMs: 100,
-              sessionId: "session-zeta",
+              completedAt: 110,
+              id: "turn-1",
+              startedAt: 100,
               status: "completed",
-              threadId: "zeta",
-              turnId: "turn-1",
-              updatedAtMs: 110,
             },
             {
-              createdAtMs: 120,
-              sessionId: "session-zeta",
+              completedAt: 130,
+              id: "turn-2",
+              startedAt: 120,
               status: "interrupted",
-              threadId: "zeta",
-              turnId: "turn-2",
-              updatedAtMs: 130,
             },
           ],
         }),
         child("alpha", {
-          agentState: { status: "running" },
+          extra: agentExtra("alpha", {
+            agentState: { status: "running" },
+          }),
           status: { type: "active", activeFlags: [] },
         }),
         child("outside", { parentThreadId: "another-parent" }),
@@ -72,6 +87,7 @@ describe("selectCanonicalChildThreadSummaries", () => {
         sessionId: "session-alpha",
         status: "running",
         threadId: "alpha",
+        updatedAtMs: THREAD_UPDATED_AT_SECONDS * 1_000,
       }),
       expect.objectContaining({
         modelProvider: "openai",
@@ -87,18 +103,23 @@ describe("selectCanonicalChildThreadSummaries", () => {
 
   it.each([
     [child("pending"), "pendingInit"],
-    [child("running", { agentState: { status: "running" } }), "running"],
+    [
+      child("running", {
+        extra: agentExtra("running", { agentState: { status: "running" } }),
+      }),
+      "running",
+    ],
     [
       child("interrupted", {
-        agentState: { status: "interrupted" },
+        extra: agentExtra("interrupted", {
+          agentState: { status: "interrupted" },
+        }),
         turns: [
           {
-            createdAtMs: 100,
-            sessionId: "session-interrupted",
+            completedAt: 200,
+            id: "turn",
+            startedAt: 100,
             status: "interrupted",
-            threadId: "interrupted",
-            turnId: "turn",
-            updatedAtMs: 200,
           },
         ],
       }),
@@ -106,15 +127,15 @@ describe("selectCanonicalChildThreadSummaries", () => {
     ],
     [
       child("completed", {
-        agentState: { status: "completed" },
+        extra: agentExtra("completed", {
+          agentState: { status: "completed" },
+        }),
         turns: [
           {
-            createdAtMs: 100,
-            sessionId: "session-completed",
+            completedAt: 200,
+            id: "turn",
+            startedAt: 100,
             status: "completed",
-            threadId: "completed",
-            turnId: "turn",
-            updatedAtMs: 200,
           },
         ],
       }),
@@ -122,14 +143,18 @@ describe("selectCanonicalChildThreadSummaries", () => {
     ],
     [
       child("errored", {
-        agentState: { message: "provider failed", status: "errored" },
+        extra: agentExtra("errored", {
+          agentState: { message: "provider failed", status: "errored" },
+        }),
       }),
       "errored",
     ],
     [
       child("shutdown", {
-        agentState: { status: "shutdown" },
-        status: { type: "active" },
+        extra: agentExtra("shutdown", {
+          agentState: { status: "shutdown" },
+        }),
+        status: { type: "active", activeFlags: [] },
       }),
       "shutdown",
     ],
@@ -140,6 +165,40 @@ describe("selectCanonicalChildThreadSummaries", () => {
         threads: [thread],
       })[0]?.status,
     ).toBe(expected);
+  });
+
+  it("extra 未提供 agentState 时按最新 v2 Turn 派生错误状态", () => {
+    const [summary] = selectCanonicalChildThreadSummaries({
+      parentThreadId: "parent",
+      threads: [
+        child("fallback", {
+          extra: { agentPath: "/root/fallback" },
+          turns: [
+            {
+              completedAt: 110,
+              id: "turn-1",
+              startedAt: 100,
+              status: "completed",
+            },
+            {
+              completedAt: 130,
+              error: { message: "provider failed" },
+              id: "turn-2",
+              startedAt: 120,
+              status: "failed",
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        status: "errored",
+        statusMessage: "provider failed",
+        threadId: "fallback",
+      }),
+    );
   });
 
   it("为被 parent Item 引用但缺失的 child 显式生成 notFound", () => {
@@ -167,35 +226,39 @@ describe("summarizeCanonicalChildThreads", () => {
       referencedChildThreadIds: ["missing"],
       threads: [
         child("pending"),
-        child("running", { agentState: { status: "running" } }),
+        child("running", {
+          extra: agentExtra("running", { agentState: { status: "running" } }),
+        }),
         child("interrupted", {
-          agentState: { status: "interrupted" },
+          extra: agentExtra("interrupted", {
+            agentState: { status: "interrupted" },
+          }),
           turns: [
             {
-              createdAtMs: 100,
-              sessionId: "session-interrupted",
+              completedAt: 200,
+              id: "turn",
+              startedAt: 100,
               status: "interrupted",
-              threadId: "interrupted",
-              turnId: "turn",
-              updatedAtMs: 200,
             },
           ],
         }),
         child("completed", {
-          agentState: { status: "completed" },
+          extra: agentExtra("completed", {
+            agentState: { status: "completed" },
+          }),
           turns: [
             {
-              createdAtMs: 100,
-              sessionId: "session-completed",
+              completedAt: 200,
+              id: "turn",
+              startedAt: 100,
               status: "completed",
-              threadId: "completed",
-              turnId: "turn",
-              updatedAtMs: 200,
             },
           ],
         }),
         child("shutdown", {
-          agentState: { status: "shutdown" },
+          extra: agentExtra("shutdown", {
+            agentState: { status: "shutdown" },
+          }),
         }),
       ],
     });

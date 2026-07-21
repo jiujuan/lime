@@ -9,7 +9,6 @@ import type {
   AgentSessionExecutionRuntime,
 } from "@/lib/api/agentExecutionRuntime";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, Message } from "../types";
 import {
   buildWaitingAgentRuntimeStatus,
@@ -25,10 +24,6 @@ import {
   upsertThreadItemState,
   upsertThreadTurnState,
 } from "./agentThreadState";
-import {
-  removeQueuedTurnSnapshots,
-  upsertQueuedTurnSnapshot,
-} from "./agentQueuedTurnProjection";
 
 type MessageParts = NonNullable<Message["contentParts"]>;
 
@@ -48,7 +43,6 @@ interface ActiveAgentStreamBindingState {
 
 interface ResolveAgentStreamResumeBindingTargetOptions {
   currentTurnId?: string | null;
-  queuedTurns: readonly QueuedTurnSnapshot[];
   sessionId?: string | null;
   threadBusy: boolean;
   threadRead?: AgentRuntimeThreadReadModel | null;
@@ -80,7 +74,6 @@ interface BindRecoveredAgentStreamThreadOptions {
   >;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
-  setQueuedTurns: Dispatch<SetStateAction<QueuedTurnSnapshot[]>>;
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setIsSending: Dispatch<SetStateAction<boolean>>;
@@ -502,7 +495,6 @@ export async function bindRecoveredAgentStreamThread(
     setIsSending,
     setMessages,
     setPendingActions,
-    setQueuedTurns,
     setThreadItems,
     setThreadTurns,
     soulCopy,
@@ -536,7 +528,6 @@ export async function bindRecoveredAgentStreamThread(
     hasMeaningfulCompletionSignal: false,
     hasFinalAnswerRequiredProcessBoundary: false,
     hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
-    queuedTurnId: null,
     requestLogId: null,
     requestStartedAt: Date.now(),
     requestFinished: false,
@@ -572,16 +563,6 @@ export async function bindRecoveredAgentStreamThread(
       pendingItemKey,
     });
   };
-  const upsertQueuedTurn = (queuedTurn: QueuedTurnSnapshot) => {
-    setQueuedTurns((prev) => upsertQueuedTurnSnapshot(prev, queuedTurn));
-  };
-  const removeQueuedTurnsFromProjection = (queuedTurnIds: string[]) => {
-    if (queuedTurnIds.length === 0) {
-      return;
-    }
-    setQueuedTurns((prev) => removeQueuedTurnSnapshots(prev, queuedTurnIds));
-  };
-
   setActiveStream({
     assistantMsgId,
     eventName: target.eventName,
@@ -622,10 +603,7 @@ export async function bindRecoveredAgentStreamThread(
           clearOptimisticItem: () => undefined,
           clearOptimisticTurn: () => undefined,
           disposeListener,
-          removeQueuedDraftMessages: () => undefined,
           clearActiveStreamIfMatch,
-          upsertQueuedTurn,
-          removeQueuedTurnsFromProjection,
           appendThinkingToParts,
         },
         eventName: target.eventName,
@@ -663,7 +641,7 @@ export async function bindRecoveredAgentStreamThread(
 
   listenerMapRef.current.set(target.eventName, unlisten);
   void runtime
-    .resumeThread(target.sessionId, target.turnId)
+    .resumeThread(target.threadId)
     .catch((error) => {
       console.error("[AgentChat] 恢复运行中会话执行失败:", error);
     })

@@ -5,7 +5,7 @@ import { useWorkspacePluginHistoryRestoreRuntime } from "./useWorkspacePluginHis
 import { useWorkspaceSceneAppExecutionSurfaceRuntime } from "./useWorkspaceSceneAppExecutionSurfaceRuntime";
 import { useWorkspaceServiceSkillExecutionCardRuntime } from "./useWorkspaceServiceSkillExecutionCardRuntime";
 
-interface UseWorkspaceArtifactSurfaceRuntimeParams {
+export interface UseWorkspaceArtifactSurfaceRuntimeParams {
   pluginHistoryRestore: Parameters<
     typeof useWorkspacePluginHistoryRestoreRuntime
   >[0];

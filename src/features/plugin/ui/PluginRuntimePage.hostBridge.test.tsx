@@ -545,32 +545,31 @@ describe("PluginRuntimePage Host Bridge", () => {
       "http://127.0.0.1:4199",
     );
     expect(appServerClientMocks.startSession).toHaveBeenCalledWith({
-      appId: "content-factory-app",
-      workspaceId: "workspace-1",
-      businessObjectRef: expect.objectContaining({
-        kind: "plugin.task",
-        id: expect.stringContaining(`content-factory-app:${taskId}`),
-        metadata: expect.objectContaining({
-          source: "plugin_runtime_page",
-          appId: "content-factory-app",
-          entryKey: "dashboard",
-          taskKind: "content.scenario_planning",
-        }),
-      }),
+      serviceName: "生成内容场景",
+      threadSource: "plugin",
+      historyMode: "paginated",
     });
     expect(appServerClientMocks.startTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionId: "plugin-session-1",
-        runtimeOptions: expect.objectContaining({
-          runtimeRequest: expect.objectContaining({
-            workspaceId: "workspace-1",
+        threadId: "plugin-thread-1",
+        responsesapiClientMetadata: expect.objectContaining({
+          metadata: expect.objectContaining({
+            plugin_host_bridge: expect.objectContaining({
+              retryOfTaskId: taskId,
+              retryAttempt: 1,
+            }),
           }),
+          pluginRuntime: expect.objectContaining({
+            appId: "content-factory-app",
+            taskKind: "content.scenario_planning",
+          }),
+          workspaceId: "workspace-1",
         }),
       }),
     );
     expect(appServerClientMocks.readThread).toHaveBeenCalledWith({
       threadId: "plugin-thread-1",
-      turnsView: "full",
+      includeTurns: true,
     });
     expect(appServerClientMocks.respondAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -592,7 +591,7 @@ describe("PluginRuntimePage Host Bridge", () => {
       }),
     );
     expect(appServerClientMocks.cancelTurn).toHaveBeenCalledWith({
-      sessionId: "plugin-session-1",
+      threadId: "plugin-thread-1",
       turnId: "plugin-turn-1",
     });
     expect(runtimeApiMocks.startPluginRuntimeTask).not.toHaveBeenCalled();

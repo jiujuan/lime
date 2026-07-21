@@ -84,16 +84,6 @@ describe("useWorkspaceConversationSceneRuntime message list projection", () => {
           status: "pending",
         },
       ],
-      queuedTurns: [
-        {
-          queued_turn_id: "queued-1",
-          message_preview: "继续处理",
-          message_text: "继续处理",
-          created_at: 1_777_520_000,
-          image_count: 0,
-          position: 1,
-        },
-      ],
       isRestoringSession: true,
     });
 
@@ -105,7 +95,6 @@ describe("useWorkspaceConversationSceneRuntime message list projection", () => {
     expect(sceneProps.messageListProps.threadItems).toEqual([]);
     expect(sceneProps.messageListProps.currentTurnId).toBeNull();
     expect(sceneProps.messageListProps.pendingActions).toEqual([]);
-    expect(sceneProps.messageListProps.queuedTurns).toEqual([]);
     expect(sceneProps.canvasWorkbenchLayoutProps.sessionView).toBeNull();
 
     act(() => {
@@ -117,7 +106,6 @@ describe("useWorkspaceConversationSceneRuntime message list projection", () => {
     expect(sceneProps.messageListProps.threadItems).toBe(threadItems);
     expect(sceneProps.messageListProps.currentTurnId).toBe("restore-turn-5");
     expect(sceneProps.messageListProps.pendingActions).toHaveLength(1);
-    expect(sceneProps.messageListProps.queuedTurns).toHaveLength(1);
     vi.useRealTimers();
   });
 

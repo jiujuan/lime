@@ -248,7 +248,10 @@ mod tests {
     }
 
     fn create_test_handler() -> RpcHandler {
-        let state = RpcHandlerState::new(None, Arc::new(RwLock::new(lime_core::LogStore::new())));
+        let state = RpcHandlerState::new(
+            None,
+            Arc::new(RwLock::new(lime_core::LogStore::in_memory())),
+        );
         RpcHandler::new(state)
     }
 

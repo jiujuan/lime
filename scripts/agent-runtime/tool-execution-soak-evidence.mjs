@@ -258,7 +258,7 @@ export async function collectSoakRoundObservation({
     }
   };
   const sessionId = String(evidence?.runtime?.sessionId || "").trim();
-  const sessionRead = await invokeObserved("agentSession/read", {
+  const sessionRead = await invokeObserved("thread/read", {
     sessionId,
     historyLimit: 500,
   });

@@ -192,6 +192,8 @@ function buildImageWorkbenchMessageStateSignature(
     | "isThinking"
     | "thinkingContent"
     | "runtimeStatus"
+    | "runtimeTurnId"
+    | "usage"
     | "imageWorkbenchPreview"
   >,
 ): string {
@@ -204,6 +206,8 @@ function buildImageWorkbenchMessageStateSignature(
     isThinking: message.isThinking,
     thinkingContent: message.thinkingContent ?? null,
     runtimeStatus: message.runtimeStatus ?? null,
+    runtimeTurnId: message.runtimeTurnId ?? null,
+    usage: message.usage ?? null,
     imageWorkbenchPreview: message.imageWorkbenchPreview ?? null,
   });
 }
@@ -397,6 +401,9 @@ export function mergeImageWorkbenchPreviewMessage(params: {
         : false,
     thinkingContent: mergeMessageThinkingContent(params),
     runtimeStatus: params.nextMessage.runtimeStatus,
+    runtimeTurnId:
+      params.existingMessage.runtimeTurnId ?? params.nextMessage.runtimeTurnId,
+    usage: params.nextMessage.usage ?? params.existingMessage.usage,
     imageWorkbenchPreview:
       sanitizeImageWorkbenchPreviewForDisplay(mergedPreview),
   };
@@ -621,7 +628,9 @@ export function upsertPreviewMessage(
 ): Message[] {
   const nextMessages = [...messages];
   const nextPreview = nextMessage.imageWorkbenchPreview;
-  const normalizedRuntimeTurnId = normalizeTaskRef(options?.runtimeTurnId);
+  const normalizedRuntimeTurnId = normalizeTaskRef(
+    options?.runtimeTurnId ?? nextMessage.runtimeTurnId,
+  );
   if (nextPreview && normalizedRuntimeTurnId) {
     const turnMatchedIndex = nextMessages.findIndex(
       (message) =>

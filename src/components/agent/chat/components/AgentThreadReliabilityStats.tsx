@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, ListTodo, Waves } from "lucide-react";
+import { AlertTriangle, ListTodo } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ThreadReliabilityTone } from "../utils/threadReliabilityView";
 import { resolveStatShellClassName } from "./AgentThreadReliabilityPanelViewModel";
@@ -9,8 +9,6 @@ interface AgentThreadReliabilityStatsProps {
   activeIncidentsLabel: string;
   pendingRequestCount: number;
   pendingRequestsLabel: string;
-  queuedTurnCount: number;
-  queuedTurnsLabel: string;
 }
 
 function StatCard({
@@ -35,9 +33,7 @@ function StatCard({
         {icon}
         <span>{label}</span>
       </div>
-      <div className="mt-2 text-2xl font-semibold text-foreground">
-        {value}
-      </div>
+      <div className="mt-2 text-2xl font-semibold text-foreground">{value}</div>
     </div>
   );
 }
@@ -47,11 +43,9 @@ export function AgentThreadReliabilityStats({
   activeIncidentsLabel,
   pendingRequestCount,
   pendingRequestsLabel,
-  queuedTurnCount,
-  queuedTurnsLabel,
 }: AgentThreadReliabilityStatsProps) {
   return (
-    <div className="mt-4 grid gap-2 md:grid-cols-3">
+    <div className="mt-4 grid gap-2 md:grid-cols-2">
       <StatCard
         icon={<ListTodo className="h-4 w-4" />}
         label={pendingRequestsLabel}
@@ -63,12 +57,6 @@ export function AgentThreadReliabilityStats({
         label={activeIncidentsLabel}
         tone={activeIncidentCount > 0 ? "failed" : "neutral"}
         value={activeIncidentCount}
-      />
-      <StatCard
-        icon={<Waves className="h-4 w-4" />}
-        label={queuedTurnsLabel}
-        tone={queuedTurnCount > 0 ? "waiting" : "neutral"}
-        value={queuedTurnCount}
       />
     </div>
   );

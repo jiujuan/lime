@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "CommandExecutionApprovalDecision": {
+      "enum": [
+        "accept",
+        "acceptForSession",
+        "cancel",
+        "decline"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "approvalId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "availableDecisions": {
+      "items": {
+        "$ref": "#/$defs/CommandExecutionApprovalDecision"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "command": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "cwd": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "itemId": {
+      "type": "string"
+    },
+    "reason": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "startedAtMs": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "itemId",
+    "startedAtMs",
+    "threadId",
+    "turnId"
+  ],
+  "title": "CommandExecutionRequestApprovalParams",
+  "type": "object"
+}

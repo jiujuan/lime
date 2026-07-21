@@ -1,247 +1,137 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { isHistoryReplayVisualDomReady } from "./lib/session-history-replay-visual-oracle.mjs";
 
-function readSmokeScript() {
-  return fs.readFileSync(
-    "scripts/electron/session-history-fixture-smoke.mjs",
-    "utf8",
-  );
+function read(path) {
+  return fs.readFileSync(path, "utf8");
 }
 
-function readHistoryReplayVisualFixture() {
-  return fs.readFileSync(
-    "scripts/electron/lib/session-history-replay-visual-fixture.mjs",
-    "utf8",
-  );
-}
-
-function readHistoryReplayVisualOracle() {
-  return fs.readFileSync(
-    "scripts/electron/lib/session-history-replay-visual-oracle.mjs",
-    "utf8",
-  );
-}
-
-function readThreadReadPageIsomorphicFixture() {
-  return fs.readFileSync(
+const paths = {
+  smoke: "scripts/electron/session-history-fixture-smoke.mjs",
+  threadFixture:
     "scripts/electron/lib/session-history-thread-read-isomorphic-fixture.mjs",
-    "utf8",
-  );
-}
-
-function readThreadReadPageIsomorphicOracle() {
-  return fs.readFileSync(
+  threadOracle:
     "scripts/electron/lib/session-history-thread-read-isomorphic-oracle.mjs",
-    "utf8",
-  );
-}
+  archiveOracle:
+    "scripts/electron/lib/session-history-thread-archive-oracle.mjs",
+};
 
 describe("agent session history Electron fixture smoke guard", () => {
-  it("keeps the smoke on real Electron Desktop Host IPC and App Server JSON-RPC", () => {
-    const content = readSmokeScript();
+  it("keeps the Gate on real Electron Desktop Host and App Server JSON-RPC", () => {
+    const smoke = read(paths.smoke);
 
-    expect(content).toContain("import { _electron as electron }");
-    expect(content).toContain("electron.launch({");
-    expect(content).toContain('"--use-mock-keychain"');
-    expect(content).toContain("ELECTRON_E2E_USER_DATA_DIR");
-    expect(content).toContain('LIME_ELECTRON_E2E: "1"');
-    expect(content).toContain('LIME_ELECTRON_DEV_HTTP_BRIDGE: "0"');
-    expect(content).toContain("window.__LIME_ELECTRON__ === true");
-    expect(content).toContain(
-      'typeof window.electronAPI?.invoke === "function"',
-    );
-    expect(content).toContain("window.electronAPI.supportsCommand");
-    expect(content).toContain("app_server_handle_json_lines");
-    expect(content).toContain('page.on("pageerror"');
-    expect(content).toContain("summary.pageErrors = pageErrors");
-    expect(content).toContain("pageErrors.length === 0");
-    expect(content).toContain("command: entry.command");
-    expect(content).toContain("transport: entry.transport");
+    expect(smoke).toContain("import { _electron as electron }");
+    expect(smoke).toContain("electron.launch({");
+    expect(smoke).toContain('"--use-mock-keychain"');
+    expect(smoke).toContain("ELECTRON_E2E_USER_DATA_DIR");
+    expect(smoke).toContain('LIME_ELECTRON_E2E: "1"');
+    expect(smoke).toContain('LIME_ELECTRON_DEV_HTTP_BRIDGE: "0"');
+    expect(smoke).toContain("window.__LIME_ELECTRON__ === true");
+    expect(smoke).toContain('typeof window.electronAPI?.invoke === "function"');
+    expect(smoke).toContain("window.electronAPI.supportsCommand");
+    expect(smoke).toContain("app_server_handle_json_lines");
+    expect(smoke).toContain('page.on("pageerror"');
+    expect(smoke).toContain("pageErrors.length === 0");
+    expect(smoke).toContain('APP_SERVER_BACKEND_MODE: "unavailable"');
   });
 
-  it("uses deterministic session history methods without live model backend", () => {
-    const content = readSmokeScript();
+  it("runs canonical history and v2 archive lifecycle without legacy writes", () => {
+    const smoke = read(paths.smoke);
 
-    expect(content).toContain('APP_SERVER_BACKEND_MODE: "unavailable"');
-    expect(content).toContain('"initialize"');
-    expect(content).toContain('"agentSession/start"');
-    expect(content).toContain('"agentSession/read"');
-    expect(content).toContain('"agentSession/update"');
-    expect(content).toContain('"agentSession/list"');
-    expect(content).toContain(
-      'const FORBIDDEN_METHODS = ["agentSession/turn/start"]',
-    );
-    expect(content).toContain("forbiddenMethodsSeen.length === 0");
-    expect(content).toContain("ARCHIVE_FAIL_CLOSED_MESSAGE");
-    expect(content).toContain("archived: true");
-    expect(content).toContain("callExpectError");
-    expect(content).toContain("archiveFailClosed");
-    expect(content).toContain("listedSessionArchivedAt == null");
-    expect(content).toContain("seedPersistedProjectionSession");
-    expect(content).not.toContain("seedPersistedCurrentTimelineSession");
-    expect(content).toContain("SQLITE3_BINARY");
-    expect(content).toContain("PERSISTED_SESSION_ID");
-    expect(content).toContain("launchElectronFixture");
-    expect(content).toContain("closeElectronFixture");
-    expect(content).toContain('"archive-readback"');
-    expect(content).toContain('"unarchive-readback"');
-    expect(content).toContain("sidecarRestartReadback");
-    expect(content).toContain("persistedArchiveReopenSummary");
-    expect(content).toContain("persistedUnarchiveReopenSummary");
-    expect(content).toContain("archived: false");
-    expect(content).toContain("PERSISTED_SESSION_FORBIDDEN_METHODS");
-    expect(content).toContain("sidecarRestartReadback");
-    expect(content).toContain("projection_1.sqlite");
-    expect(content).toContain("projected_sessions");
-    expect(content).toContain("projected_items");
-    expect(content).toContain("projection_watermarks");
-    expect(content).toContain("message.created");
-    expect(content).toContain('"launch-electron-persisted-archive-readback"');
-    expect(content).toContain('"launch-electron-persisted-unarchive-readback"');
-    expect(content).toContain("SIDEBAR_GUI_REQUIRED_METHODS");
-    expect(content).toContain("SIDEBAR_GUI_FORBIDDEN_METHODS");
-    expect(content).toContain("runSidebarGuiArchivePhase");
-    expect(content).toContain("runSettingsGuiRestorePhase");
-    expect(content).toContain("sidebarGuiArchiveSummary");
-    expect(content).toContain("settingsGuiRestoreSummary");
-    expect(content).toContain("seedHistoryReplayVisualProjectionSession");
-    expect(content).toContain("runHistoryReplayVisualReadPhase");
-    expect(content).toContain("runHistoryReplayVisualDomOracle");
-    expect(content).toContain("historyReplayVisualSummary");
-    expect(content).toContain("session-history-replay-visual-fixture.mjs");
-    expect(content).toContain("session-history-replay-visual-oracle.mjs");
-    expect(content).toContain("seedThreadReadPageIsomorphicProjectionSession");
-    expect(content).toContain("runThreadReadPageIsomorphicReadPhase");
-    expect(content).toContain("runThreadReadPageIsomorphicDomOracle");
-    expect(content).toContain("threadReadPageIsomorphicSummary");
-    expect(content).toContain(
-      "session-history-thread-read-isomorphic-fixture.mjs",
-    );
-    expect(content).toContain(
-      "session-history-thread-read-isomorphic-oracle.mjs",
-    );
-    expect(content).toContain("parseJsonRpcRequestsFromInvokeTrace");
-    expect(content).toContain("OPENED_PROJECT_IDS_KEY");
-    expect(content).toContain("agent-opened-project-ids-changed");
-    expect(content).toContain("app-sidebar-conversation-menu-archive");
-    expect(content).toContain("settings-archived-conversation-restore");
-    expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "external"');
-    expect(content).not.toContain("APP_SERVER_BACKEND_COMMAND");
-    expect(content).not.toContain("--allow-live-provider");
-    expect(content).not.toContain("seedLegacyAgentMessagesSession");
-    expect(content).not.toContain("runLegacyAgentMessagesBackfillPhase");
-    expect(content).not.toContain("assertLegacyBackfillPhase");
-    expect(content).not.toContain("LEGACY_SESSION_ID");
-    expect(content).not.toContain("agent_messages");
-    expect(content).not.toContain("a2ui_forms");
+    expect(smoke).toContain('"thread/start"');
+    expect(smoke).toContain('"thread/archive"');
+    expect(smoke).toContain('"thread/unarchive"');
+    expect(smoke).toContain('"thread/read"');
+    expect(smoke).toContain('"thread/list"');
+    expect(smoke).toContain('"thread/turns/list"');
+    expect(smoke).toContain('"thread/resume"');
+    expect(smoke).toContain("runThreadArchivePhase");
+    expect(smoke).toContain("runThreadUnarchivePhase");
+    expect(smoke).toContain("findRolloutPaths");
+    expect(smoke).toContain("archivedRolloutPaths");
+    expect(smoke).toContain("restoredRolloutPaths");
+    expect(smoke).toContain("seedThreadReadPageIsomorphicCanonicalThread");
+    expect(smoke).toContain("runThreadReadPageIsomorphicReadPhase");
+    expect(smoke).toContain("runThreadReadPageIsomorphicDomOracle");
+    expect(smoke).toContain("databaseBootstrapRestart");
+    expect(smoke).not.toContain('call("agentSession/update"');
+    expect(smoke).not.toContain('call("agentSession/archiveMany"');
+    expect(smoke).not.toContain("runSessionHistoryFixture");
+    expect(smoke).not.toContain("runPersistedSessionArchivePhase");
+    expect(smoke).not.toContain("runSidebarGuiArchivePhase");
+    expect(smoke).not.toContain("runSettingsGuiRestorePhase");
+    expect(smoke).not.toContain("archive-readback");
+    expect(smoke).not.toContain("unarchive-readback");
   });
 
-  it("keeps history replay visual coverage in the split current Electron oracle", () => {
-    const smoke = readSmokeScript();
-    const fixture = readHistoryReplayVisualFixture();
-    const oracle = readHistoryReplayVisualOracle();
-    const combined = `${smoke}\n${fixture}\n${oracle}`;
+  it("locks archive/unarchive to v2 notifications and restart readback", () => {
+    const oracle = read(paths.archiveOracle);
 
-    expect(fixture).toContain("HISTORY_REPLAY_VISUAL");
-    expect(fixture).toContain("message.created");
-    expect(fixture).toContain("item.completed");
-    expect(fixture).toContain("item.started");
-    expect(fixture).toContain("mcp__filesystem__read_file");
-    expect(fixture).toContain("textElements");
-    expect(fixture).toContain("remoteImageUrl");
-    expect(oracle).toContain("thread_read.thread_items");
-    expect(oracle).toContain("data-thread-item-id");
-    expect(oracle).toContain("message-image-attachment");
-    expect(oracle).toContain("reasoningSummaryOccurrences === 1");
-    expect(combined).toContain("APP_SERVER_HANDLE_JSON_LINES_COMMAND");
-    expect(smoke).not.toContain("historyReplayEvents({");
-    expect(combined).toContain('APP_SERVER_BACKEND_MODE: "unavailable"');
-    expect(combined).toContain('"agentSession/read"');
-    expect(combined).toContain('"agentSession/list"');
-    expect(combined).not.toContain('APP_SERVER_BACKEND_MODE: "external"');
-    expect(combined).not.toContain("APP_SERVER_BACKEND_COMMAND");
-    expect(combined).not.toContain("--allow-live-provider");
-    expect(combined).not.toContain("agent_runtime_");
-    expect(combined).not.toContain("mockPriorityCommands");
-    expect(combined).not.toContain("defaultMocks");
-    expect(combined).not.toContain("invokeMockOnly");
+    expect(oracle).toContain('call("thread/start"');
+    expect(oracle).toContain('call("thread/archive"');
+    expect(oracle).toContain('call("thread/unarchive"');
+    expect(oracle).toContain('"app_server_drain_events"');
+    expect(oracle).toContain("includeRecent: true");
+    expect(oracle).toContain('message?.method === "thread/archived"');
+    expect(oracle).toContain('message?.method === "thread/unarchived"');
+    expect(oracle).toContain(
+      'assert(notificationSeen, "未观察到 thread/archived notification")',
+    );
+    expect(oracle).toContain(
+      'assert(notificationSeen, "未观察到 thread/unarchived notification")',
+    );
+    expect(oracle).toContain("archivedRestartReadback: true");
+    expect(oracle).toContain('"agentSession/update"');
+    expect(oracle).toContain('"agentSession/archiveMany"');
+    expect(oracle).not.toContain('call("agentSession/update"');
+    expect(oracle).not.toContain('call("agentSession/archiveMany"');
   });
 
-  it("waits for the complete history replay DOM instead of a transient reasoning shell", () => {
-    const completeSnapshot = {
-      messageListReady: true,
-      turnGroupPresent: true,
-      imageAttachmentCount: 2,
-      userTextVisible: true,
-      imagePlaceholderTextVisible: false,
-      assistantTextVisible: true,
-      reasoningNodePresent: true,
-      reasoningText: "先确认本地图片和远程参考图都应作为结构化输入恢复。",
-      reasoningSummaryOccurrences: 1,
-      mcpNodePresent: true,
-      toolRows: 1,
-    };
-
-    expect(
-      isHistoryReplayVisualDomReady({
-        ...completeSnapshot,
-        reasoningText: "思考中",
-        reasoningSummaryOccurrences: 0,
-      }),
-    ).toBe(false);
-    expect(isHistoryReplayVisualDomReady(completeSnapshot)).toBe(true);
-  });
-
-  it("keeps thread read page isomorphic coverage in the split current Electron oracle", () => {
-    const smoke = readSmokeScript();
-    const fixture = readThreadReadPageIsomorphicFixture();
-    const oracle = readThreadReadPageIsomorphicOracle();
-    const combined = `${smoke}\n${fixture}\n${oracle}`;
+  it("keeps thread read/list/turns/resume on the v2 Thread/Turn/Item contract", () => {
+    const fixture = read(paths.threadFixture);
+    const oracle = read(paths.threadOracle);
 
     expect(fixture).toContain("THREAD_READ_PAGE_ISOMORPHIC");
-    expect(fixture).toContain("message.created");
-    expect(fixture).toContain("message.delta");
-    expect(fixture).toContain("turn.completed");
-    expect(fixture).toContain("projected_turns");
-    expect(fixture).toContain("projected_items");
-    expect(oracle).toContain('"agentSession/read"');
-    expect(oracle).toContain('"agentSession/list"');
-    expect(oracle).toContain('"agentSession/thread/resume"');
-    expect(oracle).toContain("detail.thread_read");
-    expect(oracle).toContain("thread_read.thread_items");
-    expect(oracle).toContain("historyOffset: 2");
-    expect(oracle).toContain("historyOffset: 4");
-    expect(oracle).toContain("data-runtime-turn-id");
-    expect(oracle).toContain("textOrderStable");
-    expect(combined).toContain("APP_SERVER_HANDLE_JSON_LINES_COMMAND");
-    expect(combined).toContain('APP_SERVER_BACKEND_MODE: "unavailable"');
-    expect(combined).not.toContain('APP_SERVER_BACKEND_MODE: "external"');
-    expect(combined).not.toContain("APP_SERVER_BACKEND_COMMAND");
-    expect(combined).not.toContain("--allow-live-provider");
+    expect(fixture).toContain("canonical_threads");
+    expect(fixture).toContain("thread_history.canonical_turns");
+    expect(fixture).toContain("thread_history.canonical_items");
+    expect(fixture).toContain('"sqlite"');
+    expect(fixture).toContain('"state.sqlite"');
+    expect(fixture).toContain('"thread_history.sqlite"');
+    expect(fixture).not.toContain("projection_1.sqlite");
+    expect(fixture).toContain('type: "userMessage"');
+    expect(fixture).toContain('type: "reasoning"');
+    expect(fixture).toContain('type: "agentMessage"');
+    expect(fixture).not.toContain("projected_turns");
+    expect(fixture).not.toContain("projected_items");
+    expect(oracle).toContain('"thread/read"');
+    expect(oracle).toContain('"thread/list"');
+    expect(oracle).toContain('"thread/turns/list"');
+    expect(oracle).toContain('"thread/resume"');
+    expect(oracle).toContain("threadId: fixture.threadId");
+    expect(oracle).toContain("includeTurns: true");
+    expect(oracle).toContain("cursor: newestPage.nextCursor");
+    expect(oracle).toContain("cursor: middlePage.nextCursor");
+    expect(oracle).toContain("excludeTurns: true");
+    expect(oracle).toContain("initialTurnsPage");
+    expect(oracle).toContain("result?.resume?.initialTurnsPage?.data");
+    expect(oracle).toContain('message?.method === "thread/started"');
+    expect(oracle).not.toContain("sessionId: fixture.sessionId");
+    expect(oracle).not.toContain("historyLimit:");
+    expect(oracle).not.toContain("historyOffset:");
+    expect(oracle).not.toContain("result?.resume?.resumed");
+  });
+
+  it("does not use legacy runtime or production mock fallback", () => {
+    const combined = Object.values(paths)
+      .map((path) => read(path))
+      .join("\n");
+
     expect(combined).not.toContain("agent_runtime_");
     expect(combined).not.toContain("mockPriorityCommands");
     expect(combined).not.toContain("defaultMocks");
     expect(combined).not.toContain("invokeMockOnly");
-  });
-
-  it("guards current detail arrays that previously crashed history restore", () => {
-    const content = readSmokeScript();
-
-    expect(content).toContain("detail.turns");
-    expect(content).toContain("detail.items");
-    expect(content).toContain("detail.queued_turns");
-    expect(content).toContain("detail.thread_read");
-    expect(content).toContain("不是数组");
-  });
-
-  it("does not use legacy commands or mock fallback as success evidence", () => {
-    const content = readSmokeScript();
-
-    expect(content).not.toContain("agent_runtime_");
-    expect(content).not.toContain("mockPriorityCommands");
-    expect(content).not.toContain("defaultMocks");
-    expect(content).not.toContain("invokeMockOnly");
-    expect(content).not.toContain('backendMode: "mock"');
+    expect(combined).not.toContain('APP_SERVER_BACKEND_MODE: "external"');
+    expect(combined).not.toContain("APP_SERVER_BACKEND_COMMAND");
+    expect(combined).not.toContain("--allow-live-provider");
   });
 });

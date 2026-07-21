@@ -4,9 +4,9 @@ use super::fields::{
 };
 use super::lifecycle::{approval_decision, is_action_resolution_event};
 use agent_protocol::{
-    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChangeStatus,
-    MessageContentPart, PlanStep, PlanStepStatus, SubAgentActivityKind, ThreadId,
-    ThreadItemPayload, ToolOutput,
+    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChange,
+    FileChangeKind, FileChangeStatus, MessageContentPart, PlanStep, PlanStepStatus,
+    SubAgentActivityKind, ThreadId, ThreadItemPayload, ToolOutput,
 };
 use serde_json::{Map, Value};
 
@@ -296,16 +296,29 @@ pub(super) fn typed_payload(
             exit_code: map_i64(payload, &["exitCode", "exit_code"]).map(|value| value as i32),
         },
         ItemFamily::File => ThreadItemPayload::File {
-            path: map_string(payload, &["path", "filePath", "file_path"])
-                .or_else(|| {
-                    string_list(payload, &["paths", "changedFiles", "changed_files"])
-                        .into_iter()
-                        .next()
-                })
-                .unwrap_or_else(|| "unknown".to_string()),
-            diff: map_string(payload, &["diff", "patch", "content"]),
+            changes: file_changes(payload),
             status: file_change_status(event_type, payload),
         },
+        ItemFamily::Media if event_type == "artifact.snapshot" => {
+            let artifact = payload.get("artifact").and_then(Value::as_object);
+            ThreadItemPayload::File {
+                changes: vec![FileChange {
+                    path: map_string(payload, &["path", "filePath", "file_path"])
+                        .or_else(|| {
+                            artifact.and_then(|value| map_string(value, &["filePath", "path"]))
+                        })
+                        .unwrap_or_else(|| "artifact".to_string()),
+                    kind: FileChangeKind::Update { move_path: None },
+                    diff: map_string(payload, &["content", "preview"])
+                        .or_else(|| {
+                            artifact
+                                .and_then(|value| map_string(value, &["content", "previewText"]))
+                        })
+                        .unwrap_or_default(),
+                }],
+                status: FileChangeStatus::Applied,
+            }
+        }
         ItemFamily::Media => ThreadItemPayload::Media {
             uri: map_string(
                 payload,
@@ -563,12 +576,72 @@ fn file_change_status(event_type: &str, payload: &Map<String, Value>) -> FileCha
         .as_str()
     {
         "applied" => FileChangeStatus::Applied,
-        "rejected" | "denied" => FileChangeStatus::Rejected,
+        "rejected" | "denied" | "declined" => FileChangeStatus::Rejected,
         "failed" | "error" => FileChangeStatus::Failed,
         _ if event_type.ends_with("applied") => FileChangeStatus::Applied,
+        _ if event_type.ends_with("declined") => FileChangeStatus::Rejected,
         _ if event_type.ends_with("failed") => FileChangeStatus::Failed,
         _ => FileChangeStatus::Proposed,
     }
+}
+
+fn file_changes(payload: &Map<String, Value>) -> Vec<FileChange> {
+    let changes = payload
+        .get("changes")
+        .and_then(Value::as_array)
+        .map(|changes| {
+            changes
+                .iter()
+                .filter_map(file_change_from_value)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if !changes.is_empty() {
+        return changes;
+    }
+
+    let path = map_string(payload, &["path", "filePath", "file_path"]).or_else(|| {
+        string_list(payload, &["paths", "changedFiles", "changed_files"])
+            .into_iter()
+            .next()
+    });
+    path.map(|path| FileChange {
+        path,
+        kind: FileChangeKind::Update { move_path: None },
+        diff: map_string(payload, &["diff", "patch", "content"]).unwrap_or_default(),
+    })
+    .into_iter()
+    .collect()
+}
+
+fn file_change_from_value(value: &Value) -> Option<FileChange> {
+    let value = value.as_object()?;
+    let kind = map_string(value, &["kind", "changeKind", "change_kind"])
+        .unwrap_or_else(|| "update".to_string())
+        .to_ascii_lowercase();
+    let move_path = map_string(value, &["movePath", "move_path"]);
+    let destination_path = map_string(value, &["path", "filePath", "file_path"])?;
+    let (path, kind) = match kind.as_str() {
+        "add" => (destination_path, FileChangeKind::Add),
+        "delete" => (destination_path, FileChangeKind::Delete),
+        "update" => (destination_path, FileChangeKind::Update { move_path }),
+        "move" | "move_update" => (
+            map_string(value, &["sourcePath", "source_path"]).unwrap_or(destination_path.clone()),
+            FileChangeKind::Update {
+                move_path: move_path.or(Some(destination_path)),
+            },
+        ),
+        _ => return None,
+    };
+    Some(FileChange {
+        path,
+        kind,
+        diff: value
+            .get("diff")
+            .map(compact_value)
+            .or_else(|| map_string(value, &["patch", "content"]))
+            .unwrap_or_default(),
+    })
 }
 
 fn subagent_activity(event_type: &str, payload: &Map<String, Value>) -> SubAgentActivityKind {

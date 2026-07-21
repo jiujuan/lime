@@ -404,35 +404,28 @@ describe("PluginRuntimePage", () => {
     );
     expect(appServerClientMocks.startSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        appId: "content-factory-app",
-        workspaceId: "workspace-1",
-        businessObjectRef: expect.objectContaining({
-          kind: "plugin.task",
-          title: "生成内容场景",
-          metadata: expect.objectContaining({
-            source: "plugin_runtime_page",
-            appId: "content-factory-app",
-            entryKey: "dashboard",
-            taskKind: "content.scenario_planning",
-            prompt: "基于项目知识生成内容场景",
-          }),
-        }),
+        serviceName: "生成内容场景",
+        threadSource: "plugin",
+        historyMode: "paginated",
       }),
     );
     expect(appServerClientMocks.startTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionId: "plugin-session-1",
-        input: expect.objectContaining({
-          text: expect.stringContaining("基于项目知识生成内容场景"),
-        }),
-        runtimeOptions: expect.objectContaining({
-          stream: true,
+        threadId: "plugin-thread-1",
+        input: [
+          expect.objectContaining({
+            type: "text",
+            text: expect.stringContaining("基于项目知识生成内容场景"),
+          }),
+        ],
+        responsesapiClientMetadata: expect.objectContaining({
           eventName: expect.stringMatching(
             /^plugin_runtime:content-factory-app:plugin-task-/,
           ),
-          queuedTurnId: expect.stringMatching(
-            /^plugin-queued-plugin-task-/,
-          ),
+          pluginRuntime: expect.objectContaining({
+            appId: "content-factory-app",
+            taskKind: "content.scenario_planning",
+          }),
         }),
       }),
     );

@@ -1,5 +1,15 @@
+pub use app_server_protocol::app_server_method_catalog;
 pub use app_server_protocol::is_app_server_notification_method;
 pub use app_server_protocol::is_app_server_request_method;
+pub use app_server_protocol::protocol::v2::ServerNotification;
+pub use app_server_protocol::protocol::v2::METHOD_THREAD_ARCHIVE;
+pub use app_server_protocol::protocol::v2::METHOD_THREAD_SHELL_COMMAND;
+pub use app_server_protocol::protocol::v2::METHOD_THREAD_UNARCHIVE;
+use app_server_protocol::protocol::v2::NOTIFICATION_METHODS;
+pub use app_server_protocol::protocol::v2::{
+    ThreadArchiveParams, ThreadArchiveResponse, ThreadShellCommandParams,
+    ThreadShellCommandResponse, ThreadUnarchiveParams, ThreadUnarchiveResponse,
+};
 pub use app_server_protocol::AgentSessionActionReplayParams;
 pub use app_server_protocol::AgentSessionActionRespondParams;
 pub use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
@@ -40,8 +50,6 @@ pub use app_server_protocol::AgentSessionReviewDecisionSaveParams;
 pub use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
 pub use app_server_protocol::AgentSessionReviewDecisionTemplateExportResponse;
 pub use app_server_protocol::AgentSessionStartParams;
-pub use app_server_protocol::AgentSessionThreadResumeParams;
-pub use app_server_protocol::AgentSessionThreadResumeResponse;
 pub use app_server_protocol::AgentSessionTurnCancelParams;
 pub use app_server_protocol::AgentSessionTurnStartParams;
 pub use app_server_protocol::AppServerMethodKind;
@@ -81,7 +89,6 @@ pub use app_server_protocol::BrowserSessionState;
 pub use app_server_protocol::BrowserSessionTargetInfo;
 pub use app_server_protocol::BrowserSessionTargetListParams;
 pub use app_server_protocol::BrowserSessionTargetListResponse;
-pub use app_server_protocol::CanonicalThreadEventNotification;
 pub use app_server_protocol::CapabilityListParams;
 pub use app_server_protocol::DiagnosticsCapabilityRoutingMetricsSnapshot;
 pub use app_server_protocol::DiagnosticsIdempotencyDiagnostics;
@@ -210,7 +217,6 @@ pub use app_server_protocol::ProjectMemoryReadParams;
 pub use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::RequestId;
 pub use app_server_protocol::ServerDiagnosticsResponse;
-use app_server_protocol::ServerNotification;
 pub use app_server_protocol::SkillDownloadInstallParams;
 pub use app_server_protocol::SkillDownloadInstallResponse;
 pub use app_server_protocol::SkillListResponse;
@@ -282,7 +288,6 @@ pub use app_server_protocol::WorkspaceRightSurfaceRequestParams;
 pub use app_server_protocol::WorkspaceRightSurfaceRequestResponse;
 pub use app_server_protocol::WorkspaceSkillBindingsListParams;
 pub use app_server_protocol::WorkspaceSkillBindingsListResponse;
-pub use app_server_protocol::APP_SERVER_METHODS;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_REPLAY;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
@@ -293,21 +298,15 @@ pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET;
 pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST;
 pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT;
-pub use app_server_protocol::METHOD_AGENT_SESSION_LIST;
 pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_CLEAR;
 pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_READ;
 pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_SET;
 pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE;
-pub use app_server_protocol::METHOD_AGENT_SESSION_READ;
 pub use app_server_protocol::METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT;
-pub use app_server_protocol::METHOD_AGENT_SESSION_START;
-pub use app_server_protocol::METHOD_AGENT_SESSION_THREAD_RESUME;
-pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
-pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 pub use app_server_protocol::METHOD_ARTIFACT_READ;
 pub use app_server_protocol::METHOD_AUTOMATION_JOB_CREATE;
 pub use app_server_protocol::METHOD_AUTOMATION_JOB_DELETE;
@@ -434,7 +433,11 @@ pub use app_server_protocol::METHOD_SKILL_READ;
 pub use app_server_protocol::METHOD_THREAD_ITEMS_LIST;
 pub use app_server_protocol::METHOD_THREAD_LIST;
 pub use app_server_protocol::METHOD_THREAD_READ;
+pub use app_server_protocol::METHOD_THREAD_RESUME;
+pub use app_server_protocol::METHOD_THREAD_START;
 pub use app_server_protocol::METHOD_THREAD_TURNS_LIST;
+pub use app_server_protocol::METHOD_TURN_INTERRUPT;
+pub use app_server_protocol::METHOD_TURN_START;
 pub use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_READ;
@@ -466,6 +469,8 @@ use thiserror::Error;
 pub enum ClientError {
     #[error("invalid request params: {0}")]
     InvalidParams(String),
+    #[error("invalid server notification: {0}")]
+    InvalidNotification(String),
     #[error("failed to serialize request params: {0}")]
     Serialize(#[from] serde_json::Error),
     #[error(transparent)]
@@ -526,7 +531,7 @@ fn validate_mcp_prompt_target(server: &str, name: &str) -> Result<(), ClientErro
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClientEvent {
-    CanonicalThread(CanonicalThreadEventNotification),
+    Lifecycle(ServerNotification),
     AgentSession(JsonRpcNotification),
     Notification(JsonRpcNotification),
     Request(JsonRpcRequest),
@@ -534,26 +539,59 @@ pub enum ClientEvent {
     Error(JsonRpcErrorResponse),
 }
 
-impl From<JsonRpcMessage> for ClientEvent {
-    fn from(message: JsonRpcMessage) -> Self {
+impl TryFrom<JsonRpcMessage> for ClientEvent {
+    type Error = ClientError;
+
+    fn try_from(message: JsonRpcMessage) -> Result<Self, ClientError> {
         match message {
             JsonRpcMessage::Notification(notification)
                 if notification.method == METHOD_AGENT_SESSION_EVENT =>
             {
-                match ServerNotification::try_from(notification.clone()) {
-                    Ok(ServerNotification::AgentSessionEvent(params)) => params
-                        .canonical_event
-                        .map(Self::CanonicalThread)
-                        .unwrap_or(Self::AgentSession(notification)),
-                    _ => Self::AgentSession(notification),
+                let event_type = read_agent_session_event_type(&notification).ok_or_else(|| {
+                    ClientError::InvalidNotification(
+                        "agentSession/event is missing event.type".to_string(),
+                    )
+                })?;
+                if is_agent_session_side_channel(event_type) {
+                    Ok(Self::AgentSession(notification))
+                } else {
+                    Err(ClientError::InvalidNotification(format!(
+                        "agentSession/event type '{event_type}' is not an allowed raw side-channel"
+                    )))
                 }
             }
-            JsonRpcMessage::Notification(notification) => Self::Notification(notification),
-            JsonRpcMessage::Request(request) => Self::Request(request),
-            JsonRpcMessage::Response(response) => Self::Response(response),
-            JsonRpcMessage::Error(error) => Self::Error(error),
+            JsonRpcMessage::Notification(notification)
+                if NOTIFICATION_METHODS.contains(&notification.method.as_str()) =>
+            {
+                ServerNotification::try_from(notification)
+                    .map(Self::Lifecycle)
+                    .map_err(ClientError::InvalidNotification)
+            }
+            JsonRpcMessage::Notification(notification) => Ok(Self::Notification(notification)),
+            JsonRpcMessage::Request(request) => Ok(Self::Request(request)),
+            JsonRpcMessage::Response(response) => Ok(Self::Response(response)),
+            JsonRpcMessage::Error(error) => Ok(Self::Error(error)),
         }
     }
+}
+
+fn read_agent_session_event_type(notification: &JsonRpcNotification) -> Option<&str> {
+    notification
+        .params
+        .as_ref()?
+        .get("event")?
+        .get("type")?
+        .as_str()
+}
+
+fn is_agent_session_side_channel(event_type: &str) -> bool {
+    event_type.starts_with("action.")
+        || event_type.starts_with("approval.")
+        || event_type.starts_with("provider.")
+        || event_type.starts_with("image_task.")
+        || event_type.starts_with("image_task_")
+        || event_type.starts_with("media.")
+        || event_type.starts_with("runtime.")
 }
 
 #[derive(Debug, Clone)]
@@ -607,6 +645,27 @@ impl AppServerClient {
         params: ThreadListParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_threads(params))
+    }
+
+    pub fn archive_thread(
+        &mut self,
+        params: ThreadArchiveParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::archive_thread(params))
+    }
+
+    pub fn unarchive_thread(
+        &mut self,
+        params: ThreadUnarchiveParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::unarchive_thread(params))
+    }
+
+    pub fn run_thread_shell_command(
+        &mut self,
+        params: ThreadShellCommandParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::run_thread_shell_command(params))
     }
 
     pub fn list_thread_turns(
@@ -1643,8 +1702,8 @@ impl AppServerClient {
         Ok(encode_message(&JsonRpcMessage::Notification(notification))?)
     }
 
-    pub fn event(message: JsonRpcMessage) -> ClientEvent {
-        ClientEvent::from(message)
+    pub fn event(message: JsonRpcMessage) -> Result<ClientEvent, ClientError> {
+        ClientEvent::try_from(message)
     }
 
     fn next_id(&mut self) -> RequestId {
@@ -1666,7 +1725,7 @@ pub mod typed {
     }
 
     pub fn list_sessions(params: AgentSessionListParams) -> TypedRequest<AgentSessionListParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_LIST, params)
+        TypedRequest::new(METHOD_THREAD_LIST, params)
     }
 
     pub fn read_thread(params: ThreadReadParams) -> TypedRequest<ThreadReadParams> {
@@ -1675,6 +1734,20 @@ pub mod typed {
 
     pub fn list_threads(params: ThreadListParams) -> TypedRequest<ThreadListParams> {
         TypedRequest::new(METHOD_THREAD_LIST, params)
+    }
+
+    pub fn archive_thread(params: ThreadArchiveParams) -> TypedRequest<ThreadArchiveParams> {
+        TypedRequest::new(METHOD_THREAD_ARCHIVE, params)
+    }
+
+    pub fn unarchive_thread(params: ThreadUnarchiveParams) -> TypedRequest<ThreadUnarchiveParams> {
+        TypedRequest::new(METHOD_THREAD_UNARCHIVE, params)
+    }
+
+    pub fn run_thread_shell_command(
+        params: ThreadShellCommandParams,
+    ) -> TypedRequest<ThreadShellCommandParams> {
+        TypedRequest::new(METHOD_THREAD_SHELL_COMMAND, params)
     }
 
     pub fn list_thread_turns(params: ThreadTurnsListParams) -> TypedRequest<ThreadTurnsListParams> {
@@ -1686,11 +1759,11 @@ pub mod typed {
     }
 
     pub fn start_session(params: AgentSessionStartParams) -> TypedRequest<AgentSessionStartParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_START, params)
+        TypedRequest::new(METHOD_THREAD_START, params)
     }
 
     pub fn read_session(params: AgentSessionReadParams) -> TypedRequest<AgentSessionReadParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_READ, params)
+        TypedRequest::new(METHOD_THREAD_READ, params)
     }
 
     pub fn read_workflow(params: WorkflowReadParams) -> TypedRequest<WorkflowReadParams> {
@@ -2510,13 +2583,13 @@ pub mod typed {
     pub fn start_turn(
         params: AgentSessionTurnStartParams,
     ) -> TypedRequest<AgentSessionTurnStartParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_TURN_START, params)
+        TypedRequest::new(METHOD_TURN_START, params)
     }
 
     pub fn cancel_turn(
         params: AgentSessionTurnCancelParams,
     ) -> TypedRequest<AgentSessionTurnCancelParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_TURN_CANCEL, params)
+        TypedRequest::new(METHOD_TURN_INTERRUPT, params)
     }
 
     pub fn replay_action(
@@ -2575,14 +2648,14 @@ mod tests {
             history_before_message_id: None,
         });
 
-        assert_eq!(typed.method(), METHOD_AGENT_SESSION_READ);
+        assert_eq!(typed.method(), METHOD_THREAD_READ);
         assert_eq!(typed.params().session_id, "sess_1");
 
         let mut client = AppServerClient::new();
         let request = client.typed_request(typed).expect("request");
 
         assert_eq!(request.id, RequestId::Integer(1));
-        assert_eq!(request.method, METHOD_AGENT_SESSION_READ);
+        assert_eq!(request.method, METHOD_THREAD_READ);
         assert_eq!(request.params.expect("params")["sessionId"], "sess_1");
 
         let typed = typed::read_workflow(WorkflowReadParams {
@@ -3002,7 +3075,7 @@ mod tests {
             .expect("request");
 
         assert_eq!(request.id, RequestId::Integer(1));
-        assert_eq!(request.method, METHOD_AGENT_SESSION_LIST);
+        assert_eq!(request.method, METHOD_THREAD_LIST);
         assert_eq!(
             request.params.expect("params"),
             json!({
@@ -4458,80 +4531,237 @@ mod tests {
                 turn_id: "turn_1".to_string(),
             })
             .expect("second");
+        let third = client
+            .run_thread_shell_command(ThreadShellCommandParams {
+                thread_id: "thread_1".to_string(),
+                command: "printf ready".to_string(),
+            })
+            .expect("third");
 
         assert_eq!(first.id, RequestId::Integer(1));
         assert_eq!(second.id, RequestId::Integer(2));
-        assert_eq!(second.method, METHOD_AGENT_SESSION_TURN_CANCEL);
+        assert_eq!(third.id, RequestId::Integer(3));
+        assert_eq!(second.method, METHOD_TURN_INTERRUPT);
+        assert_eq!(third.method, METHOD_THREAD_SHELL_COMMAND);
+        assert_eq!(
+            third.params.expect("shell params"),
+            json!({
+                "threadId": "thread_1",
+                "command": "printf ready"
+            })
+        );
     }
 
     #[test]
-    fn event_classifies_agent_session_notification_without_deserializing_payload() {
+    fn event_classifies_allowed_agent_session_raw_side_channel() {
+        for event_type in [
+            "action.required",
+            "approval.required",
+            "provider.first_event.received",
+            "image_task.created",
+            "media.read.chunk",
+            "runtime.status",
+        ] {
+            let notification = JsonRpcNotification::new(
+                METHOD_AGENT_SESSION_EVENT,
+                Some(
+                    serde_json::to_value(AgentSessionEventParams {
+                        event: AgentEvent {
+                            event_id: format!("evt_{event_type}"),
+                            sequence: 1,
+                            session_id: "sess_1".to_string(),
+                            thread_id: Some("thread_1".to_string()),
+                            turn_id: Some("turn_1".to_string()),
+                            event_type: event_type.to_string(),
+                            timestamp: "2026-06-04T00:00:00Z".to_string(),
+                            payload: json!({ "source": "fixture" }),
+                        },
+                    })
+                    .expect("params"),
+                ),
+            );
+
+            let event = AppServerClient::event(JsonRpcMessage::Notification(notification.clone()))
+                .expect("raw side-channel event");
+
+            assert_eq!(event, ClientEvent::AgentSession(notification));
+        }
+    }
+
+    #[test]
+    fn event_rejects_unowned_agent_session_raw_event() {
         let notification = JsonRpcNotification::new(
             METHOD_AGENT_SESSION_EVENT,
             Some(
-                serde_json::to_value(AgentSessionEventParams::from_event(AgentEvent {
-                    event_id: "evt_1".to_string(),
-                    sequence: 1,
-                    session_id: "sess_1".to_string(),
-                    thread_id: Some("thread_1".to_string()),
-                    turn_id: Some("turn_1".to_string()),
-                    event_type: "turn.started".to_string(),
-                    timestamp: "2026-06-04T00:00:00Z".to_string(),
-                    payload: json!({ "status": "running" }),
-                }))
+                serde_json::to_value(AgentSessionEventParams {
+                    event: AgentEvent {
+                        event_id: "evt_1".to_string(),
+                        sequence: 1,
+                        session_id: "sess_1".to_string(),
+                        thread_id: Some("thread_1".to_string()),
+                        turn_id: Some("turn_1".to_string()),
+                        event_type: "workflow.step.started".to_string(),
+                        timestamp: "2026-06-04T00:00:00Z".to_string(),
+                        payload: json!({}),
+                    },
+                })
                 .expect("params"),
             ),
         );
 
-        let event = AppServerClient::event(JsonRpcMessage::Notification(notification.clone()));
-
-        assert_eq!(event, ClientEvent::AgentSession(notification));
-    }
-
-    #[test]
-    fn event_decodes_canonical_thread_item_projection() {
-        let notification = JsonRpcNotification::new(
-            METHOD_AGENT_SESSION_EVENT,
-            Some(
-                serde_json::to_value(AgentSessionEventParams::from_event(AgentEvent {
-                    event_id: "evt_1".to_string(),
-                    sequence: 1,
-                    session_id: "sess_1".to_string(),
-                    thread_id: Some("thread_1".to_string()),
-                    turn_id: Some("turn_1".to_string()),
-                    event_type: "item.updated".to_string(),
-                    timestamp: "2026-06-04T00:00:00Z".to_string(),
-                    payload: json!({
-                        "item": {
-                            "sessionId": "sess_1",
-                            "threadId": "thread_1",
-                            "turnId": "turn_1",
-                            "itemId": "msg_1",
-                            "sequence": 1,
-                            "ordinal": 0,
-                            "createdAtMs": 100,
-                            "updatedAtMs": 120,
-                            "kind": "agentMessage",
-                            "status": "inProgress",
-                            "payload": {
-                                "type": "agentMessage",
-                                "text": "hello"
-                            }
-                        }
-                    }),
-                }))
-                .expect("params"),
-            ),
-        );
-
-        let event = AppServerClient::event(JsonRpcMessage::Notification(notification));
+        let error = AppServerClient::event(JsonRpcMessage::Notification(notification))
+            .expect_err("unowned raw event must fail closed");
 
         assert!(matches!(
-            event,
-            ClientEvent::CanonicalThread(
-                CanonicalThreadEventNotification::ItemUpdated(item)
-            ) if item.item_id.as_str() == "msg_1"
+            error,
+            ClientError::InvalidNotification(message)
+                if message.contains("workflow.step.started")
         ));
+    }
+
+    #[test]
+    fn event_decodes_all_direct_v2_lifecycle_notifications() {
+        let thread = json!({
+            "id": "thread_1",
+            "sessionId": "session_1",
+            "preview": "",
+            "ephemeral": false,
+            "historyMode": "legacy",
+            "modelProvider": "openai",
+            "createdAt": 10,
+            "updatedAt": 11,
+            "cwd": "/workspace",
+            "cliVersion": "1.0.0",
+            "source": "appServer",
+            "turns": []
+        });
+        let turn = json!({
+            "id": "turn_1",
+            "items": [],
+            "itemsView": "full",
+            "status": "inProgress"
+        });
+        let item = json!({
+            "type": "agentMessage",
+            "id": "item_1",
+            "text": "hello"
+        });
+        let notifications = [
+            json!({
+                "method": "thread/started",
+                "params": { "thread": thread }
+            }),
+            json!({
+                "method": "turn/started",
+                "params": { "threadId": "thread_1", "turn": turn }
+            }),
+            json!({
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread_1",
+                    "turn": {
+                        "id": "turn_1",
+                        "items": [],
+                        "itemsView": "full",
+                        "status": "completed"
+                    }
+                }
+            }),
+            json!({
+                "method": "item/started",
+                "params": {
+                    "item": item,
+                    "threadId": "thread_1",
+                    "turnId": "turn_1",
+                    "startedAtMs": 12
+                }
+            }),
+            json!({
+                "method": "item/completed",
+                "params": {
+                    "item": {
+                        "type": "agentMessage",
+                        "id": "item_1",
+                        "text": "hello"
+                    },
+                    "threadId": "thread_1",
+                    "turnId": "turn_1",
+                    "completedAtMs": 13
+                }
+            }),
+            json!({
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread_1",
+                    "turnId": "turn_1",
+                    "itemId": "item_1",
+                    "delta": "hello"
+                }
+            }),
+        ];
+
+        for notification in notifications {
+            let method = notification["method"]
+                .as_str()
+                .expect("notification method")
+                .to_string();
+            let raw =
+                JsonRpcNotification::new(method.clone(), Some(notification["params"].clone()));
+            let event = AppServerClient::event(JsonRpcMessage::Notification(raw))
+                .expect("direct lifecycle event");
+
+            assert!(matches!(
+                event,
+                ClientEvent::Lifecycle(ref lifecycle) if lifecycle.method() == method
+            ));
+        }
+    }
+
+    #[test]
+    fn event_rejects_agent_session_lifecycle_wrapper() {
+        let notification = JsonRpcNotification::new(
+            METHOD_AGENT_SESSION_EVENT,
+            Some(
+                serde_json::to_value(AgentSessionEventParams {
+                    event: AgentEvent {
+                        event_id: "evt_legacy_turn".to_string(),
+                        sequence: 1,
+                        session_id: "sess_1".to_string(),
+                        thread_id: Some("thread_1".to_string()),
+                        turn_id: Some("turn_1".to_string()),
+                        event_type: "turn.started".to_string(),
+                        timestamp: "2026-06-04T00:00:00Z".to_string(),
+                        payload: json!({ "status": "running" }),
+                    },
+                })
+                .expect("params"),
+            ),
+        );
+
+        let error = AppServerClient::event(JsonRpcMessage::Notification(notification))
+            .expect_err("wrapper lifecycle must fail closed");
+
+        assert!(matches!(
+            error,
+            ClientError::InvalidNotification(message)
+                if message.contains("turn.started")
+        ));
+    }
+
+    #[test]
+    fn event_rejects_malformed_direct_lifecycle_notification() {
+        let notification = JsonRpcNotification::new(
+            "turn/started",
+            Some(json!({
+                "threadId": "thread_1",
+                "turn": { "status": "inProgress" }
+            })),
+        );
+
+        let error = AppServerClient::event(JsonRpcMessage::Notification(notification))
+            .expect_err("malformed direct lifecycle must fail closed");
+
+        assert!(matches!(error, ClientError::InvalidNotification(_)));
     }
 
     #[test]
@@ -4544,18 +4774,19 @@ mod tests {
         };
 
         assert_eq!(
-            AppServerClient::event(JsonRpcMessage::Response(response.clone())),
+            AppServerClient::event(JsonRpcMessage::Response(response.clone())).expect("response"),
             ClientEvent::Response(response)
         );
         assert_eq!(
-            AppServerClient::event(JsonRpcMessage::Error(error.clone())),
+            AppServerClient::event(JsonRpcMessage::Error(error.clone())).expect("error"),
             ClientEvent::Error(error)
         );
     }
 
     #[test]
     fn reexports_protocol_method_catalog_for_consumers() {
-        let methods: Vec<&str> = APP_SERVER_METHODS.iter().map(|spec| spec.method).collect();
+        let catalog = app_server_method_catalog();
+        let methods: Vec<&str> = catalog.iter().map(|spec| spec.method).collect();
 
         assert!(methods.contains(&METHOD_INITIALIZE));
         assert!(methods.contains(&METHOD_ARTIFACT_READ));
@@ -4566,7 +4797,7 @@ mod tests {
         assert!(methods.contains(&METHOD_FILE_SYSTEM_RENAME_FILE));
         assert!(methods.contains(&METHOD_FILE_SYSTEM_DELETE_FILE));
         assert!(methods.contains(&METHOD_EVIDENCE_EXPORT));
-        assert!(methods.contains(&METHOD_AGENT_SESSION_TURN_START));
+        assert!(methods.contains(&METHOD_TURN_START));
         assert!(methods.contains(&METHOD_WORKSPACE_LIST));
         assert!(methods.contains(&METHOD_PLUGIN_SHELL_PREPARE));
         assert!(methods.contains(&METHOD_WORKSPACE_READ));
@@ -4674,9 +4905,7 @@ mod tests {
             METHOD_AUTOMATION_SCHEDULE_VALIDATE
         ));
         assert!(is_app_server_request_method(METHOD_PROJECT_MEMORY_READ));
-        assert!(is_app_server_request_method(
-            METHOD_AGENT_SESSION_TURN_CANCEL
-        ));
+        assert!(is_app_server_request_method(METHOD_TURN_INTERRUPT));
         assert!(!is_app_server_request_method(METHOD_INITIALIZED));
         assert!(is_app_server_notification_method(METHOD_INITIALIZED));
         assert!(is_app_server_notification_method(

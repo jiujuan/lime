@@ -10,7 +10,6 @@ import { buildConversationProjectionEvents } from "./conversationEventProjection
 import { buildTurnContextEvents } from "./contextProjection";
 import { buildDiagnosticProjectionEvents } from "./diagnosticProjection";
 import { sequenceProjectionEvents as sequenceEvents } from "./projectionBase";
-import { buildQueueProjectionEvents } from "./queueProjection";
 import { buildRoutingProjectionEvents } from "./routingProjection";
 import { buildRuntimeLifecycleEvents } from "./runtimeLifecycleProjection";
 import { buildThreadItemProjectionEvents } from "./threadItemProjection";
@@ -131,12 +130,6 @@ export function buildAgentUiProjectionEvents(
         return buildArtifactProjectionEvents(event, context);
       case "turn_context":
         return buildTurnContextEvents(event, context);
-      case "queue_added":
-        return buildQueueProjectionEvents(event, context);
-      case "queue_removed":
-      case "queue_started":
-      case "queue_cleared":
-        return buildQueueProjectionEvents(event, context);
       case "model_change":
         return buildRuntimeLifecycleEvents(event, context);
       case "model_effective":

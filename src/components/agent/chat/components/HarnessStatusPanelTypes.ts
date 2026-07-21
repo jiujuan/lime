@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type {
   ActionRequired,
@@ -69,12 +68,9 @@ export interface HarnessStatusPanelProps {
   pendingActions?: ActionRequired[];
   submittedActionsInFlight?: ActionRequired[];
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
-  queuedTurns?: QueuedTurnSnapshot[];
   canInterrupt?: boolean;
   onInterruptCurrentTurn?: () => void | Promise<void>;
-  onResumeThread?: () => boolean | Promise<boolean>;
   onReplayPendingRequest?: (requestId: string) => boolean | Promise<boolean>;
-  onPromoteQueuedTurn?: (queuedTurnId: string) => boolean | Promise<boolean>;
   onObjectiveChanged?: () => void | Promise<void>;
   onOpenMemoryWorkbench?: () => void;
   onManageProviders?: (context?: ProviderSettingsFocusContext) => void;

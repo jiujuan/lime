@@ -24,6 +24,17 @@ pub(super) async fn handle_action_response(
                     "tool_confirmation action/respond requires decision".to_string(),
                 )
             })?;
+            if decision.is_cancel() {
+                agent_state
+                    .cancel_action(
+                        &request.session.session_id,
+                        &request.request_id,
+                        Some(action_scope),
+                    )
+                    .await
+                    .map_err(action_required_error)?;
+                return Ok(ActionResponseOutcome::Canceled);
+            }
             agent_state
                 .confirm_tool_action(
                     &request.session.session_id,
@@ -169,8 +180,12 @@ fn action_response_error(code: &str, request_id: &str) -> RuntimeCoreError {
 mod tests {
     use super::*;
     use crate::runtime::RuntimeHostContext;
+    use agent_runtime::action_required::{
+        ActionTerminalStatus, PendingActionDescriptor, PendingActionStatus,
+    };
     use app_server_protocol::{
-        AgentSession, AgentSessionActionScope, AgentSessionStatus, AgentTurn, AgentTurnStatus,
+        AgentSession, AgentSessionActionScope, AgentSessionApprovalDecision, AgentSessionStatus,
+        AgentTurn, AgentTurnStatus,
     };
 
     fn session() -> AgentSession {
@@ -223,6 +238,25 @@ mod tests {
         }
     }
 
+    fn restored_tool_confirmation() -> PendingActionDescriptor {
+        PendingActionDescriptor {
+            request_id: "approval-1".to_string(),
+            action_type: "tool_confirmation".to_string(),
+            tool_id: Some("tool-1".to_string()),
+            message: Some("Allow?".to_string()),
+            requested_schema: None,
+            available_decisions: vec!["allow_once".to_string(), "decline".to_string()],
+            scope: AgentActionRequiredScope::from_parts(
+                Some("session-1".to_string()),
+                Some("thread-1".to_string()),
+                Some("turn-1".to_string()),
+            ),
+            created_at_ms: Some(1_783_900_000_000),
+            deadline_at_ms: Some(1_999_999_999_999),
+            status: PendingActionStatus::Pending,
+        }
+    }
+
     #[test]
     fn action_scope_requires_canonical_session_thread_and_turn() {
         let missing = required_action_scope(&action_request(None)).expect_err("missing scope");
@@ -241,5 +275,31 @@ mod tests {
         wrong_turn.turn_id = Some("wrong-turn".to_string());
         assert!(required_action_scope(&action_request(Some(wrong_turn))).is_err());
         assert!(required_action_scope(&action_request(Some(complete_scope()))).is_ok());
+    }
+
+    #[tokio::test]
+    async fn tool_confirmation_cancel_terminalizes_without_resolving_as_decline() {
+        let agent_state = AgentRuntimeState::default();
+        assert!(matches!(
+            agent_state
+                .restore_pending_action_descriptors([restored_tool_confirmation()])
+                .await
+                .as_slice(),
+            [agent_runtime::action_required::PendingActionRestoreOutcome::Restored]
+        ));
+        let mut request = action_request(Some(complete_scope()));
+        request.action_type = AgentSessionActionType::ToolConfirmation;
+        request.decision = Some(AgentSessionApprovalDecision::Cancel);
+        request.confirmed = false;
+
+        let outcome = handle_action_response(&agent_state, &request)
+            .await
+            .expect("cancel tool confirmation");
+
+        assert!(matches!(outcome, ActionResponseOutcome::Canceled));
+        assert_eq!(
+            agent_state.terminal_action_status("approval-1").await,
+            Some(ActionTerminalStatus::Canceled)
+        );
     }
 }

@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 describe("AgentChatWorkspace right surface state boundary", () => {
   it("右侧 surface 本地状态必须由 current hook owner 提供，并先于 artifact 打开 runtime 捕获", () => {
     const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      ),
       "utf8",
     );
     const ownerSource = readFileSync(
@@ -37,15 +40,30 @@ describe("AgentChatWorkspace right surface state boundary", () => {
       ),
       "utf8",
     );
+    const artifactInteractionRuntimeSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceArtifactInteractionRuntime.ts",
+      ),
+      "utf8",
+    );
 
     expect(workspaceSource).toContain("useWorkspaceContextSurfaceRuntime({");
-    expect(workspaceSource).toContain("useWorkspaceArtifactActionRuntime({");
+    expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceArtifactInteractionRuntime({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceArtifactActionRuntime({",
+    );
     expect(workspaceSource).not.toContain(
       "useWorkspaceRightSurfaceLocalStateRuntime()",
     );
     expect(workspaceSource).not.toContain("useWorkspaceArtifactOpenRuntime({");
     expect(contextSurfaceSource).toContain(
       "useWorkspaceRightSurfaceLocalStateRuntime()",
+    );
+    expect(artifactInteractionRuntimeSource).toContain(
+      "useWorkspaceArtifactActionRuntime(action)",
     );
     expect(artifactActionRuntimeSource).toContain(
       "useWorkspaceArtifactOpenRuntime({",
@@ -69,7 +87,10 @@ describe("AgentChatWorkspace right surface state boundary", () => {
 
   it("Artifact click 的 Article right surface 打开逻辑必须由 artifact open runtime 提供", () => {
     const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      ),
       "utf8",
     );
     const artifactOpenRuntimeSource = readFileSync(
@@ -94,9 +115,24 @@ describe("AgentChatWorkspace right surface state boundary", () => {
       ),
       "utf8",
     );
+    const artifactInteractionRuntimeSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceArtifactInteractionRuntime.ts",
+      ),
+      "utf8",
+    );
 
-    expect(workspaceSource).toContain("useWorkspaceArtifactActionRuntime({");
+    expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceArtifactInteractionRuntime({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceArtifactActionRuntime({",
+    );
     expect(workspaceSource).not.toContain("useWorkspaceArtifactOpenRuntime({");
+    expect(artifactInteractionRuntimeSource).toContain(
+      "useWorkspaceArtifactActionRuntime(action)",
+    );
     expect(artifactActionRuntimeSource).toContain(
       "useWorkspaceArtifactOpenRuntime({",
     );
@@ -130,7 +166,10 @@ describe("AgentChatWorkspace right surface state boundary", () => {
 
   it("右侧 surface pending App Server runtime 必须由 pending bridge runtime 绑定", () => {
     const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      ),
       "utf8",
     );
     const ownerSource = readFileSync(
@@ -170,7 +209,10 @@ describe("AgentChatWorkspace right surface state boundary", () => {
 
   it("右侧 surface 动作编排必须由 action runtime 提供，不回流父级 Workspace", () => {
     const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      ),
       "utf8",
     );
     const ownerSource = readFileSync(
@@ -246,7 +288,10 @@ describe("AgentChatWorkspace right surface state boundary", () => {
 
   it("Expert Panel 可见性和 props 组装必须由 right surface expert runtime 提供", () => {
     const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      ),
       "utf8",
     );
     const ownerSource = readFileSync(
@@ -298,7 +343,10 @@ describe("AgentChatWorkspace right surface state boundary", () => {
 
   it("右侧 surface host 渲染和 Article action 写回必须由 host runtime 提供", () => {
     const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      ),
       "utf8",
     );
     const ownerSource = readFileSync(
@@ -354,7 +402,10 @@ describe("AgentChatWorkspace right surface state boundary", () => {
 
   it("Article Editor 图片槽位命令组装必须由 current image slot runtime 提供", () => {
     const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      ),
       "utf8",
     );
     const ownerSource = readFileSync(
@@ -410,7 +461,10 @@ describe("AgentChatWorkspace right surface state boundary", () => {
 describe("AgentChatWorkspace conversation right surface boundary", () => {
   it("右侧 surface / Harness / Expert chrome 必须通过 scene runtime 窄契约传递", () => {
     const workspaceSource = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/useAgentChatWorkspaceRuntime.tsx",
+      ),
       "utf8",
     );
     const conversationRuntimeSource = readFileSync(

@@ -1,7 +1,4 @@
-import {
-  APP_SERVER_METHOD_WORKFLOW_READ,
-  SESSION_ID,
-} from "./claw-chat-current-fixture-constants.mjs";
+import { APP_SERVER_METHOD_WORKFLOW_READ } from "./claw-chat-current-fixture-constants.mjs";
 import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
 import { sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
@@ -146,6 +143,7 @@ function summarizeImageCommandWorkflowRead(result, { turnId, taskId }) {
 export async function readImageCommandWorkflowAudit({
   page,
   appServerRequests,
+  sessionId,
   turnId,
   taskId,
 }) {
@@ -153,7 +151,7 @@ export async function readImageCommandWorkflowAudit({
     page,
     APP_SERVER_METHOD_WORKFLOW_READ,
     {
-      sessionId: SESSION_ID,
+      sessionId,
     },
     appServerRequests,
   );

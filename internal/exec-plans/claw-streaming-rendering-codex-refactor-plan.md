@@ -1,6 +1,6 @@
 # Claw Streaming Rendering Codex 对齐重构计划
 
-> 状态：completed / S4.10 历史 hydrate / local merge / GUI fixture guard 已按结构化 runtime turn 边界收口；普通工具、WebTools、Skills Runtime、MCP structuredContent 与 Expert Panel 聚合 current fixture 均已复跑通过
+> 状态：completed / S4.13 canonical AgentMessage snapshot 原位替换、ordinal 稳定排序与 current Gate B 已复验通过
 > 创建时间：2026-06-24
 > 关联研究：`internal/research/workbech/codex-streaming-rendering.md`
 > 主目标：用 Codex 风格的结构化 item lifecycle 修复 Claw / Agent Chat 中 reasoning、WebSearch / WebFetch、阶段性输出与最终正文的错序、重复、消失和错误追加。
@@ -631,3 +631,122 @@
 - 剩余边界：
   - 本轮证明的是 external controlled fixture 下真实 Electron / preload IPC / App Server JSON-RPC / read model / GUI 投影闭环，不声明 live Provider 网络质量或第三方模型首 token SLA。
   - 正常对话首字慢的当前分解显示 provider 等待 90ms、renderer 本地首字绘制约 31ms，主要瓶颈不在本次修复后的前端首字绘制；后续若 live Provider 首字仍慢，应继续用同一 trace 口径区分 `providerWaitMs`、`serverToRendererFirstTextDeltaMs` 与 `clientLocalOutputMs`。
+
+## 8. 2026-07-18 S4.13 canonical AgentMessage snapshot 原位替换
+
+状态：completed
+
+### 8.1 现场事实与根因
+
+- 复现 session：`sess_160a1f5acb344230a03bd2c6fccfa5a2`，turn：`e4464820-6399-4181-9441-703810a0aa38`。
+- sequence `103` 创建 AgentMessage，固定 `ordinal=103`；sequence `104..170` 是真实小粒度 `message.delta`；sequence `171` 完成同一 item，最终 `phase=commentary` 文本为 118 字，持久化事实没有重复。
+- Renderer canonical gateway 把运行中的完整 AgentMessage item snapshot 投影为 `text_delta`，随后字符串增量路径把前缀快照反复追加，造成 commentary 膨胀并把后续工具/文件项向下推。
+- lifecycle 同时延后所有 `in_progress agent_message` 的 `item_updated`，使 canonical snapshot 无法按稳定 item id 原位替换；两条旧规则互相补偿，偏离 Codex 的 item lifecycle。
+- Codex 参考：`item/agentMessage/delta` 是带 `itemId + delta` 的独立通知；`item/started` / `item/completed` 携带 item snapshot。delta 追加与 snapshot 替换不得混用。
+
+### 8.2 本轮窄写集
+
+- `src/lib/api/agentRuntime/appServerEventPayloadProjection.ts`
+- `src/lib/api/agentRuntime/appServerCanonicalItemProjection.test.ts`
+- `src/lib/api/agentRuntime/eventSequenceGate.test.ts`
+- `src/lib/api/agentRuntime/threadClient.test.ts`
+- `src/components/agent/chat/hooks/agentStreamRuntimeLifecycleEvents.ts`
+- `src/components/agent/chat/hooks/agentStreamRuntimeLifecycleEvents.unit.test.ts`
+- `src/components/agent/chat/hooks/agentStreamRuntimeHandler.ts`
+- `src/components/agent/chat/hooks/agentStreamRuntimeHandlerActions.ts`
+- `src/components/agent/chat/hooks/agentStreamThreadItemController.ts`
+- `src/components/agent/chat/hooks/agentStreamThreadItemController.test.ts`
+- `src/components/agent/chat/hooks/agentStreamAgentMessageContentSync.ts`
+- `src/components/agent/chat/hooks/agentStreamAgentMessageContentSync.unit.test.ts`
+- `src/components/agent/chat/hooks/agentThreadState.ts`
+- `src/components/agent/chat/hooks/agentThreadState.test.ts`
+- `scripts/agent-runtime/claw-chat-current-fixture-backend-script.mjs`
+- `scripts/agent-runtime/claw-chat-current-fixture-backend-tool-skill-events.mjs`
+- `scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs`
+- `scripts/agent-runtime/claw-chat-current-fixture-constants.mjs`
+- `scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.test.mjs`
+- `scripts/agent-runtime/claw-chat-current-fixture-gui-web-tools-waits.mjs`
+- `scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs`
+- `scripts/agent-runtime/claw-chat-current-fixture-web-tools-assertions.mjs`
+- `scripts/agent-runtime/claw-chat-current-fixture-web-tools-rendering.mjs`
+- 本执行计划。
+
+避让写集：当前工作树中的 `TaskCenterUtilityToolbar.integration.test.tsx`、`ThreadWorkspaceHeader.test.tsx`、`taskCenterSurfaceState*`、`useWorkspaceTaskCenterSurfaceRuntime.ts` 不修改。
+
+`appServerEventPayloadProjection.ts` 已超过 1000 行。本轮只删除错误的 AgentMessage snapshot -> delta 特判，不增加新业务逻辑；退出条件是该文件净减行，后续新增 canonical item 类型前先拆 `projectCanonical*Event` owner。
+
+### 8.3 Agent Verification Contract
+
+1. canonical `item/updated` 的 AgentMessage 完整快照必须投影为 `item_updated`，不得投影为 `text_delta`。
+2. 同一 item id 的多次前缀快照只替换同一条 content part；最终只存在一份完整 commentary。
+3. `in_progress agent_message` snapshot 必须进入 thread item 与 message content part 同步，不得被 lifecycle 延后。
+4. item 与 content part 排序优先首次稳定 `ordinal`，完成/更新通知变化中的 `sequence` 只保留为事件 provenance。
+5. commentary 的 ordinal 早于后续工具时，任何后到 snapshot 都不得把 commentary 移到工具之后。
+6. 不增加自然语言去重、DOM/CSS 排序或生产 mock fallback。
+
+### 8.4 验证与退出条件
+
+- [x] canonical projection 定向测试覆盖 snapshot 不降级为 delta。
+- [x] lifecycle / content sync 定向测试覆盖多次前缀 snapshot 原位替换。
+- [x] thread item / content part 定向测试覆盖 ordinal 稳定顺序。
+- [x] `npm run test:contracts` 通过。
+- [x] 聚焦 Claw current `web-tools-rendering` Gate B 通过。
+- [x] `npm run verify:gui-smoke` 通过。
+- [x] `git diff --check` 通过。
+
+分类：
+
+- `current`：canonical item snapshot 按 item id upsert，`ordinal` 决定稳定时间线位置。
+- `compat`：真正的 raw/typed `message.delta` 继续走 delta 追加路径。
+- `deprecated`：运行中 AgentMessage snapshot 转 `text_delta`、延后 snapshot item update。
+- `dead`：用字符串包含/前缀/重叠启发式补救 canonical snapshot 重复，或用 CSS 调整视觉顺序。
+
+### 8.5 2026-07-18 Gate B 复验结果
+
+- 首次复跑暴露 fixture 与 current App Server lifecycle 漂移：WebTools reasoning 先发不同 identity 的 legacy `reasoning.final`，随后直接发 canonical `item.updated`，被 current App Server 按 `updated without a matching item.started` fail closed。fixture 已收口为同一 reasoning item 的 `item.started -> item.updated -> item.completed`，并删除 legacy final identity/signature 双轨及对应断言。
+- v1.107.0 已把终态运行细节迁到 canonical 紧凑时间线；WebTools Gate B 不再要求 completed bubble 恢复旧 inline process group。current 断言改为 live 阶段必须展示展开的 WebSearch / Reasoning / WebFetch 与稳定顺序，completed 阶段必须显示“已处理”紧凑摘要、正文 Markdown 和可用输入框，同时底层 message/read model 保留结构化过程项。
+- canonical AgentMessage snapshot 首字性能证据已由 `agent_message_snapshot` 路径记录 `agentStream.firstTextDelta` 与双 RAF `agentStream.firstTextPaint`；最终 Gate B 使用重新构建的 renderer，未复用 stale packaged asset。
+- 定向测试：`npx vitest run "src/components/agent/chat/hooks/agentStreamRuntimeLifecycleEvents.unit.test.ts" "src/components/agent/chat/hooks/agentStreamAgentMessageContentSync.unit.test.ts" "src/components/agent/chat/hooks/agentStreamThreadItemController.test.ts" "src/components/agent/chat/hooks/agentThreadState.test.ts" "src/lib/api/agentRuntime/appServerCanonicalItemProjection.test.ts"`，5 files / 31 tests 通过。
+- fixture 守卫：`npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`，1 file / 62 tests 通过；脚本语法、Prettier 与 `git diff --check` 通过。
+- 边界门禁：`npm run test:contracts` 通过，protocol 704 types 无漂移、App Server client 291 checks 通过；`npm run verify:gui-smoke` 通过，evidence 为 `.lime/qc/project-gates/standalone-shell-01-20260718131228-95922/shell-01-electron-smoke/summary.json`。
+- 最终真实 Electron Gate B：`npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 240000 --cdp-port 9280 --prefix claw-chat-current-fixture-web-tools-rendering-s413-gate-b-final-rebuilt --evidence-dir ".lime/qc/gui-evidence/claw-chat-current-fixture"` 通过；session `claw-chat-current-1784380167310-84014`，proof level 为 `Gate B CDP controlled fixture`，58/58 assertions 全真，console/invoke/page error 为 0。
+- Gate B evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-s413-gate-b-final-rebuilt-summary.json` 与同前缀 `-chat.png`、`-backend-ledger.json`。性能分解：`providerWaitMs=90`、`serverToRendererFirstTextDeltaMs=103`、`rendererApplyFirstTextDeltaMs=0`、`clientLocalOutputMs=125`、`firstTextDeltaToFirstTextPaintMs=22`。
+- 证明边界：本轮使用 external controlled fixture，证明真实 Electron / preload / IPC / `app_server_handle_json_lines` / App Server JSON-RPC / RuntimeCore external backend / read model / GUI；`liveProviderNotUsed=true`，不声明正式 Provider 网络质量或第三方模型 SLA。
+
+### 8.6 final_answer snapshot completion 接线
+
+- 高层绑定测试进一步暴露：canonical `final_answer` snapshot 已原位写入 message `contentParts`，但没有同步 `requestState.accumulatedContent`；当后续 `turn_completed` 不携带正文时，completion controller 会误判“模型未输出最终答复”。同一 snapshot 也未被终态恢复轮询识别为正文进展，导致 tail recovery 不启动或不能重新计时。
+- current 修复：显式 `final_answer` 的非空 AgentMessage snapshot 以完整快照替换 `accumulatedContent` / `renderedContent`，同步 active text segment provenance，并在事件 sequence 晚于工具/推理边界时标记已出现最终答复；多次前缀 snapshot 不追加。`commentary` snapshot 不进入最终累计正文，preserve-assistant-content 路径不覆盖既有正文。
+- `agentStreamTurnEventBinding` 把显式 `final_answer` lifecycle snapshot 与真实 `text_delta` 一样视为正文进展，复用现有 terminal recovery poll；没有新增第二套 timer 或 completion owner。
+- 新增写集：`src/components/agent/chat/hooks/agentStreamTurnEventBinding.ts`、`src/components/agent/chat/hooks/agentStreamTurnEventBinding.test.ts`。
+- 定向验证：3 files / 20 tests 通过；扩大流式验证 10 files / 144 tests 通过；Renderer/Node `npm run typecheck` 通过；ESLint、Prettier、`git diff --check` 通过。
+- 智能全量测试：第 71-80 批通过；第 81 批受并行修改的 `TaskCenterUtilityToolbar.integration.test.tsx` 跨文件 `react-i18next` mock 污染，6 个受影响文件独立进程复跑 54/54 通过；第 82-111 批通过。该并行测试隔离问题不在本轮写集内，未覆盖其改动。
+- 最新 Gate B：`home-hotpath` 通过，evidence 为 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-home-hotpath-s413-snapshot-fix-summary.json`；`npm run verify:gui-smoke` 通过，evidence 为 `.lime/qc/project-gates/standalone-shell-01-20260718132229-35611/shell-01-electron-smoke/summary.json`；重新构建当前 packaged assets 后，`npm run smoke:agent-runtime-current-fixture` 完整通过。
+- `web-tools-rendering-s413-gate-b-post-smoke` 复跑暴露 fixture 终态文本双轨：完整 Markdown 只进入 canonical AgentMessage，确定性 done marker 只进入 `turn.completed.text`；terminal reconcile 后的 read model hydrate 会回写不含 marker 的 AgentMessage，导致 `guiWebToolsFinalTextVisibleAfterCompletion` 间歇失败。completed waiter 同时仍允许“摘要或 marker 任一出现”后提前返回，放大了竞态。
+- current 修复：WebTools fixture 的 canonical AgentMessage snapshot 现在同时携带完整 Markdown 与 done marker；该场景的 `turn.completed.text` 复用同一 `followupText`，GUI、terminal reconcile 与 read model hydrate 共享一个最终正文事实源。completed waiter 必须同时观察到摘要与 marker 才返回，没有放宽 Gate B 断言。
+- 回归验证：`npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.test.mjs" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`，2 files / 66 tests 通过；新增 waiter 回归明确模拟摘要先 paint、marker 后 paint 的两次快照。
+- fresh packaged assets Gate B：`claw-chat-current-fixture-web-tools-rendering-s413-gate-b-canonical-terminal-final-summary.json` 通过，session `claw-chat-current-1784381515036-53640`；连续复跑 `claw-chat-current-fixture-web-tools-rendering-s413-gate-b-canonical-terminal-repeat-2-summary.json` 再次通过，session `claw-chat-current-1784381597181-56970`。两次均为 `Gate B CDP controlled fixture`、58/58 assertions 全真，console/actionable-console/invoke/page/crash error 为 0，mock fallback 与 legacy command hit 为 0。
+- 第二次复跑性能分解：`providerWaitMs=90`、`serverToRendererFirstTextDeltaMs=38`、`rendererApplyFirstTextDeltaMs=1`、`clientLocalOutputMs=64`、`firstTextDeltaToFirstTextPaintMs=26`。证明边界仍是 external controlled fixture 下的真实 Electron / preload / IPC / `app_server_handle_json_lines` / App Server JSON-RPC / RuntimeCore external backend / read model / GUI，不声明 live Provider 网络质量或第三方模型 SLA。
+
+## 8.7 2026-07-18 Gate B 再次复验与并行测试边界
+
+状态：Gate B completed；本地 smart 全量门禁保留并行工作树测试隔离说明。
+
+- 最新真实 Electron Gate B：`npm run smoke:claw-chat-current-fixture -- --scenario web-tools-rendering --timeout-ms 240000 --cdp-port 9281 --prefix claw-chat-current-fixture-web-tools-rendering-s413-complete-final-current --evidence-dir ".lime/qc/gui-evidence/claw-chat-current-fixture"` 通过；session `claw-chat-current-1784386531203-34203`。
+- Gate B summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-s413-complete-final-current-summary.json`；proof level=`Gate B CDP controlled fixture`；58/58 assertions 为 true，false=0；`backendMode=external`、`liveProviderNotUsed=true`。
+- 真实链路证据：Electron renderer、preload invoke、Electron IPC、`app_server_handle_json_lines`、current App Server JSON-RPC、external fixture backend、read model 与 GUI identity 全部一致；命中 `agentSession/turn/start`、`agentSession/read`、`thread/list` 等 current method，`turn.completed` 显式终态收口。
+- 错误与回流：console/actionable-console/page/crash/invoke 错误均为 0；mock fallback 命中=0；legacy command 命中=0；WebTools live running / completed、Markdown、reasoning、WebSearch、WebFetch 和最终 done marker 均可见且顺序稳定。
+- 性能与 trace：`providerWaitMs=90`、`serverToRendererFirstTextDeltaMs=91`、`rendererApplyFirstTextDeltaMs=0`、`clientLocalOutputMs=81`、`firstTextDeltaToFirstTextPaintMs=25`；App Server trace 为 summary-only，保留 W3C trace carrier，不保存 raw payload、prompt 或 provider request/response。
+- `npm run verify:local` 本轮曾因并行工作树产生的孤立 i18n key 和 Workspace owner stale guard 中断；孤立 key 已清理，相关 guard/autoGuide 定向回归通过。smart runner 后续批次因测试文件持续新增导致 batch index 漂移，且 `TaskCenterUtilityToolbar.integration.test.tsx` 的 `react-i18next` mock 污染同批后续组件测试；受影响文件独立进程复跑通过。该测试隔离边界不影响本轮 Gate B，不宣称 `verify:local` 统一入口 exit=0。
+- 证明边界：本轮仍只证明 external controlled fixture 下的真实 Electron / preload / IPC / App Server JSON-RPC / RuntimeCore external backend / read model / GUI 投影闭环，不声明 live Provider 网络质量、正式模型行为或第三方 SLA。
+
+## 8.8 2026-07-19 fresh session 首次发送与 Gate B trace 收口
+
+状态：completed / current v2 skeleton closed
+
+- fresh session 首次发送先从 current read model hydrate canonical `threadId`，同步更新 submit 使用的 thread ref；`turn/start` 继续 fail closed，不把 `sessionId` 当作 `threadId`，也不恢复 v0 lifecycle 或生产 mock fallback。
+- 最后一个 Gate B 阻塞不是产品链失败，而是 evidence buffer 被高频成功的 `app_server_drain_events` 淘汰：最终 localStorage 只剩 100 条 drain，真实 `app_server_handle_json_lines` 已离开窗口。
+- fixture 现在运行期增量收集 invoke trace，压缩正常 Electron drain 噪音，同时保留业务 invoke、失败、mock 与 legacy 负面证据；`electronIpcAppServerBridgeUsed` 仍严格要求实际 `app_server_handle_json_lines + electron-ipc + success`，不以 preload 支持或测试侧 request log 代替 IPC 证据。
+- 定向验证：invoke trace、Gate B contract 与 fixture guard 共 3 files / 70 tests 通过；脚本语法、`git diff --check`、`npm run governance:scripts` 通过。
+- definitive Gate B：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-home-hotpath-v2-definitive-summary.json` 为 `ok=true`；严格 IPC hit=51，methods 包含 `turn/start`；Electron/preload/IPC/App Server/external backend/read model/GUI identity 一致，terminal=`completed`，mock/legacy/page error/crash 均为 0。
+- 分类：v2 Thread identity/hydrate 与运行期 invoke trace evidence 为 `current`；旧 session-only identity fixture 为 `dead/test-only migrated`；最终 buffer 单点读取为 `deprecated`。证明边界仍是 controlled external fixture，不声明 live Provider SLA。

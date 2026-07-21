@@ -10,7 +10,6 @@ export interface ResolveWorkspaceSceneSessionProjectionParams<
   TExecutionRuntime,
   TPendingAction,
   TSubmittedAction,
-  TQueuedTurn,
 > {
   shouldHideCurrentSessionContent: boolean;
   displayMessages: TMessage[];
@@ -22,7 +21,6 @@ export interface ResolveWorkspaceSceneSessionProjectionParams<
   executionRuntime: TExecutionRuntime | null;
   planComposerPendingActions: TPendingAction[];
   submittedActionsInFlight: TSubmittedAction[];
-  queuedTurns: TQueuedTurn[];
   isPreparingSend: boolean;
   isTaskCenterDraftSendPending: boolean;
   isSending: boolean;
@@ -36,7 +34,6 @@ export interface WorkspaceSceneSessionProjection<
   TExecutionRuntime,
   TPendingAction,
   TSubmittedAction,
-  TQueuedTurn,
 > {
   sceneDisplayMessages: TMessage[];
   sceneTurns: TTurn[];
@@ -46,7 +43,6 @@ export interface WorkspaceSceneSessionProjection<
   sceneExecutionRuntime: TExecutionRuntime | null;
   scenePendingActions: TPendingAction[];
   sceneSubmittedActionsInFlight: TSubmittedAction[];
-  sceneQueuedTurns: TQueuedTurn[];
   sceneIsPreparingSend: boolean;
   sceneIsSending: boolean;
 }
@@ -59,7 +55,6 @@ export function resolveWorkspaceSceneSessionProjection<
   TExecutionRuntime,
   TPendingAction,
   TSubmittedAction,
-  TQueuedTurn,
 >({
   shouldHideCurrentSessionContent,
   displayMessages,
@@ -71,7 +66,6 @@ export function resolveWorkspaceSceneSessionProjection<
   executionRuntime,
   planComposerPendingActions,
   submittedActionsInFlight,
-  queuedTurns,
   isPreparingSend,
   isTaskCenterDraftSendPending,
   isSending,
@@ -82,8 +76,7 @@ export function resolveWorkspaceSceneSessionProjection<
   TThreadRead,
   TExecutionRuntime,
   TPendingAction,
-  TSubmittedAction,
-  TQueuedTurn
+  TSubmittedAction
 >): WorkspaceSceneSessionProjection<
   TMessage,
   TTurn,
@@ -91,8 +84,7 @@ export function resolveWorkspaceSceneSessionProjection<
   TThreadRead,
   TExecutionRuntime,
   TPendingAction,
-  TSubmittedAction,
-  TQueuedTurn
+  TSubmittedAction
 > {
   if (shouldHideCurrentSessionContent) {
     if (homePendingPreviewMessages.length > 0) {
@@ -105,7 +97,6 @@ export function resolveWorkspaceSceneSessionProjection<
         sceneExecutionRuntime: null,
         scenePendingActions: [],
         sceneSubmittedActionsInFlight: [],
-        sceneQueuedTurns: [],
         sceneIsPreparingSend: isPreparingSend || isTaskCenterDraftSendPending,
         sceneIsSending: isSending,
       };
@@ -120,7 +111,6 @@ export function resolveWorkspaceSceneSessionProjection<
       sceneExecutionRuntime: null,
       scenePendingActions: [],
       sceneSubmittedActionsInFlight: [],
-      sceneQueuedTurns: [],
       sceneIsPreparingSend: false,
       sceneIsSending: false,
     };
@@ -136,7 +126,6 @@ export function resolveWorkspaceSceneSessionProjection<
     sceneExecutionRuntime: executionRuntime,
     scenePendingActions: planComposerPendingActions,
     sceneSubmittedActionsInFlight: submittedActionsInFlight,
-    sceneQueuedTurns: queuedTurns,
     sceneIsPreparingSend: isPreparingSend || isTaskCenterDraftSendPending,
     sceneIsSending: isSending || hasActiveThreadReadActivity(threadRead),
   };

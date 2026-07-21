@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+pub const TOOL_HANDLER_EXECUTED_METADATA_KEY: &str = "handler_executed";
+pub const TOOL_OUTCOME_METADATA_KEY: &str = "tool_outcome";
+pub const TOOL_OUTCOME_ABORTED: &str = "aborted";
+
 /// Canonical terminal output emitted for every tool execution outcome.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NormalizedToolOutput {
@@ -33,6 +37,11 @@ impl NormalizedToolOutput {
                         .filter(|error| !error.is_empty())
                         .unwrap_or_else(|| result.output.clone())
                 };
+                let mut metadata = result.metadata;
+                metadata.insert(
+                    TOOL_HANDLER_EXECUTED_METADATA_KEY.to_string(),
+                    Value::Bool(true),
+                );
                 Self {
                     success: result.success,
                     text,
@@ -41,12 +50,22 @@ impl NormalizedToolOutput {
                     duration_ms,
                     truncation: result.truncation,
                     sidecar_reference: result.sidecar_reference,
-                    metadata: result.metadata,
+                    metadata,
                     agent_control_projection_facts: result.agent_control_projection_facts,
                 }
             }
             RuntimeToolExecutionOutcome::Error(error) => {
                 let message = error.message().to_string();
+                let mut metadata = HashMap::from([(
+                    TOOL_HANDLER_EXECUTED_METADATA_KEY.to_string(),
+                    Value::Bool(error.handler_executed()),
+                )]);
+                if let Some(reason_code) = error.reason_code() {
+                    metadata.insert(
+                        "reasonCode".to_string(),
+                        Value::String(reason_code.to_string()),
+                    );
+                }
                 Self {
                     success: false,
                     text: message.clone(),
@@ -55,10 +74,24 @@ impl NormalizedToolOutput {
                     duration_ms,
                     truncation: None,
                     sidecar_reference: None,
-                    metadata: HashMap::new(),
+                    metadata,
                     agent_control_projection_facts: Vec::new(),
                 }
             }
+            RuntimeToolExecutionOutcome::Aborted => Self {
+                success: false,
+                text: "Tool execution aborted".to_string(),
+                structured_content: None,
+                error: None,
+                duration_ms,
+                truncation: None,
+                sidecar_reference: None,
+                metadata: HashMap::from([(
+                    TOOL_OUTCOME_METADATA_KEY.to_string(),
+                    Value::String(TOOL_OUTCOME_ABORTED.to_string()),
+                )]),
+                agent_control_projection_facts: Vec::new(),
+            },
         }
     }
 }
@@ -205,6 +238,30 @@ mod tests {
             Some(serde_json::json!({ "tool_surface_updated": true }))
         );
         assert!(runtime_tool_result_surface_updated(&result));
+    }
+
+    #[test]
+    fn runtime_tool_failure_preserves_policy_reason_code() {
+        let output = NormalizedToolOutput::from_execution_outcome(
+            RuntimeToolExecutionOutcome::Error(
+                crate::tool_executor::RuntimeToolExecutionFailure::from_error(
+                    crate::tool_executor::RuntimeToolExecutionError::new(
+                        "declined",
+                        Some(
+                            crate::tool_executor::RuntimeToolPolicyErrorKind::PermissionDenied(
+                                "tool_approval_declined".to_string(),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            7,
+        );
+
+        assert_eq!(
+            output.metadata.get("reasonCode"),
+            Some(&Value::String("tool_approval_declined".to_string()))
+        );
     }
 
     #[test]

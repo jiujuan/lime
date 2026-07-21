@@ -152,7 +152,7 @@ export const PRODUCTION_READINESS_NEXT_ACTIONS = {
   production_gui_collector_schema_missing:
     "重新运行 scripts/plugin/content-factory-production-gui-evidence.mjs，GUI evidence 必须带 current collector schemaVersion。",
   production_gui_current_app_server_methods_missing:
-    "重新用真实 Electron CDP 采集 GUI evidence，trace 必须证明 agentSession/turn/start、agentSession/read 和 evidence/export 都走 current App Server JSON-RPC。",
+    "重新用真实 Electron CDP 采集 GUI evidence，trace 必须证明 turn/start、thread/read 和 evidence/export 都走 current App Server JSON-RPC。",
   production_gui_not_cloud_release:
     "从 production catalog 安装 cloud_release 包后再跑 GUI evidence；local_folder、fixture 和 localhost 不能关闭 production 缺口。",
   production_gui_signature_not_verified:
@@ -198,9 +198,9 @@ export const PRODUCTION_READINESS_NEXT_ACTIONS = {
   production_gui_fetch_cloud_signature_ref_mismatch:
     "重新运行 fetchCloud verified 安装链和 GUI collector，GUI installedState.signatureRef 必须与 fetchCloud signatureRef 一致。",
   production_gui_turn_start_not_electron_ipc:
-    "重新用真实 Electron CDP 发送 @写文章，并确认 agentSession/turn/start 经 electron-ipc 进入 app_server_handle_json_lines。",
+    "重新用真实 Electron CDP 发送 @写文章，并确认 turn/start 经 electron-ipc 进入 app_server_handle_json_lines。",
   production_gui_turn_start_trace_missing:
-    "重新传入真实 turn-start trace，GUI evidence 必须匹配目标 session 的 electron-ipc -> app_server_handle_json_lines -> agentSession/turn/start。",
+    "重新传入真实 turn-start trace，GUI evidence 必须匹配目标 session 的 electron-ipc -> app_server_handle_json_lines -> turn/start。",
   production_host_generation_not_completed:
     "重新跑完整 @写文章流程直到 Host-managed generation completed；不能用占位、手写 JSON 或半程 trace 代替。",
   production_host_generation_not_live:
@@ -738,10 +738,10 @@ function summarizeGuiForReport(guiEvidence) {
     workflowJsonlEventCount: guiEvidence.workflowJsonlEventCount || 0,
     workflowJsonlPresent: guiEvidence.workflowJsonlPresent === true,
     workflowResumeLifecycle: {
+      actionMetadataPresent:
+        guiEvidence.workflowResumeLifecycle?.actionMetadataPresent === true,
       auditEventsPresent:
         guiEvidence.workflowResumeLifecycle?.auditEventsPresent === true,
-      contractMetadataPresent:
-        guiEvidence.workflowResumeLifecycle?.contractMetadataPresent === true,
     },
   };
 }

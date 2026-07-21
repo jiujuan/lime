@@ -10,7 +10,6 @@ import type {
   AgentSessionExecutionRuntime,
 } from "@/lib/api/agentExecutionRuntime";
 import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { ActionRequired, Message } from "../types";
 import { handleTurnStreamEvent } from "./agentStreamRuntimeHandler";
@@ -46,6 +45,7 @@ import {
   type AgentUiPerformanceTraceMetadata,
 } from "./agentStreamPerformanceMetrics";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import { isAgentMessageFinalAnswerPhase } from "../utils/agentMessagePhase";
 
 type MessageParts = NonNullable<Message["contentParts"]>;
 const STREAM_FIRST_EVENT_TIMEOUT_MS = 12_000;
@@ -138,6 +138,17 @@ function readRuntimeErrorMessage(payload: unknown): string {
     : "Runtime error";
 }
 
+function isFinalAgentMessageSnapshotEvent(event: AgentEvent): boolean {
+  return (
+    (event.type === "item_started" ||
+      event.type === "item_updated" ||
+      event.type === "item_completed") &&
+    event.item.type === "agent_message" &&
+    isAgentMessageFinalAnswerPhase(event.item.phase) &&
+    Boolean(event.item.text.trim())
+  );
+}
+
 interface StreamObserver {
   onTextDelta?: (delta: string, accumulated: string) => void;
   onComplete?: (content: string) => void;
@@ -163,7 +174,6 @@ interface RegisterAgentStreamTurnEventBindingOptions {
   content: string;
   webSearch?: boolean;
   autoContinue?: AutoContinueRequestPayload;
-  expectingQueue: boolean;
   activeSessionId: string;
   resolvedWorkspaceId: string;
   assistantMsgId: string;
@@ -192,10 +202,7 @@ interface RegisterAgentStreamTurnEventBindingOptions {
     clearOptimisticItem: () => void;
     clearOptimisticTurn: () => void;
     disposeListener: () => void;
-    removeQueuedDraftMessages: () => void;
     clearActiveStreamIfMatch: (eventName: string) => boolean;
-    upsertQueuedTurn: (queuedTurn: QueuedTurnSnapshot) => void;
-    removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
   };
   appendThinkingToParts: (
     parts: MessageParts,
@@ -231,7 +238,6 @@ export async function registerAgentStreamTurnEventBinding(
     content,
     webSearch,
     autoContinue,
-    expectingQueue,
     activeSessionId,
     resolvedWorkspaceId,
     assistantMsgId,
@@ -268,7 +274,6 @@ export async function registerAgentStreamTurnEventBinding(
     effectiveModel,
     effectiveProviderType,
     eventName,
-    expectingQueue,
     requestState,
     resolvedWorkspaceId,
     skipUserMessage,
@@ -324,9 +329,7 @@ export async function registerAgentStreamTurnEventBinding(
     }
   };
   const readRecoveryTurnId = () =>
-    requestState.activeTextSegmentTurnId ??
-    requestState.currentTurnId ??
-    null;
+    requestState.activeTextSegmentTurnId ?? requestState.currentTurnId ?? null;
   function scheduleDeferredRecoveryPoll() {
     clearDeferredRecoveryPoll();
     if (requestState.requestFinished) {
@@ -515,10 +518,7 @@ export async function registerAgentStreamTurnEventBinding(
         clearOptimisticItem: callbacks.clearOptimisticItem,
         clearOptimisticTurn: callbacks.clearOptimisticTurn,
         disposeListener: disposeListenerWithWatchdogs,
-        removeQueuedDraftMessages: callbacks.removeQueuedDraftMessages,
         clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
-        upsertQueuedTurn: callbacks.upsertQueuedTurn,
-        removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
         appendThinkingToParts,
       },
       observer,
@@ -796,10 +796,7 @@ export async function registerAgentStreamTurnEventBinding(
           clearOptimisticItem: callbacks.clearOptimisticItem,
           clearOptimisticTurn: callbacks.clearOptimisticTurn,
           disposeListener: disposeListenerWithWatchdogs,
-          removeQueuedDraftMessages: callbacks.removeQueuedDraftMessages,
           clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
-          upsertQueuedTurn: callbacks.upsertQueuedTurn,
-          removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
           appendThinkingToParts,
         },
         observer,
@@ -832,7 +829,11 @@ export async function registerAgentStreamTurnEventBinding(
         setIsSending,
         soulCopy,
       });
-      if (data.type === "text_delta" || data.type === "text_delta_batch") {
+      if (
+        data.type === "text_delta" ||
+        data.type === "text_delta_batch" ||
+        isFinalAgentMessageSnapshotEvent(data)
+      ) {
         startTerminalRecoveryPoll();
       }
       scheduleInactivityWatchdog();
@@ -843,7 +844,6 @@ export async function registerAgentStreamTurnEventBinding(
   const listenerBoundContext = buildAgentStreamListenerBoundContext({
     activeSessionId,
     eventName,
-    expectingQueue,
     listenerBoundAt: requestState.listenerBoundAt,
     requestStartedAt: requestState.requestStartedAt,
   });
@@ -858,10 +858,6 @@ export async function registerAgentStreamTurnEventBinding(
     clearFirstEventWatchdog();
     clearInactivityWatchdog();
     clearDeferredRecoveryPoll();
-    if (requestState.queuedDraftCleanupTimerId) {
-      clearTimeout(requestState.queuedDraftCleanupTimerId);
-      requestState.queuedDraftCleanupTimerId = null;
-    }
     if (requestState.pendingTextRenderTimerId) {
       clearTimeout(requestState.pendingTextRenderTimerId);
       requestState.pendingTextRenderTimerId = null;

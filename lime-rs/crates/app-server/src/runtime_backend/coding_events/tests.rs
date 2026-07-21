@@ -393,7 +393,49 @@ fn apply_patch_tool_failure_emits_patch_failed_with_category() {
 }
 
 #[test]
-fn apply_patch_tool_success_emits_patch_and_all_file_changes() {
+fn declined_apply_patch_emits_declined_terminal_with_start_snapshot() {
+    let mut mirror = CodingEventMirror::default();
+    let started = mirror.process_event(&tool_started(
+        "apply_patch",
+        "tool-patch-declined",
+        Some(json!({
+            "patch": "*** Begin Patch\n*** Add File: declined.txt\n+never applied\n*** End Patch\n"
+        })),
+    ));
+    let ended = mirror.process_event(&tool_completed(
+        "tool-patch-declined",
+        AgentToolResult {
+            success: false,
+            output: "用户拒绝工具执行".to_string(),
+            error: None,
+            structured_content: None,
+            images: None,
+            metadata: Some(HashMap::from([(
+                "reasonCode".to_string(),
+                json!("tool_approval_declined"),
+            )])),
+        },
+    ));
+
+    assert_eq!(started.after_raw[0].event_type, "patch.started");
+    assert_eq!(
+        started.after_raw[0].payload["changes"][0]["path"].as_str(),
+        Some("declined.txt")
+    );
+    assert_eq!(ended.after_raw.len(), 1);
+    assert_eq!(ended.after_raw[0].event_type, "patch.declined");
+    assert_eq!(
+        ended.after_raw[0].payload["status"].as_str(),
+        Some("declined")
+    );
+    assert_eq!(
+        ended.after_raw[0].payload["changes"][0]["path"].as_str(),
+        Some("declined.txt")
+    );
+}
+
+#[test]
+fn apply_patch_tool_success_emits_one_batch_patch_lifecycle() {
     let mut mirror = CodingEventMirror::default();
     let _ = mirror.process_event(&tool_started(
         "apply_patch",
@@ -443,38 +485,15 @@ fn apply_patch_tool_success_emits_patch_and_all_file_changes() {
         .iter()
         .map(|event| event.event_type.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(
-        event_types,
-        vec!["patch.applied", "file.changed", "file.changed"]
-    );
-    let changed_paths = events
-        .after_raw
-        .iter()
-        .filter(|event| event.event_type == "file.changed")
-        .filter_map(|event| event.payload["path"].as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(changed_paths, vec!["a.txt", "b.txt"]);
-    let first_file_change = events
-        .after_raw
-        .iter()
-        .find(|event| event.event_type == "file.changed")
-        .expect("file.changed event");
-    assert_eq!(
-        first_file_change.payload["checkpointRef"].as_str(),
-        Some("checkpoint:file:a")
-    );
-    assert_eq!(
-        first_file_change.payload["contentRef"].as_str(),
-        Some("content:file:a")
-    );
-    assert_eq!(
-        first_file_change.payload["diffRef"].as_str(),
-        Some("diff:file:a")
-    );
-    assert_eq!(
-        first_file_change.payload["diff"].as_array().expect("diff"),
-        &vec![json!({ "kind": "add", "value": "a" })]
-    );
+    assert_eq!(event_types, vec!["patch.applied"]);
+    let first_file_change = events.after_raw.first().expect("patch.applied event");
+    let changes = first_file_change.payload["changes"]
+        .as_array()
+        .expect("changes");
+    assert_eq!(changes.len(), 2);
+    assert_eq!(changes[0]["path"].as_str(), Some("a.txt"));
+    assert_eq!(changes[0]["kind"].as_str(), Some("add"));
+    assert_eq!(changes[0]["diff"].as_str(), Some("+a"));
 }
 
 #[test]

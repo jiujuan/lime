@@ -55,7 +55,7 @@ describe("AppSidebar current App Server session boundary", () => {
     }
   });
 
-  it("侧栏归档 / 恢复入口只能经 agentRuntime session gateway 更新 session", () => {
+  it("侧栏归档 / 恢复入口只能经 v2 thread lifecycle gateway", () => {
     const source = readSource(
       "src/components/app-sidebar/useAppSidebarConversationActions.ts",
     );
@@ -65,9 +65,12 @@ describe("AppSidebar current App Server session boundary", () => {
       "const deleteConversation = useCallback(",
     );
 
-    expect(archiveHandler).toContain("await updateAgentRuntimeSession({");
-    expect(archiveHandler).toContain("session_id: session.id");
-    expect(archiveHandler).toContain("archived,");
+    expect(archiveHandler).toContain(
+      "await archiveAgentRuntimeSession(session.id)",
+    );
+    expect(archiveHandler).toContain(
+      "await unarchiveAgentRuntimeSession(session.id)",
+    );
     expect(archiveHandler).toContain(
       "moveSidebarSessionArchiveStateOptimistically(nextSession)",
     );
@@ -103,7 +106,7 @@ describe("AppSidebar current App Server session boundary", () => {
     expect(source).not.toContain("invokeCommand(");
   });
 
-  it("App Server session gateway 必须通过 agentSession/list/read/update/delete 事实源", () => {
+  it("App Server session gateway 必须通过 thread lifecycle 与 metadata 事实源", () => {
     const source = readSource(
       "src/lib/api/agentRuntime/appServerSessionClient.ts",
     );
@@ -120,14 +123,25 @@ describe("AppSidebar current App Server session boundary", () => {
     const updateFunction = sourceBetween(
       source,
       "async function updateAgentRuntimeSession(",
+      "async function archiveAgentRuntimeSession(",
+    );
+    const lifecycleFunctions = sourceBetween(
+      source,
+      "async function archiveAgentRuntimeSession(",
       "return {",
     );
 
-    expect(listFunction).toContain("METHOD_AGENT_SESSION_LIST");
-    expect(getFunction).toContain("appServerClient.readSession(");
+    expect(listFunction).toContain("listCanonicalSessionOverviews(");
+    expect(source).toContain("METHOD_THREAD_LIST");
+    expect(getFunction).toContain("appServerClient.readThread(");
     expect(updateFunction).toContain("appServerClient.updateSession(");
-    expect(updateFunction).toContain("appServerClient.deleteSession(");
-    expect(updateFunction).toContain("agentSession/delete did not confirm deletion");
+    expect(lifecycleFunctions).toContain("appServerClient.archiveThread(");
+    expect(lifecycleFunctions).toContain("appServerClient.unarchiveThread(");
+    expect(lifecycleFunctions).toContain("appServerClient.deleteSession(");
+    expect(lifecycleFunctions).toContain(
+      "agentSession/delete did not confirm deletion",
+    );
+    expect(source).not.toContain("archiveManySessions");
     expect(source).not.toContain('"agent_runtime_list_sessions"');
     expect(source).not.toContain('"agent_runtime_get_session"');
     expect(source).not.toContain('"agent_runtime_update_session"');

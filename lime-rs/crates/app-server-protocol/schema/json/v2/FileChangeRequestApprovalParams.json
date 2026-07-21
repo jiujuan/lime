@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "grantRoot": {
+      "default": null,
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "itemId": {
+      "type": "string"
+    },
+    "reason": {
+      "default": null,
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "startedAtMs": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "itemId",
+    "startedAtMs",
+    "threadId",
+    "turnId"
+  ],
+  "title": "FileChangeRequestApprovalParams",
+  "type": "object"
+}

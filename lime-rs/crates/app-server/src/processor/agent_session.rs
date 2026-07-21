@@ -1,39 +1,25 @@
 //! agent_session domain handlers for the App Server processor.
 
 use super::{
-    dispatch_result, dispatch_result_with_events, event_notification_jsonrpc, parse_params,
-    to_jsonrpc_error, RequestProcessor, RpcDispatch,
+    dispatch_result, dispatch_result_with_events, parse_params,
+    project_event_notifications_jsonrpc, to_jsonrpc_error,
+    v2_notifications::V2NotificationProjector, RequestProcessor, RpcDispatch,
 };
 use crate::RuntimeEvent;
 use app_server_protocol::{
-    AgentSessionArchiveManyParams, AgentSessionCompactParams, AgentSessionDeleteParams,
-    AgentSessionFileCheckpointDiffParams, AgentSessionFileCheckpointGetParams,
-    AgentSessionFileCheckpointListParams, AgentSessionFileCheckpointRestoreParams,
-    AgentSessionListParams, AgentSessionMediaReadParams, AgentSessionObjectiveAuditParams,
-    AgentSessionObjectiveClearParams, AgentSessionObjectiveContinueParams,
-    AgentSessionObjectiveReadParams, AgentSessionObjectiveSetParams,
-    AgentSessionObjectiveStatusUpdateParams, AgentSessionQueuedTurnPromoteParams,
-    AgentSessionQueuedTurnRemoveParams, AgentSessionRuntimeEventAppendParams,
-    AgentSessionRuntimeEventAppendResponse, AgentSessionThreadResumeParams,
+    AgentSessionCompactParams, AgentSessionDeleteParams, AgentSessionFileCheckpointDiffParams,
+    AgentSessionFileCheckpointGetParams, AgentSessionFileCheckpointListParams,
+    AgentSessionFileCheckpointRestoreParams, AgentSessionMediaReadParams,
+    AgentSessionObjectiveAuditParams, AgentSessionObjectiveClearParams,
+    AgentSessionObjectiveContinueParams, AgentSessionObjectiveReadParams,
+    AgentSessionObjectiveSetParams, AgentSessionObjectiveStatusUpdateParams,
+    AgentSessionQueuedTurnPromoteParams, AgentSessionQueuedTurnRemoveParams,
+    AgentSessionRuntimeEventAppendParams, AgentSessionRuntimeEventAppendResponse,
     AgentSessionToolInventoryReadParams, AgentSessionUpdateParams, JsonRpcError, JsonRpcMessage,
     RequestId,
 };
 
 impl RequestProcessor {
-    pub(super) async fn handle_session_list_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_agent_sessions(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
     pub(super) async fn handle_session_update_impl(
         &self,
         params: Option<serde_json::Value>,
@@ -43,20 +29,6 @@ impl RequestProcessor {
         let response = self
             .runtime
             .update_session_current(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_session_archive_many_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionArchiveManyParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .archive_many_agent_sessions(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -86,14 +58,18 @@ impl RequestProcessor {
         let params: AgentSessionMediaReadParams = parse_params(params)?;
         let response = if params.stream {
             if let Some(event_callback) = event_callback {
+                let mut event_projector = V2NotificationProjector::default();
                 let mut runtime_event_callback = |event| {
-                    let message = event_notification_jsonrpc(event).map_err(|error| {
-                        crate::RuntimeCoreError::Backend(format!(
-                            "failed to serialize media read streaming event: {}",
-                            error.message
-                        ))
-                    })?;
-                    event_callback(message);
+                    let messages = project_event_notifications_jsonrpc(&mut event_projector, event)
+                        .map_err(|error| {
+                            crate::RuntimeCoreError::Backend(format!(
+                                "failed to serialize media read streaming event: {}",
+                                error.message
+                            ))
+                        })?;
+                    for message in messages {
+                        event_callback(message);
+                    }
                     Ok(())
                 };
                 self.runtime
@@ -214,21 +190,6 @@ impl RequestProcessor {
         let output = self
             .runtime
             .compact_agent_session(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result_with_events(output.response, output.events)
-    }
-
-    pub(super) async fn handle_session_thread_resume_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionThreadResumeParams = parse_params(params)?;
-        let host = self.runtime_host_context();
-        let output = self
-            .runtime
-            .resume_agent_session_thread(params, host)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result_with_events(output.response, output.events)

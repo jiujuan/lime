@@ -155,7 +155,7 @@ pub(super) fn parse_image_command_intent(
         .unwrap_or_default();
     let raw_text = optional_string(image_task, &["raw_text", "rawText"])
         .or_else(|| optional_string(launch, &["raw_text", "rawText"]))
-        .or_else(|| non_empty_string(&request.input.text));
+        .or_else(|| non_empty_string(&request.input.concat_text()));
     let required_capabilities = string_vec(
         image_task,
         &["required_capabilities", "requiredCapabilities"],

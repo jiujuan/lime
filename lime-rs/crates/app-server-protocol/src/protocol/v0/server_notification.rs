@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{JsonRpcNotification, RequestId};
+use crate::JsonRpcNotification;
 
 use super::{
     AgentSessionEventParams, AppServerNotificationMethod, WorkspaceRightSurfacePendingChangedParams,
@@ -31,12 +31,6 @@ pub struct ConfigWarningNotification {
     pub path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub range: Option<TextRange>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ServerRequestResolvedNotification {
-    pub request_id: RequestId,
 }
 
 macro_rules! app_server_server_notification_definitions {
@@ -98,7 +92,6 @@ macro_rules! app_server_server_notification_definitions {
 
 app_server_server_notification_definitions! {
     ConfigWarning => "configWarning" (ConfigWarningNotification),
-    ServerRequestResolved => "serverRequest/resolved" (ServerRequestResolvedNotification),
     AgentSessionEvent => "agentSession/event" (AgentSessionEventParams),
     WorkspaceRightSurfacePendingChanged => "workspaceRightSurface/pendingChanged" (
         WorkspaceRightSurfacePendingChangedParams

@@ -6,19 +6,19 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::StreamExt;
 
-use lime_core::database::dao::api_key_provider::ApiProviderType;
 use lime_core::database::DbConnection;
-use lime_core::models::anthropic::AnthropicMessagesRequest;
-#[cfg(test)]
-use lime_core::models::RuntimeProviderType;
 use lime_core::models::{
     runtime_api_key_id_from_credential_uuid, RuntimeCredentialData, RuntimeProviderCredential,
+    RuntimeProviderType,
 };
-use lime_providers::providers::claude_custom::{ClaudeCustomProvider, PromptCacheMode};
-use lime_providers::providers::gemini::{GeminiApiKeyCredential, GeminiApiKeyProvider};
-use lime_providers::providers::openai_custom::OpenAICustomProvider;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
+use model_provider::current_client::{
+    CanonicalLlmEvent, CurrentProviderClient, CurrentProviderContent, CurrentProviderMessage,
+    CurrentProviderRequest,
+};
+use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
 
 use crate::{LlmProvider, SkillError};
 
@@ -33,26 +33,6 @@ pub struct LimeLlmProvider {
     db: DbConnection,
     /// 偏好的 Provider 类型（可选）
     preferred_provider: Option<String>,
-}
-
-struct GeminiApiCall<'a> {
-    credential_id: &'a str,
-    api_key: &'a str,
-    base_url: Option<&'a str>,
-    excluded_models: &'a [String],
-    system_prompt: &'a str,
-    user_message: &'a str,
-    model: &'a str,
-}
-
-struct ClaudeApiCall<'a> {
-    api_key: &'a str,
-    base_url: Option<&'a str>,
-    provider_type: ApiProviderType,
-    prompt_cache_mode: PromptCacheMode,
-    system_prompt: &'a str,
-    user_message: &'a str,
-    model: &'a str,
 }
 
 impl LimeLlmProvider {
@@ -109,8 +89,6 @@ impl LimeLlmProvider {
         match provider.to_lowercase().as_str() {
             "openai" | "gpt" => Some(RuntimeProviderType::OpenAI),
             "anthropic" | "claude" => Some(RuntimeProviderType::Claude),
-            "gemini" | "google" => Some(RuntimeProviderType::GeminiApiKey),
-            "vertex" => Some(RuntimeProviderType::Vertex),
             _ => None,
         }
     }
@@ -132,259 +110,79 @@ impl LimeLlmProvider {
         user_message: &str,
         model: &str,
     ) -> Result<String, SkillError> {
-        match &credential.credential {
-            RuntimeCredentialData::ClaudeKey { api_key, base_url } => {
-                self.call_claude_api(ClaudeApiCall {
-                    api_key,
-                    base_url: base_url.as_deref(),
-                    provider_type: ApiProviderType::AnthropicCompatible,
-                    prompt_cache_mode: if matches!(
-                        credential.effective_prompt_cache_mode(),
-                        Some(lime_core::models::ProviderPromptCacheMode::Automatic)
-                    ) {
-                        PromptCacheMode::Automatic
-                    } else {
-                        PromptCacheMode::ExplicitOnly
-                    },
-                    system_prompt,
-                    user_message,
-                    model,
-                })
-                .await
+        let (api_key, base_url) = match &credential.credential {
+            RuntimeCredentialData::OpenAIKey { api_key, base_url }
+            | RuntimeCredentialData::ClaudeKey { api_key, base_url }
+            | RuntimeCredentialData::AnthropicKey { api_key, base_url } => {
+                (api_key.as_str(), base_url.as_deref())
             }
-            RuntimeCredentialData::OpenAIKey { api_key, base_url } => {
-                self.call_openai_api(
-                    api_key,
-                    base_url.as_deref(),
-                    system_prompt,
-                    user_message,
-                    model,
-                )
-                .await
+            RuntimeCredentialData::GeminiApiKey { .. }
+            | RuntimeCredentialData::VertexKey { .. } => {
+                return Err(SkillError::ProviderError(format!(
+                    "当前 model-provider 不支持 runtime credential: {:?}",
+                    credential.provider_type
+                )));
             }
-            RuntimeCredentialData::AnthropicKey { api_key, base_url } => {
-                // Anthropic API Key 使用 Claude API
-                self.call_claude_api(ClaudeApiCall {
-                    api_key,
-                    base_url: base_url.as_deref(),
-                    provider_type: ApiProviderType::Anthropic,
-                    prompt_cache_mode: if matches!(
-                        credential.effective_prompt_cache_mode(),
-                        Some(lime_core::models::ProviderPromptCacheMode::Automatic)
-                    ) {
-                        PromptCacheMode::Automatic
-                    } else {
-                        PromptCacheMode::ExplicitOnly
-                    },
-                    system_prompt,
-                    user_message,
-                    model,
-                })
-                .await
-            }
-            RuntimeCredentialData::GeminiApiKey {
-                api_key,
-                base_url,
-                excluded_models,
-            } => {
-                self.call_gemini_api(GeminiApiCall {
-                    credential_id: &credential.uuid,
-                    api_key,
-                    base_url: base_url.as_deref(),
-                    excluded_models,
-                    system_prompt,
-                    user_message,
-                    model,
-                })
-                .await
-            }
-            RuntimeCredentialData::VertexKey { .. } => Err(SkillError::ProviderError(format!(
-                "Skill LLM 调用暂不支持 Vertex runtime credential: {:?}",
-                credential.provider_type
-            ))),
-        }
-    }
-
-    /// 调用 Gemini API Key Provider
-    async fn call_gemini_api(&self, call: GeminiApiCall<'_>) -> Result<String, SkillError> {
-        let credential =
-            GeminiApiKeyCredential::new(call.credential_id.to_string(), call.api_key.to_string())
-                .with_base_url(call.base_url.map(ToString::to_string))
-                .with_excluded_models(call.excluded_models.to_vec());
-
-        if !credential.supports_model(call.model) {
-            return Err(SkillError::ProviderError(format!(
-                "Gemini API Key 凭证不支持模型: {}",
-                call.model
-            )));
-        }
-
-        let provider = GeminiApiKeyProvider::new();
-        let prompt = if call.system_prompt.trim().is_empty() {
-            call.user_message.to_string()
-        } else {
-            format!("{}\n\n{}", call.system_prompt, call.user_message)
         };
-        let body = serde_json::json!({
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{ "text": prompt }]
-                }
-            ],
-            "generationConfig": {
-                "maxOutputTokens": 4096
+
+        let protocol = match credential.provider_type {
+            RuntimeProviderType::Claude
+            | RuntimeProviderType::Anthropic
+            | RuntimeProviderType::AnthropicCompatible => {
+                RuntimeProviderProtocol::AnthropicMessages
             }
+            RuntimeProviderType::OpenAI => RuntimeProviderProtocol::ChatCompletions,
+            unsupported => {
+                return Err(SkillError::ProviderError(format!(
+                    "当前 model-provider 不支持 runtime provider: {unsupported}"
+                )));
+            }
+        };
+
+        let client = CurrentProviderClient::new(RuntimeProviderConfig {
+            provider_name: match protocol {
+                RuntimeProviderProtocol::AnthropicMessages => "anthropic".to_string(),
+                _ => "openai".to_string(),
+            },
+            provider_selector: Some(credential.provider_type.to_string()),
+            model_name: model.to_string(),
+            api_key: Some(api_key.to_string()),
+            base_url: base_url.map(ToOwned::to_owned),
+            credential_uuid: credential.uuid.clone(),
+            reasoning_effort: None,
+            protocol: Some(protocol),
+            supports_websockets: false,
+            toolshim: false,
+            toolshim_model: None,
+        })
+        .map_err(|error| SkillError::ProviderError(error.to_string()))?;
+
+        let request = CurrentProviderRequest::new(vec![CurrentProviderMessage::user(vec![
+            CurrentProviderContent::Text(user_message.to_string()),
+        ])])
+        .with_system_prompt((!system_prompt.trim().is_empty()).then(|| system_prompt.to_string()))
+        .with_generation(model_provider::current_client::GenerationOptions {
+            max_tokens: Some(4096),
+            ..Default::default()
         });
 
-        let json = provider
-            .generate_content(&credential, call.model, &body)
+        let mut stream = client
+            .stream(request)
             .await
-            .map_err(|e| SkillError::ProviderError(format!("Gemini API 调用失败: {}", e)))?;
-
-        let content = json["candidates"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|candidate| candidate["content"]["parts"].as_array())
-            .and_then(|parts| parts.first())
-            .and_then(|part| part["text"].as_str())
-            .unwrap_or("");
-
-        Ok(content.to_string())
-    }
-
-    /// 调用 Claude API
-    async fn call_claude_api(&self, call: ClaudeApiCall<'_>) -> Result<String, SkillError> {
-        use lime_core::models::anthropic::AnthropicMessage;
-
-        let claude = ClaudeCustomProvider::with_provider_type_and_prompt_cache_mode(
-            call.api_key.to_string(),
-            call.base_url.map(|s| s.to_string()),
-            call.provider_type,
-            call.prompt_cache_mode,
-        );
-
-        // 构建 Anthropic 请求
-        let request = AnthropicMessagesRequest {
-            model: call.model.to_string(),
-            max_tokens: Some(4096),
-            system: Some(serde_json::Value::String(call.system_prompt.to_string())),
-            messages: vec![AnthropicMessage {
-                role: "user".to_string(),
-                content: serde_json::Value::String(call.user_message.to_string()),
-            }],
-            stream: false,
-            temperature: None,
-            tools: None,
-            tool_choice: None,
-        };
-
-        let resp = claude
-            .call_api(&request)
-            .await
-            .map_err(|e| SkillError::ProviderError(format!("Claude API 调用失败: {}", e)))?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SkillError::ProviderError(format!(
-                "Claude API 返回错误: status={}, body={}",
-                status, body
-            )));
+            .map_err(|error| SkillError::ProviderError(error.to_string()))?;
+        let mut content = String::new();
+        while let Some(event) = stream.next().await {
+            match event.map_err(|error| SkillError::ProviderError(error.to_string()))? {
+                CanonicalLlmEvent::TextDelta { text, .. } => content.push_str(&text),
+                CanonicalLlmEvent::ProviderError { message, .. } => {
+                    return Err(SkillError::ProviderError(message));
+                }
+                CanonicalLlmEvent::Finish { .. } | CanonicalLlmEvent::StepFinish { .. } => break,
+                _ => {}
+            }
         }
 
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| SkillError::ProviderError(format!("读取响应失败: {}", e)))?;
-
-        // 解析 Anthropic 响应
-        let json: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| SkillError::ProviderError(format!("解析响应失败: {}", e)))?;
-
-        // 提取文本内容
-        let content = json["content"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|block| block["text"].as_str())
-            .unwrap_or("");
-
-        Ok(content.to_string())
-    }
-
-    /// 调用 OpenAI API
-    async fn call_openai_api(
-        &self,
-        api_key: &str,
-        base_url: Option<&str>,
-        system_prompt: &str,
-        user_message: &str,
-        model: &str,
-    ) -> Result<String, SkillError> {
-        use lime_core::models::openai::{ChatCompletionRequest, ChatMessage, MessageContent};
-
-        let openai =
-            OpenAICustomProvider::with_config(api_key.to_string(), base_url.map(|s| s.to_string()));
-
-        // 构建 OpenAI 请求
-        let request = ChatCompletionRequest {
-            model: model.to_string(),
-            messages: vec![
-                ChatMessage {
-                    role: "system".to_string(),
-                    content: Some(MessageContent::Text(system_prompt.to_string())),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    reasoning_content: None,
-                },
-                ChatMessage {
-                    role: "user".to_string(),
-                    content: Some(MessageContent::Text(user_message.to_string())),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    reasoning_content: None,
-                },
-            ],
-            max_tokens: Some(4096),
-            stream: false,
-            temperature: None,
-            top_p: None,
-            tools: None,
-            tool_choice: None,
-            reasoning_effort: None,
-        };
-
-        let resp = openai
-            .call_api(&request)
-            .await
-            .map_err(|e| SkillError::ProviderError(format!("OpenAI API 调用失败: {}", e)))?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SkillError::ProviderError(format!(
-                "OpenAI API 返回错误: status={}, body={}",
-                status, body
-            )));
-        }
-
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| SkillError::ProviderError(format!("读取响应失败: {}", e)))?;
-
-        // 解析 OpenAI 响应
-        let json: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| SkillError::ProviderError(format!("解析响应失败: {}", e)))?;
-
-        // 提取文本内容
-        let content = json["choices"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|choice| choice["message"]["content"].as_str())
-            .unwrap_or("");
-
-        Ok(content.to_string())
+        Ok(content)
     }
 }
 
@@ -508,14 +306,14 @@ mod tests {
     }
 
     #[test]
-    fn test_map_skill_provider_gemini() {
+    fn test_map_skill_provider_unsupported_is_fail_closed() {
         assert_eq!(
             LimeLlmProvider::map_skill_provider_to_runtime_provider_type("gemini"),
-            Some(RuntimeProviderType::GeminiApiKey)
+            None
         );
         assert_eq!(
             LimeLlmProvider::map_skill_provider_to_runtime_provider_type("google"),
-            Some(RuntimeProviderType::GeminiApiKey)
+            None
         );
     }
 

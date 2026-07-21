@@ -1,7 +1,6 @@
+use agent_protocol::AgentInput;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSession;
-use app_server_protocol::AgentSessionArchiveManyParams;
-use app_server_protocol::AgentSessionArchiveManyResponse;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionOverview;
 use app_server_protocol::AgentSessionUpdateParams;
@@ -16,6 +15,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::article_workspace_edited_draft;
+use super::canonical_rollout::RolloutStore;
 use super::projection_item_events::query_projected_session_item_events;
 use super::projection_payload_summary::bounded_payload_summary;
 use super::projection_protocol::{
@@ -29,12 +29,18 @@ use super::session_title;
 use super::status::resolve_session_runtime_state;
 use super::status::RuntimeTurnSnapshot;
 
+mod session_settings;
+mod thread_product_projection;
+
 const PROJECTION_SUMMARY_MESSAGE_TEXT_MAX_CHARS: usize = 2_000;
 const PROJECTION_SUMMARY_MESSAGE_ROW_LIMIT: i64 = 20_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionStore {
     path: PathBuf,
+    state_path: PathBuf,
+    thread_history_path: PathBuf,
+    rollout_store: Option<RolloutStore>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,21 +100,88 @@ pub struct ProjectionWatermark {
 impl ProjectionStore {
     pub fn initialize(path: impl AsRef<Path>) -> Result<Self, String> {
         let path = path.as_ref().to_path_buf();
-        if let Some(parent) = path.parent() {
+        Self::initialize_inner(path.clone(), path.clone(), path, None)
+    }
+
+    pub fn initialize_with_agent_root(
+        path: impl AsRef<Path>,
+        agent_root: impl AsRef<Path>,
+    ) -> Result<Self, String> {
+        let path = path.as_ref().to_path_buf();
+        Self::initialize_inner(
+            path.clone(),
+            path.clone(),
+            path,
+            Some(RolloutStore::new(agent_root)),
+        )
+    }
+
+    pub fn initialize_with_storage_paths(
+        projection_path: impl AsRef<Path>,
+        state_path: impl AsRef<Path>,
+        thread_history_path: impl AsRef<Path>,
+        agent_root: impl AsRef<Path>,
+    ) -> Result<Self, String> {
+        Self::initialize_inner(
+            projection_path,
+            state_path,
+            thread_history_path,
+            Some(RolloutStore::new(agent_root)),
+        )
+    }
+
+    fn initialize_inner(
+        projection_path: impl AsRef<Path>,
+        state_path: impl AsRef<Path>,
+        thread_history_path: impl AsRef<Path>,
+        rollout_store: Option<RolloutStore>,
+    ) -> Result<Self, String> {
+        let path = projection_path.as_ref().to_path_buf();
+        let state_path = state_path.as_ref().to_path_buf();
+        let thread_history_path = thread_history_path.as_ref().to_path_buf();
+        for database_path in [&path, &state_path, &thread_history_path] {
+            let Some(parent) = database_path.parent() else {
+                continue;
+            };
             fs::create_dir_all(parent).map_err(|error| {
-                format!("无法创建 Projection DB 目录 {}: {error}", parent.display())
+                format!(
+                    "无法创建 App Server SQLite 目录 {}: {error}",
+                    parent.display()
+                )
             })?;
         }
         let conn = Connection::open(&path)
             .map_err(|error| format!("无法打开 Projection DB {}: {error}", path.display()))?;
         create_schema(&conn)?;
-        let store = Self { path };
+        let store = Self {
+            path,
+            state_path,
+            thread_history_path,
+            rollout_store,
+        };
         store.ensure_canonical_thread_store()?;
+        store.rebuild_canonical_rollouts_if_empty()?;
         Ok(store)
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn state_path(&self) -> &Path {
+        &self.state_path
+    }
+
+    pub fn thread_history_path(&self) -> &Path {
+        &self.thread_history_path
+    }
+
+    fn open_projection_store(&self) -> Result<Connection, String> {
+        self.open_thread_store().map_err(|error| error.to_string())
+    }
+
+    pub(super) fn rollout_store(&self) -> Option<&RolloutStore> {
+        self.rollout_store.as_ref()
     }
 
     pub fn apply_event(&self, event: &AgentEvent) -> Result<(), String> {
@@ -119,8 +192,7 @@ impl ProjectionStore {
         if events.is_empty() {
             return Ok(0);
         }
-        let mut conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let mut conn = self.open_projection_store()?;
         let tx = conn
             .transaction()
             .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
@@ -136,8 +208,7 @@ impl ProjectionStore {
     }
 
     pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
-        let mut conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let mut conn = self.open_projection_store()?;
         let tx = conn
             .transaction()
             .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
@@ -149,11 +220,37 @@ impl ProjectionStore {
 
     pub(super) fn delete_session_data(&self, session_id: &str) -> Result<bool, String> {
         self.ensure_canonical_thread_store()?;
-        let mut conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let mut conn = self
+            .open_thread_store()
+            .map_err(|error| error.to_string())?;
         let tx = conn
             .transaction()
             .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
+        let thread_id = tx
+            .query_row(
+                "SELECT thread_id FROM canonical_threads WHERE session_id = ?1",
+                params![session_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| format!("无法定位 canonical thread: {error}"))?;
+        if let Some(thread_id) = thread_id.as_deref() {
+            tx.execute(
+                "DELETE FROM canonical_items WHERE thread_id = ?1",
+                params![thread_id],
+            )
+            .map_err(|error| format!("无法清理 canonical_items: {error}"))?;
+            tx.execute(
+                "DELETE FROM canonical_turns WHERE thread_id = ?1",
+                params![thread_id],
+            )
+            .map_err(|error| format!("无法清理 canonical_turns: {error}"))?;
+            tx.execute(
+                "DELETE FROM canonical_history_applies WHERE thread_id = ?1",
+                params![thread_id],
+            )
+            .map_err(|error| format!("无法清理 canonical_history_applies: {error}"))?;
+        }
         let deleted_canonical = tx
             .execute(
                 "DELETE FROM canonical_threads WHERE session_id = ?1",
@@ -178,8 +275,7 @@ impl ProjectionStore {
             ));
         }
 
-        let mut conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let mut conn = self.open_projection_store()?;
         let tx = conn
             .transaction()
             .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
@@ -200,8 +296,7 @@ impl ProjectionStore {
         session_id: &str,
         window: ProjectionReadWindow,
     ) -> Result<Option<ProjectionReadSession>, String> {
-        let conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let conn = self.open_projection_store()?;
         let Some(session_row) = query_projected_session(&conn, session_id)? else {
             return Ok(None);
         };
@@ -240,8 +335,7 @@ impl ProjectionStore {
             return Ok(None);
         }
 
-        let conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let conn = self.open_projection_store()?;
         let rows =
             query_projected_import_session_rows(&conn, normalized_client, normalized_thread_id)?;
         let matched = rows
@@ -270,8 +364,7 @@ impl ProjectionStore {
     }
 
     pub fn read_watermark(&self, session_id: &str) -> Result<Option<ProjectionWatermark>, String> {
-        let conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let conn = self.open_projection_store()?;
         conn.query_row(
             "SELECT last_sequence FROM projection_watermarks WHERE session_id = ?1",
             params![session_id],
@@ -288,8 +381,7 @@ impl ProjectionStore {
 
     #[cfg(test)]
     pub fn read_session(&self, session_id: &str) -> Result<Option<ProjectionSession>, String> {
-        let conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let conn = self.open_projection_store()?;
         let mut stmt = conn
             .prepare(
                 "SELECT session_id, thread_id, status, last_event_sequence
@@ -322,8 +414,7 @@ impl ProjectionStore {
         &self,
         event_id: &str,
     ) -> Result<Option<String>, String> {
-        let conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let conn = self.open_projection_store()?;
         conn.query_row(
             "SELECT payload_summary_json FROM projected_items WHERE event_id = ?1",
             params![event_id],
@@ -567,12 +658,43 @@ fn projected_session_overview(conn: &Connection, row: ProjectedSessionRow) -> Ag
 }
 
 impl ProjectionStore {
+    pub(in crate::runtime) fn list_queued_session_ids(&self) -> Result<Vec<String>, String> {
+        let conn = self.open_projection_store()?;
+        let projection_table = if self.state_path() == self.path() {
+            "projected_turns"
+        } else {
+            "projection.projected_turns"
+        };
+        let rollout_predicate = self
+            .rollout_store()
+            .is_some()
+            .then_some("AND threads.rollout_path IS NOT NULL")
+            .unwrap_or_default();
+        let sql = format!(
+            "SELECT DISTINCT queued.session_id
+             FROM {projection_table} AS queued
+             JOIN canonical_threads AS threads
+               ON threads.thread_id = queued.thread_id
+              AND threads.session_id = queued.session_id
+             WHERE queued.status = 'queued'
+               {rollout_predicate}
+             ORDER BY queued.session_id ASC"
+        );
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|error| format!("无法准备 current queued session 查询: {error}"))?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| format!("无法查询 current queued session: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("无法读取 current queued session: {error}"))
+    }
+
     pub fn list_session_overviews(
         &self,
         params: &AgentSessionListParams,
     ) -> Result<Vec<AgentSessionOverview>, String> {
-        let conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let conn = self.open_projection_store()?;
         let scope = SessionListScope::from_params(params);
         query_projected_session_overviews(
             &conn,
@@ -592,8 +714,7 @@ impl ProjectionStore {
         if session_id.is_empty() {
             return Err("sessionId is required for agentSession/update".to_string());
         }
-        let mut conn = Connection::open(&self.path)
-            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let mut conn = self.open_projection_store()?;
         let tx = conn
             .transaction()
             .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
@@ -603,9 +724,6 @@ impl ProjectionStore {
         let title = normalized_text(params.title.as_deref());
         let model = normalized_text(params.model_name.as_deref());
         let execution_strategy = normalized_text(params.execution_strategy.as_deref());
-        let archived_at = params
-            .archived
-            .map(|archived| archived.then_some(updated_at.to_string()));
         let metadata_json = merge_projected_session_metadata_json(
             existing.metadata_json.as_deref(),
             &params,
@@ -620,17 +738,14 @@ impl ProjectionStore {
                 title = COALESCE(?1, title),
                 model = COALESCE(?2, model),
                 execution_strategy = COALESCE(?3, execution_strategy),
-                archived_at = CASE WHEN ?4 IS NULL THEN archived_at ELSE ?5 END,
-                metadata_json = COALESCE(?6, metadata_json),
-                updated_at = ?7
-            WHERE session_id = ?8
+                metadata_json = COALESCE(?4, metadata_json),
+                updated_at = ?5
+            WHERE session_id = ?6
             "#,
             params![
                 title,
                 model,
                 execution_strategy,
-                params.archived,
-                archived_at.flatten(),
                 metadata_json,
                 updated_at,
                 session_id,
@@ -642,36 +757,6 @@ impl ProjectionStore {
         tx.commit()
             .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
         Ok(session.map(|session| AgentSessionUpdateResponse { session }))
-    }
-
-    pub fn archive_many_sessions(
-        &self,
-        params: AgentSessionArchiveManyParams,
-        archived_at: &str,
-    ) -> Result<(AgentSessionArchiveManyResponse, Vec<String>), String> {
-        let mut sessions = Vec::new();
-        let mut missing_session_ids = Vec::new();
-        for session_id in params.session_ids {
-            let normalized = session_id.trim();
-            if normalized.is_empty() {
-                continue;
-            }
-            match self.update_session_overview(
-                AgentSessionUpdateParams {
-                    session_id: normalized.to_string(),
-                    archived: Some(true),
-                    ..AgentSessionUpdateParams::default()
-                },
-                archived_at,
-            )? {
-                Some(response) => sessions.push(response.session),
-                None => missing_session_ids.push(normalized.to_string()),
-            }
-        }
-        Ok((
-            AgentSessionArchiveManyResponse { sessions },
-            missing_session_ids,
-        ))
     }
 }
 
@@ -1073,10 +1158,32 @@ fn projected_message_text_elements(payload: &Value) -> Vec<Value> {
 }
 
 fn projected_message_attachments(payload: &Value) -> Vec<Value> {
-    payload
+    if let Some(input) = payload
         .get("input")
-        .and_then(|input| input.get("attachments"))
-        .or_else(|| payload.get("attachments"))
+        .and_then(|value| serde_json::from_value::<Vec<AgentInput>>(value.clone()).ok())
+    {
+        return input
+            .iter()
+            .filter_map(|part| match part {
+                AgentInput::Image { uri, detail } => Some(serde_json::json!({
+                    "kind": "image",
+                    "uri": uri,
+                    "detail": detail,
+                })),
+                AgentInput::LocalImage { path, detail } => Some(serde_json::json!({
+                    "kind": "image",
+                    "uri": path,
+                    "detail": detail,
+                    "metadata": {"localPath": path},
+                })),
+                AgentInput::Text { .. } | AgentInput::Skill { .. } | AgentInput::Mention { .. } => {
+                    None
+                }
+            })
+            .collect();
+    }
+    payload
+        .get("attachments")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default()
@@ -1096,10 +1203,19 @@ fn projected_message_text(payload: &Value) -> String {
         .or_else(|| {
             payload
                 .get("input")
-                .and_then(|value| {
-                    serde_json::from_value::<app_server_protocol::AgentInput>(value.clone()).ok()
+                .and_then(|value| serde_json::from_value::<Vec<AgentInput>>(value.clone()).ok())
+                .map(|input| {
+                    input
+                        .iter()
+                        .filter_map(|part| match part {
+                            AgentInput::Text { text, .. } => Some(text.as_str()),
+                            AgentInput::Image { .. }
+                            | AgentInput::LocalImage { .. }
+                            | AgentInput::Skill { .. }
+                            | AgentInput::Mention { .. } => None,
+                        })
+                        .collect::<String>()
                 })
-                .map(|input| input.text)
         })
         .unwrap_or_default()
 }
@@ -1673,18 +1789,13 @@ mod tests {
             item_type: "message.created".to_string(),
             created_at: "2026-06-08T00:00:01.000Z".to_string(),
             payload: serde_json::json!({
-                "input": {
-                    "text": "分析图片",
-                    "attachments": [
-                        {
-                            "kind": "image",
-                            "uri": "file:///tmp/rich-input.png",
-                            "metadata": {
-                                "mediaType": "image/png"
-                            }
-                        }
-                    ]
-                },
+                "input": [
+                    {"type": "text", "text": "分析图片"},
+                    {
+                        "type": "image",
+                        "uri": "file:///tmp/rich-input.png"
+                    }
+                ],
                 "content": {
                     "kind": "inline_text",
                     "text": "分析图片"

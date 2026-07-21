@@ -27,7 +27,6 @@ interface HandleSubmitFailureOptions {
   content: string;
   images: MessageImage[];
   assistantMsgId: string;
-  expectingQueue: boolean;
   eventName: string;
   activeStreamRef: MutableRefObject<ActiveStreamState | null>;
   setMessages: Dispatch<SetStateAction<Message[]>>;
@@ -51,7 +50,6 @@ export function handleAgentStreamSubmitFailure(
     content,
     images,
     assistantMsgId,
-    expectingQueue,
     eventName,
     activeStreamRef,
     setMessages,
@@ -110,7 +108,7 @@ export function handleAgentStreamSubmitFailure(
   );
   clearActiveStreamIfMatch(eventName);
   disposeListener();
-  if (!expectingQueue && !activeStreamRef.current) {
+  if (!activeStreamRef.current) {
     setIsSending(false);
   }
 }

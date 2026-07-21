@@ -1,16 +1,22 @@
 import {
   AppServerClient,
-  type AppServerAgentSession,
-  type AppServerAgentTurn,
-  type AppServerAgentSessionReadParams,
-  type AppServerAgentSessionReadResponse,
   type AppServerAgentSessionUpdateParams,
-  type AppServerBusinessObjectRef,
+  type AppServerThreadListParams,
+  type AppServerThreadListResponse,
+  type AppServerThreadReadParams,
 } from "@/lib/api/appServer";
-import { METHOD_AGENT_SESSION_LIST } from "../../../../packages/app-server-client/src/protocol";
+import {
+  METHOD_THREAD_LIST,
+  METHOD_THREAD_ITEMS_LIST,
+  METHOD_THREAD_TURNS_LIST,
+  type ThreadItemsListResponse,
+  type ThreadTurnsListResponse,
+} from "../../../../packages/app-server-client/src/protocol";
 import type { AgentExecutionStrategy } from "../agentExecutionRuntime";
-import type { AgentThreadTurn, AgentThreadTurnStatus } from "../agentProtocol";
-import { projectAppServerSessionReadToThreadReadModel } from "./appServerReadModelProjection";
+import {
+  readCanonicalThreadDetail,
+  readCanonicalThreadListResponse,
+} from "./appServerCanonicalThreadProjection";
 import type {
   AgentRuntimeCreateSessionOptions,
   AgentRuntimeGetSessionOptions,
@@ -21,31 +27,24 @@ import type {
   AgentSessionInfo,
   AgentRuntimeListSessionsOptions,
 } from "./sessionTypes";
-import { projectCanonicalApprovalItem } from "./canonicalApprovalItemProjection";
 
-const DEFAULT_APP_ID = "desktop";
+const THREAD_LIST_PAGE_LIMIT = 100;
 
 export type AppServerSessionRpcClient = Pick<
   AppServerClient,
   | "startSession"
-  | "readSession"
+  | "readThread"
   | "updateSession"
-  | "archiveManySessions"
+  | "archiveThread"
+  | "unarchiveThread"
   | "deleteSession"
   | "request"
 >;
 
-export type AppServerAgentSessionListParams = {
-  includeArchived?: boolean;
-  archivedOnly?: boolean;
-  cwd?: string | string[];
-  workspaceId?: string;
-  limit?: number;
-};
-
 export type AppServerAgentSessionOverview = {
   sessionId: string;
   threadId?: string;
+  parentThreadId?: string;
   title?: string;
   businessObjectRefMetadata?: unknown;
   model: string;
@@ -62,15 +61,6 @@ export type AppServerAgentSessionOverview = {
   queuedTurnCount?: number;
 };
 
-export type AppServerAgentSessionListResponse = {
-  sessions: AppServerAgentSessionOverview[];
-};
-
-type NormalizedAppServerAgentSessionReadResponse =
-  AppServerAgentSessionReadResponse & {
-    detail?: unknown;
-  };
-
 export interface AppServerSessionClientDeps {
   appServerClient?: AppServerSessionRpcClient;
 }
@@ -86,33 +76,44 @@ export function createAppServerSessionClient({
   ): Promise<string> {
     const sessionScope = normalizeCreateSessionScope(workspaceId, options);
     const normalizedName = name?.trim() || "新对话";
+    const route = readThreadStartRoute(options?.metadata);
+    if (!route) {
+      throw new Error(
+        "thread/start requires current providerSelector and modelName",
+      );
+    }
     const response = await appServerClient.startSession({
-      appId: DEFAULT_APP_ID,
-      workspaceId: sessionScope.workspaceId,
-      businessObjectRef: sessionBusinessObjectRef({
-        scopeId: sessionScope.scopeId,
-        name: normalizedName,
-        executionStrategy,
-        runStartHooks: options?.runStartHooks,
-        workingDir: sessionScope.workingDir,
-        metadata: options?.metadata,
-      }),
+      cwd: sessionScope.workingDir,
+      model: route.model,
+      modelProvider: route.modelProvider,
+      serviceName: normalizedName,
+      threadSource: "appServer",
+      historyMode: "paginated",
     });
-    assertAppServerAgentSession(response.result.session);
-    return response.result.session.sessionId;
+    const thread = readCanonicalThreadFromResult(response.result);
+    if (
+      !thread ||
+      !readStringField(thread, "id") ||
+      !readStringField(thread, "sessionId")
+    ) {
+      throw new Error("thread/start did not return canonical Thread");
+    }
+    const sessionId = readStringField(thread, "sessionId");
+    if (!sessionId) {
+      throw new Error("thread/start returned an empty canonical sessionId");
+    }
+    return sessionId;
   }
 
   async function listAgentRuntimeSessions(
     options?: AgentRuntimeListSessionsOptions,
   ): Promise<AgentSessionInfo[]> {
-    const response =
-      await appServerClient.request<AppServerAgentSessionListResponse>(
-        METHOD_AGENT_SESSION_LIST,
-        appServerSessionListParamsFromOptions(options),
-      );
-    const sessions = readAppServerAgentSessionListResponse(response.result);
+    const sessions = await listCanonicalSessionOverviews(
+      appServerClient,
+      options,
+    );
     if (!sessions) {
-      throw new Error("agentSession/list did not return session list");
+      throw new Error("thread/list did not return session list");
     }
     return sessions.map(appServerSessionOverviewToRuntimeInfo);
   }
@@ -121,20 +122,59 @@ export function createAppServerSessionClient({
     sessionId: string,
     options?: AgentRuntimeGetSessionOptions,
   ): Promise<AgentSessionDetail> {
-    const response = await appServerClient.readSession(
-      appServerSessionReadParamsFromOptions(sessionId, options),
-    );
-    const readResponse = readAppServerAgentSessionReadResponse(response.result);
-    if (!readResponse) {
-      throw new Error("agentSession/read did not return session detail");
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      throw new Error("sessionId is required to read App Server session");
     }
-    const detail = readSessionDetail(readResponse);
-    if (!detail) {
-      throw new Error(
-        "agentSession/read did not return canonical session detail",
+
+    let threadId = normalizedSessionId;
+    let readResult: unknown;
+    try {
+      readResult = (
+        await appServerClient.readThread(
+          appServerThreadReadParams(threadId, false),
+        )
+      ).result;
+    } catch (directReadError) {
+      const matchingThreadId = await findCanonicalThreadIdBySessionId(
+        appServerClient,
+        normalizedSessionId,
       );
+      if (!matchingThreadId) {
+        throw directReadError;
+      }
+      threadId = matchingThreadId;
+      readResult = (
+        await appServerClient.readThread(
+          appServerThreadReadParams(threadId, false),
+        )
+      ).result;
     }
-    return detail;
+
+    const canonicalThread = readCanonicalThreadFromResult(readResult);
+    if (canonicalThread) {
+      if (readStringField(canonicalThread, "historyMode") === "paginated") {
+        readResult = await readPaginatedCanonicalThread(
+          appServerClient,
+          canonicalThread,
+        );
+      } else if (
+        !Array.isArray(canonicalThread.turns) ||
+        canonicalThread.turns.length === 0
+      ) {
+        readResult = (
+          await appServerClient.readThread(
+            appServerThreadReadParams(threadId, true),
+          )
+        ).result;
+      }
+    }
+
+    const canonicalDetail = readCanonicalThreadDetail(readResult);
+    if (!canonicalDetail) {
+      throw new Error("thread/read did not return canonical session detail");
+    }
+    return canonicalDetail;
   }
 
   async function updateAgentRuntimeSession(
@@ -145,19 +185,31 @@ export function createAppServerSessionClient({
     );
   }
 
-  async function archiveManyAgentRuntimeSessions(
-    sessionIds: string[],
-  ): Promise<AgentSessionInfo[]> {
-    const response = await appServerClient.archiveManySessions({
-      sessionIds: normalizeSessionIds(sessionIds),
-    });
-    const sessions = readAppServerAgentSessionListResponse(response.result);
-    if (!sessions) {
-      throw new Error(
-        "agentSession/archiveMany did not return archived sessions",
-      );
+  async function archiveAgentRuntimeSession(sessionId: string): Promise<void> {
+    const threadId = await resolveCanonicalThreadId(
+      appServerClient,
+      sessionId,
+      "thread/archive",
+    );
+    await appServerClient.archiveThread({ threadId });
+  }
+
+  async function unarchiveAgentRuntimeSession(
+    sessionId: string,
+  ): Promise<void> {
+    const threadId = await resolveCanonicalThreadId(
+      appServerClient,
+      sessionId,
+      "thread/unarchive",
+    );
+    const response = await appServerClient.unarchiveThread({ threadId });
+    const thread = readCanonicalThreadFromResult(response.result);
+    const restoredThreadId = thread
+      ? readStringField(thread, "id") || readStringField(thread, "threadId")
+      : "";
+    if (restoredThreadId !== threadId) {
+      throw new Error("thread/unarchive did not return the restored thread");
     }
-    return sessions.map(appServerSessionOverviewToRuntimeInfo);
   }
 
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
@@ -174,21 +226,14 @@ export function createAppServerSessionClient({
   }
 
   return {
-    archiveManyAgentRuntimeSessions,
+    archiveAgentRuntimeSession,
     createAgentRuntimeSession,
     deleteAgentRuntimeSession,
     getAgentRuntimeSession,
     listAgentRuntimeSessions,
+    unarchiveAgentRuntimeSession,
     updateAgentRuntimeSession,
   };
-}
-
-function assertAppServerAgentSession(
-  value: unknown,
-): asserts value is AppServerAgentSession {
-  if (!isAppServerAgentSession(value)) {
-    throw new Error("agentSession/start did not return an App Server session");
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -224,275 +269,8 @@ function readOptionalStringField(
   return typeof value === "string" ? value : undefined;
 }
 
-function readNumberField(
-  record: Record<string, unknown>,
-  camelKey: string,
-  snakeKey?: string,
-): number | undefined {
-  const value = readField(record, camelKey, snakeKey);
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
-}
-
-function readNullableStringField(
-  record: Record<string, unknown>,
-  camelKey: string,
-  snakeKey?: string,
-): string | null | undefined {
-  const value = readField(record, camelKey, snakeKey);
-  return value === null || typeof value === "string" ? value : undefined;
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function readOptionalObjectField(
-  record: Record<string, unknown>,
-  camelKey: string,
-  snakeKey?: string,
-): Record<string, unknown> | undefined {
-  const value = readField(record, camelKey, snakeKey);
-  return isPlainObject(value) ? value : undefined;
-}
-
-function readAppServerAgentSession(
-  value: unknown,
-): AppServerAgentSession | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const sessionId = readStringField(value, "sessionId", "session_id");
-  const threadId = readStringField(value, "threadId", "thread_id");
-  const appId = readStringField(value, "appId", "app_id");
-  const status = readStringField(value, "status");
-  const createdAt = readStringField(value, "createdAt", "created_at");
-  const updatedAt = readStringField(value, "updatedAt", "updated_at");
-  const workspaceId = readOptionalStringField(
-    value,
-    "workspaceId",
-    "workspace_id",
-  );
-  if (
-    !sessionId ||
-    !threadId ||
-    !appId ||
-    !isAppServerAgentSessionStatus(status) ||
-    !createdAt ||
-    !updatedAt
-  ) {
-    return null;
-  }
-
-  return omitUndefined({
-    ...(value as Partial<AppServerAgentSession>),
-    sessionId,
-    threadId,
-    appId,
-    workspaceId,
-    status,
-    createdAt,
-    updatedAt,
-  }) as AppServerAgentSession;
-}
-
-function isAppServerAgentSession(
-  value: unknown,
-): value is AppServerAgentSession {
-  return readAppServerAgentSession(value) !== null;
-}
-
-function readAppServerAgentSessionOverview(
-  value: unknown,
-): AppServerAgentSessionOverview | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const sessionId = readStringField(value, "sessionId", "session_id");
-  const model = readField(value, "model");
-  const messagesCount = readNumberField(
-    value,
-    "messagesCount",
-    "messages_count",
-  );
-  const createdAt = readStringField(value, "createdAt", "created_at");
-  const updatedAt = readStringField(value, "updatedAt", "updated_at");
-  if (
-    !sessionId ||
-    typeof model !== "string" ||
-    typeof messagesCount !== "number" ||
-    !createdAt ||
-    !updatedAt
-  ) {
-    return null;
-  }
-
-  return omitUndefined({
-    ...(value as Partial<AppServerAgentSessionOverview>),
-    sessionId,
-    threadId:
-      readOptionalStringField(value, "threadId", "thread_id") ?? undefined,
-    title: readOptionalStringField(value, "title"),
-    businessObjectRefMetadata: readOptionalObjectField(
-      value,
-      "businessObjectRefMetadata",
-      "business_object_ref_metadata",
-    ),
-    model,
-    createdAt,
-    updatedAt,
-    archivedAt: readNullableStringField(value, "archivedAt", "archived_at"),
-    workspaceId: readOptionalStringField(value, "workspaceId", "workspace_id"),
-    workingDir: readOptionalStringField(value, "workingDir", "working_dir"),
-    executionStrategy: readOptionalStringField(
-      value,
-      "executionStrategy",
-      "execution_strategy",
-    ),
-    messagesCount,
-    threadStatus: readOptionalStringField(value, "threadStatus") ?? undefined,
-    latestTurnStatus:
-      readOptionalStringField(value, "latestTurnStatus") ?? undefined,
-    activeTurnId: readOptionalStringField(value, "activeTurnId") ?? undefined,
-    queuedTurnCount: readNumberField(value, "queuedTurnCount"),
-  }) as AppServerAgentSessionOverview;
-}
-
-function readAppServerAgentSessionListResponse(
-  value: unknown,
-): AppServerAgentSessionOverview[] | null {
-  if (!isRecord(value) || !Array.isArray(value.sessions)) {
-    return null;
-  }
-
-  const sessions: AppServerAgentSessionOverview[] = [];
-  for (const session of value.sessions) {
-    const normalized = readAppServerAgentSessionOverview(session);
-    if (!normalized) {
-      return null;
-    }
-    sessions.push(normalized);
-  }
-  return sessions;
-}
-
-function readAppServerAgentSessionReadResponse(
-  value: unknown,
-): NormalizedAppServerAgentSessionReadResponse | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const session = readAppServerAgentSession(value.session);
-  if (!session || !Array.isArray(value.turns)) {
-    return null;
-  }
-
-  const turns: AppServerAgentTurn[] = [];
-  for (const turn of value.turns) {
-    const normalized = readAppServerAgentTurn(turn);
-    if (!normalized) {
-      return null;
-    }
-    turns.push(normalized);
-  }
-
-  return {
-    ...(value as Partial<NormalizedAppServerAgentSessionReadResponse>),
-    session,
-    turns,
-    detail: value.detail,
-  } as NormalizedAppServerAgentSessionReadResponse;
-}
-
-function readAppServerAgentTurn(value: unknown): AppServerAgentTurn | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const turnId = readStringField(value, "turnId", "turn_id");
-  const sessionId = readStringField(value, "sessionId", "session_id");
-  const threadId = readStringField(value, "threadId", "thread_id");
-  const status = readStringField(value, "status");
-  if (
-    !turnId ||
-    !sessionId ||
-    !threadId ||
-    !isAppServerAgentTurnStatus(status)
-  ) {
-    return null;
-  }
-
-  return omitUndefined({
-    ...(value as Partial<AppServerAgentTurn>),
-    turnId,
-    sessionId,
-    threadId,
-    status,
-    startedAt: readOptionalStringField(value, "startedAt", "started_at"),
-    completedAt: readOptionalStringField(value, "completedAt", "completed_at"),
-  }) as AppServerAgentTurn;
-}
-
-function isAppServerAgentSessionStatus(value: unknown): boolean {
-  return (
-    value === "idle" ||
-    value === "running" ||
-    value === "waitingAction" ||
-    value === "completed" ||
-    value === "failed" ||
-    value === "canceled"
-  );
-}
-
-function isAppServerAgentTurnStatus(value: unknown): boolean {
-  return (
-    value === "accepted" ||
-    value === "queued" ||
-    value === "running" ||
-    value === "waitingAction" ||
-    value === "completed" ||
-    value === "failed" ||
-    value === "canceled"
-  );
-}
-
-function sessionBusinessObjectRef({
-  scopeId,
-  name,
-  executionStrategy,
-  runStartHooks,
-  workingDir,
-  metadata,
-}: {
-  scopeId: string;
-  name: string;
-  executionStrategy?: AgentExecutionStrategy;
-  runStartHooks?: boolean;
-  workingDir?: string | null;
-  metadata?: Record<string, unknown>;
-}): AppServerBusinessObjectRef {
-  const normalizedWorkingDir = normalizeCwd(workingDir ?? undefined);
-  return {
-    kind: "agent.session",
-    id: `agent-session:${scopeId}:${Date.now()}`,
-    title: name,
-    metadata: {
-      ...metadata,
-      title: name,
-      ...(normalizedWorkingDir
-        ? {
-            workingDir: normalizedWorkingDir,
-            working_dir: normalizedWorkingDir,
-          }
-        : {}),
-      executionStrategy,
-      ...(runStartHooks === false ? { runStartHooks: false } : {}),
-    },
-  };
 }
 
 function normalizeCreateSessionScope(
@@ -519,24 +297,215 @@ function normalizeCreateSessionScope(
   };
 }
 
-function appServerSessionListParamsFromOptions(
+function readThreadStartRoute(
+  metadata: Record<string, unknown> | undefined,
+): { model: string; modelProvider: string } | null {
+  const source = metadata ?? {};
+  const modelProvider = readOptionalStringField(source, "providerSelector");
+  const model = readOptionalStringField(source, "modelName");
+  return modelProvider && model ? { model, modelProvider } : null;
+}
+
+async function listCanonicalSessionOverviews(
+  client: AppServerSessionRpcClient,
   options?: AgentRuntimeListSessionsOptions,
-): AppServerAgentSessionListParams {
+): Promise<AppServerAgentSessionOverview[] | null> {
+  const requestedLimit = normalizeListLimit(options?.limit);
+  if (requestedLimit === 0) {
+    return [];
+  }
+
+  const workspaceId = options?.workspaceId?.trim() || undefined;
   const cwd = normalizeCwdFilter(options?.cwd);
-  const workspaceId = options?.workspaceId?.trim();
-  const limit =
-    typeof options?.limit === "number" &&
-    Number.isFinite(options.limit) &&
-    options.limit >= 0
-      ? Math.trunc(options.limit)
-      : undefined;
-  return omitUndefined({
-    includeArchived: options?.includeArchived === true ? true : undefined,
-    archivedOnly: options?.archivedOnly === true ? true : undefined,
-    cwd,
-    workspaceId: cwd ? undefined : workspaceId || undefined,
-    limit,
-  });
+  const sessions: AppServerAgentSessionOverview[] = [];
+  const pageLimit = requestedLimit ?? THREAD_LIST_PAGE_LIMIT;
+
+  for (const archived of archivedFilters(options)) {
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const response = await client.request<AppServerThreadListResponse>(
+        METHOD_THREAD_LIST,
+        appServerThreadListParams({ archived, cursor, cwd, limit: pageLimit }),
+      );
+      const page = readCanonicalThreadListResponse(response.result, {
+        archived,
+      });
+      if (!page) {
+        return null;
+      }
+      sessions.push(
+        ...page.filter(
+          (session) =>
+            matchesWorkspace(session, workspaceId) && matchesCwd(session, cwd),
+        ),
+      );
+
+      const collapsed = collapseCanonicalSessionOverviews(sessions);
+      if (requestedLimit !== undefined && collapsed.length >= requestedLimit) {
+        break;
+      }
+      const nextCursor = response.result.nextCursor?.trim() || undefined;
+      if (!nextCursor || seenCursors.has(nextCursor)) {
+        break;
+      }
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+    } while (cursor);
+  }
+
+  const collapsed = collapseCanonicalSessionOverviews(sessions).sort(
+    (left, right) =>
+      timestampMillis(right.updatedAt) - timestampMillis(left.updatedAt),
+  );
+  return requestedLimit === undefined
+    ? collapsed
+    : collapsed.slice(0, requestedLimit);
+}
+
+async function findCanonicalThreadIdBySessionId(
+  client: AppServerSessionRpcClient,
+  sessionId: string,
+): Promise<string | undefined> {
+  let childFallback: AppServerAgentSessionOverview | undefined;
+  for (const archived of [false, true]) {
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const response = await client.request<AppServerThreadListResponse>(
+        METHOD_THREAD_LIST,
+        appServerThreadListParams({
+          archived,
+          cursor,
+          limit: THREAD_LIST_PAGE_LIMIT,
+        }),
+      );
+      const page = readCanonicalThreadListResponse(response.result, {
+        archived,
+      });
+      if (!page) {
+        throw new Error("thread/list did not return session list");
+      }
+      const exactThread = page.find((thread) => thread.threadId === sessionId);
+      if (exactThread?.threadId) {
+        return exactThread.threadId;
+      }
+      const root = page.find(
+        (thread) => thread.sessionId === sessionId && !thread.parentThreadId,
+      );
+      if (root?.threadId) {
+        return root.threadId;
+      }
+      childFallback ??= page.find((thread) => thread.sessionId === sessionId);
+
+      const nextCursor = response.result.nextCursor?.trim() || undefined;
+      if (!nextCursor || seenCursors.has(nextCursor)) {
+        break;
+      }
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+    } while (cursor);
+  }
+  return childFallback?.threadId;
+}
+
+async function resolveCanonicalThreadId(
+  client: AppServerSessionRpcClient,
+  sessionId: string,
+  method: "thread/archive" | "thread/unarchive",
+): Promise<string> {
+  const normalizedSessionId = sessionId.trim();
+  if (!normalizedSessionId) {
+    throw new Error(`sessionId is required for ${method}`);
+  }
+  const threadId = await findCanonicalThreadIdBySessionId(
+    client,
+    normalizedSessionId,
+  );
+  if (!threadId) {
+    throw new Error(`${method} could not resolve canonical thread`);
+  }
+  return threadId;
+}
+
+function appServerThreadListParams({
+  archived,
+  cursor,
+  cwd,
+  limit,
+}: {
+  archived: boolean;
+  cursor?: string;
+  cwd?: string | string[];
+  limit: number;
+}): AppServerThreadListParams {
+  return omitUndefined({ archived, cursor, cwd, limit });
+}
+
+function archivedFilters(
+  options?: AgentRuntimeListSessionsOptions,
+): readonly boolean[] {
+  if (options?.archivedOnly === true) {
+    return [true];
+  }
+  return options?.includeArchived === true ? [false, true] : [false];
+}
+
+function normalizeListLimit(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : undefined;
+}
+
+function matchesWorkspace(
+  session: AppServerAgentSessionOverview,
+  workspaceId: string | undefined,
+): boolean {
+  return workspaceId === undefined || session.workspaceId === workspaceId;
+}
+
+function matchesCwd(
+  session: AppServerAgentSessionOverview,
+  cwd: string | string[] | undefined,
+): boolean {
+  if (cwd === undefined) {
+    return true;
+  }
+  const accepted = Array.isArray(cwd) ? cwd : [cwd];
+  return Boolean(
+    session.workingDir &&
+    accepted.includes(normalizeCwd(session.workingDir) ?? ""),
+  );
+}
+
+function collapseCanonicalSessionOverviews(
+  sessions: AppServerAgentSessionOverview[],
+): AppServerAgentSessionOverview[] {
+  const bySessionId = new Map<string, AppServerAgentSessionOverview>();
+  for (const session of sessions) {
+    const current = bySessionId.get(session.sessionId);
+    if (!current || preferCanonicalSessionRoot(session, current)) {
+      bySessionId.set(session.sessionId, session);
+    }
+  }
+  return [...bySessionId.values()];
+}
+
+function preferCanonicalSessionRoot(
+  candidate: AppServerAgentSessionOverview,
+  current: AppServerAgentSessionOverview,
+): boolean {
+  const candidateIsRoot = !candidate.parentThreadId;
+  const currentIsRoot = !current.parentThreadId;
+  if (candidateIsRoot !== currentIsRoot) {
+    return candidateIsRoot;
+  }
+  const candidateUpdatedAt = timestampMillis(candidate.updatedAt);
+  const currentUpdatedAt = timestampMillis(current.updatedAt);
+  if (candidateUpdatedAt !== currentUpdatedAt) {
+    return candidateUpdatedAt > currentUpdatedAt;
+  }
+  return (candidate.threadId ?? "") < (current.threadId ?? "");
 }
 
 function normalizeCwdFilter(cwd: string | string[] | undefined) {
@@ -558,25 +527,124 @@ function normalizeCwd(cwd: string | undefined) {
   return trimmed || value;
 }
 
-function appServerSessionReadParamsFromOptions(
-  sessionId: string,
-  options?: AgentRuntimeGetSessionOptions,
-): AppServerAgentSessionReadParams &
-  Pick<
-    AgentRuntimeGetSessionOptions,
-    "historyLimit" | "historyOffset" | "historyBeforeMessageId"
-  > {
-  const normalizedSessionId = sessionId.trim();
-  if (!normalizedSessionId) {
+function appServerThreadReadParams(
+  threadId: string,
+  includeTurns: boolean,
+): AppServerThreadReadParams {
+  const normalizedThreadId = threadId.trim();
+  if (!normalizedThreadId) {
     throw new Error("sessionId is required to read App Server session");
   }
 
-  return omitUndefined({
-    sessionId: normalizedSessionId,
-    historyLimit: nonNegativeInteger(options?.historyLimit),
-    historyOffset: nonNegativeInteger(options?.historyOffset),
-    historyBeforeMessageId: positiveInteger(options?.historyBeforeMessageId),
-  });
+  return {
+    threadId: normalizedThreadId,
+    includeTurns,
+  };
+}
+
+function readCanonicalThreadFromResult(
+  value: unknown,
+): Record<string, unknown> | null {
+  return isRecord(value) && isRecord(value.thread) ? value.thread : null;
+}
+
+async function readPaginatedCanonicalThread(
+  client: AppServerSessionRpcClient,
+  thread: Record<string, unknown>,
+): Promise<{ thread: Record<string, unknown> }> {
+  const threadId =
+    readStringField(thread, "threadId") || readStringField(thread, "id");
+  if (!threadId) {
+    throw new Error("thread/read returned an empty canonical thread id");
+  }
+
+  const turns: Record<string, unknown>[] = [];
+  const turnCursors = new Set<string>();
+  let turnCursor: string | undefined;
+  do {
+    const response = await client.request<ThreadTurnsListResponse>(
+      METHOD_THREAD_TURNS_LIST,
+      omitUndefined({
+        threadId,
+        cursor: turnCursor,
+        limit: THREAD_LIST_PAGE_LIMIT,
+        sortDirection: "asc",
+        itemsView: "summary",
+      }),
+    );
+    if (!isRecord(response.result) || !Array.isArray(response.result.data)) {
+      throw new Error("thread/turns/list did not return turn page");
+    }
+    for (const turn of response.result.data) {
+      if (isRecord(turn)) {
+        turns.push(turn);
+      }
+    }
+    const nextCursor = readNextCursor(response.result);
+    if (!nextCursor || turnCursors.has(nextCursor)) {
+      break;
+    }
+    turnCursors.add(nextCursor);
+    turnCursor = nextCursor;
+  } while (turnCursor);
+
+  const itemsByTurnId = new Map<string, unknown[]>();
+  const itemCursors = new Set<string>();
+  let itemCursor: string | undefined;
+  do {
+    const response = await client.request<ThreadItemsListResponse>(
+      METHOD_THREAD_ITEMS_LIST,
+      omitUndefined({
+        threadId,
+        cursor: itemCursor,
+        limit: THREAD_LIST_PAGE_LIMIT,
+        sortDirection: "asc",
+      }),
+    );
+    if (!isRecord(response.result) || !Array.isArray(response.result.data)) {
+      throw new Error("thread/items/list did not return item page");
+    }
+    for (const entry of response.result.data) {
+      if (!isRecord(entry)) {
+        continue;
+      }
+      const turnId = readStringField(entry, "turnId");
+      const item = entry.item;
+      if (!turnId || !isRecord(item)) {
+        continue;
+      }
+      const items = itemsByTurnId.get(turnId) ?? [];
+      items.push(item);
+      itemsByTurnId.set(turnId, items);
+    }
+    const nextCursor = readNextCursor(response.result);
+    if (!nextCursor || itemCursors.has(nextCursor)) {
+      break;
+    }
+    itemCursors.add(nextCursor);
+    itemCursor = nextCursor;
+  } while (itemCursor);
+
+  return {
+    thread: {
+      ...thread,
+      turns: turns.map((turn) => ({
+        ...turn,
+        items: itemsByTurnId.get(canonicalTurnId(turn)) ?? [],
+      })),
+    },
+  };
+}
+
+function readNextCursor(value: Record<string, unknown>): string | undefined {
+  const cursor = value.nextCursor;
+  return typeof cursor === "string" && cursor.trim()
+    ? cursor.trim()
+    : undefined;
+}
+
+function canonicalTurnId(value: Record<string, unknown>): string {
+  return readStringField(value, "turnId") || readStringField(value, "id");
 }
 
 function appServerSessionUpdateParamsFromRequest(
@@ -590,8 +658,6 @@ function appServerSessionUpdateParamsFromRequest(
   return omitUndefined({
     sessionId,
     title: request.name?.trim() || undefined,
-    archived:
-      typeof request.archived === "boolean" ? request.archived : undefined,
     providerSelector: request.provider_selector?.trim() || undefined,
     providerName: request.provider_name?.trim() || undefined,
     modelName: request.model_name?.trim() || undefined,
@@ -603,19 +669,6 @@ function appServerSessionUpdateParamsFromRequest(
     articleWorkspaceEditedDraft:
       request.article_workspace_edited_draft ?? undefined,
   });
-}
-
-function normalizeSessionIds(sessionIds: string[]): string[] {
-  const seen = new Set<string>();
-  return sessionIds
-    .map((sessionId) => sessionId.trim())
-    .filter((sessionId) => {
-      if (!sessionId || seen.has(sessionId)) {
-        return false;
-      }
-      seen.add(sessionId);
-      return true;
-    });
 }
 
 function appServerSessionOverviewToRuntimeInfo(
@@ -651,210 +704,12 @@ function appServerSessionOverviewToRuntimeInfo(
   });
 }
 
-function appServerSessionReadToRuntimeDetail(
-  response: AppServerAgentSessionReadResponse,
-): AgentSessionDetail {
-  const fallbackTimestamp = response.session.updatedAt;
-  const title =
-    sessionTitleFromBusinessObjectRef(response.session.businessObjectRef) ??
-    response.session.sessionId;
-  return {
-    id: response.session.sessionId,
-    thread_id: response.session.threadId,
-    name: title,
-    created_at: timestampMillis(response.session.createdAt),
-    updated_at: timestampMillis(response.session.updatedAt),
-    workspace_id: response.session.workspaceId,
-    messages: [],
-    turns: response.turns.flatMap((turn) => {
-      const projectedTurn = appServerTurnToRuntimeTurn(
-        turn,
-        fallbackTimestamp,
-      );
-      return projectedTurn ? [projectedTurn] : [];
-    }),
-    items: [],
-    queued_turns: [],
-    thread_read: projectAppServerSessionReadToThreadReadModel(response),
-    todo_items: [],
-  };
-}
-
-function sessionTitleFromBusinessObjectRef(
-  ref: AppServerBusinessObjectRef | undefined,
-): string | undefined {
-  const title = ref?.title?.trim();
-  if (title) {
-    return title;
-  }
-
-  const metadata =
-    ref?.metadata &&
-    typeof ref.metadata === "object" &&
-    !Array.isArray(ref.metadata)
-      ? (ref.metadata as Record<string, unknown>)
-      : null;
-  const metadataTitle =
-    typeof metadata?.title === "string" ? metadata.title.trim() : "";
-  return metadataTitle || undefined;
-}
-
-function appServerTurnToRuntimeTurn(
-  turn: AppServerAgentTurn,
-  fallbackTimestamp: string,
-): AgentThreadTurn | null {
-  const status = agentThreadTurnStatusFromAppServer(turn.status);
-  if (!status) {
-    return null;
-  }
-  const startedAt = turn.startedAt ?? fallbackTimestamp;
-  const updatedAt = turn.completedAt ?? startedAt;
-  return {
-    id: turn.turnId,
-    thread_id: turn.threadId,
-    prompt_text: "",
-    status,
-    started_at: startedAt,
-    completed_at: turn.completedAt,
-    created_at: startedAt,
-    updated_at: updatedAt,
-  };
-}
-
-function agentThreadTurnStatusFromAppServer(
-  status: AppServerAgentTurn["status"],
-): AgentThreadTurnStatus | null {
-  switch (status) {
-    case "completed":
-      return "completed";
-    case "failed":
-      return "failed";
-    case "canceled":
-      return "canceled";
-    case "accepted":
-    case "running":
-    case "waitingAction":
-      return "running";
-    case "queued":
-      return null;
-  }
-}
-
-function readSessionDetail(
-  response: NormalizedAppServerAgentSessionReadResponse,
-): AgentSessionDetail | null {
-  if (!isRecord(response.detail)) {
-    return null;
-  }
-  const detail = response.detail as Partial<AgentSessionDetail>;
-  const fallback = appServerSessionReadToRuntimeDetail(response);
-  const detailExecutionRuntime = isRecord(detail.execution_runtime)
-    ? detail.execution_runtime
-    : isRecord((detail as Record<string, unknown>).executionRuntime)
-      ? ((detail as Record<string, unknown>)
-          .executionRuntime as AgentSessionDetail["execution_runtime"])
-      : detail.execution_runtime === null ||
-          (detail as Record<string, unknown>).executionRuntime === null
-        ? null
-        : undefined;
-  return {
-    ...fallback,
-    ...detail,
-    id: typeof detail.id === "string" ? detail.id : fallback.id,
-    thread_id:
-      typeof detail.thread_id === "string"
-        ? detail.thread_id
-        : fallback.thread_id,
-    name: typeof detail.name === "string" ? detail.name : fallback.name,
-    created_at:
-      typeof detail.created_at === "number" &&
-      Number.isFinite(detail.created_at)
-        ? detail.created_at
-        : fallback.created_at,
-    updated_at:
-      typeof detail.updated_at === "number" &&
-      Number.isFinite(detail.updated_at)
-        ? detail.updated_at
-        : fallback.updated_at,
-    workspace_id:
-      typeof detail.workspace_id === "string"
-        ? detail.workspace_id
-        : fallback.workspace_id,
-    messages: Array.isArray(detail.messages)
-      ? detail.messages
-      : fallback.messages,
-    turns: fallback.turns,
-    items: Array.isArray(detail.items)
-      ? (detail.items.map(
-          (item) => projectCanonicalApprovalItem(item) ?? item,
-        ) as AgentSessionDetail["items"])
-      : fallback.items,
-    queued_turns: Array.isArray(detail.queued_turns)
-      ? detail.queued_turns
-      : fallback.queued_turns,
-    thread_read: mergeThreadReadDetail(
-      detail.thread_read,
-      fallback.thread_read,
-    ),
-    execution_runtime:
-      detailExecutionRuntime === undefined
-        ? fallback.execution_runtime
-        : detailExecutionRuntime,
-    todo_items: Array.isArray(detail.todo_items)
-      ? detail.todo_items
-      : fallback.todo_items,
-  };
-}
-
-function mergeThreadReadDetail(
-  detailThreadRead: unknown,
-  fallbackThreadRead: AgentSessionDetail["thread_read"],
-): AgentSessionDetail["thread_read"] {
-  if (!isRecord(detailThreadRead)) {
-    return fallbackThreadRead;
-  }
-  return {
-    ...fallbackThreadRead,
-    ...detailThreadRead,
-    thread_id:
-      typeof detailThreadRead.thread_id === "string"
-        ? detailThreadRead.thread_id
-        : fallbackThreadRead?.thread_id,
-    status:
-      typeof detailThreadRead.status === "string"
-        ? detailThreadRead.status
-        : fallbackThreadRead?.status,
-    profile_status:
-      typeof detailThreadRead.profile_status === "string"
-        ? detailThreadRead.profile_status
-        : fallbackThreadRead?.profile_status,
-    session_business_object_ref_metadata: Object.prototype.hasOwnProperty.call(
-      detailThreadRead,
-      "session_business_object_ref_metadata",
-    )
-      ? detailThreadRead.session_business_object_ref_metadata
-      : fallbackThreadRead?.session_business_object_ref_metadata,
-  } as AgentSessionDetail["thread_read"];
-}
-
 function timestampMillis(value: string | undefined): number {
   if (!value) {
     return Date.now();
   }
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : Date.now();
-}
-
-function nonNegativeInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? Math.trunc(value)
-    : undefined;
-}
-
-function positiveInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? Math.trunc(value)
-    : undefined;
 }
 
 function executionStrategyFromProtocol(

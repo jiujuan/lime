@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "SortDirection": {
+      "enum": [
+        "asc",
+        "desc"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "cursor": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "limit": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "sortDirection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SortDirection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "threadId"
+  ],
+  "title": "ThreadItemsListParams",
+  "type": "object"
+}

@@ -2,8 +2,8 @@
 
 > status: target architecture
 > owner: runtime-architecture
-> last_verified: 2026-07-12
-> reference: Codex `5c19155c`, OpenCode `9976269a`
+> last_verified: 2026-07-18
+> reference: Codex `2e4f5560`, OpenCode `08fb4737`
 
 ## 一句话
 
@@ -112,13 +112,26 @@ resume -> hydrate canonical history -> new turn
 
 ## 结构清理目标
 
-| 现状 | v2 目标 |
-| --- | --- |
-| `catalog.rs` 2698 行集中所有 method | domain declarations + 生成总 catalog；单文件只保留导出入口 |
-| `runtime.rs` 710 行 | 组装、依赖注入和 re-export；业务落到 runtime 子模块 |
-| `dispatch.rs` 725 行 | method 到 processor 的薄映射；无业务分支 |
-| `AgentChatWorkspace.tsx` 2674 行 | scene composition < 800 行；command/projection/view model 独立 |
-| 多个 content/event mapper | 一个 provider-neutral LLM contract + 一个 materialization owner |
+| 现状                                | v2 目标                                                                                       |
+| ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| `catalog.rs` 2698 行集中所有 method | domain declarations + 生成总 catalog；单文件只保留导出入口                                    |
+| `runtime.rs` 710 行                 | 组装、依赖注入和 re-export；业务落到 runtime 子模块                                           |
+| `dispatch.rs` 725 行                | method 到 processor 的薄映射；无业务分支                                                      |
+| `AgentChatWorkspace.tsx` 13 行      | 公共入口只委托 `useAgentChatWorkspaceRuntime`；scene/command/projection 由 current owner 组合 |
+| 多个 content/event mapper           | 一个 provider-neutral LLM contract + 一个 materialization owner                               |
+
+Workspace GUI 的 current 组合链固定为：
+
+```text
+AgentChatWorkspace
+  -> useAgentChatWorkspaceRuntime
+  -> useAgentChatWorkspaceEntryRuntime
+  -> useAgentChatWorkspaceSetupRuntime
+  -> useAgentChatWorkspaceCommandRuntime
+  -> useAgentChatWorkspaceSceneRuntime
+```
+
+主 runtime 只编排这四个 Hook，不保存第二套 Thread/Turn/Item truth；owner 返回值只在当前 render 内向下游投影，不写回 runtime store。
 
 ## 迁移原则
 

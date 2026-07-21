@@ -1,10 +1,13 @@
 import {
   METHOD_MCP_SERVER_ELICITATION_REQUEST,
   type McpServerElicitationRequestParams,
-  type McpServerElicitationResponse,
+  type McpServerElicitationRequestResponse,
 } from "@limecloud/app-server-client";
 
-import { AppServerServerRequestDispatcher } from "./appServerServerRequest";
+import {
+  getDefaultAppServerServerRequestDispatcher,
+  type AppServerServerRequestDispatcher,
+} from "./appServerServerRequest";
 
 type ElicitationDispatcher = Pick<AppServerServerRequestDispatcher, "register">;
 
@@ -47,7 +50,7 @@ export interface McpElicitationFormIssue {
 interface PendingResolver {
   cleanup: () => void;
   request: PendingMcpServerElicitation;
-  resolve: (response: McpServerElicitationResponse) => void;
+  resolve: (response: McpServerElicitationRequestResponse) => void;
 }
 
 export class McpServerElicitationController {
@@ -59,7 +62,7 @@ export class McpServerElicitationController {
   #unregister: (() => void) | null = null;
 
   constructor(
-    dispatcher: ElicitationDispatcher = new AppServerServerRequestDispatcher(),
+    dispatcher: ElicitationDispatcher = getDefaultAppServerServerRequestDispatcher(),
   ) {
     this.#dispatcher = dispatcher;
   }
@@ -77,7 +80,7 @@ export class McpServerElicitationController {
     }
     this.#unregister = this.#dispatcher.register<
       ScopedMcpServerElicitationRequestParams,
-      McpServerElicitationResponse
+      McpServerElicitationRequestResponse
     >(METHOD_MCP_SERVER_ELICITATION_REQUEST, (params, _request, signal) =>
       this.#waitForResponse(params, signal),
     );
@@ -127,7 +130,7 @@ export class McpServerElicitationController {
   #waitForResponse(
     input: ScopedMcpServerElicitationRequestParams,
     signal: AbortSignal,
-  ): Promise<McpServerElicitationResponse> {
+  ): Promise<McpServerElicitationRequestResponse> {
     const params = normalizeScopedRequest(input);
     return new Promise((resolve) => {
       const key = `mcp-server-elicitation:${this.#nextKey}`;
@@ -153,7 +156,7 @@ export class McpServerElicitationController {
     });
   }
 
-  #settle(key: string, response: McpServerElicitationResponse): boolean {
+  #settle(key: string, response: McpServerElicitationRequestResponse): boolean {
     const pending = this.#pending.get(key);
     if (!pending) {
       return false;

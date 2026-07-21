@@ -3,7 +3,6 @@ import {
   SESSION_ID,
   WEB_TOOLS_FETCH_TOOL_CALL_ID,
   WEB_TOOLS_MID_THINKING_TEXT,
-  WEB_TOOLS_REASONING_FINAL_SIGNATURE,
   WEB_TOOLS_REASONING_ITEM_ID,
   WEB_TOOLS_REASONING_ITEM_SIGNATURE,
   WEB_TOOLS_REASONING_NATIVE_ITEM_ID,
@@ -66,15 +65,10 @@ function summarizeWebToolsReadModel(readModel) {
     includesAssistantSummary: serialized.includes("网页搜索渲染结论"),
     includesWebSearchTool: serialized.includes(WEB_TOOLS_SEARCH_TOOL_CALL_ID),
     includesWebFetchTool: serialized.includes(WEB_TOOLS_FETCH_TOOL_CALL_ID),
-    includesReasoningFinal: serialized.includes(
-      WEB_TOOLS_REASONING_FINAL_SIGNATURE,
-    ),
-    includesReasoningFinalProviderMetadata:
-      serialized.includes(WEB_TOOLS_REASONING_FINAL_SIGNATURE) &&
-      serialized.includes(WEB_TOOLS_REASONING_PROVIDER_BACKEND),
     includesReasoningItem: serialized.includes(WEB_TOOLS_REASONING_ITEM_ID),
     includesReasoningItemProviderMetadata:
       serialized.includes(WEB_TOOLS_REASONING_ITEM_SIGNATURE) &&
+      serialized.includes(WEB_TOOLS_REASONING_PROVIDER_BACKEND) &&
       serialized.includes(WEB_TOOLS_REASONING_NATIVE_ITEM_ID),
   };
 }
@@ -97,9 +91,7 @@ async function probeWebToolsFailureReadModel(page, options, appServerRequests) {
     detailItemCount: Array.isArray(detailItems) ? detailItems.length : null,
     detailItems: summarizeThreadItemsForProbe(detailItems),
     includesMidThinking: serializedProbe.includes(WEB_TOOLS_MID_THINKING_TEXT),
-    includesIntroText: serializedProbe.includes(
-      "我先联网核实目标页面来源。",
-    ),
+    includesIntroText: serializedProbe.includes("我先联网核实目标页面来源。"),
     includesWebSearchTool: serializedProbe.includes(
       WEB_TOOLS_SEARCH_TOOL_CALL_ID,
     ),
@@ -158,12 +150,16 @@ export async function runWebToolsRenderingScenario({
   }
 
   logStage("wait-read-model-web-tools-rendering-completed");
-  const readModelWebToolsRenderingCompleted =
-    await waitForSessionReadCompleted(page, options, appServerRequests, {
+  const readModelWebToolsRenderingCompleted = await waitForSessionReadCompleted(
+    page,
+    options,
+    appServerRequests,
+    {
       prompt: WEB_TOOLS_RENDERING_PROMPT,
       doneText: WEB_TOOLS_RENDERING_DONE_TEXT,
       summaryText: "网页搜索渲染结论",
-    });
+    },
+  );
   result.readModelWebToolsRenderingCompleted = sanitizeJson(
     summarizeWebToolsReadModel(readModelWebToolsRenderingCompleted),
   );

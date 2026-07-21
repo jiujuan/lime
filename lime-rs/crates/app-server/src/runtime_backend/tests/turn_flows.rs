@@ -1,4 +1,29 @@
 use super::*;
+use crate::RuntimeCore;
+use std::sync::Arc;
+
+fn image_command_request(workspace: &TempDir) -> ExecutionRequest {
+    request_for_test(
+        "画一张广州夏天的图",
+        None,
+        Some(json!({
+            "harness": {
+                "projectRoot": workspace.path().to_string_lossy(),
+                "image_command_intent": {
+                    "kind": "image_command",
+                    "image_task": {
+                        "prompt": "画一张广州夏天的图",
+                        "mode": "generate",
+                        "count": 1,
+                        "provider_id": "openai",
+                        "model": "gpt-image-2",
+                        "executor_mode": "images_api"
+                    }
+                }
+            }
+        })),
+    )
+}
 
 #[tokio::test]
 async fn cancel_turn_cancels_runtime_stream_token() {
@@ -31,26 +56,7 @@ async fn cancel_turn_cancels_runtime_stream_token() {
 async fn runtime_backend_image_command_short_circuits_before_chat_model_routing() {
     let backend = RuntimeBackend::new();
     let workspace = TempDir::new().expect("workspace");
-    let request = request_for_test(
-        "画一张广州夏天的图",
-        None,
-        Some(json!({
-            "harness": {
-                "projectRoot": workspace.path().to_string_lossy(),
-                "image_command_intent": {
-                    "kind": "image_command",
-                    "image_task": {
-                        "prompt": "画一张广州夏天的图",
-                        "mode": "generate",
-                        "count": 1,
-                        "provider_id": "openai",
-                        "model": "gpt-image-2",
-                        "executor_mode": "images_api"
-                    }
-                }
-            }
-        })),
-    );
+    let request = image_command_request(&workspace);
     let mut sink = TestRuntimeEventSink::default();
 
     backend
@@ -125,8 +131,65 @@ async fn runtime_backend_image_command_short_circuits_before_chat_model_routing(
 }
 
 #[tokio::test]
-async fn respond_action_without_pending_waiter_fails_closed() {
-    let backend = RuntimeBackend::new();
+async fn runtime_core_image_command_bypasses_chat_route_preflight() {
+    let workspace = TempDir::new().expect("workspace");
+    let request = image_command_request(&workspace);
+    let core = RuntimeCore::with_backend(Arc::new(RuntimeBackend::new()));
+    let session = core
+        .start_session(app_server_protocol::AgentSessionStartParams {
+            session_id: Some(request.session.session_id.clone()),
+            thread_id: Some(request.session.thread_id.clone()),
+            app_id: request.session.app_id.clone(),
+            workspace_id: request.session.workspace_id.clone(),
+            business_object_ref: request.session.business_object_ref.clone(),
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            app_server_protocol::AgentSessionTurnStartParams {
+                session_id: session.session_id,
+                turn_id: Some(request.turn.turn_id),
+                input: AgentInput {
+                    text: request.input.concat_text(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: request.runtime_options,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("image command should bypass RuntimeCore chat route preflight");
+
+    assert_eq!(output.response.turn.status, AgentTurnStatus::Completed);
+    assert_eq!(
+        output
+            .events
+            .iter()
+            .find(|event| event.event_type == "image_task.create_failed")
+            .and_then(|event| event.payload["reasonCode"].as_str()),
+        Some("app_data_source_unavailable")
+    );
+    assert!(output
+        .events
+        .iter()
+        .all(|event| event.event_type != "routing.decision.made"));
+}
+
+#[tokio::test]
+async fn respond_action_without_pending_descriptor_fails_closed() {
+    let db: lime_core::database::DbConnection = std::sync::Arc::new(std::sync::Mutex::new(
+        rusqlite::Connection::open_in_memory().expect("db"),
+    ));
+    {
+        let conn = db.lock().expect("db lock");
+        lime_core::database::schema::create_tables(&conn).expect("schema");
+    }
+    let backend = RuntimeBackend::with_db(db);
     let request = request_for_test("hello", None, None);
     let mut sink = TestRuntimeEventSink::default();
 
@@ -173,8 +236,6 @@ async fn runtime_backend_registers_current_gateway_tools_in_agent_registry() {
         let conn = db.lock().expect("db lock");
         lime_core::database::schema::create_tables(&conn).expect("schema");
     }
-    lime_agent::initialize_agent_runtime(db.clone()).expect("runtime dirs");
-
     let backend = RuntimeBackend::with_db(db.clone());
     ExecutionBackend::set_app_data_source(&backend, std::sync::Arc::new(NoopAppDataSource))
         .expect("app data source should be accepted");

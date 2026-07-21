@@ -92,28 +92,14 @@ export function buildInputbarModeRequestMetadata(
   base: Record<string, unknown> | undefined,
   state: InputbarModeState,
 ): Record<string, unknown> | undefined {
-  const planEnabled = Boolean(state.planEnabled);
   const goalEnabled = Boolean(state.goalEnabled);
-  if (!planEnabled && !goalEnabled) {
+  if (!goalEnabled) {
     return base;
   }
 
   const source = state.source?.trim() || "inputbar";
   const threadId = state.threadId?.trim() || null;
   const { root, harness, preferences } = mergeHarness(base);
-
-  if (planEnabled) {
-    preferences.task = true;
-    preferences.task_mode = true;
-    harness.task_mode_enabled = true;
-    harness.collaboration_mode = {
-      ...(isPlainRecord(harness.collaboration_mode)
-        ? (harness.collaboration_mode as Record<string, unknown>)
-        : {}),
-      mode: "plan",
-      source,
-    };
-  }
 
   if (goalEnabled) {
     const objectiveText = state.objectiveText?.trim();

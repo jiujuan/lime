@@ -1,19 +1,33 @@
-use rusqlite::{Connection, DatabaseName};
+#[cfg(test)]
+use rusqlite::Connection;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(test)]
+use crate::database_path_migration::sqlite_sidecar_path;
+use crate::database_path_migration::{
+    database_snapshot, inspect_database_signal, inspect_migration_source_database_signal,
+    migrate_legacy_database, DatabaseSignal,
+};
+#[cfg(test)]
+use crate::migration_manifest::MIGRATION_MANIFEST_FILE_NAME;
+use crate::migration_manifest::{
+    completed_manifest_exists, now_timestamp, write_completed_manifest, DatabaseMigrationMode,
+    DatabaseMigrationRecord,
+};
 use crate::product_db_migration_cleanup::remove_database_with_sidecars;
 
 const APP_DATA_DIR_NAME: &str = "lime";
+#[cfg(target_os = "windows")]
+const WINDOWS_COMPANY_DIR_NAME: &str = "LimeCloud";
 const LEGACY_APP_DATA_DIR_NAME: &str = "proxycast";
 const LEGACY_HOME_DIR_NAME: &str = ".proxycast";
-const COMPAT_HOME_DIR_NAME: &str = ".lime";
+const USER_HOME_DIR_NAME: &str = ".lime";
 const APP_SERVER_DATA_DIR_NAME: &str = "app-server";
 const AGENT_RUNTIME_OVERRIDE_ENV: &str = "LIME_AGENT_RUNTIME_ROOT";
 const DATABASE_FILE_NAME: &str = "lime.db";
 const LEGACY_DATABASE_FILE_NAME: &str = "proxycast.db";
-const MIGRATION_MARKER_FILE: &str = ".migration_completed";
+const LEGACY_PRODUCT_DATABASE_FILE_NAME: &str = "app.db";
 const USER_MEMORY_FILE_NAME: &str = "AGENTS.md";
 const CODEX_HOME_ENV: &str = "CODEX_HOME";
 const CODEX_HOME_DIR_NAME: &str = ".codex";
@@ -23,20 +37,6 @@ const WORKSPACE_LOCAL_RUNTIME_AGENTS_FILE_NAME: &str = "AGENTS.local.md";
 const SKILL_PROVIDER_DIRS: &[&str] = &[
     ".agents", ".warp", ".claude", ".codex", ".cursor", ".gemini", ".copilot", ".factory",
     ".github",
-];
-const USER_SIGNAL_TABLES: &[&str] = &[
-    "contents",
-    "agent_sessions",
-    "general_chat_sessions",
-    "materials",
-    "provider_ui_state",
-    "providers",
-    "api_keys",
-    "heartbeat_executions",
-];
-const USER_SIGNAL_QUERIES: &[&str] = &[
-    "SELECT COUNT(*) FROM api_key_providers WHERE COALESCE(is_system, 0) = 0",
-    "SELECT COUNT(*) FROM settings WHERE key NOT LIKE 'migrated_%' AND key NOT LIKE 'migration_%' AND key NOT LIKE 'cleaned_%'",
 ];
 pub const WORKSPACE_LOCAL_RUNTIME_AGENTS_GITIGNORE_ENTRY: &str = ".lime/AGENTS.local.md";
 
@@ -62,18 +62,52 @@ fn legacy_app_data_dir() -> Result<PathBuf, String> {
     Ok(roaming_data_parent_dir()?.join(LEGACY_APP_DATA_DIR_NAME))
 }
 
-fn compat_home_dir() -> Result<PathBuf, String> {
+pub fn user_home_dir() -> Result<PathBuf, String> {
     Ok(dirs::home_dir()
         .ok_or_else(|| "无法获取主目录".to_string())?
-        .join(COMPAT_HOME_DIR_NAME))
+        .join(USER_HOME_DIR_NAME))
+}
+
+pub fn preferred_agent_root() -> Result<PathBuf, String> {
+    let app_data_root = preferred_data_parent_dir()?.join(APP_DATA_DIR_NAME);
+    Ok(resolve_agent_root_from_app_data_root(
+        &app_data_root,
+        resolve_agent_dir_override(),
+    ))
+}
+
+fn platform_default_agent_root() -> Result<PathBuf, String> {
+    let app_data_root = preferred_data_parent_dir()?.join(APP_DATA_DIR_NAME);
+    Ok(resolve_agent_root_from_app_data_root(&app_data_root, None))
 }
 
 pub fn preferred_database_path() -> Result<PathBuf, String> {
-    Ok(preferred_data_dir()?.join(DATABASE_FILE_NAME))
+    Ok(preferred_agent_root()?.join(DATABASE_FILE_NAME))
 }
 
 pub fn legacy_database_path() -> Result<PathBuf, String> {
     Ok(legacy_home_dir()?.join(LEGACY_DATABASE_FILE_NAME))
+}
+
+/// 返回同一 Lime 产品边界内可用于模型控制面迁移的旧数据库候选。
+///
+/// 候选只负责定位；调用方仍需排除 current target，并按模型控制面信号选择 source。
+/// 显式/E2E AgentRoot 只检查自身及 parent，不会扫描 ambient 用户目录。
+pub fn model_control_migration_source_paths(data_root: &Path) -> Vec<PathBuf> {
+    let mut roots = explicit_data_dir_migration_source_roots(data_root);
+    push_unique_root(&mut roots, data_root.to_path_buf());
+
+    let mut candidates = Vec::new();
+    for root in roots {
+        for file_name in [
+            DATABASE_FILE_NAME,
+            LEGACY_DATABASE_FILE_NAME,
+            LEGACY_PRODUCT_DATABASE_FILE_NAME,
+        ] {
+            push_unique_root(&mut candidates, root.join(file_name));
+        }
+    }
+    candidates
 }
 
 pub fn resolve_database_path() -> Result<PathBuf, String> {
@@ -86,7 +120,9 @@ pub fn resolve_database_path_for_data_dir(data_dir: impl AsRef<Path>) -> Result<
 }
 
 pub fn resolve_database_path_with_migration() -> Result<DatabasePathResolution, String> {
-    with_app_roots(resolve_database_path_from_source_roots)
+    let preferred_root = preferred_agent_root()?;
+    let legacy_roots = database_migration_source_roots()?;
+    resolve_database_path_from_source_roots(&preferred_root, &legacy_roots)
 }
 
 pub fn resolve_database_path_for_data_dir_with_migration(
@@ -100,10 +136,6 @@ pub fn resolve_database_path_for_data_dir_with_migration(
     resolve_database_path_from_source_roots(data_dir, &legacy_roots)
 }
 
-pub fn resolve_logs_dir() -> Result<PathBuf, String> {
-    resolve_runtime_subdir("logs")
-}
-
 pub fn resolve_request_logs_dir() -> Result<PathBuf, String> {
     resolve_runtime_subdir("request_logs")
 }
@@ -112,21 +144,8 @@ pub fn resolve_projects_dir() -> Result<PathBuf, String> {
     resolve_runtime_subdir("projects")
 }
 
-pub fn resolve_sessions_dir() -> Result<PathBuf, String> {
-    resolve_runtime_subdir("sessions")
-}
-
 pub fn resolve_skills_dir() -> Result<PathBuf, String> {
     resolve_home_skills_dir()
-}
-
-pub fn resolve_agent_dir() -> Result<PathBuf, String> {
-    if let Some(root) = resolve_agent_dir_override() {
-        fs::create_dir_all(&root)
-            .map_err(|error| format!("无法创建 Agent 运行时目录 {}: {error}", root.display()))?;
-        return Ok(root);
-    }
-    resolve_runtime_subdir("agent")
 }
 
 pub fn resolve_project_skills_dir() -> Option<PathBuf> {
@@ -187,7 +206,7 @@ pub fn resolve_workspace_local_runtime_agents_path(working_dir: &Path) -> PathBu
 }
 
 pub fn resolve_user_memory_path() -> Result<PathBuf, String> {
-    let preferred_root = compat_home_dir()?;
+    let preferred_root = user_home_dir()?;
     let mut legacy_roots = Vec::new();
 
     #[cfg(target_os = "windows")]
@@ -234,7 +253,6 @@ pub fn migrate_legacy_install_data() -> Result<(), String> {
     let _ = resolve_database_path()?;
 
     for (label, action) in [
-        ("logs", resolve_logs_dir as fn() -> Result<PathBuf, String>),
         (
             "request_logs",
             resolve_request_logs_dir as fn() -> Result<PathBuf, String>,
@@ -242,10 +260,6 @@ pub fn migrate_legacy_install_data() -> Result<(), String> {
         (
             "projects",
             resolve_projects_dir as fn() -> Result<PathBuf, String>,
-        ),
-        (
-            "sessions",
-            resolve_sessions_dir as fn() -> Result<PathBuf, String>,
         ),
         (
             "skills",
@@ -268,7 +282,7 @@ fn preferred_data_parent_dir() -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     {
         return dirs::data_local_dir()
-            .or_else(dirs::data_dir)
+            .map(|root| root.join(WINDOWS_COMPANY_DIR_NAME))
             .ok_or_else(|| "无法获取本地应用数据目录".to_string());
     }
 
@@ -287,6 +301,13 @@ fn legacy_windows_roaming_app_data_dir() -> Result<PathBuf, String> {
     Ok(roaming_data_parent_dir()?.join(APP_DATA_DIR_NAME))
 }
 
+#[cfg(target_os = "windows")]
+fn windows_squirrel_install_root() -> Result<PathBuf, String> {
+    Ok(dirs::data_local_dir()
+        .ok_or_else(|| "无法获取本地应用数据目录".to_string())?
+        .join(APP_DATA_DIR_NAME))
+}
+
 fn with_app_roots<T>(
     resolver: impl FnOnce(&Path, &[PathBuf]) -> Result<T, String>,
 ) -> Result<T, String> {
@@ -302,7 +323,7 @@ fn resolve_runtime_subdir(subdir: &str) -> Result<PathBuf, String> {
 }
 
 fn resolve_home_skills_dir() -> Result<PathBuf, String> {
-    let preferred_root = compat_home_dir()?;
+    let preferred_root = user_home_dir()?;
     let mut legacy_roots = Vec::new();
 
     #[cfg(target_os = "windows")]
@@ -335,10 +356,17 @@ fn resolve_agent_dir_override() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+fn resolve_agent_root_from_app_data_root(
+    app_data_root: &Path,
+    override_root: Option<PathBuf>,
+) -> PathBuf {
+    override_root.unwrap_or_else(|| app_data_root.join(APP_SERVER_DATA_DIR_NAME))
+}
+
 fn fallback_user_memory_path() -> PathBuf {
     dirs::home_dir()
-        .map(|home| home.join(COMPAT_HOME_DIR_NAME))
-        .unwrap_or_else(|| fallback_app_data_dir().join(COMPAT_HOME_DIR_NAME))
+        .map(|home| home.join(USER_HOME_DIR_NAME))
+        .unwrap_or_else(|| fallback_app_data_dir().join(USER_HOME_DIR_NAME))
         .join(USER_MEMORY_FILE_NAME)
 }
 
@@ -368,17 +396,76 @@ fn fallback_app_data_dir() -> PathBuf {
 fn migration_source_roots() -> Result<Vec<PathBuf>, String> {
     let mut roots = Vec::new();
 
+    push_unique_root(&mut roots, preferred_data_dir()?);
+
     #[cfg(target_os = "windows")]
     push_unique_root(&mut roots, legacy_windows_roaming_app_data_dir()?);
 
     push_unique_root(&mut roots, legacy_app_data_dir()?);
     push_unique_root(&mut roots, legacy_home_dir()?);
-    push_unique_root(&mut roots, compat_home_dir()?);
+    push_unique_root(&mut roots, user_home_dir()?);
 
     Ok(roots)
 }
 
+fn database_migration_source_roots() -> Result<Vec<PathBuf>, String> {
+    let recursive_roots = migration_source_roots()?;
+    #[cfg(target_os = "windows")]
+    let exact_only_roots = vec![windows_squirrel_install_root()?];
+    #[cfg(not(target_os = "windows"))]
+    let exact_only_roots = Vec::new();
+
+    Ok(expand_database_migration_source_roots(
+        recursive_roots,
+        &exact_only_roots,
+    ))
+}
+
+fn expand_database_migration_source_roots(
+    recursive_roots: Vec<PathBuf>,
+    exact_only_roots: &[PathBuf],
+) -> Vec<PathBuf> {
+    let mut roots = recursive_roots;
+    for root in exact_only_roots {
+        push_unique_root(&mut roots, root.clone());
+    }
+    for root in roots.clone() {
+        push_unique_root(&mut roots, root.join(APP_SERVER_DATA_DIR_NAME));
+    }
+    roots
+}
+
 fn explicit_data_dir_migration_source_roots(data_dir: &Path) -> Vec<PathBuf> {
+    let platform_default_root = platform_default_agent_root().ok();
+    let is_platform_default_root = platform_default_root
+        .as_deref()
+        .is_some_and(|default_root| default_root == data_dir);
+    let mut platform_migration_roots = Vec::new();
+
+    if is_platform_default_root {
+        if let Ok(preferred_root) = preferred_data_dir() {
+            push_unique_root(&mut platform_migration_roots, preferred_root);
+        }
+
+        if let Ok(source_roots) = database_migration_source_roots() {
+            for root in source_roots {
+                push_unique_root(&mut platform_migration_roots, root);
+            }
+        }
+    }
+
+    explicit_data_dir_migration_source_roots_from_roots(
+        data_dir,
+        platform_default_root.as_deref(),
+        &platform_migration_roots,
+    )
+}
+
+fn explicit_data_dir_migration_source_roots_from_roots(
+    data_dir: &Path,
+    platform_default_root: Option<&Path>,
+    platform_migration_roots: &[PathBuf],
+) -> Vec<PathBuf> {
     let mut roots = Vec::new();
 
     if data_dir
@@ -391,13 +478,9 @@ fn explicit_data_dir_migration_source_roots(data_dir: &Path) -> Vec<PathBuf> {
         }
     }
 
-    if let Ok(preferred_root) = preferred_data_dir() {
-        push_unique_root_if_different(&mut roots, preferred_root, data_dir);
-    }
-
-    if let Ok(source_roots) = migration_source_roots() {
-        for root in source_roots {
-            push_unique_root_if_different(&mut roots, root, data_dir);
+    if platform_default_root.is_some_and(|default_root| default_root == data_dir) {
+        for root in platform_migration_roots {
+            push_unique_root_if_different(&mut roots, root.clone(), data_dir);
         }
     }
 
@@ -414,12 +497,15 @@ fn resolve_database_path_from_explicit_data_dir_parent(
     {
         return Ok(None);
     }
+    if completed_manifest_exists(data_dir)? {
+        return Ok(None);
+    }
 
     let Some(parent) = data_dir.parent() else {
         return Ok(None);
     };
     let legacy_path = parent.join(DATABASE_FILE_NAME);
-    let legacy_signal = inspect_database_signal(&legacy_path);
+    let legacy_signal = inspect_migration_source_database_signal(&legacy_path)?;
     let preferred_path = data_dir.join(DATABASE_FILE_NAME);
     let preferred_signal = inspect_database_signal(&preferred_path);
     if !should_replace_preferred_with_legacy(
@@ -431,12 +517,7 @@ fn resolve_database_path_from_explicit_data_dir_parent(
         return Ok(None);
     }
 
-    let marker_path = data_dir.join(MIGRATION_MARKER_FILE);
-    let result = migrate_database_to_preferred(&legacy_path, &preferred_path)?;
-    if result.database_path == preferred_path {
-        write_migration_marker(&marker_path);
-    }
-    Ok(Some(result))
+    migrate_database_to_preferred(&legacy_path, &preferred_path, data_dir).map(Some)
 }
 
 fn push_unique_root(roots: &mut Vec<PathBuf>, root: PathBuf) {
@@ -472,18 +553,6 @@ fn resolve_default_project_dir_from_roots(
     legacy_root: &Path,
 ) -> Result<PathBuf, String> {
     resolve_default_project_dir_from_source_roots(preferred_root, &[legacy_root.to_path_buf()])
-}
-
-#[cfg(test)]
-fn resolve_agent_dir_from_roots(
-    preferred_root: &Path,
-    legacy_root: &Path,
-) -> Result<PathBuf, String> {
-    resolve_subdir_with_legacy_copy_from_source_roots(
-        preferred_root,
-        &[legacy_root.to_path_buf()],
-        "agent",
-    )
 }
 
 fn resolve_user_memory_path_from_source_roots(
@@ -537,45 +606,55 @@ fn resolve_database_path_from_source_roots(
         .map_err(|e| format!("无法创建数据库目录 {}: {e}", preferred_root.display()))?;
 
     let preferred_path = preferred_root.join(DATABASE_FILE_NAME);
-    let marker_path = preferred_root.join(MIGRATION_MARKER_FILE);
+    if completed_manifest_exists(preferred_root)? {
+        return Ok(DatabasePathResolution {
+            database_path: preferred_path,
+            migrated_from: None,
+        });
+    }
     let preferred_signal = inspect_database_signal(&preferred_path);
-    let legacy_path = select_best_legacy_database_candidate(preferred_root, legacy_roots);
+    let legacy_path = select_best_legacy_database_candidate(preferred_root, legacy_roots)?;
 
     if let Some(legacy_path) = legacy_path.as_ref() {
-        let legacy_signal = inspect_database_signal(legacy_path);
-        let should_migrate = if marker_path.exists() {
-            should_replace_preferred_with_legacy(
-                preferred_path.as_path(),
-                preferred_signal.as_ref(),
-                legacy_path.as_path(),
-                legacy_signal.as_ref(),
-            )
-        } else if !preferred_path.exists() {
-            true
-        } else {
-            should_replace_preferred_with_legacy(
-                preferred_path.as_path(),
-                preferred_signal.as_ref(),
-                legacy_path.as_path(),
-                legacy_signal.as_ref(),
-            )
-        };
+        let legacy_signal = inspect_migration_source_database_signal(legacy_path)?;
+        let should_migrate = should_replace_preferred_with_legacy(
+            preferred_path.as_path(),
+            preferred_signal.as_ref(),
+            legacy_path.as_path(),
+            legacy_signal.as_ref(),
+        );
 
         if should_migrate {
-            let result = migrate_database_to_preferred(legacy_path, &preferred_path);
-            if result
-                .as_ref()
-                .map(|resolution| resolution.database_path == preferred_path)
-                .unwrap_or(false)
-            {
-                write_migration_marker(&marker_path);
-            }
-            return result;
+            return migrate_database_to_preferred(legacy_path, &preferred_path, preferred_root);
         }
+
+        write_database_migration_manifest(
+            preferred_root,
+            DatabaseMigrationMode::AdoptedExisting,
+            Some(legacy_path),
+            legacy_signal.as_ref(),
+            &preferred_path,
+            preferred_signal.as_ref(),
+        )?;
+        return Ok(DatabasePathResolution {
+            database_path: preferred_path,
+            migrated_from: None,
+        });
     }
 
-    // 无可迁移旧库 → 新安装或已迁移完成
-    write_migration_marker(&marker_path);
+    let mode = if preferred_path.exists() {
+        DatabaseMigrationMode::AdoptedExisting
+    } else {
+        DatabaseMigrationMode::FreshInstall
+    };
+    write_database_migration_manifest(
+        preferred_root,
+        mode,
+        None,
+        None,
+        &preferred_path,
+        preferred_signal.as_ref(),
+    )?;
     Ok(DatabasePathResolution {
         database_path: preferred_path,
         migrated_from: None,
@@ -591,29 +670,40 @@ fn resolve_database_path_from_roots(
         .map(|resolution| resolution.database_path)
 }
 
-fn write_migration_marker(marker_path: &Path) {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs().to_string())
-        .unwrap_or_default();
-    if let Err(e) = fs::write(marker_path, timestamp) {
-        tracing::warn!(
-            "[路径迁移] 写入迁移标记失败 {}（下次启动会重新检测）: {e}",
-            marker_path.display()
-        );
-    }
-}
-
 fn migrate_database_to_preferred(
     legacy_path: &Path,
     preferred_path: &Path,
+    preferred_root: &Path,
 ) -> Result<DatabasePathResolution, String> {
-    migrate_legacy_database(legacy_path, preferred_path).map_err(|error| {
+    let outcome = migrate_legacy_database(legacy_path, preferred_path).map_err(|error| {
         format!(
             "数据库迁移失败，拒绝回退旧路径 {}: {error}",
             legacy_path.display()
         )
     })?;
+    let record = DatabaseMigrationRecord {
+        mode: DatabaseMigrationMode::Copied,
+        source_path: Some(legacy_path.to_path_buf()),
+        source: Some(outcome.source),
+        target_path: preferred_path.to_path_buf(),
+        target: outcome.target,
+        started_at: outcome.started_at,
+        verified_at: outcome.verified_at,
+        cutover_at: outcome.cutover_at,
+    };
+    if let Err(manifest_error) = write_completed_manifest(preferred_root, record) {
+        let rollback = remove_database_with_sidecars(preferred_path);
+        return match rollback {
+            Ok(_) => Err(format!(
+                "数据库迁移 manifest 写入失败，已回滚本次目标 {}: {manifest_error}",
+                preferred_path.display()
+            )),
+            Err(rollback_error) => Err(format!(
+                "数据库迁移 manifest 写入失败且目标回滚失败 {}: manifest={manifest_error}; rollback={rollback_error}",
+                preferred_path.display()
+            )),
+        };
+    }
     tracing::info!(
         "[路径迁移] 数据库已从旧路径迁移到 {}",
         preferred_path.display()
@@ -622,6 +712,33 @@ fn migrate_database_to_preferred(
         database_path: preferred_path.to_path_buf(),
         migrated_from: Some(legacy_path.to_path_buf()),
     })
+}
+
+fn write_database_migration_manifest(
+    preferred_root: &Path,
+    mode: DatabaseMigrationMode,
+    source_path: Option<&Path>,
+    source_signal: Option<&DatabaseSignal>,
+    target_path: &Path,
+    target_signal: Option<&DatabaseSignal>,
+) -> Result<(), String> {
+    let timestamp = now_timestamp();
+    write_completed_manifest(
+        preferred_root,
+        DatabaseMigrationRecord {
+            mode,
+            source_path: source_path.map(Path::to_path_buf),
+            source: match source_path {
+                Some(path) => Some(database_snapshot(path, source_signal)?),
+                None => None,
+            },
+            target_path: target_path.to_path_buf(),
+            target: database_snapshot(target_path, target_signal)?,
+            started_at: timestamp.clone(),
+            verified_at: timestamp.clone(),
+            cutover_at: timestamp,
+        },
+    )
 }
 
 fn resolve_subdir_with_legacy_copy_from_source_roots(
@@ -633,12 +750,14 @@ fn resolve_subdir_with_legacy_copy_from_source_roots(
     fs::create_dir_all(&preferred_dir)
         .map_err(|e| format!("无法创建目录 {}: {e}", preferred_dir.display()))?;
 
-    let marker_path = preferred_root.join(MIGRATION_MARKER_FILE);
-    if marker_path.exists() && dir_has_entries(&preferred_dir) {
+    if completed_manifest_exists(preferred_root)? && dir_has_entries(&preferred_dir) {
         return Ok(preferred_dir);
     }
 
     for legacy_root in legacy_roots {
+        if legacy_root == preferred_root {
+            continue;
+        }
         let legacy_dir = legacy_root.join(subdir);
         if legacy_dir.exists() {
             copy_dir_contents_if_missing(&legacy_dir, &preferred_dir)?;
@@ -717,7 +836,8 @@ fn dir_has_entries(path: &Path) -> bool {
 fn select_best_legacy_database_candidate(
     preferred_root: &Path,
     legacy_roots: &[PathBuf],
-) -> Option<PathBuf> {
+) -> Result<Option<PathBuf>, String> {
+    let preferred_path = preferred_root.join(DATABASE_FILE_NAME);
     let mut candidates = vec![preferred_root.join(LEGACY_DATABASE_FILE_NAME)];
 
     for legacy_root in legacy_roots {
@@ -739,10 +859,13 @@ fn select_best_legacy_database_candidate(
 
     let mut best: Option<(usize, DatabaseSignal, PathBuf)> = None;
     for (priority, candidate) in deduped.into_iter().enumerate() {
-        let Some(signal) = inspect_database_signal(&candidate) else {
+        if candidate == preferred_path {
+            continue;
+        }
+        let Some(signal) = inspect_migration_source_database_signal(&candidate)? else {
             continue;
         };
-        if !signal.has_schema && signal.user_signal == 0 {
+        if !signal.has_schema() && signal.user_signal == 0 {
             continue;
         }
 
@@ -751,10 +874,10 @@ fn select_best_legacy_database_candidate(
             Some((best_priority, best_signal, _)) => {
                 signal.user_signal > best_signal.user_signal
                     || (signal.user_signal == best_signal.user_signal
-                        && signal.has_schema
-                        && !best_signal.has_schema)
+                        && signal.has_schema()
+                        && !best_signal.has_schema())
                     || (signal.user_signal == best_signal.user_signal
-                        && signal.has_schema == best_signal.has_schema
+                        && signal.has_schema() == best_signal.has_schema()
                         && priority < *best_priority)
             }
         };
@@ -764,77 +887,7 @@ fn select_best_legacy_database_candidate(
         }
     }
 
-    best.map(|(_, _, path)| path)
-}
-
-fn migrate_legacy_database(legacy_path: &Path, preferred_path: &Path) -> Result<(), String> {
-    if let Some(parent) = preferred_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("无法创建数据库目录 {}: {e}", parent.display()))?;
-    }
-
-    let source = Connection::open(legacy_path)
-        .map_err(|e| format!("打开旧数据库失败 {}: {e}", legacy_path.display()))?;
-    source
-        .busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|e| format!("设置旧数据库 busy_timeout 失败: {e}"))?;
-    let _ = source.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-
-    backup_existing_database(preferred_path)?;
-    remove_database_with_sidecars(preferred_path).map(|_| ())?;
-
-    match source.backup(DatabaseName::Main, preferred_path, None) {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            let _ = remove_database_with_sidecars(preferred_path);
-            Err(format!(
-                "复制旧数据库 {} -> {} 失败: {error}",
-                legacy_path.display(),
-                preferred_path.display()
-            ))
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct DatabaseSignal {
-    user_signal: u64,
-    has_schema: bool,
-}
-
-fn inspect_database_signal(path: &Path) -> Option<DatabaseSignal> {
-    if !path.exists() {
-        return None;
-    }
-
-    let conn = Connection::open(path).ok()?;
-    let has_schema = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table'",
-            [],
-            |row| row.get::<_, u64>(0),
-        )
-        .ok()
-        .map(|count| count > 0)
-        .unwrap_or(false);
-
-    let user_signal = USER_SIGNAL_TABLES
-        .iter()
-        .map(|table| {
-            let sql = format!("SELECT COUNT(*) FROM {table}");
-            conn.query_row(&sql, [], |row| row.get::<_, u64>(0))
-                .unwrap_or(0)
-        })
-        .chain(USER_SIGNAL_QUERIES.iter().map(|sql| {
-            conn.query_row(sql, [], |row| row.get::<_, u64>(0))
-                .unwrap_or(0)
-        }))
-        .sum();
-
-    Some(DatabaseSignal {
-        user_signal,
-        has_schema,
-    })
+    Ok(best.map(|(_, _, path)| path))
 }
 
 fn should_replace_preferred_with_legacy(
@@ -851,7 +904,7 @@ fn should_replace_preferred_with_legacy(
         return true;
     };
 
-    if !preferred_signal.has_schema && legacy_signal.has_schema {
+    if !preferred_signal.has_schema() && legacy_signal.has_schema() {
         tracing::warn!(
             "[路径迁移] 当前数据库 {} 无有效 schema，准备回退旧库 {}",
             preferred_path.display(),
@@ -870,28 +923,6 @@ fn should_replace_preferred_with_legacy(
     }
 
     false
-}
-
-fn backup_existing_database(path: &Path) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
-
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or_default();
-    let backup_path = path.with_file_name(format!(
-        "{DATABASE_FILE_NAME}.bootstrap-backup-{suffix}.bak"
-    ));
-    fs::copy(path, &backup_path).map_err(|e| {
-        format!(
-            "备份当前数据库失败 {} -> {}: {e}",
-            path.display(),
-            backup_path.display()
-        )
-    })?;
-    Ok(())
 }
 
 fn copy_dir_contents_if_missing(from: &Path, to: &Path) -> Result<(), String> {
@@ -932,6 +963,61 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
+    fn preferred_agent_root_resolution_does_not_create_directories() {
+        let temp = tempdir().unwrap();
+        let app_data_root = temp
+            .path()
+            .join("application-support")
+            .join(APP_DATA_DIR_NAME);
+
+        let resolved = resolve_agent_root_from_app_data_root(&app_data_root, None);
+
+        assert_eq!(resolved, app_data_root.join(APP_SERVER_DATA_DIR_NAME));
+        assert!(!app_data_root.exists());
+    }
+
+    #[test]
+    fn explicit_agent_root_override_wins_without_touching_default_root() {
+        let temp = tempdir().unwrap();
+        let app_data_root = temp
+            .path()
+            .join("application-support")
+            .join(APP_DATA_DIR_NAME);
+        let override_root = temp.path().join("e2e").join(APP_SERVER_DATA_DIR_NAME);
+
+        let resolved =
+            resolve_agent_root_from_app_data_root(&app_data_root, Some(override_root.clone()));
+
+        assert_eq!(resolved, override_root);
+        assert!(!app_data_root.exists());
+        assert!(!override_root.exists());
+    }
+
+    #[test]
+    fn explicit_agent_root_override_does_not_expand_platform_migration_sources() {
+        let temp = tempdir().unwrap();
+        let app_data_root = temp
+            .path()
+            .join("application-support")
+            .join(APP_DATA_DIR_NAME);
+        let platform_default_root = resolve_agent_root_from_app_data_root(&app_data_root, None);
+        let override_root = temp.path().join("e2e").join(APP_SERVER_DATA_DIR_NAME);
+        let preferred_root_with_override =
+            resolve_agent_root_from_app_data_root(&app_data_root, Some(override_root.clone()));
+        let global_legacy_root = temp.path().join("legacy-global");
+
+        assert_eq!(preferred_root_with_override, override_root);
+        let sources = explicit_data_dir_migration_source_roots_from_roots(
+            &preferred_root_with_override,
+            Some(&platform_default_root),
+            std::slice::from_ref(&global_legacy_root),
+        );
+
+        assert_eq!(sources, vec![temp.path().join("e2e")]);
+        assert!(!sources.contains(&global_legacy_root));
+    }
+
+    #[test]
     fn resolve_database_path_migrates_legacy_database() {
         let temp = tempdir().unwrap();
         let preferred_root = temp.path().join("appdata").join("lime");
@@ -959,23 +1045,223 @@ mod tests {
         assert_eq!(name, "lime");
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
-    fn resolve_logs_dir_copies_legacy_files() {
+    fn migrate_database_supports_uri_reserved_characters_in_source_path() {
+        let temp = tempdir().unwrap();
+        let source_root = temp.path().join("legacy path %#?");
+        let target_root = temp.path().join("current");
+        fs::create_dir_all(&source_root).unwrap();
+        let source_path = source_root.join(DATABASE_FILE_NAME);
+        let source = Connection::open(&source_path).unwrap();
+        source
+            .execute_batch(
+                "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO settings (key, value) VALUES ('providers.active_tab', 'legacy');",
+            )
+            .unwrap();
+        drop(source);
+
+        let resolution = resolve_database_path_from_source_roots(
+            &target_root,
+            std::slice::from_ref(&source_root),
+        )
+        .unwrap();
+
+        assert_eq!(resolution.migrated_from, Some(source_path));
+        let migrated = Connection::open(resolution.database_path).unwrap();
+        let value: String = migrated
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'providers.active_tab'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, "legacy");
+    }
+
+    #[test]
+    fn resolve_database_path_rejects_uncheckpointed_wal_without_touching_source() {
+        let temp = tempdir().unwrap();
+        let source_root = temp.path().join("legacy");
+        let target_root = temp.path().join("current");
+        fs::create_dir_all(&source_root).unwrap();
+        let source_path = source_root.join(DATABASE_FILE_NAME);
+        let target_path = target_root.join(DATABASE_FILE_NAME);
+        let writer = Connection::open(&source_path).unwrap();
+        writer
+            .execute_batch(
+                "PRAGMA journal_mode = WAL;
+                 PRAGMA wal_autocheckpoint = 0;
+                 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO settings (key, value) VALUES ('providers.active_tab', 'legacy');",
+            )
+            .unwrap();
+        let wal_path = sqlite_sidecar_path(&source_path, "-wal");
+        let shm_path = sqlite_sidecar_path(&source_path, "-shm");
+        assert!(wal_path.is_file());
+        assert!(shm_path.is_file());
+        let source_before = fs::read(&source_path).unwrap();
+        let wal_before = fs::read(&wal_path).unwrap();
+        let shm_before = fs::read(&shm_path).unwrap();
+        let source_mtime_before = fs::metadata(&source_path).unwrap().modified().unwrap();
+        let wal_mtime_before = fs::metadata(&wal_path).unwrap().modified().unwrap();
+        let shm_mtime_before = fs::metadata(&shm_path).unwrap().modified().unwrap();
+        assert!(!wal_before.is_empty());
+
+        let error = resolve_database_path_from_source_roots(
+            &target_root,
+            std::slice::from_ref(&source_root),
+        )
+        .expect_err("未 checkpoint 的 WAL 源必须交给显式维护流程");
+
+        assert!(error.contains("迁移源数据库存在活动伴生文件"));
+        assert!(!target_path.exists());
+        assert!(!target_root.join(MIGRATION_MANIFEST_FILE_NAME).exists());
+        assert_eq!(fs::read(&source_path).unwrap(), source_before);
+        assert_eq!(fs::read(&wal_path).unwrap(), wal_before);
+        assert_eq!(fs::read(&shm_path).unwrap(), shm_before);
+        assert_eq!(
+            fs::metadata(&source_path).unwrap().modified().unwrap(),
+            source_mtime_before
+        );
+        assert_eq!(
+            fs::metadata(&wal_path).unwrap().modified().unwrap(),
+            wal_mtime_before
+        );
+        assert_eq!(
+            fs::metadata(&shm_path).unwrap().modified().unwrap(),
+            shm_mtime_before
+        );
+        let value: String = writer
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'providers.active_tab'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, "legacy");
+        drop(writer);
+    }
+
+    #[test]
+    fn migrate_legacy_database_fails_closed_when_target_sidecars_exist() {
+        let temp = tempdir().unwrap();
+        let source_root = temp.path().join("legacy");
+        let target_root = temp.path().join("current");
+        fs::create_dir_all(&source_root).unwrap();
+        fs::create_dir_all(&target_root).unwrap();
+        let source_path = source_root.join(DATABASE_FILE_NAME);
+        let target_path = target_root.join(DATABASE_FILE_NAME);
+        let source = Connection::open(&source_path).unwrap();
+        source
+            .execute_batch(
+                "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO settings (key, value) VALUES ('providers.active_tab', 'legacy');",
+            )
+            .unwrap();
+        drop(source);
+        let target_wal = sqlite_sidecar_path(&target_path, "-wal");
+        let target_shm = sqlite_sidecar_path(&target_path, "-shm");
+        fs::write(&target_wal, b"existing wal").unwrap();
+        fs::write(&target_shm, b"existing shm").unwrap();
+
+        let error = migrate_legacy_database(&source_path, &target_path)
+            .expect_err("目标伴生文件存在时必须拒绝迁移");
+
+        assert!(error.contains("目标数据库已存在，拒绝覆盖"));
+        assert!(!target_path.exists());
+        assert_eq!(fs::read(&target_wal).unwrap(), b"existing wal");
+        assert_eq!(fs::read(&target_shm).unwrap(), b"existing shm");
+        assert!(!fs::read_dir(&target_root).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("migration-staging")
+        }));
+    }
+
+    #[test]
+    fn exact_database_source_does_not_modify_or_expand_install_root() {
+        let temp = tempdir().unwrap();
+        let recursive_root = temp.path().join("roaming").join(APP_DATA_DIR_NAME);
+        let install_root = temp.path().join("local").join(APP_DATA_DIR_NAME);
+        let package_root = install_root.join("packages").join("current");
+        fs::create_dir_all(&package_root).unwrap();
+        fs::write(package_root.join("Lime.exe"), b"installer payload").unwrap();
+
+        let source_path = install_root.join(DATABASE_FILE_NAME);
+        let source = Connection::open(&source_path).unwrap();
+        source
+            .execute_batch(
+                "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO settings (key, value) VALUES ('providers.active_tab', 'legacy');",
+            )
+            .unwrap();
+        drop(source);
+        let source_before = fs::read(&source_path).unwrap();
+        let install_mtime_before = fs::metadata(&install_root).unwrap().modified().unwrap();
+
+        let recursive_roots = vec![recursive_root.clone()];
+        let database_roots = expand_database_migration_source_roots(
+            recursive_roots.clone(),
+            std::slice::from_ref(&install_root),
+        );
+        assert_eq!(recursive_roots, vec![recursive_root]);
+        assert!(database_roots.contains(&install_root));
+        assert!(database_roots.contains(&install_root.join(APP_SERVER_DATA_DIR_NAME)));
+
+        let target_root = temp.path().join("current").join(APP_SERVER_DATA_DIR_NAME);
+        let resolution =
+            resolve_database_path_from_source_roots(&target_root, &database_roots).unwrap();
+
+        assert_eq!(resolution.migrated_from, Some(source_path.clone()));
+        assert_eq!(fs::read(&source_path).unwrap(), source_before);
+        assert_eq!(
+            fs::metadata(&install_root).unwrap().modified().unwrap(),
+            install_mtime_before
+        );
+        assert!(!install_root.join(MIGRATION_MANIFEST_FILE_NAME).exists());
+        assert!(!install_root.join(APP_SERVER_DATA_DIR_NAME).exists());
+        assert!(!target_root.join("packages").exists());
+        assert_eq!(
+            fs::read(package_root.join("Lime.exe")).unwrap(),
+            b"installer payload"
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_recursive_migration_sources_exclude_squirrel_install_root() {
+        let install_root = windows_squirrel_install_root().unwrap();
+        let recursive_roots = migration_source_roots().unwrap();
+        let database_roots = database_migration_source_roots().unwrap();
+
+        assert!(!recursive_roots.contains(&install_root));
+        assert!(database_roots.contains(&install_root));
+        assert!(database_roots.contains(&install_root.join(APP_SERVER_DATA_DIR_NAME)));
+    }
+
+    #[test]
+    fn resolve_subdir_skips_same_root_as_legacy_source() {
         let temp = tempdir().unwrap();
         let preferred_root = temp.path().join("appdata").join("lime");
-        let legacy_root = temp.path().join("home").join(".lime");
-        let legacy_logs = legacy_root.join("logs");
-        fs::create_dir_all(&legacy_logs).unwrap();
-        fs::write(legacy_logs.join("lime.log"), "legacy log").unwrap();
+        let nested = preferred_root.join("logs").join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("lime.log"), "current log").unwrap();
 
-        let resolved =
-            resolve_subdir_with_legacy_copy_from_roots(&preferred_root, &legacy_root, "logs")
-                .unwrap();
+        let resolved = resolve_subdir_with_legacy_copy_from_source_roots(
+            &preferred_root,
+            std::slice::from_ref(&preferred_root),
+            "logs",
+        )
+        .unwrap();
 
         assert_eq!(resolved, preferred_root.join("logs"));
         assert_eq!(
-            fs::read_to_string(resolved.join("lime.log")).unwrap(),
-            "legacy log"
+            fs::read_to_string(nested.join("lime.log")).unwrap(),
+            "current log"
         );
     }
 
@@ -996,35 +1282,6 @@ mod tests {
         assert_eq!(
             fs::read_to_string(resolved.join("legacy-project").join("note.md")).unwrap(),
             "legacy project"
-        );
-    }
-
-    #[test]
-    fn resolve_sessions_dir_copies_legacy_session_directories() {
-        let temp = tempdir().unwrap();
-        let preferred_root = temp.path().join("appdata").join("lime");
-        let legacy_root = temp.path().join("home").join(".lime");
-        let legacy_session_dir = legacy_root
-            .join("sessions")
-            .join("legacy-session")
-            .join("files");
-        fs::create_dir_all(&legacy_session_dir).unwrap();
-        fs::write(legacy_session_dir.join("note.md"), "legacy session").unwrap();
-
-        let resolved =
-            resolve_subdir_with_legacy_copy_from_roots(&preferred_root, &legacy_root, "sessions")
-                .unwrap();
-
-        assert_eq!(resolved, preferred_root.join("sessions"));
-        assert_eq!(
-            fs::read_to_string(
-                resolved
-                    .join("legacy-session")
-                    .join("files")
-                    .join("note.md")
-            )
-            .unwrap(),
-            "legacy session"
         );
     }
 
@@ -1063,24 +1320,6 @@ mod tests {
         assert_eq!(
             fs::read_to_string(resolved.join("legacy-skill").join("SKILL.md")).unwrap(),
             "legacy skill"
-        );
-    }
-
-    #[test]
-    fn resolve_agent_dir_copies_legacy_runtime_directories() {
-        let temp = tempdir().unwrap();
-        let preferred_root = temp.path().join("appdata").join("lime");
-        let legacy_root = temp.path().join("home").join(".lime");
-        let legacy_agent_dir = legacy_root.join("agent").join("state").join("logs");
-        fs::create_dir_all(&legacy_agent_dir).unwrap();
-        fs::write(legacy_agent_dir.join("runtime.log"), "legacy runtime").unwrap();
-
-        let resolved = resolve_agent_dir_from_roots(&preferred_root, &legacy_root).unwrap();
-
-        assert_eq!(resolved, preferred_root.join("agent"));
-        assert_eq!(
-            fs::read_to_string(resolved.join("state").join("logs").join("runtime.log")).unwrap(),
-            "legacy runtime"
         );
     }
 
@@ -1236,7 +1475,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_database_path_replaces_bootstrap_db_with_legacy_data() {
+    fn resolve_database_path_fails_closed_when_bootstrap_db_exists() {
         let temp = tempdir().unwrap();
         let preferred_root = temp.path().join("appdata").join("lime");
         let legacy_root = temp.path().join("home").join(".lime");
@@ -1251,6 +1490,7 @@ mod tests {
                 [],
             )
             .unwrap();
+        drop(preferred_conn);
 
         let legacy_db = legacy_root.join(DATABASE_FILE_NAME);
         let legacy_conn = Connection::open(&legacy_db).unwrap();
@@ -1270,12 +1510,14 @@ mod tests {
             .execute("INSERT INTO contents (title) VALUES ('legacy')", [])
             .unwrap();
 
-        let resolved = resolve_database_path_from_roots(&preferred_root, &legacy_root).unwrap();
-        let conn = Connection::open(resolved).unwrap();
+        let error = resolve_database_path_from_roots(&preferred_root, &legacy_root)
+            .expect_err("已有目标数据库时必须拒绝覆盖");
+        assert!(error.contains("目标数据库已存在，拒绝覆盖"));
+        let conn = Connection::open(preferred_db).unwrap();
         let count: u64 = conn
             .query_row("SELECT COUNT(*) FROM contents", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 1);
+        assert_eq!(count, 0);
     }
 
     #[test]
@@ -1319,7 +1561,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_database_path_recovers_from_legacy_when_marker_exists_but_new_db_is_empty() {
+    fn resolve_database_path_fails_closed_when_target_is_empty_and_legacy_has_data() {
         let temp = tempdir().unwrap();
         let preferred_root = temp.path().join("appdata").join("lime");
         let legacy_root = temp.path().join("home").join(".lime");
@@ -1351,18 +1593,16 @@ mod tests {
             .unwrap();
         drop(legacy_conn);
 
-        // 写入标记文件 → 模拟已迁移过
-        fs::write(preferred_root.join(MIGRATION_MARKER_FILE), "1700000000").unwrap();
+        // 目标文件已创建时，启动迁移不得覆盖目标。
+        let error = resolve_database_path_from_roots(&preferred_root, &legacy_root)
+            .expect_err("已有目标数据库时必须拒绝覆盖");
+        assert!(error.contains("目标数据库已存在，拒绝覆盖"));
 
-        // 即使标记已存在，只要新库仍是空壳，也应自动恢复旧库数据
-        let resolved = resolve_database_path_from_roots(&preferred_root, &legacy_root).unwrap();
-        assert_eq!(resolved, preferred_db);
-
-        let conn = Connection::open(&resolved).unwrap();
+        let conn = Connection::open(&preferred_db).unwrap();
         let count: u64 = conn
             .query_row("SELECT COUNT(*) FROM contents", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 1);
+        assert_eq!(count, 0);
     }
 
     #[test]
@@ -1410,6 +1650,7 @@ mod tests {
 
         assert!(sources.contains(&electron_user_data_root));
         assert!(!sources.contains(&app_server_root));
+        assert_eq!(sources, vec![electron_user_data_root]);
     }
 
     #[test]
@@ -1500,7 +1741,7 @@ mod tests {
         assert!(error.contains("数据库迁移失败，拒绝回退旧路径"));
         assert!(error.contains(source_db.to_string_lossy().as_ref()));
         assert!(target_db.is_dir());
-        assert!(!app_server_root.join(MIGRATION_MARKER_FILE).exists());
+        assert!(!app_server_root.join(MIGRATION_MANIFEST_FILE_NAME).exists());
         let source_conn = Connection::open(&source_db).unwrap();
         let value: String = source_conn
             .query_row(
@@ -1548,7 +1789,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_database_path_writes_marker_after_successful_migration() {
+    fn resolve_database_path_writes_versioned_manifest_after_successful_migration() {
         let temp = tempdir().unwrap();
         let preferred_root = temp.path().join("appdata").join("lime");
         let legacy_root = temp.path().join("home").join(".lime");
@@ -1565,29 +1806,79 @@ mod tests {
             .unwrap();
         drop(conn);
 
-        let marker_path = preferred_root.join(MIGRATION_MARKER_FILE);
-        assert!(!marker_path.exists());
+        let manifest_path = preferred_root.join(MIGRATION_MANIFEST_FILE_NAME);
+        assert!(!manifest_path.exists());
 
         let _ = resolve_database_path_from_roots(&preferred_root, &legacy_root).unwrap();
 
-        // 迁移成功后标记文件应存在
-        assert!(marker_path.exists());
+        assert!(manifest_path.exists());
+        let manifest = fs::read_to_string(manifest_path).unwrap();
+        assert!(manifest.contains("\"schemaVersion\": \"storage-migration.v1\""));
+        assert!(manifest.contains("\"mode\": \"copied\""));
+        assert!(manifest.contains("\"manifestSha256\""));
+        assert!(manifest.contains(legacy_db.to_string_lossy().as_ref()));
+        let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+        assert_eq!(manifest["target"]["relativePath"], "lime.db");
+        assert_eq!(manifest["cleanupAuthorizedAt"], serde_json::Value::Null);
+        assert_eq!(
+            manifest["source"]["snapshot"]["fingerprint"]["sha256"]
+                .as_str()
+                .unwrap()
+                .len(),
+            64
+        );
+        assert_eq!(
+            manifest["target"]["snapshot"]["fingerprint"]["sha256"]
+                .as_str()
+                .unwrap()
+                .len(),
+            64
+        );
+        assert_eq!(
+            manifest["source"]["snapshot"]["userSignal"],
+            manifest["target"]["snapshot"]["userSignal"]
+        );
+        assert_eq!(
+            manifest["source"]["snapshot"]["schemaObjectCount"],
+            manifest["target"]["snapshot"]["schemaObjectCount"]
+        );
     }
 
     #[test]
-    fn resolve_database_path_writes_marker_for_fresh_install() {
+    fn resolve_database_path_writes_versioned_manifest_for_fresh_install() {
         let temp = tempdir().unwrap();
         let preferred_root = temp.path().join("appdata").join("lime");
         let legacy_root = temp.path().join("home").join(".lime");
         // 不创建 legacy_root → 模拟全新安装
 
-        let marker_path = preferred_root.join(MIGRATION_MARKER_FILE);
-        assert!(!marker_path.exists());
+        let manifest_path = preferred_root.join(MIGRATION_MANIFEST_FILE_NAME);
+        assert!(!manifest_path.exists());
 
         let resolved = resolve_database_path_from_roots(&preferred_root, &legacy_root).unwrap();
         assert_eq!(resolved, preferred_root.join(DATABASE_FILE_NAME));
 
-        // 全新安装也应写标记
-        assert!(marker_path.exists());
+        assert!(manifest_path.exists());
+        let manifest = fs::read_to_string(manifest_path).unwrap();
+        assert!(manifest.contains("\"mode\": \"fresh-install\""));
+        assert!(manifest.contains("\"cleanupAuthorizedAt\": null"));
+    }
+
+    #[test]
+    fn model_control_candidates_for_explicit_root_stay_within_root_and_parent() {
+        let temp = tempdir().unwrap();
+        let data_root = temp.path().join("portable").join(APP_SERVER_DATA_DIR_NAME);
+        let parent = data_root.parent().unwrap();
+
+        let candidates = model_control_migration_source_paths(&data_root);
+
+        assert!(candidates.contains(&parent.join(DATABASE_FILE_NAME)));
+        assert!(candidates.contains(&parent.join(LEGACY_DATABASE_FILE_NAME)));
+        assert!(candidates.contains(&parent.join(LEGACY_PRODUCT_DATABASE_FILE_NAME)));
+        assert!(candidates.contains(&data_root.join(DATABASE_FILE_NAME)));
+        assert!(candidates.contains(&data_root.join(LEGACY_DATABASE_FILE_NAME)));
+        assert!(candidates.contains(&data_root.join(LEGACY_PRODUCT_DATABASE_FILE_NAME)));
+        assert!(candidates
+            .iter()
+            .all(|candidate| candidate.starts_with(temp.path())));
     }
 }

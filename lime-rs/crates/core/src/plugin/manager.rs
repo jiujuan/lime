@@ -82,10 +82,9 @@ impl PluginManager {
 
     /// 使用默认配置创建
     pub fn with_defaults() -> Self {
-        Self::new(
-            PluginLoader::default_plugins_dir(),
-            PluginManagerConfig::default(),
-        )
+        let mut config = PluginManagerConfig::default();
+        config.enabled = false;
+        Self::new(PathBuf::new(), config)
     }
 
     /// 加载所有插件
@@ -612,5 +611,23 @@ impl PluginManager {
 impl Default for PluginManager {
     fn default() -> Self {
         Self::with_defaults()
+    }
+}
+
+#[cfg(test)]
+mod default_root_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn default_manager_is_disabled_without_guessing_a_platform_root() {
+        let manager = PluginManager::with_defaults();
+
+        assert!(!manager.config.enabled);
+        assert!(manager.loader.plugins_dir().as_os_str().is_empty());
+        assert!(manager
+            .load_all()
+            .await
+            .expect("disabled loader")
+            .is_empty());
     }
 }

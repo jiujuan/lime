@@ -824,7 +824,15 @@ fn action_denies_tool(event: &AgentEvent) -> bool {
         .map(|value| {
             matches!(
                 value,
-                "deny" | "denied" | "reject" | "rejected" | "cancel" | "canceled" | "cancelled"
+                "deny"
+                    | "denied"
+                    | "decline"
+                    | "declined"
+                    | "reject"
+                    | "rejected"
+                    | "cancel"
+                    | "canceled"
+                    | "cancelled"
             )
         })
         .unwrap_or(false)

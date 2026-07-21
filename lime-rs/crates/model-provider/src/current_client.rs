@@ -11,6 +11,7 @@ use crate::provider_stream::{
 };
 use crate::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
 use crate::ModelProviderProtocol;
+use agent_protocol::ImageDetail;
 use async_stream::stream;
 use futures::future::BoxFuture;
 use futures::Stream;
@@ -34,6 +35,7 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue};
 use tokio_tungstenite::tungstenite::Error as WebSocketError;
 
+mod health;
 mod lowering;
 mod stream;
 #[cfg(test)]
@@ -41,6 +43,7 @@ mod stream_tests;
 mod transport;
 mod websocket;
 
+use health::{CircuitBreaker, CircuitOpen, CircuitPermit, HealthConfig};
 use lowering::{anthropic_request, chat_completions_request, responses_request};
 use stream::{anthropic_sse, openai_chat_sse, responses_sse};
 use transport::{
@@ -210,10 +213,13 @@ fn canonical_content(
             metadata: Default::default(),
         }),
         CurrentProviderContent::Image {
-            uri, media_type, ..
-        } => ContentPart::media(uri.clone(), media_type.clone()).map_err(|error| {
-            CurrentProviderError::new(format!("canonical media input rejected: {error}"))
-        }),
+            uri,
+            media_type,
+            detail,
+            ..
+        } => ContentPart::media_with_detail(uri.clone(), media_type.clone(), *detail).map_err(
+            |error| CurrentProviderError::new(format!("canonical media input rejected: {error}")),
+        ),
         CurrentProviderContent::ToolCall(call) => Ok(ContentPart::ToolCall {
             id: call.id.clone(),
             name: call.name.clone(),
@@ -285,6 +291,7 @@ pub enum CurrentProviderContent {
         uri: String,
         media_type: String,
         provider_data: Option<String>,
+        detail: Option<ImageDetail>,
     },
     ToolCall(CurrentProviderToolCall),
     ToolResult(CurrentProviderToolResult),
@@ -416,6 +423,7 @@ impl std::error::Error for CurrentProviderError {}
 pub struct CurrentProviderClient {
     config: RuntimeProviderConfig,
     client: Client,
+    health: Arc<CircuitBreaker>,
     http_fallback: Arc<AtomicBool>,
     websocket: Arc<Mutex<Option<ResponsesSocket>>>,
 }
@@ -441,6 +449,7 @@ impl CurrentProviderClient {
         Ok(Self {
             config,
             client,
+            health: Arc::new(CircuitBreaker::new(HealthConfig::default())),
             http_fallback: Arc::new(AtomicBool::new(false)),
             websocket: Arc::new(Mutex::new(None)),
         })
@@ -450,6 +459,7 @@ impl CurrentProviderClient {
         Self {
             config,
             client,
+            health: Arc::new(CircuitBreaker::new(HealthConfig::default())),
             http_fallback: Arc::new(AtomicBool::new(false)),
             websocket: Arc::new(Mutex::new(None)),
         }
@@ -484,6 +494,8 @@ impl CurrentProviderClient {
         request: CurrentProviderRequest,
     ) -> Result<CurrentProviderStream, CurrentProviderError> {
         let protocol = self.protocol();
+        ensure_supported_protocol(&protocol)?;
+        let mut permit = self.health.acquire().map_err(circuit_open_error)?;
         let media_payloads = request.media_payloads()?;
         let canonical_request = request.into_canonical(&self.config.model_name)?;
         let wire_shape = RuntimeReplyProviderRequestWireShape::from_model_request_policy(
@@ -516,7 +528,10 @@ impl CurrentProviderClient {
                 .await
             {
                 Ok(stream) => {
-                    return Ok(self.websocket_with_http_fallback(stream, payload, wire_shape));
+                    return Ok(self.tracked_stream(
+                        self.websocket_with_http_fallback(stream, payload, wire_shape),
+                        permit,
+                    ));
                 }
                 Err(error) => {
                     self.http_fallback.store(true, Ordering::Release);
@@ -527,9 +542,20 @@ impl CurrentProviderClient {
                 }
             }
         }
-        let response = self
+        let response = match self
             .send_stream_request(&protocol, payload, &wire_shape)
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                if request_error_is_health_failure(&error) {
+                    permit.failure();
+                } else {
+                    permit.ignore();
+                }
+                return Err(error);
+            }
+        };
         let stream: CurrentProviderStream = match protocol {
             ModelProviderProtocol::Responses => Box::pin(responses_sse(response)),
             ModelProviderProtocol::AnthropicMessages => Box::pin(anthropic_sse(response)),
@@ -537,7 +563,53 @@ impl CurrentProviderClient {
                 Box::pin(openai_chat_sse(response))
             }
         };
-        Ok(stream)
+        Ok(self.tracked_stream(stream, permit))
+    }
+
+    fn tracked_stream(
+        &self,
+        mut stream: CurrentProviderStream,
+        permit: CircuitPermit,
+    ) -> CurrentProviderStream {
+        Box::pin(stream! {
+            let mut permit = Some(permit);
+            while let Some(item) = futures::StreamExt::next(&mut stream).await {
+                match &item {
+                    Ok(CanonicalLlmEvent::Finish { .. }) => {
+                        if let Some(mut permit) = permit.take() {
+                            permit.success();
+                        }
+                    }
+                    Ok(CanonicalLlmEvent::ProviderError {
+                        classification,
+                        retryable,
+                        ..
+                    }) => {
+                        if let Some(mut permit) = permit.take() {
+                            if stream_event_is_health_failure(*classification, *retryable) {
+                                permit.failure();
+                            } else {
+                                permit.ignore();
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        if let Some(mut permit) = permit.take() {
+                            if stream_error_is_health_failure(error) {
+                                permit.failure();
+                            } else {
+                                permit.ignore();
+                            }
+                        }
+                    }
+                    Ok(_) => {}
+                }
+                yield item;
+            }
+            if let Some(mut permit) = permit {
+                permit.failure();
+            }
+        })
     }
 
     pub fn responses_websocket_enabled(&self) -> bool {
@@ -745,6 +817,49 @@ impl CurrentProvider for CurrentProviderClient {
     }
 }
 
+fn circuit_open_error(error: CircuitOpen) -> CurrentProviderError {
+    CurrentProviderError::transport(error.to_string())
+}
+
+fn request_error_is_health_failure(error: &CurrentProviderError) -> bool {
+    health_failure(error.classification, Some(error.retryable), false)
+}
+
+fn stream_error_is_health_failure(error: &CurrentProviderError) -> bool {
+    health_failure(error.classification, Some(error.retryable), true)
+}
+
+fn stream_event_is_health_failure(
+    classification: Option<FailureClassification>,
+    retryable: Option<bool>,
+) -> bool {
+    health_failure(classification, retryable, true)
+}
+
+fn health_failure(
+    classification: Option<FailureClassification>,
+    retryable: Option<bool>,
+    unknown_is_failure: bool,
+) -> bool {
+    match classification {
+        Some(
+            FailureClassification::Authentication
+            | FailureClassification::Permission
+            | FailureClassification::Quota
+            | FailureClassification::InvalidRequest
+            | FailureClassification::ContextOverflow
+            | FailureClassification::ContentPolicy,
+        ) => false,
+        Some(
+            FailureClassification::RateLimit
+            | FailureClassification::ProviderInternal
+            | FailureClassification::Transport,
+        ) => true,
+        Some(FailureClassification::Unknown) => retryable.unwrap_or(unknown_is_failure),
+        None => retryable.unwrap_or(unknown_is_failure),
+    }
+}
+
 async fn ensure_success_response(response: Response) -> Result<Response, CurrentProviderError> {
     if response.status().is_success() {
         return Ok(response);
@@ -872,6 +987,15 @@ fn websocket_connect_error(url: &url::Url, error: WebSocketError) -> CurrentProv
     CurrentProviderError::transport(format!("Responses WebSocket 连接失败 ({url}): {error}"))
 }
 
+fn ensure_supported_protocol(protocol: &ModelProviderProtocol) -> Result<(), CurrentProviderError> {
+    if let ModelProviderProtocol::Custom(name) = protocol {
+        return Err(CurrentProviderError::invalid_request(format!(
+            "unsupported provider protocol `{name}`; no current model-provider wire adapter is registered"
+        )));
+    }
+    Ok(())
+}
+
 fn provider_urls(protocol: &ModelProviderProtocol, base_url: Option<&str>) -> Vec<String> {
     let base_url = base_url
         .map(str::trim)
@@ -888,6 +1012,17 @@ fn provider_urls(protocol: &ModelProviderProtocol, base_url: Option<&str>) -> Ve
         }
     };
     endpoint_urls(base_url, endpoint)
+}
+
+/// 返回 Responses API 的首选 endpoint。
+///
+/// 图片编排等非回合消费者也必须复用 current provider 的 endpoint 规则，不能重新
+/// 按 current provider 的 Responses 路径规则构造 endpoint。
+pub fn responses_endpoint(base_url: &str) -> String {
+    provider_urls(&ModelProviderProtocol::Responses, Some(base_url))
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| format!("{}/v1/responses", base_url.trim_end_matches('/')))
 }
 
 fn endpoint_urls(base_url: &str, endpoint: &str) -> Vec<String> {
@@ -993,6 +1128,26 @@ mod tests {
     }
 
     #[test]
+    fn responses_endpoint_uses_current_provider_path_rules() {
+        assert_eq!(
+            responses_endpoint("https://api.openai.com"),
+            "https://api.openai.com/v1/responses"
+        );
+        assert_eq!(
+            responses_endpoint("https://api.openai.com/v1"),
+            "https://api.openai.com/v1/responses"
+        );
+        assert_eq!(
+            responses_endpoint("https://gateway.example.com/codex"),
+            "https://gateway.example.com/codex/responses"
+        );
+        assert_eq!(
+            responses_endpoint("https://gateway.example.com/proxy/responses"),
+            "https://gateway.example.com/proxy/responses"
+        );
+    }
+
+    #[test]
     fn client_selects_anthropic_from_current_config() {
         let mut config = config(None);
         config.provider_name = "anthropic".to_string();
@@ -1006,6 +1161,21 @@ mod tests {
     }
 
     #[test]
+    fn custom_protocol_is_rejected_before_wire_lowering() {
+        let error = ensure_supported_protocol(&ModelProviderProtocol::Custom(
+            "gemini_generate_content".to_string(),
+        ))
+        .expect_err("custom protocols require an explicit wire adapter");
+
+        assert_eq!(
+            error.classification,
+            Some(FailureClassification::InvalidRequest)
+        );
+        assert!(!error.retryable);
+        assert!(error.message.contains("unsupported provider protocol"));
+    }
+
+    #[test]
     fn chat_lowering_preserves_images_prior_tool_calls_and_results() {
         let request = CurrentProviderRequest::new(vec![
             CurrentProviderMessage::user(vec![
@@ -1014,6 +1184,7 @@ mod tests {
                     uri: "sidecar://image-1".to_string(),
                     media_type: "image/png".to_string(),
                     provider_data: Some("data:image/png;base64,abc".to_string()),
+                    detail: Some(ImageDetail::High),
                 },
             ]),
             CurrentProviderMessage::assistant(vec![CurrentProviderContent::ToolCall(
@@ -1045,6 +1216,10 @@ mod tests {
         assert_eq!(
             value["messages"][0]["content"][1]["image_url"]["url"],
             "data:image/png;base64,abc"
+        );
+        assert_eq!(
+            value["messages"][0]["content"][1]["image_url"]["detail"],
+            "high"
         );
         assert_eq!(
             value["messages"][1]["tool_calls"][0]["function"]["name"],
@@ -1090,6 +1265,7 @@ mod tests {
                 uri: "sidecar://image-1".to_string(),
                 media_type: "image/png".to_string(),
                 provider_data: Some("data:image/png;base64,abc".to_string()),
+                detail: Some(ImageDetail::Original),
             },
         ])]);
         let canonical = request
@@ -1113,6 +1289,7 @@ mod tests {
             responses["input"][0]["content"][1]["image_url"],
             "data:image/png;base64,abc"
         );
+        assert_eq!(responses["input"][0]["content"][1]["detail"], "original");
         assert_eq!(
             anthropic["messages"][0]["content"][1]["source"],
             json!({
@@ -1130,6 +1307,7 @@ mod tests {
                 uri: "sidecar://image-1".to_string(),
                 media_type: "image/png".to_string(),
                 provider_data: Some("data:image/png;base64,abc".to_string()),
+                detail: Some(ImageDetail::Low),
             },
         ])]);
 
@@ -1139,7 +1317,11 @@ mod tests {
 
         assert!(matches!(
             &canonical.messages[0].content[0],
-            ContentPart::Media { uri, .. } if uri == "sidecar://image-1"
+            ContentPart::Media {
+                uri,
+                detail: Some(ImageDetail::Low),
+                ..
+            } if uri == "sidecar://image-1"
         ));
         assert!(!serde_json::to_string(&canonical)
             .expect("serialize canonical request")
@@ -1153,6 +1335,7 @@ mod tests {
                 uri: "sidecar://image-1".to_string(),
                 media_type: "image/png".to_string(),
                 provider_data: None,
+                detail: None,
             },
         ])]);
 
@@ -1862,6 +2045,134 @@ mod tests {
             requests.load(Ordering::SeqCst),
             usize::from(MAX_STREAM_REQUEST_ATTEMPTS)
         );
+    }
+
+    fn health_test_client() -> CurrentProviderClient {
+        let mut client = CurrentProviderClient::with_client(
+            config(Some(RuntimeProviderProtocol::ChatCompletions)),
+            Client::new(),
+        );
+        client.health = Arc::new(CircuitBreaker::new(HealthConfig {
+            window_duration: Duration::from_secs(60),
+            min_samples: 1,
+            error_rate_threshold: 1.0,
+            open_duration: Duration::from_secs(60),
+        }));
+        client
+    }
+
+    #[test]
+    fn circuit_health_failure_filters_provider_rejections() {
+        assert!(health_failure(
+            Some(FailureClassification::RateLimit),
+            Some(true),
+            false
+        ));
+        assert!(health_failure(
+            Some(FailureClassification::ProviderInternal),
+            Some(true),
+            false
+        ));
+        assert!(health_failure(
+            Some(FailureClassification::Transport),
+            Some(true),
+            false
+        ));
+        assert!(!health_failure(
+            Some(FailureClassification::Authentication),
+            Some(false),
+            false
+        ));
+        assert!(!health_failure(
+            Some(FailureClassification::InvalidRequest),
+            Some(false),
+            false
+        ));
+        assert!(!health_failure(
+            Some(FailureClassification::ContextOverflow),
+            Some(false),
+            false
+        ));
+    }
+
+    #[tokio::test]
+    async fn tracked_stream_records_finish_success_and_failure_outcomes() {
+        let success_client = health_test_client();
+        let success_stream = success_client.tracked_stream(
+            Box::pin(futures::stream::iter([Ok(CanonicalLlmEvent::Finish {
+                reason: FinishReason::Stop,
+                usage: None,
+                response_id: None,
+            })])),
+            success_client.health.acquire().expect("success permit"),
+        );
+        let success_events = success_stream.collect::<Vec<_>>().await;
+        assert_eq!(success_events.len(), 1);
+        assert!(success_client.health.acquire().is_ok());
+
+        let provider_error_client = health_test_client();
+        let provider_error_stream = provider_error_client.tracked_stream(
+            Box::pin(futures::stream::iter([Ok(
+                CanonicalLlmEvent::ProviderError {
+                    message: "provider unavailable".to_string(),
+                    classification: Some(FailureClassification::ProviderInternal),
+                    retryable: Some(true),
+                },
+            )])),
+            provider_error_client
+                .health
+                .acquire()
+                .expect("provider error permit"),
+        );
+        let _ = provider_error_stream.collect::<Vec<_>>().await;
+        assert!(provider_error_client.health.acquire().is_err());
+
+        let transport_error_client = health_test_client();
+        let transport_error_stream = transport_error_client.tracked_stream(
+            Box::pin(futures::stream::iter([Err(
+                CurrentProviderError::transport("connection reset"),
+            )])),
+            transport_error_client
+                .health
+                .acquire()
+                .expect("transport error permit"),
+        );
+        let _ = transport_error_stream.collect::<Vec<_>>().await;
+        assert!(transport_error_client.health.acquire().is_err());
+
+        let eof_client = health_test_client();
+        let eof_stream = eof_client.tracked_stream(
+            Box::pin(futures::stream::empty()),
+            eof_client.health.acquire().expect("EOF permit"),
+        );
+        assert!(eof_stream.collect::<Vec<_>>().await.is_empty());
+        assert!(eof_client.health.acquire().is_err());
+    }
+
+    #[tokio::test]
+    async fn tracked_stream_drop_does_not_record_cancellation() {
+        let client = health_test_client();
+        let stream = client.tracked_stream(
+            Box::pin(futures::stream::pending()),
+            client.health.acquire().expect("pending permit"),
+        );
+        drop(stream);
+        assert!(client.health.acquire().is_ok());
+    }
+
+    #[tokio::test]
+    async fn stream_preflight_rejects_open_circuit_before_network() {
+        let client = health_test_client();
+        let mut permit = client.health.acquire().expect("initial permit");
+        permit.failure();
+
+        let error = match client.stream(text_request()).await {
+            Err(error) => error,
+            Ok(_) => panic!("open circuit must reject before network"),
+        };
+        assert!(error.message.contains("health circuit is open"));
+        assert_eq!(error.classification, Some(FailureClassification::Transport));
+        assert!(error.retryable);
     }
 
     async fn spawn_http_fixture(

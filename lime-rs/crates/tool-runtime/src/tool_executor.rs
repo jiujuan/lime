@@ -247,11 +247,24 @@ impl RuntimeTool {
         call.emit_started().await;
         let started_at = Instant::now();
         let outcome = if call.tool_name() == self.definition.name {
-            RuntimeToolExecutionOutcome::from_execution_result(
-                self.executor
-                    .execute_call(call, context, turn_context)
-                    .await,
-            )
+            match context.cancel_token().cloned() {
+                Some(cancel_token) if cancel_token.is_cancelled() => {
+                    RuntimeToolExecutionOutcome::Aborted
+                }
+                Some(cancel_token) => {
+                    let execution = self.executor.execute_call(call, context, turn_context);
+                    tokio::select! {
+                        biased;
+                        _ = cancel_token.cancelled() => RuntimeToolExecutionOutcome::Aborted,
+                        result = execution => RuntimeToolExecutionOutcome::from_execution_result(result),
+                    }
+                }
+                None => RuntimeToolExecutionOutcome::from_execution_result(
+                    self.executor
+                        .execute_call(call, context, turn_context)
+                        .await,
+                ),
+            }
         } else {
             RuntimeToolExecutionOutcome::Error(RuntimeToolExecutionFailure::from_error(
                 RuntimeToolExecutionError::new(
@@ -261,7 +274,8 @@ impl RuntimeTool {
                         self.definition.name
                     ),
                     None,
-                ),
+                )
+                .before_handler(),
             ))
         };
         let duration_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -348,6 +362,7 @@ impl RuntimeToolExecutionResult {
 pub enum RuntimeToolExecutionOutcome {
     Result(RuntimeToolExecutionResult),
     Error(RuntimeToolExecutionFailure),
+    Aborted,
 }
 
 impl RuntimeToolExecutionOutcome {
@@ -365,6 +380,7 @@ impl RuntimeToolExecutionOutcome {
 pub struct RuntimeToolExecutionError {
     message: String,
     policy_kind: Option<RuntimeToolPolicyErrorKind>,
+    handler_executed: bool,
 }
 
 impl RuntimeToolExecutionError {
@@ -375,7 +391,13 @@ impl RuntimeToolExecutionError {
         Self {
             message: message.into(),
             policy_kind,
+            handler_executed: true,
         }
+    }
+
+    pub fn before_handler(mut self) -> Self {
+        self.handler_executed = false;
+        self
     }
 
     pub fn message(&self) -> &str {
@@ -385,16 +407,27 @@ impl RuntimeToolExecutionError {
     pub fn policy_kind(&self) -> Option<&RuntimeToolPolicyErrorKind> {
         self.policy_kind.as_ref()
     }
+
+    pub fn handler_executed(&self) -> bool {
+        self.handler_executed
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeToolExecutionFailure {
     message: String,
     kind: RuntimeToolExecutionFailureKind,
+    reason_code: Option<String>,
+    handler_executed: bool,
 }
 
 impl RuntimeToolExecutionFailure {
     pub fn from_error(error: RuntimeToolExecutionError) -> Self {
+        let reason_code = error.policy_kind().map(|kind| match kind {
+            RuntimeToolPolicyErrorKind::PermissionDenied(reason)
+            | RuntimeToolPolicyErrorKind::SafetyCheckFailed(reason)
+            | RuntimeToolPolicyErrorKind::ExecutionFailed(reason) => reason.clone(),
+        });
         let kind = match error.policy_kind() {
             Some(RuntimeToolPolicyErrorKind::PermissionDenied(_)) => {
                 RuntimeToolExecutionFailureKind::PermissionDenied
@@ -410,6 +443,8 @@ impl RuntimeToolExecutionFailure {
         Self {
             message: error.message().to_string(),
             kind,
+            reason_code,
+            handler_executed: error.handler_executed(),
         }
     }
 
@@ -419,6 +454,14 @@ impl RuntimeToolExecutionFailure {
 
     pub fn kind(&self) -> RuntimeToolExecutionFailureKind {
         self.kind
+    }
+
+    pub fn reason_code(&self) -> Option<&str> {
+        self.reason_code.as_deref()
+    }
+
+    pub fn handler_executed(&self) -> bool {
+        self.handler_executed
     }
 }
 
@@ -680,6 +723,9 @@ mod tests {
             RuntimeToolExecutionOutcome::Error(error) => {
                 panic!("runtime runner should not fail: {error:?}");
             }
+            RuntimeToolExecutionOutcome::Aborted => {
+                panic!("runtime runner should not abort without a cancellation token");
+            }
         }
     }
 
@@ -735,6 +781,9 @@ mod tests {
                     error.kind(),
                     RuntimeToolExecutionFailureKind::PermissionDenied
                 );
+            }
+            RuntimeToolExecutionOutcome::Aborted => {
+                panic!("runtime runner should not abort without a cancellation token");
             }
         }
     }

@@ -201,7 +201,7 @@ function adaptProviderMigration(summary, candidateRunId) {
     summary.permissionFailureCauseSeen === true &&
     summary.permissionUserVisible === true &&
     summary.permissionSourceUnchanged === true &&
-    summary.permissionMigrationMarkerExists === false &&
+    summary.permissionMigrationManifestExists === false &&
     summary.permissionMigratedProductDbExists === false &&
     summary.permissionPageErrorCount === 0 &&
     summary.permissionRendererCrashCount === 0 &&

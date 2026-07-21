@@ -1,7 +1,6 @@
 export interface AgentStreamListenerBoundContextParams {
   activeSessionId: string;
   eventName: string;
-  expectingQueue: boolean;
   listenerBoundAt: number;
   requestStartedAt: number;
 }
@@ -63,7 +62,6 @@ export function buildAgentStreamListenerBoundContext(
   return {
     elapsedMs: params.listenerBoundAt - params.requestStartedAt,
     eventName: params.eventName,
-    expectingQueue: params.expectingQueue,
     sessionId: params.activeSessionId,
   };
 }

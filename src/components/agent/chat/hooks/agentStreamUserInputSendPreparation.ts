@@ -1,6 +1,6 @@
 import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
-import type { RuntimeSearchMode } from "@limecloud/app-server-client";
+import type { ModeKind } from "@limecloud/app-server-client";
 import type {
   AssistantDraftState,
   SendMessageObserver,
@@ -31,10 +31,6 @@ export type AgentStreamUserInputSendPreparationEnv = Pick<
   | "clawTraceEnabled"
   | "soulCopy"
   | "getWorkspaceIdForSubmit"
-  | "activeStreamRef"
-  | "getQueuedTurnsCount"
-  | "isThreadBusy"
-  | "hasPendingPreparedSubmit"
   | "getSyncedSessionModelPreference"
   | "setMessages"
   | "setIsSending"
@@ -44,7 +40,6 @@ interface PrepareAgentStreamUserInputSendOptions {
   content: string;
   images: MessageImage[];
   webSearch?: boolean;
-  searchMode?: RuntimeSearchMode;
   thinking?: boolean;
   skipUserMessage: boolean;
   executionStrategyOverride?: AgentExecutionStrategy;
@@ -59,7 +54,6 @@ export interface PreparedAgentStreamUserInputSend {
   content: string;
   images: MessageImage[];
   webSearch?: boolean;
-  searchMode?: RuntimeSearchMode;
   thinking?: boolean;
   skipUserMessage: boolean;
   effectiveExecutionStrategy: AgentExecutionStrategy;
@@ -72,49 +66,18 @@ export interface PreparedAgentStreamUserInputSend {
   syncedSessionModelPreference: SessionModelPreference | null;
   observer?: SendMessageObserver;
   requestMetadata?: Record<string, unknown>;
+  collaborationMode?: ModeKind;
   modelInputCapabilityGate?: ModelCapabilitySendGateResult;
   assistantDraft?: AssistantDraftState;
   skillRequest?: SendMessageOptions["skillRequest"];
-  explicitToolPreferences?: boolean;
   targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
-  skipPreSubmitResume?: boolean;
-  expectingQueue: boolean;
   assistantMsgId: string;
   userMsgId: string | null;
   userMsg: Message | null;
   assistantMsg: Message;
   submittedDraft?: InterruptedInputDraftSnapshot | null;
-}
-
-export function resolvePreparedSendExpectingQueue(options: {
-  activeStreamSessionId?: string | null;
-  activeStreamTurnId?: string | null;
-  currentSessionId?: string | null;
-  queuedTurnsCount: number;
-  threadBusy: boolean;
-  pendingPreparedSubmit: boolean;
-}): boolean {
-  if (options.queuedTurnsCount > 0) {
-    return true;
-  }
-
-  if (options.threadBusy || options.pendingPreparedSubmit) {
-    return true;
-  }
-
-  if (options.activeStreamTurnId?.trim()) {
-    return true;
-  }
-
-  const activeStreamSessionId = options.activeStreamSessionId?.trim();
-  if (!activeStreamSessionId) {
-    return false;
-  }
-
-  const currentSessionId = options.currentSessionId?.trim();
-  return !currentSessionId || activeStreamSessionId !== currentSessionId;
 }
 
 function shouldProjectModelInputCapabilityGate(
@@ -384,11 +347,8 @@ export function prepareAgentStreamUserInputSend(
   const messagePurpose = sendOptions?.purpose;
   const assistantDraft = sendOptions?.assistantDraft;
   const capabilityRoute = sendOptions?.capabilityRoute;
-  const searchMode = sendOptions?.searchMode;
-  const explicitToolPreferences = sendOptions?.explicitToolPreferences === true;
   const skipSessionRestore = sendOptions?.skipSessionRestore === true;
   const skipSessionStartHooks = sendOptions?.skipSessionStartHooks === true;
-  const skipPreSubmitResume = sendOptions?.skipPreSubmitResume === true;
   const resolvedSystemPrompt =
     sendOptions?.systemPromptOverride?.trim() || systemPrompt;
   const displayContent = sendOptions?.displayContent;
@@ -403,20 +363,11 @@ export function prepareAgentStreamUserInputSend(
     submittedDraft,
   );
   const skillRequest = sendOptions?.skillRequest;
-  const expectingQueue = resolvePreparedSendExpectingQueue({
-    activeStreamSessionId: env.activeStreamRef.current?.sessionId,
-    activeStreamTurnId: env.activeStreamRef.current?.turnId,
-    currentSessionId: sessionIdForSend,
-    queuedTurnsCount: env.getQueuedTurnsCount(),
-    threadBusy: env.isThreadBusy(),
-    pendingPreparedSubmit: env.hasPendingPreparedSubmit(),
-  });
   const { assistantMsg, userMsg } = prepareAgentStreamSubmitDraft({
     content,
     displayContent,
     images,
     skipUserMessage,
-    expectingQueue,
     assistantMsgId,
     userMsgId,
     assistantDraft,
@@ -433,7 +384,6 @@ export function prepareAgentStreamUserInputSend(
     content,
     images,
     webSearch,
-    searchMode,
     thinking,
     skipUserMessage,
     effectiveExecutionStrategy,
@@ -446,15 +396,15 @@ export function prepareAgentStreamUserInputSend(
     syncedSessionModelPreference,
     observer,
     requestMetadata,
+    ...(sendOptions?.collaborationMode
+      ? { collaborationMode: sendOptions.collaborationMode }
+      : {}),
     modelInputCapabilityGate: projectedModelInputCapabilityGate,
     assistantDraft,
     skillRequest,
-    explicitToolPreferences,
     targetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
-    skipPreSubmitResume,
-    expectingQueue,
     assistantMsgId,
     userMsgId,
     userMsg,

@@ -76,7 +76,7 @@ describe("agent runtime tool execution smoke guard", () => {
     const content = readAgentControlGateBSources();
 
     expect(content).toContain(AGENT_CONTROL_FINAL_TEXT);
-    expect(content).toContain('method === "agentSession/read"');
+    expect(content).toContain('method === "thread/read"');
     expect(content).toContain('transport === "electron-ipc"');
     expect(content).toContain("stage=cold-restart-electron");
     expect(content).toContain("--cold-restart");
@@ -123,7 +123,7 @@ describe("agent runtime tool execution smoke guard", () => {
     expect(content).not.toContain("visibleDomToolSearchRowCompleted");
     expect(content).toContain("visibleDomDeferredToolRowCompleted");
     expect(content).toContain(DEFERRED_MCP_TOOL_SEARCH_FINAL_TEXT);
-    expect(content).toContain('method === "agentSession/read"');
+    expect(content).toContain('method === "thread/read"');
     expect(content).toContain('transport === "electron-ipc"');
     expect(content).toContain('getAttribute("data-tool-name")');
     expect(content).toContain('getAttribute("data-tool-status")');
@@ -194,7 +194,7 @@ describe("agent runtime tool execution smoke guard", () => {
       activeSessionId: "session-deferred",
       appServerCalls: [
         {
-          method: "agentSession/read",
+          method: "thread/read",
           transport: "electron-ipc",
           status: "success",
         },
@@ -284,7 +284,7 @@ describe("agent runtime tool execution smoke guard", () => {
       activeSessionId: "session-agent-control",
       appServerCalls: [
         {
-          method: "agentSession/read",
+          method: "thread/read",
           transport: "electron-ipc",
           status: "success",
         },

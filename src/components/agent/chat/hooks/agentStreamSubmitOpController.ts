@@ -5,24 +5,18 @@ import { bindThreadGoalMetadataToSession } from "../utils/harnessRequestMetadata
 
 type AgentStreamSubmitOpBaseOptions = Omit<
   BuildUserInputSubmitOpOptions,
-  "queueIfBusy" | "sessionId" | "turnId" | "workspaceId"
+  "threadId"
 >;
 
 export interface BuildAgentStreamSubmitOpOptions extends AgentStreamSubmitOpBaseOptions {
   activeSessionId: string;
-  requestTurnId: string;
-  submitWorkspaceId?: string;
+  activeThreadId: string;
 }
 
 export function buildAgentStreamSubmitOp(
   options: BuildAgentStreamSubmitOpOptions,
 ): AgentUserInputOp {
-  const {
-    activeSessionId,
-    requestTurnId,
-    submitWorkspaceId,
-    ...submitOpOptions
-  } = options;
+  const { activeSessionId, activeThreadId, ...submitOpOptions } = options;
 
   return buildUserInputSubmitOp({
     ...submitOpOptions,
@@ -30,10 +24,6 @@ export function buildAgentStreamSubmitOp(
       submitOpOptions.requestMetadata,
       activeSessionId,
     ),
-    explicitToolPreferences: submitOpOptions.explicitToolPreferences,
-    sessionId: activeSessionId,
-    workspaceId: submitWorkspaceId,
-    turnId: requestTurnId,
-    queueIfBusy: true,
+    threadId: activeThreadId,
   });
 }

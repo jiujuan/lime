@@ -29,6 +29,37 @@ pub fn build_platform_shell_command(command: &str) -> Command {
     }
 }
 
+pub fn platform_shell_argv(command: &str) -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(executable_path) = detect_powershell_executable() {
+            return vec![
+                executable_path.to_string_lossy().to_string(),
+                "-NoProfile".to_string(),
+                "-NonInteractive".to_string(),
+                "-Command".to_string(),
+                wrap_powershell_command_for_utf8(command),
+            ];
+        }
+        return vec![
+            detect_cmd_executable().to_string_lossy().to_string(),
+            "/D".to_string(),
+            "/S".to_string(),
+            "/C".to_string(),
+            wrap_cmd_command_for_utf8(command),
+        ];
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let shell = std::env::var("SHELL")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "sh".to_string());
+        vec![shell, "-lc".to_string(), command.to_string()]
+    }
+}
+
 pub fn detect_powershell_executable() -> Option<PathBuf> {
     let from_path = which::which("pwsh")
         .ok()

@@ -87,7 +87,7 @@ function buildStateCoverage(stateObservations, screenshots) {
         observation.tab === "archived-conversations" &&
         observation.viewport === "desktop" &&
         observation.locale === "zh-CN" &&
-        observation.fixtureMethod === "agentSession/list" &&
+        observation.fixtureMethod === "thread/list" &&
         observation.fixtureOutcome === requirement.fixtureOutcome &&
         observation.testOnly === true &&
         observation.testId === requirement.testId &&

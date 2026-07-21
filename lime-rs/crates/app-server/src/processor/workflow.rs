@@ -417,7 +417,7 @@ mod tests {
                 assert_eq!(requests.len(), 2);
                 let retry_request = requests.last().expect("retry request");
                 assert_eq!(retry_request.turn.turn_id, rescheduled_turn_id);
-                assert_eq!(retry_request.input.text, "生成一篇产品文章");
+                assert_eq!(retry_request.input.concat_text(), "生成一篇产品文章");
                 assert_eq!(
                     retry_request
                         .runtime_options

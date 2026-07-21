@@ -10,18 +10,18 @@ use app_server_protocol::ConnectPayload;
 use app_server_protocol::ConnectRelayApiKeySaveParams;
 use app_server_protocol::ConnectRelayApiKeySaveResponse;
 use app_server_protocol::OpenDeepLinkPayload;
-use lime_core::app_paths;
 use lime_core::connect as connect_core;
 use lime_core::database::dao::api_key_provider::ApiProviderType;
 use lime_core::database::DbConnection;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub(crate) async fn resolve_deep_link(
+    registry_cache_path: &Path,
     params: ConnectDeepLinkResolveParams,
 ) -> Result<ConnectDeepLinkResolveResponse, RuntimeCoreError> {
     let payload = connect_core::parse_deep_link(&params.url).map_err(connect_deep_link_error)?;
-    let relay_info = match load_connect_registry_best_effort().await {
+    let relay_info = match load_connect_registry_best_effort(registry_cache_path).await {
         Some(registry) => registry.get(&payload.relay),
         None => None,
     };
@@ -49,6 +49,7 @@ pub(crate) fn resolve_open_deep_link(
 pub(crate) async fn save_relay_api_key(
     db: &DbConnection,
     api_key_provider_service: &ApiKeyProviderService,
+    registry_cache_path: &Path,
     params: ConnectRelayApiKeySaveParams,
 ) -> Result<ConnectRelayApiKeySaveResponse, RuntimeCoreError> {
     let relay_id = params.relay_id.trim();
@@ -63,7 +64,7 @@ pub(crate) async fn save_relay_api_key(
         ));
     }
 
-    let registry = load_connect_registry_required().await?;
+    let registry = load_connect_registry_required(registry_cache_path).await?;
     let relay_info = registry
         .get(relay_id)
         .ok_or_else(|| RuntimeCoreError::Backend(format!("中转商 {relay_id} 不在注册表中")))?;
@@ -119,6 +120,7 @@ pub(crate) async fn save_relay_api_key(
 }
 
 pub(crate) async fn deliver_callback(
+    registry_cache_path: &Path,
     params: ConnectCallbackSendParams,
 ) -> Result<ConnectCallbackSendResponse, RuntimeCoreError> {
     let relay_id = params.relay_id.trim();
@@ -126,7 +128,7 @@ pub(crate) async fn deliver_callback(
         return Ok(ConnectCallbackSendResponse { delivered: false });
     }
 
-    let Some(registry) = load_connect_registry_best_effort().await else {
+    let Some(registry) = load_connect_registry_best_effort(registry_cache_path).await else {
         return Ok(ConnectCallbackSendResponse { delivered: false });
     };
     let Some(relay_info) = registry.get(relay_id) else {
@@ -165,8 +167,10 @@ pub(crate) async fn deliver_callback(
     Ok(ConnectCallbackSendResponse { delivered: true })
 }
 
-async fn load_connect_registry_best_effort() -> Option<connect_core::RelayRegistry> {
-    let registry = connect_core::RelayRegistry::new(connect_registry_cache_path());
+async fn load_connect_registry_best_effort(
+    registry_cache_path: &Path,
+) -> Option<connect_core::RelayRegistry> {
+    let registry = connect_core::RelayRegistry::new(registry_cache_path.to_path_buf());
     if registry.load_from_cache().is_ok() {
         return Some(registry);
     }
@@ -176,14 +180,17 @@ async fn load_connect_registry_best_effort() -> Option<connect_core::RelayRegist
     None
 }
 
-async fn load_connect_registry_required() -> Result<connect_core::RelayRegistry, RuntimeCoreError> {
-    load_connect_registry_best_effort()
+async fn load_connect_registry_required(
+    registry_cache_path: &Path,
+) -> Result<connect_core::RelayRegistry, RuntimeCoreError> {
+    load_connect_registry_best_effort(registry_cache_path)
         .await
         .ok_or_else(|| RuntimeCoreError::Backend("无法加载中转商注册表".to_string()))
 }
 
-fn connect_registry_cache_path() -> PathBuf {
-    app_paths::best_effort_data_dir()
+pub(crate) fn connect_registry_cache_path_for_agent_root(agent_root: &Path) -> PathBuf {
+    agent_root
+        .join("cache")
         .join("connect")
         .join("registry.json")
 }
@@ -226,4 +233,23 @@ fn connect_deep_link_error(error: connect_core::DeepLinkError) -> RuntimeCoreErr
 
 fn data_error(error: impl std::fmt::Display) -> RuntimeCoreError {
     RuntimeCoreError::Backend(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_cache_path_is_derived_from_injected_agent_root() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let agent_root = temp.path().join("app-server");
+
+        assert_eq!(
+            connect_registry_cache_path_for_agent_root(&agent_root),
+            agent_root
+                .join("cache")
+                .join("connect")
+                .join("registry.json")
+        );
+    }
 }

@@ -1,0 +1,280 @@
+use super::*;
+use agent_protocol::{
+    ItemKind, ItemStatus, MessageContentPart, ThreadItemPayload, TurnAdmissionState,
+    TurnApprovalState, TurnItemsView, TurnQueueState, TurnStatus,
+};
+
+fn item(sequence: u64, ordinal: u64, id: &str, text: &str) -> ThreadItem {
+    ThreadItem {
+        session_id: SessionId::new("session-1"),
+        thread_id: ThreadId::new("thread-1"),
+        turn_id: TurnId::new("turn-1"),
+        item_id: ItemId::new(id),
+        sequence,
+        ordinal,
+        created_at_ms: sequence as i64,
+        updated_at_ms: sequence as i64,
+        completed_at_ms: None,
+        kind: ItemKind::AgentMessage,
+        status: ItemStatus::InProgress,
+        payload: ThreadItemPayload::AgentMessage {
+            text: text.to_string(),
+            phase: None,
+            content_parts: vec![MessageContentPart::Text {
+                text: text.to_string(),
+            }],
+        },
+        metadata: serde_json::Value::Null,
+    }
+}
+
+fn turn(id: &str, status: TurnStatus) -> Turn {
+    Turn {
+        session_id: SessionId::new("session-1"),
+        thread_id: ThreadId::new("thread-1"),
+        turn_id: TurnId::new(id),
+        status,
+        admission: TurnAdmissionState::Accepted,
+        queue: TurnQueueState::Running,
+        approval: TurnApprovalState::NotRequired,
+        items: Vec::new(),
+        items_view: TurnItemsView::NotLoaded,
+        error: None,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+        started_at_ms: Some(1),
+        completed_at_ms: None,
+        duration_ms: None,
+    }
+}
+
+#[test]
+fn coalesces_repeated_item_snapshots_and_preserves_first_order() {
+    let mut builder = ThreadHistoryBuilder::new();
+    let first = item(1, 10, "item-a", "first");
+    let second = item(2, 20, "item-b", "second");
+    let mut update = first.clone();
+    update.sequence = 3;
+    update.ordinal = 99;
+    if let ThreadItemPayload::AgentMessage { text, .. } = &mut update.payload {
+        *text = "latest".to_string();
+    }
+
+    let changes = builder
+        .append_items_at(1, vec![first.clone(), second.clone()])
+        .expect("initial append");
+    assert_eq!(changes.changed_items, vec![first.clone(), second]);
+    let changes = builder
+        .append_items_at(2, vec![update.clone()])
+        .expect("snapshot update");
+    assert_eq!(changes.changed_items.len(), 1);
+    assert_eq!(builder.raw_items()[0].ordinal, 10);
+    assert_eq!(builder.raw_items()[0].sequence, 3);
+    assert!(matches!(
+        &builder.raw_items()[0].payload,
+        ThreadItemPayload::AgentMessage { text, .. } if text == "firstlatest"
+    ));
+}
+
+#[test]
+fn exact_retry_is_idempotent_and_different_payload_collides() {
+    let mut builder = ThreadHistoryBuilder::new();
+    let first = item(1, 1, "item-a", "same");
+    assert!(
+        builder
+            .append_items_at(1, vec![first.clone()])
+            .unwrap()
+            .changed_items
+            .len()
+            == 1
+    );
+    assert!(builder
+        .append_items_at(1, vec![first])
+        .expect("exact retry")
+        .changed_items
+        .is_empty());
+    let different = item(1, 2, "item-b", "different");
+    assert!(matches!(
+        builder.append_items_at(1, vec![different]),
+        Err(ThreadHistoryBuilderError::SequenceCollision { sequence: 1 })
+    ));
+}
+
+#[test]
+fn rollback_removes_raw_tail_and_reports_removed_identity() {
+    let mut builder = ThreadHistoryBuilder::new();
+    let mut first = item(1, 1, "item-a", "first");
+    first.turn_id = TurnId::new("turn-1");
+    let mut second = item(2, 2, "item-b", "second");
+    second.turn_id = TurnId::new("turn-2");
+    let mut first_turn = turn("turn-1", TurnStatus::InProgress);
+    first_turn.items = vec![first.clone()];
+    builder
+        .apply_change_set(ThreadHistoryChangeSet {
+            sequence: 1,
+            changed_turns: vec![first_turn],
+            changed_items: vec![first.clone()],
+            ..Default::default()
+        })
+        .unwrap();
+    let mut second_turn = turn("turn-2", TurnStatus::Completed);
+    second_turn.updated_at_ms = 2;
+    builder
+        .apply_change_set(ThreadHistoryChangeSet {
+            sequence: 2,
+            changed_turns: vec![second_turn],
+            changed_items: vec![second.clone()],
+            ..Default::default()
+        })
+        .unwrap();
+    let changes = builder.rollback_at(3, 1).expect("rollback");
+    assert_eq!(changes.rollback_to_sequence, Some(1));
+    assert_eq!(changes.removed_item_ids, vec![second.item_id]);
+    assert_eq!(changes.removed_turn_ids, vec![TurnId::new("turn-2")]);
+    assert_eq!(builder.raw_items(), &[first]);
+    assert_eq!(builder.turns()[0].items.len(), 1);
+    assert_eq!(builder.sequence(), Some(3));
+}
+
+#[test]
+fn active_snapshot_and_pages_are_stable() {
+    let mut builder = ThreadHistoryBuilder::new();
+    let mut open = turn("turn-1", TurnStatus::InProgress);
+    open.updated_at_ms = 1;
+    builder.append_turns_at(1, vec![open.clone()]).unwrap();
+    assert_eq!(builder.active_turn_snapshot(), Some(open));
+    builder
+        .append_items_at(2, vec![item(2, 1, "item-a", "a")])
+        .unwrap();
+    let page = builder.page_items(0, 1, SortDirection::Asc);
+    assert_eq!(page.data.len(), 1);
+    assert_eq!(page.next_offset, None);
+    assert_eq!(
+        builder.snapshot().thread_id,
+        Some(ThreadId::new("thread-1"))
+    );
+}
+
+#[test]
+fn identity_validation_is_atomic() {
+    let mut builder =
+        ThreadHistoryBuilder::for_thread(SessionId::new("session-1"), ThreadId::new("thread-1"));
+    let mut wrong = item(1, 1, "item-a", "wrong");
+    wrong.session_id = SessionId::new("session-2");
+    assert!(matches!(
+        builder.append_items_at(1, vec![wrong]),
+        Err(ThreadHistoryBuilderError::SessionIdentityMismatch { .. })
+    ));
+    assert!(builder.raw_items().is_empty());
+    assert_eq!(builder.sequence(), None);
+}
+
+#[test]
+fn turn_updates_preserve_first_created_time_and_active_state() {
+    let mut builder = ThreadHistoryBuilder::new();
+    let open = turn("turn-1", TurnStatus::InProgress);
+    builder.append_turns_at(1, vec![open.clone()]).unwrap();
+    let mut done = open.clone();
+    done.status = TurnStatus::Completed;
+    done.created_at_ms = 99;
+    done.completed_at_ms = Some(100);
+    let changes = builder.append_turns_at(2, vec![done.clone()]).unwrap();
+    assert_eq!(changes.changed_turns.len(), 1);
+    assert_eq!(builder.turns()[0].created_at_ms, open.created_at_ms);
+    let mut expected = done;
+    expected.created_at_ms = open.created_at_ms;
+    assert_eq!(builder.active_turn_snapshot(), Some(expected));
+}
+
+#[test]
+fn page_descending_uses_reverse_stable_order() {
+    let mut builder = ThreadHistoryBuilder::new();
+    let items = (1..=3)
+        .map(|sequence| item(sequence, sequence, &format!("item-{sequence}"), "x"))
+        .collect::<Vec<_>>();
+    builder.append_items_at(3, items).unwrap();
+    let page = builder.page_items(0, 2, SortDirection::Desc);
+    assert_eq!(
+        page.data
+            .iter()
+            .map(|item| item.sequence)
+            .collect::<Vec<_>>(),
+        vec![3, 2]
+    );
+    assert_eq!(page.next_offset, Some(2));
+}
+
+#[test]
+fn apply_change_set_coalesces_typed_payload_and_is_atomic_on_conflict() {
+    let mut builder =
+        ThreadHistoryBuilder::for_thread(SessionId::new("session-1"), ThreadId::new("thread-1"));
+    let open = turn("turn-1", TurnStatus::InProgress);
+    let first = item(1, 1, "item-a", "hello");
+    builder
+        .apply_change_set(ThreadHistoryChangeSet {
+            sequence: 1,
+            changed_turns: vec![open],
+            changed_items: vec![first],
+            ..Default::default()
+        })
+        .expect("initial canonical batch");
+
+    let mut delta = item(2, 99, "item-a", " world");
+    delta.completed_at_ms = Some(2);
+    let normalized = builder
+        .apply_change_set(ThreadHistoryChangeSet {
+            sequence: 2,
+            changed_items: vec![delta],
+            ..Default::default()
+        })
+        .expect("typed delta");
+    assert_eq!(normalized.changed_items.len(), 1);
+    assert_eq!(builder.raw_items()[0].ordinal, 1);
+    assert_eq!(builder.raw_items()[0].sequence, 2);
+    assert!(matches!(
+        &builder.raw_items()[0].payload,
+        ThreadItemPayload::AgentMessage { text, .. } if text == "hello world"
+    ));
+
+    let before = builder.snapshot();
+    let conflict = item(2, 2, "item-b", "conflict");
+    assert!(matches!(
+        builder.apply_change_set(ThreadHistoryChangeSet {
+            sequence: 2,
+            changed_items: vec![conflict],
+            ..Default::default()
+        }),
+        Err(ThreadHistoryBuilderError::SequenceCollision { sequence: 2 })
+    ));
+    assert_eq!(builder.snapshot(), before);
+}
+
+#[test]
+fn snapshot_rebuild_rejects_orphan_items_and_preserves_turn_sequences() {
+    let open = turn("turn-1", TurnStatus::InProgress);
+    let stored_item = item(4, 1, "item-a", "hello");
+    let snapshot = CanonicalHistory {
+        session_id: Some(SessionId::new("session-1")),
+        thread_id: Some(ThreadId::new("thread-1")),
+        sequence: Some(4),
+        turns: vec![open],
+        turn_sequences: [(TurnId::new("turn-1"), 3)].into_iter().collect(),
+        items: vec![stored_item.clone()],
+    };
+    let builder = ThreadHistoryBuilder::from_snapshot(snapshot).expect("snapshot");
+    assert_eq!(builder.snapshot().turn_sequences[&TurnId::new("turn-1")], 3);
+    assert_eq!(builder.raw_items(), &[stored_item]);
+
+    let orphan = CanonicalHistory {
+        session_id: Some(SessionId::new("session-1")),
+        thread_id: Some(ThreadId::new("thread-1")),
+        sequence: Some(1),
+        turns: Vec::new(),
+        turn_sequences: Default::default(),
+        items: vec![item(1, 1, "orphan", "orphan")],
+    };
+    assert!(matches!(
+        ThreadHistoryBuilder::from_snapshot(orphan),
+        Err(ThreadHistoryBuilderError::MissingTurn { .. })
+    ));
+}

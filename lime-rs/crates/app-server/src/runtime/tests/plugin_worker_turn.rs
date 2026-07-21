@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 fn runtime_options_with_metadata(metadata: Value) -> RuntimeOptions {
@@ -18,10 +19,20 @@ fn runtime_options_with_metadata(metadata: Value) -> RuntimeOptions {
 
 struct TurnCompletedHostGenerationBackend {
     requests: Mutex<Vec<ExecutionRequest>>,
+    preflight_calls: AtomicUsize,
 }
 
 #[async_trait]
 impl ExecutionBackend for TurnCompletedHostGenerationBackend {
+    async fn preflight_turn(
+        &self,
+        _request: &ExecutionRequest,
+        _first_sampling_turn: bool,
+    ) -> Result<(), RuntimeCoreError> {
+        self.preflight_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
     async fn start_turn(
         &self,
         request: ExecutionRequest,
@@ -92,6 +103,51 @@ impl ExecutionBackend for TurnCompletedHostGenerationBackend {
     }
 }
 
+#[derive(Default)]
+struct UnavailableChatRouteBackend {
+    preflight_calls: AtomicUsize,
+}
+
+#[async_trait]
+impl ExecutionBackend for UnavailableChatRouteBackend {
+    async fn preflight_turn(
+        &self,
+        _request: &ExecutionRequest,
+        _first_sampling_turn: bool,
+    ) -> Result<(), RuntimeCoreError> {
+        self.preflight_calls.fetch_add(1, Ordering::SeqCst);
+        Err(RuntimeCoreError::Backend(
+            "chat route must not be resolved for plugin worker turns".to_string(),
+        ))
+    }
+
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "chat backend must not run for plugin worker turns".to_string(),
+        ))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 #[tokio::test]
 async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace_patch() {
     let Some(fixture_root) = content_factory_fixture_root() else {
@@ -100,8 +156,13 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
     let installed_state = content_factory_installed_state(&fixture_root);
     let data_source =
         TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
+    let backend = Arc::new(UnavailableChatRouteBackend::default());
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
-    let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
+    let core = RuntimeCore::with_backend(backend.clone())
+        .with_sidecar_store(Arc::new(
+            SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+        ))
+        .with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory".to_string()),
@@ -135,6 +196,7 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
         .expect("article workspace worker turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Completed);
+    assert_eq!(backend.preflight_calls.load(Ordering::SeqCst), 0);
     let event_types = output
         .events
         .iter()
@@ -237,6 +299,7 @@ async fn plugin_activation_turn_uses_regular_agent_backend() {
         Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
     let backend = Arc::new(TurnCompletedHostGenerationBackend {
         requests: Mutex::new(Vec::new()),
+        preflight_calls: AtomicUsize::new(0),
     });
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let core = RuntimeCore::with_backend(backend.clone())
@@ -287,8 +350,9 @@ async fn plugin_activation_turn_uses_regular_agent_backend() {
         1,
         "plugin activation must enter the regular Agent backend"
     );
+    assert_eq!(backend.preflight_calls.load(Ordering::SeqCst), 1);
     assert_eq!(
-        requests[0].input.text,
+        requests[0].input.concat_text(),
         "@写文章 写一篇关于 AI Agent 工作流的公众号文章"
     );
     assert!(
@@ -456,7 +520,9 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
     let installed_state = content_factory_installed_state(&fixture_root);
     let data_source =
         TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
-    let core = RuntimeCore::default().with_app_data_source(Arc::new(data_source));
+    let backend = Arc::new(UnavailableChatRouteBackend::default());
+    let core =
+        RuntimeCore::with_backend(backend.clone()).with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-output-auth".to_string()),
@@ -490,6 +556,7 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
         .expect("article workspace worker unauthorized output turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Failed);
+    assert_eq!(backend.preflight_calls.load(Ordering::SeqCst), 0);
     let event_types = output
         .events
         .iter()

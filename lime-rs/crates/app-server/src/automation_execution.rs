@@ -1,6 +1,4 @@
-use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSessionStartParams;
-use app_server_protocol::AgentSessionTurnStartParams;
 use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::AutomationJobIdParams;
 use app_server_protocol::AutomationJobRunNowResponse;
@@ -18,6 +16,7 @@ use serde_json::Value;
 use std::str::FromStr;
 use uuid::Uuid;
 
+use crate::runtime::TurnStartRequest;
 use crate::RuntimeCore;
 use crate::RuntimeCoreError;
 use crate::RuntimeHostContext;
@@ -163,13 +162,10 @@ impl RuntimeCore {
 
         let output = self
             .start_turn(
-                AgentSessionTurnStartParams {
+                TurnStartRequest {
                     session_id: start.session_id.clone(),
                     turn_id: Some(start.turn_id.clone()),
-                    input: AgentInput {
-                        text: start.prompt.clone(),
-                        attachments: Vec::new(),
-                    },
+                    input: vec![agent_protocol::AgentInput::text(start.prompt.clone())],
                     runtime_options: Some(start.runtime_options.clone()),
                     queue_if_busy: false,
                     skip_pre_submit_resume: false,
@@ -888,7 +884,7 @@ mod tests {
                 .map(|value| value.id.as_str()),
             Some("job-1")
         );
-        assert_eq!(request.input.text, "生成今日摘要");
+        assert_eq!(request.input.concat_text(), "生成今日摘要");
         assert_eq!(request.provider_preference(), Some("openai"));
         assert_eq!(request.model_preference(), Some("gpt-4.1"));
         assert_eq!(

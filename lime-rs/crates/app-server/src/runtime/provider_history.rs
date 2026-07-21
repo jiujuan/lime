@@ -5,10 +5,11 @@
 //! 避免任何旧 session 或 provider adapter 参与多轮采样。
 
 use super::StoredSession;
-use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument};
-use app_server_protocol::{AgentAttachment, AgentEvent, AgentInput};
+use agent_protocol::{AgentInput, ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument};
+use agent_runtime::reply_input::{RuntimeReplyInput, RuntimeReplyInputPart};
+use app_server_protocol::AgentEvent;
 use model_provider::current_client::{
-    CurrentProviderContent, CurrentProviderMessage, CurrentProviderToolCall,
+    CurrentProviderContent, CurrentProviderMessage, CurrentProviderRole, CurrentProviderToolCall,
     CurrentProviderToolResult,
 };
 use serde_json::Value;
@@ -23,31 +24,51 @@ pub(in crate::runtime) fn provider_history_excluding_current_turn_input(
     sidecar_store: Option<&super::SidecarStore>,
     turn_id: &str,
 ) -> Result<Vec<CurrentProviderMessage>, super::RuntimeCoreError> {
-    let events = provider_history_events(stored)
+    let (replacement_history, events) = provider_history_source(stored);
+    let events = events
         .into_iter()
         .filter(|event| {
             event.turn_id.as_deref() != Some(turn_id)
                 || !super::turn_input_events::is_turn_input_event(event)
         })
         .collect::<Vec<_>>();
-    messages_from_events_with_provider_input(&events, |input| {
-        super::input_media::provider_input_from_references(input, sidecar_store)
-    })
-    .map_err(super::RuntimeCoreError::Backend)
+    let mut messages = replacement_history.unwrap_or_default();
+    messages.extend(
+        messages_from_events_with_provider_input(&events, |input| {
+            RuntimeReplyInput::try_from_user_parts(input, |media| {
+                super::input_media::resolve_runtime_input_media(
+                    media,
+                    sidecar_store,
+                    &stored.session.session_id,
+                )
+            })
+            .map_err(|error| error.to_string())
+        })
+        .map_err(super::RuntimeCoreError::Backend)?,
+    );
+    Ok(messages)
 }
 
-fn provider_history_events(stored: &StoredSession) -> Vec<AgentEvent> {
-    let Some(tail_start_turn_id) = stored
+fn provider_history_source(
+    stored: &StoredSession,
+) -> (Option<Vec<CurrentProviderMessage>>, Vec<AgentEvent>) {
+    let Some(compaction) = stored
         .events
         .iter()
         .rev()
         .find(|event| event.event_type == "context.compaction.completed")
-        .and_then(|event| event.payload.get("tailStartTurnId"))
+    else {
+        return (None, stored.events.clone());
+    };
+    let replacement_history = replacement_history_from_compaction(compaction);
+    let Some(tail_start_turn_id) = compaction
+        .payload
+        .get("tailStartTurnId")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
-        return stored.events.clone();
+        return (None, stored.events.clone());
     };
 
     let Some(start_index) = stored
@@ -56,30 +77,89 @@ fn provider_history_events(stored: &StoredSession) -> Vec<AgentEvent> {
         .position(|event| event.turn_id.as_deref() == Some(tail_start_turn_id))
     else {
         // A malformed or imported compaction marker must never discard history.
-        return stored.events.clone();
+        return (None, stored.events.clone());
     };
-    stored.events[start_index..].to_vec()
+    let Some(replacement_history) = replacement_history else {
+        // Legacy compaction markers do not carry a durable replacement history. Rebuild the
+        // complete event history instead of guessing which prefix can be dropped.
+        return (None, stored.events.clone());
+    };
+    (
+        Some(replacement_history),
+        stored.events[start_index..].to_vec(),
+    )
 }
 
-pub(crate) fn reply_input_from_agent_input(
-    input: &AgentInput,
-) -> agent_runtime::reply_input::RuntimeReplyInput {
-    let images = input
-        .attachments
-        .iter()
-        .filter_map(image_from_attachment)
-        .collect();
-    agent_runtime::reply_input::RuntimeReplyInput {
-        text: input.text.clone(),
-        images,
-        agent_only: false,
+fn replacement_history_from_compaction(event: &AgentEvent) -> Option<Vec<CurrentProviderMessage>> {
+    let field = |name: &str| {
+        event
+            .payload
+            .get("artifact")
+            .filter(|value| value.is_object())
+            .and_then(|artifact| artifact.get(name))
+            .or_else(|| event.payload.get(name))
+    };
+    if field("windowNumber").and_then(Value::as_u64).is_none()
+        || field("firstWindowId").and_then(Value::as_str).is_none()
+        || field("windowId").and_then(Value::as_str).is_none()
+    {
+        return None;
     }
+    let replacement_history = field("replacementHistory")?.as_array()?;
+    replacement_history
+        .iter()
+        .map(provider_message_from_replacement_item)
+        .collect()
+}
+
+fn provider_message_from_replacement_item(item: &Value) -> Option<CurrentProviderMessage> {
+    let role = match item.get("role").and_then(Value::as_str)? {
+        "user" => CurrentProviderRole::User,
+        "assistant" => CurrentProviderRole::Assistant,
+        "tool" => CurrentProviderRole::Tool,
+        _ => return None,
+    };
+    let content = replacement_content(item.get("content")?)?;
+    Some(CurrentProviderMessage { role, content })
+}
+
+fn replacement_content(value: &Value) -> Option<Vec<CurrentProviderContent>> {
+    if let Some(text) = value.as_str().filter(|text| !text.is_empty()) {
+        return Some(vec![CurrentProviderContent::Text(text.to_string())]);
+    }
+    let parts = value.as_array()?;
+    let mut content = Vec::with_capacity(parts.len());
+    for part in parts {
+        let text = part
+            .as_str()
+            .or_else(|| part.get("text").and_then(Value::as_str))
+            .filter(|text| !text.is_empty())?;
+        content.push(CurrentProviderContent::Text(text.to_string()));
+    }
+    (!content.is_empty()).then_some(content)
 }
 
 #[cfg(test)]
 fn messages_from_events(events: &[AgentEvent]) -> Vec<CurrentProviderMessage> {
-    messages_from_events_with_provider_input(events, |input| Ok(input.clone()))
-        .expect("identity provider input projection cannot fail")
+    messages_from_events_with_provider_input(events, |input| {
+        RuntimeReplyInput::try_from_user_parts(input, |media| {
+            let (uri, detail) = match media {
+                agent_runtime::reply_input::RuntimeReplyInputMedia::Image { uri, detail }
+                | agent_runtime::reply_input::RuntimeReplyInputMedia::LocalImage {
+                    path: uri,
+                    detail,
+                } => (uri, detail),
+            };
+            Ok::<_, String>(agent_runtime::reply_input::RuntimeReplyInputImage {
+                uri: uri.clone(),
+                media_type: "image/*".to_string(),
+                provider_data: uri.starts_with("data:").then(|| uri.clone()),
+                detail,
+            })
+        })
+        .map_err(|error| error.to_string())
+    })
+    .expect("identity provider input projection cannot fail")
 }
 
 fn messages_from_events_with_provider_input<G>(
@@ -87,7 +167,7 @@ fn messages_from_events_with_provider_input<G>(
     mut provider_input: G,
 ) -> Result<Vec<CurrentProviderMessage>, String>
 where
-    G: FnMut(&AgentInput) -> Result<AgentInput, String>,
+    G: FnMut(Vec<AgentInput>) -> Result<RuntimeReplyInput, String>,
 {
     let mut messages = Vec::new();
     let mut assistant_content = Vec::new();
@@ -345,13 +425,13 @@ fn user_message_from_event<G>(
     provider_input: &mut G,
 ) -> Result<Option<CurrentProviderMessage>, String>
 where
-    G: FnMut(&AgentInput) -> Result<AgentInput, String>,
+    G: FnMut(Vec<AgentInput>) -> Result<RuntimeReplyInput, String>,
 {
     let input = event
         .payload
         .get("input")
         .cloned()
-        .and_then(|value| serde_json::from_value::<AgentInput>(value).ok())
+        .and_then(|value| serde_json::from_value::<Vec<AgentInput>>(value).ok())
         .or_else(|| {
             let text = event
                 .payload
@@ -360,58 +440,36 @@ where
                 .and_then(Value::as_str)
                 .or_else(|| event.payload.get("text").and_then(Value::as_str))?
                 .to_string();
-            let attachments = event
-                .payload
-                .get("attachments")
-                .cloned()
-                .and_then(|value| serde_json::from_value(value).ok())
-                .unwrap_or_default();
-            Some(AgentInput { text, attachments })
+            Some(vec![AgentInput::text(text)])
         });
     let Some(input) = input else {
         return Ok(None);
     };
-    let input = provider_input(&input)?;
+    let input = provider_input(input)?;
     Ok(user_message_from_input(&input))
 }
 
-fn user_message_from_input(input: &AgentInput) -> Option<CurrentProviderMessage> {
+fn user_message_from_input(input: &RuntimeReplyInput) -> Option<CurrentProviderMessage> {
     let mut content = Vec::new();
-    if !input.text.trim().is_empty() {
-        content.push(CurrentProviderContent::Text(input.text.clone()));
+    for part in &input.parts {
+        match part {
+            RuntimeReplyInputPart::Text { text, .. } if !text.trim().is_empty() => {
+                content.push(CurrentProviderContent::Text(text.clone()));
+            }
+            RuntimeReplyInputPart::Image(image) => {
+                content.push(CurrentProviderContent::Image {
+                    uri: image.uri.clone(),
+                    media_type: image.media_type.clone(),
+                    provider_data: image.provider_data.clone(),
+                    detail: image.detail,
+                });
+            }
+            RuntimeReplyInputPart::Text { .. }
+            | RuntimeReplyInputPart::Skill { .. }
+            | RuntimeReplyInputPart::Mention { .. } => {}
+        }
     }
-    content.extend(input.attachments.iter().filter_map(|attachment| {
-        image_from_attachment(attachment).map(|image| CurrentProviderContent::Image {
-            uri: image.uri,
-            media_type: image.media_type,
-            provider_data: image.provider_data,
-        })
-    }));
     (!content.is_empty()).then(|| CurrentProviderMessage::user(content))
-}
-
-fn image_from_attachment(
-    attachment: &AgentAttachment,
-) -> Option<agent_runtime::reply_input::RuntimeReplyInputImage> {
-    let attachment_uri = attachment.uri.as_deref().map(str::trim)?;
-    let provider_data = attachment_uri
-        .starts_with("data:image/")
-        .then(|| attachment_uri.to_string());
-    let uri = super::input_media::attachment_reference_uri(attachment)?;
-    let media_type = super::input_media::attachment_media_type(attachment)
-        .or_else(|| {
-            provider_data
-                .as_deref()?
-                .split(';')
-                .next()
-                .map(|prefix| prefix.trim_start_matches("data:").to_string())
-        })
-        .filter(|media_type| media_type.starts_with("image/"))?;
-    Some(agent_runtime::reply_input::RuntimeReplyInputImage {
-        uri,
-        media_type,
-        provider_data,
-    })
 }
 
 fn provider_event_payload(payload: &Value) -> &Value {
@@ -464,7 +522,7 @@ fn text_from_message_value(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_protocol::{ItemId, ItemKind, SessionId, ThreadId, ToolOutput, TurnId};
+    use agent_protocol::{ImageDetail, ItemId, ItemKind, SessionId, ThreadId, ToolOutput, TurnId};
     use serde_json::json;
 
     fn event(sequence: u64, event_type: &str, payload: Value) -> AgentEvent {
@@ -478,6 +536,90 @@ mod tests {
             timestamp: "2026-07-12T00:00:00.000Z".to_string(),
             payload,
         }
+    }
+
+    fn stored_with_events(events: Vec<AgentEvent>) -> StoredSession {
+        StoredSession {
+            session: app_server_protocol::AgentSession {
+                session_id: "session-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                app_id: "agent-chat".to_string(),
+                workspace_id: None,
+                business_object_ref: None,
+                status: app_server_protocol::AgentSessionStatus::Idle,
+                created_at: "now".to_string(),
+                updated_at: "now".to_string(),
+            },
+            turns: Vec::new(),
+            turn_inputs: HashMap::new(),
+            turn_runtime_options: HashMap::new(),
+            events,
+            output_blobs: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn replacement_history_is_used_before_bounded_tail() {
+        let mut tail = event(
+            3,
+            "message.created",
+            json!({"input": [{"type": "text", "text": "tail"}]}),
+        );
+        tail.turn_id = Some("turn-tail".to_string());
+        let compaction = event(
+            2,
+            "context.compaction.completed",
+            json!({
+                "tailStartTurnId": "turn-tail",
+                "artifact": {
+                    "windowNumber": 1,
+                    "firstWindowId": "ctx_window_session_1",
+                    "windowId": "ctx_window_session_1",
+                    "replacementHistory": [{
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "remember this"}]
+                    }]
+                }
+            }),
+        );
+        let stored = stored_with_events(vec![
+            event(
+                1,
+                "message.created",
+                json!({"input": [{"type": "text", "text": "old"}]}),
+            ),
+            compaction,
+            tail,
+        ]);
+
+        let (replacement, events) = provider_history_source(&stored);
+        let replacement = replacement.expect("replacement history");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &replacement[0].content[..],
+            [CurrentProviderContent::Text(text)] if text == "remember this"
+        ));
+    }
+
+    #[test]
+    fn legacy_compaction_without_replacement_history_rebuilds_full_history() {
+        let compaction = event(
+            2,
+            "context.compaction.completed",
+            json!({"tailStartTurnId": "turn-1", "artifact": {"contextEpoch": 1}}),
+        );
+        let stored = stored_with_events(vec![
+            event(
+                1,
+                "message.created",
+                json!({"input": [{"type": "text", "text": "old"}]}),
+            ),
+            compaction,
+        ]);
+
+        let (replacement, events) = provider_history_source(&stored);
+        assert!(replacement.is_none());
+        assert_eq!(events.len(), 2);
     }
 
     fn canonical_tool_event(
@@ -531,7 +673,7 @@ mod tests {
             event(
                 1,
                 "message.created",
-                json!({ "input": { "text": "read it", "attachments": [] } }),
+                json!({ "input": [{ "type": "text", "text": "read it" }] }),
             ),
             canonical_tool_event(
                 2,
@@ -756,7 +898,7 @@ mod tests {
             event(
                 1,
                 "message.created",
-                json!({ "input": { "text": "read it", "attachments": [] } }),
+                json!({ "input": [{ "type": "text", "text": "read it" }] }),
             ),
             event(
                 2,
@@ -809,23 +951,29 @@ mod tests {
 
     #[test]
     fn inline_image_input_is_preserved_for_current_provider() {
-        let input = AgentInput {
-            text: "describe it".to_string(),
-            attachments: vec![AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some("data:image/png;base64,abc".to_string()),
-                metadata: Some(json!({ "mimeType": "image/png" })),
-            }],
-        };
-
-        let reply = reply_input_from_agent_input(&input);
-        assert_eq!(reply.images.len(), 1);
-        assert_eq!(reply.images[0].uri, "data:image/png;base64,abc");
-        assert_eq!(reply.images[0].media_type, "image/png");
+        let root = tempfile::tempdir().expect("sidecar root");
+        let store =
+            super::super::sidecar_store::SidecarStore::new(root.path()).expect("sidecar store");
+        let input = vec![
+            AgentInput::text("describe it"),
+            AgentInput::Image {
+                uri: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==".to_string(),
+                detail: Some(ImageDetail::High),
+            },
+        ];
+        let reply = RuntimeReplyInput::try_from_user_parts(input, |media| {
+            super::super::input_media::resolve_runtime_input_media(media, Some(&store), "session-1")
+        })
+        .expect("provider input");
+        let images = reply.images().collect::<Vec<_>>();
+        assert_eq!(images.len(), 1);
+        assert!(images[0].uri.starts_with("sidecar://media/"));
+        assert_eq!(images[0].media_type, "image/png");
         assert_eq!(
-            reply.images[0].provider_data.as_deref(),
-            Some("data:image/png;base64,abc")
+            images[0].provider_data.as_deref(),
+            Some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==")
         );
+        assert_eq!(images[0].detail, Some(ImageDetail::High));
     }
 
     #[test]
@@ -834,24 +982,25 @@ mod tests {
         let root = tempfile::tempdir().expect("sidecar root");
         let store =
             super::super::sidecar_store::SidecarStore::new(root.path()).expect("sidecar store");
-        let mut input = AgentInput {
-            text: "describe it".to_string(),
-            attachments: vec![AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some(PNG_DATA_URL.to_string()),
-                metadata: Some(json!({ "mediaType": "image/png" })),
-            }],
-        };
-        super::super::input_media::persist_inline_input_media(
-            &mut input,
-            Some(&store),
-            "session-1",
-        )
-        .expect("persist input media");
-        let reference_uri = input.attachments[0].uri.clone().expect("reference uri");
+        let input = vec![
+            AgentInput::text("describe it"),
+            AgentInput::Image {
+                uri: PNG_DATA_URL.to_string(),
+                detail: None,
+            },
+        ];
         let messages = messages_from_events_with_provider_input(
             &[event(1, "message.created", json!({ "input": input }))],
-            |input| super::super::input_media::provider_input_from_references(input, Some(&store)),
+            |input| {
+                RuntimeReplyInput::try_from_user_parts(input, |media| {
+                    super::super::input_media::resolve_runtime_input_media(
+                        media,
+                        Some(&store),
+                        "session-1",
+                    )
+                })
+                .map_err(|error| error.to_string())
+            },
         )
         .expect("provider history");
 
@@ -861,8 +1010,9 @@ mod tests {
                 uri,
                 media_type,
                 provider_data: Some(provider_data),
+                detail: None,
             }] if text == "describe it"
-                && uri == &reference_uri
+                && uri.starts_with("sidecar://media/")
                 && media_type == "image/png"
                 && provider_data == PNG_DATA_URL
         ));

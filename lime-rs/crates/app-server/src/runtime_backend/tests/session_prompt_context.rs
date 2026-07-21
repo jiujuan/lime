@@ -312,6 +312,78 @@ fn plugin_activation_keeps_full_tool_surface_preparation() {
 }
 
 #[test]
+fn structured_mentions_enter_ordered_control_context_without_provider_prompt_text() {
+    let mut request = request_for_test("写一篇公众号文章", None, None);
+    request.input = agent_runtime::reply_input::RuntimeReplyInput::from_parts(vec![
+        agent_runtime::reply_input::RuntimeReplyInputPart::Text {
+            text: "写一篇公众号文章".to_string(),
+            text_elements: Vec::new(),
+        },
+        agent_runtime::reply_input::RuntimeReplyInputPart::Mention {
+            name: "creator-workbench".to_string(),
+            path: "plugin://creator-workbench".to_string(),
+        },
+        agent_runtime::reply_input::RuntimeReplyInputPart::Mention {
+            name: "duplicate-name-is-ignored".to_string(),
+            path: "plugin://creator-workbench".to_string(),
+        },
+        agent_runtime::reply_input::RuntimeReplyInputPart::Mention {
+            name: "docs".to_string(),
+            path: "app://docs".to_string(),
+        },
+        agent_runtime::reply_input::RuntimeReplyInputPart::Mention {
+            name: "browser".to_string(),
+            path: "mcp://browser".to_string(),
+        },
+    ]);
+    apply_detached_desktop_first_turn_policy(&mut request);
+
+    assert!(should_use_compact_tool_surface(&request));
+
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let turn_context = config.turn_context.expect("turn context");
+    assert_eq!(
+        turn_context.metadata[super::super::request_context::INPUT_MENTIONS_TURN_METADATA_KEY],
+        json!([
+            {
+                "kind": "plugin",
+                "name": "creator-workbench",
+                "path": "plugin://creator-workbench"
+            },
+            {
+                "kind": "app",
+                "name": "docs",
+                "path": "app://docs"
+            },
+            {
+                "kind": "mcp",
+                "name": "browser",
+                "path": "mcp://browser"
+            }
+        ])
+    );
+    let prompt = config.system_prompt.unwrap_or_default();
+    assert!(!prompt.contains("plugin://creator-workbench"));
+    assert!(!prompt.contains("app://docs"));
+    assert!(!prompt.contains("mcp://browser"));
+}
+
+#[test]
 fn detached_first_turn_session_config_uses_light_context() {
     let mut request = request_for_test(
         "帮我说明 TTFT 优化重点",

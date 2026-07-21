@@ -120,7 +120,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn direct_provider_config_keeps_runtime_only_route_without_registry_block() {
+    async fn direct_provider_config_without_capability_snapshot_fails_closed() {
         let db = test_db();
         let service = ApiKeyProviderService::new();
         let request = request_for_test("hello", None, None);
@@ -150,7 +150,17 @@ mod tests {
         .await
         .expect("route");
 
-        assert!(route.resolved_route.failure.is_none());
+        let failure = route
+            .resolved_route
+            .failure
+            .as_ref()
+            .expect("missing capability snapshot failure");
+        assert_eq!(failure.category, RouteFailureCategory::CapabilityGap);
+        assert_eq!(failure.reason_code, "capability_snapshot_missing");
+        assert_eq!(
+            failure.capability_gap.as_deref(),
+            Some("capability_snapshot:missing")
+        );
         assert_eq!(route.resolved_route.protocol, ProtocolKind::OpenaiChat);
         assert_eq!(
             route.resolved_route.endpoint.kind,
@@ -168,7 +178,14 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("direct_provider_config_not_in_registry")
         );
-        assert!(route.not_possible_payload.is_none());
+        assert_eq!(
+            route
+                .not_possible_payload
+                .as_ref()
+                .and_then(|payload| payload.pointer("/routeFailure/reasonCode"))
+                .and_then(Value::as_str),
+            Some("capability_snapshot_missing")
+        );
     }
 
     #[tokio::test]
@@ -233,6 +250,53 @@ mod tests {
                 .pointer("/modelRegistry/modelCapabilities/capabilities/tools")
                 .and_then(|value| value.as_bool()),
             Some(true)
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_provider_with_unknown_model_fails_closed() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Unknown Model Gateway".to_string(),
+                ApiProviderType::Openai,
+                "https://unknown-model.example.com/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("custom provider");
+        service
+            .add_api_key(&db, &provider.id, "sk-unknown", None, true)
+            .expect("api key");
+        let request = request_for_test("hello", None, None);
+
+        let route = resolve_chat_model_route(
+            &db,
+            &service,
+            &request,
+            &selection(&provider.id, "unknown-model"),
+            None,
+        )
+        .await
+        .expect("route");
+
+        let failure = route.resolved_route.failure.expect("unknown model failure");
+        assert_eq!(failure.category, RouteFailureCategory::ModelUnavailable);
+        assert_eq!(failure.reason_code, "model_registry_metadata_missing");
+        assert_eq!(failure.provider_id.as_deref(), Some(provider.id.as_str()));
+        assert_eq!(failure.model_id.as_deref(), Some("unknown-model"));
+        assert_eq!(
+            route
+                .not_possible_payload
+                .as_ref()
+                .and_then(|payload| payload.pointer("/routeFailure/reasonCode"))
+                .and_then(Value::as_str),
+            Some("model_registry_metadata_missing")
         );
     }
 
@@ -339,11 +403,11 @@ mod tests {
         let mut request = request_for_test("看图", None, None);
         request
             .input
-            .attachments
-            .push(app_server_protocol::AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some("file:///tmp/poster.png".to_string()),
-                metadata: None,
+            .push_image(agent_runtime::reply_input::RuntimeReplyInputImage {
+                uri: "file:///tmp/poster.png".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: None,
+                detail: None,
             });
 
         let route = resolve_chat_model_route(
@@ -421,11 +485,11 @@ mod tests {
         let mut request = request_for_test("看图", None, None);
         request
             .input
-            .attachments
-            .push(app_server_protocol::AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some("file:///tmp/poster.png".to_string()),
-                metadata: None,
+            .push_image(agent_runtime::reply_input::RuntimeReplyInputImage {
+                uri: "file:///tmp/poster.png".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: None,
+                detail: None,
             });
 
         let route = resolve_chat_model_route(
@@ -468,6 +532,23 @@ mod tests {
         service
             .add_api_key(&db, &provider.id, "sk-ant", None, true)
             .expect("api key");
+        service
+            .update_provider(
+                &db,
+                &provider.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(vec!["claude-sonnet-4".to_string()]),
+            )
+            .expect("declared model");
         let request = request_for_test("hello", None, None);
 
         let route = resolve_chat_model_route(
@@ -589,6 +670,23 @@ mod tests {
         service
             .add_api_key(&db, "openai", "sk-openai", None, true)
             .expect("openai api key");
+        service
+            .update_provider(
+                &db,
+                "openai",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(vec!["gpt-4.1-mini".to_string()]),
+            )
+            .expect("declared base model");
         let request = request_for_test(
             "hello",
             None,

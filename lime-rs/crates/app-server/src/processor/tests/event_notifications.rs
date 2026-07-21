@@ -1,11 +1,25 @@
-use crate::processor::event_notification_jsonrpc;
+use crate::processor::{
+    project_event_notifications_jsonrpc, v2_notifications::V2NotificationProjector,
+};
 use app_server_protocol::AgentEvent;
+use app_server_protocol::JsonRpcError;
 use app_server_protocol::JsonRpcMessage;
 use serde_json::json;
 
+fn event_notifications_jsonrpc(event: AgentEvent) -> Result<Vec<JsonRpcMessage>, JsonRpcError> {
+    let mut projector = V2NotificationProjector::default();
+    project_event_notifications_jsonrpc(&mut projector, event)
+}
+
+fn single_event_notification(event: AgentEvent) -> Result<JsonRpcMessage, JsonRpcError> {
+    let mut messages = event_notifications_jsonrpc(event)?;
+    assert_eq!(messages.len(), 1, "expected one projected notification");
+    Ok(messages.remove(0))
+}
+
 #[test]
-fn event_notification_jsonrpc_includes_typed_runtime_event_projection() {
-    let message = event_notification_jsonrpc(AgentEvent {
+fn event_notifications_jsonrpc_emits_direct_agent_message_delta() {
+    let message = single_event_notification(AgentEvent {
         event_id: "evt_1".to_string(),
         sequence: 1,
         session_id: "sess_1".to_string(),
@@ -24,30 +38,21 @@ fn event_notification_jsonrpc_includes_typed_runtime_event_projection() {
     let JsonRpcMessage::Notification(notification) = message else {
         panic!("expected notification");
     };
-    assert_eq!(notification.method, "agentSession/event");
-    let params = notification.params.expect("params");
+    assert_eq!(notification.method, "item/agentMessage/delta");
     assert_eq!(
-        params["typedEvent"],
+        notification.params.expect("params"),
         json!({
-            "method": "item/agentMessage/delta",
-            "params": {
-                "eventId": "evt_1",
-                "sequence": 1,
-                "sessionId": "sess_1",
-                "threadId": "thread_1",
-                "turnId": "turn_1",
-                "timestamp": "2026-07-05T00:00:00Z",
-                "itemId": "agent-message-final",
-                "delta": "typed delta",
-                "phase": "final_answer"
-            }
+            "threadId": "thread_1",
+            "turnId": "turn_1",
+            "itemId": "agent-message-final",
+            "delta": "typed delta"
         })
     );
 }
 
 #[test]
-fn event_notification_jsonrpc_includes_typed_turn_failed_projection() {
-    let message = event_notification_jsonrpc(AgentEvent {
+fn event_notifications_jsonrpc_lowers_turn_failed_to_direct_completion() {
+    let message = single_event_notification(AgentEvent {
         event_id: "evt_failed".to_string(),
         sequence: 2,
         session_id: "sess_1".to_string(),
@@ -56,7 +61,18 @@ fn event_notification_jsonrpc_includes_typed_turn_failed_projection() {
         event_type: "turn.failed".to_string(),
         timestamp: "2026-07-05T00:00:01Z".to_string(),
         payload: json!({
-            "message": "provider stream timed out"
+            "message": "provider stream timed out",
+            "turn": {
+                "sessionId": "sess_1",
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "status": "failed",
+                "createdAtMs": 100,
+                "updatedAtMs": 120,
+                "startedAtMs": 100,
+                "completedAtMs": 120,
+                "error": {"message": "provider stream timed out"}
+            }
         }),
     })
     .expect("notification");
@@ -64,27 +80,16 @@ fn event_notification_jsonrpc_includes_typed_turn_failed_projection() {
     let JsonRpcMessage::Notification(notification) = message else {
         panic!("expected notification");
     };
+    assert_eq!(notification.method, "turn/completed");
     let params = notification.params.expect("params");
-    assert_eq!(
-        params["typedEvent"],
-        json!({
-            "method": "turn/failed",
-            "params": {
-                "eventId": "evt_failed",
-                "sequence": 2,
-                "sessionId": "sess_1",
-                "threadId": "thread_1",
-                "turnId": "turn_1",
-                "timestamp": "2026-07-05T00:00:01Z",
-                "status": "failed"
-            }
-        })
-    );
+    assert_eq!(params["threadId"], "thread_1");
+    assert_eq!(params["turn"]["id"], "turn_1");
+    assert_eq!(params["turn"]["status"], "failed");
 }
 
 #[test]
-fn event_notification_jsonrpc_includes_canonical_item_projection() {
-    let message = event_notification_jsonrpc(AgentEvent {
+fn direct_delta_uses_the_canonical_item_identity() {
+    let message = single_event_notification(AgentEvent {
         event_id: "evt_item".to_string(),
         sequence: 3,
         session_id: "sess_1".to_string(),
@@ -117,13 +122,10 @@ fn event_notification_jsonrpc_includes_canonical_item_projection() {
     let JsonRpcMessage::Notification(notification) = message else {
         panic!("expected notification");
     };
+    assert_eq!(notification.method, "item/agentMessage/delta");
     let params = notification.params.expect("params");
-    assert_eq!(params["canonicalEvent"]["method"], "item/updated");
-    assert_eq!(params["canonicalEvent"]["params"]["itemId"], "agent-turn_1");
-    assert_eq!(
-        params["canonicalEvent"]["params"]["payload"]["text"],
-        "hello"
-    );
+    assert_eq!(params["itemId"], "agent-turn_1");
+    assert_eq!(params["delta"], "hello");
 }
 
 #[test]
@@ -136,7 +138,7 @@ fn current_turn_canceled_projects_interrupted_and_retired_name_is_not_accepted()
         "createdAtMs": 100,
         "updatedAtMs": 120
     });
-    let notification = event_notification_jsonrpc(AgentEvent {
+    let notification = single_event_notification(AgentEvent {
         event_id: "evt_canceled".to_string(),
         sequence: 4,
         session_id: "sess_1".to_string(),
@@ -150,11 +152,12 @@ fn current_turn_canceled_projects_interrupted_and_retired_name_is_not_accepted()
     let JsonRpcMessage::Notification(notification) = notification else {
         panic!("expected notification");
     };
+    assert_eq!(notification.method, "turn/completed");
     let params = notification.params.expect("params");
-    assert_eq!(params["canonicalEvent"]["method"], "turn/updated");
-    assert_eq!(params["canonicalEvent"]["params"]["status"], "interrupted");
+    assert_eq!(params["turn"]["id"], "turn_1");
+    assert_eq!(params["turn"]["status"], "interrupted");
 
-    let retired = event_notification_jsonrpc(AgentEvent {
+    let retired = single_event_notification(AgentEvent {
         event_id: "evt_interrupted".to_string(),
         sequence: 5,
         session_id: "sess_1".to_string(),
@@ -168,9 +171,79 @@ fn current_turn_canceled_projects_interrupted_and_retired_name_is_not_accepted()
     let JsonRpcMessage::Notification(retired) = retired else {
         panic!("expected notification");
     };
-    assert!(retired
-        .params
-        .expect("params")
-        .get("canonicalEvent")
-        .is_none());
+    assert_eq!(retired.method, "agentSession/event");
+    let params = retired.params.expect("params");
+    assert_eq!(params["event"]["type"], "turn.interrupted");
+    assert!(params.get("typedEvent").is_none());
+    assert!(params.get("canonicalEvent").is_none());
+}
+
+#[test]
+fn malformed_direct_lifecycle_does_not_fall_back_to_agent_session_event() {
+    let error = event_notifications_jsonrpc(AgentEvent {
+        event_id: "evt_malformed_item".to_string(),
+        sequence: 6,
+        session_id: "sess_1".to_string(),
+        thread_id: Some("thread_1".to_string()),
+        turn_id: Some("turn_1".to_string()),
+        event_type: "item.completed".to_string(),
+        timestamp: "2026-07-05T00:00:05Z".to_string(),
+        payload: json!({}),
+    })
+    .expect_err("malformed direct lifecycle must reject");
+
+    assert_eq!(error.code, app_server_protocol::error_codes::RUNTIME_ERROR);
+    assert!(error.message.contains("item.completed"));
+}
+
+#[test]
+fn terminal_usage_emits_completion_and_token_usage_notifications() {
+    let messages = event_notifications_jsonrpc(AgentEvent {
+        event_id: "evt_terminal_usage".to_string(),
+        sequence: 7,
+        session_id: "sess_1".to_string(),
+        thread_id: Some("thread_1".to_string()),
+        turn_id: Some("turn_1".to_string()),
+        event_type: "turn.completed".to_string(),
+        timestamp: "2026-07-05T00:00:06Z".to_string(),
+        payload: json!({
+            "turn": {
+                "sessionId": "sess_1",
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "status": "completed",
+                "createdAtMs": 100,
+                "updatedAtMs": 120,
+                "startedAtMs": 100,
+                "completedAtMs": 120
+            },
+            "usage": {
+                "total_token_usage": {
+                    "total_tokens": 31_000,
+                    "input_tokens": 31_000,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 0,
+                    "reasoning_output_tokens": 0
+                },
+                "last_token_usage": {
+                    "total_tokens": 31_000,
+                    "input_tokens": 31_000,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 0,
+                    "reasoning_output_tokens": 0
+                }
+            }
+        }),
+    })
+    .expect("terminal notifications");
+
+    assert_eq!(messages.len(), 2);
+    let methods = messages
+        .into_iter()
+        .map(|message| match message {
+            JsonRpcMessage::Notification(notification) => notification.method,
+            other => panic!("expected notification, got {other:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(methods, ["thread/tokenUsage/updated", "turn/completed"]);
 }

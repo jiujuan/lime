@@ -22,7 +22,6 @@ describe("shouldApplyAgentStreamTerminalEvent", () => {
   it("只有 queuedTurnId 时终态必须命中 queuedTurnId", () => {
     expect(
       shouldApplyAgentStreamTerminalEvent({
-        queuedTurnId: "queued-canceled",
         terminalTurnId: "queued-canceled",
       }),
     ).toBe(true);
@@ -31,7 +30,6 @@ describe("shouldApplyAgentStreamTerminalEvent", () => {
   it("只有 queuedTurnId 时拒绝不匹配的终态", () => {
     expect(
       shouldApplyAgentStreamTerminalEvent({
-        queuedTurnId: "queued-canceled",
         terminalTurnId: "turn-canceled",
       }),
     ).toBe(false);
@@ -71,7 +69,6 @@ describe("shouldApplyAgentStreamTerminalEvent", () => {
     expect(
       shouldApplyAgentStreamTerminalEvent({
         currentTurnId: "turn-current",
-        queuedTurnId: "turn-old",
         terminalTurnId: "turn-old",
       }),
     ).toBe(false);

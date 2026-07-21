@@ -217,7 +217,6 @@ const I18N_RTL_SURFACE_FILES = new Set([
   "src/components/settings-v2/_layout/index.tsx",
   "src/components/settings-v2/agent/providers/index.tsx",
   "src/components/settings-v2/general/appearance/index.tsx",
-  "src/components/settings-v2/general/hotkeys/index.tsx",
   "src/components/settings-v2/general/memory/index.tsx",
   "src/components/settings-v2/system/about/index.tsx",
   "src/components/settings-v2/system/automation/index.tsx",

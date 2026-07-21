@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  buildCodexThreadSettingsLiveUpdateProjectionEvent,
-  extractCodexThreadSettingsLiveUpdateSnapshot,
+  buildThreadSettingsLiveUpdateProjectionEvent,
+  extractThreadSettingsLiveUpdateSnapshot,
 } from "../dist/index.js";
 
 function settingsNotification(threadId, threadSettings) {
@@ -85,7 +85,7 @@ function baseInput(overrides = {}) {
 }
 
 test("thread settings live update uses notification facts and future turns without transcript pollution", () => {
-  const event = buildCodexThreadSettingsLiveUpdateProjectionEvent(
+  const event = buildThreadSettingsLiveUpdateProjectionEvent(
     baseInput(),
     {
       sequence: 211,
@@ -139,7 +139,7 @@ test("thread settings live update uses notification facts and future turns witho
 });
 
 test("thread settings live update rejects settings-only model requests and transcript/read-model leaks", () => {
-  const snapshot = extractCodexThreadSettingsLiveUpdateSnapshot(
+  const snapshot = extractThreadSettingsLiveUpdateSnapshot(
     baseInput({
       modelRequestsDuringSettingsUpdate: [{ model: "gpt-5.4" }],
       transcriptItems: [
@@ -171,7 +171,7 @@ test("thread settings live update rejects settings-only model requests and trans
 });
 
 test("thread settings live update keeps active turn settings stable and applies changes to future turns", () => {
-  const snapshot = extractCodexThreadSettingsLiveUpdateSnapshot(
+  const snapshot = extractThreadSettingsLiveUpdateSnapshot(
     baseInput({
       activeTurnAfter: {
         id: "turn-active",
@@ -203,7 +203,7 @@ test("thread settings live update keeps active turn settings stable and applies 
 });
 
 test("thread settings live update updates cached session only from notification", () => {
-  const ackMutated = extractCodexThreadSettingsLiveUpdateSnapshot(
+  const ackMutated = extractThreadSettingsLiveUpdateSnapshot(
     baseInput({
       cachedSessionAfterAck: {
         model: "gpt-5.4",
@@ -217,7 +217,7 @@ test("thread settings live update updates cached session only from notification"
     ["ack_updated_cached_session_without_notification"],
   );
 
-  const notificationIgnored = extractCodexThreadSettingsLiveUpdateSnapshot(
+  const notificationIgnored = extractThreadSettingsLiveUpdateSnapshot(
     baseInput({
       cachedSessionAfterNotification: {
         model: "mock-model",
@@ -233,7 +233,7 @@ test("thread settings live update updates cached session only from notification"
 });
 
 test("thread settings live update handles service tier clear as future request omission", () => {
-  const snapshot = extractCodexThreadSettingsLiveUpdateSnapshot(
+  const snapshot = extractThreadSettingsLiveUpdateSnapshot(
     baseInput({
       settingsUpdateRequest: {
         threadId: "thread-settings",
@@ -257,7 +257,7 @@ test("thread settings live update handles service tier clear as future request o
 });
 
 test("thread settings live update rejects sandboxPolicy combined with permissions without current error", () => {
-  const snapshot = extractCodexThreadSettingsLiveUpdateSnapshot(
+  const snapshot = extractThreadSettingsLiveUpdateSnapshot(
     baseInput({
       settingsUpdateRequest: {
         threadId: "thread-settings",
@@ -274,7 +274,7 @@ test("thread settings live update rejects sandboxPolicy combined with permission
     ["sandbox_policy_combined_with_permissions"],
   );
 
-  const rejected = extractCodexThreadSettingsLiveUpdateSnapshot(
+  const rejected = extractThreadSettingsLiveUpdateSnapshot(
     baseInput({
       settingsUpdateRequest: {
         threadId: "thread-settings",
@@ -291,7 +291,7 @@ test("thread settings live update rejects sandboxPolicy combined with permission
 });
 
 test("thread settings live update requires scoped settings notification", () => {
-  const snapshot = extractCodexThreadSettingsLiveUpdateSnapshot(
+  const snapshot = extractThreadSettingsLiveUpdateSnapshot(
     baseInput({
       settingsNotification: [settingsNotification("other-thread", { model: "gpt-5.4" })],
     }),
@@ -302,7 +302,7 @@ test("thread settings live update requires scoped settings notification", () => 
     ["missing_settings_notification", "settings_notification_wrong_thread"],
   );
 
-  const turnOverride = extractCodexThreadSettingsLiveUpdateSnapshot({
+  const turnOverride = extractThreadSettingsLiveUpdateSnapshot({
     threadId: "thread-settings",
     turnStartOverride: {
       threadId: "thread-settings",

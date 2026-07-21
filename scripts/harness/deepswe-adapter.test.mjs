@@ -216,10 +216,10 @@ describe("DeepSWE current-chain adapter", () => {
         if (method === "workspace/ensure") {
           return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
         }
-        if (method === "agentSession/start") {
+        if (method === "thread/start") {
           return { session: { sessionId: "deepswe-run-1" } };
         }
-        if (method === "agentSession/read") {
+        if (method === "thread/read") {
           return sessionRead;
         }
         if (method === "evidence/export") {
@@ -265,12 +265,12 @@ describe("DeepSWE current-chain adapter", () => {
     expect(result.status).toBe("completed");
     expect(calls.map((call) => call.method)).toEqual([
       "workspace/ensure",
-      "agentSession/start",
-      "agentSession/read",
+      "thread/start",
+      "thread/read",
       "evidence/export",
     ]);
     expect(
-      calls.find((call) => call.method === "agentSession/start")?.params,
+      calls.find((call) => call.method === "thread/start")?.params,
     ).toMatchObject({ workingDir: workspaceDir, workspaceId: "workspace-1" });
     expect(turnStartParams).toMatchObject({
       runtimeRequest: {
@@ -427,10 +427,10 @@ describe("DeepSWE current-chain adapter", () => {
         if (method === "workspace/ensure") {
           return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
         }
-        if (method === "agentSession/start") {
+        if (method === "thread/start") {
           return { session: { sessionId: "deepswe-run-failed" } };
         }
-        if (method === "agentSession/read") {
+        if (method === "thread/read") {
           readCount += 1;
           return { detail: { turns: [], items: [] } };
         }
@@ -521,10 +521,10 @@ describe("DeepSWE current-chain adapter", () => {
         if (method === "workspace/ensure") {
           return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
         }
-        if (method === "agentSession/start") {
+        if (method === "thread/start") {
           return { session: { sessionId: "deepswe-run-budget" } };
         }
-        if (method === "agentSession/read") {
+        if (method === "thread/read") {
           return {
             detail: {
               turns: [
@@ -618,10 +618,10 @@ describe("DeepSWE current-chain adapter", () => {
         if (method === "workspace/ensure") {
           return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
         }
-        if (method === "agentSession/start") {
+        if (method === "thread/start") {
           return { session: { sessionId: "deepswe-run-step-cap" } };
         }
-        if (method === "agentSession/read") {
+        if (method === "thread/read") {
           readCount += 1;
           return {
             detail: {
@@ -730,10 +730,10 @@ describe("DeepSWE current-chain adapter", () => {
         if (method === "workspace/ensure") {
           return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
         }
-        if (method === "agentSession/start") {
+        if (method === "thread/start") {
           return { session: { sessionId: "deepswe-run-runtime-budget" } };
         }
-        if (method === "agentSession/read") {
+        if (method === "thread/read") {
           return {
             detail: {
               turns: [
@@ -807,10 +807,10 @@ describe("DeepSWE current-chain adapter", () => {
         if (method === "workspace/ensure") {
           return { workspace: { id: "workspace-1", rootPath: workspaceDir } };
         }
-        if (method === "agentSession/start") {
+        if (method === "thread/start") {
           return { session: { sessionId: "deepswe-run-wall-timeout" } };
         }
-        if (method === "agentSession/read") {
+        if (method === "thread/read") {
           return {
             detail: {
               turns: [
@@ -946,7 +946,7 @@ describe("DeepSWE current-chain adapter", () => {
 
   it("classifies current-chain and verifier failures by owner", () => {
     expect(
-      classifyFailure("agent", new Error("agentSession/read failed")).owner,
+      classifyFailure("agent", new Error("thread/read failed")).owner,
     ).toBe("app-server");
     expect(
       classifyFailure("verifier", new Error("Pier reward.json missing")).owner,

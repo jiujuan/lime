@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "inputText": {
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "inputText"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "inputImage": {
+          "properties": {
+            "image_url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "image_url"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "inputImage"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "DynamicToolCallOutputContentItem"
+}

@@ -7,7 +7,7 @@ impl ConnectAppDataSource for LocalAppDataSource {
         &self,
         params: ConnectDeepLinkResolveParams,
     ) -> Result<ConnectDeepLinkResolveResponse, RuntimeCoreError> {
-        connect::resolve_deep_link(params).await
+        connect::resolve_deep_link(&self.connect_registry_cache_path, params).await
     }
 
     async fn resolve_connect_open_deep_link(
@@ -21,13 +21,19 @@ impl ConnectAppDataSource for LocalAppDataSource {
         &self,
         params: ConnectRelayApiKeySaveParams,
     ) -> Result<ConnectRelayApiKeySaveResponse, RuntimeCoreError> {
-        connect::save_relay_api_key(&self.db, &self.api_key_provider_service, params).await
+        connect::save_relay_api_key(
+            &self.db,
+            &self.api_key_provider_service,
+            &self.connect_registry_cache_path,
+            params,
+        )
+        .await
     }
 
     async fn deliver_connect_callback(
         &self,
         params: ConnectCallbackSendParams,
     ) -> Result<ConnectCallbackSendResponse, RuntimeCoreError> {
-        connect::deliver_callback(params).await
+        connect::deliver_callback(&self.connect_registry_cache_path, params).await
     }
 }

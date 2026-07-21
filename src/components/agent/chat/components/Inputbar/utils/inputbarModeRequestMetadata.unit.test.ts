@@ -6,7 +6,7 @@ import {
 } from "./inputbarModeRequestMetadata";
 
 describe("inputbarModeRequestMetadata", () => {
-  it("应把 plan 和 goal 开关投影到 harness metadata", () => {
+  it("只把 goal 开关投影到 harness metadata", () => {
     const metadata = buildInputbarModeRequestMetadata(
       {
         harness: {
@@ -27,18 +27,11 @@ describe("inputbarModeRequestMetadata", () => {
 
     expect(metadata).toMatchObject({
       harness: {
-        task_mode_enabled: true,
         goal_mode_enabled: true,
         preferences: {
           subagent: true,
-          task: true,
-          task_mode: true,
           objective: true,
           goal: true,
-        },
-        collaboration_mode: {
-          mode: "plan",
-          source: "inputbar",
         },
         thread_goal: {
           enabled: true,
@@ -68,28 +61,17 @@ describe("inputbarModeRequestMetadata", () => {
         },
       },
     });
+    expect(JSON.stringify(metadata)).not.toContain("collaboration_mode");
+    expect(JSON.stringify(metadata)).not.toContain("task_mode_enabled");
   });
 
-  it("计划模式应作为协作模式投影，且不创建 update_plan 工具语义", () => {
+  it("计划模式不再写入 request metadata", () => {
     const metadata = buildInputbarModeRequestMetadata(undefined, {
       planEnabled: true,
       source: "plus_menu",
     });
 
-    expect(metadata).toMatchObject({
-      harness: {
-        task_mode_enabled: true,
-        collaboration_mode: {
-          mode: "plan",
-          source: "plus_menu",
-        },
-        preferences: {
-          task: true,
-          task_mode: true,
-        },
-      },
-    });
-    expect(JSON.stringify(metadata)).not.toContain("update_plan");
+    expect(metadata).toBeUndefined();
   });
 
   it("未开启 plan 时不生成 toolPreferencesOverride", () => {

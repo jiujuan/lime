@@ -70,6 +70,14 @@ struct PluginShellDescriptorFields {
 }
 
 impl RuntimeCore {
+    pub(super) fn installed_plugin_runtime_dir(
+        &self,
+        state: &serde_json::Value,
+    ) -> Result<PathBuf, RuntimeCoreError> {
+        let plugin_data_root = self.app_data_source.plugin_data_root().ok();
+        resolve_plugin_runtime_dir(state, plugin_data_root.as_deref())
+    }
+
     pub async fn list_plugin_installed(
         &self,
     ) -> Result<PluginInstalledListResponse, RuntimeCoreError> {
@@ -179,7 +187,7 @@ impl RuntimeCore {
             ));
         }
 
-        let app_dir = match resolve_plugin_runtime_dir(&installed_state) {
+        let app_dir = match self.installed_plugin_runtime_dir(&installed_state) {
             Ok(app_dir) => app_dir,
             Err(error) => {
                 return Ok(build_plugin_shell_prepare_response(
@@ -225,7 +233,7 @@ impl RuntimeCore {
             return Ok(status);
         }
 
-        let app_dir = resolve_plugin_runtime_dir(&state)?;
+        let app_dir = self.installed_plugin_runtime_dir(&state)?;
         ensure_plugin_runtime_folder(&app_dir)?;
         let task_runtime = build_plugin_task_runtime_contract(&state, Some(&app_dir));
         let port = reserve_local_port()?;
@@ -271,11 +279,17 @@ impl RuntimeCore {
         if let Some(status) = self.running_plugin_ui_runtime(&params.app_id, None).await? {
             return Ok(status);
         }
+        let plugin_data_root = self.app_data_source.plugin_data_root().ok();
         let task_runtime = self
             .find_plugin_installed_state(&params.app_id)
             .await
             .ok()
-            .map(|state| build_plugin_task_runtime_contract_with_runtime_dir(&state));
+            .map(|state| {
+                build_plugin_task_runtime_contract_with_runtime_dir(
+                    &state,
+                    plugin_data_root.as_deref(),
+                )
+            });
         Ok(stopped_plugin_ui_runtime_status(
             params.app_id,
             "Plugin UI runtime 未启动。",

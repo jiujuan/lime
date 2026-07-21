@@ -1,6 +1,6 @@
 use app_server::capability_source_from_app_policy_json;
 use app_server::init_app_server_otel_from_env;
-use app_server::run_stdio;
+use app_server::run_transport;
 use app_server::AppDataSource;
 use app_server::AppServer;
 use app_server::AppServerBackendMode;
@@ -16,20 +16,17 @@ use app_server::SidecarStore;
 use app_server::StorageRoots;
 use app_server::TraceEventWriter;
 use app_server::DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS;
+use app_server_transport::AppServerTransport;
 use app_server_transport::DEFAULT_LISTEN_URL;
 use lime_core::app_paths;
 use lime_core::database;
 use lime_core::database::DbConnection;
-use lime_core::product_db_migration_cleanup::{
-    cleanup_migrated_product_db_source, ProductDbMigrationCleanupPolicy,
-};
 use lime_infra::telemetry::TelemetryStore;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const APP_SERVER_DATA_DIR_ENV: &str = "APP_SERVER_DATA_DIR";
-const PRODUCT_DB_MIGRATION_CLEANUP_ENV: &str = "APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP";
 
 struct InitializedDatabase {
     db: DbConnection,
@@ -39,12 +36,22 @@ struct InitializedDatabase {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let config = parse_args()?;
-    if config.listen != DEFAULT_LISTEN_URL {
-        anyhow::bail!("unsupported listen URL: {}", config.listen);
+    let transport_base_dir = match config.data_dir.clone() {
+        Some(data_dir) => data_dir,
+        None => app_paths::preferred_agent_root()
+            .map_err(|error| anyhow::anyhow!("failed to resolve AgentRoot: {error}"))?,
+    };
+    let transport =
+        AppServerTransport::from_listen_url_with_base(&config.listen, &transport_base_dir)
+            .map_err(|error| anyhow::anyhow!(error))?;
+
+    if config.model_control_source.is_some() && transport == AppServerTransport::Off {
+        drop(initialize_database(&config)?);
+        return Ok(());
     }
 
     let _otel_guard = init_app_server_otel_from_env()?;
-    run_stdio(build_app_server(&config).await?).await?;
+    run_transport(build_app_server(&config).await?, transport).await?;
 
     Ok(())
 }
@@ -58,7 +65,7 @@ struct CliConfig {
     backend_args: Vec<String>,
     backend_timeout_ms: u64,
     data_dir: Option<PathBuf>,
-    product_db_migration_cleanup_policy: ProductDbMigrationCleanupPolicy,
+    model_control_source: Option<PathBuf>,
 }
 
 impl CliConfig {
@@ -76,7 +83,6 @@ fn parse_args() -> anyhow::Result<CliConfig> {
     parse_args_from_with_env(
         std::env::args().skip(1),
         std::env::var_os(APP_SERVER_DATA_DIR_ENV),
-        std::env::var_os(PRODUCT_DB_MIGRATION_CLEANUP_ENV),
     )
 }
 
@@ -167,8 +173,13 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
             .map_err(|error| anyhow::anyhow!("failed to initialize event log writer: {error}"))?;
         let trace_event_writer = TraceEventWriter::new(&storage_roots.trace_log_root)
             .map_err(|error| anyhow::anyhow!("failed to initialize trace event writer: {error}"))?;
-        let projection_store = ProjectionStore::initialize(&storage_roots.projection_db_path)
-            .map_err(|error| anyhow::anyhow!("failed to initialize projection store: {error}"))?;
+        let projection_store = ProjectionStore::initialize_with_storage_paths(
+            &storage_roots.projection_db_path,
+            &storage_roots.state_db_path,
+            &storage_roots.thread_history_db_path,
+            &storage_roots.data_root,
+        )
+        .map_err(|error| anyhow::anyhow!("failed to initialize projection store: {error}"))?;
         let telemetry_store = TelemetryStore::initialize(&storage_roots.telemetry_db_path)
             .map_err(|error| anyhow::anyhow!("failed to initialize telemetry store: {error}"))?;
         runtime = runtime
@@ -178,10 +189,21 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
             .with_telemetry_store(Arc::new(telemetry_store));
     }
 
-    runtime
+    if let Err(error) = runtime
         .recover_agent_control_spawns(RuntimeHostContext::default(), None)
         .await
-        .map_err(|error| anyhow::anyhow!("failed to recover agent control spawns: {error}"))?;
+    {
+        if error.is_provider_selection_required() {
+            tracing::warn!(
+                error = %error,
+                "deferring agent control recovery until provider/model selection is available"
+            );
+        } else {
+            return Err(anyhow::anyhow!(
+                "failed to recover agent control spawns: {error}"
+            ));
+        }
+    }
 
     AppServer::with_runtime(runtime)
         .with_mcp_elicitation_router(mcp_elicitation_router)
@@ -193,17 +215,18 @@ fn initialize_database(config: &CliConfig) -> anyhow::Result<InitializedDatabase
         Some(data_dir) => {
             let storage_roots = StorageRoots::initialize(data_dir)
                 .map_err(|error| anyhow::anyhow!("failed to initialize storage roots: {error}"))?;
-            let (db, resolution) = database::init_database_with_data_dir_resolution(data_dir)
-                .map_err(|error| {
+            let db = database::init_database_at_path(&storage_roots.product_db_path).map_err(
+                |error| {
                     anyhow::anyhow!(
                         "failed to initialize app-server database at {}: {error}",
                         storage_roots.product_db_path.display()
                     )
-                })?;
-            cleanup_migrated_product_db_source_after_init(
-                resolution.migrated_from.as_ref(),
-                &resolution.database_path,
-                config.product_db_migration_cleanup_policy,
+                },
+            )?;
+            migrate_model_control_data_if_available(
+                data_dir,
+                &storage_roots.product_db_path,
+                config.model_control_source.as_deref(),
             )?;
             Ok(InitializedDatabase {
                 db,
@@ -211,20 +234,22 @@ fn initialize_database(config: &CliConfig) -> anyhow::Result<InitializedDatabase
             })
         }
         None => {
-            let data_root = app_paths::best_effort_data_dir();
+            let data_root = app_paths::preferred_agent_root()
+                .map_err(|error| anyhow::anyhow!("failed to resolve AgentRoot: {error}"))?;
             let storage_roots = StorageRoots::initialize(&data_root)
                 .map_err(|error| anyhow::anyhow!("failed to initialize storage roots: {error}"))?;
-            let (db, resolution) = database::init_database_with_data_dir_resolution(&data_root)
-                .map_err(|error| {
+            let db = database::init_database_at_path(&storage_roots.product_db_path).map_err(
+                |error| {
                     anyhow::anyhow!(
                         "failed to initialize app-server database at {}: {error}",
                         storage_roots.product_db_path.display()
                     )
-                })?;
-            cleanup_migrated_product_db_source_after_init(
-                resolution.migrated_from.as_ref(),
-                &resolution.database_path,
-                config.product_db_migration_cleanup_policy,
+                },
+            )?;
+            migrate_model_control_data_if_available(
+                &data_root,
+                &storage_roots.product_db_path,
+                config.model_control_source.as_deref(),
             )?;
             Ok(InitializedDatabase {
                 db,
@@ -234,47 +259,173 @@ fn initialize_database(config: &CliConfig) -> anyhow::Result<InitializedDatabase
     }
 }
 
-fn cleanup_migrated_product_db_source_after_init(
-    migrated_from: Option<&PathBuf>,
-    database_path: &PathBuf,
-    policy: ProductDbMigrationCleanupPolicy,
+fn migrate_model_control_data_if_available(
+    data_root: &Path,
+    target_path: &Path,
+    explicit_source: Option<&Path>,
 ) -> anyhow::Result<()> {
-    let Some(source_path) = migrated_from else {
+    if let Some(source) = explicit_source {
+        validate_explicit_model_control_source(data_root, source)?;
+    }
+    let candidates = explicit_source
+        .map(|source| vec![source.to_path_buf()])
+        .unwrap_or_else(|| app_paths::model_control_migration_source_paths(data_root));
+    let Some((source_path, signal)) =
+        select_model_control_source(data_root, candidates, target_path)?
+    else {
+        if let Some(source) = explicit_source {
+            anyhow::bail!(
+                "explicit model control source has no migratable model state: {}",
+                source.display()
+            );
+        }
         return Ok(());
     };
-    if source_path == database_path {
-        return Ok(());
-    }
-
-    let report = cleanup_migrated_product_db_source(source_path, policy).map_err(|error| {
-        anyhow::anyhow!(
-            "failed to clean migrated product database source {} with policy {}: {error}",
-            source_path.display(),
-            policy.as_str()
-        )
-    })?;
+    let report =
+        database::model_control_migration::migrate_model_control_data(&source_path, target_path)
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "failed to migrate model control data from {}: {error}",
+                    source_path.display()
+                )
+            })?;
     if report.changed() {
         tracing::info!(
-            "[路径迁移] 已按 {} 清理迁移源 Product DB {}（rows={}, schema_objects={}, files={}）",
-            report.policy.as_str(),
-            report.source_path.display(),
-            report.rows_deleted,
-            report.schema_objects_dropped,
-            report.database_files_deleted
+            source = %source_path.display(),
+            source_api_keys = signal.api_keys,
+            source_custom_providers = signal.custom_providers,
+            source_model_preferences = signal.model_preferences,
+            providers = report.providers,
+            api_keys = report.api_keys,
+            provider_ui_state = report.provider_ui_state,
+            model_preferences = report.model_preferences,
+            settings = report.settings,
+            "migrated model control data without importing Product DB"
         );
     }
     Ok(())
 }
 
+fn validate_explicit_model_control_source(data_root: &Path, source: &Path) -> anyhow::Result<()> {
+    let allowed_sources = app_paths::model_control_migration_source_paths(data_root);
+    let Some(source_root) = allowed_sources
+        .iter()
+        .find(|candidate| candidate.as_path() == source)
+        .and_then(|candidate| candidate.parent())
+    else {
+        anyhow::bail!(
+            "explicit model control source is outside the same-product Lime legacy boundary: {}",
+            source.display()
+        );
+    };
+
+    validate_model_control_source_path(source_root, source)
+}
+
+fn validate_model_control_source_path(source_root: &Path, source: &Path) -> anyhow::Result<()> {
+    let root_metadata = std::fs::symlink_metadata(source_root).map_err(|error| {
+        anyhow::anyhow!(
+            "failed to inspect model control source root {}: {error}",
+            source_root.display()
+        )
+    })?;
+    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
+        anyhow::bail!(
+            "model control source root must be a regular non-symlink directory: {}",
+            source_root.display()
+        );
+    }
+
+    let metadata = std::fs::symlink_metadata(source).map_err(|error| {
+        anyhow::anyhow!(
+            "failed to inspect explicit model control source {}: {error}",
+            source.display()
+        )
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        anyhow::bail!(
+            "explicit model control source must be a regular non-symlink file: {}",
+            source.display()
+        );
+    }
+
+    let canonical_root = std::fs::canonicalize(source_root).map_err(|error| {
+        anyhow::anyhow!(
+            "failed to canonicalize model control source root {}: {error}",
+            source_root.display()
+        )
+    })?;
+    let canonical_source = std::fs::canonicalize(source).map_err(|error| {
+        anyhow::anyhow!(
+            "failed to canonicalize model control source {}: {error}",
+            source.display()
+        )
+    })?;
+    if canonical_source.parent() != Some(canonical_root.as_path()) {
+        anyhow::bail!(
+            "model control source escapes its same-product Lime legacy root: {}",
+            source.display()
+        );
+    }
+    Ok(())
+}
+
+fn select_model_control_source(
+    data_root: &Path,
+    candidates: impl IntoIterator<Item = PathBuf>,
+    target_path: &Path,
+) -> anyhow::Result<
+    Option<(
+        PathBuf,
+        database::model_control_migration::ModelControlSourceSignal,
+    )>,
+> {
+    let mut selected = None;
+    for source_path in candidates {
+        if source_path == target_path {
+            continue;
+        }
+        match std::fs::symlink_metadata(&source_path) {
+            Ok(_) => validate_explicit_model_control_source(data_root, &source_path)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(anyhow::anyhow!(
+                    "failed to inspect model control data at {}: {error}",
+                    source_path.display()
+                ));
+            }
+        }
+        let signal = database::model_control_migration::inspect_model_control_source(&source_path)
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "failed to inspect model control data at {}: {error}",
+                    source_path.display()
+                )
+            })?;
+        let Some(signal) = signal else {
+            continue;
+        };
+        let should_replace = selected.as_ref().is_none_or(
+            |(_, current): &(
+                PathBuf,
+                database::model_control_migration::ModelControlSourceSignal,
+            )| { signal.priority() > current.priority() },
+        );
+        if should_replace {
+            selected = Some((source_path, signal));
+        }
+    }
+    Ok(selected)
+}
+
 #[cfg(test)]
 fn parse_args_from(args: impl IntoIterator<Item = String>) -> anyhow::Result<CliConfig> {
-    parse_args_from_with_env(args, None, None)
+    parse_args_from_with_env(args, None)
 }
 
 fn parse_args_from_with_env(
     args: impl IntoIterator<Item = String>,
     data_dir_env: Option<OsString>,
-    product_db_migration_cleanup_env: Option<OsString>,
 ) -> anyhow::Result<CliConfig> {
     let mut args = args.into_iter();
     let mut listen = DEFAULT_LISTEN_URL.to_string();
@@ -283,15 +434,11 @@ fn parse_args_from_with_env(
     let mut backend_command = None;
     let mut backend_args = Vec::new();
     let mut backend_timeout_ms = DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS;
+    let mut data_dir_from_cli = false;
     let mut data_dir = data_dir_env
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
-    let mut product_db_migration_cleanup_policy = product_db_migration_cleanup_env
-        .and_then(|value| value.into_string().ok())
-        .map(|value| ProductDbMigrationCleanupPolicy::parse(&value))
-        .transpose()
-        .map_err(|error| anyhow::anyhow!(error))?
-        .unwrap_or_default();
+    let mut model_control_source = None;
 
     while let Some(arg) = args.next() {
         if let Some(value) = arg.strip_prefix("--data-dir=") {
@@ -299,14 +446,16 @@ fn parse_args_from_with_env(
                 anyhow::bail!("--data-dir requires a path");
             }
             data_dir = Some(PathBuf::from(value));
+            data_dir_from_cli = true;
             continue;
         }
-        if let Some(value) = arg.strip_prefix("--product-db-migration-cleanup=") {
-            product_db_migration_cleanup_policy = ProductDbMigrationCleanupPolicy::parse(value)
-                .map_err(|error| anyhow::anyhow!(error))?;
+        if let Some(value) = arg.strip_prefix("--model-control-source=") {
+            if value.is_empty() {
+                anyhow::bail!("--model-control-source requires a path");
+            }
+            model_control_source = Some(PathBuf::from(value));
             continue;
         }
-
         match arg.as_str() {
             "--stdio" => listen = DEFAULT_LISTEN_URL.to_string(),
             "--listen" => {
@@ -351,23 +500,26 @@ fn parse_args_from_with_env(
                     Some(PathBuf::from(args.next().ok_or_else(|| {
                         anyhow::anyhow!("--data-dir requires a path")
                     })?));
+                data_dir_from_cli = true;
             }
-            "--product-db-migration-cleanup" => {
-                let value = args.next().ok_or_else(|| {
-                    anyhow::anyhow!("--product-db-migration-cleanup requires a value")
-                })?;
-                product_db_migration_cleanup_policy =
-                    ProductDbMigrationCleanupPolicy::parse(&value)
-                        .map_err(|error| anyhow::anyhow!(error))?;
+            "--model-control-source" => {
+                model_control_source =
+                    Some(PathBuf::from(args.next().ok_or_else(|| {
+                        anyhow::anyhow!("--model-control-source requires a path")
+                    })?));
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: app-server [--stdio] [--listen stdio://] [--backend external|runtime|mock|unavailable] [--backend-command path] [--backend-arg value] [--backend-timeout-ms ms] [--app-policy path] [--data-dir path] [--product-db-migration-cleanup retain|clear-rows|drop-tables|delete-file]"
+                    "Usage: app-server [--stdio] [--listen stdio://|unix://PATH|ws://127.0.0.1:PORT|off] [--backend external|runtime|mock|unavailable] [--backend-command path] [--backend-arg value] [--backend-timeout-ms ms] [--app-policy path] [--data-dir path] [--model-control-source path]"
                 );
                 std::process::exit(0);
             }
             other => anyhow::bail!("unknown argument: {other}"),
         }
+    }
+
+    if model_control_source.is_some() && !data_dir_from_cli {
+        anyhow::bail!("--model-control-source requires an explicit --data-dir");
     }
 
     Ok(CliConfig {
@@ -378,7 +530,7 @@ fn parse_args_from_with_env(
         backend_args,
         backend_timeout_ms,
         data_dir,
-        product_db_migration_cleanup_policy,
+        model_control_source,
     })
 }
 
@@ -407,10 +559,7 @@ mod tests {
             DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS
         );
         assert_eq!(config.data_dir, None);
-        assert_eq!(
-            config.product_db_migration_cleanup_policy,
-            ProductDbMigrationCleanupPolicy::DropTables
-        );
+        assert_eq!(config.model_control_source, None);
     }
 
     #[test]
@@ -474,11 +623,40 @@ mod tests {
     }
 
     #[test]
+    fn parse_args_accepts_explicit_model_control_source_with_data_dir() {
+        let config = parse_args_from(
+            [
+                "--data-dir=/tmp/platform-app-server",
+                "--model-control-source=/tmp/lime-legacy/app.db",
+            ]
+            .map(str::to_string),
+        )
+        .expect("config");
+
+        assert_eq!(
+            config.model_control_source,
+            Some(PathBuf::from("/tmp/lime-legacy/app.db"))
+        );
+    }
+
+    #[test]
+    fn parse_args_rejects_model_control_source_without_explicit_data_dir() {
+        let error = parse_args_from_with_env(
+            ["--model-control-source", "/tmp/lime-legacy/app.db"].map(str::to_string),
+            Some(OsString::from("/tmp/env-app-server")),
+        )
+        .expect_err("model source must not target an ambient data dir");
+
+        assert!(error
+            .to_string()
+            .contains("requires an explicit --data-dir"));
+    }
+
+    #[test]
     fn parse_args_data_dir_cli_wins_over_env() {
         let config = parse_args_from_with_env(
             ["--data-dir", "/tmp/cli-app-server"].map(str::to_string),
             Some(OsString::from("/tmp/env-app-server")),
-            None,
         )
         .expect("config");
 
@@ -487,46 +665,25 @@ mod tests {
 
     #[test]
     fn parse_args_accepts_data_dir_env_fallback() {
-        let config = parse_args_from_with_env(
-            Vec::new(),
-            Some(OsString::from("/tmp/env-app-server")),
-            None,
-        )
-        .expect("config");
+        let config =
+            parse_args_from_with_env(Vec::new(), Some(OsString::from("/tmp/env-app-server")))
+                .expect("config");
 
         assert_eq!(config.data_dir, Some(PathBuf::from("/tmp/env-app-server")));
     }
 
     #[test]
-    fn parse_args_accepts_product_db_migration_cleanup_policy() {
-        let config =
+    fn parse_args_rejects_retired_product_db_migration_cleanup_policy() {
+        let error =
             parse_args_from(["--product-db-migration-cleanup", "delete-file"].map(str::to_string))
-                .expect("config");
+                .expect_err("retired startup cleanup option must be rejected");
 
-        assert_eq!(
-            config.product_db_migration_cleanup_policy,
-            ProductDbMigrationCleanupPolicy::DeleteFile
-        );
+        assert!(error.to_string().contains("unknown argument"));
 
-        let config = parse_args_from_with_env(
-            ["--product-db-migration-cleanup=retain"].map(str::to_string),
-            None,
-            Some(OsString::from("clear-rows")),
-        )
-        .expect("config");
+        let error = parse_args_from(["--product-db-migration-cleanup=retain"].map(str::to_string))
+            .expect_err("retired startup cleanup option must be rejected");
 
-        assert_eq!(
-            config.product_db_migration_cleanup_policy,
-            ProductDbMigrationCleanupPolicy::Retain
-        );
-
-        let config = parse_args_from_with_env(Vec::new(), None, Some(OsString::from("clear-rows")))
-            .expect("config");
-
-        assert_eq!(
-            config.product_db_migration_cleanup_policy,
-            ProductDbMigrationCleanupPolicy::ClearRows
-        );
+        assert!(error.to_string().contains("unknown argument"));
     }
 
     #[test]
@@ -541,7 +698,7 @@ mod tests {
             backend_args: Vec::new(),
             backend_timeout_ms: DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS,
             data_dir: Some(data_dir.clone()),
-            product_db_migration_cleanup_policy: ProductDbMigrationCleanupPolicy::DropTables,
+            model_control_source: None,
         };
 
         let db = initialize_database(&config).expect("initialize database");
@@ -554,6 +711,14 @@ mod tests {
             data_dir.join("runtime").join("projection_1.sqlite")
         );
         assert_eq!(
+            storage_roots.state_db_path,
+            data_dir.join("sqlite").join("state.sqlite")
+        );
+        assert_eq!(
+            storage_roots.thread_history_db_path,
+            data_dir.join("sqlite").join("thread_history.sqlite")
+        );
+        assert_eq!(
             storage_roots.event_log_root,
             data_dir.join("runtime").join("events")
         );
@@ -564,11 +729,11 @@ mod tests {
     }
 
     #[test]
-    fn initialize_database_migrates_previous_product_settings_from_user_data_root() {
+    fn initialize_database_migrates_only_model_control_data_from_same_product_source() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let user_data_root = temp_dir.path().join("desktop-platform");
         let app_server_data_dir = user_data_root.join("app-server");
-        let previous_db = user_data_root.join("lime.db");
+        let previous_db = user_data_root.join("app.db");
         let previous_db_conn =
             database::init_database_at_path(&previous_db).expect("previous product database");
         {
@@ -592,6 +757,17 @@ mod tests {
                 ),
             )
             .expect("insert previous provider");
+            conn.execute(
+                "INSERT INTO api_keys (id, provider_id, api_key_encrypted, created_at)
+                 VALUES ('provider-key', 'custom-openai-compatible', 'ciphertext', '2026-06-15T00:00:00Z')",
+                [],
+            )
+            .expect("insert previous API key");
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('request_logs.retention', '7d')",
+                [],
+            )
+            .expect("insert non-model setting");
         }
         drop(previous_db_conn);
 
@@ -603,86 +779,185 @@ mod tests {
             backend_args: Vec::new(),
             backend_timeout_ms: DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS,
             data_dir: Some(app_server_data_dir.clone()),
-            product_db_migration_cleanup_policy: ProductDbMigrationCleanupPolicy::DropTables,
+            model_control_source: Some(previous_db.clone()),
         };
 
         let db = initialize_database(&config).expect("initialize app-server database");
         drop(db);
 
-        let migrated = rusqlite::Connection::open(app_server_data_dir.join("lime.db"))
-            .expect("migrated app-server db");
-        let setting_value: String = migrated
+        let current = rusqlite::Connection::open(app_server_data_dir.join("lime.db"))
+            .expect("current app-server db");
+        let setting_value: String = current
             .query_row(
                 "SELECT value FROM settings WHERE key = ?1",
                 ["providers.active_tab"],
                 |row| row.get(0),
             )
             .expect("migrated provider setting");
-        let provider_count: i64 = migrated
+        let provider_count: i64 = current
             .query_row(
                 "SELECT COUNT(*) FROM api_key_providers WHERE id = ?1",
                 ["custom-openai-compatible"],
                 |row| row.get(0),
             )
-            .expect("migrated custom provider");
+            .expect("migrated custom provider count");
+        let api_key_count: i64 = current
+            .query_row(
+                "SELECT COUNT(*) FROM api_keys WHERE id = 'provider-key'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("migrated API key count");
+        let non_model_setting_count: i64 = current
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key = 'request_logs.retention'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("non-model setting count");
 
         assert_eq!(setting_value, "service-providers");
         assert_eq!(provider_count, 1);
+        assert_eq!(api_key_count, 1);
+        assert_eq!(non_model_setting_count, 0);
 
-        let previous = rusqlite::Connection::open(&previous_db).expect("old product db shell");
+        let previous = rusqlite::Connection::open(&previous_db).expect("retained product db");
         let old_user_table_count: i64 = previous
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
                 [],
                 |row| row.get(0),
             )
-            .expect("old product db tables cleared");
-        assert_eq!(old_user_table_count, 0);
-    }
-
-    #[test]
-    fn initialize_database_can_delete_migrated_product_db_source_by_policy() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let user_data_root = temp_dir.path().join("desktop-platform");
-        let app_server_data_dir = user_data_root.join("app-server");
-        let previous_db = user_data_root.join("lime.db");
-        let previous_db_conn =
-            database::init_database_at_path(&previous_db).expect("previous product database");
-        {
-            let conn = previous_db_conn.lock().expect("previous db lock");
-            conn.execute(
-                "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
-                ("providers.active_tab", "service-providers"),
-            )
-            .expect("insert previous setting");
-        }
-        drop(previous_db_conn);
-
-        let config = CliConfig {
-            listen: DEFAULT_LISTEN_URL.to_string(),
-            backend_mode: AppServerBackendMode::Unavailable,
-            app_policy_path: None,
-            backend_command: None,
-            backend_args: Vec::new(),
-            backend_timeout_ms: DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS,
-            data_dir: Some(app_server_data_dir.clone()),
-            product_db_migration_cleanup_policy: ProductDbMigrationCleanupPolicy::DeleteFile,
-        };
-
-        let db = initialize_database(&config).expect("initialize app-server database");
-        drop(db);
-
-        assert!(!previous_db.exists());
-        let migrated = rusqlite::Connection::open(app_server_data_dir.join("lime.db"))
-            .expect("migrated app-server db");
-        let setting_value: String = migrated
+            .expect("retained product db schema");
+        assert!(old_user_table_count > 0);
+        let retained_setting_value: String = previous
             .query_row(
                 "SELECT value FROM settings WHERE key = ?1",
                 ["providers.active_tab"],
                 |row| row.get(0),
             )
-            .expect("migrated provider setting");
-        assert_eq!(setting_value, "service-providers");
+            .expect("retained provider setting");
+        assert_eq!(retained_setting_value, "service-providers");
+        let retained_provider_count: i64 = previous
+            .query_row(
+                "SELECT COUNT(*) FROM api_key_providers WHERE id = ?1",
+                ["custom-openai-compatible"],
+                |row| row.get(0),
+            )
+            .expect("retained custom provider");
+        assert_eq!(retained_provider_count, 1);
+    }
+
+    #[test]
+    fn explicit_model_control_source_rejects_sibling_product_path() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let data_root = temp_dir.path().join("lime").join("app-server");
+        let sibling_source = temp_dir
+            .path()
+            .join("content-studio")
+            .join("app-server")
+            .join("lime.db");
+        std::fs::create_dir_all(sibling_source.parent().expect("source parent"))
+            .expect("create source parent");
+        std::fs::write(&sibling_source, []).expect("create source file");
+
+        let error = validate_explicit_model_control_source(&data_root, &sibling_source)
+            .expect_err("sibling product source must be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("outside the same-product Lime legacy boundary"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_model_control_source_rejects_symlink_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let product_root = temp_dir.path().join("lime");
+        let data_root = product_root.join("app-server");
+        let sibling_source = temp_dir.path().join("content-studio").join("app.db");
+        let linked_source = product_root.join("app.db");
+        std::fs::create_dir_all(&product_root).expect("create product root");
+        std::fs::create_dir_all(sibling_source.parent().expect("sibling parent"))
+            .expect("create sibling root");
+        std::fs::write(&sibling_source, []).expect("create sibling source");
+        symlink(&sibling_source, &linked_source).expect("link model source");
+
+        let error = validate_explicit_model_control_source(&data_root, &linked_source)
+            .expect_err("symlink source must be rejected");
+
+        assert!(error.to_string().contains("regular non-symlink file"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_model_control_source_rejects_symlink_root() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let sibling_root = temp_dir.path().join("content-studio");
+        let product_root = temp_dir.path().join("lime");
+        let data_root = product_root.join("app-server");
+        let source = product_root.join("app.db");
+        std::fs::create_dir_all(&sibling_root).expect("create sibling root");
+        std::fs::write(sibling_root.join("app.db"), []).expect("create sibling source");
+        symlink(&sibling_root, &product_root).expect("link product root");
+
+        let error = validate_explicit_model_control_source(&data_root, &source)
+            .expect_err("symlink source root must be rejected");
+
+        assert!(error.to_string().contains("regular non-symlink directory"));
+    }
+
+    #[test]
+    fn model_control_source_selection_prefers_credentials_over_ui_state() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let product_root = temp_dir.path().join("lime");
+        let data_root = product_root.join("app-server");
+        let ui_source = data_root.join("app.db");
+        let credential_source = product_root.join("proxycast.db");
+        let target = data_root.join("lime.db");
+        let ui_db = database::init_database_at_path(&ui_source).expect("ui source");
+        {
+            let conn = ui_db.lock().expect("ui source lock");
+            conn.execute(
+                "INSERT INTO provider_ui_state (key, value) VALUES ('selected_provider', 'openai')",
+                [],
+            )
+            .expect("ui state");
+        }
+        let credential_db =
+            database::init_database_at_path(&credential_source).expect("credential source");
+        {
+            let conn = credential_db.lock().expect("credential source lock");
+            conn.execute(
+                "INSERT INTO api_key_providers
+                 (id, name, type, api_host, is_system, group_name, enabled, sort_order, created_at, updated_at)
+                 VALUES ('custom', 'Custom', 'openai', 'https://example.invalid/v1', 0, 'custom', 1, 1, '2026-07-19', '2026-07-19')",
+                [],
+            )
+            .expect("provider");
+            conn.execute(
+                "INSERT INTO api_keys (id, provider_id, api_key_encrypted, created_at)
+                 VALUES ('key', 'custom', 'ciphertext', '2026-07-19')",
+                [],
+            )
+            .expect("api key");
+        }
+
+        let (selected, signal) = select_model_control_source(
+            &data_root,
+            [ui_source.clone(), credential_source.clone()],
+            &target,
+        )
+        .expect("select source")
+        .expect("selected source");
+
+        assert_eq!(selected, credential_source);
+        assert_eq!(signal.api_keys, 1);
+        assert_eq!(signal.custom_providers, 1);
     }
 
     #[test]
@@ -763,7 +1038,7 @@ mod tests {
                 {
                   "id": "content.draft.generate",
                   "title": "Generate Draft",
-                  "methods": ["agentSession/turn/start"],
+                  "methods": ["turn/start"],
                   "appIds": ["content-studio"]
                 }
               ]

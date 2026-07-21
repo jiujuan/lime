@@ -1,10 +1,8 @@
-use super::current_log_path;
 use super::legacy_data_dir_guess;
 use super::read_log_storage_diagnostics_from_path;
 use super::read_persisted_logs_tail_from_path;
 use super::to_rfc3339;
 use crate::summarize_trace_event_store;
-use crate::StorageRoots;
 use crate::TRACE_EVENT_MAX_FILES_PER_SESSION;
 use app_server_protocol::LogStorageDiagnosticsResponse;
 use app_server_protocol::SupportBundleExportParams;
@@ -222,10 +220,6 @@ fn collect_directory_tree_entries(root: &Path) -> Vec<SupportBundleTreeEntry> {
     entries
 }
 
-fn trace_store_root_guess(app_data_dir: Option<&Path>) -> Option<PathBuf> {
-    app_data_dir.map(|dir| StorageRoots::from_data_root(dir).trace_log_root)
-}
-
 fn collect_trace_store_summary(trace_root: Option<&Path>) -> SupportBundleTraceStoreSummary {
     let Some(trace_root) = trace_root else {
         return empty_trace_store_summary(false);
@@ -398,6 +392,7 @@ fn write_support_bundle_readme(
 
 fn export_support_bundle_to(
     output_directory: &Path,
+    current_log_path: &Path,
     params: SupportBundleExportParams,
     trace_store_root: Option<&Path>,
 ) -> Result<SupportBundleExportResponse, String> {
@@ -418,9 +413,8 @@ fn export_support_bundle_to(
     fs::create_dir_all(&meta_dir)
         .map_err(|error| format!("创建支持包元数据目录失败 {}: {error}", meta_dir.display()))?;
 
-    let current_log_path = current_log_path()?;
-    let log_storage_diagnostics = read_log_storage_diagnostics_from_path(&current_log_path, 0);
-    let persisted_log_tail = read_persisted_logs_tail_from_path(&current_log_path, 200);
+    let log_storage_diagnostics = read_log_storage_diagnostics_from_path(current_log_path, 0);
+    let persisted_log_tail = read_persisted_logs_tail_from_path(current_log_path, 200);
     let app_data_dir = app_paths::preferred_data_dir().ok();
     let config_path = config_path_guess();
     let legacy_data_dir = legacy_data_dir_guess();
@@ -531,23 +525,13 @@ fn export_support_bundle_to(
 }
 
 pub(crate) fn export_support_bundle(
-    params: SupportBundleExportParams,
-) -> Result<SupportBundleExportResponse, String> {
-    let app_data_dir = app_paths::preferred_data_dir().ok();
-    let trace_store_root = trace_store_root_guess(app_data_dir.as_deref());
-    export_support_bundle_to(
-        &default_support_bundle_output_dir(),
-        params,
-        trace_store_root.as_deref(),
-    )
-}
-
-pub(crate) fn export_support_bundle_with_trace_root(
+    current_log_path: &Path,
     params: SupportBundleExportParams,
     trace_store_root: Option<&Path>,
 ) -> Result<SupportBundleExportResponse, String> {
     export_support_bundle_to(
         &default_support_bundle_output_dir(),
+        current_log_path,
         params,
         trace_store_root,
     )
@@ -586,19 +570,6 @@ mod tests {
         assert_eq!(summary.traces[0].trace_id.as_deref(), Some("trace-a"));
         assert!(!summary_json.contains("secret assistant text"));
         assert!(!summary_json.contains("\"text\""));
-    }
-
-    #[test]
-    fn trace_store_root_guess_reuses_storage_roots_without_creating_directories() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let data_root = temp.path().join("app-server");
-        let trace_root = trace_store_root_guess(Some(&data_root)).expect("trace root");
-
-        assert_eq!(
-            trace_root,
-            StorageRoots::from_data_root(&data_root).trace_log_root
-        );
-        assert!(!data_root.exists());
     }
 
     #[test]
@@ -658,9 +629,18 @@ mod tests {
             r#"{"schema_version":1,"seq":1,"wall_time_unix_ms":1780000000000,"trace_id":"trace-a","run_id":null,"request_id":null,"session_id":"session-a","thread_id":null,"turn_id":null,"event_id":"event-a","event_sequence":1,"event_type":"message.delta","checkpoint":"app_server.message_delta.emitted","metrics":{"text_chars":21},"redaction":{"mode":"summary_only","raw_agent_event_payload":false,"prompt_text":false,"provider_payload":false},"text":"secret assistant text"}"#,
         )
         .expect("trace file");
+        let log_path = temp
+            .path()
+            .join("app-server")
+            .join("observability")
+            .join("log")
+            .join("lime.log");
+        fs::create_dir_all(log_path.parent().expect("log parent")).expect("log dir");
+        fs::write(&log_path, "2026-07-19 00:00:00.000 [INFO] current log\n").expect("log file");
 
         let response = export_support_bundle_to(
             &temp.path().join("bundles"),
+            &log_path,
             SupportBundleExportParams {
                 include_trace_export: Some(
                     app_server_protocol::SupportBundleTraceExportSelection {

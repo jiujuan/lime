@@ -1,10 +1,7 @@
 import type { SlashCommandStatusSnapshot } from "../commands";
 import { executeSlashCommand, parseSlashCommand } from "../commands";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
-import type {
-  ClearMessagesOptions,
-  SendMessageFn,
-} from "./agentChatShared";
+import type { ClearMessagesOptions, SendMessageFn } from "./agentChatShared";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 
 interface CreateAgentChatSendMessageOptions {
@@ -16,6 +13,10 @@ interface CreateAgentChatSendMessageOptions {
   appendAssistantMessage: (content: string) => void;
   notifyInfo: (message: string) => void;
   notifySuccess: (message: string) => void;
+  notifyError?: (message: string) => void;
+  shellCommandHelp?: string;
+  shellCommandError?: (message: string) => string;
+  runUserShellCommand?: (command: string) => Promise<boolean>;
   onOpenSubagents?: () => void;
 }
 
@@ -31,6 +32,10 @@ export function createAgentChatSendMessage(
     appendAssistantMessage,
     notifyInfo,
     notifySuccess,
+    notifyError,
+    shellCommandHelp,
+    shellCommandError,
+    runUserShellCommand,
     onOpenSubagents,
   } = options;
 
@@ -46,6 +51,27 @@ export function createAgentChatSendMessage(
     sendOptions,
   ) => {
     if (!skipUserMessage) {
+      if (content.startsWith("!")) {
+        const command = content.slice(1).trim();
+        if (!command) {
+          if (shellCommandHelp) {
+            notifyInfo(shellCommandHelp);
+          }
+          return;
+        }
+        if (!runUserShellCommand) {
+          return;
+        }
+        try {
+          await runUserShellCommand(command);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          notifyError?.(shellCommandError?.(message) ?? message);
+        }
+        return;
+      }
+
       const parsedSlashCommand = parseSlashCommand(content);
       if (parsedSlashCommand) {
         const effectiveModel =

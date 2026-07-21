@@ -146,6 +146,27 @@ describe("agentThreadState", () => {
     ]);
   });
 
+  it("同一 turn 的 item 应按稳定 ordinal 排序而不是完成通知 sequence", () => {
+    const completedCommentary = createItem({
+      id: "commentary",
+      type: "agent_message",
+      text: "先核对仓库状态。",
+      phase: "commentary",
+      status: "completed",
+      ordinal: 3,
+      sequence: 30,
+    });
+    const tool = createItem({
+      id: "tool",
+      ordinal: 4,
+      sequence: 10,
+    });
+
+    expect(
+      upsertThreadItemState([tool], completedCommentary).map((item) => item.id),
+    ).toEqual(["commentary", "tool"]);
+  });
+
   it("删除不存在的 pending turn/item 时应复用原数组", () => {
     const turns = [createTurn()];
     const items = [createItem()];

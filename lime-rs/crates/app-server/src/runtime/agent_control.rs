@@ -6,11 +6,15 @@
 use super::agent_control_gateway_support::{
     required_agent_control_id, stable_agent_control_digest,
 };
+mod route;
+
 use super::*;
 use agent_protocol::{
     ItemStatus, ThreadId, ThreadItemPayload, ThreadTurnsView, TurnQueueState, TurnStatus,
 };
-use app_server_protocol::{AgentSessionStartParams, AgentSessionStatus, AgentTurnStatus};
+use app_server_protocol::{
+    AgentSessionStartParams, AgentSessionStatus, AgentTurnStatus, BusinessObjectRef, RuntimeOptions,
+};
 use serde_json::json;
 use thread_store::{
     AgentGraphStore, ReadThreadParams, ThreadMetadataPatch, ThreadStore, UpdateThreadMetadataParams,
@@ -31,7 +35,73 @@ pub(crate) struct AgentControlSpawnResponse {
     pub parent_thread_id: String,
 }
 
+use route::{agent_control_route_snapshot, AGENT_CONTROL_ROUTE_KEY};
+
 impl RuntimeCore {
+    pub(in crate::runtime) fn persist_agent_control_session_defaults(
+        &self,
+        session_id: &str,
+        runtime_options: Option<&RuntimeOptions>,
+    ) -> Result<AgentSession, RuntimeCoreError> {
+        let defaults = agent_control_session_defaults(runtime_options);
+        let route_snapshot = agent_control_route_snapshot(runtime_options);
+        if defaults.is_none() && route_snapshot.is_none() {
+            return self
+                .session_snapshot(session_id)
+                .map(|(session, _)| session);
+        };
+
+        let mut state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let stored = state
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+        let session_id = stored.session.session_id.clone();
+        let reference =
+            stored
+                .session
+                .business_object_ref
+                .get_or_insert_with(|| BusinessObjectRef {
+                    kind: "agent.session".to_string(),
+                    id: session_id,
+                    title: None,
+                    uri: None,
+                    metadata: None,
+                });
+        let mut metadata = match reference.metadata.take() {
+            Some(serde_json::Value::Object(metadata)) => metadata,
+            Some(previous) => {
+                let mut metadata = serde_json::Map::new();
+                metadata.insert("previousMetadata".to_string(), previous);
+                metadata
+            }
+            None => serde_json::Map::new(),
+        };
+        if let Some((provider_selector, provider_name, model_name)) = defaults {
+            metadata.insert(
+                "providerSelector".to_string(),
+                serde_json::Value::String(provider_selector),
+            );
+            metadata.insert(
+                "providerName".to_string(),
+                serde_json::Value::String(provider_name),
+            );
+            metadata.insert(
+                "modelName".to_string(),
+                serde_json::Value::String(model_name),
+            );
+        }
+        if let Some(route_snapshot) = route_snapshot {
+            metadata.insert(AGENT_CONTROL_ROUTE_KEY.to_string(), route_snapshot);
+        }
+        reference.metadata = Some(serde_json::Value::Object(metadata));
+        stored.session.updated_at = timestamp();
+        Ok(stored.session.clone())
+    }
+
     pub(in crate::runtime) fn is_pending_agent_control_thread(
         &self,
         thread_id: &str,
@@ -51,9 +121,19 @@ impl RuntimeCore {
     ///
     /// A graph-enabled control path requires ProjectionStore. We fail before session creation
     /// when it is unavailable so an in-memory child cannot escape without durable topology.
+    #[cfg(test)]
     pub(crate) async fn stage_agent_control_spawn(
         &self,
         request: AgentControlSpawnRequest,
+    ) -> Result<AgentControlSpawnResponse, RuntimeCoreError> {
+        self.stage_agent_control_spawn_with_runtime_options(request, None)
+            .await
+    }
+
+    pub(crate) async fn stage_agent_control_spawn_with_runtime_options(
+        &self,
+        request: AgentControlSpawnRequest,
+        runtime_options: Option<RuntimeOptions>,
     ) -> Result<AgentControlSpawnResponse, RuntimeCoreError> {
         let AgentControlSpawnRequest {
             parent_session_id,
@@ -70,6 +150,14 @@ impl RuntimeCore {
                 "agent control requires canonical ProjectionStore".to_string(),
             )
         })?;
+        if self.backend.requires_provider_selection()
+            && !route::has_complete_agent_control_route_snapshot(runtime_options.as_ref())
+        {
+            return Err(RuntimeCoreError::pending_route_for_session(
+                parent_session_id.clone(),
+                runtime_options.as_ref(),
+            ));
+        }
         let parent = self.loaded_agent_control_parent(&parent_session_id)?;
         let child_session_id = child_session_id
             .map(|value| required_agent_control_id(value, "child session id is empty"))
@@ -122,7 +210,7 @@ impl RuntimeCore {
                 ))
             })?;
 
-        let response = match self.start_session(AgentSessionStartParams {
+        let mut response = match self.start_session(AgentSessionStartParams {
             session_id: Some(child_session_id.clone()),
             thread_id: Some(child_thread_id.clone()),
             app_id: parent.app_id,
@@ -143,6 +231,21 @@ impl RuntimeCore {
                 };
             }
         };
+        if let Err(error) = self.persist_agent_control_session_defaults(
+            &response.session.session_id,
+            runtime_options.as_ref(),
+        ) {
+            return match self
+                .rollback_staged_agent_control_spawn(&response.session)
+                .await
+            {
+                Ok(()) => Err(error),
+                Err(cleanup_error) => Err(RuntimeCoreError::Backend(format!(
+                    "failed to persist child session provider defaults: {error}; failed to remove partial child session: {cleanup_error}"
+                ))),
+            };
+        }
+        response.session = self.session_snapshot(&response.session.session_id)?.0;
         if let Err(error) = self.append_runtime_events(
             &response.session.session_id,
             &response.session.thread_id,
@@ -390,11 +493,150 @@ impl RuntimeCore {
     }
 }
 
+fn agent_control_session_defaults(
+    runtime_options: Option<&RuntimeOptions>,
+) -> Option<(String, String, String)> {
+    let request = runtime_options?.runtime_request.as_ref()?;
+    let provider_config = request.provider_config.as_ref();
+    let provider_selector = trimmed_option(request.provider_preference.as_deref())
+        .or_else(|| {
+            provider_config.and_then(|config| trimmed_option(config.provider_id.as_deref()))
+        })
+        .or_else(|| {
+            provider_config.and_then(|config| trimmed_option(config.provider_name.as_deref()))
+        })?;
+    let provider_name = provider_config
+        .and_then(|config| trimmed_option(config.provider_name.as_deref()))
+        .unwrap_or_else(|| provider_selector.clone());
+    let model_name = trimmed_option(request.model_preference.as_deref()).or_else(|| {
+        provider_config.and_then(|config| trimmed_option(config.model_name.as_deref()))
+    })?;
+    Some((provider_selector, provider_name, model_name))
+}
+
+pub(in crate::runtime) fn runtime_options_with_agent_control_session_defaults(
+    runtime_options: Option<RuntimeOptions>,
+    session: &AgentSession,
+) -> Option<RuntimeOptions> {
+    let defaults = agent_control_session_default_values(session);
+    let route_snapshot = route::agent_control_route_snapshot_from_session(session);
+    let has_route_snapshot = route_snapshot.is_some();
+    if defaults.is_none() && route_snapshot.is_none() {
+        return runtime_options;
+    }
+
+    let mut options = runtime_options.unwrap_or_default();
+    let request = options.runtime_request_mut();
+    if let Some(route_snapshot) = route_snapshot {
+        if let Some(stored_provider_config) =
+            route::runtime_provider_config_from_route_snapshot(route_snapshot)
+        {
+            request.provider_config = Some(route::merge_runtime_provider_config(
+                stored_provider_config,
+                request.provider_config.take(),
+            ));
+        }
+        route::restore_agent_control_route_metadata(request, route_snapshot);
+        if let Some(provider) = route_snapshot
+            .get("providerPreference")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+        {
+            request.provider_preference = Some(provider);
+        }
+        if let Some(model) = route_snapshot
+            .get("modelPreference")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+        {
+            request.model_preference = Some(model);
+        }
+    }
+
+    let Some((provider_selector, model_name)) = defaults else {
+        return Some(options);
+    };
+    let provider_config_has_value = request.provider_config.as_ref().is_some_and(|config| {
+        trimmed_option(config.provider_id.as_deref()).is_some()
+            || trimmed_option(config.provider_name.as_deref()).is_some()
+    });
+    if !has_route_snapshot
+        && trimmed_option(request.provider_preference.as_deref()).is_none()
+        && !provider_config_has_value
+    {
+        request.provider_preference = Some(provider_selector);
+    }
+
+    let model_config_has_value = request
+        .provider_config
+        .as_ref()
+        .and_then(|config| trimmed_option(config.model_name.as_deref()))
+        .is_some();
+    if !has_route_snapshot
+        && trimmed_option(request.model_preference.as_deref()).is_none()
+        && !model_config_has_value
+    {
+        request.model_preference = Some(model_name);
+    }
+    Some(options)
+}
+
+pub(in crate::runtime) fn has_agent_control_runtime_route(
+    runtime_options: Option<&RuntimeOptions>,
+) -> bool {
+    agent_control_session_defaults(runtime_options).is_some()
+}
+
+fn agent_control_session_default_values(session: &AgentSession) -> Option<(String, String)> {
+    let Some(metadata) = session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+    else {
+        return None;
+    };
+    if let Some(route_snapshot) = metadata
+        .get(route::AGENT_CONTROL_ROUTE_KEY)
+        .and_then(|value| value.as_object())
+    {
+        let provider = route_snapshot
+            .get("providerPreference")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|value| trimmed_option(Some(value)));
+        let model = route_snapshot
+            .get("modelPreference")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|value| trimmed_option(Some(value)));
+        if let Some(defaults) = provider.zip(model) {
+            return Some(defaults);
+        }
+    }
+    let provider = [
+        "providerSelector",
+        "provider_selector",
+        "providerName",
+        "provider_name",
+    ]
+    .into_iter()
+    .find_map(|key| trimmed_option(metadata.get(key).and_then(serde_json::Value::as_str)));
+    let model = ["modelName", "model_name", "model"]
+        .into_iter()
+        .find_map(|key| trimmed_option(metadata.get(key).and_then(serde_json::Value::as_str)));
+    provider.zip(model)
+}
+
+fn trimmed_option(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
 #[derive(Debug, Clone)]
 struct ForkedAgentControlTurn {
     source_thread_id: String,
     source_turn_id: String,
-    input: AgentInput,
+    input: Vec<AgentInput>,
     assistant_messages: Vec<ForkedAgentControlMessage>,
 }
 

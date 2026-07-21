@@ -34,12 +34,7 @@ pub(super) fn chat_task_request_from_runtime(
         &["requiredCapabilities", "required_capabilities"],
     );
 
-    if request
-        .input
-        .attachments
-        .iter()
-        .any(|attachment| attachment.kind.eq_ignore_ascii_case("image"))
-    {
+    if request.input.has_images() {
         push_unique(&mut task_families, "vision_understanding".to_string());
         push_unique(&mut input_modalities, "image".to_string());
         push_unique(&mut capabilities, "vision".to_string());
@@ -284,11 +279,11 @@ mod tests {
         let mut request = request_for_test("看图", None, None);
         request
             .input
-            .attachments
-            .push(app_server_protocol::AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some("file:///tmp/poster.png".to_string()),
-                metadata: None,
+            .push_image(agent_runtime::reply_input::RuntimeReplyInputImage {
+                uri: "file:///tmp/poster.png".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: None,
+                detail: None,
             });
         let selection = RuntimeModelSelection {
             provider: "openai".to_string(),
@@ -325,11 +320,11 @@ mod tests {
         let mut request = request_for_test("看图", None, None);
         request
             .input
-            .attachments
-            .push(app_server_protocol::AgentAttachment {
-                kind: "image".to_string(),
-                uri: Some("file:///tmp/poster.png".to_string()),
-                metadata: None,
+            .push_image(agent_runtime::reply_input::RuntimeReplyInputImage {
+                uri: "file:///tmp/poster.png".to_string(),
+                media_type: "image/png".to_string(),
+                provider_data: None,
+                detail: None,
             });
         let selection = RuntimeModelSelection {
             provider: "openai".to_string(),
@@ -377,7 +372,7 @@ mod tests {
     }
 
     #[test]
-    fn resolved_route_does_not_block_unknown_capability_snapshot() {
+    fn resolved_route_blocks_unknown_capability_snapshot() {
         let selection = RuntimeModelSelection {
             provider: "fixture-openai".to_string(),
             model: "fixture-model".to_string(),
@@ -417,8 +412,17 @@ mod tests {
         let route =
             resolved_route_from_runtime(&task_request, &selection, &routing_payload, None, None);
 
-        assert!(route.failure.is_none());
-        assert!(route.decision.capability_gap.is_none());
+        let failure = route.failure.expect("missing capability snapshot failure");
+        assert_eq!(failure.category, RouteFailureCategory::CapabilityGap);
+        assert_eq!(failure.reason_code, "capability_snapshot_missing");
+        assert_eq!(
+            failure.capability_gap.as_deref(),
+            Some("capability_snapshot:missing")
+        );
+        assert_eq!(
+            route.decision.capability_gap.as_deref(),
+            Some("capability_snapshot:missing")
+        );
     }
 
     #[test]

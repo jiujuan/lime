@@ -180,9 +180,11 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
                 .is_some_and(|output| output.contains("ok"))
     }));
     assert!(items.iter().any(|item| {
-        item["type"] == "file_artifact"
+        item["type"] == "patch"
             && item["turn_id"] == first_turn_id
-            && item["path"] == "/workspace/app/src/lib.rs"
+            && item["paths"]
+                .as_array()
+                .is_some_and(|paths| paths.iter().any(|path| path == "/workspace/app/src/lib.rs"))
             && item["file_status"] == "applied"
             && item["status"] == "completed"
     }));
@@ -1092,7 +1094,7 @@ fn legacy_import_repair_uses_one_event_sequence_ordinal_domain() {
             timestamp: "2026-07-14T00:00:02Z".to_string(),
             payload: serde_json::json!({
                 "role": "user",
-                "input": {"text": "continue", "attachments": []}
+                "input": [{"type": "text", "text": "continue"}]
             }),
         },
         app_server_protocol::AgentEvent {
@@ -1569,9 +1571,7 @@ fn commit_closes_incomplete_imported_lifecycles_as_failed_timeline_items() {
     assert_eq!(tool["metadata"]["imported_incomplete"], true);
     let patch = items
         .iter()
-        .find(|item| {
-            item["type"] == "file_artifact" && item["metadata"]["imported_incomplete"] == true
-        })
+        .find(|item| item["type"] == "patch" && item["metadata"]["imported_incomplete"] == true)
         .expect("patch item");
     assert_eq!(patch["status"], "failed");
     assert_eq!(patch["metadata"]["imported_incomplete"], true);

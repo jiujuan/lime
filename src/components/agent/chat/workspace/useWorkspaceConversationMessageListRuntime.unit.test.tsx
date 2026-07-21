@@ -28,9 +28,7 @@ function createDefaultProps(): HookProps {
       onOpenSubagentSession: noop,
       onOpenUrlPreview: noop,
       onPermissionResponse: noop,
-      onPromoteQueuedTurn: noop,
       onReplayPendingRequest: noop,
-      onResumeThread: noop,
       onSaveMessageAsKnowledge: noop,
       onSaveMessageAsSkill: noop,
       onWriteFile: noop,
@@ -57,7 +55,6 @@ function createDefaultProps(): HookProps {
       isSending: true,
       messages: [{ id: "message-1", content: "hello" }] as never,
       pendingActions: [{ requestId: "pending-1" }] as never,
-      queuedTurns: [{ id: "queued-1" }] as never,
       sessionHistoryWindow: {
         hasFullHistory: false,
       } as never,
@@ -144,13 +141,14 @@ describe("useWorkspaceConversationMessageListRuntime", () => {
     expect(runtime.threadItems).toBe(props.projection.threadItems);
     expect(runtime.currentTurnId).toBe("turn-1");
     expect(runtime.pendingActions).toBe(props.projection.pendingActions);
-    expect(runtime.queuedTurns).toBe(props.projection.queuedTurns);
+    expect(runtime).not.toHaveProperty("queuedTurns");
     expect(runtime.focusedTimelineItemId).toBe("item-1");
     expect(runtime.timelineFocusRequestKey).toBe(7);
     expect(runtime.onA2UISubmit).toBe(props.actions.onA2UISubmit);
     expect(runtime.onPermissionResponse).toBe(
       props.actions.onPermissionResponse,
     );
+    expect(runtime).not.toHaveProperty("onPromoteQueuedTurn");
   });
 
   it("刷新 read model 时应绑定当前 scene session", () => {

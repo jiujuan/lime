@@ -13,11 +13,11 @@ function buildRuntimeClient(): Pick<
       id: 1,
       result: {
         turn: {
-          turnId: "turn-1",
-          sessionId: "session-1",
-          threadId: "thread-1",
-          status: "accepted" as const,
-          startedAt: "2026-05-15T00:00:00.000Z",
+          id: "turn-1",
+          items: [],
+          itemsView: "full" as const,
+          status: "inProgress" as const,
+          startedAt: Date.parse("2026-05-15T00:00:00.000Z") / 1_000,
         },
       },
       response: { jsonrpc: "2.0", id: 1, result: {} },
@@ -28,27 +28,29 @@ function buildRuntimeClient(): Pick<
       id: 2,
       result: {
         thread: {
-          archived: false,
-          createdAtMs: 1_747_267_200_000,
+          cliVersion: "0.0.0-test",
+          createdAt: 1_747_267_200,
+          cwd: "/tmp/plugin-runtime",
+          ephemeral: false,
+          id: "thread-1",
+          modelProvider: "openai",
+          preview: "Plugin runtime task",
           sessionId: "session-1",
+          source: "appServer",
           status: {
             type: "active" as const,
             activeFlags: ["waitingOnApproval" as const],
           },
-          threadId: "thread-1",
-          turns: [{
-            approval: "pending" as const,
-            createdAtMs: 1_747_267_200_000,
-            items: [],
-            itemsView: "full" as const,
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "inProgress" as const,
-            updatedAtMs: 1_747_267_201_000,
-          }],
-          turnsView: "full" as const,
-          updatedAtMs: 1_747_267_201_000,
+          turns: [
+            {
+              id: "turn-1",
+              items: [],
+              itemsView: "full" as const,
+              startedAt: 1_747_267_200,
+              status: "inProgress" as const,
+            },
+          ],
+          updatedAt: 1_747_267_201,
         },
       },
       response: { jsonrpc: "2.0", id: 2, result: {} },
@@ -84,6 +86,7 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       entryKey: "dashboard",
       workspaceId: "workspace-1",
       sessionId: "session-1",
+      threadId: "thread-1",
       taskId: "task-1",
       taskKind: "content.copy.generate",
       title: "生成内容批次",
@@ -124,72 +127,41 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
     });
 
     expect(runtimeClient.startTurn).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      turnId: "turn-1",
-      input: {
-        text: expect.stringContaining("Business Prompt:"),
-        attachments: [],
+      threadId: "thread-1",
+      input: [
+        {
+          type: "text",
+          text: expect.stringContaining("Business Prompt:"),
+        },
+      ],
+      effort: "medium",
+      model: "claude-sonnet-4",
+      outputSchema: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+          },
+        },
+        required: ["items"],
       },
-      runtimeOptions: expect.objectContaining({
-        stream: true,
+      sandboxPolicy: "workspace-write",
+      responsesapiClientMetadata: {
         eventName: "plugin_runtime:content-factory-app:task-1",
-        queuedTurnId: "plugin-queued-task-1",
-        expectedOutput: {
-          artifactKind: "content_batch",
-          outputFormat: {
-            type: "json_schema",
-            schema: {
-              type: "object",
-              properties: {
-                items: {
-                  type: "array",
-                },
-              },
-              required: ["items"],
-            },
-            maxValidationRetries: 2,
-          },
+        taskId: "task-1",
+        taskKind: "content.copy.generate",
+        workspaceId: "workspace-1",
+        pluginRuntime: {
+          appId: "content-factory-app",
+          entryKey: "dashboard",
+          taskId: "task-1",
+          taskKind: "content.copy.generate",
         },
-        structuredOutput: {
-          type: "json_schema",
-          schema: {
-            type: "object",
-            properties: {
-              items: {
-                type: "array",
-              },
-            },
-            required: ["items"],
-          },
-          maxValidationRetries: 2,
+        metadata: {
+          source: "plugin-test",
+          turn_source: "plugin",
         },
-        outputSchema: {
-          type: "object",
-          properties: {
-            items: {
-              type: "array",
-            },
-          },
-          required: ["items"],
-        },
-        runtimeRequest: {
-          workspaceId: "workspace-1",
-          providerPreference: "anthropic",
-          modelPreference: "claude-sonnet-4",
-          providerConfig: {
-            providerName: "anthropic",
-            modelName: "claude-sonnet-4",
-          },
-          reasoningEffort: "medium",
-          sandboxPolicy: "workspace-write",
-          metadata: {
-            source: "plugin-test",
-            turn_source: "plugin",
-          },
-        },
-      }),
-      queueIfBusy: true,
-      skipPreSubmitResume: false,
+      },
     });
     expect(result).toEqual({
       appId: "content-factory-app",
@@ -246,10 +218,10 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
 
     expect(runtimeClient.readThread).toHaveBeenCalledWith({
       threadId: "thread-1",
-      turnsView: "full",
+      includeTurns: true,
     });
     expect(runtimeClient.cancelTurn).toHaveBeenCalledWith({
-      sessionId: "session-1",
+      threadId: "thread-1",
       turnId: "turn-1",
     });
     expect(runtimeClient.respondAction).toHaveBeenCalledWith({
@@ -275,7 +247,7 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       status: "thread_read_available",
       taskStatus: "blocked",
       threadRead: {
-        threadId: "thread-1",
+        id: "thread-1",
         status: {
           type: "active",
           activeFlags: ["waitingOnApproval"],
@@ -286,7 +258,7 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
     expect(submitted.status).toBe("submitted");
   });
 
-  it("没有 sessionId 时 fail closed，不伪造独立 task 协议", async () => {
+  it("没有 canonical identity 时 fail closed，不伪造独立 task 协议", async () => {
     const runtimeClient = buildRuntimeClient();
     const api = createPluginRuntimeCapabilityApiFromClient(runtimeClient);
 
@@ -295,22 +267,18 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
         appId: "content-factory-app",
         taskKind: "content.copy.generate",
       }),
-    ).rejects.toThrow(
-      "AgentRuntimeClient adapter requires an existing sessionId",
-    );
+    ).rejects.toThrow("requires a canonical session identity");
     expect(runtimeClient.startTurn).not.toHaveBeenCalled();
   });
 
-  it("startTurn 缺少 canonical threadId 时 fail closed", async () => {
+  it("startTurn 缺少 canonical turn id 时 fail closed", async () => {
     const runtimeClient = buildRuntimeClient();
     vi.mocked(runtimeClient.startTurn).mockResolvedValueOnce({
       id: 1,
       result: {
         turn: {
-          turnId: "turn-without-thread",
-          sessionId: "session-1",
-          threadId: "",
-          status: "accepted",
+          id: "",
+          status: "inProgress",
         },
       },
       response: { jsonrpc: "2.0", id: 1, result: {} },
@@ -323,39 +291,13 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       api.startTask({
         appId: "content-factory-app",
         sessionId: "session-1",
+        threadId: "thread-1",
         taskKind: "content.copy.generate",
       }),
-    ).rejects.toThrow("did not return a canonical threadId");
+    ).rejects.toThrow("did not return a canonical turn id");
   });
 
-  it("startTurn 返回不同 sessionId 时 fail closed", async () => {
-    const runtimeClient = buildRuntimeClient();
-    vi.mocked(runtimeClient.startTurn).mockResolvedValueOnce({
-      id: 1,
-      result: {
-        turn: {
-          turnId: "turn-other-session",
-          sessionId: "session-other",
-          threadId: "thread-1",
-          status: "accepted",
-        },
-      },
-      response: { jsonrpc: "2.0", id: 1, result: {} },
-      notifications: [],
-      messages: [],
-    });
-    const api = createPluginRuntimeCapabilityApiFromClient(runtimeClient);
-
-    await expect(
-      api.startTask({
-        appId: "app",
-        sessionId: "session-1",
-        taskKind: "content.copy.generate",
-      }),
-    ).rejects.toThrow("different from the requested session");
-  });
-
-  it("readThread 返回错误 threadId 或非 full turns 时 fail closed", async () => {
+  it("readThread 返回错误 threadId 或未包含 turns 时 fail closed", async () => {
     const runtimeClient = buildRuntimeClient();
     const api = createPluginRuntimeCapabilityApiFromClient(runtimeClient);
 
@@ -363,8 +305,8 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       id: 2,
       result: {
         thread: {
-          ...((await runtimeClient.readThread()).result.thread),
-          threadId: "other-thread",
+          ...(await runtimeClient.readThread()).result.thread,
+          id: "other-thread",
         },
       },
       response: { jsonrpc: "2.0", id: 2, result: {} },
@@ -379,8 +321,8 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       id: 2,
       result: {
         thread: {
-          ...((await runtimeClient.readThread()).result.thread),
-          turnsView: "summary",
+          ...(await runtimeClient.readThread()).result.thread,
+          turns: undefined,
         },
       },
       response: { jsonrpc: "2.0", id: 2, result: {} },
@@ -389,10 +331,10 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
     });
     await expect(
       api.getTask({ appId: "app", taskId: "task", threadId: "thread-1" }),
-    ).rejects.toThrow("did not return full turns");
+    ).rejects.toThrow("did not include turns");
   });
 
-  it("readThread 校验 thread/session/turn identity 且 getTask 检测多个 active turn", async () => {
+  it("readThread 校验 session/turn identity 且 getTask 检测多个 active turn", async () => {
     const runtimeClient = buildRuntimeClient();
     const base = (await runtimeClient.readThread()).result.thread;
     const api = createPluginRuntimeCapabilityApiFromClient(runtimeClient);
@@ -414,7 +356,7 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
     vi.mocked(runtimeClient.readThread).mockResolvedValueOnce(
       invalid({
         ...base,
-        turns: [{ ...(base.turns ?? [])[0], turnId: "" }],
+        turns: [{ ...(base.turns ?? [])[0], id: "" }],
       }),
     );
     await expect(
@@ -426,7 +368,7 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
         ...base,
         turns: [
           ...(base.turns ?? []),
-          { ...(base.turns ?? [])[0], turnId: "turn-1" },
+          { ...(base.turns ?? [])[0], id: "turn-1" },
         ],
       }),
     );
@@ -437,19 +379,9 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
     vi.mocked(runtimeClient.readThread).mockResolvedValueOnce(
       invalid({
         ...base,
-        turns: [{ ...(base.turns ?? [])[0], sessionId: "session-other" }],
-      }),
-    );
-    await expect(
-      api.getTask({ appId: "app", taskId: "task", threadId: "thread-1" }),
-    ).rejects.toThrow("mismatched turn identity");
-
-    vi.mocked(runtimeClient.readThread).mockResolvedValueOnce(
-      invalid({
-        ...base,
         turns: [
           ...(base.turns ?? []),
-          { ...(base.turns ?? [])[0], turnId: "turn-2", queue: { state: "running" as const } },
+          { ...(base.turns ?? [])[0], id: "turn-2" },
         ],
       }),
     );
@@ -476,44 +408,18 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       result: {
         thread: {
           ...base,
-          turns: [{
-            ...(base.turns ?? [])[0],
-            status: "completed" as const,
-          }],
+          turns: [
+            {
+              ...(base.turns ?? [])[0],
+              status: "completed" as const,
+            },
+          ],
         },
       },
       response: { jsonrpc: "2.0", id: 2, result: {} },
       notifications: [],
       messages: [],
     });
-    const result = await api.cancelTask({
-      appId: "app",
-      taskId: "task",
-      threadId: "thread-1",
-      turnId: "turn-1",
-    });
-    expect(result.status).toBe("not_running");
-    expect(runtimeClient.cancelTurn).not.toHaveBeenCalled();
-  });
-
-  it("取消时忽略 queued inProgress turn", async () => {
-    const runtimeClient = buildRuntimeClient();
-    vi.mocked(runtimeClient.readThread).mockResolvedValueOnce({
-      id: 2,
-      result: {
-        thread: {
-          ...((await runtimeClient.readThread()).result.thread),
-          turns: [{
-            ...((await runtimeClient.readThread()).result.thread.turns ?? [])[0],
-            queue: { state: "queued" as const },
-          }],
-        },
-      },
-      response: { jsonrpc: "2.0", id: 2, result: {} },
-      notifications: [],
-      messages: [],
-    });
-    const api = createPluginRuntimeCapabilityApiFromClient(runtimeClient);
     const result = await api.cancelTask({
       appId: "app",
       taskId: "task",
@@ -536,8 +442,7 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
             ...(base.turns ?? []),
             {
               ...(base.turns ?? [])[0],
-              turnId: "turn-2",
-              queue: { state: "running" as const },
+              id: "turn-2",
             },
           ],
         },

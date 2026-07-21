@@ -4,7 +4,6 @@ import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
 } from "@/lib/api/agentExecutionRuntime";
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type {
   SessionModelPreference,
   WorkspacePathMissingState,
@@ -41,11 +40,9 @@ export interface AgentStreamPreparedSendEnv {
   modelRef: MutableRefObject<string>;
   reasoningEffortRef: MutableRefObject<string>;
   sessionIdRef: MutableRefObject<string | null>;
-  getQueuedTurnsCount: () => number;
-  isThreadBusy: () => boolean;
-  hasPendingPreparedSubmit: () => boolean;
   runPreparedSubmit: <T>(task: () => Promise<T>) => Promise<T>;
   getWorkspaceIdForSubmit: () => string | undefined;
+  getThreadIdForSubmit: () => string | undefined;
   getSyncedSessionModelPreference: (
     sessionId: string,
   ) => SessionModelPreference | null;
@@ -76,7 +73,6 @@ export interface AgentStreamPreparedSendEnv {
   setExecutionRuntime: Dispatch<
     SetStateAction<AgentSessionExecutionRuntime | null>
   >;
-  setQueuedTurns: Dispatch<SetStateAction<QueuedTurnSnapshot[]>>;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
   setWorkspacePathMissing: Dispatch<
     SetStateAction<WorkspacePathMissingState | null>
@@ -85,22 +81,11 @@ export interface AgentStreamPreparedSendEnv {
   appendThinkingToParts: AppendThinkingToPartsFn;
 }
 
-export interface CreateAgentStreamPreparedSendEnvOptions extends Omit<
-  AgentStreamPreparedSendEnv,
-  "getQueuedTurnsCount" | "isThreadBusy"
-> {
-  queuedTurnsCount: number;
-  threadBusy: boolean;
-}
+export type CreateAgentStreamPreparedSendEnvOptions =
+  AgentStreamPreparedSendEnv;
 
 export function createAgentStreamPreparedSendEnv(
   options: CreateAgentStreamPreparedSendEnvOptions,
 ): AgentStreamPreparedSendEnv {
-  const { queuedTurnsCount, threadBusy, ...rest } = options;
-
-  return {
-    ...rest,
-    getQueuedTurnsCount: () => queuedTurnsCount,
-    isThreadBusy: () => threadBusy,
-  };
+  return options;
 }

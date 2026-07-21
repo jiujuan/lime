@@ -12,7 +12,6 @@ export const CUSTOM_PROVIDER_NAME = "Migration Fixture Provider";
 export const CUSTOM_PROVIDER_TYPE = "openai";
 export const CUSTOM_PROVIDER_HOST = "https://migration-fixture.invalid/v1";
 export const CUSTOM_MODEL_ID = "migration-fixture-model";
-export const PRODUCT_DB_MIGRATION_CLEANUP_POLICY = "drop-tables";
 export const UI_SELECTED_PROVIDER_KEY = "selected_provider";
 const UI_COLLAPSED_GROUPS_KEY = "collapsed_groups";
 
@@ -487,9 +486,24 @@ export function applyPassingMigrationSurfaceEvidence(
     ],
     ["legacyCommandsZero", summary.legacyProviderCommandsSeen.length === 0],
     ["providerVisible", summary.providerVisibleInGui === true],
-    ["migrationMarker", summary.migrationMarkerExists === true],
+    ["migrationManifest", summary.migrationManifestExists === true],
+    [
+      "migrationManifestContract",
+      summary.migrationManifest?.schemaVersion === "storage-migration.v1" &&
+        summary.migrationManifest?.migrationId === "database-path-v1" &&
+        summary.migrationManifest?.state === "completed" &&
+        summary.migrationManifest?.mode === "copied" &&
+        summary.migrationManifest?.targetRelativePath === "lime.db" &&
+        summary.migrationManifest?.sourceSha256Length === 64 &&
+        summary.migrationManifest?.targetSha256Length === 64 &&
+        summary.migrationManifest?.cleanupAuthorizedAt === null,
+    ],
     ["migratedDatabase", summary.migratedProductDbExists === true],
-    ["legacySchemaRemoved", summary.oldProductDbUserSchemaObjectCount === 0],
+    [
+      "legacySourceRetained",
+      summary.oldProductDbExists === true &&
+        summary.oldProductDbUserSchemaObjectCount > 0,
+    ],
     ["consoleErrorsZero", summary.consoleErrors.length === 0],
     ["pageErrorsZero", summary.pageErrors.length === 0],
     ["invokeErrorsZero", summary.invokeErrors.length === 0],
@@ -557,8 +571,8 @@ export function applyPassingMigrationSurfaceEvidence(
       summary.permissionSourceSchemaObjectCount > 0,
     ],
     [
-      "permissionMarkerAbsent",
-      summary.permissionMigrationMarkerExists === false,
+      "permissionManifestAbsent",
+      summary.permissionMigrationManifestExists === false,
     ],
     [
       "permissionTargetDatabaseAbsent",
@@ -714,7 +728,10 @@ export function createTempRuntimeEnv() {
     appServerDataDir,
     oldProductDbPath: path.join(oldProductDataDir, "lime.db"),
     migratedProductDbPath: path.join(appServerDataDir, "lime.db"),
-    migrationMarkerPath: path.join(appServerDataDir, ".migration_completed"),
+    migrationManifestPath: path.join(
+      appServerDataDir,
+      "migration-manifest.json",
+    ),
     env: {
       ...process.env,
       HOME: home,
@@ -747,7 +764,6 @@ function startJsonRpcProcess({ appServerBinary, runtimeEnv, dataDir }) {
       env: {
         ...runtimeEnv.env,
         APP_SERVER_BACKEND_MODE: "unavailable",
-        APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP: "retain",
       },
       stdio: ["pipe", "pipe", "pipe"],
     },

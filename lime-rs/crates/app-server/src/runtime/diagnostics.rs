@@ -35,9 +35,10 @@ impl RuntimeCore {
         let trace_store_root = self
             .trace_event_writer
             .as_ref()
-            .map(|trace_event_writer| trace_event_writer.root());
-        crate::local_data_source::export_support_bundle_with_trace_root(params, trace_store_root)
-            .map_err(RuntimeCoreError::Backend)
+            .map(|trace_event_writer| trace_event_writer.root().to_path_buf());
+        self.app_data_source
+            .export_support_bundle(params, trace_store_root)
+            .await
     }
 
     pub async fn list_diagnostics_traces(

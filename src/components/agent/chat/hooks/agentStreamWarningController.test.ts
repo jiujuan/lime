@@ -5,7 +5,11 @@ import {
   buildAgentStreamWarningPlan,
   buildAgentStreamWarningToastAction,
 } from "./agentStreamWarningController";
-import { ARTIFACT_DOCUMENT_REPAIRED_WARNING_CODE } from "./runtimeWarningPresentation";
+import {
+  ARTIFACT_DOCUMENT_REPAIRED_WARNING_CODE,
+  SKILL_LOAD_FAILED_WARNING_CODE,
+  SKILL_NOT_AVAILABLE_WARNING_CODE,
+} from "./runtimeWarningPresentation";
 
 describe("agentStreamWarningController", () => {
   it("应忽略 workspace 自动创建 warning", () => {
@@ -67,6 +71,29 @@ describe("agentStreamWarningController", () => {
       toast: null,
       warningKey: `session-a:${ARTIFACT_DOCUMENT_REPAIRED_WARNING_CODE}`,
     });
+  });
+
+  it("Skill warning 应随当前界面语言呈现", () => {
+    const previousLocale = document.documentElement.lang;
+    document.documentElement.lang = "en-US";
+    try {
+      expect(
+        buildAgentStreamWarningPlan({
+          activeSessionId: "session-a",
+          alreadyWarned: false,
+          code: SKILL_NOT_AVAILABLE_WARNING_CODE,
+        }).toast?.message,
+      ).toBe("The selected Skill is not available.");
+      expect(
+        buildAgentStreamWarningPlan({
+          activeSessionId: "session-a",
+          alreadyWarned: false,
+          code: SKILL_LOAD_FAILED_WARNING_CODE,
+        }).toast?.message,
+      ).toBe("The selected Skill could not be loaded.");
+    } finally {
+      document.documentElement.lang = previousLocale;
+    }
   });
 
   it("应从 warning plan 构造 toast action", () => {

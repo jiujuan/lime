@@ -237,52 +237,9 @@ export const AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA: JsonSchemaObject = {
   },
 } as const;
 
-export const AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA: JsonSchemaObject = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://limecloud.dev/schemas/agent-runtime-resume-contract.v0.1.schema.json",
-  title: "AgentRuntimeResumeContract",
-  type: "object",
-  required: [
-    "schemaVersion",
-    "runtimeId",
-    "sessionId",
-    "turnId",
-    "resumeMode",
-    "openActionIds",
-    "decisions",
-    "createdAt",
-  ],
-  additionalProperties: false,
-  properties: {
-    schemaVersion: { const: "lime-runtime-resume-contract/v0.1" },
-    runtimeId: stringSchema,
-    sessionId: stringSchema,
-    turnId: stringSchema,
-    resumeMode: stringSchema,
-    openActionIds: stringArraySchema,
-    decisions: {
-      type: "array",
-      items: {
-        type: "object",
-        required: ["actionId", "decision"],
-        additionalProperties: false,
-        properties: {
-          actionId: stringSchema,
-          decision: stringSchema,
-          response: true,
-          metadata: { type: "object" },
-        },
-      },
-    },
-    expiresAt: { type: "string" },
-    createdAt: stringSchema,
-  },
-} as const;
-
 export const agentUiJsonSchemas = {
   runtimeEvent: AGENT_RUNTIME_EVENT_SCHEMA,
   runtimeStateDelta: AGENT_RUNTIME_STATE_DELTA_SCHEMA,
   projectionState: AGENT_UI_PROJECTION_STATE_SCHEMA,
   runtimeCapabilityManifest: AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA,
-  runtimeResumeContract: AGENT_RUNTIME_RESUME_CONTRACT_SCHEMA,
 } as const;

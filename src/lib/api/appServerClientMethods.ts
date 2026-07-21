@@ -12,9 +12,9 @@ type AppServerClientRequestRunner = {
 declare module "./appServerClient" {
   interface AppServerClient {
     startSession(
-      params: appServer.AppServerAgentSessionStartParams,
+      params: appServer.AppServerThreadStartParams,
     ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionStartResponse>
+      appServer.AppServerRequestResult<appServer.AppServerThreadStartResponse>
     >;
     listSessions(
       params?: appServer.AppServerAgentSessionListParams,
@@ -186,6 +186,31 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerThreadReadResponse>
     >;
+    updateThreadSettings(
+      params: appServer.AppServerThreadSettingsUpdateParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerThreadSettingsUpdateResponse>
+    >;
+    setThreadMemoryMode(
+      params: appServer.AppServerThreadMemoryModeSetParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerThreadMemoryModeSetResponse>
+    >;
+    runThreadShellCommand(
+      params: appServer.AppServerThreadShellCommandParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerThreadShellCommandResponse>
+    >;
+    archiveThread(
+      params: appServer.AppServerThreadArchiveParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerThreadArchiveResponse>
+    >;
+    unarchiveThread(
+      params: appServer.AppServerThreadUnarchiveParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerThreadUnarchiveResponse>
+    >;
     readAgentSessionMedia(
       params: appServer.AppServerAgentSessionMediaReadParams,
       options?: appServer.AppServerRequestOptions,
@@ -201,11 +226,6 @@ declare module "./appServerClient" {
       params: appServer.AppServerAgentSessionUpdateParams,
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionUpdateResponse>
-    >;
-    archiveManySessions(
-      params: appServer.AppServerAgentSessionArchiveManyParams,
-    ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionArchiveManyResponse>
     >;
     deleteSession(
       params: appServer.AppServerAgentSessionDeleteParams,
@@ -247,10 +267,10 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionCompactResponse>
     >;
-    resumeAgentSessionThread(
-      params: appServer.AppServerAgentSessionThreadResumeParams,
+    resumeThread(
+      params: appServer.AppServerThreadResumeParams,
     ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionThreadResumeResponse>
+      appServer.AppServerRequestResult<appServer.AppServerThreadResumeResponse>
     >;
     removeAgentSessionQueuedTurn(
       params: appServer.AppServerAgentSessionQueuedTurnRemoveParams,
@@ -326,6 +346,11 @@ declare module "./appServerClient" {
       params: appServer.AppServerAgentSessionTurnCancelParams,
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionTurnCancelResponse>
+    >;
+    steerTurn(
+      params: appServer.AppServerTurnSteerParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerTurnSteerResponse>
     >;
     appendAgentSessionRuntimeEvents(
       params: appServer.AppServerAgentSessionRuntimeEventAppendParams,

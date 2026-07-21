@@ -3,9 +3,10 @@ use super::import_status;
 use super::provenance::{self, ImportProvenance};
 use crate::runtime::{new_id, timestamp};
 use crate::{RuntimeCore, RuntimeCoreError};
+use agent_protocol::{AgentInput, ImageDetail};
 use app_server_protocol::{
-    AgentAttachment, AgentInput, AgentSessionStartParams, AgentSessionStatus, AgentTurn,
-    AgentTurnStatus, BusinessObjectRef, ConversationImportJobPhase, ConversationImportJobProgress,
+    AgentAttachment, AgentSessionStartParams, AgentSessionStatus, AgentTurn, AgentTurnStatus,
+    BusinessObjectRef, ConversationImportJobPhase, ConversationImportJobProgress,
     ConversationImportSourceClient, ConversationImportSourceProvenance,
     ConversationImportThreadCommitParams, ConversationImportThreadCommitResponse,
     ConversationImportThreadStatus,
@@ -289,8 +290,7 @@ struct HistoryTurn {
 }
 
 struct PreparedHistoryTurn {
-    user_text: String,
-    user_attachments: Vec<AgentAttachment>,
+    user_input: Vec<AgentInput>,
     user_timestamp: Option<String>,
     completed_timestamp: Option<String>,
     user_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
@@ -495,13 +495,9 @@ fn append_history_turns(
             };
             stored.session.status = AgentSessionStatus::Running;
             stored.session.updated_at = started_at;
-            stored.turn_inputs.insert(
-                turn_id.clone(),
-                AgentInput {
-                    text: history_turn.user_text,
-                    attachments: history_turn.user_attachments,
-                },
-            );
+            stored
+                .turn_inputs
+                .insert(turn_id.clone(), history_turn.user_input);
             stored.turn_runtime_options.insert(
                 turn_id.clone(),
                 provenance.turn_runtime_options(history_turn.user_provenance.as_ref()),
@@ -557,10 +553,12 @@ fn prepare_history_turns(
     turns
         .into_iter()
         .map(|turn| {
+            let user_input = imported_user_input(&turn.user_text, &turn.user_attachments);
             let user_message = message_rollout_event(
                 "user",
                 &turn.user_text,
                 &turn.user_attachments,
+                Some(&user_input),
                 turn.user_provenance.as_ref(),
                 None,
                 None,
@@ -573,6 +571,7 @@ fn prepare_history_turns(
                             "assistant",
                             &message.text,
                             &[],
+                            None,
                             message.provenance.as_ref(),
                             message.source_item_id.as_deref(),
                             message.phase.as_deref(),
@@ -582,8 +581,7 @@ fn prepare_history_turns(
                 }
             }
             Ok(PreparedHistoryTurn {
-                user_text: turn.user_text,
-                user_attachments: turn.user_attachments,
+                user_input,
                 user_timestamp: turn.user_timestamp,
                 completed_timestamp: turn.completed_timestamp,
                 user_provenance: turn.user_provenance,
@@ -594,10 +592,57 @@ fn prepare_history_turns(
         .collect()
 }
 
+fn imported_user_input(text: &str, attachments: &[AgentAttachment]) -> Vec<AgentInput> {
+    let mut input = Vec::with_capacity(attachments.len() + 1);
+    if !text.is_empty() {
+        input.push(AgentInput::text(text));
+    }
+    input.extend(attachments.iter().filter_map(imported_image_input));
+    input
+}
+
+fn imported_image_input(attachment: &AgentAttachment) -> Option<AgentInput> {
+    if !attachment.kind.eq_ignore_ascii_case("image") {
+        return None;
+    }
+    let uri = attachment
+        .uri
+        .as_deref()
+        .map(str::trim)
+        .filter(|uri| !uri.is_empty())?;
+    let detail = attachment
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("detail"))
+        .and_then(|detail| serde_json::from_value::<ImageDetail>(detail.clone()).ok());
+    let local_path = attachment
+        .metadata
+        .as_ref()
+        .and_then(|metadata| {
+            metadata
+                .get("localPath")
+                .or_else(|| metadata.get("local_path"))
+        })
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|path| !path.is_empty());
+    if let Some(path) = local_path {
+        return Some(AgentInput::LocalImage {
+            path: path.to_string(),
+            detail,
+        });
+    }
+    Some(AgentInput::Image {
+        uri: uri.to_string(),
+        detail,
+    })
+}
+
 fn message_rollout_event(
     role: &'static str,
     text: &str,
     attachments: &[AgentAttachment],
+    input: Option<&[AgentInput]>,
     provenance: Option<&ConversationImportSourceProvenance>,
     source_item_id: Option<&str>,
     phase: Option<&str>,
@@ -634,24 +679,38 @@ fn message_rollout_event(
         ))
     })?;
 
+    let mut payload = json!({
+        "itemId": item_id,
+        "ordinal": ordinal,
+        "role": role,
+        "text": text,
+        "phase": phase,
+        "attachments": attachments,
+        "imported": true,
+        "sourceClient": "codex",
+        "sourceEventSeq": source_event_seq,
+        "sourceProvenance": source_provenance,
+    });
+    if role == "user" {
+        let input = input.ok_or_else(|| {
+            RuntimeCoreError::Backend(
+                "Codex import user message is missing typed input".to_string(),
+            )
+        })?;
+        payload["input"] = serde_json::to_value(input).map_err(|error| {
+            RuntimeCoreError::Backend(format!(
+                "unable to serialize Codex import {role} typed input: {error}"
+            ))
+        })?;
+    }
+
     Ok(CodexRolloutEvent::new(
         if role == "user" {
             "import.message"
         } else {
             "message.delta"
         },
-        json!({
-            "itemId": item_id,
-            "ordinal": ordinal,
-            "role": role,
-            "text": text,
-            "phase": phase,
-            "attachments": attachments,
-            "imported": true,
-            "sourceClient": "codex",
-            "sourceEventSeq": source_event_seq,
-            "sourceProvenance": source_provenance,
-        }),
+        payload,
     ))
 }
 
@@ -676,5 +735,81 @@ fn import_business_object_ref(
         title: title.map(str::to_string),
         uri: Some(codex::path_to_string(source_path)),
         metadata: Some(metadata),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn imported_user_input_preserves_text_media_order_and_detail() {
+        let attachments = vec![
+            AgentAttachment {
+                kind: "image".to_string(),
+                uri: Some("https://example.test/image.png".to_string()),
+                metadata: Some(json!({"detail": "high"})),
+            },
+            AgentAttachment {
+                kind: "image".to_string(),
+                uri: Some("file:///tmp/image.png".to_string()),
+                metadata: Some(json!({
+                    "localPath": "/tmp/image.png",
+                    "detail": "low"
+                })),
+            },
+        ];
+
+        assert_eq!(
+            imported_user_input("describe", &attachments),
+            vec![
+                AgentInput::text("describe"),
+                AgentInput::Image {
+                    uri: "https://example.test/image.png".to_string(),
+                    detail: Some(ImageDetail::High),
+                },
+                AgentInput::LocalImage {
+                    path: "/tmp/image.png".to_string(),
+                    detail: Some(ImageDetail::Low),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn message_rollout_event_only_attaches_typed_input_to_user_messages() {
+        let provenance = ConversationImportSourceProvenance {
+            source_event_seq: Some(7),
+            ..ConversationImportSourceProvenance::default()
+        };
+        let input = vec![AgentInput::text("question")];
+        let user = message_rollout_event(
+            "user",
+            "question",
+            &[],
+            Some(&input),
+            Some(&provenance),
+            None,
+            None,
+        )
+        .expect("user rollout event");
+        let assistant = message_rollout_event(
+            "assistant",
+            "answer",
+            &[],
+            None,
+            Some(&provenance),
+            None,
+            None,
+        )
+        .expect("assistant rollout event");
+
+        assert_eq!(user.payload().expect("user payload")["input"], json!(input));
+        assert!(assistant
+            .payload()
+            .expect("assistant payload")
+            .get("input")
+            .is_none());
     }
 }

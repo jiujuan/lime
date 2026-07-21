@@ -358,4 +358,100 @@ describe("createAgentChatSendMessage", () => {
     );
     expect(appendAssistantMessage).not.toHaveBeenCalled();
   });
+
+  it("!cmd 应提交用户 shell 命令并跳过模型发送", async () => {
+    const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
+    const runUserShellCommand = vi.fn(async () => true);
+    const sendMessage = createTestAgentChatSendMessage({
+      baseStatusSnapshot: {
+        sessionId: "session-shell",
+        currentTurnId: null,
+        providerType: "openai",
+        model: "gpt-5",
+        executionStrategy: "react",
+        queuedTurnsCount: 0,
+        isSending: false,
+      },
+      rawSendMessage,
+      compactSession: vi.fn(async () => undefined),
+      clearMessages: vi.fn(),
+      createFreshSession: vi.fn(async () => null),
+      appendAssistantMessage: vi.fn(),
+      notifyInfo: vi.fn(),
+      notifySuccess: vi.fn(),
+      runUserShellCommand,
+    });
+
+    await sendMessage("!  printf ready  ", [], false, false, false);
+
+    expect(runUserShellCommand).toHaveBeenCalledWith("printf ready");
+    expect(rawSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("空用户 shell 命令应显示提示且不发请求", async () => {
+    const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
+    const runUserShellCommand = vi.fn(async () => true);
+    const notifyInfo = vi.fn();
+    const sendMessage = createTestAgentChatSendMessage({
+      baseStatusSnapshot: {
+        sessionId: "session-shell-empty",
+        currentTurnId: null,
+        providerType: "openai",
+        model: "gpt-5",
+        executionStrategy: "react",
+        queuedTurnsCount: 0,
+        isSending: false,
+      },
+      rawSendMessage,
+      compactSession: vi.fn(async () => undefined),
+      clearMessages: vi.fn(),
+      createFreshSession: vi.fn(async () => null),
+      appendAssistantMessage: vi.fn(),
+      notifyInfo,
+      notifySuccess: vi.fn(),
+      runUserShellCommand,
+      shellCommandHelp: "请输入要执行的命令",
+    });
+
+    await sendMessage("!   ", [], false, false, false);
+
+    expect(notifyInfo).toHaveBeenCalledWith("请输入要执行的命令");
+    expect(runUserShellCommand).not.toHaveBeenCalled();
+    expect(rawSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("用户 shell 请求错误应通过可见错误通道呈现", async () => {
+    const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
+    const notifyError = vi.fn();
+    const sendMessage = createTestAgentChatSendMessage({
+      baseStatusSnapshot: {
+        sessionId: "session-shell-error",
+        currentTurnId: null,
+        providerType: "openai",
+        model: "gpt-5",
+        executionStrategy: "react",
+        queuedTurnsCount: 0,
+        isSending: false,
+      },
+      rawSendMessage,
+      compactSession: vi.fn(async () => undefined),
+      clearMessages: vi.fn(),
+      createFreshSession: vi.fn(async () => null),
+      appendAssistantMessage: vi.fn(),
+      notifyInfo: vi.fn(),
+      notifySuccess: vi.fn(),
+      notifyError,
+      runUserShellCommand: vi.fn(async () => {
+        throw new Error("runtime unavailable");
+      }),
+      shellCommandError: (message) => `命令提交失败：${message}`,
+    });
+
+    await sendMessage("!printf ready", [], false, false, false);
+
+    expect(notifyError).toHaveBeenCalledWith(
+      "命令提交失败：runtime unavailable",
+    );
+    expect(rawSendMessage).not.toHaveBeenCalled();
+  });
 });

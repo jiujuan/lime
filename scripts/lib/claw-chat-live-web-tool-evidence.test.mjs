@@ -150,7 +150,7 @@ describe("claw-chat-live-web-tool-evidence", () => {
     expect(toolCallMatchesTurn(calls[0], "turn-b")).toBe(false);
   });
 
-  it("支持 App Server JSON-RPC agentSession/read 的 result.detail envelope", () => {
+  it("支持 App Server JSON-RPC thread/read 的 result.detail envelope", () => {
     const response = {
       id: "smoke-1",
       result: {

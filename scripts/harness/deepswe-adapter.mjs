@@ -216,10 +216,10 @@ function runContextBase(options, runId, task) {
       agentPath: "Lime App Server JSON-RPC current chain",
       appServerMethods: [
         "workspace/ensure",
-        "agentSession/start",
+        "thread/start",
         "agentSession/update",
-        "agentSession/turn/start",
-        "agentSession/read",
+        "turn/start",
+        "thread/read",
         "evidence/export",
       ],
       verifier: "Pier separate verifier with patch replay",

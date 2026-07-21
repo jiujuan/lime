@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AppServerRequestError } from "@limecloud/app-server-client";
 import { PluginRuntimeTaskHost } from "./pluginRuntimeTaskHost";
 
 const tempDirs: string[] = [];
@@ -25,21 +24,6 @@ async function createTempDir(): Promise<string> {
   return dir;
 }
 
-function sessionAlreadyExistsError(sessionId: string) {
-  return new AppServerRequestError(
-    "agentSession/start",
-    {
-      id: "test-session-start",
-      error: {
-        code: -32013,
-        message: `session already exists: ${sessionId}`,
-      },
-    },
-    [],
-    [],
-  );
-}
-
 afterEach(async () => {
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
@@ -51,7 +35,7 @@ afterEach(async () => {
 });
 
 describe("PluginRuntimeTaskHost", () => {
-  it("startTask 通过 App Server session start 与 turn start 投影", async () => {
+  it("startTask 通过 v2 thread/start 与 turn/start 投影 canonical identity", async () => {
     const request = vi.fn(async (method: string) => {
       if (method === "pluginUiRuntime/status") {
         return {
@@ -67,26 +51,20 @@ describe("PluginRuntimeTaskHost", () => {
           },
         };
       }
-      if (method === "agentSession/start") {
+      if (method === "thread/start") {
         return {
-          session: {
+          thread: {
+            id: "thread-1",
             sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "idle",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
           },
         };
       }
-      if (method === "agentSession/turn/start") {
+      if (method === "turn/start") {
         return {
           turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
+            id: "turn-1",
+            status: "inProgress",
+            startedAt: Date.parse("2026-06-07T00:00:00.000Z") / 1000,
           },
         };
       }
@@ -100,7 +78,6 @@ describe("PluginRuntimeTaskHost", () => {
           appId: "content-factory-app",
           entryKey: "writer",
           workspaceId: "workspace-1",
-          sessionId: "session-1",
           taskId: "task-1",
           taskKind: "content_factory.write",
           title: "写一组发布文案",
@@ -108,7 +85,6 @@ describe("PluginRuntimeTaskHost", () => {
           input: { topic: "Electron current" },
           expectedOutput: { contentFactoryWorkspacePatch: true },
           eventName: "plugin_runtime:content-factory-app:task-1",
-          turnId: "turn-1",
           queueIfBusy: true,
           skipPreSubmitResume: false,
           metadata: { source: "host-test" },
@@ -128,6 +104,7 @@ describe("PluginRuntimeTaskHost", () => {
       taskId: "task-1",
       taskKind: "content_factory.write",
       sessionId: "session-1",
+      threadId: "thread-1",
       turnId: "turn-1",
       eventName: "plugin_runtime:content-factory-app:task-1",
       status: "accepted",
@@ -136,37 +113,32 @@ describe("PluginRuntimeTaskHost", () => {
     expect(request).toHaveBeenNthCalledWith(1, "pluginUiRuntime/status", {
       appId: "content-factory-app",
     });
-    expect(request).toHaveBeenNthCalledWith(2, "agentSession/start", {
-      sessionId: "session-1",
-      appId: "content-factory-app",
-      workspaceId: "workspace-1",
+    expect(request).toHaveBeenNthCalledWith(2, "thread/start", {
+      historyMode: "paginated",
+      model: "claude-sonnet-4",
+      modelProvider: "anthropic",
+      serviceName: "content_factory.write",
+      threadSource: "plugin",
     });
     expect(request).toHaveBeenNthCalledWith(
       3,
-      "agentSession/turn/start",
+      "turn/start",
       expect.objectContaining({
-        sessionId: "session-1",
-        turnId: "turn-1",
-        input: {
-          text: expect.stringContaining("Business Prompt:"),
-          attachments: [],
-        },
-        queueIfBusy: true,
-        skipPreSubmitResume: false,
-        runtimeOptions: expect.objectContaining({
-          stream: true,
+        threadId: "thread-1",
+        input: [
+          {
+            type: "text",
+            text: expect.stringContaining("Business Prompt:"),
+          },
+        ],
+        effort: "medium",
+        model: "claude-sonnet-4",
+        sandboxPolicy: "workspace-write",
+        responsesapiClientMetadata: expect.objectContaining({
           eventName: "plugin_runtime:content-factory-app:task-1",
           queuedTurnId: "plugin-queued-task-1",
-          runtimeRequest: expect.objectContaining({
-            workspaceId: "workspace-1",
-            providerPreference: "anthropic",
-            modelPreference: "claude-sonnet-4",
-            providerConfig: { providerName: "anthropic" },
-            metadata: {
-              source: "host-test",
-              turn_source: "plugin",
-            },
-          }),
+          taskId: "task-1",
+          workspaceId: "workspace-1",
         }),
       }),
     );
@@ -174,26 +146,14 @@ describe("PluginRuntimeTaskHost", () => {
 
   it("startTask 在 runWorker=false 时不查询 UI runtime status", async () => {
     const request = vi.fn(async (method: string) => {
-      if (method === "agentSession/start") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "idle",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-        };
+      if (method === "thread/start") {
+        throw new Error("existing thread must not call thread/start");
       }
-      if (method === "agentSession/turn/start") {
+      if (method === "turn/start") {
         return {
           turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
+            id: "turn-1",
+            status: "inProgress",
           },
         };
       }
@@ -207,6 +167,7 @@ describe("PluginRuntimeTaskHost", () => {
           appId: "content-factory-app",
           workspaceId: "workspace-1",
           sessionId: "session-1",
+          threadId: "thread-1",
           taskId: "task-1",
           taskKind: "content_factory.write",
           prompt: "跳过 worker",
@@ -224,8 +185,7 @@ describe("PluginRuntimeTaskHost", () => {
     });
 
     expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "agentSession/start",
-      "agentSession/turn/start",
+      "turn/start",
     ]);
   });
 
@@ -273,26 +233,14 @@ describe("PluginRuntimeTaskHost", () => {
           },
         };
       }
-      if (method === "agentSession/start") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "idle",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-        };
+      if (method === "thread/start") {
+        throw new Error("existing thread must not call thread/start");
       }
-      if (method === "agentSession/turn/start") {
+      if (method === "turn/start") {
         return {
           turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
+            id: "turn-1",
+            status: "inProgress",
           },
         };
       }
@@ -360,6 +308,7 @@ describe("PluginRuntimeTaskHost", () => {
           appId: "content-factory-app",
           workspaceId: "workspace-1",
           sessionId: "session-1",
+          threadId: "thread-1",
           taskId: "task-1",
           taskKind: "content.article.generate",
           prompt: "生成文章",
@@ -384,7 +333,7 @@ describe("PluginRuntimeTaskHost", () => {
       appId: "content-factory-app",
     });
     expect(request).toHaveBeenNthCalledWith(
-      4,
+      3,
       "agentSession/runtimeEvents/append",
       expect.objectContaining({
         sessionId: "session-1",
@@ -419,26 +368,14 @@ describe("PluginRuntimeTaskHost", () => {
           },
         };
       }
-      if (method === "agentSession/start") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "idle",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-        };
+      if (method === "thread/start") {
+        throw new Error("existing thread must not call thread/start");
       }
-      if (method === "agentSession/turn/start") {
+      if (method === "turn/start") {
         return {
           turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
+            id: "turn-1",
+            status: "inProgress",
           },
         };
       }
@@ -500,6 +437,7 @@ describe("PluginRuntimeTaskHost", () => {
           appId: "content-factory-app",
           workspaceId: "workspace-1",
           sessionId: "session-1",
+          threadId: "thread-1",
           taskId: "task-1",
           taskKind: "content.article.generate",
           prompt: "生成文章",
@@ -521,7 +459,7 @@ describe("PluginRuntimeTaskHost", () => {
     });
   });
 
-  it("startTask 对已存在 session 做幂等投影并继续提交 turn", async () => {
+  it("startTask 对已有 canonical thread 直接提交 turn", async () => {
     const request = vi.fn(async (method: string) => {
       if (method === "pluginUiRuntime/status") {
         return {
@@ -537,16 +475,14 @@ describe("PluginRuntimeTaskHost", () => {
           },
         };
       }
-      if (method === "agentSession/start") {
-        throw sessionAlreadyExistsError("session-1");
+      if (method === "thread/start") {
+        throw new Error("existing thread must not call thread/start");
       }
-      if (method === "agentSession/turn/start") {
+      if (method === "turn/start") {
         return {
           turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
+            id: "turn-1",
+            status: "inProgress",
           },
         };
       }
@@ -560,6 +496,7 @@ describe("PluginRuntimeTaskHost", () => {
           appId: "content-factory-app",
           workspaceId: "workspace-1",
           sessionId: "session-1",
+          threadId: "thread-1",
           taskId: "task-1",
           taskKind: "content_factory.write",
           prompt: "继续同一个 App task",
@@ -570,33 +507,29 @@ describe("PluginRuntimeTaskHost", () => {
       appId: "content-factory-app",
       taskId: "task-1",
       sessionId: "session-1",
+      threadId: "thread-1",
       turnId: "turn-1",
       status: "accepted",
     });
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "pluginUiRuntime/status",
-      "agentSession/start",
-      "agentSession/turn/start",
+      "turn/start",
     ]);
   });
 
-  it("getTask 从 agentSession/read 投影 task snapshot 状态", async () => {
-    const detail = { thread_id: "thread-1", pending_requests: [] };
+  it("getTask 从 thread/read 投影 task snapshot 状态", async () => {
+    const thread = {
+      id: "thread-1",
+      sessionId: "session-1",
+      status: { type: "active", activeFlags: ["waitingOnUserInput"] },
+      archived: false,
+      createdAt: Date.parse("2026-06-07T00:00:00.000Z") / 1000,
+      updatedAt: Date.parse("2026-06-07T00:00:00.000Z") / 1000,
+      turns: [],
+    };
     const request = vi.fn(async (method: string) => {
-      if (method === "agentSession/read") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "waitingAction",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-          turns: [],
-          detail,
-        };
+      if (method === "thread/read") {
+        return { thread };
       }
       throw new Error(`unexpected App Server method: ${method}`);
     });
@@ -607,64 +540,62 @@ describe("PluginRuntimeTaskHost", () => {
         request: {
           appId: "content-factory-app",
           taskId: "task-1",
-          sessionId: "session-1",
+          threadId: "thread-1",
         },
       }),
     ).resolves.toEqual({
       appId: "content-factory-app",
       taskId: "task-1",
       sessionId: "session-1",
+      threadId: "thread-1",
       status: "thread_read_available",
       taskStatus: "blocked",
       taskEvents: [],
-      threadRead: detail,
+      threadRead: thread,
     });
-    expect(request).toHaveBeenCalledWith("agentSession/read", {
-      sessionId: "session-1",
+    expect(request).toHaveBeenCalledWith("thread/read", {
+      threadId: "thread-1",
+      includeTurns: true,
     });
   });
 
-  it("cancelTask 缺少 turnId 时先从 agentSession/read 查找活动 turn", async () => {
+  it("cancelTask 缺少 turnId 时先从 thread/read 查找活动 turn", async () => {
     const request = vi.fn(async (method: string, params?: unknown) => {
-      if (method === "agentSession/read") {
+      if (method === "thread/read") {
+        const threadId = (params as { threadId?: string }).threadId;
         return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "running",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
+          thread: {
+            id: threadId,
+            sessionId:
+              threadId === "thread-without-active-turn"
+                ? "session-without-active-turn"
+                : "session-1",
+            status: { type: "active", activeFlags: [] },
+            archived: false,
+            createdAt: Date.parse("2026-06-07T00:00:00.000Z") / 1000,
+            updatedAt: Date.parse("2026-06-07T00:00:00.000Z") / 1000,
+            turns:
+              threadId === "thread-without-active-turn"
+                ? [
+                    {
+                      id: "turn-completed",
+                      status: "completed",
+                    },
+                  ]
+                : [
+                    {
+                      id: "turn-completed",
+                      status: "completed",
+                    },
+                    {
+                      id: "turn-running",
+                      status: "inProgress",
+                    },
+                  ],
           },
-          turns:
-            (params as { sessionId?: string }).sessionId ===
-            "session-without-active-turn"
-              ? [
-                  {
-                    turnId: "turn-completed",
-                    sessionId: "session-without-active-turn",
-                    threadId: "thread-1",
-                    status: "completed",
-                  },
-                ]
-              : [
-                  {
-                    turnId: "turn-completed",
-                    sessionId: "session-1",
-                    threadId: "thread-1",
-                    status: "completed",
-                  },
-                  {
-                    turnId: "turn-running",
-                    sessionId: "session-1",
-                    threadId: "thread-1",
-                    status: "running",
-                  },
-                ],
         };
       }
-      if (method === "agentSession/turn/cancel") {
+      if (method === "turn/interrupt") {
         return {};
       }
       throw new Error(`unexpected App Server method: ${method}`);
@@ -676,18 +607,20 @@ describe("PluginRuntimeTaskHost", () => {
         request: {
           appId: "content-factory-app",
           taskId: "task-1",
-          sessionId: "session-without-active-turn",
+          threadId: "thread-without-active-turn",
         },
       }),
     ).resolves.toEqual({
       appId: "content-factory-app",
       taskId: "task-1",
       sessionId: "session-without-active-turn",
+      threadId: "thread-without-active-turn",
       cancelled: false,
       status: "not_running",
     });
-    expect(request).toHaveBeenCalledWith("agentSession/read", {
-      sessionId: "session-without-active-turn",
+    expect(request).toHaveBeenCalledWith("thread/read", {
+      threadId: "thread-without-active-turn",
+      includeTurns: true,
     });
 
     await expect(
@@ -695,21 +628,23 @@ describe("PluginRuntimeTaskHost", () => {
         request: {
           appId: "content-factory-app",
           taskId: "task-1",
-          sessionId: "session-1",
+          threadId: "thread-1",
         },
       }),
     ).resolves.toEqual({
       appId: "content-factory-app",
       taskId: "task-1",
       sessionId: "session-1",
+      threadId: "thread-1",
       cancelled: true,
       status: "cancelled",
     });
-    expect(request).toHaveBeenCalledWith("agentSession/read", {
-      sessionId: "session-1",
+    expect(request).toHaveBeenCalledWith("thread/read", {
+      threadId: "thread-1",
+      includeTurns: true,
     });
-    expect(request).toHaveBeenCalledWith("agentSession/turn/cancel", {
-      sessionId: "session-1",
+    expect(request).toHaveBeenCalledWith("turn/interrupt", {
+      threadId: "thread-1",
       turnId: "turn-running",
     });
   });

@@ -1,8 +1,13 @@
+import { resolveRequiredAgentChatCopy } from "../utils/agentChatCopy";
+
 export const ARTIFACT_DOCUMENT_REPAIRED_WARNING_CODE =
   "artifact_document_repaired";
 export const ARTIFACT_DOCUMENT_FAILED_WARNING_CODE = "artifact_document_failed";
 export const ARTIFACT_DOCUMENT_PERSIST_FAILED_WARNING_CODE =
   "artifact_document_persist_failed";
+export const SKILL_NOT_AVAILABLE_WARNING_CODE = "skill_not_available";
+export const SKILL_LOAD_FAILED_WARNING_CODE = "skill_load_failed";
+export const MENTION_NOT_AVAILABLE_WARNING_CODE = "mention_not_available";
 
 export type RuntimeWarningToastLevel = "info" | "warning" | "error";
 
@@ -39,6 +44,28 @@ export function resolveRuntimeWarningToastPresentation(params: {
       return {
         level: "warning",
         message: "文稿未能保存到工作区，当前结果仍保留在对话中。",
+        shouldToast: true,
+      };
+    case SKILL_NOT_AVAILABLE_WARNING_CODE:
+      return {
+        level: "warning",
+        message: resolveRequiredAgentChatCopy(
+          "runtimeWarning.skillNotAvailable",
+        ),
+        shouldToast: true,
+      };
+    case SKILL_LOAD_FAILED_WARNING_CODE:
+      return {
+        level: "warning",
+        message: resolveRequiredAgentChatCopy("runtimeWarning.skillLoadFailed"),
+        shouldToast: true,
+      };
+    case MENTION_NOT_AVAILABLE_WARNING_CODE:
+      return {
+        level: "warning",
+        message: resolveRequiredAgentChatCopy(
+          "runtimeWarning.mentionNotAvailable",
+        ),
         shouldToast: true,
       };
     default:

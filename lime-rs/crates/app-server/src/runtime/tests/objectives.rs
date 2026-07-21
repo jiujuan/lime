@@ -122,7 +122,7 @@ async fn objective_continue_fails_closed_when_pending_requests_exist() {
         .lock()
         .expect("test backend requests mutex poisoned")
         .iter()
-        .all(|request| request.input.text != "继续推进当前目标。"));
+        .all(|request| request.input.concat_text() != "继续推进当前目标。"));
 }
 
 #[tokio::test]
@@ -318,6 +318,87 @@ async fn managed_objective_auto_continuation_submits_current_turn_after_terminal
         Some("auto_idle")
     );
     assert!(managed_objective.get("auto_continuation_guard").is_some());
+}
+
+#[tokio::test]
+async fn admitted_turn_drives_managed_objective_auto_continuation_on_owned_event_hub() {
+    let session_id = "sess_objective_auto_admitted";
+    let mut objective = managed_objective(session_id);
+    objective.risk_policy = Some(json!({ "allowAutoContinuation": true }));
+    objective.continuation_policy = Some(json!({
+        "autoIdle": true,
+        "maxAutoTurns": 1,
+        "maxElapsedMs": 180000
+    }));
+    objective.budget_policy = Some(json!({ "maxTurns": 1 }));
+    let app_data_source = Arc::new(TestSessionDataSource::new().with_objective(objective));
+    let backend = Arc::new(CompletedBackend);
+    let core = RuntimeCore::with_backend(backend).with_app_data_source(app_data_source.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some(session_id.to_string()),
+        thread_id: Some("thread_objective_auto_admitted".to_string()),
+        app_id: "agent-runtime".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    let mut event_receiver = core
+        .take_event_receiver()
+        .expect("runtime event hub receiver");
+
+    let output = core
+        .start_turn_admitted(
+            AgentSessionTurnStartParams {
+                session_id: session_id.to_string(),
+                turn_id: Some("turn_initial".to_string()),
+                input: AgentInput {
+                    text: "initial".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("admitted turn");
+    assert_eq!(output.response.turn.status, AgentTurnStatus::Accepted);
+
+    let mut completed_turns = 0;
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while let Some(event) = event_receiver.recv().await {
+            if event.event_type == "turn.completed" {
+                completed_turns += 1;
+                if completed_turns == 2 {
+                    break;
+                }
+            }
+        }
+    })
+    .await
+    .expect("admitted objective continuation events");
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while app_data_source.audit_updates().len() < 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("admitted objective continuation audit");
+
+    assert_eq!(completed_turns, 2);
+    let read = core
+        .read_session_current(AgentSessionReadParams {
+            session_id: session_id.to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read admitted objective session");
+    assert_eq!(read.turns.len(), 2);
+    assert_eq!(app_data_source.audit_updates().len(), 2);
 }
 
 #[tokio::test]

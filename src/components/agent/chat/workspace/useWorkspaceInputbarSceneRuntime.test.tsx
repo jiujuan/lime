@@ -68,12 +68,9 @@ function createDefaultHarnessPanelBaseProps(
     submittedActionsInFlight: [],
     onRespondToAction: noop,
     messages: [],
-    queuedTurns: [],
     canInterrupt: false,
     onInterruptCurrentTurn: noop,
-    onResumeThread: noop,
     onReplayPendingRequest: noop,
-    onPromoteQueuedTurn: noop,
     onObjectiveChanged: noop,
     onManageProviders: noop,
     onOpenExecutionPolicySettings: noop,
@@ -165,7 +162,6 @@ function createDefaultProps(overrides: HookPropsOverrides = {}): HookProps {
     soulArtifactVoiceGenerationBrief: null,
     soulArtifactVoiceEnabledForTurn: true,
     onSoulArtifactVoiceEnabledForTurnChange: noop,
-    removeQueuedTurn: noop,
     generalWorkbenchEntryPrompt: null,
     handleRestartGeneralWorkbenchEntryPrompt: noop,
     handleContinueGeneralWorkbenchEntryPrompt: noop,
@@ -247,7 +243,6 @@ function getLatestInputbarProps(): {
   }) => void | Promise<boolean> | boolean;
   toolStates?: Record<string, boolean>;
   onToolStatesChange?: (states: Record<string, boolean>) => void;
-  queuedTurns?: Array<{ queued_turn_id: string }>;
 } {
   const latestCall = mockInputbarRender.mock.calls.at(-1);
   expect(latestCall).toBeTruthy();
@@ -267,7 +262,6 @@ function getLatestInputbarProps(): {
     }) => void | Promise<boolean> | boolean;
     toolStates?: Record<string, boolean>;
     onToolStatesChange?: (states: Record<string, boolean>) => void;
-    queuedTurns?: Array<{ queued_turn_id: string }>;
   };
 }
 
@@ -295,31 +289,6 @@ afterEach(() => {
 });
 
 describe("useWorkspaceInputbarSceneRuntime", () => {
-  it("只有 queued turn 时应展示队列但不伪装成正在输出", () => {
-    renderHookNode(
-      createDefaultProps({
-        isSending: false,
-        generalWorkbenchHarnessPanelBaseProps: {
-          queuedTurns: [
-            {
-              queued_turn_id: "turn-queued",
-              message_preview: "稍后继续",
-              message_text: "稍后继续",
-              created_at: 1,
-              image_count: 0,
-              position: 0,
-            },
-          ],
-        },
-      }),
-    );
-
-    expect(getLatestInputbarProps()).toMatchObject({
-      isLoading: false,
-      queuedTurns: [{ queued_turn_id: "turn-queued" }],
-    });
-  });
-
   it("Inputbar 发送应绑定当前会话，避免落到旧 active session", async () => {
     const handleSend = vi.fn().mockResolvedValue(true);
     renderHookNode(

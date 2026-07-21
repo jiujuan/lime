@@ -1,6 +1,9 @@
 use super::*;
 
-pub(super) fn create_thread_store_schema(conn: &Connection) -> ThreadStoreResult<()> {
+pub(super) fn create_thread_store_schema(
+    conn: &Connection,
+    separate_history_database: bool,
+) -> ThreadStoreResult<()> {
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS canonical_threads (
@@ -11,19 +14,60 @@ pub(super) fn create_thread_store_schema(conn: &Connection) -> ThreadStoreResult
             updated_at_ms INTEGER NOT NULL,
             recency_at_ms INTEGER,
             archived INTEGER NOT NULL DEFAULT 0,
-            last_sequence INTEGER
+            last_sequence INTEGER,
+            rollout_path TEXT
         );
-        CREATE TABLE IF NOT EXISTS canonical_turns (
+        CREATE TABLE IF NOT EXISTS canonical_thread_spawn_edges (
+            parent_thread_id TEXT NOT NULL,
+            child_thread_id TEXT NOT NULL PRIMARY KEY,
+            status TEXT NOT NULL,
+            pending_session_id TEXT
+        );
+        CREATE TABLE IF NOT EXISTS thread_goals (
+            thread_id TEXT PRIMARY KEY NOT NULL
+                REFERENCES canonical_threads(thread_id) ON DELETE CASCADE,
+            goal_id TEXT NOT NULL,
+            objective TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN (
+                'active',
+                'paused',
+                'blocked',
+                'usage_limited',
+                'budget_limited',
+                'complete'
+            )),
+            token_budget INTEGER CHECK(token_budget IS NULL OR token_budget > 0),
+            tokens_used INTEGER NOT NULL DEFAULT 0 CHECK(tokens_used >= 0),
+            time_used_seconds INTEGER NOT NULL DEFAULT 0 CHECK(time_used_seconds >= 0),
+            created_at_ms INTEGER NOT NULL,
+            updated_at_ms INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_canonical_threads_archive_recency
+            ON canonical_threads(archived, recency_at_ms DESC, updated_at_ms DESC, thread_id DESC);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_canonical_threads_session
+            ON canonical_threads(session_id);
+        CREATE INDEX IF NOT EXISTS idx_canonical_thread_spawn_edges_parent_status
+            ON canonical_thread_spawn_edges(parent_thread_id, status);
+        "#,
+    )
+    .map_err(store_error)?;
+    conn.execute_batch(super::goal_accounting::GOAL_ACCOUNTING_SCHEMA_SQL)
+        .map_err(store_error)?;
+    let history_schema = separate_history_database
+        .then_some("thread_history.")
+        .unwrap_or_default();
+    conn.execute_batch(&format!(
+        r#"
+        CREATE TABLE IF NOT EXISTS {history_schema}canonical_turns (
             thread_id TEXT NOT NULL,
             turn_id TEXT NOT NULL,
             ordinal INTEGER NOT NULL,
             last_sequence INTEGER NOT NULL,
             turn_json TEXT NOT NULL,
             PRIMARY KEY (thread_id, turn_id),
-            UNIQUE (thread_id, ordinal),
-            FOREIGN KEY (thread_id) REFERENCES canonical_threads(thread_id) ON DELETE CASCADE
+            UNIQUE (thread_id, ordinal)
         );
-        CREATE TABLE IF NOT EXISTS canonical_items (
+        CREATE TABLE IF NOT EXISTS {history_schema}canonical_items (
             thread_id TEXT NOT NULL,
             turn_id TEXT NOT NULL,
             item_id TEXT NOT NULL,
@@ -33,46 +77,46 @@ pub(super) fn create_thread_store_schema(conn: &Connection) -> ThreadStoreResult
             PRIMARY KEY (thread_id, item_id),
             UNIQUE (thread_id, ordinal),
             FOREIGN KEY (thread_id, turn_id)
-                REFERENCES canonical_turns(thread_id, turn_id) ON DELETE CASCADE
+                REFERENCES canonical_turns(thread_id, turn_id)
+                ON DELETE CASCADE
         );
-        CREATE TABLE IF NOT EXISTS canonical_history_applies (
+        CREATE TABLE IF NOT EXISTS {history_schema}canonical_history_applies (
             thread_id TEXT NOT NULL,
             sequence INTEGER NOT NULL,
             fingerprint TEXT NOT NULL,
-            PRIMARY KEY (thread_id, sequence),
-            FOREIGN KEY (thread_id) REFERENCES canonical_threads(thread_id) ON DELETE CASCADE
+            PRIMARY KEY (thread_id, sequence)
         );
-        CREATE TABLE IF NOT EXISTS canonical_thread_spawn_edges (
-            parent_thread_id TEXT NOT NULL,
-            child_thread_id TEXT NOT NULL PRIMARY KEY,
-            status TEXT NOT NULL,
-            pending_session_id TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_canonical_threads_archive_recency
-            ON canonical_threads(archived, recency_at_ms DESC, updated_at_ms DESC, thread_id DESC);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_canonical_threads_session
-            ON canonical_threads(session_id);
-        CREATE INDEX IF NOT EXISTS idx_canonical_turns_page
+        CREATE INDEX IF NOT EXISTS {history_schema}idx_canonical_turns_page
             ON canonical_turns(thread_id, ordinal, turn_id);
-        CREATE INDEX IF NOT EXISTS idx_canonical_items_page
+        CREATE INDEX IF NOT EXISTS {history_schema}idx_canonical_items_page
             ON canonical_items(thread_id, ordinal, item_id);
-        CREATE INDEX IF NOT EXISTS idx_canonical_items_turn_page
+        CREATE INDEX IF NOT EXISTS {history_schema}idx_canonical_items_turn_page
             ON canonical_items(thread_id, turn_id, ordinal, item_id);
-        CREATE INDEX IF NOT EXISTS idx_canonical_thread_spawn_edges_parent_status
-            ON canonical_thread_spawn_edges(parent_thread_id, status);
         "#,
-    )
+    ))
     .map_err(store_error)?;
-    ensure_spawn_edge_column(conn, "pending_session_id", "TEXT")
+    ensure_table_column(conn, "canonical_threads", "rollout_path", "TEXT")?;
+    ensure_table_column(
+        conn,
+        "canonical_thread_spawn_edges",
+        "pending_session_id",
+        "TEXT",
+    )?;
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_canonical_threads_rollout_path
+            ON canonical_threads(rollout_path) WHERE rollout_path IS NOT NULL;",
+    )
+    .map_err(store_error)
 }
 
-fn ensure_spawn_edge_column(
+fn ensure_table_column(
     conn: &Connection,
+    table: &str,
     column: &str,
     definition: &str,
 ) -> ThreadStoreResult<()> {
     let mut statement = conn
-        .prepare("PRAGMA table_info(canonical_thread_spawn_edges)")
+        .prepare(&format!("PRAGMA table_info({table})"))
         .map_err(store_error)?;
     let columns = statement
         .query_map([], |row| row.get::<_, String>(1))
@@ -83,7 +127,7 @@ fn ensure_spawn_edge_column(
         return Ok(());
     }
     conn.execute(
-        &format!("ALTER TABLE canonical_thread_spawn_edges ADD COLUMN {column} {definition}"),
+        &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
         [],
     )
     .map_err(store_error)?;
@@ -241,7 +285,6 @@ pub(super) fn refresh_thread_snapshot(
         .map(|value| decode_json::<Turn>(&value))
         .transpose()?;
     if let Some(turn) = latest_turn {
-        thread.updated_at_ms = thread.updated_at_ms.max(turn.updated_at_ms);
         thread.status = match turn.status {
             TurnStatus::InProgress => ThreadStatus::Active {
                 active_flags: (turn.approval == agent_protocol::TurnApprovalState::Pending)

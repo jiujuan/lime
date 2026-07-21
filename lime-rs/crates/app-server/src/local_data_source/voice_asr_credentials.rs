@@ -103,10 +103,7 @@ pub(crate) fn set_default_voice_model(
     if params.model_id != SENSEVOICE_MODEL_ID {
         return Err(data_error(format!("不支持的语音模型: {}", params.model_id)));
     }
-    let install_dir = Path::new(params.install_dir.trim());
-    if !install_dir.is_absolute() {
-        return Err(data_error("语音模型安装目录必须是绝对路径"));
-    }
+    let install_dir = validate_voice_model_install_dir(&params.install_dir)?;
     let missing_files = required_sensevoice_files(install_dir);
     if !missing_files.is_empty() {
         return Err(data_error(format!(
@@ -138,22 +135,7 @@ pub(crate) async fn test_transcribe_voice_model_file(
         return Err(data_error("请提供本机 WAV 文件路径"));
     }
 
-    let install_dir = voice_config_service::get_default_asr_credential()
-        .map_err(data_error)?
-        .and_then(|credential| {
-            if credential.provider != CoreAsrProviderType::SenseVoiceLocal {
-                return None;
-            }
-            credential
-                .sensevoice_config
-                .filter(|config| config.model_id == params.model_id)
-                .and_then(|config| config.model_dir)
-        })
-        .unwrap_or_else(|| default_voice_model_install_dir(&params.model_id));
-    let install_dir_path = Path::new(install_dir.trim());
-    if !install_dir_path.is_absolute() {
-        return Err(data_error("语音模型安装目录必须是绝对路径"));
-    }
+    let install_dir_path = validate_voice_model_install_dir(&params.install_dir)?;
     let missing_files = required_sensevoice_files(install_dir_path);
     if !missing_files.is_empty() {
         return Err(data_error(format!(
@@ -276,13 +258,12 @@ fn required_sensevoice_files(install_dir: &Path) -> Vec<String> {
     .collect()
 }
 
-fn default_voice_model_install_dir(model_id: &str) -> String {
-    lime_core::app_paths::best_effort_data_dir()
-        .join("models")
-        .join("voice")
-        .join(model_id)
-        .to_string_lossy()
-        .to_string()
+fn validate_voice_model_install_dir(install_dir: &str) -> Result<&Path, RuntimeCoreError> {
+    let install_dir = Path::new(install_dir.trim());
+    if !install_dir.is_absolute() {
+        return Err(data_error("语音模型安装目录必须是绝对路径"));
+    }
+    Ok(install_dir)
 }
 
 #[derive(Debug)]
@@ -607,5 +588,28 @@ fn core_voice_asr_openai_config_from_protocol(config: VoiceAsrOpenAiConfig) -> C
         api_key: config.api_key,
         base_url: config.base_url,
         proxy_url: config.proxy_url,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn voice_model_install_dir_requires_explicit_absolute_path() {
+        for invalid in ["", "models/voice/sensevoice"] {
+            assert!(validate_voice_model_install_dir(invalid)
+                .expect_err("missing or relative install_dir must fail")
+                .to_string()
+                .contains("必须是绝对路径"));
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let install_dir = temp.path().join(SENSEVOICE_MODEL_ID);
+        assert_eq!(
+            validate_voice_model_install_dir(&install_dir.to_string_lossy())
+                .expect("absolute install_dir"),
+            install_dir
+        );
     }
 }

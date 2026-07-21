@@ -47,10 +47,10 @@ const REQUIRED_METHODS = [
   "mcpServer/create",
   "mcpServer/start",
   "mcpTool/list",
-  "agentSession/start",
+  "thread/start",
   "agentSession/update",
-  "agentSession/turn/start",
-  "agentSession/read",
+  "turn/start",
+  "thread/read",
 ];
 
 function printHelp() {
@@ -328,7 +328,7 @@ async function startRuntimeTurn(
   const threadId = `${sessionId}-thread`;
   const turnId = `${sessionId}-turn`;
   const expectedToolName = toolName(serverName);
-  const start = await appServerCallFromPage(page, "agentSession/start", {
+  const start = await appServerCallFromPage(page, "thread/start", {
     sessionId,
     threadId,
     appId: "desktop",
@@ -354,7 +354,7 @@ async function startRuntimeTurn(
     executionStrategy: "react",
   });
   observedMethods.add(update.method);
-  const turn = await appServerCallFromPage(page, "agentSession/turn/start", {
+  const turn = await appServerCallFromPage(page, "turn/start", {
     sessionId,
     turnId,
     input: { text: "Run the release check through the available MCP tool." },
@@ -480,7 +480,7 @@ async function waitForCompletion(
   const startedAt = Date.now();
   let latestRead = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    latestRead = await appServerCallFromPage(page, "agentSession/read", {
+    latestRead = await appServerCallFromPage(page, "thread/read", {
       sessionId: runtime.sessionId,
       historyLimit: 80,
     });

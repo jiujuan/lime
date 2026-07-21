@@ -50,7 +50,6 @@ import {
   resolveHttpExternalHref,
 } from "@/lib/markdown/externalLinks";
 import { getProviderAccessHelp } from "@/lib/provider/providerAccessHelp";
-import { resolveAgentRuntimeErrorPresentation } from "@/components/agent/chat/utils/agentRuntimeErrorPresentation";
 import { dedupeModelIds, getProviderTypeLabel } from "./providerConfigUtils";
 import type {
   ConnectionTestOptions,
@@ -66,6 +65,7 @@ import {
   type ProviderModelFetchStatusCopy,
 } from "./providerModelFetchHelpers";
 import type { ProviderSettingsFocusContext } from "@/types/page";
+import { formatProviderConnectionError } from "./providerConnectionError";
 
 // ============================================================================
 // 类型定义
@@ -251,14 +251,6 @@ function readActionErrorMessage(error: unknown): string | null {
 
 function formatActionError(error: unknown, fallback: string): string {
   return readActionErrorMessage(error) ?? fallback;
-}
-
-function formatProviderRuntimeError(
-  error: string | undefined,
-  fallback: string,
-) {
-  const rawMessage = error?.trim() || fallback;
-  return resolveAgentRuntimeErrorPresentation(rawMessage).displayMessage;
 }
 
 function isMissingApiKeyFocus(
@@ -1080,19 +1072,29 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
       } else {
         setConnectionStatus({
           tone: "error",
-          message: formatProviderRuntimeError(
-            result.error,
-            t("settings.providers.setting.feedback.connection.failureDefault"),
-          ),
+          message: formatProviderConnectionError(result.error, {
+            fallback: t(
+              "settings.providers.setting.feedback.connection.failureDefault",
+            ),
+            timeout: t(
+              "settings.providers.feedback.connection.timeout",
+              "连接测试超时。请确认 API Base URL 可访问后重试。",
+            ),
+          }),
         });
       }
     } catch (error) {
       setConnectionStatus({
         tone: "error",
-        message: formatProviderRuntimeError(
-          readActionErrorMessage(error) ?? undefined,
-          t("settings.providers.setting.feedback.connection.errorDefault"),
-        ),
+        message: formatProviderConnectionError(error, {
+          fallback: t(
+            "settings.providers.setting.feedback.connection.errorDefault",
+          ),
+          timeout: t(
+            "settings.providers.feedback.connection.timeout",
+            "连接测试超时。请确认 API Base URL 可访问后重试。",
+          ),
+        }),
       });
     } finally {
       setTestingConnection(false);

@@ -1,4 +1,3 @@
-import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentThreadTurn } from "../types";
 import { isRuntimePermissionConfirmationWaitMessage } from "./runtimeActionConfirmation";
@@ -10,7 +9,6 @@ import {
 import type {
   ThreadReliabilityIncidentDisplay,
   ThreadReliabilityOutcomeDisplay,
-  ThreadReliabilityQueuedTurnDisplay,
   ThreadReliabilityRequestDisplay,
   ThreadReliabilityTone,
   ThreadReliabilityViewTextContext,
@@ -41,34 +39,6 @@ export function normalizeInterruptStateLabel(
     );
   }
   return shortenText(interruptState, 32);
-}
-
-export function resolveNextQueuedTurn(
-  threadRead: AgentRuntimeThreadReadModel | null | undefined,
-  queuedTurns: QueuedTurnSnapshot[],
-  context: ThreadReliabilityViewTextContext,
-): ThreadReliabilityQueuedTurnDisplay | null {
-  const candidate =
-    threadRead?.queued_turns?.[0] ??
-    (queuedTurns.length > 0 ? queuedTurns[0] : null);
-
-  if (!candidate) {
-    return null;
-  }
-
-  return {
-    id: candidate.queued_turn_id,
-    title:
-      shortenText(candidate.message_preview, 48) ||
-      shortenText(candidate.message_text, 48) ||
-      viewText(context, "queue.titleFallback", "Continue queued turn"),
-    positionLabel:
-      candidate.position > 0
-        ? viewText(context, "queue.position", "Queue #{{position}}", {
-            position: candidate.position,
-          })
-        : null,
-  };
 }
 
 function resolveStatusMeta(
@@ -130,7 +100,6 @@ export function deriveStatusFromRuntime(params: {
   latestTurn: AgentThreadTurn | null;
   pendingRequests: ThreadReliabilityRequestDisplay[];
   submittedRequests: ThreadReliabilityRequestDisplay[];
-  queuedTurnCount: number;
   context: ThreadReliabilityViewTextContext;
 }): { label: string; tone: ThreadReliabilityTone } {
   if (params.submittedRequests.length > 0) {
@@ -184,13 +153,6 @@ export function deriveStatusFromRuntime(params: {
       tone: "paused",
     };
   }
-  if (params.queuedTurnCount > 0) {
-    return {
-      label: viewText(params.context, "status.waiting", "Waiting"),
-      tone: "waiting",
-    };
-  }
-
   return {
     label: viewText(params.context, "status.idle", "Idle"),
     tone: "neutral",
@@ -204,10 +166,8 @@ export function buildSummary(params: {
   submittedRequests: ThreadReliabilityRequestDisplay[];
   incidents: ThreadReliabilityIncidentDisplay[];
   outcome: ThreadReliabilityOutcomeDisplay | null;
-  queuedTurnCount: number;
   interruptState?: string | null;
   interruptStateLabel?: string | null;
-  nextQueuedTurn: ThreadReliabilityQueuedTurnDisplay | null;
   context: ThreadReliabilityViewTextContext;
 }): string {
   if (params.pendingRequests.length > 0) {
@@ -267,17 +227,6 @@ export function buildSummary(params: {
         { state: params.interruptStateLabel },
       );
     }
-    if (params.nextQueuedTurn) {
-      return viewText(
-        params.context,
-        "summary.interruptedWithNext",
-        "{{state}}. You can continue {{title}}.",
-        {
-          state: params.interruptStateLabel,
-          title: params.nextQueuedTurn.title,
-        },
-      );
-    }
     return viewText(
       params.context,
       "summary.interrupted",
@@ -303,15 +252,6 @@ export function buildSummary(params: {
     return params.outcome.summary;
   }
 
-  if (params.queuedTurnCount > 0) {
-    return viewText(
-      params.context,
-      "summary.queuedTurns",
-      "{{count}} queued turns are waiting to run",
-      { count: params.queuedTurnCount },
-    );
-  }
-
   return viewText(
     params.context,
     "summary.status",
@@ -325,7 +265,6 @@ export function buildRecommendations(params: {
   submittedRequests: ThreadReliabilityRequestDisplay[];
   incidents: ThreadReliabilityIncidentDisplay[];
   outcome: ThreadReliabilityOutcomeDisplay | null;
-  nextQueuedTurn: ThreadReliabilityQueuedTurnDisplay | null;
   interruptState?: string | null;
   interruptStateLabel?: string | null;
   context: ThreadReliabilityViewTextContext;
@@ -425,19 +364,6 @@ export function buildRecommendations(params: {
         ),
       );
     }
-  }
-  if (
-    params.nextQueuedTurn &&
-    !(params.interruptState || "").toLowerCase().includes("interrupting")
-  ) {
-    recommendations.add(
-      viewText(
-        params.context,
-        "recommendation.nextQueuedTurn",
-        "Continue queued turn: {{title}}",
-        { title: params.nextQueuedTurn.title },
-      ),
-    );
   }
   if (params.outcome?.retryable) {
     recommendations.add(

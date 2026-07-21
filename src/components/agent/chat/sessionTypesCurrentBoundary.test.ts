@@ -31,13 +31,11 @@ const CONSUMER_PATHS = [
   "src/components/agent/chat/workspace/workspaceConversationSessionViewModel.ts",
   "src/components/agent/chat/workspace/workspaceConversationWorkbenchViewModel.ts",
   "src/components/agent/chat/hooks/agentSessionRefresh.ts",
-  "src/components/agent/chat/hooks/agentStreamReadModelParsing.ts",
   "src/components/agent/chat/hooks/agentStreamRequestStartController.ts",
   "src/components/agent/chat/hooks/agentStreamSend.ts",
   "src/components/agent/chat/utils/agentTaskRuntime.ts",
   "src/components/agent/chat/utils/inputbarRuntimeStatusLine.ts",
   "src/components/agent/chat/hooks/agentSessionTopicViewModel.ts",
-  "src/components/agent/chat/utils/submitOpRuntimeCompaction.ts",
   "src/components/agent/chat/workspace/useWorkspaceArticleEditorRightSurfaceRuntime.ts",
   "src/components/agent/chat/workspace/useSessionRuntimeProjectionDeferral.ts",
   "src/components/agent/chat/workspace/workspaceConversationCodingViews.tsx",
@@ -45,7 +43,6 @@ const CONSUMER_PATHS = [
   "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
   "src/components/agent/chat/hooks/agentStreamTurnEventBinding.ts",
   "src/components/agent/chat/hooks/useAgentStream.ts",
-  "src/components/agent/chat/utils/buildUserInputSubmitOp.ts",
 ];
 
 describe("session types current owner boundary", () => {

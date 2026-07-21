@@ -143,7 +143,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
           gate_key: "write_mode",
           status: "running",
           source: "chat",
-          source_ref: "agentSession/turn/start",
+          source_ref: "turn/start",
           started_at: "2026-03-06T04:00:00.000Z",
         },
       ],
@@ -160,7 +160,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
     await flushEffects(12);
 
     expect(mockSkillExecutionGetDetail).not.toHaveBeenCalledWith(
-      "agentSession/turn/start",
+      "turn/start",
     );
   });
 

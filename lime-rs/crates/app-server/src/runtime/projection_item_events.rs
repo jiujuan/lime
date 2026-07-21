@@ -27,6 +27,7 @@ const PROJECTED_THREAD_ITEM_EVENT_TYPES: &[&str] = &[
     "patch.started",
     "patch.applied",
     "patch.failed",
+    "patch.declined",
     "action.required",
     "action.resolved",
     "action.cancelled",

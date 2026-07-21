@@ -11,5 +11,5 @@ export {
   sortAppServerAgentSessionNotifications,
 } from "./appServerEventStreamRouting";
 export type { AppServerAgentSessionEventRouteParams } from "./appServerEventStreamRouting";
-export { projectAppServerAgentEventPayload } from "./appServerEventPayloadProjection";
+export { projectAppServerAgentEventPayload } from "./appServerEventStreamProjection";
 export { readAppServerAgentEvent } from "./appServerEventPayloadUtils";

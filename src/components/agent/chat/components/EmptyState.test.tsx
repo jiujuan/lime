@@ -3544,20 +3544,14 @@ describe("EmptyState", () => {
     expectEmptyStateSend(onSend, {
       textOverride: "请先规划再持续推进这个任务",
       sendOptions: expect.objectContaining({
+        collaborationMode: "plan",
         requestMetadata: expect.objectContaining({
           harness: expect.objectContaining({
-            task_mode_enabled: true,
             goal_mode_enabled: true,
             preferences: expect.objectContaining({
-              task: true,
-              task_mode: true,
               goal: true,
               objective: true,
             }),
-            collaboration_mode: {
-              mode: "plan",
-              source: "empty_state",
-            },
             thread_goal: expect.objectContaining({
               enabled: true,
               source: "empty_state",

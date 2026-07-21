@@ -75,7 +75,7 @@ export function createTempRuntimeEnv() {
   const localAppData = path.join(tempRoot, "local-app-data");
   const roamingAppData = path.join(tempRoot, "roaming-app-data");
   const electronUserDataDir = path.join(tempRoot, "electron-user-data");
-  const agentRoot = path.join(tempRoot, "agent");
+  const agentRoot = path.join(electronUserDataDir, "app-server");
   const backendPath = path.join(tempRoot, "claw-chat-backend.mjs");
   const backendLedgerPath = path.join(tempRoot, "claw-chat-backend.jsonl");
   const cancelSignalPath = path.join(tempRoot, "claw-chat-cancel.signal");
@@ -116,6 +116,7 @@ export function createTempRuntimeEnv() {
 
   return {
     tempRoot,
+    agentRoot,
     electronUserDataDir,
     backendPath,
     backendLedgerPath,

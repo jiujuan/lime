@@ -296,9 +296,6 @@
   "agentChat.messageList.artifact.sourceCount": "{{count}} sources",
   "agentChat.messageList.artifact.locateBlock": "Locate {{label}}",
   "agentChat.messageList.artifact.documentSyncedPreview": "Synced to the workspace. You can keep reading, editing, and locating blocks in the canvas.",
-  "agentChat.messageList.artifactFrame.badge": "Artifact frame",
-  "agentChat.messageList.artifactFrame.open": "Open editor",
-  "agentChat.messageList.artifactFrame.openAria": "Open artifact editor: {{title}}",
   "agentChat.messageList.artifactFrame.streaming": "Streaming",
   "agentChat.messageList.articleArtifact.documentCreatedPrefix": "Document created:",
   "agentChat.messageList.articleArtifact.documentCreatingPrefix": "Creating document:",
@@ -465,5 +462,7 @@
   "agentChat.toolCall.group.collapseSearch": "Collapse search batch",
   "agentChat.toolCall.group.expandSearch": "Expand search batch",
   "agentChat.toolCall.group.hiddenSearchGroups": " and {{count}} more",
-  "agentChat.toolCall.error.openExternalUnsupported": "This environment cannot open external links"
+  "agentChat.toolCall.error.openExternalUnsupported": "This environment cannot open external links",
+  "agentChat.inputbar.shellCommand.empty": "Enter a command to run",
+  "agentChat.inputbar.shellCommand.error": "Command submission failed: {{message}}"
 }

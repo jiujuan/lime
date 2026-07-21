@@ -67,11 +67,11 @@ const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 const APP_SERVER_METHOD_INITIALIZE = "initialize";
 const APP_SERVER_METHOD_INITIALIZED = "initialized";
-const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
+const APP_SERVER_METHOD_THREAD_START = "thread/start";
 const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
-const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
-const APP_SERVER_METHOD_AGENT_SESSION_LIST = "agentSession/list";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
+const APP_SERVER_METHOD_THREAD_READ = "thread/read";
+const APP_SERVER_METHOD_THREAD_LIST = "thread/list";
+const APP_SERVER_METHOD_TURN_START = "turn/start";
 const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
 const APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =
@@ -1338,7 +1338,7 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
             last_error: null,
           },
         });
-      case APP_SERVER_METHOD_AGENT_SESSION_START: {
+      case APP_SERVER_METHOD_THREAD_START: {
         const requestedWorkspaceId =
           typeof params.workspaceId === "string" && params.workspaceId.trim()
             ? params.workspaceId.trim()
@@ -1369,13 +1369,13 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
         return buildAppServerJsonRpcResult(message.id, {
           session: buildAppServerSessionOverviewFromFixture(fixture),
         });
-      case APP_SERVER_METHOD_AGENT_SESSION_LIST:
+      case APP_SERVER_METHOD_THREAD_LIST:
         return buildAppServerJsonRpcResult(message.id, {
           sessions: sessionCreated
             ? [buildAppServerSessionOverviewFromFixture(fixture)]
             : [],
         });
-      case APP_SERVER_METHOD_AGENT_SESSION_READ:
+      case APP_SERVER_METHOD_THREAD_READ:
         return buildAppServerJsonRpcResult(
           message.id,
           buildAppServerSessionReadFixture(fixture),
@@ -1415,7 +1415,7 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
           restoredAt: nowIso,
         });
       }
-      case APP_SERVER_METHOD_AGENT_SESSION_TURN_START: {
+      case APP_SERVER_METHOD_TURN_START: {
         const turnParams = params && typeof params === "object" ? params : {};
         const submitRequest = {
           message: turnParams.input?.text ?? "",
@@ -2762,7 +2762,7 @@ async function main() {
           if (
             hasAppServerMethodCount(
               diagnostics,
-              APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+              APP_SERVER_METHOD_TURN_START,
             )
           ) {
             return {
@@ -2778,7 +2778,7 @@ async function main() {
           return {
             ok: hasAppServerMethodCount(
               nextDiagnostics,
-              APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+              APP_SERVER_METHOD_TURN_START,
             ),
             value: {
               fallbackSubmitted,
@@ -2813,7 +2813,7 @@ async function main() {
     assert(
       hasAppServerMethodCount(
         submitDiagnostics,
-        APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+        APP_SERVER_METHOD_TURN_START,
       ),
       `自然语言任务未提交到 App Server JSON-RPC: ${JSON.stringify(
         submitCommand ?? null,
@@ -2822,7 +2822,7 @@ async function main() {
     assert(
       hasAppServerMethodCount(
         submitDiagnostics,
-        APP_SERVER_METHOD_AGENT_SESSION_START,
+        APP_SERVER_METHOD_THREAD_START,
       ),
       `自然语言任务未创建 App Server session: ${JSON.stringify(
         submitDiagnostics ?? null,
@@ -2972,7 +2972,7 @@ async function main() {
           if (
             hasAppServerMethodCount(
               diagnostics,
-              APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+              APP_SERVER_METHOD_TURN_START,
               2,
             ) &&
             isExpectedPlainCodeRuntimeQueuedSubmitRequest(latestRequest)
@@ -2998,7 +2998,7 @@ async function main() {
             ok:
               hasAppServerMethodCount(
                 nextDiagnostics,
-                APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+                APP_SERVER_METHOD_TURN_START,
                 2,
               ) &&
               isExpectedPlainCodeRuntimeQueuedSubmitRequest(nextLatestRequest),

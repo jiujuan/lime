@@ -23,9 +23,9 @@ const CHAT_PROVIDER_PREFERENCE = "deepseek";
 const CHAT_MODEL_PREFERENCE = "deepseek-v4-flash";
 const CONTEXT_CLOSE_TIMEOUT_MS = 5_000;
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
-const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_TURN_START = "turn/start";
+const APP_SERVER_METHOD_TURN_INTERRUPT = "turn/interrupt";
+const APP_SERVER_METHOD_THREAD_READ = "thread/read";
 const TERMINAL_THREAD_STATUSES = new Set([
   "completed",
   "failed",
@@ -373,7 +373,7 @@ function isCurrentImageRuntimeSubmit(invoke) {
   return Boolean(
     getAppServerMethodRequest(
       invoke,
-      APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+      APP_SERVER_METHOD_TURN_START,
     ),
   );
 }
@@ -473,7 +473,7 @@ async function cleanupSubmittedCurrentTurn(options, turnParams) {
   try {
     await invokeAppServerMethod(
       options,
-      APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+      APP_SERVER_METHOD_TURN_INTERRUPT,
       { sessionId, turnId },
       20_000,
     );
@@ -492,7 +492,7 @@ async function cleanupSubmittedCurrentTurn(options, turnParams) {
     async () => {
       const sessionRead = await invokeAppServerMethod(
         options,
-        APP_SERVER_METHOD_AGENT_SESSION_READ,
+        APP_SERVER_METHOD_THREAD_READ,
         { sessionId },
         20_000,
       ).catch(() => null);
@@ -816,18 +816,18 @@ async function main() {
         .find((item) => isLegacyImageRuntimeSubmit(item)) || null;
     assert(
       !retiredImageSkillInvoke,
-      "@配图 不应再通过 execute_skill 提交，必须走 agentSession/turn/start current 主链",
+      "@配图 不应再通过 execute_skill 提交，必须走 turn/start current 主链",
     );
     assert(
       !legacyRuntimeSubmitInvoke,
-      "@配图 不应再通过 agent_runtime_submit_turn 提交，必须走 agentSession/turn/start current 主链",
+      "@配图 不应再通过 agent_runtime_submit_turn 提交，必须走 turn/start current 主链",
     );
 
     const request = getAppServerMethodRequest(
       submitInvoke,
-      APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+      APP_SERVER_METHOD_TURN_START,
     );
-    assert(request, "@配图 current 提交缺少 agentSession/turn/start");
+    assert(request, "@配图 current 提交缺少 turn/start");
     const params = request.params || {};
     const runtimeOptions = params.runtimeOptions || {};
     const runtimeRequest = runtimeOptions.runtimeRequest || {};
@@ -872,7 +872,7 @@ async function main() {
     summary.assertions.imageGenerationContractPreserved = true;
     summary.assertions.chatModelPreferenceSuppressed = true;
     summary.submitRequest = {
-      routeMode: "agentSession/turn/start",
+      routeMode: "turn/start",
       message: params.input?.text || null,
       sessionId: params.sessionId || null,
       turnId: params.turnId || null,
@@ -890,7 +890,7 @@ async function main() {
       fullPage: true,
     });
 
-    if (summary.submitRequest?.routeMode === "agentSession/turn/start") {
+    if (summary.submitRequest?.routeMode === "turn/start") {
       summary.cleanup = await cleanupSubmittedCurrentTurn(
         options,
         summary.submitRequest,

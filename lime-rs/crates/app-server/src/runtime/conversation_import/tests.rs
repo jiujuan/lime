@@ -944,7 +944,7 @@ fn committing_codex_rollout_imports_completed_lime_session() {
         "data:image/png;base64,abc"
     );
     assert_eq!(messages[0]["attachments"][0]["kind"], "image");
-    assert_eq!(messages[0]["attachments"][0]["metadata"]["detail"], "low");
+    assert_eq!(messages[0]["attachments"][0]["detail"], "low");
     assert_eq!(messages[1]["role"], "assistant");
     assert_eq!(messages[1]["content"][0]["text"], full_reply.trim());
 }

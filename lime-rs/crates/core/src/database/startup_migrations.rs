@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use rusqlite::Connection;
 
 use super::{migration, migration_v2, migration_v4, migration_v5, migration_v6};
@@ -64,7 +62,6 @@ fn run_nonfatal_count_migration<F, S>(
 fn run_provider_pool_startup_migrations(conn: &Connection) {
     run_provider_id_migration(conn);
     migration::check_model_registry_version(conn);
-    run_retired_provider_pool_cleanup(conn);
 }
 
 fn run_provider_id_migration(conn: &Connection) {
@@ -77,85 +74,6 @@ fn run_provider_id_migration(conn: &Connection) {
             format!("[数据库] 已迁移 {} 个 Provider ID", count)
         },
     );
-}
-
-#[derive(Debug, Clone, Copy)]
-struct RetiredProviderPoolCleanup {
-    rows_deleted: usize,
-    managed_files_deleted: usize,
-}
-
-fn run_retired_provider_pool_cleanup(conn: &Connection) {
-    run_nonfatal_logged_startup_migration(
-        conn,
-        "凭证池退役清理失败",
-        |tx| {
-            let rows_deleted = clear_provider_pool_credentials(tx)?;
-            let managed_files_deleted = remove_managed_provider_pool_credential_files()?;
-            Ok(RetiredProviderPoolCleanup {
-                rows_deleted,
-                managed_files_deleted,
-            })
-        },
-        |_, result| {
-            if result.rows_deleted == 0 && result.managed_files_deleted == 0 {
-                return None;
-            }
-            Some(format!(
-                "[数据库] 凭证池已退役，清理 {} 条旧凭证记录和 {} 个托管凭证文件",
-                result.rows_deleted, result.managed_files_deleted
-            ))
-        },
-    );
-}
-
-fn clear_provider_pool_credentials(conn: &Connection) -> Result<usize, String> {
-    conn.execute("DELETE FROM provider_pool_credentials", [])
-        .map_err(|error| error.to_string())
-}
-
-fn count_managed_files(path: &Path) -> usize {
-    let Ok(metadata) = std::fs::symlink_metadata(path) else {
-        return 0;
-    };
-
-    let file_type = metadata.file_type();
-    if file_type.is_symlink() || metadata.is_file() {
-        return 1;
-    }
-
-    if !metadata.is_dir() {
-        return 0;
-    }
-
-    let Ok(entries) = std::fs::read_dir(path) else {
-        return 0;
-    };
-
-    entries
-        .filter_map(Result::ok)
-        .map(|entry| count_managed_files(&entry.path()))
-        .sum()
-}
-
-fn remove_managed_provider_pool_credential_files() -> Result<usize, String> {
-    let data_dir = crate::app_paths::preferred_data_dir().map_err(|error| error.to_string())?;
-    let credentials_dir = data_dir.join("credentials");
-
-    let metadata = match std::fs::symlink_metadata(&credentials_dir) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-        Err(error) => return Err(error.to_string()),
-    };
-
-    let deleted_count = count_managed_files(&credentials_dir);
-    if metadata.file_type().is_symlink() || metadata.is_file() {
-        std::fs::remove_file(&credentials_dir).map_err(|error| error.to_string())?;
-    } else if metadata.is_dir() {
-        std::fs::remove_dir_all(&credentials_dir).map_err(|error| error.to_string())?;
-    }
-
-    Ok(deleted_count)
 }
 
 fn run_mcp_startup_migrations(conn: &Connection) {
@@ -329,6 +247,30 @@ mod tests {
         run_provider_id_migration(&conn);
 
         assert!(!migration::is_model_registry_refresh_needed(&conn));
+    }
+
+    #[test]
+    fn provider_pool_startup_migrations_retain_deprecated_credentials() {
+        let conn = Connection::open_in_memory().unwrap();
+        schema::create_tables(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO provider_pool_credentials (
+                uuid, provider_type, credential_data, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["legacy-credential", "openai", "{}", 1_i64, 1_i64],
+        )
+        .unwrap();
+
+        run_provider_pool_startup_migrations(&conn);
+
+        let retained: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM provider_pool_credentials WHERE uuid = ?1",
+                ["legacy-credential"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(retained, 1);
     }
 
     #[test]

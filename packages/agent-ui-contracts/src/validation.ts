@@ -1,9 +1,6 @@
 import type { AgentUiFixture } from "./fixtures";
 import type { AgentUiProjectionState } from "./projection";
-import type {
-  AgentRuntimeCapabilityManifest,
-  AgentRuntimeResumeContract,
-} from "./capabilities";
+import type { AgentRuntimeCapabilityManifest } from "./capabilities";
 import type {
   AgentRuntimeExecutionEvent,
   AgentRuntimeReadModel,
@@ -70,14 +67,6 @@ export function validateRuntimeCapabilityManifest(
   const issues = collectRuntimeCapabilityManifestValidationIssues(input);
   throwIfIssues(issues);
   return input as AgentRuntimeCapabilityManifest;
-}
-
-export function validateRuntimeResumeContract(
-  input: unknown,
-): AgentRuntimeResumeContract {
-  const issues = collectRuntimeResumeContractValidationIssues(input);
-  throwIfIssues(issues);
-  return input as AgentRuntimeResumeContract;
 }
 
 export function collectRuntimeEventValidationIssues(
@@ -311,41 +300,6 @@ export function collectRuntimeCapabilityManifestValidationIssues(
   return issues;
 }
 
-export function collectRuntimeResumeContractValidationIssues(
-  input: unknown,
-  path = "$",
-): AgentUiContractValidationIssue[] {
-  const issues: AgentUiContractValidationIssue[] = [];
-
-  if (!isRecord(input)) {
-    return [
-      issue("schema_mismatch", path, "Resume contract must be an object."),
-    ];
-  }
-
-  requireString(input, "schemaVersion", path, issues);
-  requireString(input, "runtimeId", path, issues);
-  requireString(input, "sessionId", path, issues);
-  requireString(input, "turnId", path, issues);
-  requireString(input, "resumeMode", path, issues);
-  requireString(input, "createdAt", path, issues);
-  optionalString(input, "expiresAt", path, issues);
-  requireStringArray(input, "openActionIds", path, issues);
-  requireArray(input, "decisions", path, issues);
-  if (Array.isArray(input.decisions)) {
-    input.decisions.forEach((decision, index) => {
-      collectResumeDecisionValidationIssues(
-        decision,
-        `${path}.decisions[${index}]`,
-        issues,
-      );
-    });
-  }
-
-  collectResumeCoverageIssues(input, path, issues);
-  return issues;
-}
-
 function collectMessagePartValidationIssues(
   input: unknown,
   path: string,
@@ -393,65 +347,6 @@ function collectCapabilityEntryValidationIssues(
     requireRecord(input, "metadata", path, issues);
     collectPayloadIssues(input.metadata, `${path}.metadata`, issues);
   }
-}
-
-function collectResumeDecisionValidationIssues(
-  input: unknown,
-  path: string,
-  issues: AgentUiContractValidationIssue[],
-): void {
-  if (!isRecord(input)) {
-    issues.push(
-      issue("schema_mismatch", path, "Resume decision must be an object."),
-    );
-    return;
-  }
-  requireString(input, "actionId", path, issues);
-  requireString(input, "decision", path, issues);
-  if ("metadata" in input && input.metadata !== undefined) {
-    requireRecord(input, "metadata", path, issues);
-    collectPayloadIssues(input.metadata, `${path}.metadata`, issues);
-  }
-}
-
-function collectResumeCoverageIssues(
-  input: Record<string, unknown>,
-  path: string,
-  issues: AgentUiContractValidationIssue[],
-): void {
-  if (!Array.isArray(input.openActionIds) || !Array.isArray(input.decisions)) {
-    return;
-  }
-  const openActionIds = input.openActionIds.filter(
-    (value): value is string => typeof value === "string" && value.length > 0,
-  );
-  const decisionIds = new Set(
-    input.decisions
-      .filter(isRecord)
-      .map((decision) => decision.actionId)
-      .filter(
-        (value): value is string =>
-          typeof value === "string" && value.length > 0,
-      ),
-  );
-  const resumeMode =
-    typeof input.resumeMode === "string" ? input.resumeMode : undefined;
-  if (resumeMode !== "all-open-actions" && resumeMode !== "selected-actions") {
-    return;
-  }
-  const missing = openActionIds.filter(
-    (actionId) => !decisionIds.has(actionId),
-  );
-  if (missing.length === 0) {
-    return;
-  }
-  issues.push(
-    issue(
-      "schema_mismatch",
-      `${path}.decisions`,
-      `Resume contract must cover open actions: ${missing.join(", ")}.`,
-    ),
-  );
 }
 
 function collectTimelineEntryValidationIssues(
