@@ -1,5 +1,6 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import type {
@@ -270,6 +271,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     pendingActions?: MessageListProps["pendingActions"];
     submittedActionsInFlight?: MessageListProps["submittedActionsInFlight"];
     threadItems?: MessageListProps["threadItems"];
+    threadGoal?: ThreadGoal | null;
     threadRead?: MessageListProps["threadRead"];
     executionRuntime?: AgentSessionExecutionRuntime | null;
     canonicalChildren?: MessageListProps["canonicalChildren"];

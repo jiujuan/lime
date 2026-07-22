@@ -29,6 +29,7 @@ import { buildInputbarWorkflowPanelCopy } from "./inputbarWorkflowCopy";
 import type { InputbarSendHandler } from "./inputbarSendPayload";
 import type { InterruptedInputRestoreRequest } from "../../hooks/agentStreamInputRestoreTypes";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 
 const SecondaryControlsRow = styled.div`
   position: absolute;
@@ -102,6 +103,10 @@ interface InputbarProps extends SkillSelectionSourceProps {
   projectContextModeLabel?: string;
   projectContextBranchLabel?: string;
   sessionId?: string | null;
+  threadId?: string | null;
+  threadGoal?: ThreadGoal | null;
+  threadGoalError?: unknown;
+  threadGoalLoading?: boolean;
   pathReferences?: MessagePathReference[];
   onAddPathReferences?: (references: MessagePathReference[]) => void;
   inputRestoreRequest?: InterruptedInputRestoreRequest | null;
@@ -168,6 +173,10 @@ export const Inputbar: React.FC<InputbarProps> = ({
   contextVariant = "default",
   projectId = null,
   sessionId = null,
+  threadId = null,
+  threadGoal = null,
+  threadGoalError = null,
+  threadGoalLoading = false,
   pathReferences = [],
   onAddPathReferences,
   inputRestoreRequest = null,
@@ -338,6 +347,10 @@ export const Inputbar: React.FC<InputbarProps> = ({
         onSelectPlugin={handleSelectPlugin}
         projectId={projectId}
         sessionId={sessionId}
+        threadId={threadId}
+        threadGoal={threadGoal}
+        threadGoalError={threadGoalError}
+        threadGoalLoading={threadGoalLoading}
         defaultCuratedTaskReferenceMemoryIds={
           defaultCuratedTaskReferenceMemoryIds
         }

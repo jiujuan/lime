@@ -1,23 +1,15 @@
 import {
   METHOD_PLUGIN_UI_RUNTIME_STATUS,
-  METHOD_AGENT_SESSION_ACTION_RESPOND,
-  METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   METHOD_THREAD_START,
   METHOD_THREAD_READ,
   METHOD_TURN_START,
   METHOD_TURN_INTERRUPT,
   type PluginUiRuntimeStatusResponse,
-  type AgentSessionActionRespondResponse,
-  type AgentSessionRuntimeEventAppendResponse,
   type ThreadReadResponse,
   type ThreadStartResponse,
   type TurnInterruptResponse,
   type TurnStartResponse,
 } from "@limecloud/app-server-client";
-import {
-  buildPluginTaskWorkerFailureResult,
-  runPluginTaskWorker,
-} from "./pluginTaskWorker";
 
 type HostArgs = Record<string, unknown> | null | undefined;
 type AppServerParams = Record<string, unknown>;
@@ -43,16 +35,36 @@ export class PluginRuntimeTaskHost {
     const traceId = `plugin-trace-${nowMs}`;
     const eventName =
       readString(request, "eventName") ?? `plugin_runtime:${appId}:${taskId}`;
-    const requestedPackageRootPath =
-      readString(request, "packageRootPath") ??
-      readString(request, "runtimePackageRoot") ??
-      readString(request, "appRootPath") ??
-      undefined;
     const explicitRunWorker = readBoolean(request, "runWorker");
     const requestedRuntimeRequest = readRecord(request, "runtimeRequest");
-    const metadata = {
+    const workerTrigger = await this.#resolveWorkerTrigger({
+      appId,
+      taskKind,
+      requireWorker: explicitRunWorker === true,
+      skipWorker: explicitRunWorker === false,
+    });
+    const metadata: Record<string, unknown> = {
       ...(readRecord(request, "metadata") ?? {}),
       ...(readRecord(requestedRuntimeRequest, "metadata") ?? {}),
+      ...(workerTrigger
+        ? {
+            plugin: {
+              appId,
+              workspaceId,
+              paneAction: {
+                key: readString(request, "entryKey") ?? "default",
+                prompt:
+                  readString(request, "prompt") ??
+                  readString(request, "title") ??
+                  taskKind,
+                surfaceKind: "pluginRuntime",
+                paneKind: "pluginTask",
+                outputArtifactKind: workerTrigger.outputArtifactKind,
+                taskKind,
+              },
+            },
+          }
+        : {}),
     };
     const message = buildPluginRuntimeTaskMessage(request);
     const queuedTurnId = `plugin-queued-${taskId}`;
@@ -62,15 +74,6 @@ export class PluginRuntimeTaskHost {
         readString(requestedRuntimeRequest, "workspaceId") ?? workspaceId,
       metadata,
     };
-    const workerConfig = await this.#resolveWorkerConfig({
-      appId,
-      taskKind,
-      requestedPackageRootPath,
-      requireWorker: explicitRunWorker === true,
-      skipWorker: explicitRunWorker === false,
-    });
-    const shouldRunWorker = Boolean(workerConfig);
-
     const identity = await this.#resolveThreadIdentity({
       request,
       runtimeRequest,
@@ -94,20 +97,15 @@ export class PluginRuntimeTaskHost {
       turnResponse.turn,
       "turn/start turn",
     );
-    const worker = shouldRunWorker
-      ? await this.#runAndAppendWorker({
-          appId,
-          taskId,
-          taskKind,
-          sessionId: identity.sessionId,
-          turnId,
-          packageRootPath: workerConfig?.packageRootPath,
-          workerEntrypoint: workerConfig?.workerEntrypoint ?? null,
-          request,
-        })
+    const worker = workerTrigger
+      ? {
+          status: "delegated",
+          owner: "runtime_core",
+          outputArtifactKind: workerTrigger.outputArtifactKind,
+        }
       : {
           status: "skipped",
-          reason: "package_root_missing",
+          reason: "task_runtime_not_selected",
         };
 
     return {
@@ -188,41 +186,11 @@ export class PluginRuntimeTaskHost {
 
   async submitHostResponse(args: HostArgs): Promise<Record<string, unknown>> {
     const request = readRequest(args);
-    const appId = readRequiredString(request, "appId");
-    const taskId = readRequiredString(request, "taskId");
-    const runtimeRequest = readRecord(request, "runtimeRequest") ?? {};
-    const sessionId =
-      readString(runtimeRequest, "sessionId") ??
-      readRequiredString(runtimeRequest, "session_id");
-    const requestId =
-      readString(runtimeRequest, "requestId") ??
-      readRequiredString(runtimeRequest, "request_id");
-    const actionType =
-      readString(runtimeRequest, "actionType") ??
-      readString(runtimeRequest, "action_type") ??
-      "tool_confirmation";
-    await this.#appServerRequest<AgentSessionActionRespondResponse>(
-      METHOD_AGENT_SESSION_ACTION_RESPOND,
-      {
-        sessionId,
-        requestId,
-        actionType,
-        confirmed: readBoolean(runtimeRequest, "confirmed") ?? false,
-        ...readStringParam(runtimeRequest, "response", "response"),
-        userData: runtimeRequest.userData ?? runtimeRequest.user_data,
-        metadata: runtimeRequest.metadata,
-        ...readStringParam(runtimeRequest, "eventName", "eventName"),
-        ...readStringParam(runtimeRequest, "event_name", "eventName"),
-        actionScope: normalizeAgentSessionActionScope(
-          runtimeRequest.actionScope ?? runtimeRequest.action_scope,
-        ),
-      },
+    readRequiredString(request, "appId");
+    readRequiredString(request, "taskId");
+    throw new Error(
+      "plugin_runtime_submit_host_response is retired; respond through the typed App Server server-request dispatcher.",
     );
-    return {
-      appId,
-      taskId,
-      status: "submitted",
-    };
   }
 
   async #resolveThreadIdentity(params: {
@@ -256,15 +224,13 @@ export class PluginRuntimeTaskHost {
     return { sessionId, threadId };
   }
 
-  async #resolveWorkerConfig(params: {
+  async #resolveWorkerTrigger(params: {
     appId: string;
     taskKind: string;
-    requestedPackageRootPath?: string;
     requireWorker: boolean;
     skipWorker: boolean;
   }): Promise<{
-    packageRootPath: string;
-    workerEntrypoint: string;
+    outputArtifactKind: string;
   } | null> {
     if (params.skipWorker) {
       return null;
@@ -275,7 +241,7 @@ export class PluginRuntimeTaskHost {
     );
     const taskRuntime = status.taskRuntime;
     if (!taskRuntime?.enabled) {
-      if (params.requireWorker || params.requestedPackageRootPath) {
+      if (params.requireWorker) {
         throw new Error(`Plugin ${params.appId} task runtime is not enabled`);
       }
       return null;
@@ -284,9 +250,7 @@ export class PluginRuntimeTaskHost {
       ? taskRuntime.taskKinds
       : [];
     const shouldRunForTaskKind =
-      params.requireWorker ||
-      Boolean(params.requestedPackageRootPath) ||
-      taskKinds.includes(params.taskKind);
+      params.requireWorker || taskKinds.includes(params.taskKind);
     if (!shouldRunForTaskKind) {
       return null;
     }
@@ -296,82 +260,13 @@ export class PluginRuntimeTaskHost {
         `Plugin ${params.appId} task runtime is blocked: ${blockers.join(", ")}`,
       );
     }
-    const workerEntrypoint = taskRuntime.workerEntrypoint?.trim();
-    if (!workerEntrypoint) {
+    const outputArtifactKind = taskRuntime.outputArtifactKind?.trim();
+    if (!outputArtifactKind) {
       throw new Error(
-        `Plugin ${params.appId} task runtime has no worker entrypoint`,
+        `Plugin ${params.appId} task runtime has no output artifact kind`,
       );
     }
-    const packageRootPath =
-      params.requestedPackageRootPath ?? taskRuntime.packageRootPath?.trim();
-    if (!packageRootPath) {
-      throw new Error(
-        `Plugin ${params.appId} task runtime has no package root path`,
-      );
-    }
-    return {
-      packageRootPath,
-      workerEntrypoint,
-    };
-  }
-
-  async #runAndAppendWorker(params: {
-    appId: string;
-    taskId: string;
-    taskKind: string;
-    sessionId: string;
-    turnId: string;
-    packageRootPath?: string;
-    workerEntrypoint: string | null;
-    request: Record<string, unknown>;
-  }): Promise<Record<string, unknown>> {
-    if (!params.packageRootPath) {
-      throw new Error("Plugin task worker requires packageRootPath");
-    }
-    if (!params.workerEntrypoint) {
-      throw new Error("Plugin task worker requires workerEntrypoint");
-    }
-    const workerRequest = {
-      appId: params.appId,
-      taskId: params.taskId,
-      taskKind: params.taskKind,
-      sessionId: params.sessionId,
-      turnId: params.turnId,
-      packageRootPath: params.packageRootPath,
-      workerEntrypoint: params.workerEntrypoint,
-      input: params.request.input,
-      prompt: readString(params.request, "prompt") ?? undefined,
-      title: readString(params.request, "title") ?? undefined,
-      metadata: params.request.metadata,
-      timeoutMs: readNumber(params.request, "workerTimeoutMs") ?? undefined,
-    };
-    const workerResult = await runPluginTaskWorker(workerRequest).catch(
-      (error) => buildPluginTaskWorkerFailureResult(workerRequest, error),
-    );
-    const appended =
-      await this.#appServerRequest<AgentSessionRuntimeEventAppendResponse>(
-        METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
-        {
-          sessionId: params.sessionId,
-          turnId: params.turnId,
-          runtimeEvents: workerResult.runtimeEvents,
-        },
-      );
-    return {
-      status: workerResult.status,
-      artifactKind:
-        workerResult.status === "completed"
-          ? workerResult.artifactKind
-          : undefined,
-      errorCode:
-        workerResult.status === "failed" ? workerResult.errorCode : undefined,
-      errorMessage:
-        workerResult.status === "failed"
-          ? workerResult.errorMessage
-          : undefined,
-      runtimeEventCount: workerResult.runtimeEvents.length,
-      appendedEventCount: appended.events?.length ?? 0,
-    };
+    return { outputArtifactKind };
   }
 }
 
@@ -415,21 +310,6 @@ function readBoolean(value: unknown, key: string): boolean | null {
     return null;
   }
   return record[key];
-}
-
-function readNumber(value: unknown, key: string): number | null {
-  const record = toRecord(value);
-  const next = record?.[key];
-  return typeof next === "number" && Number.isFinite(next) ? next : null;
-}
-
-function readStringParam(
-  value: unknown,
-  inputKey: string,
-  outputKey: string,
-): AppServerParams {
-  const next = readString(value, inputKey);
-  return next ? { [outputKey]: next } : {};
 }
 
 function buildThreadStartParams(
@@ -485,6 +365,14 @@ function buildTurnStartParams(params: {
   const request: AppServerParams = {
     threadId: params.threadId,
     input: [{ type: "text", text: params.message }],
+    additionalContext: {
+      metadata: {
+        kind: "application",
+        value: JSON.stringify(
+          readRecord(params.runtimeRequest, "metadata") ?? {},
+        ),
+      },
+    },
     responsesapiClientMetadata: {
       appId: params.appId,
       eventName: params.eventName,
@@ -636,26 +524,6 @@ function activeThreadTurnId(response: ThreadReadResponse): string | null {
     );
   }
   return activeTurnIds[0] ?? null;
-}
-
-function normalizeAgentSessionActionScope(
-  value: unknown,
-): Record<string, string> | undefined {
-  const record = toRecord(value);
-  if (!record) {
-    return undefined;
-  }
-  const scope = {
-    ...readStringParam(record, "sessionId", "sessionId"),
-    ...readStringParam(record, "session_id", "sessionId"),
-    ...readStringParam(record, "threadId", "threadId"),
-    ...readStringParam(record, "thread_id", "threadId"),
-    ...readStringParam(record, "turnId", "turnId"),
-    ...readStringParam(record, "turn_id", "turnId"),
-  };
-  return Object.keys(scope).length > 0
-    ? (scope as Record<string, string>)
-    : undefined;
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

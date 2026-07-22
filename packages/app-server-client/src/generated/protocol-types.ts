@@ -8,7 +8,6 @@ export const METHOD_AGENT_SESSION_ACTION_RESPOND =
 export const METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT =
   "agentSession/analysisHandoff/export";
 export const METHOD_AGENT_SESSION_COMPACT = "agentSession/compact";
-export const METHOD_AGENT_SESSION_DELETE = "agentSession/delete";
 export const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
 export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =
   "agentSession/fileCheckpoint/diff";
@@ -323,6 +322,9 @@ export const METHOD_SOUL_STYLE_PACK_UNINSTALL = "soulStylePack/uninstall";
 export const METHOD_TELEGRAM_CHANNEL_PROBE = "telegramChannel/probe";
 export const METHOD_THREAD_ARCHIVE = "thread/archive";
 export const METHOD_THREAD_ARCHIVED = "thread/archived";
+export const METHOD_THREAD_DELETE = "thread/delete";
+export const METHOD_THREAD_DELETED = "thread/deleted";
+export const METHOD_THREAD_FORK = "thread/fork";
 export const METHOD_THREAD_GOAL_CLEAR = "thread/goal/clear";
 export const METHOD_THREAD_GOAL_CLEARED = "thread/goal/cleared";
 export const METHOD_THREAD_GOAL_GET = "thread/goal/get";
@@ -425,10 +427,6 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "agentSession/compact",
-  },
-  {
-    kind: "request",
-    method: "agentSession/delete",
   },
   {
     kind: "notification",
@@ -1428,6 +1426,18 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
+    method: "thread/delete",
+  },
+  {
+    kind: "notification",
+    method: "thread/deleted",
+  },
+  {
+    kind: "request",
+    method: "thread/fork",
+  },
+  {
+    kind: "request",
     method: "thread/goal/clear",
   },
   {
@@ -1795,6 +1805,10 @@ export const GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES = [
     scope: "thread",
   },
   {
+    method: "thread/delete",
+    scope: "thread",
+  },
+  {
     method: "thread/goal/clear",
     scope: "thread",
   },
@@ -1975,15 +1989,6 @@ export interface AgentSessionCompactResponse {
   compacted: boolean;
   session: AgentSession;
   turns?: AgentTurn[];
-}
-
-export interface AgentSessionDeleteParams {
-  sessionId: string;
-}
-
-export interface AgentSessionDeleteResponse {
-  deleted: boolean;
-  sessionId: string;
 }
 
 export interface AgentSessionEventParams {
@@ -2650,11 +2655,6 @@ export type AppServerClientRequest =
   | {
       id: number | string;
       method: "agentSession/update";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/delete";
       params?: unknown;
     }
   | {
@@ -3933,7 +3933,6 @@ export type AppServerRequestMethod =
   | "agentSession/action/respond"
   | "agentSession/analysisHandoff/export"
   | "agentSession/compact"
-  | "agentSession/delete"
   | "agentSession/fileCheckpoint/diff"
   | "agentSession/fileCheckpoint/get"
   | "agentSession/fileCheckpoint/list"
@@ -4539,6 +4538,11 @@ export type ClientRequest =
     }
   | {
       id: number | string;
+      method: "thread/fork";
+      params: ThreadForkParams;
+    }
+  | {
+      id: number | string;
       method: "thread/resume";
       params: ThreadResumeParams;
     }
@@ -4556,6 +4560,11 @@ export type ClientRequest =
       id: number | string;
       method: "thread/archive";
       params: ThreadArchiveParams;
+    }
+  | {
+      id: number | string;
+      method: "thread/delete";
+      params: ThreadDeleteParams;
     }
   | {
       id: number | string;
@@ -6355,6 +6364,8 @@ export interface MemoryStoreSearchResponse {
 
 export type Method =
   | "thread/archive"
+  | "thread/delete"
+  | "thread/fork"
   | "thread/goal/clear"
   | "thread/goal/get"
   | "thread/goal/set"
@@ -7458,6 +7469,10 @@ export type ServerNotification =
       params: ThreadArchivedNotification;
     }
   | {
+      method: "thread/deleted";
+      params: ThreadDeletedNotification;
+    }
+  | {
       method: "thread/unarchived";
       params: ThreadUnarchivedNotification;
     }
@@ -7998,6 +8013,55 @@ export type ThreadArchiveResponse = Record<string, unknown>;
 
 export interface ThreadArchivedNotification {
   threadId: string;
+}
+
+export interface ThreadDeleteParams {
+  threadId: string;
+}
+
+export type ThreadDeleteResponse = Record<string, unknown>;
+
+export interface ThreadDeletedNotification {
+  threadId: string;
+}
+
+export interface ThreadForkParams {
+  approvalPolicy?: unknown;
+  approvalsReviewer?: unknown;
+  baseInstructions?: null | string;
+  beforeTurnId?: null | string;
+  config?: null | Record<string, unknown>;
+  cwd?: null | string;
+  deferGoalContinuation?: boolean;
+  developerInstructions?: null | string;
+  ephemeral?: boolean;
+  excludeTurns?: boolean;
+  lastTurnId?: null | string;
+  model?: null | string;
+  modelProvider?: null | string;
+  path?: null | string;
+  permissions?: null | string;
+  runtimeWorkspaceRoots?: string[] | null;
+  sandbox?: unknown;
+  serviceTier?: null | string;
+  threadId: string;
+  threadSource?: null | string;
+}
+
+export interface ThreadForkResponse {
+  activePermissionProfile?: unknown;
+  approvalPolicy: unknown;
+  approvalsReviewer: unknown;
+  cwd: string;
+  instructionSources?: string[];
+  model: string;
+  modelProvider: string;
+  multiAgentMode?: unknown;
+  reasoningEffort?: null | string;
+  runtimeWorkspaceRoots?: string[];
+  sandbox: unknown;
+  serviceTier?: null | string;
+  thread: Thread;
 }
 
 export interface ThreadGoal {

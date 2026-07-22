@@ -52,10 +52,7 @@ import { buildServiceSkillHomeCopy } from "../service-skills/homeCopy";
 import { HomeStartSurface } from "../home/HomeStartSurface";
 import { buildHomeSurfaceCopy } from "../home/homeSurfaceCopy";
 import { buildInputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
-import {
-  buildInputbarModeRequestMetadata,
-  buildInputbarToolPreferencesOverride,
-} from "./Inputbar/utils/inputbarModeRequestMetadata";
+import { buildInputbarToolPreferencesOverride } from "./Inputbar/utils/inputbarModeRequestMetadata";
 import {
   buildEmptyStateQuickActionItems,
   resolveEffectiveCuratedTaskReferences,
@@ -549,17 +546,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           }
         : baseRequestMetadata;
     const inputbarModeState = {
-      goalEnabled: modeState?.goalEnabled ?? objectiveEnabled,
-      objectiveText: inputOverride,
       planEnabled: modeState?.planEnabled ?? taskEnabled,
-      source: "empty_state",
       subagentEnabled: modeState?.subagentEnabled ?? subagentEnabled,
-      threadId: sessionId,
     };
-    const requestMetadata = buildInputbarModeRequestMetadata(
-      knowledgeRequestMetadata,
-      inputbarModeState,
-    );
+    const requestMetadata = knowledgeRequestMetadata;
+    const threadGoal =
+      (modeState?.goalEnabled ?? objectiveEnabled) && inputOverride.trim()
+        ? { objective: inputOverride.trim() }
+        : undefined;
     const toolPreferencesOverride =
       buildInputbarToolPreferencesOverride(inputbarModeState);
     const collaborationMode = inputbarModeState.planEnabled
@@ -582,6 +576,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       capabilityDispatch.capabilityRoute ||
       capabilityDispatch.displayContent ||
       requestMetadata ||
+      threadGoal ||
       toolPreferencesOverride ||
       collaborationMode ||
       shouldAttachInputRestoreDraft
@@ -594,6 +589,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               ? { displayContent: capabilityDispatch.displayContent }
               : {}),
             ...(requestMetadata ? { requestMetadata } : {}),
+            ...(threadGoal ? { threadGoal } : {}),
             ...(toolPreferencesOverride ? { toolPreferencesOverride } : {}),
             ...(collaborationMode ? { collaborationMode } : {}),
           }

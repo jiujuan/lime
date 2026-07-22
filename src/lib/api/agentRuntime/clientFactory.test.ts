@@ -147,12 +147,9 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
-    deleteSession: vi.fn().mockResolvedValue({
+    deleteThread: vi.fn().mockResolvedValue({
       id: 1,
-      result: {
-        sessionId: "session-1",
-        deleted: true,
-      },
+      result: {},
       response: {
         id: 1,
         result: {},
@@ -288,7 +285,6 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
-    respondAction: vi.fn().mockResolvedValue({}),
     listAgentSessionFileCheckpoints: vi.fn().mockResolvedValue({
       id: 1,
       result: {
@@ -707,13 +703,6 @@ function standardRuntimeClientMock(): AgentRuntimeLifecycleClient {
       messages: [],
       notifications: [],
     }),
-    respondAction: vi.fn().mockResolvedValue({
-      id: 3,
-      result: {},
-      response: { id: 3, result: {} },
-      messages: [],
-      notifications: [],
-    }),
     readThread: vi.fn().mockResolvedValue({
       id: 4,
       result: {
@@ -851,8 +840,8 @@ describe("agentRuntime clientFactory", () => {
     expect(appServerClient.archiveThread).toHaveBeenCalledWith({
       threadId: "thread-1",
     });
-    expect(appServerClient.deleteSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
+    expect(appServerClient.deleteThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
     });
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });

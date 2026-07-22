@@ -146,6 +146,122 @@
       ],
       "type": "object"
     },
+    "ThreadDeleteParams": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadForkParams": {
+      "properties": {
+        "approvalPolicy": true,
+        "approvalsReviewer": true,
+        "baseInstructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "beforeTurnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "config": {
+          "additionalProperties": true,
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "deferGoalContinuation": {
+          "type": "boolean"
+        },
+        "developerInstructions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "ephemeral": {
+          "type": "boolean"
+        },
+        "excludeTurns": {
+          "type": "boolean"
+        },
+        "lastTurnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modelProvider": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "permissions": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runtimeWorkspaceRoots": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sandbox": true,
+        "serviceTier": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "threadSource": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadGoalClearParams": {
       "properties": {
         "threadId": {
@@ -1185,6 +1301,26 @@
           "$ref": "#/$defs/RequestId"
         },
         "method": {
+          "const": "thread/fork",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadForkParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
           "const": "thread/resume",
           "type": "string"
         },
@@ -1250,6 +1386,26 @@
         },
         "params": {
           "$ref": "#/$defs/ThreadArchiveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "const": "thread/delete",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadDeleteParams"
         }
       },
       "required": [

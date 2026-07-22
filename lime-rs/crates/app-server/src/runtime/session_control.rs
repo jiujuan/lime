@@ -308,7 +308,7 @@ impl RuntimeCore {
         let mut resumed_runtime_options = queued.runtime_options.clone().unwrap_or_default();
         resumed_runtime_options.queued_turn_id = Some(queued_turn_id.clone());
         let output = match self
-            .start_turn(
+            .start_turn_inner(
                 TurnStartRequest {
                     session_id: session_id.to_string(),
                     turn_id: Some(queued_turn_id.clone()),
@@ -318,6 +318,10 @@ impl RuntimeCore {
                     skip_pre_submit_resume: true,
                 },
                 host,
+                None,
+                false,
+                false,
+                super::turn_start::TurnStartInputKind::QueuedUser,
             )
             .await
         {

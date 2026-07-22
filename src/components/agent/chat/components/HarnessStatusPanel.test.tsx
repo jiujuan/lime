@@ -7,6 +7,46 @@ import {
 import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 
 describe("HarnessStatusPanel", () => {
+  it("只从 canonical ThreadGoal 展示目标详情", () => {
+    const goal = {
+      createdAt: 10,
+      objective: "对齐 Codex ThreadGoal",
+      status: "active" as const,
+      threadId: "thread-goal-1",
+      timeUsedSeconds: 12,
+      tokensUsed: 240,
+      updatedAt: 20,
+    };
+    const { container } = renderPanel({
+      layout: "dialog",
+      threadGoal: goal,
+      threadRead: {
+        thread_id: "thread-goal-1",
+        status: "idle",
+        managed_objective: {
+          objective_text: "旧 ManagedObjective 不得展示",
+          status: "active",
+          success_criteria: [],
+        },
+      },
+    });
+
+    expect(container.textContent).toContain("对齐 Codex ThreadGoal");
+    expect(container.textContent).not.toContain("旧 ManagedObjective 不得展示");
+    expect(
+      container.querySelector('[data-testid="thread-goal-panel"]'),
+    ).not.toBeNull();
+
+    const mismatch = renderPanel({
+      layout: "dialog",
+      threadGoal: { ...goal, threadId: "thread-other" },
+      threadRead: { thread_id: "thread-goal-1", status: "idle" },
+    });
+    expect(
+      mismatch.container.querySelector('[data-testid="thread-goal-panel"]'),
+    ).toBeNull();
+  });
+
   it("弹窗模式应默认展示完整内容且不渲染展开按钮", () => {
     const { container } = renderPanel({
       layout: "dialog",

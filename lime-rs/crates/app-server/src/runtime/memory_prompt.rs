@@ -247,6 +247,9 @@ fn memory_packet_from_prompt_context(value: &Value) -> Option<ContextPacket> {
 }
 
 fn session_compaction_prompt_context_from_event(payload: &Value) -> Option<Value> {
+    if provider_uses_compaction_replacement_history(payload) {
+        return None;
+    }
     let summary = payload
         .get("summary")
         .and_then(Value::as_str)
@@ -265,6 +268,23 @@ fn session_compaction_prompt_context_from_event(payload: &Value) -> Option<Value
     copy_optional_value(payload, &mut context, SIDECAR_REF_FIELD);
     context.insert("summary".to_string(), json!(summary));
     Some(Value::Object(context))
+}
+
+fn provider_uses_compaction_replacement_history(payload: &Value) -> bool {
+    let field = |name: &str| {
+        payload
+            .get("artifact")
+            .filter(|value| value.is_object())
+            .and_then(|artifact| artifact.get(name))
+            .or_else(|| payload.get(name))
+    };
+
+    field("windowNumber").and_then(Value::as_u64).is_some()
+        && field("firstWindowId").and_then(Value::as_str).is_some()
+        && field("windowId").and_then(Value::as_str).is_some()
+        && field("replacementHistory")
+            .and_then(Value::as_array)
+            .is_some()
 }
 
 fn session_compaction_prompt_assembly_from_metadata(
@@ -673,6 +693,38 @@ mod tests {
             .expect("base prompt");
 
         assert_eq!(prompt, "base");
+    }
+
+    #[test]
+    fn compaction_replacement_history_is_not_duplicated_in_system_prompt() {
+        let payload = json!({
+            "summary": "durable summary",
+            "artifact": {
+                "windowNumber": 1,
+                "firstWindowId": "01982f77-d905-7f30-b4d9-9d8aeaa0d8de",
+                "windowId": "01982f77-d905-7f30-b4d9-9d8aeaa0d8df",
+                "replacementHistory": [{
+                    "role": "user",
+                    "content": "durable summary"
+                }]
+            }
+        });
+
+        assert!(session_compaction_prompt_context_from_event(&payload).is_none());
+    }
+
+    #[test]
+    fn legacy_compaction_summary_remains_a_prompt_fail_safe() {
+        let payload = json!({
+            "summary": "legacy summary",
+            "contextEpoch": 1
+        });
+
+        let context =
+            session_compaction_prompt_context_from_event(&payload).expect("legacy prompt context");
+
+        assert_eq!(context["summary"], "legacy summary");
+        assert_eq!(context["contextEpoch"], 1);
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use super::status::agent_turn_blocks_queue_resume;
 use super::{RuntimeCore, RuntimeCoreError};
 use agent_protocol::PageCursor;
 use app_server_protocol::{
@@ -70,8 +71,23 @@ impl RuntimeCore {
             })
             .await?;
         let session_id = response.thread.session_id.clone();
-        self.ensure_current_session_hydrated(session_id.as_str())
-            .await?;
+        if let Err(error) = self
+            .ensure_current_session_hydrated(session_id.as_str())
+            .await
+        {
+            if !matches!(error, RuntimeCoreError::SessionNotFound(_))
+                || response.thread.forked_from_id.is_none()
+            {
+                return Err(error);
+            }
+            let canonical = self
+                .read_thread(ThreadReadParams {
+                    thread_id: response.thread.thread_id.clone(),
+                    turns_view: agent_protocol::ThreadTurnsView::Full,
+                })
+                .await?;
+            self.hydrate_fork_session_from_canonical(&canonical.thread)?;
+        }
         let active_turn_id = self
             .session_loops
             .snapshot(session_id.as_str())
@@ -83,6 +99,28 @@ impl RuntimeCore {
             })?
             .and_then(|snapshot| snapshot.active_turn_id)
             .map(agent_protocol::TurnId::new);
+        let state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let thread_is_idle = active_turn_id.is_none()
+            && state
+                .sessions
+                .get(session_id.as_str())
+                .is_some_and(|stored| {
+                    !stored
+                        .turns
+                        .iter()
+                        .any(|turn| agent_turn_blocks_queue_resume(turn.status))
+                });
+        self.projection_store
+            .as_deref()
+            .ok_or_else(|| {
+                RuntimeCoreError::Backend("thread goal store is unavailable".to_string())
+            })?
+            .restore_thread_goal_accounting_sync(response.thread.thread_id.as_str(), thread_is_idle)
+            .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
+        drop(state);
         Ok(RuntimeThreadResumeSnapshot {
             thread: response.thread,
             active_turn_id,
@@ -95,15 +133,51 @@ impl RuntimeCore {
     ) -> Result<ThreadReadResponse, RuntimeCoreError> {
         let store = self.canonical_thread_store()?;
         let thread_id = params.thread_id.clone();
+        let turns_view = params.turns_view;
         let mut thread = store
             .read_thread(ReadThreadParams {
                 thread_id: params.thread_id,
                 include_archived: true,
-                turns_view: params.turns_view,
+                turns_view,
             })
             .await
             .map_err(store_error)?
             .ok_or_else(|| RuntimeCoreError::Backend(format!("thread not found: {thread_id}")))?;
+        if thread.forked_from_id.is_some()
+            && thread
+                .metadata
+                .get("forkSequence")
+                .and_then(serde_json::Value::as_u64)
+                .is_some()
+        {
+            if let Err(error) = self
+                .ensure_current_session_hydrated(thread.session_id.as_str())
+                .await
+            {
+                if !matches!(error, RuntimeCoreError::SessionNotFound(_)) {
+                    return Err(error);
+                }
+            }
+            let canonical = if matches!(turns_view, agent_protocol::ThreadTurnsView::Full) {
+                thread.clone()
+            } else {
+                store
+                    .read_thread(ReadThreadParams {
+                        thread_id: thread.thread_id.clone(),
+                        include_archived: true,
+                        turns_view: agent_protocol::ThreadTurnsView::Full,
+                    })
+                    .await
+                    .map_err(store_error)?
+                    .ok_or_else(|| {
+                        RuntimeCoreError::Backend(format!(
+                            "forked thread disappeared during history hydration: {}",
+                            thread.thread_id
+                        ))
+                    })?
+            };
+            self.hydrate_fork_session_from_canonical(&canonical)?;
+        }
         if let Some(product) = self
             .projection_store
             .as_deref()

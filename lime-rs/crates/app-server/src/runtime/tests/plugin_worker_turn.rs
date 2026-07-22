@@ -1,5 +1,6 @@
 use super::support::*;
 use super::*;
+use agent_protocol::{ThreadId, ThreadTurnsView, TurnStatus};
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -510,6 +511,114 @@ async fn article_workspace_worker_blocks_cloud_release_without_verified_signatur
         "reinstall_verified_package"
     );
     assert_eq!(runtime_error.payload["retryable"], false);
+}
+
+#[tokio::test]
+async fn admitted_plugin_worker_failure_reaches_durable_and_canonical_terminal() {
+    let installed_state = cloud_release_installed_state_with_evidence(json!({
+        "status": "blocked",
+        "signaturePolicy": "required",
+        "signatureVerificationStatus": "declared",
+        "packageHashMatched": true,
+        "manifestHashMatched": true,
+        "packageVerificationStatus": "verified"
+    }));
+    let data_source =
+        TestSessionDataSource::new().with_plugin_installed_states(vec![installed_state]);
+    let storage_root = tempfile::tempdir().expect("plugin worker terminal storage root");
+    let event_log_writer = Arc::new(
+        EventLogWriter::new(storage_root.path().join("events"))
+            .expect("plugin worker terminal event log"),
+    );
+    let projection_store = Arc::new(
+        ProjectionStore::initialize(storage_root.path().join("state.sqlite"))
+            .expect("plugin worker terminal projection store"),
+    );
+    let core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store)
+        .with_app_data_source(Arc::new(data_source));
+    let mut events = core
+        .event_hub
+        .take_receiver()
+        .expect("plugin worker terminal event receiver");
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("session-plugin-worker-admitted-failure".to_string()),
+            thread_id: Some("thread-plugin-worker-admitted-failure".to_string()),
+            app_id: "content-factory-app".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("plugin worker terminal session")
+        .session;
+    let turn_id = "turn-plugin-worker-admitted-failure";
+
+    core.start_turn_admitted(
+        AgentSessionTurnStartParams {
+            session_id: session.session_id.clone(),
+            turn_id: Some(turn_id.to_string()),
+            input: AgentInput {
+                text: "重新生成配图".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: Some(runtime_options_with_metadata(
+                article_workspace_action_metadata(),
+            )),
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("admit plugin worker failure turn");
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.expect("plugin worker terminal event");
+            if event.event_type == "turn.failed" && event.turn_id.as_deref() == Some(turn_id) {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("plugin worker admitted failure terminal");
+
+    let durable_event_types = event_log_writer
+        .read_session_events(&session.session_id)
+        .expect("plugin worker durable events")
+        .into_iter()
+        .filter(|record| record.event.turn_id.as_deref() == Some(turn_id))
+        .map(|record| record.event.event_type)
+        .collect::<Vec<_>>();
+    let runtime_error_index = durable_event_types
+        .iter()
+        .position(|event| event == "runtime.error")
+        .expect("plugin worker admitted failure diagnostic");
+    let turn_failed_index = durable_event_types
+        .iter()
+        .position(|event| event == "turn.failed")
+        .expect("plugin worker admitted failure terminal");
+    assert!(
+        runtime_error_index < turn_failed_index,
+        "plugin worker diagnostic must precede its terminal: {durable_event_types:?}"
+    );
+
+    let read = core
+        .read_thread(ThreadReadParams {
+            thread_id: ThreadId::new(session.thread_id),
+            turns_view: ThreadTurnsView::Full,
+        })
+        .await
+        .expect("read plugin worker terminal thread");
+    let turn = read
+        .thread
+        .turns
+        .iter()
+        .find(|turn| turn.turn_id.as_str() == turn_id)
+        .expect("plugin worker terminal turn");
+    assert_eq!(turn.status, TurnStatus::Failed);
 }
 
 #[tokio::test]

@@ -8,6 +8,10 @@ import type { TranslationFunction } from "./HarnessActivityTypes";
 import type { HarnessStatusPanelProps } from "./HarnessStatusPanelTypes";
 import type { AgentTranslation } from "./HarnessStatusPanelPrimitives";
 import type { HarnessStatusPanelSectionsProps } from "./HarnessStatusPanelSections";
+import {
+  THREAD_GOAL_COPY,
+  THREAD_GOAL_STATUS_LABEL_KEYS,
+} from "./threadGoalCopy";
 import type { useHarnessActivityModel } from "./useHarnessActivityModel";
 import type { useHarnessFileReviewState } from "./useHarnessFileReviewState";
 import type { useHarnessEvidencePackExport } from "./useHarnessEvidencePackExport";
@@ -43,7 +47,6 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   harnessState: HarnessStatusPanelProps["harnessState"];
   messages: NonNullable<HarnessStatusPanelProps["messages"]>;
   onInterruptCurrentTurn: HarnessStatusPanelProps["onInterruptCurrentTurn"];
-  onObjectiveChanged: HarnessStatusPanelProps["onObjectiveChanged"];
   onManageProviders: HarnessStatusPanelProps["onManageProviders"];
   onOpenExecutionPolicySettings: HarnessStatusPanelProps["onOpenExecutionPolicySettings"];
   onOpenFileCheckpoints: HarnessStatusPanelProps["onOpenFileCheckpoints"];
@@ -66,6 +69,9 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   >;
   t: TranslationFunction;
   threadItems: NonNullable<HarnessStatusPanelProps["threadItems"]>;
+  threadGoal: HarnessStatusPanelProps["threadGoal"];
+  threadGoalError: HarnessStatusPanelProps["threadGoalError"];
+  threadGoalLoading: boolean;
   threadRead: HarnessStatusPanelProps["threadRead"];
   threadReliabilityView: ThreadReliabilityView | null;
   toolInventory: HarnessStatusPanelProps["toolInventory"];
@@ -94,7 +100,6 @@ export function buildHarnessStatusPanelSectionModels({
   harnessState,
   messages,
   onInterruptCurrentTurn,
-  onObjectiveChanged,
   onManageProviders,
   onOpenExecutionPolicySettings,
   onOpenFileCheckpoints,
@@ -115,6 +120,9 @@ export function buildHarnessStatusPanelSectionModels({
   submittedActionsInFlight,
   t,
   threadItems,
+  threadGoal,
+  threadGoalError,
+  threadGoalLoading,
   threadRead,
   threadReliabilityView,
   toolInventory,
@@ -200,28 +208,30 @@ export function buildHarnessStatusPanelSectionModels({
             openBrowserReplayPreview,
           }
         : null,
-    objectiveSection: diagnosticRuntimeContext?.sessionId
-      ? {
-          title: String(t("agentChat.managedObjective.sectionTitle" as never)),
-          badge: threadRead?.managed_objective
-            ? String(
-                t(
-                  `agentChat.managedObjective.status.${threadRead.managed_objective.status}` as never,
-                ),
-              )
-            : String(t("agentChat.managedObjective.badge.empty" as never)),
-          panelProps: {
-            sessionId: diagnosticRuntimeContext.sessionId,
-            workspaceId: diagnosticRuntimeContext.workspaceId,
-            objective: threadRead?.managed_objective ?? null,
-            runtimeBusy:
-              threadRead?.status === "running" ||
-              threadRead?.status === "queued" ||
-              canInterrupt,
-            onObjectiveChanged,
-          },
-        }
-      : null,
+    objectiveSection:
+      threadRead?.thread_id &&
+      (!threadGoal || threadGoal.threadId === threadRead.thread_id)
+        ? {
+            title: String(
+              t(THREAD_GOAL_COPY.sectionTitle as never),
+            ),
+            badge: threadGoal
+              ? String(
+                  t(THREAD_GOAL_STATUS_LABEL_KEYS[threadGoal.status] as never),
+                )
+              : String(t(THREAD_GOAL_COPY.badgeEmpty as never)),
+            panelProps: {
+              threadId: threadRead.thread_id,
+              threadGoal,
+              threadGoalError,
+              threadGoalLoading,
+              runtimeBusy:
+                threadRead?.status === "running" ||
+                threadRead?.status === "queued" ||
+                canInterrupt,
+            },
+          }
+        : null,
     reliabilitySection: {
       shouldRender: Boolean(threadReliabilityView?.shouldRender),
       statusLabel: threadReliabilityView?.statusLabel ?? "",

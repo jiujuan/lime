@@ -7,6 +7,7 @@ import {
   type AgentRuntimeLifecycleEventListener,
   type AgentRuntimeLifecycleNotification,
   type AgentRuntimeNotification,
+  type JsonRpcError,
   type AgentSessionActionRespondParams,
   type AgentSessionActionRespondResponse,
   type ThreadReadParams,
@@ -29,6 +30,7 @@ import {
   type EvidenceExportParams,
   type EvidenceExportResponse,
   type JsonRpcMessage,
+  type RequestId,
   type StructuredOutputContract,
   serverNotification,
   agentSessionEventNotification,
@@ -104,6 +106,14 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     options?: AppServerRequestOptions,
   ): Promise<AppServerRequestResult<AgentSessionActionRespondResponse>> {
     return await this.#base.respondAction(params, options);
+  }
+
+  respondServerRequest<T>(id: RequestId, result: T): void {
+    this.#base.respondServerRequest(id, result);
+  }
+
+  rejectServerRequest(id: RequestId, error: JsonRpcError): void {
+    this.#base.rejectServerRequest(id, error);
   }
 
   async readThread(

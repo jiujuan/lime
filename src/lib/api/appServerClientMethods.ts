@@ -16,6 +16,11 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerThreadStartResponse>
     >;
+    forkThread(
+      params: appServer.AppServerThreadForkParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerThreadForkResponse>
+    >;
     listSessions(
       params?: appServer.AppServerAgentSessionListParams,
     ): Promise<
@@ -227,10 +232,10 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionUpdateResponse>
     >;
-    deleteSession(
-      params: appServer.AppServerAgentSessionDeleteParams,
+    deleteThread(
+      params: appServer.AppServerThreadDeleteParams,
     ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionDeleteResponse>
+      appServer.AppServerRequestResult<appServer.AppServerThreadDeleteResponse>
     >;
     readAgentSessionObjective(
       params: appServer.AppServerAgentSessionObjectiveReadParams,

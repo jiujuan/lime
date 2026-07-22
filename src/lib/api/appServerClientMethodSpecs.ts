@@ -17,6 +17,11 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
     params: "required",
   },
   {
+    name: "forkThread",
+    method: constants.APP_SERVER_METHOD_THREAD_FORK,
+    params: "required",
+  },
+  {
     name: "listSessions",
     method: constants.APP_SERVER_METHOD_THREAD_LIST,
     params: "optional-empty",
@@ -228,8 +233,8 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
     params: "required",
   },
   {
-    name: "deleteSession",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_DELETE,
+    name: "deleteThread",
+    method: constants.APP_SERVER_METHOD_THREAD_DELETE,
     params: "required",
   },
   {

@@ -1,7 +1,45 @@
 use super::common::*;
 use crate::manager::{create_mcp_manager_state, McpClientManager};
-use crate::types::McpError;
+use crate::types::{McpError, McpServerTransport};
+#[cfg(unix)]
+use std::collections::HashMap;
+#[cfg(unix)]
+use std::path::Path;
 use std::sync::Arc;
+#[cfg(unix)]
+use std::time::Duration;
+
+#[cfg(unix)]
+fn process_exists(pid: u32) -> bool {
+    let Ok(pid) = i32::try_from(pid) else {
+        return false;
+    };
+    unsafe { libc::kill(pid, 0) == 0 }
+}
+
+#[cfg(unix)]
+async fn wait_for_pid_file(path: &Path) -> u32 {
+    for _ in 0..50 {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(pid) = content.trim().parse() {
+                return pid;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("timed out waiting for pid file: {}", path.display());
+}
+
+#[cfg(unix)]
+async fn wait_for_process_exit(pid: u32) {
+    for _ in 0..50 {
+        if !process_exists(pid) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("process {pid} still running after timeout");
+}
 
 #[test]
 fn test_manager_creation() {
@@ -242,6 +280,96 @@ async fn test_start_server_invalid_command() {
         Err(e) => panic!("Expected ProcessSpawnFailed error, got: {:?}", e),
         Ok(_) => panic!("Expected error, but got Ok"),
     }
+}
+
+#[tokio::test]
+async fn test_start_server_rejects_unknown_environment_before_spawn() {
+    let manager = McpClientManager::new(None);
+    let mut config =
+        create_test_config_with_command("/nonexistent/command/that/should/not/be_spawned", 5);
+    config.environment_id = "remote".to_string();
+
+    let result = manager.start_server("test-server", &config).await;
+
+    match result {
+        Err(McpError::ConfigError(message)) => {
+            assert!(message.contains("unknown environment id `remote`"));
+        }
+        Err(error) => panic!("Expected unknown environment error, got: {error:?}"),
+        Ok(()) => panic!("Expected unknown environment to be rejected"),
+    }
+    assert!(!manager.is_server_running("test-server").await);
+}
+
+#[tokio::test]
+async fn test_start_http_server_rejects_unknown_environment_before_connect() {
+    let manager = McpClientManager::new(None);
+    let mut config = create_test_config();
+    config.transport = McpServerTransport::StreamableHttp {
+        url: "http://127.0.0.1:1".to_string(),
+        bearer_token_env_var: None,
+        http_headers: None,
+        env_http_headers: None,
+    };
+    config.environment_id = "remote".to_string();
+
+    let result = manager.start_server("test-http-server", &config).await;
+
+    match result {
+        Err(McpError::ConfigError(message)) => {
+            assert!(message.contains("unknown environment id `remote`"));
+        }
+        Err(error) => panic!("Expected unknown environment error, got: {error:?}"),
+        Ok(()) => panic!("Expected unknown environment to be rejected"),
+    }
+    assert!(!manager.is_server_running("test-http-server").await);
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_stop_server_kills_initialized_stdio_process_group() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let child_pid_file = temp_dir.path().join("child.pid");
+    let script = r#"
+sleep 300 &
+child_pid=$!
+printf '%s\n' "$child_pid" > "$CHILD_PID_FILE"
+while IFS= read -r line; do
+  case "$line" in
+    *'"method":"initialize"'*)
+      id=${line#*\"id\":}
+      id=${id%%,*}
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"stdio-fixture","version":"1.0.0"}}}\n' "$id"
+      ;;
+  esac
+done
+"#;
+    let mut config = create_test_config_with_command("/bin/sh", 5);
+    config.transport = McpServerTransport::Stdio {
+        command: "/bin/sh".to_string(),
+        args: vec!["-c".to_string(), script.to_string()],
+        env: HashMap::from([(
+            "CHILD_PID_FILE".to_string(),
+            child_pid_file.to_string_lossy().into_owned(),
+        )]),
+        cwd: None,
+    };
+    let manager = McpClientManager::new(None);
+
+    manager
+        .start_server("stdio-fixture", &config)
+        .await
+        .expect("start stdio fixture");
+    let child_pid = wait_for_pid_file(&child_pid_file).await;
+    assert!(process_exists(child_pid));
+
+    manager
+        .stop_server("stdio-fixture")
+        .await
+        .expect("stop stdio fixture");
+
+    wait_for_process_exit(child_pid).await;
+    assert!(!manager.is_server_running("stdio-fixture").await);
 }
 
 #[tokio::test]

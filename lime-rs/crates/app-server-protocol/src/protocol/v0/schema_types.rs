@@ -95,8 +95,6 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "AgentSessionListResponse",
     "AgentSessionUpdateParams",
     "AgentSessionUpdateResponse",
-    "AgentSessionDeleteParams",
-    "AgentSessionDeleteResponse",
     "ManagedObjectiveStatus",
     "ManagedObjective",
     "AgentSessionObjectiveReadParams",

@@ -13,11 +13,7 @@ import {
   resolveInputCapabilityDispatch,
   type InputCapabilitySelection,
 } from "../../../skill-selection/inputCapabilitySelection";
-import {
-  buildInputbarModeRequestMetadata,
-  buildInputbarToolPreferencesOverride,
-} from "../utils/inputbarModeRequestMetadata";
-import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime/objectiveClient";
+import { buildInputbarToolPreferencesOverride } from "../utils/inputbarModeRequestMetadata";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import type { BaseComposerSendMetadata } from "@/components/input-kit";
 
@@ -156,17 +152,14 @@ export function useInputbarSend({
             }
           : baseRequestMetadata;
       const inputbarModeState = {
-        goalEnabled: Boolean(activeTools["objective_mode"]),
-        objectiveText: submittedInput,
         planEnabled: Boolean(activeTools["task_mode"]),
-        source: "inputbar",
         subagentEnabled: Boolean(activeTools["subagent_mode"]),
-        threadId: sessionId,
       };
-      const requestMetadata = buildInputbarModeRequestMetadata(
-        knowledgeRequestMetadata,
-        inputbarModeState,
-      );
+      const requestMetadata = knowledgeRequestMetadata;
+      const threadGoal =
+        activeTools["objective_mode"] && submittedInput.trim()
+          ? { objective: submittedInput.trim() }
+          : undefined;
       const toolPreferencesOverride =
         buildInputbarToolPreferencesOverride(inputbarModeState);
       const collaborationMode = inputbarModeState.planEnabled
@@ -191,6 +184,7 @@ export function useInputbarSend({
         capabilityDispatch.capabilityRoute ||
         capabilityDispatch.displayContent ||
         requestMetadata ||
+        threadGoal ||
         toolPreferencesOverride ||
         collaborationMode
           ? {
@@ -206,38 +200,13 @@ export function useInputbarSend({
                   }
                 : {}),
               ...(requestMetadata ? { requestMetadata } : {}),
+              ...(threadGoal ? { threadGoal } : {}),
               ...(toolPreferencesOverride ? { toolPreferencesOverride } : {}),
               ...(collaborationMode ? { collaborationMode } : {}),
             }
           : undefined;
 
       try {
-        if (
-          inputbarModeState.goalEnabled &&
-          sessionId?.trim() &&
-          submittedInput.trim()
-        ) {
-          recordAgentUiPerformanceMetric("inputbar.objectivePersist.start", {
-            elapsedMs: Math.max(0, Date.now() - triggeredAt),
-            sessionId: sessionId.trim(),
-            source: "inputbar",
-            triggerSource,
-            workspaceId: projectId ?? null,
-          });
-          await setAgentRuntimeObjective({
-            sessionId: sessionId.trim(),
-            workspaceId: projectId ?? undefined,
-            objectiveText: submittedInput.trim(),
-            successCriteria: [],
-          });
-          recordAgentUiPerformanceMetric("inputbar.objectivePersist.done", {
-            elapsedMs: Math.max(0, Date.now() - triggeredAt),
-            sessionId: sessionId.trim(),
-            source: "inputbar",
-            triggerSource,
-            workspaceId: projectId ?? null,
-          });
-        }
         const result = await onSend({
           images: pendingImages.length > 0 ? pendingImages : undefined,
           textOverride,

@@ -289,7 +289,10 @@ fn canonical_item_from_event(
 ) -> Option<ThreadItem> {
     if !matches!(
         event.event_type.as_str(),
-        "item.started" | "item.updated" | "item.completed"
+        "item.started"
+            | "item.updated"
+            | "item.completed"
+            | super::super::thread_fork::FORK_CANONICAL_ITEM_EVENT_TYPE
     ) {
         return None;
     }
@@ -312,11 +315,13 @@ fn canonical_item_from_event(
     );
     item.turn_id = TurnId::new(turn_id);
     item.sequence = event.sequence;
-    item.ordinal = canonical_item_ordinal(event);
-    item.created_at_ms = timestamp;
-    item.updated_at_ms = timestamp;
-    item.status = canonical_item_lifecycle_status(event.event_type.as_str(), item.status);
-    item.completed_at_ms = item.status.is_terminal().then_some(timestamp);
+    if event.event_type != super::super::thread_fork::FORK_CANONICAL_ITEM_EVENT_TYPE {
+        item.ordinal = canonical_item_ordinal(event);
+        item.created_at_ms = timestamp;
+        item.updated_at_ms = timestamp;
+        item.status = canonical_item_lifecycle_status(event.event_type.as_str(), item.status);
+        item.completed_at_ms = item.status.is_terminal().then_some(timestamp);
+    }
     Some(item)
 }
 
@@ -356,6 +361,27 @@ fn turn_snapshot(
     default_thread_id: &str,
     turn_id: &str,
 ) -> Turn {
+    if event.event_type == super::super::thread_fork::FORK_CANONICAL_ITEM_EVENT_TYPE {
+        if let Some(mut turn) = event
+            .payload
+            .get("forkTurn")
+            .cloned()
+            .and_then(|value| serde_json::from_value::<Turn>(value).ok())
+        {
+            turn.session_id =
+                SessionId::new(non_empty(&event.session_id).unwrap_or(default_session_id));
+            turn.thread_id = ThreadId::new(
+                event
+                    .thread_id
+                    .as_deref()
+                    .and_then(non_empty)
+                    .unwrap_or(default_thread_id),
+            );
+            turn.turn_id = TurnId::new(turn_id);
+            turn.items.clear();
+            return turn;
+        }
+    }
     let timestamp = event_timestamp_ms(event);
     let status = match event.event_type.as_str() {
         "turn.completed" => TurnStatus::Completed,

@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 pub(super) const TURN_INPUT_EVENT_TYPE: &str = "message.created";
+pub(super) const THREAD_GOAL_CONTINUATION_EVENT_TYPE: &str = "thread.goal.continuation";
 
 pub(super) fn runtime_event_for_turn_input(input: &[AgentInput]) -> Option<super::RuntimeEvent> {
     runtime_event_for_turn_input_with_client_id(input, None)
@@ -15,26 +16,57 @@ pub(super) fn runtime_event_for_turn_input_with_client_id(
     input: &[AgentInput],
     client_id: Option<&str>,
 ) -> Option<super::RuntimeEvent> {
+    runtime_event_for_turn_input_kind(
+        TURN_INPUT_EVENT_TYPE,
+        input,
+        client_id,
+        "user_visible",
+        None,
+    )
+}
+
+pub(super) fn runtime_event_for_goal_continuation(
+    input: &[AgentInput],
+) -> Option<super::RuntimeEvent> {
+    runtime_event_for_turn_input_kind(
+        THREAD_GOAL_CONTINUATION_EVENT_TYPE,
+        input,
+        None,
+        "agent_only",
+        Some("thread_goal"),
+    )
+}
+
+fn runtime_event_for_turn_input_kind(
+    event_type: &str,
+    input: &[AgentInput],
+    client_id: Option<&str>,
+    visibility: &str,
+    source: Option<&str>,
+) -> Option<super::RuntimeEvent> {
     if super::turn_start::validate_user_input(input).is_err() {
         return None;
     }
     let text = super::turn_start::user_input_text(input);
     let mut payload = json!({
         "role": "user",
-        "visibility": "user_visible",
+        "visibility": visibility,
         "input": input,
         "content": {
             "kind": "inline_text",
             "text": text,
         },
     });
+    if let Some(source) = source {
+        payload["source"] = Value::String(source.to_string());
+    }
     if let Some(client_id) = client_id
         .map(str::trim)
         .filter(|client_id| !client_id.is_empty())
     {
         payload["clientId"] = Value::String(client_id.to_string());
     }
-    Some(super::RuntimeEvent::new(TURN_INPUT_EVENT_TYPE, payload))
+    Some(super::RuntimeEvent::new(event_type, payload))
 }
 
 pub(super) fn turn_inputs_from_events(events: &[AgentEvent]) -> HashMap<String, Vec<AgentInput>> {
@@ -53,16 +85,28 @@ pub(super) fn is_turn_input_event(event: &AgentEvent) -> bool {
             .is_none_or(|mailbox| mailbox["turnInput"] == true)
 }
 
+pub(super) fn is_provider_input_event(event: &AgentEvent) -> bool {
+    matches!(
+        event.event_type.as_str(),
+        TURN_INPUT_EVENT_TYPE | THREAD_GOAL_CONTINUATION_EVENT_TYPE
+    ) && event
+        .payload
+        .get("mailbox")
+        .is_none_or(|mailbox| mailbox["turnInput"] == true)
+}
+
 pub(super) fn is_turn_input_event_type(event_type: &str) -> bool {
     event_type == TURN_INPUT_EVENT_TYPE
 }
 
-pub(super) fn runtime_event_is_turn_input(event: &RuntimeEvent) -> bool {
-    is_turn_input_event_type(&event.event_type)
-        && event
-            .payload
-            .get("mailbox")
-            .is_none_or(|mailbox| mailbox["turnInput"] == true)
+pub(super) fn runtime_event_is_provider_input(event: &RuntimeEvent) -> bool {
+    matches!(
+        event.event_type.as_str(),
+        TURN_INPUT_EVENT_TYPE | THREAD_GOAL_CONTINUATION_EVENT_TYPE
+    ) && event
+        .payload
+        .get("mailbox")
+        .is_none_or(|mailbox| mailbox["turnInput"] == true)
 }
 
 fn turn_input_from_event(event: &AgentEvent) -> Option<(String, Vec<AgentInput>)> {

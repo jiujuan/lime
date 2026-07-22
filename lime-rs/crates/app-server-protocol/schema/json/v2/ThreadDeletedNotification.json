@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
-    "sessionId": {
+    "threadId": {
       "type": "string"
     }
   },
   "required": [
-    "sessionId"
+    "threadId"
   ],
-  "title": "AgentSessionDeleteParams",
+  "title": "ThreadDeletedNotification",
   "type": "object"
 }

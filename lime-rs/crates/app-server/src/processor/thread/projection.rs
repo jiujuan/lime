@@ -84,7 +84,7 @@ pub(super) fn lower_thread_items_list_params(
     })
 }
 
-pub(super) fn project_thread_read_response(
+pub(in crate::processor) fn project_thread_read_response(
     response: canonical::thread::ThreadReadResponse,
 ) -> Result<v2::ThreadReadResponse, JsonRpcError> {
     Ok(v2::ThreadReadResponse {

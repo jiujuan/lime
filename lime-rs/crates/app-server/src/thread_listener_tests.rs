@@ -228,6 +228,111 @@ async fn goal_notification_removes_stale_peer_without_failing_origin() {
 }
 
 #[tokio::test]
+async fn thread_delete_responds_then_fans_out_child_to_root_and_removes_state() {
+    let server = AppServer::new();
+    let origin_connection = ConnectionId(25);
+    let peer_connection = ConnectionId(26);
+    let (origin_writer, mut origin_messages) = mpsc::channel(8);
+    let (peer_writer, mut peer_messages) = mpsc::channel(8);
+    server.register_transport_writer(origin_connection, origin_writer, None);
+    server.register_transport_writer(peer_connection, peer_writer, None);
+    server.mark_transport_initialized(origin_connection);
+    server.mark_transport_initialized(peer_connection);
+    server
+        .thread_states
+        .connection_initialized(origin_connection)
+        .await;
+    server
+        .thread_states
+        .connection_initialized(peer_connection)
+        .await;
+
+    let child_thread = agent_protocol::ThreadId::new("thread-delete-child");
+    let root_thread = agent_protocol::ThreadId::new("thread-delete-root");
+    let retained_thread = agent_protocol::ThreadId::new("thread-delete-retained");
+    for thread_id in [&child_thread, &root_thread, &retained_thread] {
+        assert!(
+            server
+                .thread_states
+                .subscribe_connection(thread_id.clone(), peer_connection)
+                .await
+        );
+    }
+
+    let response = JsonRpcMessage::Response(
+        app_server_protocol::JsonRpcResponse::new(
+            RequestId::String("delete-1".to_string()),
+            json!({}),
+        )
+        .expect("thread/delete response"),
+    );
+    let child_deleted: JsonRpcNotification =
+        app_server_protocol::protocol::v2::ServerNotification::ThreadDeleted(
+            app_server_protocol::protocol::v2::ThreadDeletedNotification {
+                thread_id: child_thread.to_string(),
+            },
+        )
+        .into();
+    let root_deleted: JsonRpcNotification =
+        app_server_protocol::protocol::v2::ServerNotification::ThreadDeleted(
+            app_server_protocol::protocol::v2::ThreadDeletedNotification {
+                thread_id: root_thread.to_string(),
+            },
+        )
+        .into();
+    let child_deleted = JsonRpcMessage::Notification(child_deleted);
+    let root_deleted = JsonRpcMessage::Notification(root_deleted);
+    let mut messages = vec![
+        response.clone(),
+        child_deleted.clone(),
+        root_deleted.clone(),
+    ];
+
+    assert!(
+        publish_thread_delete_transport_result(&server, origin_connection, &mut messages,).await
+    );
+
+    assert_eq!(next_queued_message(&mut origin_messages).await, response);
+    assert_eq!(
+        next_queued_message(&mut origin_messages).await,
+        child_deleted
+    );
+    assert_eq!(
+        next_queued_message(&mut origin_messages).await,
+        root_deleted
+    );
+    assert_eq!(next_queued_message(&mut peer_messages).await, child_deleted);
+    assert_eq!(next_queued_message(&mut peer_messages).await, root_deleted);
+    assert!(server
+        .thread_states
+        .subscribed_connection_ids(&child_thread)
+        .await
+        .is_empty());
+    assert!(server
+        .thread_states
+        .subscribed_connection_ids(&root_thread)
+        .await
+        .is_empty());
+    assert_eq!(
+        server
+            .thread_states
+            .subscribed_connection_ids(&retained_thread)
+            .await,
+        vec![peer_connection]
+    );
+    assert!(matches!(
+        origin_messages.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+    assert!(matches!(
+        peer_messages.try_recv(),
+        Err(mpsc::error::TryRecvError::Empty)
+    ));
+
+    server.thread_states.clear_all_listeners().await;
+}
+
+#[tokio::test]
 async fn completed_turn_publishes_durable_goal_update_once_in_listener_fifo() {
     let temp = tempfile::tempdir().expect("goal listener tempdir");
     let database_path = temp.path().join("state.sqlite");

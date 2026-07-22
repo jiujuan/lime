@@ -243,7 +243,7 @@ fn start_session_store_failure_leaves_no_memory_session_and_allows_retry() {
 }
 
 #[tokio::test]
-async fn delete_session_removes_empty_canonical_thread_and_allows_recreate() {
+async fn delete_thread_removes_empty_canonical_thread_and_allows_recreate() {
     let temp = tempfile::tempdir().expect("tempdir");
     let database_path = temp.path().join("projection.sqlite");
     let backup_path = temp.path().join("projection.sqlite.backup");
@@ -256,10 +256,8 @@ async fn delete_session_removes_empty_canonical_thread_and_allows_recreate() {
     std::fs::rename(&database_path, &backup_path).expect("move database aside");
     std::fs::create_dir(&database_path).expect("block database path");
     assert!(matches!(
-        core.delete_agent_session(AgentSessionDeleteParams {
-            session_id: "sess_empty_delete".to_string(),
-        })
-        .await,
+        core.delete_thread(ThreadId::new("thread_empty_delete"))
+            .await,
         Err(RuntimeCoreError::Backend(_))
     ));
     std::fs::rename(&database_path, &blocked_path).expect("unblock database path");
@@ -273,12 +271,10 @@ async fn delete_session_removes_empty_canonical_thread_and_allows_recreate() {
     .expect("failed delete keeps memory session");
 
     let deleted = core
-        .delete_agent_session(AgentSessionDeleteParams {
-            session_id: "sess_empty_delete".to_string(),
-        })
+        .delete_thread(ThreadId::new("thread_empty_delete"))
         .await
-        .expect("delete session");
-    assert!(deleted.deleted);
+        .expect("delete thread");
+    assert_eq!(deleted.len(), 1);
     assert!(block_on(store.read_thread(ReadThreadParams {
         thread_id: ThreadId::new("thread_empty_delete"),
         include_archived: false,
@@ -298,9 +294,14 @@ async fn delete_session_removes_empty_canonical_thread_and_allows_recreate() {
 }
 
 #[tokio::test]
-async fn delete_session_closes_exact_runtime_owner_before_removal() {
+async fn delete_thread_closes_exact_runtime_owner_before_removal() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
     let backend = Arc::new(CloseSessionRecordingBackend::default());
-    let core = RuntimeCore::with_backend(backend.clone());
+    let core = RuntimeCore::with_backend(backend.clone()).with_projection_store(store);
     core.start_session(empty_thread_session_params(
         "sess_close_runtime",
         "thread_close_runtime",
@@ -308,13 +309,11 @@ async fn delete_session_closes_exact_runtime_owner_before_removal() {
     .expect("start session");
 
     let deleted = core
-        .delete_agent_session(AgentSessionDeleteParams {
-            session_id: "sess_close_runtime".to_string(),
-        })
+        .delete_thread(ThreadId::new("thread_close_runtime"))
         .await
-        .expect("delete session");
+        .expect("delete thread");
 
-    assert!(deleted.deleted);
+    assert_eq!(deleted.len(), 1);
     assert_eq!(
         *backend
             .close_requests
@@ -418,7 +417,7 @@ async fn compact_agent_session_writes_session_context_artifact() {
 }
 
 #[tokio::test]
-async fn compact_agent_session_injects_next_turn_session_context_packet() {
+async fn compact_agent_session_uses_replacement_history_without_duplicate_prompt_context() {
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
     let backend = Arc::new(TurnCompletedRecordingBackend {
@@ -499,59 +498,17 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
         .as_ref()
         .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
         .expect("runtime metadata");
-    let compaction_context = metadata
-        .get(crate::runtime::memory_prompt::SESSION_COMPACTION_PROMPT_CONTEXT_KEY)
-        .expect("compaction prompt context");
-    assert_eq!(
-        compaction_context["schema"].as_str(),
-        Some("session_compaction_prompt_context.v1")
-    );
-    assert_eq!(compaction_context["contextEpoch"].as_u64(), Some(1));
-    assert!(compaction_context["summary"]
-        .as_str()
-        .expect("summary")
-        .contains("No earlier turns were removed"));
-    assert_eq!(
-        compaction_context["sidecarRef"]["kind"].as_str(),
-        Some("context_compaction")
-    );
-    assert!(compaction_context["sidecarRef"]["sha256"]
-        .as_str()
-        .is_some_and(|value| !value.is_empty()));
-    assert_eq!(compaction_context["packetTokenBudget"].as_u64(), Some(720));
-    assert_eq!(
-        compaction_context["contextBudgetPolicy"]["source"].as_str(),
-        Some("model_request_policy")
-    );
-    assert_eq!(
-        compaction_context["contextBudgetPolicy"]["modelContextWindow"].as_u64(),
-        Some(7600)
-    );
-    assert_eq!(
-        compaction_context["contextBudgetPolicy"]["autoCompactTokenLimit"].as_u64(),
-        Some(7200)
-    );
-    let telemetry = metadata
-        .get(crate::runtime::memory_prompt::CONTEXT_PACKET_TELEMETRY_KEY)
-        .expect("context telemetry");
-    assert_eq!(telemetry["packetCount"].as_u64(), Some(1));
-    assert_eq!(
-        telemetry["packets"][0]["kind"].as_str(),
-        Some("session_context_compaction")
-    );
-    assert_eq!(
-        telemetry["packets"][0]["source"].as_str(),
-        Some("session.compaction")
-    );
-    assert_eq!(telemetry["packets"][0]["tokenBudget"].as_u64(), Some(720));
-    assert_eq!(
-        telemetry["packets"][0]["fragmentEnvelope"]["sidecar_reference"]["kind"].as_str(),
-        Some("context_compaction")
+    assert!(
+        metadata
+            .get(crate::runtime::memory_prompt::SESSION_COMPACTION_PROMPT_CONTEXT_KEY)
+            .is_none(),
+        "replacement history must own the compaction summary"
     );
     assert!(
-        telemetry["packets"][0]["fragmentEnvelope"]["sidecar_reference"]["sha256"]
-            .as_str()
-            .is_some_and(|value| !value.is_empty())
+        metadata
+            .get(crate::runtime::memory_prompt::CONTEXT_PACKET_TELEMETRY_KEY)
+            .is_none(),
+        "skipped prompt context must not emit packet telemetry"
     );
 
     let prompt = crate::runtime::memory_prompt::append_memory_context_to_system_prompt(
@@ -559,9 +516,7 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
         Some(metadata),
     )
     .expect("system prompt");
-    assert!(prompt.starts_with("base prompt\n\n## Session Context Compaction"));
-    assert!(prompt.contains("不是长期记忆"));
-    assert!(prompt.contains("不得把本摘要自动写入 memory store"));
+    assert_eq!(prompt, "base prompt");
 }
 
 #[tokio::test]

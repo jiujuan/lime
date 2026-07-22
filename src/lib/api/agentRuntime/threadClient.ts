@@ -1,13 +1,10 @@
 import {
   AppServerClient,
-  type AppServerAgentSessionActionReplayResponse,
   type AppServerAgentSessionFileCheckpointDetail,
   type AppServerAgentSessionFileCheckpointDiffResponse,
   type AppServerAgentSessionFileCheckpointListResponse,
   type AppServerAgentSessionFileCheckpointRestoreResponse,
   type AppServerAgentSessionFileCheckpointSummary,
-  type AppServerAgentSessionActionRespondParams,
-  type AppServerAgentSessionActionScope,
   type AppServerCapabilityListParams,
   type AppServerThreadReadParams,
   type AppServerThreadReadResponse,
@@ -57,6 +54,11 @@ import type {
   AgentRuntimeThreadReadModel,
 } from "./sessionTypes";
 import type { AgentRuntimeCapabilityManifest } from "@limecloud/agent-ui-contracts";
+import {
+  findPendingTypedServerRequestAction,
+  respondPendingTypedServerRequest,
+  replayedActionViewFromPendingAction,
+} from "./serverRequestReplay";
 
 export type AgentRuntimeAppServerClient = Pick<
   AppServerClient,
@@ -65,10 +67,8 @@ export type AgentRuntimeAppServerClient = Pick<
   | "startTurn"
   | "steerTurn"
   | "cancelTurn"
-  | "replayAction"
   | "compactAgentSession"
   | "resumeThread"
-  | "respondAction"
   | "drainEvents"
   | "listAgentSessionFileCheckpoints"
   | "getAgentSessionFileCheckpoint"
@@ -79,7 +79,7 @@ export type AgentRuntimeAppServerClient = Pick<
 
 export type AgentRuntimeLifecycleClient = Pick<
   StandardAgentRuntimeClient,
-  "startTurn" | "steerTurn" | "cancelTurn" | "respondAction" | "readThread"
+  "startTurn" | "steerTurn" | "cancelTurn" | "readThread"
 >;
 
 type AgentRuntimeLifecycleStartTurnParams = Parameters<
@@ -90,9 +90,6 @@ type AgentRuntimeLifecycleCancelTurnParams = Parameters<
 >[0];
 type AgentRuntimeLifecycleSteerTurnParams = Parameters<
   AgentRuntimeLifecycleClient["steerTurn"]
->[0];
-type AgentRuntimeLifecycleRespondActionParams = Parameters<
-  AgentRuntimeLifecycleClient["respondAction"]
 >[0];
 type AgentRuntimeLifecycleReadThreadParams = Parameters<
   AgentRuntimeLifecycleClient["readThread"]
@@ -229,49 +226,23 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
   async function replayAgentRuntimeRequest(
     request: AgentRuntimeReplayRequestRequest,
   ): Promise<AgentRuntimeReplayedActionRequiredView | null> {
-    const response = await appServerClient.replayAction(
-      appServerActionReplayParamsFromRequest(request),
+    const action = findPendingTypedServerRequestAction(
+      request.session_id,
+      request.request_id,
     );
-    const result = agentRuntimeReplayedActionFromAppServer(
-      response.result.action,
-    );
-    assertReplayedActionRequiredViewOrNull(
-      "agentSession/action/replay",
-      result,
-    );
-    return result;
+    return action ? replayedActionViewFromPendingAction(action) : null;
   }
 
   async function respondAgentRuntimeAction(
     request: AgentRuntimeRespondActionRequest,
   ): Promise<void> {
     assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
-    const eventName = appServerActionRespondEventNameFromRequest(request);
-    const route = appServerEventRouter?.register({
-      eventName,
-      sessionId: request.session_id,
-      turnId: request.action_scope?.turn_id,
-    });
-    try {
-      const result = await standardRuntimeClient.respondAction(
-        appServerActionRespondParamsFromRequest(request),
-      );
-      if (route) {
-        route.publish(result.notifications);
-      } else {
-        publishAppServerAgentSessionNotifications(
-          eventName,
-          result.notifications,
-        );
-      }
-    } catch (error) {
-      publishAppServerRpcErrorNotifications(error, {
-        eventName,
-        sessionId: request.session_id,
-        turnId: request.action_scope?.turn_id,
-      });
-      throw error;
+    if (respondPendingTypedServerRequest(request)) {
+      return;
     }
+    throw new Error(
+      "Typed server request is no longer pending; generic agentSession/action/respond is retired.",
+    );
   }
 
   async function getAgentRuntimeThreadRead(
@@ -519,10 +490,6 @@ function createAppServerAgentRuntimeLifecycleClient(
       appServerClient.cancelTurn(params) as ReturnType<
         AgentRuntimeLifecycleClient["cancelTurn"]
       >,
-    respondAction: (params: AgentRuntimeLifecycleRespondActionParams) =>
-      appServerClient.respondAction(
-        params as unknown as AppServerAgentSessionActionRespondParams,
-      ) as ReturnType<AgentRuntimeLifecycleClient["respondAction"]>,
     readThread: (params: AgentRuntimeLifecycleReadThreadParams) =>
       appServerClient.readThread(
         params as unknown as AppServerThreadReadParams,
@@ -992,32 +959,6 @@ function assertFileCheckpointListResult(
   }
 }
 
-function isReplayedActionRequiredView(
-  value: unknown,
-): value is AgentRuntimeReplayedActionRequiredView {
-  return (
-    isRecord(value) &&
-    value.type === "action_required" &&
-    isRequiredString(value.request_id) &&
-    (value.action_type === "tool_confirmation" ||
-      value.action_type === "ask_user" ||
-      value.action_type === "elicitation") &&
-    (value.tool_name === undefined || typeof value.tool_name === "string") &&
-    (value.arguments === undefined || isRecord(value.arguments)) &&
-    (value.prompt === undefined || typeof value.prompt === "string") &&
-    (value.requested_schema === undefined || isRecord(value.requested_schema))
-  );
-}
-
-function assertReplayedActionRequiredViewOrNull(
-  command: string,
-  value: unknown,
-): asserts value is AgentRuntimeReplayedActionRequiredView | null {
-  if (value !== null && !isReplayedActionRequiredView(value)) {
-    throw new Error(`${command} did not return replayed action view`);
-  }
-}
-
 function assertFileCheckpointDetail(
   command: string,
   value: unknown,
@@ -1060,85 +1001,6 @@ function appServerTurnCancelParamsFromRequest(
     threadId: request.session_id,
     turnId: request.turn_id,
   };
-}
-
-export function appServerActionRespondParamsFromRequest(
-  request: AgentRuntimeRespondActionRequest,
-): AppServerAgentSessionActionRespondParams {
-  return omitUndefined({
-    sessionId: request.session_id,
-    requestId: request.request_id,
-    actionType: request.action_type,
-    decision: request.decision,
-    confirmed: request.confirmed,
-    response: request.response,
-    userData: request.user_data,
-    metadata: request.metadata,
-    eventName: request.event_name,
-    actionScope: appServerActionScopeFromRequest(request.action_scope),
-  });
-}
-
-function appServerActionRespondEventNameFromRequest(
-  request: AgentRuntimeRespondActionRequest,
-): string | undefined {
-  const explicitEventName = request.event_name?.trim();
-  if (explicitEventName) {
-    return explicitEventName;
-  }
-  const sessionId = request.session_id.trim();
-  return sessionId ? `agentSession/event/${sessionId}` : undefined;
-}
-
-function appServerActionReplayParamsFromRequest(
-  request: AgentRuntimeReplayRequestRequest,
-) {
-  return {
-    sessionId: request.session_id,
-    requestId: request.request_id,
-  };
-}
-
-function agentRuntimeReplayedActionFromAppServer(
-  action: AppServerAgentSessionActionReplayResponse["action"],
-): AgentRuntimeReplayedActionRequiredView | null {
-  if (!action) {
-    return null;
-  }
-  return omitUndefined({
-    type: action.type,
-    request_id: action.requestId,
-    action_type: action.actionType,
-    tool_name: action.toolName,
-    arguments: isRecord(action.arguments) ? action.arguments : undefined,
-    prompt: action.prompt,
-    questions: action.questions,
-    requested_schema: isRecord(action.requestedSchema)
-      ? action.requestedSchema
-      : undefined,
-    available_decisions: action.availableDecisions,
-    scope: action.scope
-      ? omitUndefined({
-          session_id: action.scope.sessionId,
-          thread_id: action.scope.threadId,
-          turn_id: action.scope.turnId,
-        })
-      : undefined,
-  });
-}
-
-function appServerActionScopeFromRequest(
-  scope?: AgentRuntimeRespondActionRequest["action_scope"],
-): AppServerAgentSessionActionScope | undefined {
-  if (!scope) {
-    return undefined;
-  }
-
-  return omitUndefined({
-    sessionId: scope.session_id,
-    threadId: scope.thread_id,
-    turnId: scope.turn_id,
-  });
 }
 
 function omitUndefined<T extends Record<string, unknown>>(value: T): T {

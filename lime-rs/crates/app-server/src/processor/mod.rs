@@ -27,6 +27,7 @@ mod session_operations;
 mod skill;
 mod soul;
 mod thread;
+mod thread_fork;
 mod thread_goal;
 mod turn;
 pub(crate) mod v2_notifications;
@@ -600,7 +601,7 @@ impl RequestProcessor {
             .clone()
     }
 
-    pub(super) fn runtime_host_context(&self) -> RuntimeHostContext {
+    pub(crate) fn runtime_host_context(&self) -> RuntimeHostContext {
         RuntimeHostContext::from(self.client_info())
     }
 }

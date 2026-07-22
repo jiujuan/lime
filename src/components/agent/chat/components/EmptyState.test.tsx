@@ -182,21 +182,6 @@ vi.mock("./ChatModelSelector", () => ({
   ChatModelSelector: () => <div data-testid="chat-model-selector" />,
 }));
 
-vi.mock("./Inputbar/components/InputbarObjectiveInlinePanel", () => ({
-  InputbarObjectiveInlinePanel: (props: {
-    sessionId: string;
-    workspaceId?: string | null;
-    runtimeBusy?: boolean;
-  }) => (
-    <div
-      data-testid="empty-state-objective-inline-panel"
-      data-session-id={props.sessionId}
-      data-workspace-id={props.workspaceId ?? ""}
-      data-runtime-busy={String(Boolean(props.runtimeBusy))}
-    />
-  ),
-}));
-
 vi.mock("../utils/contextualRecommendations", () => ({
   buildRecommendationPrompt: vi.fn((fullPrompt: string) => fullPrompt),
   getContextualRecommendations: vi.fn(() => []),
@@ -3545,30 +3530,7 @@ describe("EmptyState", () => {
       textOverride: "请先规划再持续推进这个任务",
       sendOptions: expect.objectContaining({
         collaborationMode: "plan",
-        requestMetadata: expect.objectContaining({
-          harness: expect.objectContaining({
-            goal_mode_enabled: true,
-            preferences: expect.objectContaining({
-              goal: true,
-              objective: true,
-            }),
-            thread_goal: expect.objectContaining({
-              enabled: true,
-              source: "empty_state",
-              status: "active",
-              set: expect.objectContaining({
-                threadId: "thread-empty-state-plan-goal",
-                objective: "请先规划再持续推进这个任务",
-                status: "active",
-                tokenBudget: null,
-              }),
-            }),
-            managed_objective: {
-              objective_text: "请先规划再持续推进这个任务",
-              source: "empty_state",
-            },
-          }),
-        }),
+        threadGoal: { objective: "请先规划再持续推进这个任务" },
         toolPreferencesOverride: {
           task: true,
           subagent: false,

@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+mod delete;
+
 const ROLLOUT_SCHEMA_VERSION: u32 = 1;
 const SESSIONS_DIR_NAME: &str = "sessions";
 const ARCHIVED_SESSIONS_DIR_NAME: &str = "archived_sessions";

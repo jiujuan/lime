@@ -430,6 +430,7 @@ pub struct CurrentProviderClient {
 
 impl CurrentProviderClient {
     pub fn new(config: RuntimeProviderConfig) -> Result<Self, CurrentProviderError> {
+        runtime_protocol(&config)?;
         let mut client_builder = Client::builder()
             .connect_timeout(Duration::from_secs(30))
             .tcp_keepalive(Duration::from_secs(60))
@@ -473,27 +474,15 @@ impl CurrentProviderClient {
         RuntimeReplyProviderHandle::from_config(&self.config, RuntimeProviderBackend::Current)
     }
 
-    pub fn protocol(&self) -> ModelProviderProtocol {
-        match self.config.protocol {
-            Some(RuntimeProviderProtocol::Responses) => ModelProviderProtocol::Responses,
-            Some(RuntimeProviderProtocol::AnthropicMessages) => {
-                ModelProviderProtocol::AnthropicMessages
-            }
-            Some(RuntimeProviderProtocol::ChatCompletions) => {
-                ModelProviderProtocol::ChatCompletions
-            }
-            None if provider_uses_anthropic_messages(&self.config) => {
-                ModelProviderProtocol::AnthropicMessages
-            }
-            None => ModelProviderProtocol::ChatCompletions,
-        }
+    pub fn protocol(&self) -> Result<ModelProviderProtocol, CurrentProviderError> {
+        runtime_protocol(&self.config)
     }
 
     pub async fn stream(
         &self,
         request: CurrentProviderRequest,
     ) -> Result<CurrentProviderStream, CurrentProviderError> {
-        let protocol = self.protocol();
+        let protocol = self.protocol()?;
         ensure_supported_protocol(&protocol)?;
         let mut permit = self.health.acquire().map_err(circuit_open_error)?;
         let media_payloads = request.media_payloads()?;
@@ -931,16 +920,25 @@ fn is_local_media_reference(uri: &str) -> bool {
     uri.starts_with("sidecar://") || uri.starts_with("asset://") || uri.starts_with("file://")
 }
 
-fn provider_uses_anthropic_messages(config: &RuntimeProviderConfig) -> bool {
-    [
-        config.provider_name.as_str(),
-        config.provider_selector.as_deref().unwrap_or_default(),
-    ]
-    .iter()
-    .any(|value| {
-        let value = value.to_ascii_lowercase();
-        value == "anthropic" || value == "claude" || value.contains("anthropic")
-    })
+fn runtime_protocol(
+    config: &RuntimeProviderConfig,
+) -> Result<ModelProviderProtocol, CurrentProviderError> {
+    match config.protocol {
+        Some(RuntimeProviderProtocol::Responses) => Ok(ModelProviderProtocol::Responses),
+        Some(RuntimeProviderProtocol::AnthropicMessages) => {
+            Ok(ModelProviderProtocol::AnthropicMessages)
+        }
+        Some(RuntimeProviderProtocol::ChatCompletions) => {
+            Ok(ModelProviderProtocol::ChatCompletions)
+        }
+        None => Err(CurrentProviderError::invalid_request(format!(
+            "provider route for `{}` is missing an explicit protocol",
+            config
+                .provider_selector
+                .as_deref()
+                .unwrap_or_else(|| config.provider_name.as_str())
+        ))),
+    }
 }
 
 fn responses_websocket_url(base_url: Option<&str>) -> Result<url::Url, CurrentProviderError> {
@@ -1148,16 +1146,28 @@ mod tests {
     }
 
     #[test]
-    fn client_selects_anthropic_from_current_config() {
+    fn client_rejects_missing_route_protocol_instead_of_inferring_from_provider_name() {
         let mut config = config(None);
         config.provider_name = "anthropic".to_string();
-        let client = CurrentProviderClient::with_client(config, Client::new());
+        config.provider_selector = Some("anthropic".to_string());
+        let construction_error = match CurrentProviderClient::new(config.clone()) {
+            Ok(_) => panic!("client construction must reject a missing route protocol"),
+            Err(error) => error,
+        };
+        assert!(construction_error.message.contains("anthropic"));
 
-        assert_eq!(client.protocol(), ModelProviderProtocol::AnthropicMessages);
+        let client = CurrentProviderClient::with_client(config, Client::new());
+        let error = client
+            .protocol()
+            .expect_err("missing route protocol must fail closed");
+
         assert_eq!(
-            client.runtime_handle().backend,
-            RuntimeProviderBackend::Current
+            error.classification,
+            Some(FailureClassification::InvalidRequest)
         );
+        assert!(!error.retryable);
+        assert!(error.message.contains("missing an explicit protocol"));
+        assert!(error.message.contains("anthropic"));
     }
 
     #[test]

@@ -137,6 +137,7 @@ mod tests {
                 env: HashMap::new(),
                 cwd: None,
             },
+            environment_id: crate::types::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             startup_timeout: 30,
             tool_timeout: None,

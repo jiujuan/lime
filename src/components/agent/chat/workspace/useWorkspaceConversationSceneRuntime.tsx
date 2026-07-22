@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
@@ -259,6 +260,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   rightSurfaceChrome: WorkspaceConversationRightSurfaceChromeRuntime;
   isRestoringSession: boolean;
   sessionId: string | null | undefined;
+  threadGoal?: ThreadGoal | null;
   syncStatus: SyncStatus;
   pendingA2UIForm: ConversationScenePresentationParams["scene"]["pendingA2UIForm"];
   pendingA2UISource: PendingA2UISource | null;
@@ -321,6 +323,7 @@ export function useWorkspaceConversationSceneRuntime({
   rightSurfaceChrome,
   isRestoringSession,
   sessionId,
+  threadGoal,
   syncStatus,
   pendingA2UIForm,
   pendingA2UISource,
@@ -531,6 +534,7 @@ export function useWorkspaceConversationSceneRuntime({
     submittedActionsInFlight: projectedSubmittedActionsInFlight,
     threadItems: projectedThreadItems,
     todoItems,
+    threadGoal,
     threadRead: projectedThreadRead,
     executionRuntime,
     canonicalChildren,

@@ -51,24 +51,8 @@ impl ConfiguredSessionProvider {
 pub struct ModelRouteProviderConfiguration {
     pub turn_provider: TurnProviderConfiguration,
     pub route_protocol: Option<ProtocolKind>,
+    pub credential_ref: Option<String>,
     pub direct_provider_config: Option<SessionProviderConfig>,
-}
-
-pub(crate) fn provider_configuration_from_model_selection(
-    provider: impl Into<String>,
-    model: impl Into<String>,
-    reasoning_effort: Option<String>,
-    route_protocol: Option<ProtocolKind>,
-) -> ModelRouteProviderConfiguration {
-    ModelRouteProviderConfiguration {
-        turn_provider: TurnProviderConfiguration::from_model_selection(
-            provider,
-            model,
-            reasoning_effort,
-        ),
-        route_protocol,
-        direct_provider_config: None,
-    }
 }
 
 async fn configure_provider_for_session(
@@ -148,38 +132,6 @@ async fn install_provider_for_session(
         .map_err(|error| format!("创建 Provider 失败: {error}"))
 }
 
-pub(crate) async fn configure_model_route_provider_for_session(
-    agent_state: &AgentRuntimeState,
-    db: &DbConnection,
-    session_id: &str,
-    configuration: ModelRouteProviderConfiguration,
-) -> Result<SessionProviderConfig, String> {
-    configure_model_route_provider_for_session_with_provider(
-        agent_state,
-        db,
-        session_id,
-        configuration,
-    )
-    .await
-    .map(ConfiguredSessionProvider::into_config)
-}
-
-pub(crate) async fn configure_model_route_provider_for_session_with_provider(
-    agent_state: &AgentRuntimeState,
-    db: &DbConnection,
-    session_id: &str,
-    configuration: ModelRouteProviderConfiguration,
-) -> Result<ConfiguredSessionProvider, String> {
-    configure_model_route_provider_for_session_with_provider_and_credential_ref(
-        agent_state,
-        db,
-        session_id,
-        configuration,
-        None,
-    )
-    .await
-}
-
 pub(crate) async fn configure_model_route_provider_for_session_with_provider_and_credential_ref(
     agent_state: &AgentRuntimeState,
     db: &DbConnection,
@@ -211,7 +163,10 @@ pub fn route_protocol_from_session_provider_config(
 
 fn ensure_supported_route_protocol(protocol: Option<&ProtocolKind>) -> Result<(), String> {
     let Some(protocol) = protocol else {
-        return Ok(());
+        return Err(
+            "provider route is missing an explicit protocol; resolve the model route before provider admission"
+                .to_string(),
+        );
     };
     if model_provider_protocol_from_route_protocol(Some(protocol.clone())).is_some() {
         return Ok(());
@@ -325,6 +280,24 @@ mod tests {
         Arc::new(Mutex::new(connection))
     }
 
+    fn model_route_configuration(
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        reasoning_effort: Option<String>,
+        route_protocol: Option<ProtocolKind>,
+    ) -> ModelRouteProviderConfiguration {
+        ModelRouteProviderConfiguration {
+            turn_provider: TurnProviderConfiguration::from_model_selection(
+                provider,
+                model,
+                reasoning_effort,
+            ),
+            route_protocol,
+            credential_ref: None,
+            direct_provider_config: None,
+        }
+    }
+
     #[test]
     fn route_protocol_is_projected_to_model_provider_protocol() {
         assert_eq!(
@@ -400,6 +373,15 @@ mod tests {
             assert!(error.contains("unsupported provider protocol"));
             assert!(error.contains("no current model-provider wire adapter"));
         }
+    }
+
+    #[test]
+    fn missing_route_protocol_fails_closed_before_provider_selection() {
+        let error = ensure_supported_route_protocol(None)
+            .expect_err("missing route protocol must fail before provider selection");
+
+        assert!(error.contains("missing an explicit protocol"));
+        assert!(error.contains("resolve the model route"));
     }
 
     #[test]
@@ -492,7 +474,7 @@ mod tests {
             .expect("add exact configured key");
         let credential_ref = runtime_api_key_credential_uuid(&exact_key.id);
         let runtime = AgentRuntimeState::new();
-        let configuration = provider_configuration_from_model_selection(
+        let configuration = model_route_configuration(
             provider.id,
             "fixture-model",
             Some("high".to_string()),
@@ -551,7 +533,7 @@ mod tests {
             .expect("add configured key");
         let missing_ref = runtime_api_key_credential_uuid("missing-key");
         let runtime = AgentRuntimeState::new();
-        let configuration = provider_configuration_from_model_selection(
+        let configuration = model_route_configuration(
             provider.id,
             "fixture-model",
             None,

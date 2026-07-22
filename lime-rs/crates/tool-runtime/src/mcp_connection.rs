@@ -11,6 +11,35 @@ pub use registry::{McpConnectionCall, McpConnectionHandle, McpConnectionRegistry
 pub use scope::McpCallScope;
 pub use step_snapshot::McpStepSnapshot;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct McpConnectionProvenance {
+    environment_id: String,
+    auth_scopes: Option<Vec<String>>,
+}
+
+impl Default for McpConnectionProvenance {
+    fn default() -> Self {
+        Self::new("local", None)
+    }
+}
+
+impl McpConnectionProvenance {
+    pub fn new(environment_id: impl Into<String>, auth_scopes: Option<Vec<String>>) -> Self {
+        Self {
+            environment_id: environment_id.into(),
+            auth_scopes,
+        }
+    }
+
+    pub fn environment_id(&self) -> &str {
+        &self.environment_id
+    }
+
+    pub fn auth_scopes(&self) -> Option<&[String]> {
+        self.auth_scopes.as_deref()
+    }
+}
+
 pub type McpConnectionError = rmcp::ServiceError;
 
 #[async_trait]

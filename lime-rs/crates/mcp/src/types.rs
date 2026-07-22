@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+/// MCP 服务器未显式配置时使用的本地环境身份。
+pub const DEFAULT_MCP_SERVER_ENVIRONMENT_ID: &str = "local";
+
 // ============================================================================
 // 服务器配置和状态
 // ============================================================================
@@ -66,6 +69,9 @@ impl Default for McpServerTransport {
 pub struct McpServerConfig {
     #[serde(flatten)]
     pub transport: McpServerTransport,
+    /// MCP 服务器实际运行环境的显式身份，不从 cwd 推导。
+    #[serde(default = "default_environment_id")]
+    pub environment_id: String,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     /// 启动超时时间（秒）。
@@ -101,6 +107,10 @@ fn default_timeout() -> u64 {
 
 fn default_enabled() -> bool {
     true
+}
+
+fn default_environment_id() -> String {
+    DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string()
 }
 
 impl McpServerConfig {
@@ -198,6 +208,9 @@ impl McpServerConfig {
     }
 
     pub fn validate_static(&self) -> Result<(), String> {
+        if self.environment_id.trim().is_empty() {
+            return Err("environment_id must be a non-empty string".to_string());
+        }
         if !self.enabled {
             return Ok(());
         }
@@ -249,6 +262,7 @@ impl Default for McpServerConfig {
     fn default() -> Self {
         Self {
             transport: McpServerTransport::default(),
+            environment_id: default_environment_id(),
             enabled: false,
             startup_timeout: default_timeout(),
             tool_timeout: None,
@@ -337,8 +351,16 @@ impl McpServerConfig {
             .or_else(|| u64_field(object, "timeout"))
             .unwrap_or_else(default_timeout);
 
+        let environment_id = string_field(object, "environment_id")
+            .or_else(|| string_field(object, "environmentId"))
+            .unwrap_or_else(default_environment_id);
+        if environment_id.trim().is_empty() {
+            return Err("environment_id must be a non-empty string".to_string());
+        }
+
         let config = Self {
             transport,
+            environment_id,
             enabled: bool_field(object, "enabled").unwrap_or_else(default_enabled),
             startup_timeout,
             tool_timeout: u64_field(object, "tool_timeout")
@@ -720,7 +742,7 @@ pub type McpManagerState = Arc<Mutex<super::manager::McpClientManager>>;
 
 #[cfg(test)]
 mod tests {
-    use super::{McpServerConfig, McpServerTransport};
+    use super::{McpServerConfig, McpServerTransport, DEFAULT_MCP_SERVER_ENVIRONMENT_ID};
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -732,6 +754,7 @@ mod tests {
                 env: HashMap::new(),
                 cwd,
             },
+            environment_id: DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             startup_timeout: 30,
             tool_timeout: None,
@@ -772,6 +795,30 @@ mod tests {
         assert_eq!(config.command(), "node");
         assert_eq!(config.args(), &["server.js".to_string()]);
         assert_eq!(config.startup_timeout, 42);
+        assert_eq!(config.environment_id, DEFAULT_MCP_SERVER_ENVIRONMENT_ID);
+    }
+
+    #[test]
+    fn parses_explicit_environment_identity_without_deriving_from_cwd() {
+        let config = McpServerConfig::from_value(serde_json::json!({
+            "command": "node",
+            "cwd": "/tmp/other",
+            "environmentId": "remote"
+        }))
+        .unwrap();
+
+        assert_eq!(config.environment_id, "remote");
+    }
+
+    #[test]
+    fn rejects_empty_environment_identity() {
+        let error = McpServerConfig::from_value(serde_json::json!({
+            "command": "node",
+            "environment_id": "  "
+        }))
+        .unwrap_err();
+
+        assert!(error.contains("environment_id"));
     }
 
     #[test]

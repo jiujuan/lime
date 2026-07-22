@@ -7,7 +7,7 @@ import type {
 import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
 import type { TurnSteerParams } from "@limecloud/app-server-client";
 import type { ModeKind } from "@limecloud/app-server-client";
-import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime/objectiveClient";
+import { setThreadGoal } from "@/lib/api/agentRuntime/threadGoalClient";
 import { modelRegistryApi } from "@/lib/api/modelRegistry";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 import {
@@ -25,6 +25,7 @@ import type {
   AssistantDraftState,
   SendMessageObserver,
   SessionModelPreference,
+  ThreadGoalInput,
 } from "./agentChatShared";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { AgentAccessMode } from "./agentChatStorage";
@@ -41,7 +42,6 @@ import {
   extractAgentUiPerformanceTraceMetadata,
   mergeAgentUiPerformanceTraceMetadata,
 } from "./agentStreamPerformanceMetrics";
-import { extractInputbarManagedObjectiveText } from "../components/Inputbar/utils/inputbarModeRequestMetadata";
 
 type MessageParts = NonNullable<Message["contentParts"]>;
 
@@ -83,6 +83,7 @@ interface ExecuteAgentStreamSubmitOptions {
   systemPrompt?: string;
   requestMetadata?: Record<string, unknown>;
   collaborationMode?: ModeKind;
+  threadGoal?: ThreadGoalInput;
   assistantDraft?: AssistantDraftState;
   targetSessionId?: string;
   skipSessionRestore?: boolean;
@@ -172,6 +173,28 @@ async function resolveSubmitModelPolicy(options: {
   }
 }
 
+async function setAcceptedThreadGoal(
+  threadId: string,
+  threadGoal: ThreadGoalInput | undefined,
+): Promise<void> {
+  if (!threadGoal) {
+    return;
+  }
+  try {
+    await setThreadGoal({
+      threadId,
+      objective: threadGoal.objective,
+      status: "active",
+      tokenBudget: threadGoal.tokenBudget,
+    });
+  } catch (error) {
+    console.error(
+      "[AgentStream] 用户 Turn 已接受，但设置 ThreadGoal 失败:",
+      error,
+    );
+  }
+}
+
 export async function executeAgentStreamSubmit(
   options: ExecuteAgentStreamSubmitOptions,
 ) {
@@ -200,6 +223,7 @@ export async function executeAgentStreamSubmit(
     systemPrompt,
     requestMetadata,
     collaborationMode,
+    threadGoal,
     assistantDraft,
     targetSessionId,
     skipSessionRestore,
@@ -291,6 +315,14 @@ export async function executeAgentStreamSubmit(
         ? { clientUserMessageId: clientUserMessageId.trim() }
         : {}),
     };
+    if (threadGoal) {
+      await setThreadGoal({
+        threadId: resolvedThreadId,
+        objective: threadGoal.objective,
+        status: "active",
+        tokenBudget: threadGoal.tokenBudget,
+      });
+    }
     callbacks.clearOptimisticItem();
     callbacks.clearOptimisticTurn();
     const response = await runtime.steerTurn(params);
@@ -342,9 +374,6 @@ export async function executeAgentStreamSubmit(
     assistantDraft?.fallbackContent === undefined
       ? null
       : assistantDraft.fallbackContent.trim();
-  const managedObjectiveText = extractInputbarManagedObjectiveText(
-    resolvedRequestMetadata,
-  );
   const eventBindingWorkspaceId = resolvedWorkspaceId ?? "";
 
   const unlisten = await registerAgentStreamTurnEventBinding({
@@ -433,7 +462,6 @@ export async function executeAgentStreamSubmit(
       const submitOp = buildAgentStreamSubmitOp({
         content,
         images,
-        activeSessionId: resolvedActiveSessionId,
         activeThreadId: resolvedThreadId,
         clientUserMessageId,
         eventName,
@@ -450,19 +478,8 @@ export async function executeAgentStreamSubmit(
         modelCapabilitySummary,
       });
 
-      if (managedObjectiveText) {
-        try {
-          await setAgentRuntimeObjective({
-            sessionId: resolvedActiveSessionId,
-            workspaceId: resolvedWorkspaceId,
-            objectiveText: managedObjectiveText,
-            successCriteria: [],
-          });
-        } catch (error) {
-          console.warn("[AgentStream] 写入追求目标失败，继续发送消息:", error);
-        }
-      }
       await runtime.submitOp(submitOp);
+      await setAcceptedThreadGoal(resolvedThreadId, threadGoal);
     },
   });
 }

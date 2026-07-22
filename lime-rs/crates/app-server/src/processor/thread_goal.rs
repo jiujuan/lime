@@ -15,6 +15,7 @@ impl RequestProcessor {
     ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let params: ThreadGoalSetParams = parse_params(params)?;
+        self.resolve_v2_thread_session(&params.thread_id).await?;
         let goal = self
             .runtime
             .set_thread_goal(params)

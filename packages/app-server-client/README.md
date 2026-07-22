@@ -19,6 +19,8 @@ Current scope:
   state, including `item/agentMessage/delta`;
 - keep `agentSession/event` only as the raw `media.read.*` side-channel;
 - use `AppServerConnection` for typed App Server request / response flows;
+- resolve or reject typed reverse `serverRequest` messages by their outer JSON-RPC
+  request id; missing response wiring fails closed;
 - use `AgentRuntimeClient` as the standard facade for runtime turn, action,
   thread read, evidence export, and event subscription flows.
 
@@ -123,6 +125,11 @@ Lifecycle delivery uses the direct v2 server notifications
 `thread/started`, `turn/started`, `turn/completed`, `item/started`,
 `item/completed`, and `item/agentMessage/delta`. The raw event subscription is
 reserved for `media.read.*`; it is not a second lifecycle protocol.
+
+Typed reverse requests are answered through the same connection that received
+them. Use `respondServerRequest(requestId, result)` or
+`rejectServerRequest(requestId, error)`; do not reconstruct an action payload
+from thread or turn metadata, and do not fall back to `agentSession/action/respond`.
 
 This package does not import Lime Rust crates, Tauri commands, Agent DTOs, or
 renderer UI code. Electron apps should use it from main / preload boundaries and

@@ -516,6 +516,49 @@ fn worker_adapter_times_out_worker_process() {
 }
 
 #[test]
+fn worker_adapter_preserves_failed_response_when_worker_exits_non_zero() {
+    let Some(node) = node_available() else {
+        return;
+    };
+    let temp = tempfile::tempdir().expect("temp dir");
+    let worker = temp.path().join("worker.mjs");
+    fs::write(
+        &worker,
+        r#"
+process.stdout.write(JSON.stringify({
+  status: "failed",
+  error: { code: "HOST_MANAGED_GENERATION_REQUIRED" }
+}) + "\n");
+process.exitCode = 1;
+"#,
+    )
+    .expect("worker");
+    let contract = PluginTaskRuntimeContract {
+        enabled: true,
+        package_root_path: Some(temp.path().to_string_lossy().to_string()),
+        worker_entrypoint: Some("./worker.mjs".to_string()),
+        output_artifact_kind: Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND.to_string()),
+        ..PluginTaskRuntimeContract::default()
+    };
+
+    let core = RuntimeCore::default();
+    let error = core
+        .run_plugin_worker(
+            PluginWorkerRunRequest::new(temp.path(), contract, json!({})).with_timeout_ms(1_000),
+        )
+        .expect_err("failed worker response");
+
+    assert!(
+        error
+            .to_string()
+            .contains("HOST_MANAGED_GENERATION_REQUIRED"),
+        "{error}"
+    );
+    assert!(!error.to_string().contains("exited with"), "{error}");
+    assert!(!node.is_empty());
+}
+
+#[test]
 fn worker_adapter_drains_large_stdout_while_waiting_for_exit() {
     let Some(node) = node_available() else {
         return;

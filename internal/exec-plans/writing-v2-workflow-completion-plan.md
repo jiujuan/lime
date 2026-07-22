@@ -257,3 +257,12 @@
 - 2026-07-02：按最新产品决策反向收口：workflow 不是右侧展示模型，改为只写 JSONL audit log。App Server 将 `workflow.*` 分流到 `sessions/session_<id>/workflow-events.jsonl`；`agentSession/read` 和 renderer event stream 不再暴露 workflow facts；Article Editor 与 GUI fixture 改为断言 workflow rail 缺席。
 - 2026-07-02：纠正实现口径：`src/features/agent-app/fixtures` 不再作为 production current，fixture 移入 `src/features/plugin/testing/fixtures`；真实内容工厂 Plugin worker 仍未实现，当前 smoke 只能作为 test-only evidence。
 - 2026-07-02：纠正宿主 / 插件边界：撤回 host-side 内容工厂正文生成模块方向；App Server 只保留 worker artifact partial 通用透传和 JSONL 审计，不再通过最终 `documentText` 回切伪流式。真实正文生成必须进入内容工厂 Plugin worker / 插件包。
+
+## 2026-07-22 Plugin worker scoped model cache Gate B
+
+- Verification Contract：`budget:normal / P1`；current 主链为 `Electron Desktop Host -> App Server JSON-RPC -> RuntimeCore -> Provider metadata -> Plugin worker -> Thread/Turn/Item -> Article Editor`。本轮只跑 services/App Server 定向测试与单场景 Electron Gate B；不进入 `internal/refactor/v1/**`，不接管并行 provider route、canonical store、protocol 或 renderer 热区。
+- Happy Path：`modelProvider/fetchModels` 写入 credential fingerprint scoped cache；单 enabled key 的 runtime 读取同一 scoped metadata，调用 `/v1/chat/completions`，worker turn 完成并把正文投影到 Article Editor。失败边界：需要 key 但 credential 缺失或多 key 歧义时不读取 unscoped/其它 credential cache；明确 keyless Provider 才允许读取 unscoped cache。
+- 实现：`ModelRegistryService::resolve_provider_model_metadata` 按 API key fingerprint 读取 scoped cache；App Server 仅在 Provider 恰好有一个 enabled key 时通过 `select_runtime_credential_by_ref` 取得 cache credential；Ollama/LM Studio 等 keyless Provider 保留 unscoped cache。多 key 当前保持 cache fail-closed，不回退跨 credential 搜索。
+- 验证：services metadata 4/4、App Server metadata 3/3、sidecar rebuild、局部 rustfmt 与 diff check 通过。Gate B `root-plugin-worker-generation-v5` 通过：fixture 收到 2 次 `/v1/chat/completions`，worker read model 为 `completed`，EventLog 落 `turn.completed`，Article Editor 正文、编辑、刷新和重开恢复均通过。summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/root-plugin-worker-generation-v5-summary.json`。
+- 分类：credential-scoped cache、keyless cache、RuntimeCore Plugin worker 与 Article Editor 投影均为 `current`；本刀未新增 `compat / deprecated / dead` surface。
+- 下一刀：正式支持多 enabled key 时，把 route resolution 拆成 routing/assembly 两阶段；最终 provider/model 确定后只选择一次 credential，并让 metadata、route evidence 与 execution 复用同一 durable ref。

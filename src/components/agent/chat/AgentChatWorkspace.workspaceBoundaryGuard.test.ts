@@ -355,6 +355,16 @@ describe("AgentChatWorkspace general workbench harness surface boundary", () => 
     expect(ownerSource).toContain("onPrepareMcpTargets");
     expect(ownerSource).toContain("onSubmitCodeFixPrompt");
     expect(ownerSource).toContain("onReplayPendingRequest");
+    expect(ownerSource).toContain("threadGoal");
+    for (const retiredObjectiveSurface of [
+      "onObjectiveChanged",
+      "refreshSessionReadModel",
+      "threadRead.managed_objective",
+      "objectiveClient",
+      "ManagedObjectivePanel",
+    ]) {
+      expect(ownerSource).not.toContain(retiredObjectiveSurface);
+    }
     expect(inputbarCallSource).toContain(
       "generalWorkbenchHarnessPanelBaseProps,",
     );

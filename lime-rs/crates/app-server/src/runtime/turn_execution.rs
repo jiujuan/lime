@@ -4,7 +4,9 @@ use super::event_store::{
 };
 use super::plugin_worker_workflow_cancel::workflow_cancel_events_from_audit_records;
 use super::status::{agent_turn_blocks_queue_resume, agent_turn_is_active, agent_turn_is_terminal};
-use super::turn_start::{user_input_text, validate_user_input, TurnStartRequest};
+use super::turn_start::{
+    user_input_text, validate_user_input, TurnStartInputKind, TurnStartRequest,
+};
 use super::workflow::events::{WORKFLOW_RUN_RESUMING, WORKFLOW_STEP_RESUMING};
 use super::*;
 use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload};
@@ -642,8 +644,15 @@ impl RuntimeCore {
     where
         P: Into<TurnStartRequest>,
     {
-        self.start_turn_inner(params.into(), host, None, true, false)
-            .await
+        self.start_turn_inner(
+            params.into(),
+            host,
+            None,
+            true,
+            false,
+            TurnStartInputKind::User,
+        )
+        .await
     }
 
     /// Admit a v2 turn and return its canonical in-progress identity before the
@@ -656,8 +665,15 @@ impl RuntimeCore {
     where
         P: Into<TurnStartRequest>,
     {
-        self.start_turn_inner(params.into(), host, None, true, true)
-            .await
+        self.start_turn_inner(
+            params.into(),
+            host,
+            None,
+            true,
+            true,
+            TurnStartInputKind::User,
+        )
+        .await
     }
 
     /// Adds user input to the expected active regular turn without creating a
@@ -769,6 +785,7 @@ impl RuntimeCore {
         })
     }
 
+    #[cfg(test)]
     pub(crate) async fn start_turn_with_event_callback<P>(
         &self,
         params: P,
@@ -778,21 +795,15 @@ impl RuntimeCore {
     where
         P: Into<TurnStartRequest>,
     {
-        self.start_turn_inner(params.into(), host, Some(event_callback), true, false)
-            .await
-    }
-
-    pub(crate) async fn start_turn_with_event_callback_without_auto_continuation<P>(
-        &self,
-        params: P,
-        host: RuntimeHostContext,
-        event_callback: &mut RuntimeEventCallback<'_>,
-    ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError>
-    where
-        P: Into<TurnStartRequest>,
-    {
-        Box::pin(self.start_turn_inner(params.into(), host, Some(event_callback), false, false))
-            .await
+        self.start_turn_inner(
+            params.into(),
+            host,
+            Some(event_callback),
+            true,
+            false,
+            TurnStartInputKind::User,
+        )
+        .await
     }
 
     pub(in crate::runtime) async fn start_turn_inner(
@@ -800,8 +811,9 @@ impl RuntimeCore {
         mut params: TurnStartRequest,
         host: RuntimeHostContext,
         mut event_callback: Option<&mut RuntimeEventCallback<'_>>,
-        enable_auto_continuation: bool,
+        enable_goal_continuation: bool,
         return_after_admission: bool,
+        input_kind: TurnStartInputKind,
     ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError> {
         self.ensure_current_session_hydrated(&params.session_id)
             .await?;
@@ -814,11 +826,13 @@ impl RuntimeCore {
                     params.runtime_options.take(),
                 ));
         }
-        if let Some(output) = self
-            .steer_existing_actor_turn(&params, event_callback.as_deref_mut())
-            .await?
-        {
-            return Ok(output);
+        if !input_kind.is_agent_only() {
+            if let Some(output) = self
+                .steer_existing_actor_turn(&params, event_callback.as_deref_mut())
+                .await?
+            {
+                return Ok(output);
+            }
         }
         let mut pre_turn_events = self
             .maybe_auto_compact_before_turn(&params.session_id, params.runtime_options.as_ref())
@@ -958,17 +972,23 @@ impl RuntimeCore {
             });
         }
 
-        let provider_input = agent_runtime::reply_input::RuntimeReplyInput::try_from_user_parts(
-            params.input.clone(),
-            |media| {
-                super::input_media::resolve_runtime_input_media(
-                    media,
-                    self.sidecar_store.as_deref(),
-                    &params.session_id,
-                )
-            },
-        )
-        .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
+        let mut provider_input =
+            agent_runtime::reply_input::RuntimeReplyInput::try_from_user_parts(
+                params.input.clone(),
+                |media| {
+                    super::input_media::resolve_runtime_input_media(
+                        media,
+                        self.sidecar_store.as_deref(),
+                        &params.session_id,
+                    )
+                },
+            )
+            .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
+        provider_input.agent_only = input_kind.is_agent_only();
+        let agent_only_input_event = input_kind
+            .is_agent_only()
+            .then(|| super::turn_input_events::runtime_event_for_goal_continuation(&params.input))
+            .flatten();
         self.prepare_media_prompt_context_from_provider_input(&mut params, &provider_input);
 
         let (session, previous_session, turn) = {
@@ -1190,6 +1210,20 @@ impl RuntimeCore {
                 turn.turn_id.clone(),
                 self.event_hub.clone(),
             );
+            if let Some(event) = agent_only_input_event.clone() {
+                if let Err(error) = sink.emit(event) {
+                    let _ = submitted
+                        .session
+                        .interrupt_for_turn(Some(&turn.turn_id))
+                        .await;
+                    self.rollback_started_turn(
+                        &session.session_id,
+                        &turn.turn_id,
+                        previous_session,
+                    );
+                    return Err(error);
+                }
+            }
             if let Err(error) = sink.emit(RuntimeEvent::new(
                 "turn.accepted",
                 json!({
@@ -1250,16 +1284,24 @@ impl RuntimeCore {
             let session_id = session.session_id.clone();
             let turn_id = turn.turn_id.clone();
             let previous_session_for_task = previous_session.clone();
-            let auto_continuation_host = request_host.clone();
+            let goal_continuation_host = request_host.clone();
             let pending_work_host = request_host.clone();
             let pending_work_runtime_options = request.runtime_options.clone();
             tokio::spawn(async move {
                 tokio::task::yield_now().await;
                 let mut sink = sink;
-                if let Err(error) = runtime
+                let drive_result = runtime
                     .drive_backend_to_completion(submitted, &mut sink)
-                    .await
-                {
+                    .await;
+                let drive_result = match drive_result {
+                    Ok(()) => runtime.ensure_admitted_turn_terminal_after_task(
+                        &session_id,
+                        &turn_id,
+                        &mut sink,
+                    ),
+                    Err(error) => Err(error),
+                };
+                if let Err(error) = drive_result {
                     if sink.emitted_count() > 0 {
                         let _ = sink.emit_failure(&error);
                         runtime.wake_pending_session_work_if_turn_terminal(
@@ -1277,25 +1319,23 @@ impl RuntimeCore {
                     }
                     return;
                 }
-                runtime.wake_pending_session_work_if_turn_terminal(
-                    &session_id,
-                    &turn_id,
-                    pending_work_host,
-                    pending_work_runtime_options,
-                );
-                let auto_runtime = runtime.clone();
-                let auto_hub = runtime.event_hub.clone();
-                let auto_session_id = session_id.clone();
+                runtime
+                    .schedule_pending_agent_mailbox_triggers(
+                        session_id.clone(),
+                        pending_work_host,
+                        pending_work_runtime_options,
+                    )
+                    .await;
+                let continuation_runtime = runtime.clone();
+                let continuation_hub = runtime.event_hub.clone();
+                let continuation_session_id = session_id.clone();
+                let runtime_handle = tokio::runtime::Handle::current();
                 let _ = tokio::task::spawn_blocking(move || {
-                    let runtime = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("build managed objective continuation runtime");
-                    runtime.block_on(
-                        auto_runtime.maybe_submit_managed_objective_auto_continuation_with_hub(
-                            &auto_session_id,
-                            auto_continuation_host,
-                            auto_hub,
+                    runtime_handle.block_on(
+                        continuation_runtime.maybe_continue_thread_goal_if_idle_with_hub(
+                            &continuation_session_id,
+                            goal_continuation_host,
+                            continuation_hub,
                         ),
                     );
                 })
@@ -1324,6 +1364,9 @@ impl RuntimeCore {
                 turn.turn_id.clone(),
                 event_callback,
             );
+            if let Some(event) = agent_only_input_event.clone() {
+                sink.emit(event)?;
+            }
             sink.emit(RuntimeEvent::new(
                 "turn.accepted",
                 json!({
@@ -1377,6 +1420,9 @@ impl RuntimeCore {
             events
         } else {
             let mut sink = CollectingRuntimeEventSink::default();
+            if let Some(event) = agent_only_input_event {
+                sink.emit(event)?;
+            }
             if let Some(event) = super::expert_role_switch::runtime_event_from_request_metadata(
                 request.runtime_metadata(),
             ) {
@@ -1461,18 +1507,17 @@ impl RuntimeCore {
         let response_turn = self
             .stored_turn(&session.session_id, &turn.turn_id)?
             .unwrap_or(turn);
-        self.wake_pending_session_work_if_turn_terminal(
-            &session.session_id,
-            &response_turn.turn_id,
-            request_host.clone(),
-            request.runtime_options.clone(),
-        );
-        if enable_auto_continuation && agent_turn_is_terminal(response_turn.status) {
-            self.maybe_submit_managed_objective_auto_continuation(
-                &session.session_id,
-                request_host,
+        if input_kind.runs_idle_scheduler() && agent_turn_is_terminal(response_turn.status) {
+            self.schedule_pending_agent_mailbox_triggers(
+                session.session_id.clone(),
+                request_host.clone(),
+                request.runtime_options.clone(),
             )
             .await;
+        }
+        if enable_goal_continuation && response_turn.status == AgentTurnStatus::Completed {
+            self.maybe_continue_thread_goal_if_idle(&session.session_id, request_host)
+                .await;
         }
 
         Ok(RuntimeCoreOutput {
@@ -1821,8 +1866,17 @@ impl RuntimeCore {
                         RuntimeCoreError::Backend("runtime session task completion channel closed".to_string())
                     })?;
                     match outcome {
-                        Ok(RuntimeSessionTaskOutcome::Completed)
-                        | Ok(RuntimeSessionTaskOutcome::Shutdown) => return Ok(()),
+                        Ok(RuntimeSessionTaskOutcome::Completed) => return Ok(()),
+                        Ok(RuntimeSessionTaskOutcome::Shutdown) => {
+                            sink.emit(RuntimeEvent::new(
+                                "turn.canceled",
+                                json!({
+                                    "reason": "session_task_shutdown",
+                                    "source": "session_loop",
+                                }),
+                            ))?;
+                            return Ok(());
+                        }
                         Ok(
                             outcome @ (RuntimeSessionTaskOutcome::Interrupted
                             | RuntimeSessionTaskOutcome::Replaced),
@@ -1851,6 +1905,28 @@ impl RuntimeCore {
                 }
             }
         }
+    }
+
+    fn ensure_admitted_turn_terminal_after_task(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        let turn = self
+            .stored_turn(session_id, turn_id)?
+            .ok_or_else(|| RuntimeCoreError::TurnNotActive(turn_id.to_string()))?;
+        if agent_turn_is_terminal(turn.status) {
+            return Ok(());
+        }
+        sink.emit(RuntimeEvent::new(
+            "turn.completed",
+            json!({
+                "backend": "runtime_core",
+                "reason": "session_task_completed",
+                "source": "session_loop",
+            }),
+        ))
     }
 
     async fn execute_backend_via_session_loop(

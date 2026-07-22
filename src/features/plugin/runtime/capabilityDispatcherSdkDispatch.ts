@@ -154,10 +154,7 @@ export async function dispatchAgent(
       sessionId ? { ...input, taskId, sessionId } : taskId,
     );
   }
-  if (
-    request.method === "submitHostResponse" ||
-    request.method === "respondAction"
-  ) {
+  if (request.method === "submitHostResponse") {
     return sdk.agent.submitHostResponse(
       readInputRecord(request, request.method) as unknown as Parameters<
         typeof sdk.agent.submitHostResponse

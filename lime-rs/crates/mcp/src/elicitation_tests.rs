@@ -124,7 +124,10 @@ async fn scoped_tools_call_owner_routes_nested_elicitation_without_private_wire_
     .await
     .expect("start Lime MCP client");
     let client = crate::McpBridgeClient::new(Arc::new(client_service), Duration::from_secs(5));
-    let scope = call_scope();
+    let scope = call_scope()
+        .with_environment_id("local")
+        .with_snapshot_generation(17)
+        .with_auth_scopes(vec!["search.read".to_string()]);
     let call_task = tokio::spawn(async move {
         client
             .call_tool(
@@ -140,6 +143,12 @@ async fn scoped_tools_call_owner_routes_nested_elicitation_without_private_wire_
     let request = receive_request(&mut requests).await;
     assert_eq!(request.thread_id, "thread-1");
     assert_eq!(request.turn_id.as_deref(), Some("turn-1"));
+    assert_eq!(request.environment_id(), Some("local"));
+    assert_eq!(request.snapshot_generation(), Some(17));
+    assert_eq!(
+        request.auth_scopes(),
+        Some(["search.read".to_string()].as_slice())
+    );
     assert_eq!(
         request.meta,
         Some(json!({ "persist": ["session", "always"] }))

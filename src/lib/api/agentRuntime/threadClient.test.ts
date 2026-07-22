@@ -17,7 +17,6 @@ import { listenAgentRuntimeEvent } from "../agentRuntimeEvents";
 import { resetAgentRuntimeEventSequenceGatesForTests } from "./eventSequenceGate";
 import { projectAppServerAgentEventPayload } from "./appServerEventStream";
 import {
-  appServerActionRespondParamsFromRequest,
   createThreadClient,
   type AgentRuntimeAppServerClient,
   type AgentRuntimeLifecycleClient,
@@ -123,28 +122,6 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       notifications: [],
     }),
     cancelTurn: vi.fn().mockResolvedValue({}),
-    replayAction: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        action: {
-          type: "action_required",
-          requestId: "request-1",
-          actionType: "ask_user",
-          prompt: "请选择执行模式",
-          scope: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            turnId: "turn-1",
-          },
-        },
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
     compactAgentSession: vi.fn().mockResolvedValue({
       id: 1,
       result: {
@@ -181,7 +158,6 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
-    respondAction: vi.fn().mockResolvedValue({}),
     drainEvents: vi.fn().mockResolvedValue([]),
     listAgentSessionFileCheckpoints: vi.fn().mockResolvedValue({
       id: 1,
@@ -280,13 +256,6 @@ function standardRuntimeClientMock(): AgentRuntimeLifecycleClient {
       id: 2,
       result: {},
       response: { id: 2, result: {} },
-      messages: [],
-      notifications: [],
-    }),
-    respondAction: vi.fn().mockResolvedValue({
-      id: 3,
-      result: {},
-      response: { id: 3, result: {} },
       messages: [],
       notifications: [],
     }),
@@ -474,7 +443,7 @@ describe("agentRuntime threadClient", () => {
     expect(appServerClient.runThreadShellCommand).not.toHaveBeenCalled();
   });
 
-  it("replay request 应走 App Server current action/replay 且不调用 legacy command gateway", async () => {
+  it("replay request 无当前 typed server-request 时应 fail closed 且不调用旧 action/replay", async () => {
     const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const appServerClient = appServerClientMock();
     const client = createThreadClient({
@@ -488,21 +457,7 @@ describe("agentRuntime threadClient", () => {
         session_id: "session-1",
         request_id: "request-1",
       }),
-    ).resolves.toMatchObject({
-      type: "action_required",
-      request_id: "request-1",
-      action_type: "ask_user",
-      prompt: "请选择执行模式",
-      scope: {
-        session_id: "session-1",
-        thread_id: "thread-1",
-        turn_id: "turn-1",
-      },
-    });
-    expect(appServerClient.replayAction).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      requestId: "request-1",
-    });
+    ).resolves.toBeNull();
     expect(invokeCommand).not.toHaveBeenCalled();
   });
 
@@ -573,16 +528,8 @@ describe("agentRuntime threadClient", () => {
     });
   });
 
-  it("replay current 收到假成功或缺字段结果时应 fail closed", async () => {
+  it("replay current 缺少 typed pending request 时应返回 null", async () => {
     const appServerClient = appServerClientMock();
-    vi.mocked(appServerClient.replayAction).mockResolvedValueOnce(
-      malformedAppServerResult({
-        action: {
-          type: "action_required",
-          actionType: "tool_confirmation",
-        },
-      }),
-    );
     const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createThreadClient({
       appServerClient,
@@ -595,9 +542,7 @@ describe("agentRuntime threadClient", () => {
         session_id: "session-1",
         request_id: "request-1",
       }),
-    ).rejects.toThrow(
-      "agentSession/action/replay did not return replayed action view",
-    );
+    ).resolves.toBeNull();
     expect(invokeCommand).not.toHaveBeenCalled();
   });
 
@@ -820,14 +765,6 @@ describe("agentRuntime threadClient", () => {
       expect.objectContaining({ result: { turnId: "turn-1" } }),
     );
     await expect(
-      client.respondAgentRuntimeAction({
-        session_id: "session-1",
-        request_id: "request-1",
-        action_type: "ask_user",
-        confirmed: true,
-      }),
-    ).resolves.toBeUndefined();
-    await expect(
       client.getAgentRuntimeThreadRead(" session-1 "),
     ).resolves.toEqual(
       expect.objectContaining({
@@ -849,12 +786,6 @@ describe("agentRuntime threadClient", () => {
       threadId: "session-1",
       turnId: "turn-1",
     });
-    expect(standardRuntimeClient.respondAction).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      requestId: "request-1",
-      actionType: "ask_user",
-      confirmed: true,
-    });
     expect(appServerClient.readThread).toHaveBeenCalledWith({
       threadId: "session-1",
       includeTurns: true,
@@ -862,7 +793,6 @@ describe("agentRuntime threadClient", () => {
     expect(appServerClient.startTurn).not.toHaveBeenCalled();
     expect(appServerClient.steerTurn).not.toHaveBeenCalled();
     expect(appServerClient.cancelTurn).not.toHaveBeenCalled();
-    expect(appServerClient.respondAction).not.toHaveBeenCalled();
     expect(standardRuntimeClient.readThread).not.toHaveBeenCalled();
     expect(invokeCommand).not.toHaveBeenCalled();
   });
@@ -1495,7 +1425,7 @@ describe("agentRuntime threadClient", () => {
     expect(appServerClient.cancelTurn).not.toHaveBeenCalled();
   });
 
-  it("App Server 可用时 respond action 应进入 agentSession/action/respond", async () => {
+  it("typed pending 不存在时 respond action 应 fail closed，不回退旧 action/respond", async () => {
     const appServerClient = appServerClientMock();
     const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createThreadClient({
@@ -1504,37 +1434,16 @@ describe("agentRuntime threadClient", () => {
       isAppServerTurnLifecycleAvailable: () => true,
     });
 
-    await client.respondAgentRuntimeAction({
-      session_id: "session-1",
-      request_id: "req-1",
-      action_type: "ask_user",
-      confirmed: true,
-      response: '{"answer":"继续"}',
-      user_data: { answer: "继续" },
-      metadata: { source: "inline-action" },
-      event_name: "agentSession/event/session-1",
-      action_scope: {
+    await expect(
+      client.respondAgentRuntimeAction({
         session_id: "session-1",
-        thread_id: "thread-1",
-        turn_id: "turn-1",
-      },
-    });
-
-    expect(appServerClient.respondAction).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      requestId: "req-1",
-      actionType: "ask_user",
-      confirmed: true,
-      response: '{"answer":"继续"}',
-      userData: { answer: "继续" },
-      metadata: { source: "inline-action" },
-      eventName: "agentSession/event/session-1",
-      actionScope: {
-        sessionId: "session-1",
-        threadId: "thread-1",
-        turnId: "turn-1",
-      },
-    });
+        request_id: "req-1",
+        action_type: "ask_user",
+        confirmed: true,
+      }),
+    ).rejects.toThrow(
+      "Typed server request is no longer pending; generic agentSession/action/respond is retired.",
+    );
     expect(invokeCommand).not.toHaveBeenCalled();
   });
 
@@ -1629,59 +1538,6 @@ describe("agentRuntime threadClient", () => {
     );
 
     expect(invokeCommand).not.toHaveBeenCalled();
-    expect(appServerClient.respondAction).not.toHaveBeenCalled();
-  });
-
-  it("App Server respond action 应先注册 event drain route 再发送 action/respond", async () => {
-    const appServerClient = appServerClientMock();
-    vi.mocked(appServerClient.drainEvents).mockResolvedValue([]);
-    vi.mocked(appServerClient.respondAction).mockImplementationOnce(
-      async () => {
-        expect(appServerClient.drainEvents).toHaveBeenCalled();
-        return {
-          id: 2,
-          result: {},
-          response: {
-            id: 2,
-            result: {},
-          },
-          messages: [],
-          notifications: [],
-        };
-      },
-    );
-    const client = createThreadClient({
-      appServerClient,
-      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
-      isAppServerTurnLifecycleAvailable: () => true,
-      enableAppServerEventDrain: true,
-    });
-
-    await client.respondAgentRuntimeAction({
-      session_id: "session-1",
-      request_id: "req-1",
-      action_type: "tool_confirmation",
-      decision: "allow_for_session",
-      event_name: "agent_stream_message-1",
-      action_scope: {
-        session_id: "session-1",
-        thread_id: "thread-1",
-        turn_id: "turn-1",
-      },
-    });
-
-    expect(appServerClient.respondAction).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      requestId: "req-1",
-      actionType: "tool_confirmation",
-      decision: "allow_for_session",
-      eventName: "agent_stream_message-1",
-      actionScope: {
-        sessionId: "session-1",
-        threadId: "thread-1",
-        turnId: "turn-1",
-      },
-    });
   });
 
   it("request projection 应在未传可选项时保持精简 App Server 参数", () => {
@@ -1697,20 +1553,6 @@ describe("agentRuntime threadClient", () => {
       additionalContext: createApplicationAdditionalContext({
         rendererEventName: "agentSession/event/session-1",
       }),
-    });
-
-    expect(
-      appServerActionRespondParamsFromRequest({
-        session_id: "session-1",
-        request_id: "req-1",
-        action_type: "tool_confirmation",
-        decision: "cancel",
-      }),
-    ).toEqual({
-      sessionId: "session-1",
-      requestId: "req-1",
-      actionType: "tool_confirmation",
-      decision: "cancel",
     });
   });
 });

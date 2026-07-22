@@ -97,6 +97,19 @@ export function resolveWorkspaceShellChromeRuntime({
     !hasHomeConversationActivity &&
     !normalizedInitialSessionId;
 
+  if (shouldRenderTaskCenterHomeSurface && typeof console !== "undefined") {
+    console.warn("[FLICKER-DEBUG] shouldRenderTaskCenterHomeSurface=true", {
+      shouldRenderTaskCenterEmbeddedHome,
+      shouldSuppressTaskCenterDraftContent,
+      sessionId,
+      normalizedInitialSessionId,
+      isSending,
+      isPreparingSend,
+      hasDisplayMessages,
+      queuedTurnCount,
+    });
+  }
+
   const showChatLayout = shouldRenderTaskCenterHomeSurface
     ? false
     : shouldShowChatLayout({

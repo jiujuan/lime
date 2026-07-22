@@ -99,6 +99,35 @@ fn trace_writer_persists_summary_only_events() {
 }
 
 #[test]
+fn trace_writer_clear_session_is_scoped_and_idempotent() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = TraceEventWriter::new(temp.path()).expect("writer");
+    writer
+        .append_agent_events(&[
+            traced_event("trace-a", "session-a", 1),
+            traced_event("trace-b", "session-b", 1),
+        ])
+        .expect("append traces");
+
+    writer.clear_session("session-a").expect("clear session");
+    writer
+        .clear_session("session-a")
+        .expect("clear missing session");
+
+    assert!(writer
+        .read_raw_trace_events("session-a", "trace-a")
+        .expect("cleared trace")
+        .is_empty());
+    assert_eq!(
+        writer
+            .read_raw_trace_events("session-b", "trace-b")
+            .expect("retained trace")
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn trace_writer_exports_summary_only_zip() {
     let temp = tempfile::tempdir().expect("tempdir");
     let trace_root = temp.path().join("trace-store");

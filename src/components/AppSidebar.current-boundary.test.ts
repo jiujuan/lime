@@ -137,10 +137,11 @@ describe("AppSidebar current App Server session boundary", () => {
     expect(updateFunction).toContain("appServerClient.updateSession(");
     expect(lifecycleFunctions).toContain("appServerClient.archiveThread(");
     expect(lifecycleFunctions).toContain("appServerClient.unarchiveThread(");
-    expect(lifecycleFunctions).toContain("appServerClient.deleteSession(");
-    expect(lifecycleFunctions).toContain(
-      "agentSession/delete did not confirm deletion",
-    );
+    expect(lifecycleFunctions).toContain("resolveCanonicalThreadId(");
+    expect(lifecycleFunctions).toContain('"thread/delete"');
+    expect(lifecycleFunctions).toContain("appServerClient.deleteThread(");
+    expect(source).not.toContain("appServerClient.deleteSession(");
+    expect(source).not.toContain('"agentSession/delete"');
     expect(source).not.toContain("archiveManySessions");
     expect(source).not.toContain('"agent_runtime_list_sessions"');
     expect(source).not.toContain('"agent_runtime_get_session"');

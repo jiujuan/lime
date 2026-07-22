@@ -98,8 +98,8 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
       params: "required",
     },
     {
-      name: "deleteSession",
-      method: protocol.METHOD_AGENT_SESSION_DELETE,
+      name: "deleteThread",
+      method: protocol.METHOD_THREAD_DELETE,
       kind: "request",
       params: "required",
     },
@@ -1522,6 +1522,12 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
     {
       name: "startSession",
       method: protocol.METHOD_THREAD_START,
+      kind: "request",
+      params: "required",
+    },
+    {
+      name: "forkThread",
+      method: protocol.METHOD_THREAD_FORK,
       kind: "request",
       params: "required",
     },

@@ -2,10 +2,12 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub const METHOD_THREAD_START: &str = "thread/start";
+pub const METHOD_THREAD_FORK: &str = "thread/fork";
 pub const METHOD_THREAD_RESUME: &str = "thread/resume";
 pub const METHOD_THREAD_READ: &str = "thread/read";
 pub const METHOD_THREAD_LIST: &str = "thread/list";
 pub const METHOD_THREAD_ARCHIVE: &str = "thread/archive";
+pub const METHOD_THREAD_DELETE: &str = "thread/delete";
 pub const METHOD_THREAD_UNARCHIVE: &str = "thread/unarchive";
 pub const METHOD_THREAD_TURNS_LIST: &str = "thread/turns/list";
 pub const METHOD_THREAD_ITEMS_LIST: &str = "thread/items/list";
@@ -20,6 +22,7 @@ pub const METHOD_TURN_STEER: &str = "turn/steer";
 pub const METHOD_TURN_INTERRUPT: &str = "turn/interrupt";
 pub const METHOD_THREAD_STARTED: &str = "thread/started";
 pub const METHOD_THREAD_ARCHIVED: &str = "thread/archived";
+pub const METHOD_THREAD_DELETED: &str = "thread/deleted";
 pub const METHOD_THREAD_UNARCHIVED: &str = "thread/unarchived";
 pub const METHOD_TURN_STARTED: &str = "turn/started";
 pub const METHOD_TURN_COMPLETED: &str = "turn/completed";
@@ -42,6 +45,8 @@ pub const METHOD_ITEM_TOOL_REQUEST_USER_INPUT: &str = "item/tool/requestUserInpu
 pub enum Method {
     #[serde(rename = "thread/start")]
     ThreadStart,
+    #[serde(rename = "thread/fork")]
+    ThreadFork,
     #[serde(rename = "thread/resume")]
     ThreadResume,
     #[serde(rename = "thread/read")]
@@ -50,6 +55,8 @@ pub enum Method {
     ThreadList,
     #[serde(rename = "thread/archive")]
     ThreadArchive,
+    #[serde(rename = "thread/delete")]
+    ThreadDelete,
     #[serde(rename = "thread/unarchive")]
     ThreadUnarchive,
     #[serde(rename = "thread/turns/list")]
@@ -80,10 +87,12 @@ impl Method {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::ThreadStart => METHOD_THREAD_START,
+            Self::ThreadFork => METHOD_THREAD_FORK,
             Self::ThreadResume => METHOD_THREAD_RESUME,
             Self::ThreadRead => METHOD_THREAD_READ,
             Self::ThreadList => METHOD_THREAD_LIST,
             Self::ThreadArchive => METHOD_THREAD_ARCHIVE,
+            Self::ThreadDelete => METHOD_THREAD_DELETE,
             Self::ThreadUnarchive => METHOD_THREAD_UNARCHIVE,
             Self::ThreadTurnsList => METHOD_THREAD_TURNS_LIST,
             Self::ThreadItemsList => METHOD_THREAD_ITEMS_LIST,
@@ -102,10 +111,12 @@ impl Method {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             METHOD_THREAD_START => Some(Self::ThreadStart),
+            METHOD_THREAD_FORK => Some(Self::ThreadFork),
             METHOD_THREAD_RESUME => Some(Self::ThreadResume),
             METHOD_THREAD_READ => Some(Self::ThreadRead),
             METHOD_THREAD_LIST => Some(Self::ThreadList),
             METHOD_THREAD_ARCHIVE => Some(Self::ThreadArchive),
+            METHOD_THREAD_DELETE => Some(Self::ThreadDelete),
             METHOD_THREAD_UNARCHIVE => Some(Self::ThreadUnarchive),
             METHOD_THREAD_TURNS_LIST => Some(Self::ThreadTurnsList),
             METHOD_THREAD_ITEMS_LIST => Some(Self::ThreadItemsList),
@@ -125,10 +136,12 @@ impl Method {
 
 pub const METHODS: &[&str] = &[
     METHOD_THREAD_START,
+    METHOD_THREAD_FORK,
     METHOD_THREAD_RESUME,
     METHOD_THREAD_READ,
     METHOD_THREAD_LIST,
     METHOD_THREAD_ARCHIVE,
+    METHOD_THREAD_DELETE,
     METHOD_THREAD_UNARCHIVE,
     METHOD_THREAD_TURNS_LIST,
     METHOD_THREAD_ITEMS_LIST,
@@ -146,6 +159,7 @@ pub const METHODS: &[&str] = &[
 pub const NOTIFICATION_METHODS: &[&str] = &[
     METHOD_THREAD_STARTED,
     METHOD_THREAD_ARCHIVED,
+    METHOD_THREAD_DELETED,
     METHOD_THREAD_UNARCHIVED,
     METHOD_TURN_STARTED,
     METHOD_TURN_COMPLETED,

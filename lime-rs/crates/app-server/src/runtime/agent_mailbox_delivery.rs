@@ -6,6 +6,7 @@
 use super::*;
 use agent_protocol::{AgentInput as UserInput, ItemId, ThreadId, ThreadTurnsView};
 use app_server_protocol::{AgentSession, AgentTurn, RuntimeOptions};
+use futures::future::BoxFuture;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -65,40 +66,42 @@ impl RuntimeCore {
         }));
     }
 
-    pub(crate) async fn schedule_pending_agent_mailbox_triggers(
+    pub(crate) fn schedule_pending_agent_mailbox_triggers(
         &self,
         session_id: String,
         host: RuntimeHostContext,
         runtime_options: Option<RuntimeOptions>,
-    ) {
-        let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
+    ) -> BoxFuture<'static, ()> {
         let core = self.clone();
-        tokio::spawn(async move {
-            let result = core
-                .process_pending_session_work_with_options(
-                    &session_id,
-                    host,
-                    runtime_options,
-                    Some(admitted_tx),
-                )
-                .await;
-            if let Err(error) = result {
-                if matches!(&error, RuntimeCoreError::PendingRoute { .. }) {
-                    tracing::debug!(
-                        session_id = %session_id,
-                        error = %error,
-                        "background agent mailbox TriggerTurn recovery is waiting for a route"
-                    );
-                } else {
-                    tracing::warn!(
-                        session_id = %session_id,
-                        error = %error,
-                        "background agent mailbox TriggerTurn processing failed"
-                    );
+        Box::pin(async move {
+            let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
+            tokio::spawn(async move {
+                let result = core
+                    .process_pending_session_work_with_options(
+                        &session_id,
+                        host,
+                        runtime_options,
+                        Some(admitted_tx),
+                    )
+                    .await;
+                if let Err(error) = result {
+                    if matches!(&error, RuntimeCoreError::PendingRoute { .. }) {
+                        tracing::debug!(
+                            session_id = %session_id,
+                            error = %error,
+                            "background agent mailbox TriggerTurn recovery is waiting for a route"
+                        );
+                    } else {
+                        tracing::warn!(
+                            session_id = %session_id,
+                            error = %error,
+                            "background agent mailbox TriggerTurn processing failed"
+                        );
+                    }
                 }
-            }
-        });
-        let _ = admitted_rx.await;
+            });
+            let _ = admitted_rx.await;
+        })
     }
 
     pub(in crate::runtime) async fn process_pending_session_work_with_options(
@@ -231,7 +234,7 @@ impl RuntimeCore {
                 Ok(())
             };
             match self
-                .start_turn_with_event_callback(
+                .start_turn_inner(
                     TurnStartRequest {
                         session_id: session.session_id.clone(),
                         turn_id: Some(turn_id),
@@ -241,7 +244,10 @@ impl RuntimeCore {
                         skip_pre_submit_resume: false,
                     },
                     host.clone(),
-                    &mut observe_admission,
+                    Some(&mut observe_admission),
+                    false,
+                    false,
+                    super::turn_start::TurnStartInputKind::PendingTriggerUser,
                 )
                 .await
             {
@@ -330,6 +336,7 @@ impl RuntimeCore {
     ) -> Result<Vec<AgentMailboxMessage>, RuntimeCoreError> {
         self.ensure_current_session_hydrated(session_id).await?;
         let (session, turns) = self.session_snapshot(session_id)?;
+        self.recover_direct_child_terminal_activity(&session).await?;
         let turn = turns
             .into_iter()
             .find(|turn| turn.turn_id == turn_id)
@@ -399,9 +406,18 @@ impl RuntimeCore {
                     ))
                 })?;
             let child_session_id = child_thread.session_id.to_string();
-            let durable_scan = event_log_writer
+            let mut durable_scan = event_log_writer
                 .scan_session_events(&child_session_id)
                 .map_err(RuntimeCoreError::Backend)?;
+            if durable_scan
+                .issue
+                .as_ref()
+                .is_some_and(|issue| issue.is_repairable_tail())
+            {
+                durable_scan = event_log_writer
+                    .repair_session_event_log(&child_session_id)
+                    .map_err(RuntimeCoreError::Backend)?;
+            }
             let has_terminal_in_valid_prefix = durable_scan.records.iter().any(|record| {
                 matches!(
                     record.event.event_type.as_str(),
@@ -409,16 +425,6 @@ impl RuntimeCore {
                 )
             });
             if !has_terminal_in_valid_prefix {
-                if durable_scan
-                    .issue
-                    .as_ref()
-                    .is_some_and(|issue| issue.is_repairable_tail())
-                {
-                    event_log_writer
-                        .repair_session_event_log(&child_session_id)
-                        .map_err(RuntimeCoreError::Backend)?;
-                    continue;
-                }
                 if durable_scan.issue.is_none() {
                     continue;
                 }

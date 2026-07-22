@@ -27,10 +27,6 @@
       "method": "agentSession/compact"
     },
     {
-      "kind": "request",
-      "method": "agentSession/delete"
-    },
-    {
       "kind": "notification",
       "method": "agentSession/event"
     },
@@ -1028,6 +1024,18 @@
     },
     {
       "kind": "request",
+      "method": "thread/delete"
+    },
+    {
+      "kind": "notification",
+      "method": "thread/deleted"
+    },
+    {
+      "kind": "request",
+      "method": "thread/fork"
+    },
+    {
+      "kind": "request",
       "method": "thread/goal/clear"
     },
     {
@@ -1390,6 +1398,10 @@
       "scope": "thread"
     },
     {
+      "method": "thread/delete",
+      "scope": "thread"
+    },
+    {
       "method": "thread/goal/clear",
       "scope": "thread"
     },
@@ -1471,8 +1483,6 @@
       "AgentSessionAnalysisHandoffExportResponse",
       "AgentSessionCompactParams",
       "AgentSessionCompactResponse",
-      "AgentSessionDeleteParams",
-      "AgentSessionDeleteResponse",
       "AgentSessionEventParams",
       "AgentSessionFileCheckpointDetail",
       "AgentSessionFileCheckpointDiffParams",
@@ -2148,6 +2158,11 @@
       "ThreadArchiveParams",
       "ThreadArchiveResponse",
       "ThreadArchivedNotification",
+      "ThreadDeleteParams",
+      "ThreadDeleteResponse",
+      "ThreadDeletedNotification",
+      "ThreadForkParams",
+      "ThreadForkResponse",
       "ThreadGoal",
       "ThreadGoalClearParams",
       "ThreadGoalClearResponse",

@@ -1,7 +1,7 @@
 use crate::lime_session_repository::LimeSessionRepository;
 use crate::provider_configuration::{
-    configure_model_route_provider_for_session_with_provider, ModelRouteProviderConfiguration,
-    SessionProviderConfig,
+    configure_model_route_provider_for_session_with_provider_and_credential_ref,
+    ModelRouteProviderConfiguration, SessionProviderConfig,
 };
 use crate::request_tool_policy::{
     resolve_request_tool_policy_with_mode,
@@ -47,15 +47,19 @@ pub async fn run_direct_text_generation_with_db(
         provider_configuration,
     } = request;
     let configured_provider = match provider_configuration {
-        Some(provider_configuration) => Some(
-            configure_model_route_provider_for_session_with_provider(
-                agent_state,
-                db,
-                &session_id,
-                provider_configuration,
+        Some(provider_configuration) => {
+            let credential_ref = provider_configuration.credential_ref.clone();
+            Some(
+                configure_model_route_provider_for_session_with_provider_and_credential_ref(
+                    agent_state,
+                    db,
+                    &session_id,
+                    provider_configuration,
+                    credential_ref.as_deref(),
+                )
+                .await?,
             )
-            .await?,
-        ),
+        }
         None => None,
     };
     let request_tool_policy =

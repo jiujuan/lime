@@ -1,4 +1,4 @@
-use super::{McpCallScope, McpConnectionCall, McpConnectionHandle};
+use super::{McpCallScope, McpConnectionCall, McpConnectionHandle, McpConnectionProvenance};
 use crate::tool_extension::{RuntimeExtensionConfig, RuntimeToolCaller};
 use lime_core::tool_calling::extract_tool_surface_metadata;
 use rmcp::model::{CallToolRequestParam, ErrorCode, ErrorData, Tool};
@@ -14,12 +14,15 @@ use tokio_util::sync::CancellationToken;
 struct McpStepRoute {
     tool_name: String,
     allowed_callers: Option<Vec<String>>,
+    provenance: McpConnectionProvenance,
+    supports_parallel_tool_calls: bool,
     connection: McpConnectionHandle,
 }
 
 #[derive(Clone)]
 pub struct McpStepSnapshot {
     caller: RuntimeToolCaller,
+    generation: u64,
     tools: Arc<Vec<Tool>>,
     routes: Arc<HashMap<String, McpStepRoute>>,
 }
@@ -28,13 +31,34 @@ impl McpStepSnapshot {
     pub fn empty(caller: RuntimeToolCaller) -> Self {
         Self {
             caller,
+            generation: 0,
             tools: Arc::new(Vec::new()),
             routes: Arc::new(HashMap::new()),
         }
     }
 
+    /// Generation of the connection registry captured for this sampling step.
+    ///
+    /// The snapshot remains immutable even when the registry changes; callers can use this
+    /// value to correlate tool exposure and execution evidence with the captured registry state.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     pub fn tools(&self) -> &[Tool] {
         self.tools.as_ref()
+    }
+
+    pub fn supports_parallel_tool_calls(&self, tool_name: &str) -> bool {
+        self.routes
+            .get(tool_name)
+            .is_some_and(|route| route.supports_parallel_tool_calls)
+    }
+
+    pub fn environment_id(&self, tool_name: &str) -> Option<&str> {
+        self.routes
+            .get(tool_name)
+            .map(|route| route.provenance.environment_id())
     }
 
     pub async fn dispatch(
@@ -58,6 +82,16 @@ impl McpStepSnapshot {
             ));
         }
 
+        let scope = scope
+            .with_snapshot_generation(self.generation)
+            .with_environment_id(route.provenance.environment_id().to_string())
+            .with_auth_scopes(
+                route
+                    .provenance
+                    .auth_scopes()
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_default(),
+            );
         let notifications = route.connection.lock().await.subscribe().await;
         let arguments = tool_call.arguments;
         let response = Box::pin(async move {
@@ -76,22 +110,33 @@ impl McpStepSnapshot {
     }
 
     pub(super) async fn capture(
-        connections: Vec<(String, RuntimeExtensionConfig, McpConnectionHandle)>,
+        connections: Vec<(
+            String,
+            RuntimeExtensionConfig,
+            McpConnectionProvenance,
+            bool,
+            McpConnectionHandle,
+        )>,
         selected_deferred_tools: HashSet<String>,
         caller: RuntimeToolCaller,
         discovery_timeout: Duration,
+        generation: u64,
     ) -> Self {
         let mut tools = Vec::new();
         let mut routes = HashMap::new();
         let selected_deferred_tools = Arc::new(selected_deferred_tools);
         let mut pending = JoinSet::new();
-        for (connection_name, config, connection) in connections {
+        for (connection_name, config, provenance, supports_parallel_tool_calls, connection) in
+            connections
+        {
             let selected_deferred_tools = Arc::clone(&selected_deferred_tools);
             let caller = caller.clone();
             pending.spawn(async move {
                 capture_connection(
                     connection_name,
                     config,
+                    provenance,
+                    supports_parallel_tool_calls,
                     connection,
                     selected_deferred_tools,
                     caller,
@@ -114,6 +159,7 @@ impl McpStepSnapshot {
         tools.sort_by(|left, right| left.name.cmp(&right.name));
         Self {
             caller,
+            generation,
             tools: Arc::new(tools),
             routes: Arc::new(routes),
         }
@@ -127,6 +173,8 @@ struct CapturedConnectionTools {
 async fn capture_connection(
     connection_name: String,
     config: RuntimeExtensionConfig,
+    provenance: McpConnectionProvenance,
+    supports_parallel_tool_calls: bool,
     connection: McpConnectionHandle,
     selected_deferred_tools: Arc<HashSet<String>>,
     caller: RuntimeToolCaller,
@@ -168,6 +216,8 @@ async fn capture_connection(
                     McpStepRoute {
                         tool_name,
                         allowed_callers,
+                        provenance: provenance.clone(),
+                        supports_parallel_tool_calls,
                         connection: Arc::clone(&connection),
                     },
                 ));
@@ -233,6 +283,7 @@ mod tests {
         output: String,
         discovery_mode: DiscoveryMode,
         call_count: Arc<AtomicUsize>,
+        observed_scope: Option<Arc<Mutex<Option<McpCallScope>>>>,
     }
 
     #[async_trait]
@@ -256,6 +307,9 @@ mod tests {
             _scope: &McpCallScope,
             _cancel_token: CancellationToken,
         ) -> Result<CallToolResult, McpConnectionError> {
+            if let Some(observed_scope) = &self.observed_scope {
+                *observed_scope.lock().await = Some(_scope.clone());
+            }
             self.call_count.fetch_add(1, Ordering::SeqCst);
             Ok(CallToolResult::success(vec![Content::text(format!(
                 "{}:{name}",
@@ -294,8 +348,148 @@ mod tests {
             .await
             .expect("new result");
 
+        assert!(fresh.generation() > captured.generation());
         assert!(result_text(&old_result).contains("old:search"));
         assert!(result_text(&new_result).contains("new:search"));
+    }
+
+    #[tokio::test]
+    async fn snapshot_generation_is_stable_and_monotonic_across_registry_mutations() {
+        let registry = McpConnectionRegistry::new();
+        let empty = snapshot(&registry, HashSet::new(), Duration::from_secs(1)).await;
+        assert_eq!(empty.generation(), 0);
+
+        register(&registry, vec!["search"], "first").await;
+        let first = snapshot(&registry, HashSet::new(), Duration::from_secs(1)).await;
+        assert!(first.generation() > empty.generation());
+        let first_generation = first.generation();
+
+        registry.remove("docs").await;
+        let removed = snapshot(&registry, HashSet::new(), Duration::from_secs(1)).await;
+        assert!(removed.generation() > first_generation);
+        assert_eq!(first.generation(), first_generation);
+    }
+
+    #[tokio::test]
+    async fn snapshot_keeps_server_route_metadata_immutable() {
+        let registry = McpConnectionRegistry::new();
+        let config = RuntimeExtensionConfig::new(
+            "docs",
+            "Docs tools",
+            vec!["search".to_string()],
+            false,
+            vec!["search".to_string()],
+            None,
+        );
+        let connection: McpConnectionHandle = Arc::new(Mutex::new(Box::new(TestConnection {
+            tools: vec![tool("search", None)],
+            output: "docs".to_string(),
+            discovery_mode: DiscoveryMode::Ready,
+            call_count: Arc::new(AtomicUsize::new(0)),
+            observed_scope: None,
+        })));
+        registry
+            .register(
+                "docs".to_string(),
+                config.clone(),
+                McpConnectionProvenance::new("remote-tools", None),
+                true,
+                Arc::clone(&connection),
+            )
+            .await;
+
+        let parallel = snapshot(&registry, HashSet::new(), Duration::from_secs(1)).await;
+        registry.remove("docs").await;
+        registry
+            .register(
+                "docs".to_string(),
+                config,
+                McpConnectionProvenance::default(),
+                false,
+                connection,
+            )
+            .await;
+        let serial = snapshot(&registry, HashSet::new(), Duration::from_secs(1)).await;
+
+        assert!(parallel.supports_parallel_tool_calls("docs__search"));
+        assert!(!serial.supports_parallel_tool_calls("docs__search"));
+        assert!(parallel.supports_parallel_tool_calls("docs__search"));
+        assert!(!parallel.supports_parallel_tool_calls("missing"));
+        assert_eq!(
+            parallel.environment_id("docs__search"),
+            Some("remote-tools")
+        );
+        assert_eq!(serial.environment_id("docs__search"), Some("local"));
+        assert_eq!(
+            parallel.environment_id("docs__search"),
+            Some("remote-tools")
+        );
+        assert_eq!(parallel.environment_id("missing"), None);
+    }
+
+    #[tokio::test]
+    async fn dispatch_binds_snapshot_generation_to_call_scope() {
+        let registry = McpConnectionRegistry::new();
+        let observed_scope = Arc::new(Mutex::new(None));
+        let config = RuntimeExtensionConfig::new(
+            "docs",
+            "Docs tools",
+            vec!["search".to_string()],
+            false,
+            vec!["search".to_string()],
+            None,
+        );
+        let connection: McpConnectionHandle = Arc::new(Mutex::new(Box::new(TestConnection {
+            tools: vec![tool("search", None)],
+            output: "docs".to_string(),
+            discovery_mode: DiscoveryMode::Ready,
+            call_count: Arc::new(AtomicUsize::new(0)),
+            observed_scope: Some(Arc::clone(&observed_scope)),
+        })));
+        registry
+            .register(
+                "docs".to_string(),
+                config,
+                McpConnectionProvenance::new("local", Some(vec!["search.read".to_string()])),
+                false,
+                connection,
+            )
+            .await;
+
+        let snapshot = snapshot(&registry, HashSet::new(), Duration::from_secs(1)).await;
+        let generation = snapshot.generation();
+        snapshot
+            .dispatch(call("docs__search"), scope(), CancellationToken::default())
+            .await
+            .expect("dispatch route")
+            .response
+            .await
+            .expect("call result");
+
+        assert_eq!(
+            observed_scope
+                .lock()
+                .await
+                .as_ref()
+                .and_then(McpCallScope::snapshot_generation),
+            Some(generation)
+        );
+        assert_eq!(
+            observed_scope
+                .lock()
+                .await
+                .as_ref()
+                .and_then(McpCallScope::auth_scopes),
+            Some(["search.read".to_string()].as_slice())
+        );
+        assert_eq!(
+            observed_scope
+                .lock()
+                .await
+                .as_ref()
+                .and_then(McpCallScope::environment_id),
+            Some("local")
+        );
     }
 
     #[tokio::test]
@@ -427,10 +621,13 @@ mod tests {
         let denied_route = McpStepRoute {
             tool_name: "execute".to_string(),
             allowed_callers: Some(vec!["code_execution".to_string()]),
+            provenance: McpConnectionProvenance::default(),
+            supports_parallel_tool_calls: false,
             connection,
         };
         let forged_snapshot = McpStepSnapshot {
             caller: RuntimeToolCaller::assistant(),
+            generation: 0,
             tools: Arc::new(Vec::new()),
             routes: Arc::new(HashMap::from([(
                 "mixed__execute".to_string(),
@@ -619,9 +816,16 @@ mod tests {
             output: output.to_string(),
             discovery_mode,
             call_count,
+            observed_scope: None,
         })));
         registry
-            .register(name.to_string(), config, Arc::clone(&connection))
+            .register(
+                name.to_string(),
+                config,
+                McpConnectionProvenance::default(),
+                false,
+                Arc::clone(&connection),
+            )
             .await;
         connection
     }

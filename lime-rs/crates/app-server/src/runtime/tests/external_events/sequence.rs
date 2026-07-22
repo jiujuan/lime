@@ -57,6 +57,63 @@ async fn append_external_runtime_events_keeps_sequence_and_turn_scope() {
 }
 
 #[tokio::test]
+async fn runtime_error_does_not_preempt_a_later_turn_failed_terminal() {
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_runtime_error_before_terminal",
+        "thread_runtime_error_before_terminal",
+        "turn_runtime_error_before_terminal",
+    )
+    .await;
+
+    core.append_external_runtime_events(
+        &session_id,
+        Some(&turn_id),
+        vec![RuntimeEvent::new(
+            "runtime.error",
+            json!({ "message": "diagnostic before terminal" }),
+        )],
+    )
+    .expect("append runtime diagnostic");
+
+    let after_diagnostic = core
+        .read_session(AgentSessionReadParams {
+            session_id: session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read active session after diagnostic");
+    assert_eq!(after_diagnostic.session.status, AgentSessionStatus::Running);
+
+    let terminal_events = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![RuntimeEvent::new(
+                "turn.failed",
+                json!({ "message": "canonical terminal" }),
+            )],
+        )
+        .expect("append canonical failure terminal");
+    assert!(
+        terminal_events
+            .iter()
+            .any(|event| event.event_type == "turn.failed"),
+        "turn.failed must not be discarded after a runtime.error diagnostic"
+    );
+
+    let after_terminal = core
+        .read_session(AgentSessionReadParams {
+            session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read failed session after terminal");
+    assert_eq!(after_terminal.session.status, AgentSessionStatus::Failed);
+}
+
+#[tokio::test]
 async fn regular_canonical_projection_failure_is_returned_after_event_log_append() {
     let temp = tempfile::tempdir().expect("tempdir");
     let database_path = temp.path().join("projection.sqlite");

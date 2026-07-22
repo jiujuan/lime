@@ -88,7 +88,6 @@ const hoisted = vi.hoisted(() => ({
     readSession: vi.fn(),
     readThread: vi.fn(),
     cancelTurn: vi.fn(),
-    respondAction: vi.fn(),
     readWorkflow: vi.fn(),
   },
   toastMocks: {
@@ -389,7 +388,6 @@ export function usePluginRuntimePageTestLifecycle() {
       readSession: appServerClientMocks.readSession,
       readThread: appServerClientMocks.readThread,
       cancelTurn: appServerClientMocks.cancelTurn,
-      respondAction: appServerClientMocks.respondAction,
       readWorkflow: appServerClientMocks.readWorkflow,
     });
     appServerClientMocks.startSession.mockImplementation(async (request) => ({
@@ -511,13 +509,6 @@ export function usePluginRuntimePageTestLifecycle() {
       id: 5,
       result: {},
       response: { jsonrpc: "2.0", id: 5, result: {} },
-      notifications: [],
-      messages: [],
-    });
-    appServerClientMocks.respondAction.mockResolvedValue({
-      id: 6,
-      result: {},
-      response: { jsonrpc: "2.0", id: 6, result: {} },
       notifications: [],
       messages: [],
     });

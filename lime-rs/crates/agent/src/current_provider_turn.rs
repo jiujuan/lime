@@ -956,6 +956,8 @@ mod tests {
                     vec!["search".to_string()],
                     None,
                 ),
+                tool_runtime::mcp_connection::McpConnectionProvenance::default(),
+                false,
                 Arc::new(Mutex::new(Box::new(HangingMcpConnection))),
             )
             .await;

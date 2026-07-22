@@ -40,6 +40,10 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   selectedFileId?: InputbarScenePresentationParams["selectedFileId"];
   isThemeWorkbench: InputbarScenePresentationParams["isThemeWorkbench"];
   sessionId: InputbarParams["sessionId"];
+  threadId: InputbarParams["threadId"];
+  threadGoal: InputbarParams["threadGoal"];
+  threadGoalError: InputbarParams["threadGoalError"];
+  threadGoalLoading: InputbarParams["threadGoalLoading"];
   generalWorkbenchHarnessPanelBaseProps: WorkspaceGeneralWorkbenchHarnessPanelBaseProps;
   currentSessionTitle: string | null | undefined;
   handleStopSending: InputbarParams["onStop"];
@@ -124,6 +128,10 @@ export function useWorkspaceInputbarSceneRuntime({
   setMentionedCharacters,
   isThemeWorkbench,
   sessionId,
+  threadId,
+  threadGoal,
+  threadGoalError,
+  threadGoalLoading,
   generalWorkbenchHarnessPanelBaseProps,
   currentSessionTitle,
   handleStopSending,
@@ -308,6 +316,10 @@ export function useWorkspaceInputbarSceneRuntime({
         openedProjects,
         onProjectContextChange: navigationActions.handleProjectChange,
         sessionId,
+        threadId,
+        threadGoal,
+        threadGoalError,
+        threadGoalLoading,
         workflowGate: isThemeWorkbench ? currentGate : null,
         workflowSteps: isThemeWorkbench ? generalWorkbenchWorkflowSteps : steps,
         workflowRunState,

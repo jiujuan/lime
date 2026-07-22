@@ -5,6 +5,7 @@ import type {
   PluginRuntimeTaskSnapshot,
 } from "@/lib/api/pluginRuntime";
 import type { AgentRuntimeRespondActionRequest } from "@/lib/api/agentRuntime/requestTypes";
+import type { PluginTaskRuntimeContract } from "../host/hostLifecycle";
 import type {
   PluginTaskLookup,
   CapabilityHost,
@@ -51,10 +52,11 @@ export interface AgentRuntimeCapabilityHostOptions {
   manifestHash?: string;
   workspaceId?: string;
   workspaceIdResolver?: () => Promise<string>;
+  taskRuntime?: PluginTaskRuntimeContract;
   api?: PluginRuntimeCapabilityApi;
   runtimeClient?: Pick<
     AgentRuntimeClient,
-    "startTurn" | "readThread" | "cancelTurn" | "respondAction"
+    "startTurn" | "readThread" | "cancelTurn"
   >;
   ensureSession?: AgentRuntimeSessionResolver;
   now?: () => string;
@@ -133,6 +135,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   private readonly manifestHash: string;
   private readonly workspaceId?: string;
   private readonly workspaceIdResolver?: () => Promise<string>;
+  private readonly taskRuntime?: PluginTaskRuntimeContract;
   private readonly api: PluginRuntimeCapabilityApi;
   private readonly ensureSession?: AgentRuntimeSessionResolver;
   private readonly now: () => string;
@@ -146,6 +149,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     this.manifestHash = options.manifestHash ?? "";
     this.workspaceId = options.workspaceId;
     this.workspaceIdResolver = options.workspaceIdResolver;
+    this.taskRuntime = options.taskRuntime;
     this.now = options.now ?? (() => new Date().toISOString());
     this.ensureSession = options.ensureSession;
     this.api =
@@ -278,8 +282,18 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       ? await this.resolveOptionalWorkspaceId(runtimeRequest)
       : await this.resolveWorkspaceId(runtimeRequest);
     const workspaceId = resolvedWorkspaceId ?? "";
+    const pluginWorkerMetadata = buildPluginWorkerMetadata({
+      appId: this.appId,
+      entryKey,
+      taskKind,
+      title: runtimeRequest.title,
+      prompt: runtimeRequest.prompt,
+      workspaceId: resolvedWorkspaceId,
+      taskRuntime: this.taskRuntime,
+    });
     const metadata = {
       ...(runtimeRequest.metadata ?? {}),
+      ...(pluginWorkerMetadata ? { plugin: pluginWorkerMetadata } : {}),
       plugin_host_bridge: {
         source: "plugin_runtime_page",
         retryOfTaskId: retry?.retryOfTaskId,
@@ -644,4 +658,42 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     }
     throw new Error(`未找到 Plugin runtime task：${taskId}`);
   }
+}
+
+function buildPluginWorkerMetadata(params: {
+  appId: string;
+  entryKey: string;
+  taskKind: string;
+  title: string;
+  prompt?: string;
+  workspaceId?: string;
+  taskRuntime?: PluginTaskRuntimeContract;
+}): Record<string, unknown> | undefined {
+  const taskRuntime = params.taskRuntime;
+  if (!taskRuntime?.enabled || !taskRuntime.taskKinds.includes(params.taskKind)) {
+    return undefined;
+  }
+  if (taskRuntime.blockers.length > 0) {
+    throw new Error(
+      `Plugin worker runtime is blocked: ${taskRuntime.blockers.join(", ")}`,
+    );
+  }
+  const outputArtifactKind = normalizeString(
+    taskRuntime.outputArtifactKind ?? undefined,
+  );
+  if (!outputArtifactKind) {
+    throw new Error("Plugin worker runtime requires outputArtifactKind");
+  }
+  return {
+    appId: params.appId,
+    workspaceId: params.workspaceId,
+    paneAction: {
+      key: params.entryKey,
+      prompt: normalizeString(params.prompt) ?? params.title,
+      surfaceKind: "pluginRuntime",
+      paneKind: "pluginTask",
+      outputArtifactKind,
+      taskKind: params.taskKind,
+    },
+  };
 }

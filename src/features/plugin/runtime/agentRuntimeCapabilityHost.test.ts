@@ -133,10 +133,78 @@ describe("AgentRuntimeCapabilityHost", () => {
     });
   });
 
+  it("只为 manifest 声明的 worker task 注入受信任 pane action metadata", async () => {
+    const api = {
+      startTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        entryKey: request.entryKey,
+        taskId: request.taskId ?? "plugin-task-worker",
+        traceId: "plugin-trace-worker",
+        taskKind: request.taskKind,
+        sessionId: request.sessionId ?? "session-worker",
+        threadId: request.threadId ?? "thread-worker",
+        turnId: "turn-worker",
+        eventName: "plugin_runtime:content-factory-app:plugin-task-worker",
+        status: "accepted" as const,
+        submittedAt: "2026-05-15T00:00:00.000Z",
+      })),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(),
+      submitHostResponse: vi.fn(),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      workspaceId: "workspace-1",
+      taskRuntime: {
+        enabled: true,
+        packageRootPath: null,
+        workerEntrypoint: "./src/runtime/content-factory-worker.mjs",
+        contractPath: null,
+        sampleRequestPath: null,
+        outputArtifactKind: "content_factory.workspace_patch",
+        taskKinds: ["content.article.generate"],
+        directProviderAccess: false,
+        directFilesystemAccess: false,
+        blockers: [],
+        followUps: [],
+      },
+      api,
+    });
+
+    await host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY).agent.startTask({
+      title: "生成文章",
+      prompt: "写一篇可发布的文章",
+      taskKind: "content.article.generate",
+      sessionId: "session-worker",
+      threadId: "thread-worker",
+      taskId: "task-worker",
+    });
+
+    expect(api.startTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          plugin: {
+            appId: "content-factory-app",
+            workspaceId: "workspace-1",
+            paneAction: {
+              key: CONTENT_FACTORY_ENTRY_KEY,
+              prompt: "写一篇可发布的文章",
+              surfaceKind: "pluginRuntime",
+              paneKind: "pluginTask",
+              outputArtifactKind: "content_factory.workspace_patch",
+              taskKind: "content.article.generate",
+            },
+          },
+        }),
+      }),
+    );
+  });
+
   it("可以直接注入标准 AgentRuntimeClient 驱动 lime.agent task", async () => {
     const runtimeClient: Pick<
       AgentRuntimeClient,
-      "startTurn" | "readThread" | "cancelTurn" | "respondAction"
+      "startTurn" | "readThread" | "cancelTurn"
     > = {
       startTurn: vi.fn(async () => ({
         id: 1,
@@ -190,13 +258,6 @@ describe("AgentRuntimeCapabilityHost", () => {
         notifications: [],
         messages: [],
       })),
-      respondAction: vi.fn(async () => ({
-        id: 4,
-        result: {},
-        response: { jsonrpc: "2.0", id: 4, result: {} },
-        notifications: [],
-        messages: [],
-      })),
     };
     const host = new AgentRuntimeCapabilityHost({
       delegate: buildDelegateHost(),
@@ -229,12 +290,16 @@ describe("AgentRuntimeCapabilityHost", () => {
     });
     const snapshot = await sdk.agent.getTask(started.taskId);
     await sdk.agent.cancelTask(started.taskId);
-    await sdk.agent.submitHostResponse({
-      taskId: started.taskId,
-      requestId: "request-standard",
-      actionType: "ask_user",
-      response: "继续",
-    });
+    await expect(
+      sdk.agent.submitHostResponse({
+        taskId: started.taskId,
+        requestId: "request-standard",
+        actionType: "ask_user",
+        response: "继续",
+      }),
+    ).rejects.toThrow(
+      "Typed server request is no longer pending; generic agentSession/action/respond is retired.",
+    );
 
     expect(runtimeClient.startTurn).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -252,12 +317,6 @@ describe("AgentRuntimeCapabilityHost", () => {
       threadId: "thread-standard",
       turnId: "turn-standard",
     });
-    expect(runtimeClient.respondAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: "session-standard",
-        requestId: "request-standard",
-      }),
-    );
     expect(started).toMatchObject({
       taskId: "task-standard",
       sessionId: "session-standard",

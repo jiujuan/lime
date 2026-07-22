@@ -53,7 +53,6 @@ interface UseWorkspaceGeneralWorkbenchHarnessSurfaceRuntimeParams {
   pendingActions: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["pendingActions"];
   projectId?: string | null;
   providerType?: string | null;
-  refreshSessionReadModel: (sessionId?: string) => unknown;
   replayPendingAction?: (
     requestId: string,
     latestAssistantMessageId: string,
@@ -61,6 +60,9 @@ interface UseWorkspaceGeneralWorkbenchHarnessSurfaceRuntimeParams {
   sessionId?: string | null;
   submittedActionsInFlight: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["submittedActionsInFlight"];
   threadItems: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["threadItems"];
+  threadGoal: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["threadGoal"];
+  threadGoalError: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["threadGoalError"];
+  threadGoalLoading: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["threadGoalLoading"];
   threadRead: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["threadRead"];
   turns: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["turns"];
   workingDir?: string | null;
@@ -89,11 +91,13 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
   pendingActions,
   projectId,
   providerType,
-  refreshSessionReadModel,
   replayPendingAction,
   sessionId,
   submittedActionsInFlight,
   threadItems,
+  threadGoal,
+  threadGoalError,
+  threadGoalLoading,
   threadRead,
   turns,
   workingDir,
@@ -103,6 +107,9 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
       environment: contextHarnessRuntime.harnessEnvironment,
       canonicalChildren,
       threadRead,
+      threadGoal,
+      threadGoalError,
+      threadGoalLoading,
       turns,
       threadItems,
       currentTurnId,
@@ -116,9 +123,6 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
           ? (requestId: string) =>
               replayPendingAction(requestId, latestAssistantMessageId)
           : undefined,
-      onObjectiveChanged: async () => {
-        await refreshSessionReadModel(sessionId || undefined);
-      },
       onManageProviders,
       onOpenExecutionPolicySettings,
       messages,
@@ -177,11 +181,13 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
       pendingActions,
       projectId,
       providerType,
-      refreshSessionReadModel,
       replayPendingAction,
       sessionId,
       submittedActionsInFlight,
       threadItems,
+      threadGoal,
+      threadGoalError,
+      threadGoalLoading,
       threadRead,
       turns,
       workingDir,

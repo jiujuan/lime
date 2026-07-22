@@ -13,7 +13,6 @@ import { BuiltinCommandBadge } from "./Inputbar/components/BuiltinCommandBadge";
 import { InputbarAccessModeSelect } from "./Inputbar/components/InputbarAccessModeSelect";
 import { InputbarCore } from "./Inputbar/components/InputbarCore";
 import { InputbarModeStatusChip } from "./Inputbar/components/InputbarModeStatusChip";
-import { InputbarObjectiveInlinePanel } from "./Inputbar/components/InputbarObjectiveInlinePanel";
 import { InputbarPluginBadge } from "./Inputbar/components/InputbarPluginBadge";
 import { InputbarPluginSelector } from "./Inputbar/components/InputbarPluginSelector";
 import {
@@ -506,14 +505,6 @@ export function EmptyStateComposerPanel({
   };
 
   const effectiveGuideHelpLabel = guideHelpLabel ?? copy.guideHelpDefaultLabel;
-  const objectiveInlinePanel =
-    objectiveEnabled && sessionId ? (
-      <InputbarObjectiveInlinePanel
-        sessionId={sessionId}
-        workspaceId={projectId}
-        runtimeBusy={isLoading}
-      />
-    ) : null;
   const topExtra =
     guideHelpActive ||
     activePluginSelection ||
@@ -521,11 +512,8 @@ export function EmptyStateComposerPanel({
     activeRuntimeScene ||
     activeCuratedTask ||
     activeSkill ||
-    creationReplaySurface ||
-    objectiveInlinePanel ? (
+    creationReplaySurface ? (
       <>
-        {objectiveInlinePanel}
-
         {guideHelpActive ? (
           <GuideHelpBadge
             label={effectiveGuideHelpLabel}

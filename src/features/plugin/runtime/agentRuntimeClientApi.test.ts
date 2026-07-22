@@ -6,7 +6,7 @@ import { createPluginRuntimeCapabilityApiFromClient } from "./agentRuntimeClient
 
 function buildRuntimeClient(): Pick<
   AgentRuntimeClient,
-  "startTurn" | "readThread" | "cancelTurn" | "respondAction"
+  "startTurn" | "readThread" | "cancelTurn"
 > {
   return {
     startTurn: vi.fn(async () => ({
@@ -61,13 +61,6 @@ function buildRuntimeClient(): Pick<
       id: 3,
       result: {},
       response: { jsonrpc: "2.0", id: 3, result: {} },
-      notifications: [],
-      messages: [],
-    })),
-    respondAction: vi.fn(async () => ({
-      id: 4,
-      result: {},
-      response: { jsonrpc: "2.0", id: 4, result: {} },
       notifications: [],
       messages: [],
     })),
@@ -134,6 +127,15 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
           text: expect.stringContaining("Business Prompt:"),
         },
       ],
+      additionalContext: {
+        metadata: {
+          kind: "application",
+          value: JSON.stringify({
+            source: "plugin-test",
+            turn_source: "plugin",
+          }),
+        },
+      },
       effort: "medium",
       model: "claude-sonnet-4",
       outputSchema: {
@@ -147,20 +149,12 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       },
       sandboxPolicy: "workspace-write",
       responsesapiClientMetadata: {
+        appId: "content-factory-app",
+        entryKey: "dashboard",
         eventName: "plugin_runtime:content-factory-app:task-1",
         taskId: "task-1",
         taskKind: "content.copy.generate",
         workspaceId: "workspace-1",
-        pluginRuntime: {
-          appId: "content-factory-app",
-          entryKey: "dashboard",
-          taskId: "task-1",
-          taskKind: "content.copy.generate",
-        },
-        metadata: {
-          source: "plugin-test",
-          turn_source: "plugin",
-        },
       },
     });
     expect(result).toEqual({
@@ -178,7 +172,7 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
     });
   });
 
-  it("通过 readThread / cancelTurn / respondAction 承接 get/cancel/host response", async () => {
+  it("通过 readThread / cancelTurn 承接 get/cancel", async () => {
     const runtimeClient = buildRuntimeClient();
     const api = createPluginRuntimeCapabilityApiFromClient(runtimeClient);
 
@@ -192,30 +186,6 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       taskId: "task-1",
       threadId: "thread-1",
     });
-    const submitted = await api.submitHostResponse({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      runtimeRequest: {
-        session_id: "session-1",
-        request_id: "request-1",
-        action_type: "ask_user",
-        confirmed: true,
-        response: "继续执行",
-        metadata: {
-          workflowResume: {
-            workflowRunId: "content-factory-run-1",
-            workflowKey: "content_article_workflow",
-            stepId: "draft",
-          },
-        },
-        action_scope: {
-          session_id: "session-1",
-          thread_id: "thread-1",
-          turn_id: "turn-1",
-        },
-      },
-    });
-
     expect(runtimeClient.readThread).toHaveBeenCalledWith({
       threadId: "thread-1",
       includeTurns: true,
@@ -223,25 +193,6 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
     expect(runtimeClient.cancelTurn).toHaveBeenCalledWith({
       threadId: "thread-1",
       turnId: "turn-1",
-    });
-    expect(runtimeClient.respondAction).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      requestId: "request-1",
-      actionType: "ask_user",
-      confirmed: true,
-      response: "继续执行",
-      metadata: {
-        workflowResume: {
-          workflowRunId: "content-factory-run-1",
-          workflowKey: "content_article_workflow",
-          stepId: "draft",
-        },
-      },
-      actionScope: {
-        sessionId: "session-1",
-        threadId: "thread-1",
-        turnId: "turn-1",
-      },
     });
     expect(snapshot).toMatchObject({
       status: "thread_read_available",
@@ -255,7 +206,65 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       },
     });
     expect(cancelled.status).toBe("cancelled");
-    expect(submitted.status).toBe("submitted");
+  });
+
+  it("typed pending request 已响应时提交成功", async () => {
+    const runtimeClient = buildRuntimeClient();
+    const respondTypedServerRequest = vi.fn(() => true);
+    const api = createPluginRuntimeCapabilityApiFromClient(runtimeClient, {
+      respondTypedServerRequest,
+    });
+    const runtimeRequest = {
+      session_id: "session-1",
+      request_id: "request-1",
+      action_type: "ask_user" as const,
+      confirmed: true,
+      response: "继续执行",
+      action_scope: {
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+      },
+    };
+
+    await expect(
+      api.submitHostResponse({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        runtimeRequest,
+      }),
+    ).resolves.toEqual({
+      appId: "content-factory-app",
+      taskId: "task-1",
+      status: "submitted",
+    });
+
+    expect(respondTypedServerRequest).toHaveBeenCalledWith(runtimeRequest);
+  });
+
+  it("typed pending request 不存在时 fail closed，不回退 generic respondAction", async () => {
+    const runtimeClient = buildRuntimeClient();
+    const respondTypedServerRequest = vi.fn(() => false);
+    const api = createPluginRuntimeCapabilityApiFromClient(runtimeClient, {
+      respondTypedServerRequest,
+    });
+    const runtimeRequest = {
+      session_id: "session-1",
+      request_id: "request-stale",
+      action_type: "ask_user" as const,
+      confirmed: true,
+      response: "继续执行",
+    };
+
+    await expect(
+      api.submitHostResponse({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        runtimeRequest,
+      }),
+    ).rejects.toThrow(
+      "Typed server request is no longer pending; generic agentSession/action/respond is retired.",
+    );
+    expect(respondTypedServerRequest).toHaveBeenCalledWith(runtimeRequest);
   });
 
   it("没有 canonical identity 时 fail closed，不伪造独立 task 协议", async () => {

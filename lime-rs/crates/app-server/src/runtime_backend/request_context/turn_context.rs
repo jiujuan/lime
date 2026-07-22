@@ -73,7 +73,9 @@ pub(in crate::runtime_backend) fn turn_context_from_request(
         approval_policy: host_request.and_then(host_approval_policy),
         sandbox_policy: host_request.and_then(host_sandbox_policy),
         collaboration_mode: collaboration_mode_from_request(request, host_request),
-        user_visible_input_text: non_empty(Some(&request.input.concat_text())),
+        user_visible_input_text: (!request.input.agent_only)
+            .then(|| request.input.concat_text())
+            .and_then(|text| non_empty(Some(&text))),
         output_schema: output_schema_from_request(request, host_request),
         metadata,
     })

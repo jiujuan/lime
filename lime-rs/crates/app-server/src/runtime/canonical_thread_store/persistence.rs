@@ -42,6 +42,10 @@ pub(super) fn create_thread_store_schema(
             created_at_ms INTEGER NOT NULL,
             updated_at_ms INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS thread_goal_continuation_deferrals (
+            thread_id TEXT PRIMARY KEY NOT NULL
+                REFERENCES thread_goals(thread_id) ON DELETE CASCADE
+        );
         CREATE INDEX IF NOT EXISTS idx_canonical_threads_archive_recency
             ON canonical_threads(archived, recency_at_ms DESC, updated_at_ms DESC, thread_id DESC);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_canonical_threads_session

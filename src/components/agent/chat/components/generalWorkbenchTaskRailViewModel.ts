@@ -1,4 +1,5 @@
 import type { StepStatus } from "@/lib/workspace/workbenchContract";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 import type {
   AgentRuntimeThreadReadModel,
   AgentTodoItem,
@@ -816,6 +817,7 @@ export function buildGeneralWorkbenchTaskRailProjection({
   submittedActionsInFlight,
   threadItems,
   todoItems,
+  threadGoal,
   threadRead,
   canonicalChildren,
   context,
@@ -831,6 +833,7 @@ export function buildGeneralWorkbenchTaskRailProjection({
   submittedActionsInFlight?: readonly ActionRequired[];
   threadItems?: readonly AgentThreadItem[];
   todoItems?: readonly AgentTodoItem[];
+  threadGoal?: ThreadGoal | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
   canonicalChildren?: CanonicalChildThreadSummary[];
   context?: GeneralWorkbenchTaskRailContextInput;
@@ -845,6 +848,7 @@ export function buildGeneralWorkbenchTaskRailProjection({
   });
   const mergedContext = buildGeneralWorkbenchTaskRailRuntimeContext({
     context,
+    threadGoal,
     threadRead,
     threadItems,
     canonicalChildren,

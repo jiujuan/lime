@@ -17,6 +17,35 @@ struct StreamingCallbackOrderBackend {
 
 struct CanonicalMessageReasoningLifecycleBackend;
 
+struct CompletedSessionTaskWithoutTerminalBackend;
+
+#[async_trait]
+impl ExecutionBackend for CompletedSessionTaskWithoutTerminalBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl ExecutionBackend for CanonicalMessageReasoningLifecycleBackend {
     async fn start_turn(
@@ -369,6 +398,91 @@ async fn streaming_turn_start_emits_lifecycle_before_backend_progress() {
             "turn.completed"
         ]
     );
+}
+
+#[tokio::test]
+async fn admitted_session_task_completion_finalizes_canonical_turn() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let core = RuntimeCore::with_backend(Arc::new(CompletedSessionTaskWithoutTerminalBackend))
+        .with_projection_store(projection_store);
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_runner_terminal".to_string()),
+            thread_id: Some("thread_runner_terminal".to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let admitted = core
+        .start_turn_admitted(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_runner_terminal".to_string()),
+                input: AgentInput {
+                    text: "complete without backend terminal".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("admit turn");
+    assert_eq!(admitted.response.turn.status, AgentTurnStatus::Accepted);
+
+    let thread = timeout(Duration::from_secs(3), async {
+        loop {
+            let thread = core
+                .read_thread(agent_protocol::thread::ThreadReadParams {
+                    thread_id: agent_protocol::ThreadId::new(&session.thread_id),
+                    turns_view: agent_protocol::ThreadTurnsView::Full,
+                })
+                .await
+                .expect("read canonical thread")
+                .thread;
+            if thread.turns.iter().any(|turn| {
+                turn.turn_id.as_str() == "turn_runner_terminal"
+                    && turn.status == agent_protocol::TurnStatus::Completed
+            }) {
+                break thread;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("session task terminal must reach canonical read model");
+
+    let completed_turn = thread
+        .turns
+        .iter()
+        .find(|turn| turn.turn_id.as_str() == "turn_runner_terminal")
+        .expect("completed turn");
+    assert_eq!(completed_turn.status, agent_protocol::TurnStatus::Completed);
+    let events = core
+        .events_for_session(&session.session_id)
+        .expect("session events");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.event_type == "turn.completed")
+            .count(),
+        1
+    );
+    let completed = events
+        .iter()
+        .find(|event| event.event_type == "turn.completed")
+        .expect("runner terminal event");
+    assert_eq!(completed.payload["source"], "session_loop");
+    assert_eq!(completed.payload["reason"], "session_task_completed");
 }
 
 #[tokio::test]

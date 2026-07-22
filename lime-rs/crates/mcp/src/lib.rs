@@ -9,12 +9,15 @@ pub mod bridge_client;
 mod client;
 mod client_service;
 pub mod elicitation;
+mod environment;
 pub mod events;
 pub mod extension_surface;
 pub mod manager;
 pub mod naming;
 pub mod oauth;
 pub mod oauth_store;
+mod stdio_launcher;
+mod stdio_process;
 mod streamable_http;
 pub mod tool_converter;
 pub mod tool_policy;
@@ -41,4 +44,5 @@ pub use types::{
     McpPromptMessage, McpPromptResult, McpResourceContent, McpResourceDefinition,
     McpServerCapabilities, McpServerConfig, McpServerInfo, McpServerRuntimeStatus,
     McpServerTransport, McpToolCall, McpToolDefinition, McpToolResult,
+    DEFAULT_MCP_SERVER_ENVIRONMENT_ID,
 };

@@ -5,7 +5,6 @@
     "agentSession/action/respond",
     "agentSession/analysisHandoff/export",
     "agentSession/compact",
-    "agentSession/delete",
     "agentSession/fileCheckpoint/diff",
     "agentSession/fileCheckpoint/get",
     "agentSession/fileCheckpoint/list",

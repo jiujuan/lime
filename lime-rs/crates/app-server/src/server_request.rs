@@ -258,25 +258,10 @@ impl ServerRequestRouter {
         reason: impl Into<String>,
     ) -> usize {
         let error = JsonRpcError::new(error_codes::REQUEST_CANCELLED, reason);
-        let routes = {
-            let mut pending = self
-                .inner
-                .pending
-                .lock()
-                .expect("server request router mutex poisoned");
-            let request_ids = pending
-                .iter()
-                .filter_map(|(request_id, route)| {
-                    (route.thread_id.as_deref() == Some(thread_id)
-                        && route.turn_id.as_deref() == Some(turn_id))
-                    .then_some(request_id.clone())
-                })
-                .collect::<Vec<_>>();
-            request_ids
-                .iter()
-                .filter_map(|request_id| pending.remove(request_id))
-                .collect::<Vec<_>>()
-        };
+        let routes = self.take_matching_routes(|route| {
+            route.thread_id.as_deref() == Some(thread_id)
+                && route.turn_id.as_deref() == Some(turn_id)
+        });
 
         let count = routes.len();
         for route in routes {
@@ -294,6 +279,50 @@ impl ServerRequestRouter {
                     request_id = %route.request.id,
                     %error,
                     "failed to publish server-request resolution before turn transition"
+                );
+            }
+            let _ = route.sender.send(ServerRequestResolution {
+                owner: route.owner,
+                result: Err(error.clone()),
+                resolved_before_transition: true,
+            });
+        }
+        count
+    }
+
+    pub(crate) async fn abort_for_threads(
+        &self,
+        bridge: &crate::AppServerEventBridge,
+        thread_ids: &[String],
+        reason: impl Into<String>,
+    ) -> usize {
+        let error = JsonRpcError::new(error_codes::REQUEST_CANCELLED, reason);
+        let routes = self.take_matching_routes(|route| {
+            route
+                .thread_id
+                .as_ref()
+                .is_some_and(|thread_id| thread_ids.contains(thread_id))
+        });
+
+        let count = routes.len();
+        for route in routes {
+            let thread_id = route
+                .thread_id
+                .as_deref()
+                .expect("thread delete route must have a thread id");
+            if let Err(error) = publish_server_request_resolved(
+                bridge,
+                thread_id,
+                route.request.id.clone(),
+                route.owner,
+            )
+            .await
+            {
+                tracing::warn!(
+                    %thread_id,
+                    request_id = %route.request.id,
+                    %error,
+                    "failed to publish server-request resolution before thread delete"
                 );
             }
             let _ = route.sender.send(ServerRequestResolution {
@@ -392,6 +421,28 @@ impl ServerRequestRouter {
                 resolved_before_transition: false,
             })
             .map_err(|_| ServerRequestError::ResponseChannelClosed { id })
+    }
+
+    fn take_matching_routes(
+        &self,
+        mut matches: impl FnMut(&PendingRoute) -> bool,
+    ) -> Vec<PendingRoute> {
+        let mut pending = self
+            .inner
+            .pending
+            .lock()
+            .expect("server request router mutex poisoned");
+        let request_ids = pending
+            .iter()
+            .filter_map(|(request_id, route)| matches(route).then_some(request_id.clone()))
+            .collect::<Vec<_>>();
+        let mut routes = request_ids
+            .iter()
+            .filter_map(|request_id| pending.remove(request_id))
+            .collect::<Vec<_>>();
+        drop(pending);
+        routes.sort_by_key(|route| route.request_order);
+        routes
     }
 
     fn cancel(&self, id: &RequestId) -> Option<ServerRequestOwner> {
@@ -995,6 +1046,70 @@ mod tests {
             .expect("other thread stays routable");
         assert!(other_turn.wait().await.is_ok());
         assert!(other_thread.wait().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn thread_subtree_cancel_resolves_matching_requests_in_registration_order() {
+        let server = AppServer::new();
+        let router = &server.server_requests;
+        let mut outbound = server.subscribe_outbound_messages();
+        let mut root = router.register(
+            "item/commandExecution/requestApproval",
+            Some(json!({ "threadId": "thread-root", "turnId": "turn-root" })),
+        );
+        let root_id = root.id().clone();
+        let mut child = router.register(
+            "item/fileChange/requestApproval",
+            Some(json!({ "threadId": "thread-child", "turnId": "turn-child" })),
+        );
+        let child_id = child.id().clone();
+        let retained = router.register(
+            "item/tool/requestUserInput",
+            Some(json!({ "threadId": "thread-retained", "turnId": "turn-retained" })),
+        );
+
+        assert_eq!(
+            router
+                .abort_for_threads(
+                    &server.event_bridge(),
+                    &["thread-root".to_string(), "thread-child".to_string()],
+                    "thread deleted",
+                )
+                .await,
+            2
+        );
+
+        for expected_id in [&root_id, &child_id] {
+            let message = tokio::time::timeout(Duration::from_secs(1), outbound.recv())
+                .await
+                .expect("resolved notification should arrive")
+                .expect("resolved notification channel should stay open");
+            let JsonRpcMessage::Notification(notification) = message else {
+                panic!("expected resolved notification");
+            };
+            let ServerNotification::ServerRequestResolved(resolved) =
+                ServerNotification::try_from(notification).expect("typed resolved notification")
+            else {
+                panic!("expected typed resolved notification");
+            };
+            assert_eq!(&resolved.request_id, expected_id);
+        }
+
+        for pending in [&mut root, &mut child] {
+            let terminal = pending.wait_terminal().await;
+            assert!(terminal.resolved_before_transition);
+            assert!(matches!(
+                terminal.result,
+                Err(ServerRequestError::ClientRejected { error, .. })
+                    if error.code == error_codes::REQUEST_CANCELLED
+            ));
+        }
+        assert_eq!(router.pending_count(), 1);
+        router
+            .resolve_response(retained.id().clone(), json!({ "answers": {} }))
+            .expect("retained thread request stays routable");
+        assert!(retained.wait().await.is_ok());
+        server.thread_states.clear_all_listeners().await;
     }
 
     #[tokio::test]

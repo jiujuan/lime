@@ -1,4 +1,5 @@
 import React from "react";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 import {
   ChevronDown,
   CircleDot,
@@ -83,6 +84,7 @@ interface TaskCenterUtilityToolbarProps {
     submittedActionsInFlight?: readonly ActionRequired[];
     threadItems?: readonly AgentThreadItem[];
     todoItems?: readonly AgentTodoItem[];
+    threadGoal?: ThreadGoal | null;
     threadRead?: AgentRuntimeThreadReadModel | null;
     executionRuntime?: AgentSessionExecutionRuntime | null;
     canonicalChildren?: CanonicalChildThreadSummary[];
@@ -395,6 +397,7 @@ export function TaskCenterUtilityToolbar({
         accessMode: taskRail.accessMode,
         reasoningEffort: taskRail.reasoningEffort,
         workspaceRootPath: taskRail.workspaceRootPath ?? null,
+        threadGoal: taskRail.threadGoal,
         threadRead: taskRail.threadRead,
         threadItems: taskRail.threadItems,
         canonicalChildren: taskRail.canonicalChildren,
@@ -417,6 +420,7 @@ export function TaskCenterUtilityToolbar({
       submittedActionsInFlight: taskRail.submittedActionsInFlight,
       threadItems: taskRail.threadItems,
       todoItems: taskRail.todoItems,
+      threadGoal: taskRail.threadGoal,
       threadRead: taskRail.threadRead,
       canonicalChildren: taskRail.canonicalChildren,
       context: taskRailContext,

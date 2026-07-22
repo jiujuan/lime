@@ -24,6 +24,29 @@ fn thread_start_uses_v2_camel_case_fields() {
 }
 
 #[test]
+fn thread_fork_round_trips_codex_goal_deferral_fields() {
+    let expected = json!({
+        "id": 2,
+        "method": "thread/fork",
+        "params": {
+            "threadId": "thread_1",
+            "lastTurnId": "turn_2",
+            "excludeTurns": true,
+            "deferGoalContinuation": true
+        }
+    });
+    let request: ClientRequest =
+        serde_json::from_value(expected.clone()).expect("decode thread/fork request");
+    assert_eq!(request.method(), Method::ThreadFork);
+    assert_eq!(
+        serde_json::to_value(request).expect("encode thread/fork request"),
+        expected
+    );
+    assert_eq!(Method::parse(METHOD_THREAD_FORK), Some(Method::ThreadFork));
+    assert!(METHODS.contains(&METHOD_THREAD_FORK));
+}
+
+#[test]
 fn thread_resume_round_trips_exclude_turns_and_initial_page() {
     let value = json!({
         "threadId": "thread_1",
@@ -238,8 +261,20 @@ fn thread_archive_contract_matches_v2_shapes() {
         json!({})
     );
 
-    let unarchive: ClientRequest = serde_json::from_value(json!({
+    let delete: ClientRequest = serde_json::from_value(json!({
         "id": 8,
+        "method": "thread/delete",
+        "params": {"threadId": "thread_1"}
+    }))
+    .expect("deserialize thread/delete request");
+    assert_eq!(delete.method(), Method::ThreadDelete);
+    assert_eq!(
+        serde_json::to_value(ThreadDeleteResponse {}).expect("serialize delete response"),
+        json!({})
+    );
+
+    let unarchive: ClientRequest = serde_json::from_value(json!({
+        "id": 9,
         "method": "thread/unarchive",
         "params": {"threadId": "thread_1"}
     }))
@@ -249,6 +284,10 @@ fn thread_archive_contract_matches_v2_shapes() {
     for expected in [
         json!({
             "method": "thread/archived",
+            "params": {"threadId": "thread_1"}
+        }),
+        json!({
+            "method": "thread/deleted",
             "params": {"threadId": "thread_1"}
         }),
         json!({
@@ -636,6 +675,10 @@ fn lifecycle_notifications_round_trip_only_the_v2_shapes() {
             "params": {"threadId": "thread_1"}
         }),
         json!({
+            "method": "thread/deleted",
+            "params": {"threadId": "thread_1"}
+        }),
+        json!({
             "method": "thread/unarchived",
             "params": {"threadId": "thread_1"}
         }),
@@ -773,6 +816,7 @@ fn typed_v2_envelope_schema_names_are_stable() {
         [
             "thread/started",
             "thread/archived",
+            "thread/deleted",
             "thread/unarchived",
             "turn/started",
             "turn/completed",

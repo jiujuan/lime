@@ -13,7 +13,7 @@ use agent_runtime::provider_turn::{
 use agent_runtime::session_loop::RuntimeSessionInputHandle;
 use rmcp::model::CallToolResult;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc::UnboundedSender, Mutex};
@@ -217,6 +217,24 @@ impl RuntimeToolStepSnapshotSource for CurrentTurnToolStepSnapshotSource {
                 &mcp_snapshot,
                 self.agent_control_gateway.as_ref(),
             );
+            let serial_mcp_tool_names = mcp_snapshot
+                .tools()
+                .iter()
+                .filter(|tool| !mcp_snapshot.supports_parallel_tool_calls(tool.name.as_ref()))
+                .map(|tool| tool.name.to_string())
+                .collect::<Vec<_>>();
+            let mcp_tool_environment_ids =
+                mcp_snapshot
+                    .tools()
+                    .iter()
+                    .map(|tool| {
+                        let tool_name = tool.name.to_string();
+                        let environment_id = mcp_snapshot.environment_id(&tool_name).ok_or_else(|| {
+                        format!("MCP tool '{tool_name}' is missing captured environment provenance")
+                    })?;
+                        Ok((tool_name, environment_id.to_string()))
+                    })
+                    .collect::<Result<HashMap<_, _>, String>>()?;
             let executor = RuntimeToolExecutorHandle::new(Arc::new(CurrentTurnToolExecutor {
                 state: self.state.clone(),
                 policy: self.policy.clone(),
@@ -227,7 +245,12 @@ impl RuntimeToolStepSnapshotSource for CurrentTurnToolStepSnapshotSource {
                 agent_control_gateway: self.agent_control_gateway.clone(),
                 pending_input: self.pending_input.clone(),
             }));
-            Ok(RuntimeToolStepSnapshot::new(definitions, executor))
+            Ok(RuntimeToolStepSnapshot::with_tool_metadata(
+                definitions,
+                executor,
+                serial_mcp_tool_names,
+                mcp_tool_environment_ids,
+            ))
         })
     }
 }

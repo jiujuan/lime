@@ -164,7 +164,7 @@ fn app_server_turn_policy_can_select_configured_responsive_slot() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
     options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
 
     let selection = resolve_runtime_model_selection(&request).expect("responsive selection");
 
@@ -200,7 +200,7 @@ fn runtime_model_selection_prefers_responsive_slot_for_detached_first_turn() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
     options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
 
     let selection = resolve_runtime_model_selection(&request).expect("selection");
 
@@ -252,7 +252,7 @@ fn responsive_policy_without_configured_slot_keeps_explicit_preferences() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
     options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
 
     let selection = resolve_runtime_model_selection(&request).expect("selection");
     assert_eq!(selection.provider, "deepseek");
@@ -540,7 +540,7 @@ fn app_server_turn_policy_keeps_context_policy_and_auto_compact_override() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("openai".to_string());
     options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");

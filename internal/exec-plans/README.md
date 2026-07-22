@@ -29,6 +29,7 @@
 - 参考运行时主链进度日志：`internal/exec-plans/upstream-runtime-alignment-progress.md`
 - Refactor v2 全项目 Gate A/B 验收计划：`internal/exec-plans/project-gate-a-b-acceptance-plan.md`
 - Lime v1.108.0 发布执行计划：`internal/exec-plans/release-v1.108.0-plan.md`
+- Lime v1.109.0 发布执行计划：`internal/exec-plans/release-v1.109.0-plan.md`
 - Codex App GUI 对齐执行计划：`internal/exec-plans/codex-app-gui-alignment-plan.md`
 - Codex 对话兼容重构：`internal/exec-plans/codex-conversation-compat-refactor-plan.md`
 - Codex 对齐 v1 并行协调：`internal/exec-plans/codex-alignment-v1-coordination-plan.md`

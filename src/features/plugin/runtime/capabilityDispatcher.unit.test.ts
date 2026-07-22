@@ -2408,6 +2408,26 @@ describe("createPluginCapabilityDispatcher unit boundary", () => {
       status: "submitted",
       submittedAt: FIXED_NOW,
     });
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.agent",
+        method: "respondAction",
+        input: {
+          taskId: task.taskId,
+          requestId: "runtime-request-retired",
+          actionType: "ask_user",
+          response: "不得进入旧别名。",
+        },
+        rawPayload: {
+          capability: "lime.agent",
+          method: "respondAction",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY_METHOD",
+    });
 
     const cancelled = (await dispatch({
       appId: "content-factory-app",

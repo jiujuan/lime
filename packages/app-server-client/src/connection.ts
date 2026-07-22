@@ -95,6 +95,8 @@ export class AppServerConnection {
   #bufferedMessages: protocol.JsonRpcMessage[] = [];
   #mirroredNotifications: protocol.JsonRpcNotification[] = [];
   #detachedRequestIds = new Set<protocol.RequestId>();
+  #pendingServerRequestIds = new Set<protocol.RequestId>();
+  #resolvedServerRequestIds = new Set<protocol.RequestId>();
   #transportReadLock: Promise<void> = Promise.resolve();
 
   constructor(
@@ -275,12 +277,14 @@ export class AppServerConnection {
     for (;;) {
       const buffered = this.#shiftBufferedNotification();
       if (buffered) {
+        this.#observeServerMessage(buffered);
         return buffered;
       }
       const notification = await this.#withTransportRead(
         timeoutMs,
         () => this.#shiftBufferedNotification(),
         (message) => {
+          this.#observeServerMessage(message);
           if (this.#consumeDetachedRequestMessage(message)) {
             return undefined;
           }
@@ -316,6 +320,7 @@ export class AppServerConnection {
             protocol.isJsonRpcNotification(incoming) ||
             protocol.isJsonRpcRequest(incoming)
           ) {
+            this.#observeServerMessage(incoming);
             return incoming;
           }
           this.#prependBufferedMessages([incoming]);
@@ -339,13 +344,37 @@ export class AppServerConnection {
       >(
         timeoutMs,
         () => this.#shiftBufferedMessage(),
-        (incoming) =>
-          this.#consumeDetachedRequestMessage(incoming) ? undefined : incoming,
+        (incoming) => {
+          if (this.#consumeDetachedRequestMessage(incoming)) {
+            return undefined;
+          }
+          this.#observeServerMessage(incoming);
+          return incoming;
+        },
       );
       if (message) {
         return message;
       }
     }
+  }
+
+  /**
+   * Sends a response for an App Server initiated (typed server) request.
+   * The request id is the only routing key; callers must not infer identity
+   * from thread, turn, or action metadata.
+   */
+  respondServerRequest<T>(id: protocol.RequestId, result: T): void {
+    this.#consumeServerRequestId(id);
+    this.transport.send(protocol.response(id, result));
+  }
+
+  /** Sends a JSON-RPC error for an App Server initiated request. */
+  rejectServerRequest(
+    id: protocol.RequestId,
+    error: protocol.JsonRpcError,
+  ): void {
+    this.#consumeServerRequestId(id);
+    this.transport.send(protocol.errorResponse(id, error));
   }
 
   async #nextMessageForRequest(
@@ -360,6 +389,7 @@ export class AppServerConnection {
       throwIfRequestAborted(signal, method, id);
       const buffered = this.#shiftBufferedRequestMessage(id);
       if (buffered) {
+        this.#observeServerMessage(buffered);
         throwIfRequestAborted(signal, method, id);
         return buffered;
       }
@@ -380,6 +410,7 @@ export class AppServerConnection {
           readTimeoutMs,
           () => this.#shiftBufferedRequestMessage(id),
           (incoming) => {
+            this.#observeServerMessage(incoming);
             if (this.#consumeDetachedRequestMessage(incoming)) {
               return undefined;
             }
@@ -440,6 +471,7 @@ export class AppServerConnection {
     while (this.#bufferedMessages.length > 0) {
       const message = this.#bufferedMessages.shift();
       if (message && !this.#consumeDetachedRequestMessage(message)) {
+        this.#observeServerMessage(message);
         return message;
       }
     }
@@ -486,12 +518,14 @@ export class AppServerConnection {
       return undefined;
     }
     const [message] = this.#bufferedMessages.splice(index, 1);
+    this.#observeServerMessage(message);
     return message as protocol.JsonRpcNotification;
   }
 
   #shiftBufferedServerMessage(): AppServerServerMessage | undefined {
     const mirrored = this.#mirroredNotifications.shift();
     if (mirrored) {
+      this.#observeServerMessage(mirrored);
       return mirrored;
     }
     this.#dropDetachedBufferedRequestMessages();
@@ -504,7 +538,52 @@ export class AppServerConnection {
       return undefined;
     }
     const [message] = this.#bufferedMessages.splice(index, 1);
+    this.#observeServerMessage(message);
     return message as AppServerServerMessage;
+  }
+
+  #observeServerMessage(message: protocol.JsonRpcMessage): void {
+    if (protocol.isJsonRpcRequest(message)) {
+      if (this.#resolvedServerRequestIds.has(message.id)) {
+        return;
+      }
+      this.#pendingServerRequestIds.add(message.id);
+      return;
+    }
+    if (
+      protocol.isJsonRpcNotification(message) &&
+      message.method === protocol.METHOD_SERVER_REQUEST_RESOLVED
+    ) {
+      const params = message.params;
+      if (
+        params &&
+        typeof params === "object" &&
+        !Array.isArray(params) &&
+        (typeof (params as { requestId?: unknown }).requestId === "string" ||
+          typeof (params as { requestId?: unknown }).requestId === "number")
+      ) {
+        const requestId = (params as { requestId: protocol.RequestId })
+          .requestId;
+        this.#pendingServerRequestIds.delete(requestId);
+        this.#resolvedServerRequestIds.add(requestId);
+        while (this.#resolvedServerRequestIds.size > 2_048) {
+          const oldest = this.#resolvedServerRequestIds.values().next().value;
+          if (oldest === undefined) {
+            break;
+          }
+          this.#resolvedServerRequestIds.delete(oldest);
+        }
+      }
+    }
+  }
+
+  #consumeServerRequestId(id: protocol.RequestId): void {
+    if (this.#pendingServerRequestIds.delete(id)) {
+      return;
+    }
+    throw new Error(
+      `unknown or already resolved server request id: ${String(id)}`,
+    );
   }
 
   #dropDetachedBufferedRequestMessages(): void {

@@ -31,6 +31,18 @@ pub(crate) fn first_user_message_from_agent_input(input: &[AgentInput]) -> Optio
 }
 
 pub(crate) fn first_user_message_from_runtime_payload(payload: &Value) -> Option<String> {
+    if payload
+        .get("visibility")
+        .and_then(Value::as_str)
+        .is_some_and(|visibility| {
+            matches!(
+                visibility.to_ascii_lowercase().as_str(),
+                "agent_only" | "agentonly"
+            )
+        })
+    {
+        return None;
+    }
     payload
         .get("input")
         .and_then(|value| serde_json::from_value::<Vec<AgentInput>>(value.clone()).ok())
@@ -181,6 +193,18 @@ mod tests {
                 "input": [{"type": "text", "text": "生成项目摘要"}]
             })),
             Some("生成项目摘要".to_string())
+        );
+    }
+
+    #[test]
+    fn ignores_agent_only_goal_context_for_session_title() {
+        assert_eq!(
+            first_user_message_from_runtime_payload(&json!({
+                "visibility": "agent_only",
+                "source": "thread_goal",
+                "input": [{"type": "text", "text": "internal continuation"}]
+            })),
+            None
         );
     }
 

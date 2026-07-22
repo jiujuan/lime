@@ -26,12 +26,10 @@ vi.mock("@/lib/electron-host", () => ({
 }));
 
 import {
-  APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY,
-  APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
   APP_SERVER_METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
-  APP_SERVER_METHOD_AGENT_SESSION_DELETE,
   APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
   APP_SERVER_METHOD_THREAD_READ,
+  APP_SERVER_METHOD_THREAD_DELETE,
   APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
   APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
   APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
@@ -377,82 +375,22 @@ describe("Agent API 治理护栏", () => {
     });
   });
 
-  it("respondAgentRuntimeAction 应经 Electron IPC 调 App Server action/respond", async () => {
-    mockAppServerResponse({});
-
-    await respondAgentRuntimeAction({
-      session_id: "session-runtime",
-      request_id: "req-runtime",
-      action_type: "ask_user",
-      confirmed: true,
-      response: '{"answer":"A"}',
-      user_data: { answer: "A" },
-    });
-
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND, {
-      sessionId: "session-runtime",
-      requestId: "req-runtime",
-      actionType: "ask_user",
-      confirmed: true,
-      response: '{"answer":"A"}',
-      userData: { answer: "A" },
-    });
-  });
-
-  it("respondAgentRuntimeAction 应通过 App Server 透传 event_name 以便立即恢复当前执行流", async () => {
-    mockAppServerResponse({});
-
-    await respondAgentRuntimeAction({
-      session_id: "session-runtime",
-      request_id: "req-runtime-resume",
-      action_type: "elicitation",
-      confirmed: true,
-      response: '{"answer":"继续"}',
-      user_data: { answer: "继续" },
-      event_name: "agent_stream_session-runtime",
-    });
-
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND, {
-      sessionId: "session-runtime",
-      requestId: "req-runtime-resume",
-      actionType: "elicitation",
-      confirmed: true,
-      response: '{"answer":"继续"}',
-      userData: { answer: "继续" },
-      eventName: "agent_stream_session-runtime",
-    });
-  });
-
-  it("respondAgentRuntimeAction 应通过 App Server 透传 action_scope 以便精确恢复 ask/elicitation", async () => {
-    mockAppServerResponse({});
-
-    await respondAgentRuntimeAction({
-      session_id: "session-runtime",
-      request_id: "req-runtime-scope",
-      action_type: "ask_user",
-      confirmed: true,
-      response: '{"answer":"自动执行"}',
-      user_data: { answer: "自动执行" },
-      action_scope: {
+  it("respondAgentRuntimeAction 缺少 typed pending 时应 fail closed，不发旧 action/respond", async () => {
+    await expect(
+      respondAgentRuntimeAction({
         session_id: "session-runtime",
-        thread_id: "thread-runtime",
-        turn_id: "turn-runtime",
-      },
-    });
-
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND, {
-      sessionId: "session-runtime",
-      requestId: "req-runtime-scope",
-      actionType: "ask_user",
-      confirmed: true,
-      response: '{"answer":"自动执行"}',
-      userData: { answer: "自动执行" },
-      actionScope: {
-        sessionId: "session-runtime",
-        threadId: "thread-runtime",
-        turnId: "turn-runtime",
-      },
-    });
+        request_id: "req-runtime",
+        action_type: "ask_user",
+        confirmed: true,
+      }),
+    ).rejects.toThrow(
+      "Typed server request is no longer pending; generic agentSession/action/respond is retired.",
+    );
+    expect(
+      mockSafeInvoke.mock.calls.some(
+        (call) => call[0] === "app_server_handle_json_lines",
+      ),
+    ).toBe(false);
   });
 
   it("resumeThread 应经 Electron IPC 调 App Server thread/resume", async () => {
@@ -479,31 +417,13 @@ describe("Agent API 治理护栏", () => {
     });
   });
 
-  it("replayAgentRuntimeRequest 应经 Electron IPC 调 App Server action/replay", async () => {
-    mockAppServerResponse({
-      action: {
-        type: "action_required",
-        requestId: "req-runtime-replay",
-        actionType: "ask_user",
-        prompt: "请选择执行模式",
-      },
-    });
-
+  it("replayAgentRuntimeRequest 无当前 typed pending 时应 fail closed", async () => {
     await expect(
       replayAgentRuntimeRequest({
         session_id: "session-runtime-replay",
         request_id: "req-runtime-replay",
       }),
-    ).resolves.toMatchObject({
-      request_id: "req-runtime-replay",
-      action_type: "ask_user",
-      prompt: "请选择执行模式",
-    });
-
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY, {
-      sessionId: "session-runtime-replay",
-      requestId: "req-runtime-replay",
-    });
+    ).resolves.toBeNull();
   });
 
   it("getAgentRuntimeThreadRead 应经 Electron IPC 调 App Server session/read 并归一化 queued_turns", async () => {
@@ -1861,9 +1781,24 @@ describe("Agent API 治理护栏", () => {
 
   it("deleteAgentRuntimeSession / updateAgentRuntimeSession 应走 current 边界，标题生成只做本地投影", async () => {
     mockAppServerResponse({
-      sessionId: "session-runtime-3",
-      deleted: true,
+      data: [
+        {
+          cliVersion: "0.1.0",
+          createdAt: 1780704000,
+          cwd: "/tmp/workspace-1",
+          ephemeral: false,
+          id: "thread-runtime-3",
+          modelProvider: "openai-compatible",
+          preview: "Runtime Session 3",
+          sessionId: "session-runtime-3",
+          source: "appServer",
+          status: { type: "idle" },
+          turns: [],
+          updatedAt: 1780704000,
+        },
+      ],
     });
+    mockAppServerResponse({});
     mockAppServerResponse({
       session: {
         sessionId: "session-runtime-3",
@@ -1888,14 +1823,18 @@ describe("Agent API 治理护栏", () => {
       ),
     ).resolves.toBe("新的智能标题");
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_DELETE, {
-      sessionId: "session-runtime-3",
+    expectAppServerRequest(1, "thread/list", {
+      archived: false,
+      limit: 100,
     });
-    expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+    expectAppServerRequest(2, APP_SERVER_METHOD_THREAD_DELETE, {
+      threadId: "thread-runtime-3",
+    });
+    expectAppServerRequest(3, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
       sessionId: "session-runtime-3",
       title: "重命名后的标题",
     });
-    expect(mockSafeInvoke).toHaveBeenCalledTimes(2);
+    expect(mockSafeInvoke).toHaveBeenCalledTimes(3);
   });
 
   it("generateAgentRuntimeTitle 应从图片任务预览文本生成本地标题", async () => {

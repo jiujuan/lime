@@ -170,6 +170,7 @@ impl RuntimeCore {
                 None,
                 false,
                 false,
+                super::super::turn_start::TurnStartInputKind::User,
             )
             .await;
         if let Err(error) = start_result {

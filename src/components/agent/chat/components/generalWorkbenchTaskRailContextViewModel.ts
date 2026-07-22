@@ -1,4 +1,5 @@
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 import type { AgentThreadItem } from "../types";
 import {
   summarizeCanonicalChildThreads,
@@ -592,17 +593,20 @@ function buildSubtasksContextItem(
 
 export function buildGeneralWorkbenchTaskRailRuntimeContext({
   context,
+  threadGoal,
   threadRead,
   threadItems,
   canonicalChildren,
 }: {
   context?: GeneralWorkbenchTaskRailContextInput;
+  threadGoal?: ThreadGoal | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
   threadItems?: readonly AgentThreadItem[];
   canonicalChildren?: CanonicalChildThreadSummary[];
 }): GeneralWorkbenchTaskRailContextInput | undefined {
   if (
     !context &&
+    !threadGoal &&
     !threadRead &&
     !threadItems?.length &&
     !canonicalChildren?.length
@@ -613,7 +617,10 @@ export function buildGeneralWorkbenchTaskRailRuntimeContext({
   const nextContext: GeneralWorkbenchTaskRailContextInput = {
     ...(context ?? {}),
   };
-  const objectiveText = threadRead?.managed_objective?.objective_text?.trim();
+  const objectiveText =
+    threadGoal && threadRead && threadGoal.threadId === threadRead.thread_id
+      ? threadGoal.objective.trim()
+      : "";
   if (objectiveText && !nextContext.objectiveText?.trim()) {
     nextContext.objectiveText = objectiveText;
   }

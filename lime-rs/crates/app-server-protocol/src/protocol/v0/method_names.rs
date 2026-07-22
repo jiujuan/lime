@@ -44,7 +44,6 @@ pub const METHOD_TURN_START: &str = "turn/start";
 pub const METHOD_TURN_STEER: &str = "turn/steer";
 pub const METHOD_TURN_INTERRUPT: &str = "turn/interrupt";
 pub const METHOD_AGENT_SESSION_UPDATE: &str = "agentSession/update";
-pub const METHOD_AGENT_SESSION_DELETE: &str = "agentSession/delete";
 pub const METHOD_AGENT_SESSION_OBJECTIVE_READ: &str = "agentSession/objective/read";
 pub const METHOD_AGENT_SESSION_OBJECTIVE_SET: &str = "agentSession/objective/set";
 pub const METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE: &str =

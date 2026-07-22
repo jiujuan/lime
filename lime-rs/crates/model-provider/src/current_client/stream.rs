@@ -95,7 +95,9 @@ pub(super) fn openai_chat_sse(
             }
             let chunk = serde_json::from_str::<openai::ChatCompletionChunk>(&frame.data)
                 .map_err(|error| CurrentProviderError::new(format!("解析 OpenAI SSE chunk 失败: {error}")))?;
-            state.response_id = Some(chunk.id.clone());
+            if let Some(response_id) = chunk.id.filter(|value| !value.trim().is_empty()) {
+                state.response_id = Some(response_id);
+            }
             if let Some(usage) = chunk.usage {
                 let usage = openai_usage(usage);
                 yield LlmEvent::Usage { usage: usage.clone() };

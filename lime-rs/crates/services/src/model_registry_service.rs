@@ -1817,16 +1817,27 @@ impl ModelRegistryService {
         Self::is_fal_like_model_fetch(provider_id, api_host, provider_type)
     }
 
+    #[cfg(test)]
     fn provider_models_cache_key(
         provider_id: &str,
         api_host: &str,
         provider_type: Option<ApiProviderType>,
     ) -> String {
+        Self::provider_models_cache_key_scoped(provider_id, api_host, provider_type, None)
+    }
+
+    fn provider_models_cache_key_scoped(
+        provider_id: &str,
+        api_host: &str,
+        provider_type: Option<ApiProviderType>,
+        credential_fingerprint: Option<&str>,
+    ) -> String {
         let protocol = Self::resolve_model_fetch_protocol(provider_id, api_host, provider_type);
         let scope = format!(
-            "{}\n{}\n{protocol:?}",
+            "{}\n{}\n{protocol:?}\n{}",
             provider_id.trim().to_ascii_lowercase(),
-            api_host.trim().trim_end_matches('/')
+            api_host.trim().trim_end_matches('/'),
+            credential_fingerprint.unwrap_or("unscoped")
         );
         let digest = Sha256::digest(scope.as_bytes());
         let mut hash = String::with_capacity(digest.len() * 2);
@@ -1835,6 +1846,21 @@ impl ModelRegistryService {
             let _ = write!(&mut hash, "{byte:02x}");
         }
         format!("{PROVIDER_MODELS_CACHE_KEY_PREFIX}{hash}")
+    }
+
+    fn credential_cache_fingerprint(api_key: &str) -> Option<String> {
+        let api_key = api_key.trim();
+        if api_key.is_empty() {
+            return None;
+        }
+
+        let digest = Sha256::digest(api_key.as_bytes());
+        let mut fingerprint = String::with_capacity(digest.len() * 2);
+        for byte in digest {
+            use std::fmt::Write as _;
+            let _ = write!(&mut fingerprint, "{byte:02x}");
+        }
+        Some(fingerprint)
     }
 
     /// 读取 10 天内有效的 Provider 实时模型缓存。
@@ -1847,7 +1873,22 @@ impl ModelRegistryService {
         api_host: &str,
         provider_type: Option<ApiProviderType>,
     ) -> Result<Option<FetchModelsResult>, String> {
-        let cache_key = Self::provider_models_cache_key(provider_id, api_host, provider_type);
+        self.get_cached_provider_models_scoped(provider_id, api_host, provider_type, None)
+    }
+
+    fn get_cached_provider_models_scoped(
+        &self,
+        provider_id: &str,
+        api_host: &str,
+        provider_type: Option<ApiProviderType>,
+        credential_fingerprint: Option<&str>,
+    ) -> Result<Option<FetchModelsResult>, String> {
+        let cache_key = Self::provider_models_cache_key_scoped(
+            provider_id,
+            api_host,
+            provider_type,
+            credential_fingerprint,
+        );
         let now = chrono::Utc::now().timestamp();
         let mut conn = self.db.lock().map_err(|e| e.to_string())?;
 
@@ -1949,6 +1990,7 @@ impl ModelRegistryService {
         }))
     }
 
+    #[cfg(test)]
     fn save_provider_models_cache(
         &self,
         provider_id: &str,
@@ -1958,11 +2000,37 @@ impl ModelRegistryService {
         request_url: Option<String>,
         fetched_at: i64,
     ) -> Result<(), String> {
+        self.save_provider_models_cache_scoped(
+            provider_id,
+            api_host,
+            provider_type,
+            models,
+            request_url,
+            fetched_at,
+            None,
+        )
+    }
+
+    fn save_provider_models_cache_scoped(
+        &self,
+        provider_id: &str,
+        api_host: &str,
+        provider_type: Option<ApiProviderType>,
+        models: &[EnhancedModelMetadata],
+        request_url: Option<String>,
+        fetched_at: i64,
+        credential_fingerprint: Option<&str>,
+    ) -> Result<(), String> {
         if models.is_empty() {
             return Ok(());
         }
 
-        let cache_key = Self::provider_models_cache_key(provider_id, api_host, provider_type);
+        let cache_key = Self::provider_models_cache_key_scoped(
+            provider_id,
+            api_host,
+            provider_type,
+            credential_fingerprint,
+        );
         let payload = ProviderModelsCachePayload {
             taxonomy_version: PROVIDER_MODELS_CACHE_TAXONOMY_VERSION,
             provider_id: provider_id.trim().to_string(),
@@ -2083,8 +2151,14 @@ impl ModelRegistryService {
             provider_id,
             api_host
         );
+        let credential_fingerprint = Self::credential_cache_fingerprint(api_key);
 
-        match self.get_cached_provider_models(provider_id, api_host, provider_type) {
+        match self.get_cached_provider_models_scoped(
+            provider_id,
+            api_host,
+            provider_type,
+            credential_fingerprint.as_deref(),
+        ) {
             Ok(Some(cached)) => return Ok(cached),
             Ok(None) => {}
             Err(error) => {
@@ -2112,13 +2186,14 @@ impl ModelRegistryService {
                 });
             }
 
-            if let Err(error) = self.save_provider_models_cache(
+            if let Err(error) = self.save_provider_models_cache_scoped(
                 provider_id,
                 api_host,
                 provider_type,
                 &models,
                 None,
                 now,
+                credential_fingerprint.as_deref(),
             ) {
                 tracing::warn!("[ModelRegistry] 写入 Mimo Provider 模型缓存失败: {error}");
             }
@@ -2143,13 +2218,14 @@ impl ModelRegistryService {
             let models = self.build_fal_declared_models(provider_id, custom_models, now);
 
             if !models.is_empty() {
-                if let Err(error) = self.save_provider_models_cache(
+                if let Err(error) = self.save_provider_models_cache_scoped(
                     provider_id,
                     api_host,
                     provider_type,
                     &models,
                     None,
                     now,
+                    credential_fingerprint.as_deref(),
                 ) {
                     tracing::warn!("[ModelRegistry] 写入声明模型缓存失败: {error}");
                 }
@@ -2192,13 +2268,14 @@ impl ModelRegistryService {
                 self.build_responses_compatible_declared_models(provider_id, custom_models, now);
 
             if !models.is_empty() {
-                if let Err(error) = self.save_provider_models_cache(
+                if let Err(error) = self.save_provider_models_cache_scoped(
                     provider_id,
                     api_host,
                     provider_type,
                     &models,
                     None,
                     now,
+                    credential_fingerprint.as_deref(),
                 ) {
                     tracing::warn!(
                         "[ModelRegistry] 写入 Responses Provider 声明模型缓存失败: {error}"
@@ -2258,13 +2335,14 @@ impl ModelRegistryService {
                     .map(|m| self.convert_api_model(m, provider_id, now))
                     .collect();
 
-                if let Err(error) = self.save_provider_models_cache(
+                if let Err(error) = self.save_provider_models_cache_scoped(
                     provider_id,
                     api_host,
                     provider_type,
                     &models,
                     Some(request_url.clone()),
                     now,
+                    credential_fingerprint.as_deref(),
                 ) {
                     tracing::warn!("[ModelRegistry] 写入 Provider 模型缓存失败: {error}");
                 }
@@ -4416,17 +4494,44 @@ mod tests {
             .unwrap_or_default()
             .contains("已使用 Provider 中声明的图片模型"));
 
+        let credential_fingerprint = ModelRegistryService::credential_cache_fingerprint("sk-test");
         let cached = service
-            .get_cached_provider_models(
+            .get_cached_provider_models_scoped(
                 "airgate-openai-images",
                 "https://code.ylsagi.com/codex",
                 Some(ApiProviderType::Openai),
+                credential_fingerprint.as_deref(),
             )
             .expect("cache read should not fail")
             .expect("declared image models should be cached");
 
         assert!(cached.from_cache);
         assert_eq!(cached.models[0].id, "gpt-images-2");
+    }
+
+    #[test]
+    fn provider_models_cache_isolated_by_credential_fingerprint() {
+        let first = ModelRegistryService::provider_models_cache_key_scoped(
+            "openai",
+            "https://api.openai.com/v1",
+            Some(ApiProviderType::Openai),
+            Some("credential-a"),
+        );
+        let second = ModelRegistryService::provider_models_cache_key_scoped(
+            "openai",
+            "https://api.openai.com/v1",
+            Some(ApiProviderType::Openai),
+            Some("credential-b"),
+        );
+        let unscoped = ModelRegistryService::provider_models_cache_key(
+            "openai",
+            "https://api.openai.com/v1",
+            Some(ApiProviderType::Openai),
+        );
+
+        assert_ne!(first, second);
+        assert_ne!(first, unscoped);
+        assert_ne!(second, unscoped);
     }
 
     #[tokio::test]
@@ -4520,11 +4625,13 @@ mod tests {
             .unwrap_or_default()
             .contains("不提供标准 /models 枚举"));
 
+        let credential_fingerprint = ModelRegistryService::credential_cache_fingerprint("sk-test");
         let cached = service
-            .get_cached_provider_models(
+            .get_cached_provider_models_scoped(
                 "xiaomi",
                 "https://token-plan-sgp.xiaomimimo.com/anthropic",
                 Some(ApiProviderType::Openai),
+                credential_fingerprint.as_deref(),
             )
             .expect("cache read should not fail")
             .expect("mimo known model should be cached");

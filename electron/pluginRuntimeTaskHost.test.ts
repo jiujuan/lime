@@ -1,11 +1,6 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PluginRuntimeTaskHost } from "./pluginRuntimeTaskHost";
-
-const tempDirs: string[] = [];
 
 type AppServerRequestMock = (
   method: string,
@@ -18,19 +13,7 @@ function createHost(request: AppServerRequestMock): PluginRuntimeTaskHost {
   );
 }
 
-async function createTempDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "lime-plugin-runtime-"));
-  tempDirs.push(dir);
-  return dir;
-}
-
-afterEach(async () => {
-  while (tempDirs.length > 0) {
-    const dir = tempDirs.pop();
-    if (dir) {
-      await rm(dir, { recursive: true, force: true });
-    }
-  }
+afterEach(() => {
   vi.restoreAllMocks();
 });
 
@@ -189,32 +172,7 @@ describe("PluginRuntimeTaskHost", () => {
     ]);
   });
 
-  it("startTask 执行 task worker 并写回 App Server runtime event", async () => {
-    const packageRoot = await createTempDir();
-    await mkdir(path.join(packageRoot, "runtime"), { recursive: true });
-    await writeFile(
-      path.join(packageRoot, "runtime", "worker.mjs"),
-      [
-        "let input = '';",
-        "for await (const chunk of process.stdin) input += chunk;",
-        "const request = JSON.parse(input);",
-        "process.stdout.write(JSON.stringify({",
-        "  artifactKind: 'content_factory.workspace_patch',",
-        "  appId: request.appId,",
-        "  taskKind: request.taskKind,",
-        "  patch: {",
-        "    appId: request.appId,",
-        "    sessionId: request.sessionId,",
-        "    objects: [{",
-        "      ref: { appId: request.appId, kind: 'articleDraft', id: 'draft-1', sessionId: request.sessionId },",
-        "      title: '文章草稿',",
-        "      source: { markdown: '# 草稿' }",
-        "    }]",
-        "  }",
-        "}));",
-      ].join("\n"),
-      "utf8",
-    );
+  it("startTask 把 manifest worker task 委托给 RuntimeCore", async () => {
     const request = vi.fn(async (method: string, params?: unknown) => {
       if (method === "pluginUiRuntime/status") {
         return {
@@ -222,8 +180,6 @@ describe("PluginRuntimeTaskHost", () => {
           status: "ready",
           taskRuntime: {
             enabled: true,
-            packageRootPath: packageRoot,
-            workerEntrypoint: "./runtime/worker.mjs",
             outputArtifactKind: "content_factory.workspace_patch",
             taskKinds: ["content.article.generate"],
             blockers: [],
@@ -237,65 +193,33 @@ describe("PluginRuntimeTaskHost", () => {
         throw new Error("existing thread must not call thread/start");
       }
       if (method === "turn/start") {
+        const turnParams = params as {
+          additionalContext: {
+            metadata: { kind: string; value: string };
+          };
+        };
+        expect(turnParams.additionalContext.metadata.kind).toBe("application");
+        expect(JSON.parse(turnParams.additionalContext.metadata.value)).toEqual(
+          expect.objectContaining({
+            plugin: {
+              appId: "content-factory-app",
+              workspaceId: "workspace-1",
+              paneAction: {
+                key: "default",
+                prompt: "生成文章",
+                surfaceKind: "pluginRuntime",
+                paneKind: "pluginTask",
+                outputArtifactKind: "content_factory.workspace_patch",
+                taskKind: "content.article.generate",
+              },
+            },
+          }),
+        );
         return {
           turn: {
             id: "turn-1",
             status: "inProgress",
           },
-        };
-      }
-      if (method === "agentSession/runtimeEvents/append") {
-        const appendParams = params as {
-          sessionId: string;
-          turnId: string;
-          runtimeEvents: Array<{
-            type: string;
-            payload: Record<string, unknown>;
-          }>;
-        };
-        expect(appendParams.sessionId).toBe("session-1");
-        expect(appendParams.turnId).toBe("turn-1");
-        expect(appendParams.runtimeEvents[0].type).toBe("artifact.snapshot");
-        expect(appendParams.runtimeEvents[0].payload.kind).toBe(
-          "content_factory.workspace_patch",
-        );
-        expect(
-          (
-            appendParams.runtimeEvents[0].payload.metadata as Record<
-              string,
-              unknown
-            >
-          ).contentFactoryWorkspacePatch,
-        ).toBeTruthy();
-        expect(
-          (
-            appendParams.runtimeEvents[0].payload.metadata as Record<
-              string,
-              Record<string, unknown>
-            >
-          ).pluginWorker,
-        ).toEqual(
-          expect.objectContaining({
-            workerEntrypoint: "./runtime/worker.mjs",
-            status: "completed",
-            inputSummary: "prompt=生成文章; inputKeys=topic",
-            outputSummary: "1 objects: 文章草稿",
-            outputObjectCount: 1,
-          }),
-        );
-        return {
-          events: [
-            {
-              eventId: "evt-worker",
-              sequence: 1,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "artifact.snapshot",
-              timestamp: "2026-06-07T00:00:00.000Z",
-              payload: appendParams.runtimeEvents[0].payload,
-            },
-          ],
         };
       }
       throw new Error(`unexpected App Server method: ${method}`);
@@ -322,109 +246,36 @@ describe("PluginRuntimeTaskHost", () => {
       taskId: "task-1",
       status: "accepted",
       worker: {
-        status: "completed",
-        artifactKind: "content_factory.workspace_patch",
-        runtimeEventCount: 1,
-        appendedEventCount: 1,
+        status: "delegated",
+        owner: "runtime_core",
+        outputArtifactKind: "content_factory.workspace_patch",
       },
     });
 
     expect(request).toHaveBeenNthCalledWith(1, "pluginUiRuntime/status", {
       appId: "content-factory-app",
     });
-    expect(request).toHaveBeenNthCalledWith(
-      3,
-      "agentSession/runtimeEvents/append",
-      expect.objectContaining({
-        sessionId: "session-1",
-        turnId: "turn-1",
-      }),
-    );
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      "pluginUiRuntime/status",
+      "turn/start",
+    ]);
   });
 
-  it("startTask 在 worker 失败时写回 runtime.error evidence", async () => {
-    const packageRoot = await createTempDir();
-    await mkdir(path.join(packageRoot, "runtime"), { recursive: true });
-    await writeFile(
-      path.join(packageRoot, "runtime", "worker.mjs"),
-      "process.stdout.write('{');\n",
-      "utf8",
-    );
-    const request = vi.fn(async (method: string, params?: unknown) => {
+  it("startTask 对被阻塞的 worker contract fail closed", async () => {
+    const request = vi.fn(async (method: string) => {
       if (method === "pluginUiRuntime/status") {
         return {
           appId: "content-factory-app",
           status: "ready",
           taskRuntime: {
             enabled: true,
-            packageRootPath: packageRoot,
-            workerEntrypoint: "./runtime/worker.mjs",
             outputArtifactKind: "content_factory.workspace_patch",
             taskKinds: ["content.article.generate"],
-            blockers: [],
+            blockers: ["TASK_RUNTIME_DIRECT_PROVIDER_ACCESS_UNSUPPORTED"],
             followUps: [],
             directProviderAccess: false,
             directFilesystemAccess: false,
           },
-        };
-      }
-      if (method === "thread/start") {
-        throw new Error("existing thread must not call thread/start");
-      }
-      if (method === "turn/start") {
-        return {
-          turn: {
-            id: "turn-1",
-            status: "inProgress",
-          },
-        };
-      }
-      if (method === "agentSession/runtimeEvents/append") {
-        const appendParams = params as {
-          sessionId: string;
-          turnId: string;
-          runtimeEvents: Array<{
-            type: string;
-            payload: Record<string, unknown>;
-          }>;
-        };
-        expect(appendParams.sessionId).toBe("session-1");
-        expect(appendParams.turnId).toBe("turn-1");
-        expect(appendParams.runtimeEvents[0].type).toBe("runtime.error");
-        expect(appendParams.runtimeEvents[0].payload).toEqual(
-          expect.objectContaining({
-            source: "plugin_task_worker",
-            appId: "content-factory-app",
-            taskId: "task-1",
-            taskKind: "content.article.generate",
-            errorCode: "worker_invalid_json_output",
-            status: "failed",
-          }),
-        );
-        expect(appendParams.runtimeEvents[0].payload.message).toEqual(
-          expect.stringContaining("Plugin task worker failed:"),
-        );
-        expect(
-          (
-            appendParams.runtimeEvents[0].payload.metadata as Record<
-              string,
-              Record<string, unknown>
-            >
-          ).pluginWorker.inputSummary,
-        ).toBe("prompt=生成文章; inputKeys=topic");
-        return {
-          events: [
-            {
-              eventId: "evt-worker-failed",
-              sequence: 1,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "runtime.error",
-              timestamp: "2026-06-07T00:00:00.000Z",
-              payload: appendParams.runtimeEvents[0].payload,
-            },
-          ],
         };
       }
       throw new Error(`unexpected App Server method: ${method}`);
@@ -446,17 +297,10 @@ describe("PluginRuntimeTaskHost", () => {
           turnId: "turn-1",
         },
       }),
-    ).resolves.toMatchObject({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      status: "accepted",
-      worker: {
-        status: "failed",
-        errorCode: "worker_invalid_json_output",
-        runtimeEventCount: 1,
-        appendedEventCount: 1,
-      },
-    });
+    ).rejects.toThrow(
+      "Plugin content-factory-app task runtime is blocked: TASK_RUNTIME_DIRECT_PROVIDER_ACCESS_UNSUPPORTED",
+    );
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it("startTask 对已有 canonical thread 直接提交 turn", async () => {
@@ -649,13 +493,8 @@ describe("PluginRuntimeTaskHost", () => {
     });
   });
 
-  it("submitHostResponse 投影 snake_case runtime request 到 action/respond", async () => {
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentSession/action/respond") {
-        return {};
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
+  it("submitHostResponse 不再回退 generic action/respond", async () => {
+    const request = vi.fn();
     const host = createHost(request);
 
     await expect(
@@ -680,25 +519,9 @@ describe("PluginRuntimeTaskHost", () => {
           },
         },
       }),
-    ).resolves.toEqual({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      status: "submitted",
-    });
-    expect(request).toHaveBeenCalledWith("agentSession/action/respond", {
-      sessionId: "session-1",
-      requestId: "request-1",
-      actionType: "ask_user",
-      confirmed: true,
-      response: "继续",
-      userData: { note: "ok" },
-      metadata: { source: "host-test" },
-      eventName: "plugin_runtime:host_response",
-      actionScope: {
-        sessionId: "session-1",
-        threadId: "thread-1",
-        turnId: "turn-1",
-      },
-    });
+    ).rejects.toThrow(
+      "plugin_runtime_submit_host_response is retired; respond through the typed App Server server-request dispatcher.",
+    );
+    expect(request).not.toHaveBeenCalled();
   });
 });

@@ -26,6 +26,10 @@ declare module "./connection.js" {
       params: protocol.ThreadStartParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.ThreadStartResponse>>;
+    forkThread(
+      params: protocol.ThreadForkParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadForkResponse>>;
     listCapabilities(
       params?: protocol.CapabilityListParams,
       options?: AppServerRequestOptions,
@@ -70,10 +74,10 @@ declare module "./connection.js" {
       params: protocol.AgentSessionUpdateParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.AgentSessionUpdateResponse>>;
-    deleteSession(
-      params: protocol.AgentSessionDeleteParams,
+    deleteThread(
+      params: protocol.ThreadDeleteParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentSessionDeleteResponse>>;
+    ): Promise<AppServerRequestResult<protocol.ThreadDeleteResponse>>;
     readAgentSessionObjective(
       params: protocol.AgentSessionObjectiveReadParams,
       options?: AppServerRequestOptions,

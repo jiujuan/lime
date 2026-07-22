@@ -2,9 +2,10 @@ use super::{
     AgentMessageDeltaNotification, CommandExecutionRequestApprovalParams,
     FileChangeRequestApprovalParams, ItemCompletedNotification, ItemStartedNotification,
     McpServerElicitationRequestParams, Method, ServerRequestResolvedNotification,
-    ThreadArchiveParams, ThreadArchiveResponse, ThreadArchivedNotification, ThreadGoalClearParams,
-    ThreadGoalClearResponse, ThreadGoalClearedNotification, ThreadGoalGetParams,
-    ThreadGoalGetResponse, ThreadGoalSetParams, ThreadGoalSetResponse,
+    ThreadArchiveParams, ThreadArchiveResponse, ThreadArchivedNotification, ThreadDeleteParams,
+    ThreadDeleteResponse, ThreadDeletedNotification, ThreadForkParams, ThreadForkResponse,
+    ThreadGoalClearParams, ThreadGoalClearResponse, ThreadGoalClearedNotification,
+    ThreadGoalGetParams, ThreadGoalGetResponse, ThreadGoalSetParams, ThreadGoalSetResponse,
     ThreadGoalUpdatedNotification, ThreadItemsListParams, ThreadItemsListResponse,
     ThreadListParams, ThreadListResponse, ThreadMemoryModeSetParams, ThreadMemoryModeSetResponse,
     ThreadReadParams, ThreadReadResponse, ThreadResumeParams, ThreadResumeResponse,
@@ -43,6 +44,11 @@ pub enum ClientRequest {
         id: RequestId,
         params: ThreadStartParams,
     },
+    #[serde(rename = "thread/fork")]
+    ThreadFork {
+        id: RequestId,
+        params: ThreadForkParams,
+    },
     #[serde(rename = "thread/resume")]
     ThreadResume {
         id: RequestId,
@@ -62,6 +68,11 @@ pub enum ClientRequest {
     ThreadArchive {
         id: RequestId,
         params: ThreadArchiveParams,
+    },
+    #[serde(rename = "thread/delete")]
+    ThreadDelete {
+        id: RequestId,
+        params: ThreadDeleteParams,
     },
     #[serde(rename = "thread/unarchive")]
     ThreadUnarchive {
@@ -129,10 +140,12 @@ impl ClientRequest {
     pub fn id(&self) -> &RequestId {
         match self {
             Self::ThreadStart { id, .. }
+            | Self::ThreadFork { id, .. }
             | Self::ThreadResume { id, .. }
             | Self::ThreadRead { id, .. }
             | Self::ThreadList { id, .. }
             | Self::ThreadArchive { id, .. }
+            | Self::ThreadDelete { id, .. }
             | Self::ThreadUnarchive { id, .. }
             | Self::ThreadTurnsList { id, .. }
             | Self::ThreadItemsList { id, .. }
@@ -151,10 +164,12 @@ impl ClientRequest {
     pub fn method(&self) -> Method {
         match self {
             Self::ThreadStart { .. } => Method::ThreadStart,
+            Self::ThreadFork { .. } => Method::ThreadFork,
             Self::ThreadResume { .. } => Method::ThreadResume,
             Self::ThreadRead { .. } => Method::ThreadRead,
             Self::ThreadList { .. } => Method::ThreadList,
             Self::ThreadArchive { .. } => Method::ThreadArchive,
+            Self::ThreadDelete { .. } => Method::ThreadDelete,
             Self::ThreadUnarchive { .. } => Method::ThreadUnarchive,
             Self::ThreadTurnsList { .. } => Method::ThreadTurnsList,
             Self::ThreadItemsList { .. } => Method::ThreadItemsList,
@@ -185,10 +200,12 @@ pub struct ClientResponse {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClientResponsePayload {
     ThreadStart(ThreadStartResponse),
+    ThreadFork(ThreadForkResponse),
     ThreadResume(ThreadResumeResponse),
     ThreadRead(ThreadReadResponse),
     ThreadList(ThreadListResponse),
     ThreadArchive(ThreadArchiveResponse),
+    ThreadDelete(ThreadDeleteResponse),
     ThreadUnarchive(ThreadUnarchiveResponse),
     ThreadTurnsList(ThreadTurnsListResponse),
     ThreadItemsList(ThreadItemsListResponse),
@@ -207,10 +224,12 @@ impl ClientResponsePayload {
     pub fn method(&self) -> Method {
         match self {
             Self::ThreadStart(_) => Method::ThreadStart,
+            Self::ThreadFork(_) => Method::ThreadFork,
             Self::ThreadResume(_) => Method::ThreadResume,
             Self::ThreadRead(_) => Method::ThreadRead,
             Self::ThreadList(_) => Method::ThreadList,
             Self::ThreadArchive(_) => Method::ThreadArchive,
+            Self::ThreadDelete(_) => Method::ThreadDelete,
             Self::ThreadUnarchive(_) => Method::ThreadUnarchive,
             Self::ThreadTurnsList(_) => Method::ThreadTurnsList,
             Self::ThreadItemsList(_) => Method::ThreadItemsList,
@@ -229,10 +248,12 @@ impl ClientResponsePayload {
     pub fn into_response(self, id: RequestId) -> Result<ClientResponse, serde_json::Error> {
         let result = match self {
             Self::ThreadStart(response) => serde_json::to_value(response)?,
+            Self::ThreadFork(response) => serde_json::to_value(response)?,
             Self::ThreadResume(response) => serde_json::to_value(response)?,
             Self::ThreadRead(response) => serde_json::to_value(response)?,
             Self::ThreadList(response) => serde_json::to_value(response)?,
             Self::ThreadArchive(response) => serde_json::to_value(response)?,
+            Self::ThreadDelete(response) => serde_json::to_value(response)?,
             Self::ThreadUnarchive(response) => serde_json::to_value(response)?,
             Self::ThreadTurnsList(response) => serde_json::to_value(response)?,
             Self::ThreadItemsList(response) => serde_json::to_value(response)?,
@@ -372,6 +393,8 @@ pub enum ServerNotification {
     ThreadStarted(ThreadStartedNotification),
     #[serde(rename = "thread/archived")]
     ThreadArchived(ThreadArchivedNotification),
+    #[serde(rename = "thread/deleted")]
+    ThreadDeleted(ThreadDeletedNotification),
     #[serde(rename = "thread/unarchived")]
     ThreadUnarchived(ThreadUnarchivedNotification),
     #[serde(rename = "turn/started")]
@@ -401,6 +424,7 @@ impl ServerNotification {
         match self {
             Self::ThreadStarted(_) => "thread/started",
             Self::ThreadArchived(_) => "thread/archived",
+            Self::ThreadDeleted(_) => "thread/deleted",
             Self::ThreadUnarchived(_) => "thread/unarchived",
             Self::TurnStarted(_) => "turn/started",
             Self::TurnCompleted(_) => "turn/completed",
@@ -427,6 +451,9 @@ impl TryFrom<JsonRpcNotification> for ServerNotification {
                 .map_err(|error| error.to_string()),
             "thread/archived" => serde_json::from_value(params)
                 .map(Self::ThreadArchived)
+                .map_err(|error| error.to_string()),
+            "thread/deleted" => serde_json::from_value(params)
+                .map(Self::ThreadDeleted)
                 .map_err(|error| error.to_string()),
             "thread/unarchived" => serde_json::from_value(params)
                 .map(Self::ThreadUnarchived)
@@ -474,6 +501,9 @@ impl From<ServerNotification> for JsonRpcNotification {
             }
             ServerNotification::ThreadArchived(params) => {
                 jsonrpc_notification("thread/archived", params)
+            }
+            ServerNotification::ThreadDeleted(params) => {
+                jsonrpc_notification("thread/deleted", params)
             }
             ServerNotification::ThreadUnarchived(params) => {
                 jsonrpc_notification("thread/unarchived", params)

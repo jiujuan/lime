@@ -7,17 +7,6 @@ use app_server_protocol::ManagedObjective;
 use app_server_protocol::ManagedObjectiveStatus;
 use serde_json::Value;
 
-mod auto_continuation;
-
-pub(crate) use auto_continuation::build_auto_continuation_guard_audit_update;
-pub(crate) use auto_continuation::managed_objective_auto_event_name;
-pub(crate) use auto_continuation::managed_objective_auto_metadata;
-pub(crate) use auto_continuation::resolve_auto_continuation_guard;
-pub(crate) use auto_continuation::AutoContinuationGuardDecision;
-pub(crate) use auto_continuation::AutoContinuationGuardInput;
-pub(crate) use auto_continuation::AutoContinuationPolicy;
-pub(crate) use auto_continuation::AutoContinuationRunSummary;
-
 pub(crate) const MANAGED_OBJECTIVE_OWNER_AGENT_SESSION: &str = "agent_session";
 pub(crate) const MANAGED_OBJECTIVE_OWNER_AUTOMATION_JOB: &str = "automation_job";
 

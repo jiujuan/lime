@@ -648,7 +648,7 @@ describe("EmptyStateComposerPanel", () => {
     expect(onObjectiveEnabledChange).toHaveBeenCalledWith(false);
   });
 
-  it("首页开启 Goal 且已有会话时应显示追求目标编辑面板", () => {
+  it("未取得 canonical thread identity 时不应从 session 猜测 Goal", () => {
     const container = renderPanel({
       objectiveEnabled: true,
       projectId: "home-project",
@@ -656,16 +656,8 @@ describe("EmptyStateComposerPanel", () => {
       isLoading: true,
     });
 
-    const objectivePanel = container.querySelector(
-      '[data-testid="empty-state-objective-inline-panel"]',
-    );
-    expect(objectivePanel).toBeTruthy();
-    expect(objectivePanel?.getAttribute("data-session-id")).toBe(
-      "home-session-goal",
-    );
-    expect(objectivePanel?.getAttribute("data-workspace-id")).toBe(
-      "home-project",
-    );
-    expect(objectivePanel?.getAttribute("data-runtime-busy")).toBe("true");
+    expect(
+      container.querySelector('[data-testid="thread-goal-inline-panel"]'),
+    ).toBeNull();
   });
 });

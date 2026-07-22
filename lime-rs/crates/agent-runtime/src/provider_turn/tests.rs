@@ -968,6 +968,48 @@ async fn each_sampling_step_uses_a_fresh_definition_and_executor_snapshot() {
 }
 
 #[tokio::test]
+async fn mcp_tool_lifecycle_uses_captured_environment_identity() {
+    let lifecycle_emitter = Arc::new(RecordingLifecycleEmitter::default());
+    let snapshot = RuntimeToolStepSnapshot::with_tool_metadata(
+        vec![RuntimeToolDefinition::new(
+            "docs__search",
+            "search docs",
+            serde_json::json!({}),
+        )],
+        RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+        Vec::<String>::new(),
+        [("docs__search".to_string(), "remote-tools".to_string())],
+    );
+
+    let results = execute_calls(
+        &snapshot,
+        "turn-1",
+        "session-1",
+        None,
+        &PathBuf::from("/host/workspace"),
+        None,
+        lifecycle_emitter.clone(),
+        vec![CurrentProviderToolCall::new(
+            "call-1",
+            "docs__search",
+            serde_json::json!({ "query": "snapshot" }),
+        )],
+        false,
+    )
+    .await;
+
+    assert_eq!(results.len(), 1);
+    assert!(results[0].success);
+    let lifecycle_events = lifecycle_emitter.events();
+    assert_eq!(lifecycle_events.len(), 2);
+    for event in lifecycle_events {
+        assert_eq!(event.environments.len(), 1);
+        assert_eq!(event.environments[0].environment_id, "remote-tools");
+        assert_eq!(event.environments[0].cwd, PathBuf::from("/host/workspace"));
+    }
+}
+
+#[tokio::test]
 async fn unadvertised_native_and_mcp_calls_fail_without_reaching_step_executor() {
     let provider = Arc::new(ScriptedProvider::new(vec![
         vec![
@@ -1142,6 +1184,48 @@ async fn turn_executes_same_response_tool_batch_in_parallel_when_policy_allows()
     .expect("parallel tool turn");
 
     assert_eq!(probe.max_active.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn tool_batch_serializes_calls_that_do_not_support_parallel_execution() {
+    let probe = Arc::new(ParallelProbe::default());
+    let snapshot = RuntimeToolStepSnapshot::with_tool_metadata(
+        vec![
+            RuntimeToolDefinition::new("Read", "read files", serde_json::json!({})),
+            RuntimeToolDefinition::new("Glob", "find files", serde_json::json!({})),
+        ],
+        RuntimeToolExecutorHandle::new(probe.clone()),
+        ["Glob".to_string()],
+        Vec::<(String, String)>::new(),
+    );
+
+    let results = execute_calls(
+        &snapshot,
+        "turn-1",
+        "session-1",
+        None,
+        &PathBuf::from("."),
+        None,
+        Arc::new(RecordingLifecycleEmitter::default()),
+        vec![
+            CurrentProviderToolCall::new(
+                "call-1",
+                "Read",
+                serde_json::json!({ "path": "README.md" }),
+            ),
+            CurrentProviderToolCall::new(
+                "call-2",
+                "Glob",
+                serde_json::json!({ "pattern": "*.rs" }),
+            ),
+        ],
+        true,
+    )
+    .await;
+
+    assert_eq!(results.len(), 2);
+    assert!(results.iter().all(|result| result.success));
+    assert_eq!(probe.max_active.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]

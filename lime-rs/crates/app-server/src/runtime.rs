@@ -102,7 +102,10 @@ mod skills;
 mod soul;
 mod status;
 mod storage_roots;
+mod thread_delete;
+mod thread_fork;
 mod thread_goal;
+mod thread_goal_continuation;
 mod thread_item_projection;
 mod thread_read;
 pub(crate) mod thread_usage;
@@ -205,6 +208,7 @@ use lime_infra::telemetry::TelemetryStore;
 use model_provider::current_client::CurrentProviderMessage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
@@ -705,6 +709,7 @@ pub struct RuntimeCoreEventAppender {
 #[derive(Debug, Default)]
 pub(in crate::runtime) struct RuntimeCoreState {
     pub(in crate::runtime) sessions: HashMap<String, StoredSession>,
+    pub(in crate::runtime) thread_goal_continuations: HashSet<String>,
     pub(in crate::runtime) import_jobs: HashMap<String, conversation_import::ImportJobRecord>,
     pub(in crate::runtime) session_approval_cache: approval_cache::SessionApprovalCache,
     pub(in crate::runtime) right_surface_pending:

@@ -137,6 +137,7 @@ describe("agentStreamUserInputSendPreparation", () => {
       skipUserMessage: false,
       options: {
         requestMetadata: { source: "test" },
+        threadGoal: { objective: "完成 Codex 主链", tokenBudget: 50_000 },
       },
       env,
     });
@@ -149,6 +150,10 @@ describe("agentStreamUserInputSendPreparation", () => {
       model: "gpt-5.4",
     });
     expect(result.webSearch).toBe(true);
+    expect(result.threadGoal).toEqual({
+      objective: "完成 Codex 主链",
+      tokenBudget: 50_000,
+    });
     expect(result.assistantMsgId).toBe("00000000-0000-0000-0000-000000000001");
     expect(result.userMsgId).toBe("00000000-0000-0000-0000-000000000002");
     expect(messages).toHaveLength(2);

@@ -26,10 +26,6 @@ import type {
   InputbarPluginSkillCapability,
 } from "./pluginInputCapability";
 
-const { setAgentRuntimeObjectiveMock } = vi.hoisted(() => ({
-  setAgentRuntimeObjectiveMock: vi.fn(),
-}));
-
 const mockCharacterMention = vi.fn<
   (props: {
     characters?: Character[];
@@ -258,17 +254,18 @@ vi.mock("./components/InputbarCore", () => ({
   ),
 }));
 
-vi.mock("./components/InputbarObjectiveInlinePanel", () => ({
-  InputbarObjectiveInlinePanel: (props: {
-    sessionId: string;
-    workspaceId?: string | null;
+vi.mock("../ThreadGoalPanel", () => ({
+  ThreadGoalPanel: (props: {
+    threadId?: string | null;
+    threadGoal?: { objective: string } | null;
     runtimeBusy?: boolean;
   }) => (
     <div
-      data-testid="inputbar-objective-inline-panel"
-      data-session-id={props.sessionId}
-      data-workspace-id={props.workspaceId ?? ""}
+      data-testid="thread-goal-inline-panel"
+      data-thread-id={props.threadId ?? ""}
+      data-objective={props.threadGoal?.objective ?? ""}
       data-runtime-busy={String(Boolean(props.runtimeBusy))}
+      data-variant="inline"
     />
   ),
 }));
@@ -662,10 +659,6 @@ vi.mock("sonner", () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
-}));
-
-vi.mock("@/lib/api/agentRuntime/objectiveClient", () => ({
-  setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
 }));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
@@ -1402,9 +1395,8 @@ describe("Inputbar", () => {
     });
   });
 
-  it("加号菜单开启 plan 和 goal 后发送应下传 mode metadata", async () => {
+  it("加号菜单开启 plan 和 goal 后发送应下传 typed mode", async () => {
     const onSend = vi.fn();
-    setAgentRuntimeObjectiveMock.mockResolvedValue(null);
     renderInputbar({
       input: "继续执行当前任务",
       onSend,
@@ -1438,52 +1430,12 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(setAgentRuntimeObjectiveMock).toHaveBeenCalledWith({
-      sessionId: "thread-inputbar-plan-goal",
-      workspaceId: "project-inputbar-plan-goal",
-      objectiveText: "继续执行当前任务",
-      successCriteria: [],
-    });
     expectInputbarSend(onSend, {
       textOverride: "继续执行当前任务",
       sendOptions: {
         collaborationMode: "plan",
         displayContent: "继续执行当前任务",
-        requestMetadata: {
-          harness: {
-            goal_mode_enabled: true,
-            preferences: {
-              objective: true,
-              goal: true,
-            },
-            thread_goal: {
-              enabled: true,
-              source: "inputbar",
-              status: "active",
-              set: {
-                threadId: "thread-inputbar-plan-goal",
-                objective: "继续执行当前任务",
-                status: "active",
-                tokenBudget: null,
-              },
-            },
-            goal: {
-              enabled: true,
-              source: "inputbar",
-              status: "active",
-              set: {
-                threadId: "thread-inputbar-plan-goal",
-                objective: "继续执行当前任务",
-                status: "active",
-                tokenBudget: null,
-              },
-            },
-            managed_objective: {
-              objective_text: "继续执行当前任务",
-              source: "inputbar",
-            },
-          },
-        },
+        threadGoal: { objective: "继续执行当前任务" },
         toolPreferencesOverride: {
           task: true,
           subagent: false,
@@ -1492,22 +1444,38 @@ describe("Inputbar", () => {
     });
   });
 
-  it("开启 Goal 时应在输入区上方显示可编辑的追求目标面板", async () => {
+  it("canonical Goal 应按 thread identity 常显，不由发送模式开关拥有", async () => {
     const { container } = renderInputbar({
       activeTheme: "general",
       projectId: "project-goal",
       sessionId: "thread-inputbar-goal-panel",
+      threadId: "thread-canonical-goal-panel",
+      threadGoal: {
+        createdAt: 10,
+        objective: "完成 canonical Goal GUI",
+        status: "active",
+        threadId: "thread-canonical-goal-panel",
+        timeUsedSeconds: 20,
+        tokenBudget: null,
+        tokensUsed: 100,
+        updatedAt: 20,
+      },
     });
 
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(
-      container.querySelector(
-        '[data-testid="inputbar-objective-inline-panel"]',
-      ),
-    ).toBeNull();
+    const objectivePanel = container.querySelector(
+      '[data-testid="thread-goal-inline-panel"]',
+    );
+    expect(objectivePanel).toBeTruthy();
+    expect(objectivePanel?.getAttribute("data-thread-id")).toBe(
+      "thread-canonical-goal-panel",
+    );
+    expect(objectivePanel?.getAttribute("data-objective")).toBe(
+      "完成 canonical Goal GUI",
+    );
 
     await act(async () => {
       container
@@ -1515,17 +1483,6 @@ describe("Inputbar", () => {
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
-
-    const objectivePanel = container.querySelector(
-      '[data-testid="inputbar-objective-inline-panel"]',
-    );
-    expect(objectivePanel).toBeTruthy();
-    expect(objectivePanel?.getAttribute("data-session-id")).toBe(
-      "thread-inputbar-goal-panel",
-    );
-    expect(objectivePanel?.getAttribute("data-workspace-id")).toBe(
-      "project-goal",
-    );
 
     await act(async () => {
       container
@@ -1536,9 +1493,9 @@ describe("Inputbar", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="inputbar-objective-inline-panel"]',
+        '[data-testid="thread-goal-inline-panel"]',
       ),
-    ).toBeNull();
+    ).toBeTruthy();
   });
 
   it("Plan 和 Goal 开启后应在左侧显示可单独关闭的状态标签，模型放在右侧", async () => {

@@ -23,6 +23,8 @@ import {
   type EvidenceExportParams,
   type EvidenceExportResponse,
   type JsonRpcMessage,
+  type JsonRpcError,
+  type RequestId,
 } from "./protocol.js";
 import { serverNotification } from "./server-notifications.js";
 import {
@@ -86,6 +88,10 @@ export interface AgentRuntimeClient {
     params: AgentSessionActionRespondParams,
     options?: AppServerRequestOptions,
   ): Promise<AppServerRequestResult<AgentSessionActionRespondResponse>>;
+  /** Respond to a typed reverse request using its outer JSON-RPC id. */
+  respondServerRequest?<T>(id: RequestId, result: T): void;
+  /** Reject a typed reverse request using its outer JSON-RPC id. */
+  rejectServerRequest?(id: RequestId, error: JsonRpcError): void;
   readThread(
     params: ThreadReadParams,
     options?: AppServerRequestOptions,
@@ -208,6 +214,14 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
       params,
       mergeRequestOptions(this.defaultRequestOptions, options),
     );
+  }
+
+  respondServerRequest<T>(id: RequestId, result: T): void {
+    this.connection.respondServerRequest(id, result);
+  }
+
+  rejectServerRequest(id: RequestId, error: JsonRpcError): void {
+    this.connection.rejectServerRequest(id, error);
   }
 
   async readThread(

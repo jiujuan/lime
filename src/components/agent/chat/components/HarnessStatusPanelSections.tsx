@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { AgentThreadReliabilityPanel } from "./AgentThreadReliabilityPanel";
 import { HarnessActivitySections } from "./HarnessActivitySections";
 import { HarnessActiveWritesSection } from "./HarnessActiveWritesSection";
-import { ManagedObjectivePanel } from "./ManagedObjectivePanel";
+import { ThreadGoalPanel } from "./ThreadGoalPanel";
 import { HarnessFileReviewSection } from "./HarnessFileReviewSection";
 import { HarnessHandoffExportSection } from "./HarnessHandoffExportSection";
 import { HarnessOutputSignalsSection } from "./HarnessOutputSignalsSection";
@@ -21,7 +21,7 @@ import { agentText } from "./harnessPanelText";
 interface HarnessObjectiveSectionModel {
   title: string;
   badge: string;
-  panelProps: ComponentProps<typeof ManagedObjectivePanel>;
+  panelProps: ComponentProps<typeof ThreadGoalPanel>;
 }
 
 interface HarnessReliabilitySectionModel {
@@ -102,7 +102,7 @@ export function HarnessStatusPanelSections({
           badge={objectiveSection.badge}
           registerRef={registerSectionRef}
         >
-          <ManagedObjectivePanel {...objectiveSection.panelProps} />
+          <ThreadGoalPanel {...objectiveSection.panelProps} />
         </Section>
       ) : null}
 

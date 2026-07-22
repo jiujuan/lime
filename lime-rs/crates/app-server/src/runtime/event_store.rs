@@ -664,10 +664,11 @@ fn runtime_events_with_turn_input(
         return runtime_events;
     };
     if stored.events.iter().any(|event| {
-        event.turn_id.as_deref() == Some(turn_id) && turn_input_events::is_turn_input_event(event)
+        event.turn_id.as_deref() == Some(turn_id)
+            && turn_input_events::is_provider_input_event(event)
     }) || runtime_events
         .iter()
-        .any(turn_input_events::runtime_event_is_turn_input)
+        .any(turn_input_events::runtime_event_is_provider_input)
     {
         return runtime_events;
     }
@@ -1026,7 +1027,7 @@ fn turn_status_from_runtime_event(event_type: &str) -> Option<AgentTurnStatus> {
     match event_type {
         "turn.started" => Some(AgentTurnStatus::Running),
         "turn.completed" => Some(AgentTurnStatus::Completed),
-        "turn.failed" | "runtime.error" => Some(AgentTurnStatus::Failed),
+        "turn.failed" => Some(AgentTurnStatus::Failed),
         "turn.canceled" => Some(AgentTurnStatus::Canceled),
         "action.required" => Some(AgentTurnStatus::WaitingAction),
         "action.resolved" | "action.cancelled" | "action.canceled" | "action.expired" => {

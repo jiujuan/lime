@@ -37,10 +37,12 @@ pub(super) fn into_parts(
 ) -> Result<(RequestId, String, Option<serde_json::Value>), JsonRpcError> {
     match request {
         ClientRequest::ThreadStart { id, params } => parts(id, Method::ThreadStart, params),
+        ClientRequest::ThreadFork { id, params } => parts(id, Method::ThreadFork, params),
         ClientRequest::ThreadResume { id, params } => parts(id, Method::ThreadResume, params),
         ClientRequest::ThreadRead { id, params } => parts(id, Method::ThreadRead, params),
         ClientRequest::ThreadList { id, params } => parts(id, Method::ThreadList, params),
         ClientRequest::ThreadArchive { id, params } => parts(id, Method::ThreadArchive, params),
+        ClientRequest::ThreadDelete { id, params } => parts(id, Method::ThreadDelete, params),
         ClientRequest::ThreadUnarchive { id, params } => parts(id, Method::ThreadUnarchive, params),
         ClientRequest::ThreadTurnsList { id, params } => parts(id, Method::ThreadTurnsList, params),
         ClientRequest::ThreadItemsList { id, params } => parts(id, Method::ThreadItemsList, params),

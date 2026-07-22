@@ -5,6 +5,9 @@ use lime_mcp::{
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
 
 fn stdio_server_spec(
     name: &str,
@@ -268,6 +271,139 @@ async fn required_runtime_server_failure_keeps_the_previous_generation_published
             .mcp_runtime("session-a", "thread-a")
             .await
             .expect("previous generation remains published"),
+    ));
+    state.clear_mcp_runtimes().await;
+}
+
+#[tokio::test]
+async fn replacement_keeps_previous_generation_visible_until_startup_completes() {
+    let Some(node) = node_binary() else {
+        return;
+    };
+    let state = AgentRuntimeState::new();
+    let previous = state
+        .ensure_mcp_runtime_generation(
+            "session-a".to_string(),
+            "thread-a".to_string(),
+            ElicitationRequestRouter::default(),
+            Vec::new(),
+        )
+        .await
+        .expect("publish initial runtime generation");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind startup gate");
+    let gate_address = listener.local_addr().expect("startup gate address");
+    let temp_dir = tempfile::tempdir().expect("create runtime MCP fixture directory");
+    let server_path = temp_dir.path().join("gated-mcp-server.mjs");
+    std::fs::write(
+        &server_path,
+        r#"
+import net from "node:net";
+import readline from "node:readline";
+
+const [host, portText] = process.argv[2].split(":");
+const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\n");
+
+lines.on("line", (line) => {
+  if (!line.trim()) return;
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    const gate = net.createConnection({ host, port: Number(portText) });
+    gate.once("connect", () => gate.write("started\n"));
+    gate.on("data", (chunk) => {
+      if (!chunk.toString().includes("release")) return;
+      gate.end();
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: {
+          protocolVersion: "2025-03-26",
+          capabilities: { tools: {} },
+          serverInfo: { name: "gated-runtime-fixture", version: "1.0.0" },
+        },
+      });
+    });
+    return;
+  }
+  if (message.method === "notifications/initialized") return;
+  if (message.method === "tools/list") {
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: {
+        tools: [{
+          name: "gated_tool",
+          description: "gated runtime MCP fixture",
+          inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        }],
+      },
+    });
+  }
+});
+"#,
+    )
+    .expect("write gated runtime MCP fixture");
+
+    let replacement_state = state.clone();
+    let replacement = tokio::spawn(async move {
+        replacement_state
+            .ensure_mcp_runtime_generation(
+                "session-a".to_string(),
+                "thread-a".to_string(),
+                ElicitationRequestRouter::default(),
+                vec![stdio_server_spec(
+                    "gated",
+                    node,
+                    vec![
+                        server_path.to_string_lossy().into_owned(),
+                        gate_address.to_string(),
+                    ],
+                    true,
+                )],
+            )
+            .await
+    });
+
+    let (gate, _) = tokio::time::timeout(Duration::from_secs(5), listener.accept())
+        .await
+        .expect("replacement startup must reach gate")
+        .expect("accept replacement startup gate");
+    let (reader, mut writer) = gate.into_split();
+    let mut reader = BufReader::new(reader);
+    let mut signal = String::new();
+    reader
+        .read_line(&mut signal)
+        .await
+        .expect("read replacement startup signal");
+    assert_eq!(signal, "started\n");
+
+    let during_startup = state
+        .mcp_runtime("session-a", "thread-a")
+        .await
+        .expect("previous generation remains readable during replacement startup");
+    assert!(Arc::ptr_eq(&previous, &during_startup));
+
+    writer
+        .write_all(b"release\n")
+        .await
+        .expect("release replacement startup");
+    let replacement = tokio::time::timeout(Duration::from_secs(10), replacement)
+        .await
+        .expect("replacement startup must complete")
+        .expect("replacement task")
+        .expect("publish replacement generation");
+
+    assert!(!Arc::ptr_eq(&previous, &replacement));
+    assert_eq!(replacement.connections().names().await, vec!["mcp__gated"]);
+    assert!(Arc::ptr_eq(
+        &replacement,
+        &state
+            .mcp_runtime("session-a", "thread-a")
+            .await
+            .expect("replacement generation is published after startup"),
     ));
     state.clear_mcp_runtimes().await;
 }

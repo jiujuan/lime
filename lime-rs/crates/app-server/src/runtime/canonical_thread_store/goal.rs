@@ -1,3 +1,4 @@
+use super::goal_idle::flush_idle_goal_usage_in_tx;
 use super::*;
 use app_server_protocol::protocol::v2::{ThreadGoal, ThreadGoalSetParams, ThreadGoalStatus};
 use thiserror::Error;
@@ -14,16 +15,16 @@ pub(crate) enum ThreadGoalStoreError {
 }
 
 #[derive(Debug)]
-struct PersistedThreadGoal {
-    thread_id: String,
-    goal_id: String,
-    objective: String,
-    status: String,
-    token_budget: Option<i64>,
-    tokens_used: i64,
-    time_used_seconds: i64,
-    created_at_ms: i64,
-    updated_at_ms: i64,
+pub(super) struct PersistedThreadGoal {
+    pub(super) thread_id: String,
+    pub(super) goal_id: String,
+    pub(super) objective: String,
+    pub(super) status: String,
+    pub(super) token_budget: Option<i64>,
+    pub(super) tokens_used: i64,
+    pub(super) time_used_seconds: i64,
+    pub(super) created_at_ms: i64,
+    pub(super) updated_at_ms: i64,
 }
 
 impl ProjectionStore {
@@ -61,6 +62,11 @@ impl ProjectionStore {
             validate_token_budget(token_budget)?;
         }
 
+        let mut idle_permit = self.goal_accounting.idle_permit(&thread_id);
+        let idle_snapshot = active_turn
+            .is_none()
+            .then(|| idle_permit.snapshot())
+            .flatten();
         let mut conn = self
             .open_thread_store()
             .map_err(|error| ThreadGoalStoreError::Store(error.to_string()))?;
@@ -71,6 +77,17 @@ impl ProjectionStore {
         if let Some(active_turn) = active_turn {
             super::goal_rebind::flush_bound_goal_before_mutation(&tx, &thread_id, active_turn)?;
         }
+        let idle_goal_matched = idle_snapshot
+            .as_ref()
+            .map(|snapshot| {
+                flush_idle_goal_usage_in_tx(
+                    &tx,
+                    &thread_id,
+                    snapshot,
+                    chrono::Utc::now().timestamp_millis(),
+                )
+            })
+            .transpose()?;
         let existing = read_goal(&tx, &thread_id)?;
         let now_ms = chrono::Utc::now().timestamp_millis();
         let goal = match existing {
@@ -123,6 +140,16 @@ impl ProjectionStore {
             }
         }
         tx.commit().map_err(store_error)?;
+        if let (Some(snapshot), Some(true)) = (idle_snapshot.as_ref(), idle_goal_matched) {
+            idle_permit.mark_accounted(snapshot);
+        } else if idle_goal_matched == Some(false) {
+            idle_permit.clear();
+        }
+        if goal.status == "active" && active_turn.is_none() {
+            idle_permit.mark_active(&goal.goal_id);
+        } else {
+            idle_permit.clear();
+        }
         project_goal(goal)
     }
 
@@ -140,6 +167,11 @@ impl ProjectionStore {
         active_turn: Option<&super::goal_rebind::ActiveTurnGoalBinding>,
     ) -> Result<bool, ThreadGoalStoreError> {
         let thread_id = validate_thread_id(thread_id)?;
+        let mut idle_permit = self.goal_accounting.idle_permit(thread_id);
+        let idle_snapshot = active_turn
+            .is_none()
+            .then(|| idle_permit.snapshot())
+            .flatten();
         let mut conn = self
             .open_thread_store()
             .map_err(|error| ThreadGoalStoreError::Store(error.to_string()))?;
@@ -149,6 +181,14 @@ impl ProjectionStore {
         ensure_thread_exists(&tx, thread_id)?;
         if let Some(active_turn) = active_turn {
             super::goal_rebind::flush_bound_goal_before_mutation(&tx, thread_id, active_turn)?;
+        }
+        if let Some(snapshot) = idle_snapshot.as_ref() {
+            flush_idle_goal_usage_in_tx(
+                &tx,
+                thread_id,
+                snapshot,
+                chrono::Utc::now().timestamp_millis(),
+            )?;
         }
         let cleared = tx
             .execute(
@@ -163,6 +203,7 @@ impl ProjectionStore {
             }
         }
         tx.commit().map_err(store_error)?;
+        idle_permit.clear();
         Ok(cleared)
     }
 }
@@ -183,7 +224,7 @@ fn ensure_thread_exists(conn: &Connection, thread_id: &str) -> Result<(), Thread
     )))
 }
 
-fn read_goal(
+pub(super) fn read_goal(
     conn: &Connection,
     thread_id: &str,
 ) -> Result<Option<PersistedThreadGoal>, ThreadGoalStoreError> {
@@ -212,7 +253,10 @@ fn persisted_goal_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Persiste
     })
 }
 
-fn write_goal(conn: &Connection, goal: &PersistedThreadGoal) -> Result<(), ThreadGoalStoreError> {
+pub(super) fn write_goal(
+    conn: &Connection,
+    goal: &PersistedThreadGoal,
+) -> Result<(), ThreadGoalStoreError> {
     conn.execute(
         r#"INSERT INTO thread_goals (
              thread_id, goal_id, objective, status, token_budget, tokens_used,
@@ -241,7 +285,7 @@ fn write_goal(conn: &Connection, goal: &PersistedThreadGoal) -> Result<(), Threa
     Ok(())
 }
 
-fn project_goal(goal: PersistedThreadGoal) -> Result<ThreadGoal, ThreadGoalStoreError> {
+pub(super) fn project_goal(goal: PersistedThreadGoal) -> Result<ThreadGoal, ThreadGoalStoreError> {
     Ok(ThreadGoal {
         thread_id: goal.thread_id,
         objective: goal.objective,
@@ -494,5 +538,207 @@ mod tests {
             .set_thread_goal_sync(set_params("thread-1", Some("goal"), None, Some(Some(0))))
             .expect_err("zero budget must fail");
         assert!(error.to_string().contains("must be positive"));
+    }
+
+    #[test]
+    fn idle_wall_time_flushes_before_mutation_without_charging_tokens_twice() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = ProjectionStore::initialize(temp.path().join("state.sqlite"))
+            .expect("initialize store");
+        insert_thread(&store, "thread-idle-mutation");
+        store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-mutation",
+                Some("finish idle accounting"),
+                None,
+                None,
+            ))
+            .expect("create active goal");
+        store
+            .open_thread_store()
+            .expect("open canonical store")
+            .execute(
+                "UPDATE thread_goals SET tokens_used = 75 WHERE thread_id = ?1",
+                params!["thread-idle-mutation"],
+            )
+            .expect("seed token usage");
+
+        store.backdate_thread_goal_idle_for_test("thread-idle-mutation", 5);
+        let paused = store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-mutation",
+                None,
+                Some(ThreadGoalStatus::Paused),
+                None,
+            ))
+            .expect("pause active goal");
+        assert_eq!(paused.time_used_seconds, 5);
+        assert_eq!(paused.tokens_used, 75);
+        assert!(!store.thread_goal_idle_is_active_for_test("thread-idle-mutation"));
+
+        store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-mutation",
+                None,
+                Some(ThreadGoalStatus::Active),
+                None,
+            ))
+            .expect("resume goal");
+        store.backdate_thread_goal_idle_for_test("thread-idle-mutation", 4);
+        let first = store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-mutation",
+                Some("finish idle accounting exactly once"),
+                None,
+                None,
+            ))
+            .expect("flush idle progress");
+        let replay = store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-mutation",
+                Some("finish idle accounting exactly once"),
+                None,
+                None,
+            ))
+            .expect("repeat mutation");
+        assert_eq!(first.time_used_seconds, 9);
+        assert_eq!(replay.time_used_seconds, 9);
+        assert_eq!(replay.tokens_used, 75);
+    }
+
+    #[test]
+    fn live_resume_preserves_idle_time_while_cold_resume_resets_the_baseline() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("state.sqlite");
+        let store = ProjectionStore::initialize(&path).expect("initialize store");
+        insert_thread(&store, "thread-idle-resume");
+        store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-resume",
+                Some("resume safely"),
+                None,
+                None,
+            ))
+            .expect("create active goal");
+
+        store.backdate_thread_goal_idle_for_test("thread-idle-resume", 30);
+        store
+            .restore_thread_goal_accounting_sync("thread-idle-resume", true)
+            .expect("restore idle accounting");
+        let paused = store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-resume",
+                None,
+                Some(ThreadGoalStatus::Paused),
+                None,
+            ))
+            .expect("pause restored goal");
+        assert_eq!(paused.time_used_seconds, 30);
+
+        store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-resume",
+                None,
+                Some(ThreadGoalStatus::Active),
+                None,
+            ))
+            .expect("reactivate goal");
+        store.backdate_thread_goal_idle_for_test("thread-idle-resume", 20);
+        drop(store);
+
+        let store = ProjectionStore::initialize(&path).expect("reopen store");
+        store
+            .restore_thread_goal_accounting_sync("thread-idle-resume", true)
+            .expect("restore cold idle accounting");
+        let cold_paused = store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-resume",
+                None,
+                Some(ThreadGoalStatus::Paused),
+                None,
+            ))
+            .expect("pause cold-restored goal");
+        assert_eq!(cold_paused.time_used_seconds, 30);
+
+        store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-resume",
+                None,
+                Some(ThreadGoalStatus::Active),
+                None,
+            ))
+            .expect("reactivate cold-restored goal");
+        store.backdate_thread_goal_idle_for_test("thread-idle-resume", 20);
+        assert!(store
+            .clear_thread_goal_sync("thread-idle-resume")
+            .expect("clear active goal"));
+        store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-resume",
+                Some("new goal"),
+                None,
+                None,
+            ))
+            .expect("create replacement goal");
+        let replacement = store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-resume",
+                None,
+                Some(ThreadGoalStatus::Paused),
+                None,
+            ))
+            .expect("pause replacement goal");
+        assert_eq!(replacement.time_used_seconds, 0);
+    }
+
+    #[test]
+    fn cloned_store_serializes_idle_flush_exactly_once() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = ProjectionStore::initialize(temp.path().join("state.sqlite"))
+            .expect("initialize store");
+        insert_thread(&store, "thread-idle-concurrent");
+        store
+            .set_thread_goal_sync(set_params(
+                "thread-idle-concurrent",
+                Some("serialize accounting"),
+                None,
+                None,
+            ))
+            .expect("create active goal");
+        store.backdate_thread_goal_idle_for_test("thread-idle-concurrent", 6);
+
+        let first_store = store.clone();
+        let first = std::thread::spawn(move || {
+            first_store.set_thread_goal_sync(set_params(
+                "thread-idle-concurrent",
+                Some("first writer"),
+                None,
+                None,
+            ))
+        });
+        let second_store = store.clone();
+        let second = std::thread::spawn(move || {
+            second_store.set_thread_goal_sync(set_params(
+                "thread-idle-concurrent",
+                Some("second writer"),
+                None,
+                None,
+            ))
+        });
+        first
+            .join()
+            .expect("join first writer")
+            .expect("first writer");
+        second
+            .join()
+            .expect("join second writer")
+            .expect("second writer");
+
+        let goal = store
+            .get_thread_goal_sync("thread-idle-concurrent")
+            .expect("read concurrent goal")
+            .expect("concurrent goal");
+        assert_eq!(goal.time_used_seconds, 6);
+        assert_eq!(goal.tokens_used, 0);
     }
 }

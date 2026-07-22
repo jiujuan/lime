@@ -54,6 +54,10 @@ pub struct ElicitationRequest {
     pub server_name: String,
     pub thread_id: String,
     pub turn_id: Option<String>,
+    /// Internal MCP connection provenance; never crosses the App Server wire.
+    pub(crate) environment_id: Option<String>,
+    pub(crate) snapshot_generation: Option<u64>,
+    pub(crate) auth_scopes: Option<Vec<String>>,
     pub meta: Option<Value>,
     pub message: String,
     pub requested_schema: ElicitationSchema,
@@ -117,6 +121,18 @@ impl Drop for ElicitationOwnerGuard {
 impl ElicitationRequest {
     pub fn closed(&self) -> CancellationToken {
         self.closed.clone()
+    }
+
+    pub fn snapshot_generation(&self) -> Option<u64> {
+        self.snapshot_generation
+    }
+
+    pub fn auth_scopes(&self) -> Option<&[String]> {
+        self.auth_scopes.as_deref()
+    }
+
+    pub fn environment_id(&self) -> Option<&str> {
+        self.environment_id.as_deref()
     }
 }
 
@@ -435,11 +451,61 @@ impl ElicitationRequestRouter {
         true
     }
 
+    #[cfg(test)]
     pub(crate) async fn request(
         &self,
         server_name: String,
         runtime_owner: McpRuntimeOwner,
         turn_id: Option<String>,
+        params: CreateElicitationRequestParam,
+        meta: Option<Value>,
+        cancellation: CancellationToken,
+    ) -> Result<ElicitationResponse, ElicitationRouterError> {
+        self.request_with_provenance(
+            server_name,
+            runtime_owner,
+            turn_id,
+            None,
+            None,
+            None,
+            params,
+            meta,
+            cancellation,
+        )
+        .await
+    }
+
+    pub(crate) async fn request_with_scope(
+        &self,
+        server_name: String,
+        runtime_owner: McpRuntimeOwner,
+        scope: McpCallScope,
+        params: CreateElicitationRequestParam,
+        meta: Option<Value>,
+        cancellation: CancellationToken,
+    ) -> Result<ElicitationResponse, ElicitationRouterError> {
+        self.request_with_provenance(
+            server_name,
+            runtime_owner,
+            scope.turn_id().map(ToOwned::to_owned),
+            scope.environment_id().map(ToOwned::to_owned),
+            scope.snapshot_generation(),
+            scope.auth_scopes().map(ToOwned::to_owned),
+            params,
+            meta,
+            cancellation,
+        )
+        .await
+    }
+
+    async fn request_with_provenance(
+        &self,
+        server_name: String,
+        runtime_owner: McpRuntimeOwner,
+        turn_id: Option<String>,
+        environment_id: Option<String>,
+        snapshot_generation: Option<u64>,
+        auth_scopes: Option<Vec<String>>,
         params: CreateElicitationRequestParam,
         meta: Option<Value>,
         cancellation: CancellationToken,
@@ -468,6 +534,9 @@ impl ElicitationRequestRouter {
             server_name,
             thread_id: runtime_owner.thread_id,
             turn_id,
+            environment_id,
+            snapshot_generation,
+            auth_scopes,
             meta,
             message: params.message,
             requested_schema: params.requested_schema,

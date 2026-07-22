@@ -19,6 +19,7 @@ pub mod native_dispatch;
 pub mod native_dispatch_execution;
 pub mod native_overlay;
 pub mod path_guard;
+pub mod path_uri;
 pub mod request_user_input;
 pub mod sandbox;
 pub mod shell;

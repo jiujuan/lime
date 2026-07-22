@@ -15,7 +15,6 @@ use std::sync::Arc;
 use tempfile::TempDir;
 
 const SESSION_ID: &str = "persisted-session";
-const SECOND_SESSION_ID: &str = "persisted-session-second";
 const THREAD_ID: &str = "persisted-thread";
 const WORKSPACE_ID: &str = "workspace-current";
 
@@ -32,7 +31,22 @@ async fn projection_app_server(sessions: &[(&str, &str, &str, &str)]) -> Project
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("event log"));
     let projection_store =
         Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let app_data_source = Arc::new(local_app_data_source(&roots).await);
+    let runtime = RuntimeCore::with_backend(Arc::new(MockBackend))
+        .with_app_data_source(app_data_source)
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone());
     for (session_id, thread_id, title, updated_at) in sessions {
+        runtime
+            .start_session(AgentSessionStartParams {
+                session_id: Some((*session_id).to_string()),
+                thread_id: Some((*thread_id).to_string()),
+                app_id: "session-archive-jsonrpc-test".to_string(),
+                workspace_id: Some(WORKSPACE_ID.to_string()),
+                business_object_ref: None,
+                locale: None,
+            })
+            .expect("seed canonical thread");
         seed_projected_session(
             &projection_store,
             &event_log_writer,
@@ -42,11 +56,6 @@ async fn projection_app_server(sessions: &[(&str, &str, &str, &str)]) -> Project
             updated_at,
         );
     }
-    let app_data_source = Arc::new(local_app_data_source(&roots).await);
-    let runtime = RuntimeCore::with_backend(Arc::new(MockBackend))
-        .with_app_data_source(app_data_source)
-        .with_event_log_writer(event_log_writer.clone())
-        .with_projection_store(projection_store);
     ProjectionAppServer {
         _temp: temp,
         roots,
@@ -160,24 +169,22 @@ async fn memory_store_reset_does_not_delete_persisted_session_history() {
         &app.server,
         4,
         METHOD_THREAD_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID
-        }),
+        json!({}),
     )
     .await;
-    assert_eq!(session_ids(&recent), vec![SESSION_ID.to_string()]);
+    assert_eq!(thread_ids(&recent), vec![THREAD_ID.to_string()]);
 
     let read = request(
         &app.server,
         5,
         METHOD_THREAD_READ,
         json!({
-            "sessionId": SESSION_ID
+            "threadId": THREAD_ID
         }),
     )
     .await;
     assert_eq!(
-        read.pointer("/result/session/sessionId"),
+        read.pointer("/result/thread/sessionId"),
         Some(&json!(SESSION_ID)),
     );
     assert!(event_log_path.is_file());
@@ -187,71 +194,6 @@ async fn memory_store_reset_does_not_delete_persisted_session_history() {
             .expect("event log after reset")
             .len(),
         1
-    );
-}
-
-#[tokio::test]
-async fn persisted_session_delete_clears_projection_and_event_log() {
-    let app = projection_app_server(&[(
-        SESSION_ID,
-        THREAD_ID,
-        "Persisted Session",
-        "2026-06-07T00:00:00.000Z",
-    )])
-    .await;
-    initialize_server(&app.server, 1, "session-delete-jsonrpc-test").await;
-    assert_eq!(
-        app.event_log_writer
-            .read_session_events(SESSION_ID)
-            .expect("seeded event log")
-            .len(),
-        1
-    );
-
-    let deleted = request(
-        &app.server,
-        2,
-        METHOD_AGENT_SESSION_DELETE,
-        json!({
-            "sessionId": format!(" {SESSION_ID} ")
-        }),
-    )
-    .await;
-    assert_eq!(
-        deleted.pointer("/result/sessionId"),
-        Some(&json!(SESSION_ID))
-    );
-    assert_eq!(deleted.pointer("/result/deleted"), Some(&json!(true)));
-
-    let recent = request(
-        &app.server,
-        3,
-        METHOD_THREAD_LIST,
-        json!({
-            "workspaceId": WORKSPACE_ID,
-            "includeArchived": true
-        }),
-    )
-    .await;
-    assert_eq!(session_ids(&recent), Vec::<String>::new());
-    assert!(app
-        .event_log_writer
-        .read_session_events(SESSION_ID)
-        .expect("event log after delete")
-        .is_empty());
-
-    let read_missing = request_error(
-        &app.server,
-        4,
-        METHOD_THREAD_READ,
-        json!({
-            "sessionId": SESSION_ID
-        }),
-    )
-    .await;
-    assert_eq!(
-        read_missing.pointer("/error/code"),
-        Some(&json!(error_codes::SESSION_NOT_FOUND))
     );
 }
 
@@ -301,33 +243,6 @@ async fn request(server: &AppServer, id: u64, method: &str, params: Value) -> Va
     response
 }
 
-async fn request_error(server: &AppServer, id: u64, method: &str, params: Value) -> Value {
-    let lines = server
-        .handle_json_line(
-            &json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "method": method,
-                "params": params,
-            })
-            .to_string(),
-        )
-        .await
-        .expect("handle JSON-RPC request");
-    assert_eq!(
-        lines.len(),
-        1,
-        "{method} should return exactly one response"
-    );
-    let response: Value = serde_json::from_str(&lines[0]).expect("decode JSON-RPC response");
-    assert!(
-        response.get("error").is_some(),
-        "{method} should return an error response"
-    );
-    assert_eq!(response.get("id"), Some(&json!(id)));
-    response
-}
-
 async fn notify(server: &AppServer, method: &str, params: Value) {
     let lines = server
         .handle_json_line(
@@ -346,17 +261,17 @@ async fn notify(server: &AppServer, method: &str, params: Value) {
     );
 }
 
-fn session_ids(response: &Value) -> Vec<String> {
+fn thread_ids(response: &Value) -> Vec<String> {
     response
-        .pointer("/result/sessions")
+        .pointer("/result/data")
         .and_then(Value::as_array)
-        .expect("result.sessions should be an array")
+        .expect("result.data should be an array")
         .iter()
-        .map(|session| {
-            session
-                .get("sessionId")
+        .map(|thread| {
+            thread
+                .get("id")
                 .and_then(Value::as_str)
-                .expect("sessionId should be a string")
+                .expect("thread id should be a string")
                 .to_string()
         })
         .collect()

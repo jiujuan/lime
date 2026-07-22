@@ -219,6 +219,197 @@ fn goal_id(store: &ProjectionStore, thread_id: &str) -> String {
 }
 
 #[test]
+fn idle_usage_flushes_at_turn_admission_and_terminal_rearms_active_goal() {
+    let (_temp, store, thread, stored) = store_with_goal("goal-idle-admission");
+    let turn_id = "turn-idle-admission";
+    // Leave one whole-second margin for the event timestamp's millisecond projection boundary.
+    store.backdate_thread_goal_idle_for_test(thread.thread_id.as_str(), 6);
+    let accepted_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    let accepted = event(
+        &stored,
+        turn_id,
+        1,
+        "turn.accepted",
+        &accepted_at,
+        json!({"goalAccountingMode": "default"}),
+    );
+
+    store
+        .apply_canonical_events(&stored, std::slice::from_ref(&accepted))
+        .expect("apply turn admission");
+    assert!(!store.thread_goal_idle_is_active_for_test(thread.thread_id.as_str()));
+    let admitted = store
+        .get_thread_goal_sync(thread.thread_id.as_str())
+        .expect("read admitted goal")
+        .expect("admitted goal");
+    assert!((5..=6).contains(&admitted.time_used_seconds));
+    assert_eq!(admitted.tokens_used, 0);
+    let admitted_time_seconds = admitted.time_used_seconds;
+
+    store
+        .apply_canonical_events(&stored, std::slice::from_ref(&accepted))
+        .expect("replay turn admission");
+    assert_eq!(
+        store
+            .get_thread_goal_sync(thread.thread_id.as_str())
+            .expect("read replayed goal")
+            .expect("replayed goal")
+            .time_used_seconds,
+        admitted_time_seconds
+    );
+
+    let completed = event(
+        &stored,
+        turn_id,
+        2,
+        "turn.completed",
+        &accepted_at,
+        usage(0, 0, 0),
+    );
+    store
+        .apply_canonical_events(&stored, std::slice::from_ref(&completed))
+        .expect("complete admitted turn");
+    assert!(store.thread_goal_idle_is_active_for_test(thread.thread_id.as_str()));
+    let conn = store.open_thread_store().expect("open idle outbox");
+    assert_eq!(
+        conn.query_row(
+            "SELECT COUNT(*) FROM thread_goal_update_outbox WHERE source_sequence = 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("count idle admission outbox"),
+        1
+    );
+}
+
+#[test]
+fn delayed_turn_admission_does_not_overlap_idle_and_turn_time() {
+    let (_temp, store, thread, stored) = store_with_goal("goal-idle-delayed-admission");
+    store.backdate_thread_goal_idle_for_test(thread.thread_id.as_str(), 6);
+    let accepted_at = (chrono::Utc::now() - chrono::Duration::seconds(2))
+        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    let accepted = event(
+        &stored,
+        "turn-idle-delayed-admission",
+        1,
+        "turn.accepted",
+        &accepted_at,
+        json!({"goalAccountingMode": "default"}),
+    );
+
+    store
+        .apply_canonical_events(&stored, std::slice::from_ref(&accepted))
+        .expect("apply delayed turn admission");
+    let goal = store
+        .get_thread_goal_sync(thread.thread_id.as_str())
+        .expect("read delayed-admission goal")
+        .expect("delayed-admission goal");
+    assert!((3..=4).contains(&goal.time_used_seconds));
+
+    let completed_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    let completed = event(
+        &stored,
+        "turn-idle-delayed-admission",
+        2,
+        "turn.completed",
+        &completed_at,
+        usage(0, 0, 0),
+    );
+    store
+        .apply_canonical_events(&stored, std::slice::from_ref(&completed))
+        .expect("complete delayed turn");
+    let completed_goal = store
+        .get_thread_goal_sync(thread.thread_id.as_str())
+        .expect("read completed delayed-admission goal")
+        .expect("completed delayed-admission goal");
+    assert!((5..=6).contains(&completed_goal.time_used_seconds));
+}
+
+#[test]
+fn idle_usage_and_turn_binding_roll_back_together() {
+    let (_temp, store, thread, stored) = store_with_goal("goal-idle-bind-rollback");
+    store.backdate_thread_goal_idle_for_test(thread.thread_id.as_str(), 5);
+    let conn = store.open_thread_store().expect("open idle rollback store");
+    conn.execute_batch(
+        r#"CREATE TRIGGER fail_goal_turn_bind
+           BEFORE INSERT ON thread_goal_turn_accounting
+           BEGIN
+               SELECT RAISE(ABORT, 'injected goal turn bind failure');
+           END;"#,
+    )
+    .expect("install goal turn bind failure");
+    drop(conn);
+
+    let accepted_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    let accepted = event(
+        &stored,
+        "turn-idle-bind-rollback",
+        1,
+        "turn.accepted",
+        &accepted_at,
+        json!({"goalAccountingMode": "default"}),
+    );
+    let error = store
+        .apply_canonical_events(&stored, std::slice::from_ref(&accepted))
+        .expect_err("injected bind failure must reject admission accounting");
+    assert!(error.contains("injected goal turn bind failure"));
+    let goal = store
+        .get_thread_goal_sync(thread.thread_id.as_str())
+        .expect("read rolled-back idle goal")
+        .expect("rolled-back idle goal");
+    assert_eq!(goal.time_used_seconds, 0);
+    assert!(store.thread_goal_idle_is_active_for_test(thread.thread_id.as_str()));
+    let conn = store
+        .open_thread_store()
+        .expect("open rolled-back idle store");
+    assert_eq!(
+        conn.query_row(
+            "SELECT COUNT(*) FROM thread_goal_update_outbox",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("count rolled-back idle outbox"),
+        0
+    );
+}
+
+#[test]
+fn plan_terminal_does_not_rearm_idle_goal_accounting() {
+    let (_temp, store, thread, stored) = store_with_goal("goal-idle-plan");
+    let turn_id = "turn-idle-plan";
+    store.backdate_thread_goal_idle_for_test(thread.thread_id.as_str(), 5);
+    let events = [
+        event(
+            &stored,
+            turn_id,
+            1,
+            "turn.accepted",
+            "2026-07-20T00:00:00Z",
+            json!({"goalAccountingMode": "plan"}),
+        ),
+        event(
+            &stored,
+            turn_id,
+            2,
+            "turn.completed",
+            "2026-07-20T00:00:05Z",
+            usage(50, 10, 20),
+        ),
+    ];
+
+    store
+        .apply_canonical_events(&stored, &events)
+        .expect("apply plan turn");
+    assert!(!store.thread_goal_idle_is_active_for_test(thread.thread_id.as_str()));
+    let goal = store
+        .get_thread_goal_sync(thread.thread_id.as_str())
+        .expect("read plan goal")
+        .expect("plan goal");
+    assert_eq!(goal.tokens_used, 0);
+    assert_eq!(goal.time_used_seconds, 0);
+}
+
+#[test]
 fn durable_plan_marker_prevents_goal_charging_without_runtime_options() {
     let (_temp, store, thread, stored) = store_with_goal("goal-plan-durable");
     let turn_id = "turn-plan-durable";

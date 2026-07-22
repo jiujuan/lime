@@ -1347,6 +1347,95 @@ fn take_thread_goal_notification(
     Some(notification)
 }
 
+fn take_thread_deleted_notifications(
+    messages: &mut Vec<JsonRpcMessage>,
+) -> Vec<(String, JsonRpcNotification)> {
+    let mut retained = Vec::with_capacity(messages.len());
+    let mut deleted = Vec::new();
+    for message in std::mem::take(messages) {
+        let JsonRpcMessage::Notification(notification) = &message else {
+            retained.push(message);
+            continue;
+        };
+        let Ok(app_server_protocol::protocol::v2::ServerNotification::ThreadDeleted(params)) =
+            app_server_protocol::protocol::v2::ServerNotification::try_from(notification.clone())
+        else {
+            retained.push(message);
+            continue;
+        };
+        deleted.push((params.thread_id, notification.clone()));
+    }
+    *messages = retained;
+    deleted
+}
+
+async fn publish_thread_delete_transport_result(
+    server: &AppServer,
+    origin_connection_id: ConnectionId,
+    messages: &mut Vec<JsonRpcMessage>,
+) -> bool {
+    let deleted = take_thread_deleted_notifications(messages);
+    if deleted.is_empty() {
+        return false;
+    }
+
+    let bridge = server.event_bridge();
+    if let Err(error) = bridge
+        .send_messages_to_connection(origin_connection_id, messages)
+        .await
+    {
+        tracing::warn!(
+            %origin_connection_id,
+            %error,
+            "failed to send thread/delete response"
+        );
+    }
+
+    let deleted_thread_ids = deleted
+        .iter()
+        .map(|(thread_id, _)| thread_id.clone())
+        .collect::<Vec<_>>();
+    server
+        .server_requests
+        .abort_for_threads(&bridge, &deleted_thread_ids, "thread deleted")
+        .await;
+
+    for (thread_id, notification) in deleted {
+        let canonical_thread_id = agent_protocol::ThreadId::new(&thread_id);
+        let (completion_tx, completion_rx) = oneshot::channel();
+        let publish_result = match bridge
+            .send_thread_command(
+                canonical_thread_id.clone(),
+                thread_state::ThreadListenerCommand::PublishNotification {
+                    notification,
+                    origin_connection_id: Some(origin_connection_id),
+                    completion_tx: Some(completion_tx),
+                },
+            )
+            .await
+        {
+            Ok(()) => completion_rx
+                .await
+                .map_err(|error| error.to_string())
+                .and_then(|result| result),
+            Err(error) => Err(error),
+        };
+        if let Err(error) = publish_result {
+            tracing::warn!(
+                %origin_connection_id,
+                %thread_id,
+                %error,
+                "failed to publish thread/deleted notification"
+            );
+        }
+        server
+            .thread_states
+            .remove_thread(&canonical_thread_id)
+            .await;
+    }
+    true
+}
+
 fn spawn_transport_request(
     server: AppServer,
     connection_id: ConnectionId,
@@ -1355,6 +1444,11 @@ fn spawn_transport_request(
     prepared_resume: Option<(String, thread_state::ThreadResumeBarrier)>,
 ) {
     tokio::spawn(async move {
+        let is_thread_delete = matches!(
+            &message,
+            JsonRpcMessage::Request(request)
+                if request.method == app_server_protocol::protocol::v2::METHOD_THREAD_DELETE
+        );
         let goal_mutation_thread_id = thread_goal_mutation_thread_id(&message);
         let subscription_method = match &message {
             JsonRpcMessage::Request(request)
@@ -1391,6 +1485,12 @@ fn spawn_transport_request(
             .await
         {
             Ok(mut messages) => {
+                if is_thread_delete
+                    && publish_thread_delete_transport_result(&server, connection_id, &mut messages)
+                        .await
+                {
+                    return;
+                }
                 if let Some((thread_id, barrier)) = prepared_resume {
                     let successful_resume = response_thread_id(&messages)
                         .as_deref()
@@ -1492,20 +1592,43 @@ fn spawn_transport_request(
                                 "failed to send ThreadGoal mutation response"
                             );
                         }
+                        let (completion_tx, completion_rx) = oneshot::channel();
                         let command = thread_state::ThreadListenerCommand::PublishNotification {
                             notification,
                             origin_connection_id: Some(connection_id),
-                            completion_tx: None,
+                            completion_tx: Some(completion_tx),
                         };
-                        if let Err(error) = bridge
+                        let publish_result = match bridge
                             .send_thread_command(agent_protocol::ThreadId::new(thread_id), command)
+                            .await
+                        {
+                            Ok(()) => completion_rx
+                                .await
+                                .map_err(|error| error.to_string())
+                                .and_then(|result| result),
+                            Err(error) => Err(error),
+                        };
+                        if let Err(error) = publish_result {
+                            tracing::warn!(
+                                %connection_id,
+                                %thread_id,
+                                %error,
+                                "failed to publish ThreadGoal notification"
+                            );
+                        } else if let Err(error) = server
+                            .processor
+                            .runtime()
+                            .maybe_start_thread_goal_for_thread_if_idle(
+                                thread_id,
+                                server.processor.runtime_host_context(),
+                            )
                             .await
                         {
                             tracing::warn!(
                                 %connection_id,
                                 %thread_id,
                                 %error,
-                                "failed to enqueue ThreadGoal notification"
+                                "failed to start idle ThreadGoal after mutation notification"
                             );
                         }
                         return;

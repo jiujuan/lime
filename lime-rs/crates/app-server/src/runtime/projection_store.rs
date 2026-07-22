@@ -13,6 +13,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use super::article_workspace_edited_draft;
 use super::canonical_rollout::RolloutStore;
@@ -30,18 +31,32 @@ use super::status::resolve_session_runtime_state;
 use super::status::RuntimeTurnSnapshot;
 
 mod session_settings;
+pub(in crate::runtime) mod thread_delete;
 mod thread_product_projection;
 
 const PROJECTION_SUMMARY_MESSAGE_TEXT_MAX_CHARS: usize = 2_000;
 const PROJECTION_SUMMARY_MESSAGE_ROW_LIMIT: i64 = 20_000;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ProjectionStore {
     path: PathBuf,
     state_path: PathBuf,
     thread_history_path: PathBuf,
     rollout_store: Option<RolloutStore>,
+    pub(in crate::runtime) goal_accounting:
+        Arc<super::canonical_thread_store::goal_idle::GoalAccountingState>,
 }
+
+impl PartialEq for ProjectionStore {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+            && self.state_path == other.state_path
+            && self.thread_history_path == other.thread_history_path
+            && self.rollout_store == other.rollout_store
+    }
+}
+
+impl Eq for ProjectionStore {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectionReadSession {
@@ -158,6 +173,7 @@ impl ProjectionStore {
             state_path,
             thread_history_path,
             rollout_store,
+            goal_accounting: Arc::new(Default::default()),
         };
         store.ensure_canonical_thread_store()?;
         store.rebuild_canonical_rollouts_if_empty()?;
@@ -216,52 +232,6 @@ impl ProjectionStore {
         tx.commit()
             .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
         Ok(())
-    }
-
-    pub(super) fn delete_session_data(&self, session_id: &str) -> Result<bool, String> {
-        self.ensure_canonical_thread_store()?;
-        let mut conn = self
-            .open_thread_store()
-            .map_err(|error| error.to_string())?;
-        let tx = conn
-            .transaction()
-            .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
-        let thread_id = tx
-            .query_row(
-                "SELECT thread_id FROM canonical_threads WHERE session_id = ?1",
-                params![session_id],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(|error| format!("无法定位 canonical thread: {error}"))?;
-        if let Some(thread_id) = thread_id.as_deref() {
-            tx.execute(
-                "DELETE FROM canonical_items WHERE thread_id = ?1",
-                params![thread_id],
-            )
-            .map_err(|error| format!("无法清理 canonical_items: {error}"))?;
-            tx.execute(
-                "DELETE FROM canonical_turns WHERE thread_id = ?1",
-                params![thread_id],
-            )
-            .map_err(|error| format!("无法清理 canonical_turns: {error}"))?;
-            tx.execute(
-                "DELETE FROM canonical_history_applies WHERE thread_id = ?1",
-                params![thread_id],
-            )
-            .map_err(|error| format!("无法清理 canonical_history_applies: {error}"))?;
-        }
-        let deleted_canonical = tx
-            .execute(
-                "DELETE FROM canonical_threads WHERE session_id = ?1",
-                params![session_id],
-            )
-            .map_err(|error| format!("无法清理 canonical_threads: {error}"))?
-            > 0;
-        clear_session_in_tx(&tx, session_id)?;
-        tx.commit()
-            .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
-        Ok(deleted_canonical)
     }
 
     pub fn repair_session(&self, session_id: &str, events: &[AgentEvent]) -> Result<usize, String> {

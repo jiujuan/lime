@@ -4,7 +4,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
-import { extractInputbarManagedObjectiveText } from "../components/Inputbar/utils/inputbarModeRequestMetadata";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
 import type { TaskCenterDraftTab } from "./agentChatWorkspaceHelpers";
 import {
@@ -325,33 +324,6 @@ async function flushAfterNextPaint() {
     await Promise.resolve();
   });
 }
-
-describe("extractInputbarManagedObjectiveText", () => {
-  it("应从 inputbar managed objective metadata 提取目标文本", () => {
-    expect(
-      extractInputbarManagedObjectiveText({
-        harness: {
-          managed_objective: {
-            objective_text: "持续推进真实 E2E 目标",
-            source: "inputbar",
-          },
-        },
-      }),
-    ).toBe("持续推进真实 E2E 目标");
-  });
-
-  it("没有目标 metadata 时应返回 null", () => {
-    expect(
-      extractInputbarManagedObjectiveText({
-        harness: {
-          preferences: {
-            task: true,
-          },
-        },
-      }),
-    ).toBeNull();
-  });
-});
 
 describe("useTaskCenterHomePendingPreviewRuntime", () => {
   it("真实会话未 ready 前即使存在临时消息投影也应保留 pending preview", () => {

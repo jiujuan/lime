@@ -36,6 +36,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::client::McpClientWrapper;
+use crate::environment::McpEnvironmentRegistry;
 use crate::events::*;
 use crate::oauth::{McpOAuthLoginResponse, McpOAuthRegistry};
 use crate::types::*;
@@ -105,6 +106,8 @@ pub struct McpClientManager {
 
     oauth_registry: McpOAuthRegistry,
 
+    environment_registry: McpEnvironmentRegistry,
+
     elicitation_router: Option<crate::elicitation::ElicitationRequestRouter>,
     runtime_owner: Option<McpRuntimeOwner>,
 }
@@ -133,8 +136,11 @@ pub struct McpRuntimeServerSpec {
 #[derive(Clone)]
 pub struct McpBridgeSnapshot {
     pub server_name: String,
+    pub environment_id: String,
     pub description: String,
     pub tools: Vec<McpToolDefinition>,
+    pub auth_scopes: Option<Vec<String>>,
+    pub supports_parallel_tool_calls: bool,
     pub running_service:
         Arc<RunningService<RoleClient, crate::client_service::LimeMcpClientService>>,
     pub manager: Arc<McpClientManager>,
@@ -159,6 +165,7 @@ impl McpClientManager {
             tool_cache: Arc::new(RwLock::new(None)),
             emitter,
             oauth_registry: McpOAuthRegistry::new(),
+            environment_registry: McpEnvironmentRegistry::local(),
             elicitation_router: None,
             runtime_owner: None,
         }
@@ -185,6 +192,7 @@ impl McpClientManager {
             tool_cache: Arc::new(RwLock::new(None)),
             emitter,
             oauth_registry: McpOAuthRegistry::new(),
+            environment_registry: McpEnvironmentRegistry::local(),
             elicitation_router: Some(elicitation_router),
             runtime_owner: Some(McpRuntimeOwner {
                 session_id,
@@ -333,6 +341,7 @@ impl McpClientManager {
 
         let config = fallback_config.cloned().unwrap_or(McpServerConfig {
             transport: McpServerTransport::default(),
+            environment_id: crate::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: false,
             startup_timeout: 30,
             tool_timeout: None,
@@ -429,8 +438,11 @@ impl McpClientManager {
 
             snapshots.push(McpBridgeSnapshot {
                 server_name: server_name.clone(),
+                environment_id: wrapper.config.environment_id.clone(),
                 description,
                 tools: server_tools,
+                auth_scopes: wrapper.config.oauth_scopes(),
+                supports_parallel_tool_calls: wrapper.config.supports_parallel_tool_calls,
                 running_service,
                 manager: Arc::clone(self),
                 tool_timeout: bridge_tool_timeout(&wrapper.config),

@@ -65,9 +65,7 @@ function appServerClientMock(): AppServerSessionRpcClient {
     unarchiveThread: vi
       .fn()
       .mockResolvedValue(rpcResult({ thread: canonicalThread() })),
-    deleteSession: vi
-      .fn()
-      .mockResolvedValue(rpcResult({ sessionId: "session-1", deleted: true })),
+    deleteThread: vi.fn().mockResolvedValue(rpcResult({})),
   };
   return client as unknown as AppServerSessionRpcClient;
 }
@@ -585,13 +583,16 @@ describe("appServerSessionClient", () => {
 
   it("delete 应物理清理 current session", async () => {
     const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.request).mockResolvedValueOnce(
+      rpcResult({ data: [canonicalThread()] }) as never,
+    );
     const client = createAppServerSessionClient({ appServerClient });
 
     await expect(
       client.deleteAgentRuntimeSession(" session-1 "),
     ).resolves.toBeUndefined();
-    expect(appServerClient.deleteSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
+    expect(appServerClient.deleteThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
     });
   });
 });

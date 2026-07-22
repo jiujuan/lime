@@ -1,6 +1,9 @@
 use super::request_context::RuntimeModelSelection;
 use lime_agent::SessionProviderConfig;
 use lime_core::database::DbConnection;
+use lime_core::models::{
+    runtime_api_key_credential_uuid, RuntimeCredentialData, RuntimeProviderCredential,
+};
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::model_registry_service::ModelRegistryService;
 use serde_json::{json, Value};
@@ -59,11 +62,20 @@ pub(super) async fn resolve_runtime_model_registry_metadata(
     }
 
     let provider = api_key_provider_service.get_provider(db, &selection.provider)?;
+    let cache_credential = match provider.as_ref().and_then(single_enabled_api_key) {
+        Some(key) => api_key_provider_service.select_runtime_credential_by_ref(
+            db,
+            &selection.provider,
+            &runtime_api_key_credential_uuid(&key.id),
+        )?,
+        None => None,
+    };
     let registry = ModelRegistryService::new(db.clone());
     let metadata = registry.resolve_provider_model_metadata(
         provider.as_ref(),
         &selection.provider,
         &selection.model,
+        cache_credential.as_ref().map(runtime_credential_api_key),
     )?;
     let model = metadata
         .model
@@ -130,6 +142,24 @@ pub(super) async fn resolve_runtime_model_registry_metadata(
             "reasoning": reasoning,
         }),
     })
+}
+
+fn single_enabled_api_key(
+    provider: &lime_core::database::dao::api_key_provider::ProviderWithKeys,
+) -> Option<&lime_core::database::dao::api_key_provider::ApiKeyEntry> {
+    let mut enabled = provider.api_keys.iter().filter(|key| key.enabled);
+    let key = enabled.next()?;
+    enabled.next().is_none().then_some(key)
+}
+
+fn runtime_credential_api_key(credential: &RuntimeProviderCredential) -> &str {
+    match &credential.credential {
+        RuntimeCredentialData::OpenAIKey { api_key, .. }
+        | RuntimeCredentialData::ClaudeKey { api_key, .. }
+        | RuntimeCredentialData::VertexKey { api_key, .. }
+        | RuntimeCredentialData::GeminiApiKey { api_key, .. }
+        | RuntimeCredentialData::AnthropicKey { api_key, .. } => api_key,
+    }
 }
 
 #[cfg(test)]
@@ -215,6 +245,51 @@ mod tests {
                 .and_then(Value::as_str),
             Some("coder-reasoning-large")
         );
+    }
+
+    #[test]
+    fn scoped_cache_key_requires_unambiguous_runtime_credential() {
+        let now = chrono::Utc::now();
+        let key = |id: &str| lime_core::database::dao::api_key_provider::ApiKeyEntry {
+            id: id.to_string(),
+            provider_id: "custom-provider".to_string(),
+            api_key_encrypted: "encrypted".to_string(),
+            alias: None,
+            enabled: true,
+            usage_count: 0,
+            error_count: 0,
+            last_used_at: None,
+            created_at: now,
+        };
+        let mut provider = lime_core::database::dao::api_key_provider::ProviderWithKeys {
+            provider: lime_core::database::dao::api_key_provider::ApiKeyProvider {
+                id: "custom-provider".to_string(),
+                name: "Custom Provider".to_string(),
+                provider_type: ApiProviderType::Openai,
+                api_host: "https://gateway.example.com/v1".to_string(),
+                is_system: false,
+                group: lime_core::database::dao::api_key_provider::ProviderGroup::Custom,
+                enabled: true,
+                sort_order: 1,
+                api_version: None,
+                project: None,
+                location: None,
+                region: None,
+                custom_models: Vec::new(),
+                prompt_cache_mode: None,
+                created_at: now,
+                updated_at: now,
+            },
+            api_keys: vec![key("key-a")],
+        };
+
+        assert_eq!(
+            single_enabled_api_key(&provider).map(|key| key.id.as_str()),
+            Some("key-a")
+        );
+
+        provider.api_keys.push(key("key-b"));
+        assert!(single_enabled_api_key(&provider).is_none());
     }
 
     #[tokio::test]

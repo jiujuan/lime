@@ -26,6 +26,8 @@ use super::{ProjectionStore, StoredSession};
 mod agent_graph;
 mod goal;
 mod goal_accounting;
+mod goal_fork;
+pub(in crate::runtime) mod goal_idle;
 mod goal_projection;
 #[cfg(test)]
 mod goal_projection_tests;

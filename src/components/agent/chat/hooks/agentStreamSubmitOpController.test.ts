@@ -5,7 +5,6 @@ import { buildAgentStreamSubmitOp } from "./agentStreamSubmitOpController";
 describe("agentStreamSubmitOpController", () => {
   it("应按 current stream submit 语义构造 runtime submitOp", () => {
     const op = buildAgentStreamSubmitOp({
-      activeSessionId: "session-fast-1",
       activeThreadId: "thread-fast-1",
       content: "只回答一个字：好",
       images: [],
@@ -43,7 +42,6 @@ describe("agentStreamSubmitOpController", () => {
 
   it("应与底层 user_input builder 保持 payload 等价", () => {
     const streamOp = buildAgentStreamSubmitOp({
-      activeSessionId: "session-social-1",
       activeThreadId: "thread-social-1",
       content: "继续生成社媒初稿",
       images: [
@@ -152,7 +150,6 @@ describe("agentStreamSubmitOpController", () => {
 
   it("应把 reasoning effort 带入 typed turn", () => {
     const op = buildAgentStreamSubmitOp({
-      activeSessionId: "session-reasoning-1",
       activeThreadId: "thread-reasoning-1",
       content: "继续",
       images: [],
@@ -169,7 +166,6 @@ describe("agentStreamSubmitOpController", () => {
 
   it("搜索命令不应把旧 search 偏好写入 typed turn", () => {
     const op = buildAgentStreamSubmitOp({
-      activeSessionId: "session-search-1",
       activeThreadId: "thread-search-1",
       content: "@搜索 关键词:AI 行业新闻",
       images: [],
@@ -183,78 +179,5 @@ describe("agentStreamSubmitOpController", () => {
     expect(op).not.toHaveProperty("preferences");
     expect(op.turn).not.toHaveProperty("webSearch");
     expect(op.turn).not.toHaveProperty("searchMode");
-  });
-
-  it("应在最终 submit 边界把 thread goal 绑定到真实 session id", () => {
-    const op = buildAgentStreamSubmitOp({
-      activeSessionId: "session-real-1",
-      activeThreadId: "thread-real-1",
-      content: "请按目标推进",
-      images: [],
-      eventName: "agent_stream_goal",
-      requestMetadata: {
-        harness: {
-          goal_mode_enabled: true,
-          thread_goal: {
-            enabled: true,
-            source: "empty_state",
-            status: "active",
-            set: {
-              threadId: "draft-send-1",
-              objective: null,
-              status: "active",
-              tokenBudget: null,
-            },
-          },
-          goal: {
-            enabled: true,
-            source: "empty_state",
-            status: "active",
-            set: {
-              threadId: "draft-send-1",
-              objective: null,
-              status: "active",
-              tokenBudget: null,
-            },
-          },
-        },
-      },
-      effectiveAccessMode: "current",
-      effectiveProviderType: "deepseek",
-      effectiveModel: "deepseek-chat",
-    });
-
-    expect(op).not.toHaveProperty("sessionId");
-    expect(op.turn.threadId).toBe("thread-real-1");
-    expect(op.turn.additionalContext?.metadata).toEqual({
-      kind: "application",
-      value: JSON.stringify({
-        harness: {
-          goal_mode_enabled: true,
-          thread_goal: {
-            enabled: true,
-            source: "empty_state",
-            status: "active",
-            set: {
-              threadId: "session-real-1",
-              objective: null,
-              status: "active",
-              tokenBudget: null,
-            },
-          },
-          goal: {
-            enabled: true,
-            source: "empty_state",
-            status: "active",
-            set: {
-              threadId: "session-real-1",
-              objective: null,
-              status: "active",
-              tokenBudget: null,
-            },
-          },
-        },
-      }),
-    });
   });
 });

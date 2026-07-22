@@ -112,6 +112,8 @@ export type AppServerAgentSessionReviewDecisionSaveParams =
 export type AppServerAgentSessionReviewDecision =
   protocol.AgentSessionReviewDecision;
 export type AppServerThreadStartParams = protocol.ThreadStartParams;
+export type AppServerThreadForkParams = protocol.ThreadForkParams;
+export type AppServerThreadForkResponse = protocol.ThreadForkResponse;
 export type AppServerAgentSessionListParams = protocol.AgentSessionListParams;
 export type AppServerAgentSessionListResponse =
   protocol.AgentSessionListResponse;
@@ -176,10 +178,8 @@ export type AppServerAgentSessionUpdateParams =
   protocol.AgentSessionUpdateParams;
 export type AppServerAgentSessionUpdateResponse =
   protocol.AgentSessionUpdateResponse;
-export type AppServerAgentSessionDeleteParams =
-  protocol.AgentSessionDeleteParams;
-export type AppServerAgentSessionDeleteResponse =
-  protocol.AgentSessionDeleteResponse;
+export type AppServerThreadDeleteParams = protocol.ThreadDeleteParams;
+export type AppServerThreadDeleteResponse = protocol.ThreadDeleteResponse;
 export type AppServerManagedObjectiveStatus = protocol.ManagedObjectiveStatus;
 export type AppServerManagedObjective = protocol.ManagedObjective;
 export type AppServerAgentSessionObjectiveReadParams =

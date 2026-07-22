@@ -1,8 +1,12 @@
 use super::goal::ThreadGoalStoreError;
 use super::goal_accounting::{
-    account_goal_turn_usage, bind_goal_turn, mark_goal_update_delivered,
+    account_goal_turn_usage, mark_goal_update_delivered,
     mark_thread_goal_updates_delivered_through, pending_goal_updates_for_thread,
-    AccountGoalTurnUsage, BindGoalTurn, GoalTerminalStatus, GoalTurnMode,
+    AccountGoalTurnUsage, GoalTerminalStatus, GoalTurnMode,
+};
+use super::goal_idle::{
+    idle_active_goal_id, prepare_goal_turn_admission, IdleGoalTurnAdmissionOutcome,
+    PrepareGoalTurnAdmission,
 };
 use super::*;
 use crate::runtime::thread_goal::GoalAccountingMode;
@@ -46,27 +50,33 @@ impl ProjectionStore {
             };
             match event.event_type.as_str() {
                 "turn.accepted" => {
-                    if bound_goal_id(&conn, thread_id, turn_id)?.is_some() {
-                        continue;
-                    }
-                    let Some(goal_id) = active_goal_id(&conn, thread_id)? else {
-                        continue;
-                    };
+                    let mut idle_permit = self.goal_accounting.idle_permit(thread_id);
                     let Some(started_at_ms) = event_timestamp_millis(event) else {
                         continue;
                     };
-                    bind_goal_turn(
+                    let snapshot = idle_permit.snapshot_at(started_at_ms);
+                    match prepare_goal_turn_admission(
                         &mut conn,
-                        BindGoalTurn {
+                        PrepareGoalTurnAdmission {
                             thread_id,
                             turn_id,
-                            expected_goal_id: &goal_id,
                             turn_mode: turn_mode(stored, event),
                             source_sequence: event.sequence,
                             token_usage_at_start: &cumulative_usage,
                             started_at_ms,
                         },
-                    )?;
+                        snapshot.as_ref(),
+                    )? {
+                        IdleGoalTurnAdmissionOutcome::Prepared { goal_matched } => {
+                            if goal_matched {
+                                if let Some(snapshot) = snapshot.as_ref() {
+                                    idle_permit.mark_accounted(snapshot);
+                                }
+                            }
+                            idle_permit.clear();
+                        }
+                        IdleGoalTurnAdmissionOutcome::Replayed => {}
+                    }
                 }
                 _ if event_can_produce_goal_update(event) => {
                     let Some(goal_id) = bound_goal_id(&conn, thread_id, turn_id)? else {
@@ -76,6 +86,10 @@ impl ProjectionStore {
                         continue;
                     };
                     let terminal = event.event_type != "item.completed";
+                    let mut idle_permit =
+                        terminal.then(|| self.goal_accounting.idle_permit(thread_id));
+                    let plan_turn =
+                        terminal && bound_turn_uses_plan_mode(&conn, thread_id, turn_id)?;
                     account_goal_turn_usage(
                         &mut conn,
                         AccountGoalTurnUsage {
@@ -92,6 +106,15 @@ impl ProjectionStore {
                                 .flatten(),
                         },
                     )?;
+                    if let Some(permit) = idle_permit.as_mut() {
+                        if plan_turn {
+                            permit.clear();
+                        } else if let Some(goal_id) = idle_active_goal_id(&conn, thread_id)? {
+                            permit.mark_active(&goal_id);
+                        } else {
+                            permit.clear();
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -235,20 +258,6 @@ impl RuntimeCoreEventAppender {
     }
 }
 
-fn active_goal_id(
-    conn: &Connection,
-    thread_id: &str,
-) -> Result<Option<String>, ThreadGoalStoreError> {
-    conn.query_row(
-        r#"SELECT goal_id FROM thread_goals
-           WHERE thread_id = ?1 AND status IN ('active', 'budget_limited')"#,
-        params![thread_id],
-        |row| row.get(0),
-    )
-    .optional()
-    .map_err(store_error)
-}
-
 fn bound_goal_id(
     conn: &Connection,
     thread_id: &str,
@@ -261,6 +270,22 @@ fn bound_goal_id(
         |row| row.get(0),
     )
     .optional()
+    .map_err(store_error)
+}
+
+fn bound_turn_uses_plan_mode(
+    conn: &Connection,
+    thread_id: &str,
+    turn_id: &str,
+) -> Result<bool, ThreadGoalStoreError> {
+    conn.query_row(
+        r#"SELECT turn_mode FROM thread_goal_turn_accounting
+           WHERE thread_id = ?1 AND turn_id = ?2"#,
+        params![thread_id, turn_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map(|mode| mode.as_deref() == Some("plan"))
     .map_err(store_error)
 }
 
@@ -306,7 +331,7 @@ fn event_timestamp_millis(event: &AgentEvent) -> Option<i64> {
 fn event_can_produce_goal_update(event: &AgentEvent) -> bool {
     matches!(
         event.event_type.as_str(),
-        "turn.completed" | "turn.failed" | "turn.canceled"
+        "turn.accepted" | "turn.completed" | "turn.failed" | "turn.canceled"
     ) || tool_finish_counts_for_goal_progress(event)
 }
 

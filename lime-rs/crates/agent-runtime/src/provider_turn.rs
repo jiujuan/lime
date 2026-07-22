@@ -21,7 +21,7 @@ use model_provider::current_client::{
 };
 use model_provider::provider_stream::RuntimeReplyModelRequestPolicy;
 use model_provider::provider_stream::RuntimeReplyProviderTraceMetadata;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -53,6 +53,8 @@ const LOCAL_TOOL_ENVIRONMENT_ID: &str = "local";
 pub struct RuntimeToolStepSnapshot {
     pub definitions: Vec<RuntimeToolDefinition>,
     pub executor: RuntimeToolExecutorHandle,
+    serial_tool_names: Arc<HashSet<String>>,
+    tool_environment_ids: Arc<HashMap<String, String>>,
 }
 
 impl RuntimeToolStepSnapshot {
@@ -63,7 +65,34 @@ impl RuntimeToolStepSnapshot {
         Self {
             definitions,
             executor,
+            serial_tool_names: Arc::new(HashSet::new()),
+            tool_environment_ids: Arc::new(HashMap::new()),
         }
+    }
+
+    pub fn with_tool_metadata(
+        definitions: Vec<RuntimeToolDefinition>,
+        executor: RuntimeToolExecutorHandle,
+        serial_tool_names: impl IntoIterator<Item = String>,
+        tool_environment_ids: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        Self {
+            definitions,
+            executor,
+            serial_tool_names: Arc::new(serial_tool_names.into_iter().collect()),
+            tool_environment_ids: Arc::new(tool_environment_ids.into_iter().collect()),
+        }
+    }
+
+    fn supports_parallel_tool_calls(&self, tool_name: &str) -> bool {
+        !self.serial_tool_names.contains(tool_name)
+    }
+
+    fn environment_id(&self, tool_name: &str) -> &str {
+        self.tool_environment_ids
+            .get(tool_name)
+            .map(String::as_str)
+            .unwrap_or(LOCAL_TOOL_ENVIRONMENT_ID)
     }
 }
 
@@ -677,8 +706,7 @@ where
         };
 
         let results = execute_calls(
-            &tool_step_snapshot.executor,
-            &tool_step_snapshot.definitions,
+            &tool_step_snapshot,
             &turn_id,
             &session_config.id,
             session_config.turn_context.as_ref(),
@@ -891,8 +919,7 @@ fn finish_reason_name(reason: FinishReason) -> &'static str {
 }
 
 async fn execute_calls(
-    executor: &RuntimeToolExecutorHandle,
-    tool_definitions: &[RuntimeToolDefinition],
+    tool_step_snapshot: &RuntimeToolStepSnapshot,
     turn_id: &str,
     session_id: &str,
     turn_context: Option<&agent_protocol::turn_context::TurnContextOverride>,
@@ -902,26 +929,48 @@ async fn execute_calls(
     calls: Vec<CurrentProviderToolCall>,
     allow_parallel: bool,
 ) -> Vec<CurrentProviderToolResult> {
+    let parallel_execution = Arc::new(tokio::sync::RwLock::new(()));
     let execute = |call: CurrentProviderToolCall| {
-        let (definition, step_executor) =
-            match runtime_tool_definition_for_call(tool_definitions, &call) {
-                Some(definition) => (definition, executor.clone()),
+        let (definition, step_executor, advertised, environment_id) =
+            match runtime_tool_definition_for_call(&tool_step_snapshot.definitions, &call) {
+                Some(definition) => (
+                    definition,
+                    tool_step_snapshot.executor.clone(),
+                    true,
+                    tool_step_snapshot.environment_id(&call.name).to_string(),
+                ),
                 None => (
                     unavailable_runtime_tool_definition(&call),
                     RuntimeToolExecutorHandle::new(Arc::new(UnavailableStepToolExecutor)),
+                    false,
+                    LOCAL_TOOL_ENVIRONMENT_ID.to_string(),
                 ),
             };
-        execute_call(
+        let supports_parallel = allow_parallel
+            && tool_step_snapshot.supports_parallel_tool_calls(&call.name)
+            && advertised;
+        let execution = execute_call(
             step_executor,
             definition,
             turn_id.to_string(),
             session_id.to_string(),
             turn_context.cloned(),
+            environment_id,
             working_directory.clone(),
             cancel_token.clone(),
             lifecycle_emitter.clone(),
             call,
-        )
+        );
+        let parallel_execution = Arc::clone(&parallel_execution);
+        async move {
+            if supports_parallel {
+                let _guard = parallel_execution.read().await;
+                execution.await
+            } else {
+                let _guard = parallel_execution.write().await;
+                execution.await
+            }
+        }
     };
     let completed = if allow_parallel && calls.len() > 1 {
         join_all(calls.into_iter().map(execute)).await
@@ -996,6 +1045,7 @@ async fn execute_call(
     turn_id: String,
     session_id: String,
     turn_context: Option<agent_protocol::turn_context::TurnContextOverride>,
+    environment_id: String,
     working_directory: PathBuf,
     cancel_token: Option<CancellationToken>,
     lifecycle_emitter: Arc<dyn ToolLifecycleEmitter>,
@@ -1012,10 +1062,7 @@ async fn execute_call(
         call.id.clone(),
         call.name.clone(),
         call.arguments.clone(),
-        vec![ToolEnvironment::new(
-            LOCAL_TOOL_ENVIRONMENT_ID,
-            working_directory,
-        )],
+        vec![ToolEnvironment::new(environment_id, working_directory)],
         lifecycle_emitter,
     );
     let runtime_tool = executor.bind(definition, RuntimeToolExposure::Direct);

@@ -156,7 +156,6 @@ impl RequestProcessor {
                 self.handle_review_decision_save(params).boxed()
             }
             METHOD_AGENT_SESSION_UPDATE => self.handle_session_update_impl(params).boxed(),
-            METHOD_AGENT_SESSION_DELETE => self.handle_session_delete_impl(params).boxed(),
             METHOD_AGENT_SESSION_OBJECTIVE_READ => self.handle_objective_read_impl(params).boxed(),
             METHOD_AGENT_SESSION_OBJECTIVE_SET => self.handle_objective_set_impl(params).boxed(),
             METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE => {
@@ -207,10 +206,16 @@ impl RequestProcessor {
             METHOD_SESSION_FILE_DELETE => self.handle_session_file_delete_impl(params).boxed(),
             METHOD_SESSION_FILE_LIST => self.handle_session_file_list_impl(params).boxed(),
             METHOD_THREAD_START => self.handle_thread_start_v2(params).boxed(),
+            app_server_protocol::protocol::v2::METHOD_THREAD_FORK => {
+                self.handle_thread_fork_v2(params).boxed()
+            }
             METHOD_THREAD_READ => self.handle_thread_read_impl(params).boxed(),
             METHOD_THREAD_LIST => self.handle_thread_list_impl(params).boxed(),
             app_server_protocol::protocol::v2::METHOD_THREAD_ARCHIVE => {
                 self.handle_thread_archive_v2(params).boxed()
+            }
+            app_server_protocol::protocol::v2::METHOD_THREAD_DELETE => {
+                self.handle_thread_delete_v2(params).boxed()
             }
             app_server_protocol::protocol::v2::METHOD_THREAD_UNARCHIVE => {
                 self.handle_thread_unarchive_v2(params).boxed()

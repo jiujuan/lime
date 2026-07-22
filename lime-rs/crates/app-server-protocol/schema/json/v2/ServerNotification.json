@@ -806,6 +806,17 @@
       ],
       "type": "object"
     },
+    "ThreadDeletedNotification": {
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadGoal": {
       "properties": {
         "createdAt": {
@@ -1956,6 +1967,22 @@
         },
         "params": {
           "$ref": "#/$defs/ThreadArchivedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "const": "thread/deleted",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ThreadDeletedNotification"
         }
       },
       "required": [

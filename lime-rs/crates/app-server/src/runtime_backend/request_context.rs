@@ -577,13 +577,13 @@ fn should_use_responsive_chat_profile(
     request_tool_policy: &RequestToolPolicy,
 ) -> bool {
     first_sampling_turn
-        && request.session.app_id == "desktop"
+        && request.session.app_id == "agent-chat"
         && request.session.workspace_id.is_none()
         && request
             .session
             .business_object_ref
             .as_ref()
-            .is_none_or(|reference| reference.kind == "agent.session")
+            .is_none_or(|reference| reference.kind == "agent.thread")
         && !request.input.has_images()
         && request.runtime_options.as_ref().is_none_or(|options| {
             options.capability_id.is_none()

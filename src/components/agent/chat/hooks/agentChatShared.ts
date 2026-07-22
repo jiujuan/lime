@@ -107,11 +107,17 @@ export interface SlashSkillRequest {
   requestContext?: Record<string, unknown>;
 }
 
+export interface ThreadGoalInput {
+  objective: string;
+  tokenBudget?: number | null;
+}
+
 export interface SendMessageOptions {
   purpose?: Message["purpose"];
   observer?: SendMessageObserver;
   requestMetadata?: Record<string, unknown>;
   collaborationMode?: ModeKind;
+  threadGoal?: ThreadGoalInput;
   assistantDraft?: AssistantDraftState;
   inputRestoreDraft?: InterruptedInputDraftSnapshot;
   displayContent?: string;

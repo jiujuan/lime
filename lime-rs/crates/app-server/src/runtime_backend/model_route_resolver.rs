@@ -381,7 +381,7 @@ mod tests {
             )
             .expect("custom provider");
         service
-            .add_api_key(&db, &provider.id, "sk-text", None, true)
+            .add_api_key(&db, &provider.id, "sk-text-fixture", None, true)
             .expect("api key");
         service
             .update_provider(
@@ -530,7 +530,7 @@ mod tests {
             )
             .expect("custom provider");
         service
-            .add_api_key(&db, &provider.id, "sk-ant", None, true)
+            .add_api_key(&db, &provider.id, "sk-anthropic-fixture", None, true)
             .expect("api key");
         service
             .update_provider(

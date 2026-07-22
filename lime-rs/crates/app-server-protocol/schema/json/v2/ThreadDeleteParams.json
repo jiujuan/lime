@@ -1,17 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
-    "deleted": {
-      "type": "boolean"
-    },
-    "sessionId": {
+    "threadId": {
       "type": "string"
     }
   },
   "required": [
-    "deleted",
-    "sessionId"
+    "threadId"
   ],
-  "title": "AgentSessionDeleteResponse",
+  "title": "ThreadDeleteParams",
   "type": "object"
 }

@@ -116,6 +116,7 @@ pub(super) fn provider_configuration_from_runtime(
             reasoning_effort: selection.reasoning_effort.clone(),
         },
         route_protocol: Some(resolved_route.protocol.clone()),
+        credential_ref: resolved_route.auth.credential_ref.clone(),
         direct_provider_config,
     }
 }
@@ -575,5 +576,29 @@ mod tests {
             Some("https://llm.limeai.run/v1#lime_tenant_id=tenant-0001")
         );
         assert_eq!(direct_config.route_protocol, Some(ProtocolKind::OpenaiChat));
+    }
+
+    #[test]
+    fn provider_configuration_preserves_resolved_credential_ref() {
+        let selection = RuntimeModelSelection {
+            provider: "openai".to_string(),
+            model: "gpt-4.1".to_string(),
+            source: "runtime_options",
+            reasoning_effort: None,
+        };
+        let resolved_route = ResolvedModelRoute {
+            auth: app_server_protocol::AuthMaterialRef {
+                credential_ref: Some("runtime-api-key:credential-a".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let configuration = provider_configuration_from_runtime(&selection, &resolved_route, None);
+
+        assert_eq!(
+            configuration.credential_ref.as_deref(),
+            Some("runtime-api-key:credential-a")
+        );
     }
 }

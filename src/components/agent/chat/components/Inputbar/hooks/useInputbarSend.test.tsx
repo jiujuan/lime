@@ -9,14 +9,8 @@ import type { InputbarSendHandler } from "../inputbarSendPayload";
 import type { InputbarPluginSelection } from "../pluginInputCapability";
 import { useInputbarSend } from "./useInputbarSend";
 
-const { recordAgentUiPerformanceMetricMock, setAgentRuntimeObjectiveMock } =
-  vi.hoisted(() => ({
-    recordAgentUiPerformanceMetricMock: vi.fn(),
-    setAgentRuntimeObjectiveMock: vi.fn(),
-  }));
-
-vi.mock("@/lib/api/agentRuntime/objectiveClient", () => ({
-  setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
+const { recordAgentUiPerformanceMetricMock } = vi.hoisted(() => ({
+  recordAgentUiPerformanceMetricMock: vi.fn(),
 }));
 
 vi.mock("@/lib/agentUiPerformanceMetrics", () => ({
@@ -168,7 +162,6 @@ describe("useInputbarSend", () => {
     clearPathReferencesMock = vi.fn();
     clearActiveCapabilityMock = vi.fn();
     clearPendingImagesMock = vi.fn();
-    setAgentRuntimeObjectiveMock.mockResolvedValue(null);
   });
 
   it("普通文本发送应显式下传当前输入文本", async () => {
@@ -210,7 +203,6 @@ describe("useInputbarSend", () => {
       triggeredAt,
       triggerSource: "button",
     });
-    expect(setAgentRuntimeObjectiveMock).not.toHaveBeenCalled();
     expect(recordAgentUiPerformanceMetricMock).toHaveBeenCalledWith(
       "inputbar.send.plainTextFastPath",
       expect.objectContaining({
@@ -432,7 +424,7 @@ describe("useInputbarSend", () => {
     expect(clearActiveCapabilityMock).toHaveBeenCalledTimes(1);
   });
 
-  it("目标模式仍应先写入 objective 再发送同一文本", async () => {
+  it("目标模式应通过 typed threadGoal 发送同一文本", async () => {
     const onSend = vi.fn().mockResolvedValue(true);
     renderHarness({
       activeTools: {
@@ -446,15 +438,12 @@ describe("useInputbarSend", () => {
 
     await send();
 
-    expect(setAgentRuntimeObjectiveMock).toHaveBeenCalledWith({
-      sessionId: "thread-goal-1",
-      workspaceId: "workspace-1",
-      objectiveText: "保持当前修复目标",
-      successCriteria: [],
-    });
     expect(onSend).toHaveBeenCalledWith(
       expect.objectContaining({
         textOverride: "保持当前修复目标",
+        sendOptions: expect.objectContaining({
+          threadGoal: { objective: "保持当前修复目标" },
+        }),
       }),
     );
   });

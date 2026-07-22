@@ -124,8 +124,6 @@ pub enum AppServerRequestMethod {
     AgentSessionReviewDecisionSave,
     #[serde(rename = "agentSession/update")]
     AgentSessionUpdate,
-    #[serde(rename = "agentSession/delete")]
-    AgentSessionDelete,
     #[serde(rename = "agentSession/objective/read")]
     AgentSessionObjectiveRead,
     #[serde(rename = "agentSession/objective/set")]
@@ -666,7 +664,6 @@ impl AppServerRequestMethod {
             }
             Self::AgentSessionReviewDecisionSave => METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
             Self::AgentSessionUpdate => METHOD_AGENT_SESSION_UPDATE,
-            Self::AgentSessionDelete => METHOD_AGENT_SESSION_DELETE,
             Self::AgentSessionObjectiveRead => METHOD_AGENT_SESSION_OBJECTIVE_READ,
             Self::AgentSessionObjectiveSet => METHOD_AGENT_SESSION_OBJECTIVE_SET,
             Self::AgentSessionObjectiveStatusUpdate => METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
@@ -969,7 +966,6 @@ impl AppServerRequestMethod {
             }
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE => Some(Self::AgentSessionReviewDecisionSave),
             METHOD_AGENT_SESSION_UPDATE => Some(Self::AgentSessionUpdate),
-            METHOD_AGENT_SESSION_DELETE => Some(Self::AgentSessionDelete),
             METHOD_AGENT_SESSION_OBJECTIVE_READ => Some(Self::AgentSessionObjectiveRead),
             METHOD_AGENT_SESSION_OBJECTIVE_SET => Some(Self::AgentSessionObjectiveSet),
             METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE => {
@@ -1427,10 +1423,6 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_UPDATE,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_DELETE,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -2450,6 +2442,10 @@ pub const APP_SERVER_REQUEST_SERIALIZATION_SCOPES: &[AppServerRequestSerializati
     },
     AppServerRequestSerializationScopeSpec {
         method: crate::protocol::v2::METHOD_THREAD_ARCHIVE,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: crate::protocol::v2::METHOD_THREAD_DELETE,
         scope: AppServerRequestSerializationScope::Thread,
     },
     AppServerRequestSerializationScopeSpec {

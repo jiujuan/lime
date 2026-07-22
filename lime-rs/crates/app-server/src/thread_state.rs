@@ -262,6 +262,31 @@ impl ThreadStateManager {
             .unwrap_or_default()
     }
 
+    pub(crate) async fn remove_thread(&self, thread_id: &ThreadId) {
+        let entry = {
+            let mut inner = self.inner.lock().await;
+            let Some(entry) = inner.threads.remove(thread_id) else {
+                return;
+            };
+
+            for connection_id in &entry.connection_ids {
+                let remove_connection_entry = inner
+                    .thread_ids_by_connection
+                    .get_mut(connection_id)
+                    .is_some_and(|thread_ids| {
+                        thread_ids.remove(thread_id);
+                        thread_ids.is_empty()
+                    });
+                if remove_connection_entry {
+                    inner.thread_ids_by_connection.remove(connection_id);
+                }
+            }
+            entry
+        };
+
+        entry.state.lock().await.clear_listener();
+    }
+
     pub(crate) async fn clear_all_listeners(&self) {
         let thread_states = {
             let mut inner = self.inner.lock().await;
@@ -440,5 +465,59 @@ mod tests {
             .thread_state_for_listener(ThreadId::new("thread-3"))
             .await
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn remove_thread_cancels_listener_and_clears_both_connection_indexes() {
+        let manager = ThreadStateManager::new();
+        let deleted_thread = ThreadId::new("thread-deleted");
+        let retained_thread = ThreadId::new("thread-retained");
+        let first_connection = ConnectionId(1);
+        let second_connection = ConnectionId(2);
+
+        manager.connection_initialized(first_connection).await;
+        manager.connection_initialized(second_connection).await;
+        assert!(
+            manager
+                .subscribe_connection(deleted_thread.clone(), first_connection)
+                .await
+        );
+        assert!(
+            manager
+                .subscribe_connection(deleted_thread.clone(), second_connection)
+                .await
+        );
+        assert!(
+            manager
+                .subscribe_connection(retained_thread.clone(), first_connection)
+                .await
+        );
+
+        let state = manager.thread_state(deleted_thread.clone()).await;
+        let registration = state.lock().await.set_listener();
+        let cancellation = registration.cancellation.clone();
+        let _commands = registration.command_rx;
+        assert!(state.lock().await.begin_resume(ThreadResumeBarrier::new(
+            first_connection,
+            RequestId::String("resume-deleted".to_string()),
+        )));
+
+        manager.remove_thread(&deleted_thread).await;
+
+        assert!(cancellation.is_cancelled());
+        assert!(state.lock().await.listener_command_tx().is_none());
+        assert!(!state.lock().await.has_pending_resume());
+        assert!(manager
+            .subscribed_connection_ids(&deleted_thread)
+            .await
+            .is_empty());
+        assert_eq!(
+            manager.disconnect_connection(first_connection).await,
+            vec![retained_thread]
+        );
+        assert!(manager
+            .disconnect_connection(second_connection)
+            .await
+            .is_empty());
     }
 }

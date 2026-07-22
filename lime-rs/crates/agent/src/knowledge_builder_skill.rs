@@ -1,31 +1,24 @@
 use crate::provider_configuration::{
-    configure_model_route_provider_for_session, provider_configuration_from_model_selection,
+    configure_model_route_provider_for_session_with_provider_and_credential_ref,
+    ModelRouteProviderConfiguration,
 };
 use crate::{
     execute_skill_prompt, execute_skill_workflow, AgentRuntimeState, SkillEventEmitter,
     SkillExecutionError, SkillExecutionResult, SkillPromptExecution, SkillWorkflowExecution,
 };
-use lime_core::database;
+use lime_core::database::DbConnection;
 use lime_skills::{ExecutionCallback, LoadedSkillDefinition};
 use serde_json::Value;
 use std::sync::Arc;
 
-const DEFAULT_SKILL_PROVIDER: &str = "anthropic";
-const DEFAULT_SKILL_MODEL: &str = "claude-sonnet-4-20250514";
-const FALLBACK_TOOL_CAPABLE_PROVIDERS: &[(&str, &str)] = &[
-    ("anthropic", "claude-sonnet-4-20250514"),
-    ("openai", "gpt-4o"),
-    ("gemini", "gemini-2.0-flash"),
-];
-
 pub struct KnowledgeBuilderSkillRequest<'a> {
+    pub db: &'a DbConnection,
     pub skill_name: &'a str,
     pub execution_id: &'a str,
     pub session_id: &'a str,
     pub user_input: &'a str,
     pub request_context: &'a Value,
-    pub provider_override: Option<&'a str>,
-    pub model_override: Option<&'a str>,
+    pub provider_configuration: ModelRouteProviderConfiguration,
 }
 
 #[derive(Default)]
@@ -52,15 +45,12 @@ pub async fn run_knowledge_builder_skill(
     agent_state: &AgentRuntimeState,
     request: KnowledgeBuilderSkillRequest<'_>,
 ) -> Result<SkillExecutionResult, String> {
-    let db = database::init_database()?;
     let skill = load_executable_builder_skill(request.skill_name)?;
-    let (requested_provider, requested_model) = resolve_requested_provider(&skill, &request);
     configure_builder_provider(
         agent_state,
-        &db,
+        request.db,
         request.session_id,
-        &requested_provider,
-        &requested_model,
+        request.provider_configuration,
     )
     .await?;
     let user_input = build_skill_user_input(request.user_input, request.request_context);
@@ -114,92 +104,23 @@ fn load_executable_builder_skill(skill_name: &str) -> Result<LoadedSkillDefiniti
     Ok(skill)
 }
 
-fn resolve_requested_provider(
-    skill: &LoadedSkillDefinition,
-    request: &KnowledgeBuilderSkillRequest<'_>,
-) -> (String, String) {
-    let requested_provider = request
-        .provider_override
-        .map(str::to_string)
-        .or_else(|| skill.provider.clone())
-        .unwrap_or_else(|| DEFAULT_SKILL_PROVIDER.to_string());
-    let requested_model = request
-        .model_override
-        .map(str::to_string)
-        .or_else(|| skill.model.clone())
-        .unwrap_or_else(|| DEFAULT_SKILL_MODEL.to_string());
-    (requested_provider, requested_model)
-}
-
 async fn configure_builder_provider(
     agent_state: &AgentRuntimeState,
-    db: &lime_core::database::DbConnection,
+    db: &DbConnection,
     session_id: &str,
-    requested_provider: &str,
-    requested_model: &str,
+    configuration: ModelRouteProviderConfiguration,
 ) -> Result<(), String> {
-    let mut configure_result = configure_model_route_provider_for_session(
+    let credential_ref = configuration.credential_ref.clone();
+    configure_model_route_provider_for_session_with_provider_and_credential_ref(
         agent_state,
         db,
         session_id,
-        provider_configuration_from_model_selection(
-            requested_provider,
-            requested_model,
-            None,
-            None,
-        ),
+        configuration,
+        credential_ref.as_deref(),
     )
-    .await;
-
-    if configure_result.is_err() {
-        tracing::warn!(
-            "[knowledge_builder_skill] 首选 Provider {} 配置失败: {:?}，尝试 fallback",
-            requested_provider,
-            configure_result.as_ref().err()
-        );
-
-        for (fallback_provider, fallback_model) in FALLBACK_TOOL_CAPABLE_PROVIDERS {
-            if *fallback_provider == requested_provider {
-                continue;
-            }
-            match configure_model_route_provider_for_session(
-                agent_state,
-                db,
-                session_id,
-                provider_configuration_from_model_selection(
-                    *fallback_provider,
-                    *fallback_model,
-                    None,
-                    None,
-                ),
-            )
-            .await
-            {
-                Ok(config) => {
-                    tracing::info!(
-                        "[knowledge_builder_skill] Fallback 到 {} / {} 成功",
-                        fallback_provider,
-                        fallback_model
-                    );
-                    configure_result = Ok(config);
-                    break;
-                }
-                Err(error) => {
-                    tracing::warn!(
-                        "[knowledge_builder_skill] Fallback {} 也失败: {}",
-                        fallback_provider,
-                        error
-                    );
-                }
-            }
-        }
-    }
-
-    configure_result.map(|_| ()).map_err(|error| {
-        format!(
-            "无法配置任何可用的 Provider（需要支持工具调用的 Provider，如 Anthropic、OpenAI 或 Google）: {error}"
-        )
-    })
+    .await
+    .map(|_| ())
+    .map_err(|error| format!("Knowledge Builder 必须先解析 current model route: {error}"))
 }
 
 fn build_skill_user_input(user_input: &str, request_context: &Value) -> String {

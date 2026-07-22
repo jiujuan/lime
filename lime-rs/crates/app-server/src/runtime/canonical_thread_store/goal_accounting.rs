@@ -163,8 +163,21 @@ struct PersistedGoal {
     updated_at_ms: i64,
 }
 
+#[cfg(test)]
 pub(super) fn bind_goal_turn(
     conn: &mut Connection,
+    input: BindGoalTurn<'_>,
+) -> Result<GoalTurnBindOutcome, ThreadGoalStoreError> {
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(store_error)?;
+    let outcome = bind_goal_turn_in_tx(&tx, input)?;
+    tx.commit().map_err(store_error)?;
+    Ok(outcome)
+}
+
+pub(super) fn bind_goal_turn_in_tx(
+    conn: &Connection,
     input: BindGoalTurn<'_>,
 ) -> Result<GoalTurnBindOutcome, ThreadGoalStoreError> {
     let thread_id = required_identity(input.thread_id, "thread id")?;
@@ -176,10 +189,7 @@ pub(super) fn bind_goal_turn(
     }
     let source_sequence = sequence_to_i64(input.source_sequence)?;
 
-    let tx = conn
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(store_error)?;
-    if let Some(existing) = read_turn_accounting(&tx, thread_id, turn_id)? {
+    if let Some(existing) = read_turn_accounting(conn, thread_id, turn_id)? {
         let same_identity = existing.goal_id == expected_goal_id
             && existing.turn_mode == input.turn_mode
             && existing.started_at_ms == input.started_at_ms;
@@ -187,7 +197,6 @@ pub(super) fn bind_goal_turn(
             && input.source_sequence <= existing.last_source_sequence
             && (input.source_sequence < existing.last_source_sequence
                 || existing.last_token_usage == *input.token_usage_at_start);
-        tx.commit().map_err(store_error)?;
         return if replayed {
             Ok(GoalTurnBindOutcome::Replayed)
         } else {
@@ -197,7 +206,7 @@ pub(super) fn bind_goal_turn(
         };
     }
 
-    let goal_available = tx
+    let goal_available = conn
         .query_row(
             "SELECT EXISTS(
                  SELECT 1 FROM thread_goals
@@ -209,11 +218,10 @@ pub(super) fn bind_goal_turn(
         )
         .map_err(store_error)?;
     if !goal_available {
-        tx.commit().map_err(store_error)?;
         return Ok(GoalTurnBindOutcome::GoalUnavailable);
     }
 
-    tx.execute(
+    conn.execute(
         r#"INSERT INTO thread_goal_turn_accounting (
                thread_id, turn_id, goal_id, turn_mode, started_at_ms,
                last_accounted_time_seconds, last_input_tokens, last_cached_input_tokens,
@@ -235,7 +243,6 @@ pub(super) fn bind_goal_turn(
         ],
     )
     .map_err(store_error)?;
-    tx.commit().map_err(store_error)?;
     Ok(GoalTurnBindOutcome::Bound)
 }
 

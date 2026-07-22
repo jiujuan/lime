@@ -72,21 +72,6 @@ vi.mock("../skill-selection/SkillSelector", () => ({
   SkillSelector: () => <div data-testid="empty-state-skill-selector" />,
 }));
 
-vi.mock("./Inputbar/components/InputbarObjectiveInlinePanel", () => ({
-  InputbarObjectiveInlinePanel: (props: {
-    sessionId: string;
-    workspaceId?: string | null;
-    runtimeBusy?: boolean;
-  }) => (
-    <div
-      data-testid="empty-state-objective-inline-panel"
-      data-session-id={props.sessionId}
-      data-workspace-id={props.workspaceId ?? ""}
-      data-runtime-busy={String(Boolean(props.runtimeBusy))}
-    />
-  ),
-}));
-
 function translateResource(
   resource: Partial<
     Record<

@@ -126,19 +126,17 @@ describe("buildWorkspaceTaskRailRuntimeContext", () => {
       accessMode: "current",
       reasoningEffort: "medium",
       workspaceRootPath: "/tmp/project-1",
+      threadGoal: {
+        createdAt: 1,
+        objective: "完成任务区域运行事实摘要",
+        status: "active",
+        threadId: "thread-1",
+        timeUsedSeconds: 0,
+        tokensUsed: 0,
+        updatedAt: 1,
+      },
       threadRead: {
         thread_id: "thread-1",
-        managed_objective: {
-          objective_id: "objective-1",
-          owner_kind: "agent_session",
-          owner_id: "session-1",
-          objective_text: "完成任务区域运行事实摘要",
-          success_criteria: [],
-          status: "active",
-          last_artifact_refs: [],
-          created_at: "2026-06-16T10:00:00.000Z",
-          updated_at: "2026-06-16T10:00:00.000Z",
-        },
         change_summary: {
           changed_file_count: 2,
           changed_files: ["src/A.ts", "src/B.ts"],
@@ -275,17 +273,6 @@ describe("useWorkspaceTaskRailRuntime", () => {
   it("应透传 read model 与子任务摘要事实", async () => {
     const threadRead = {
       thread_id: "thread-1",
-      managed_objective: {
-        objective_id: "objective-1",
-        owner_kind: "agent_session",
-        owner_id: "session-1",
-        objective_text: "完成顶部任务轨道",
-        success_criteria: [],
-        status: "active",
-        last_artifact_refs: [],
-        created_at: "2026-06-16T10:00:00.000Z",
-        updated_at: "2026-06-16T10:00:00.000Z",
-      },
       change_summary: {
         changed_file_count: 1,
         changed_files: ["src/App.tsx"],
@@ -295,6 +282,15 @@ describe("useWorkspaceTaskRailRuntime", () => {
         sources: ["https://docs.example.com/task-rail"],
       },
     } as any;
+    const threadGoal = {
+      createdAt: 1,
+      objective: "完成顶部任务轨道",
+      status: "active" as const,
+      threadId: "thread-1",
+      timeUsedSeconds: 0,
+      tokensUsed: 0,
+      updatedAt: 1,
+    };
     const threadItems = [
       {
         id: "file-source",
@@ -321,6 +317,7 @@ describe("useWorkspaceTaskRailRuntime", () => {
       },
     ];
     const { render, getValue } = renderHook({
+      threadGoal,
       threadRead,
       threadItems,
       canonicalChildren,
@@ -329,6 +326,7 @@ describe("useWorkspaceTaskRailRuntime", () => {
     await render();
 
     expect(getValue().threadRead).toBe(threadRead);
+    expect(getValue().threadGoal).toBe(threadGoal);
     expect(getValue().threadItems).toBe(threadItems);
     expect(getValue().canonicalChildren).toBe(canonicalChildren);
     expect(

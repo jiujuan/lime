@@ -23,7 +23,6 @@ type PluginRuntimeAppServerClient = Pick<
   | "updateThreadSettings"
   | "setThreadMemoryMode"
   | "cancelTurn"
-  | "respondAction"
 >;
 
 export interface PluginRuntimeHostOptions {
@@ -104,6 +103,10 @@ function createPluginRuntimeSessionGateway(
     setThreadMemoryMode: (params) =>
       appServerClient.setThreadMemoryMode(params),
     cancelTurn: (params) => appServerClient.cancelTurn(params),
-    respondAction: (params) => appServerClient.respondAction(params),
+    respondAction: async () => {
+      throw new Error(
+        "Typed server request responses must use their JSON-RPC outer id; generic agentSession/action/respond is retired.",
+      );
+    },
   };
 }

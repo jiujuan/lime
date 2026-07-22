@@ -49,9 +49,7 @@ export interface AppServerClient {
   updateSession(
     params: protocol.AgentSessionUpdateParams,
   ): protocol.JsonRpcRequest;
-  deleteSession(
-    params: protocol.AgentSessionDeleteParams,
-  ): protocol.JsonRpcRequest;
+  deleteThread(params: protocol.ThreadDeleteParams): protocol.JsonRpcRequest;
   readAgentSessionObjective(
     params: protocol.AgentSessionObjectiveReadParams,
   ): protocol.JsonRpcRequest;
@@ -673,6 +671,7 @@ export interface AppServerClient {
     params: protocol.AgentSessionReviewDecisionSaveParams,
   ): protocol.JsonRpcRequest;
   startSession(params: protocol.ThreadStartParams): protocol.JsonRpcRequest;
+  forkThread(params: protocol.ThreadForkParams): protocol.JsonRpcRequest;
   readSession(params: protocol.AgentSessionReadParams): protocol.JsonRpcRequest;
   readAgentSessionMedia(
     params: protocol.AgentSessionMediaReadParams,

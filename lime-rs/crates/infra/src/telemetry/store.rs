@@ -100,6 +100,16 @@ impl TelemetryStore {
         }
         Ok(logs)
     }
+
+    pub fn clear_session(&self, session_id: &str) -> Result<usize, String> {
+        let conn = Connection::open(&self.path)
+            .map_err(|error| format!("无法打开 Telemetry DB {}: {error}", self.path.display()))?;
+        conn.execute(
+            "DELETE FROM request_logs WHERE session_id = ?1",
+            params![session_id],
+        )
+        .map_err(|error| format!("无法清理 Telemetry DB session request logs: {error}"))
+    }
 }
 
 fn create_schema(conn: &Connection) -> Result<(), String> {
@@ -348,5 +358,37 @@ mod tests {
         assert_eq!(logs[0].status, RequestStatus::Failed);
         assert_eq!(logs[0].duration_ms, 456);
         assert_eq!(logs[0].error_message.as_deref(), Some("provider failed"));
+    }
+
+    #[test]
+    fn clear_session_removes_only_matching_request_logs_and_is_idempotent() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store =
+            TelemetryStore::initialize(temp.path().join("telemetry_1.sqlite")).expect("store");
+        let matching = request_log("req-matching", "turn-1");
+        let mut retained = request_log("req-retained", "turn-2");
+        retained.session_id = Some("sess-retained".to_string());
+        store
+            .upsert_request_log(&matching)
+            .expect("matching upsert");
+        store
+            .upsert_request_log(&retained)
+            .expect("retained upsert");
+
+        assert_eq!(store.clear_session("sess-telemetry").expect("clear"), 1);
+        assert_eq!(
+            store
+                .clear_session("sess-telemetry")
+                .expect("clear missing"),
+            0
+        );
+        assert!(store
+            .read_request_log("req-matching")
+            .expect("read cleared")
+            .is_none());
+        assert!(store
+            .read_request_log("req-retained")
+            .expect("read retained")
+            .is_some());
     }
 }

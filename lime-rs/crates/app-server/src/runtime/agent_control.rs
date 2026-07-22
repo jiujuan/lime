@@ -6,6 +6,7 @@
 use super::agent_control_gateway_support::{
     required_agent_control_id, stable_agent_control_digest,
 };
+use super::context_compaction::ForkCompactionSeed;
 mod route;
 
 use super::*;
@@ -168,24 +169,24 @@ impl RuntimeCore {
             .transpose()?
             .unwrap_or_else(|| new_id("thread"));
         let inherits_parent_history = fork_mode != SpawnAgentForkMode::None;
-        let parent_thread = projection_store
-            .read_thread_sync(ReadThreadParams {
-                thread_id: ThreadId::new(parent.thread_id.clone()),
-                include_archived: true,
-                turns_view: ThreadTurnsView::Full,
-            })
-            .map_err(|error| {
-                RuntimeCoreError::Backend(format!(
-                    "failed to read canonical parent history for fork: {error}"
-                ))
-            })?
-            .ok_or_else(|| {
-                RuntimeCoreError::Backend(format!(
-                    "canonical parent thread is missing: {}",
-                    parent.thread_id
-                ))
-            })?;
-        let forked_turns = {
+        let (forked_turns, compaction_seed) = if inherits_parent_history {
+            let parent_thread = projection_store
+                .read_thread_sync(ReadThreadParams {
+                    thread_id: ThreadId::new(parent.thread_id.clone()),
+                    include_archived: true,
+                    turns_view: ThreadTurnsView::Full,
+                })
+                .map_err(|error| {
+                    RuntimeCoreError::Backend(format!(
+                        "failed to read canonical parent history for fork: {error}"
+                    ))
+                })?
+                .ok_or_else(|| {
+                    RuntimeCoreError::Backend(format!(
+                        "canonical parent thread is missing: {}",
+                        parent.thread_id
+                    ))
+                })?;
             let state = self
                 .state
                 .lock()
@@ -194,7 +195,9 @@ impl RuntimeCore {
                 .sessions
                 .get(&parent_session_id)
                 .ok_or_else(|| RuntimeCoreError::SessionNotFound(parent_session_id.to_string()))?;
-            selected_agent_control_fork_turns(stored_parent, &parent_thread.turns, fork_mode)?
+            selected_agent_control_fork_history(stored_parent, &parent_thread.turns, fork_mode)?
+        } else {
+            (Vec::new(), None)
         };
 
         projection_store
@@ -290,7 +293,9 @@ impl RuntimeCore {
                 };
             }
         }
-        if let Err(error) = self.fork_agent_control_history(&response.session, forked_turns) {
+        if let Err(error) =
+            self.fork_agent_control_history(&response.session, forked_turns, compaction_seed)
+        {
             return match self
                 .rollback_staged_agent_control_spawn(&response.session)
                 .await
@@ -378,16 +383,36 @@ impl RuntimeCore {
         &self,
         child: &AgentSession,
         forked_turns: Vec<ForkedAgentControlTurn>,
+        compaction_seed: Option<ForkCompactionSeed>,
     ) -> Result<(), RuntimeCoreError> {
+        let child_turn_ids = forked_turns
+            .iter()
+            .map(|forked| {
+                (
+                    forked.source_turn_id.clone(),
+                    forked_agent_control_turn_id(child, forked),
+                )
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        if let Some(seed) = compaction_seed {
+            let child_tail_turn_id = child_turn_ids
+                .get(&seed.source_tail_start_turn_id)
+                .ok_or_else(|| {
+                    RuntimeCoreError::Backend(format!(
+                        "compaction tail turn {} is not present in the fork history",
+                        seed.source_tail_start_turn_id
+                    ))
+                })?;
+            let payload = rewrite_fork_compaction_payload(seed.payload, child, child_tail_turn_id);
+            self.append_runtime_events(
+                &child.session_id,
+                &child.thread_id,
+                None,
+                vec![RuntimeEvent::new("context.compaction.completed", payload)],
+            )?;
+        }
         for forked in forked_turns {
-            let turn_id = format!(
-                "fork-{}",
-                stable_agent_control_digest(&[
-                    child.thread_id.as_str(),
-                    forked.source_thread_id.as_str(),
-                    forked.source_turn_id.as_str(),
-                ])
-            );
+            let turn_id = forked_agent_control_turn_id(child, &forked);
             {
                 let mut state = self
                     .state
@@ -632,6 +657,49 @@ fn trimmed_option(value: Option<&str>) -> Option<String> {
         .map(ToString::to_string)
 }
 
+fn forked_agent_control_turn_id(child: &AgentSession, forked: &ForkedAgentControlTurn) -> String {
+    format!(
+        "fork-{}",
+        stable_agent_control_digest(&[
+            child.thread_id.as_str(),
+            forked.source_thread_id.as_str(),
+            forked.source_turn_id.as_str(),
+        ])
+    )
+}
+
+fn rewrite_fork_compaction_payload(
+    mut payload: serde_json::Value,
+    child: &AgentSession,
+    child_tail_turn_id: &str,
+) -> serde_json::Value {
+    if let Some(object) = payload.as_object_mut() {
+        let source_compaction_id = object
+            .get("compactionId")
+            .and_then(serde_json::Value::as_str)
+            .map(ToString::to_string)
+            .unwrap_or_else(|| "compaction".to_string());
+        let child_compaction_id = format!("{}_{}", child.session_id, source_compaction_id);
+        object.insert("compactionId".to_string(), json!(child_compaction_id));
+        object.insert("sessionId".to_string(), json!(child.session_id));
+        object.insert("threadId".to_string(), json!(child.thread_id));
+        object.insert("tailStartTurnId".to_string(), json!(child_tail_turn_id));
+        if let Some(artifact) = object
+            .get_mut("artifact")
+            .and_then(|value| value.as_object_mut())
+        {
+            artifact.insert(
+                "compactionId".to_string(),
+                json!(format!("{}_{}", child.session_id, source_compaction_id)),
+            );
+            artifact.insert("sessionId".to_string(), json!(child.session_id));
+            artifact.insert("threadId".to_string(), json!(child.thread_id));
+            artifact.insert("tailStartTurnId".to_string(), json!(child_tail_turn_id));
+        }
+    }
+    payload
+}
+
 #[derive(Debug, Clone)]
 struct ForkedAgentControlTurn {
     source_thread_id: String,
@@ -649,15 +717,20 @@ struct ForkedAgentControlMessage {
     content_parts: Vec<agent_protocol::MessageContentPart>,
 }
 
-fn selected_agent_control_fork_turns(
+fn selected_agent_control_fork_history(
     parent: &StoredSession,
     canonical_turns: &[agent_protocol::Turn],
     fork_mode: SpawnAgentForkMode,
-) -> Result<Vec<ForkedAgentControlTurn>, RuntimeCoreError> {
+) -> Result<(Vec<ForkedAgentControlTurn>, Option<ForkCompactionSeed>), RuntimeCoreError> {
     if fork_mode == SpawnAgentForkMode::None {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), None));
     }
-    let mut turns = canonical_turns
+    let compaction_seed = if fork_mode == SpawnAgentForkMode::FullHistory {
+        super::context_compaction::latest_fork_compaction_seed(&parent.events)?
+    } else {
+        None
+    };
+    let mut source_turns = canonical_turns
         .iter()
         .filter(|turn| !matches!(turn.queue, TurnQueueState::Queued { .. }))
         .filter_map(|turn| {
@@ -673,6 +746,12 @@ fn selected_agent_control_fork_turns(
             canonical_inputs.next()?;
             Some((turn, canonical_inputs.next().is_some()))
         })
+        .collect::<Vec<_>>();
+    if let SpawnAgentForkMode::LastNTurns(limit) = &fork_mode {
+        source_turns = source_turns.split_off(source_turns.len().saturating_sub(*limit));
+    }
+    let turns = source_turns
+        .into_iter()
         .map(|(turn, has_duplicate_input)| {
             if has_duplicate_input {
                 return Err(RuntimeCoreError::Backend(format!(
@@ -690,6 +769,8 @@ fn selected_agent_control_fork_turns(
                         turn.turn_id
                     ))
                 })?;
+            ensure_agent_control_fork_input_is_lossless(turn, &input)?;
+            validate_agent_control_fork_items(turn)?;
             let assistant_messages = if turn.status == TurnStatus::Completed {
                 turn.items
                     .iter()
@@ -722,10 +803,97 @@ fn selected_agent_control_fork_turns(
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if let SpawnAgentForkMode::LastNTurns(limit) = fork_mode {
-        turns = turns.split_off(turns.len().saturating_sub(limit));
+    if fork_mode == SpawnAgentForkMode::FullHistory {
+        let compaction_marker = parent
+            .events
+            .iter()
+            .find(|event| event.event_type == "context.compaction.completed");
+        if let Some(marker) = compaction_marker.filter(|_| compaction_seed.is_none()) {
+            let turn_id = marker.turn_id.as_deref().unwrap_or("unknown");
+            return Err(RuntimeCoreError::Backend(format!(
+                "canonical AgentControl full-history fork source Turn {turn_id} contains compaction without replacement history"
+            )));
+        }
+        if let Some(seed) = compaction_seed.as_ref() {
+            if !turns
+                .iter()
+                .any(|turn| turn.source_turn_id == seed.source_tail_start_turn_id)
+            {
+                return Err(RuntimeCoreError::Backend(format!(
+                    "compaction tail turn {} is not present in the fork history",
+                    seed.source_tail_start_turn_id
+                )));
+            }
+        }
     }
-    Ok(turns)
+    Ok((turns, compaction_seed))
+}
+
+fn ensure_agent_control_fork_input_is_lossless(
+    turn: &agent_protocol::Turn,
+    input: &[AgentInput],
+) -> Result<(), RuntimeCoreError> {
+    let text_only = matches!(
+        input,
+        [AgentInput::Text {
+            text_elements,
+            ..
+        }] if text_elements.is_empty()
+    );
+    if text_only {
+        return Ok(());
+    }
+    Err(RuntimeCoreError::Backend(format!(
+        "canonical AgentControl fork source Turn {} contains user input that cannot be copied without loss",
+        turn.turn_id
+    )))
+}
+
+fn validate_agent_control_fork_items(turn: &agent_protocol::Turn) -> Result<(), RuntimeCoreError> {
+    for item in &turn.items {
+        match &item.payload {
+            ThreadItemPayload::UserMessage { .. } if item.status == ItemStatus::Completed => {}
+            ThreadItemPayload::UserMessage { .. } => {
+                return Err(unsupported_agent_control_fork_item(turn, item));
+            }
+            ThreadItemPayload::Reasoning { .. }
+            | ThreadItemPayload::Tool { .. }
+            | ThreadItemPayload::McpToolCall { .. }
+            | ThreadItemPayload::CollabAgentToolCall { .. }
+            | ThreadItemPayload::Plan { .. }
+            | ThreadItemPayload::Approval { .. }
+            | ThreadItemPayload::Command { .. }
+            | ThreadItemPayload::File { .. }
+            | ThreadItemPayload::Media { .. }
+            | ThreadItemPayload::SubAgent { .. } => {}
+            ThreadItemPayload::AgentMessage {
+                phase,
+                content_parts,
+                ..
+            } if phase.as_deref() == Some("final_answer") => {
+                if item.status != ItemStatus::Completed
+                    || content_parts.iter().any(|part| {
+                        matches!(part, agent_protocol::MessageContentPart::Media { .. })
+                    })
+                {
+                    return Err(unsupported_agent_control_fork_item(turn, item));
+                }
+            }
+            ThreadItemPayload::AgentMessage { .. } => {}
+            ThreadItemPayload::ContextCompaction { .. } | ThreadItemPayload::Extension { .. } => {}
+        }
+    }
+    Ok(())
+}
+
+fn unsupported_agent_control_fork_item(
+    turn: &agent_protocol::Turn,
+    item: &agent_protocol::ThreadItem,
+) -> RuntimeCoreError {
+    RuntimeCoreError::Backend(format!(
+        "canonical AgentControl fork source Turn {} contains {:?} Item {} that cannot be copied without loss",
+        turn.turn_id, item.kind, item.item_id
+    ))
 }
 
 fn with_completed_message_status(mut payload: serde_json::Value) -> serde_json::Value {

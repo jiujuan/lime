@@ -1,41 +1,40 @@
-## Lime v1.108.0
+## Lime v1.109.0
 
 ### 新功能
 
-- Agent 主链升级为 App Server v2 `Thread / Turn / Item` 协议，统一线程创建、恢复、归档、回合启动/中断/引导、Item 生命周期和 token usage 通知。
-- 新增线程目标、记忆模式、线程设置、Shell 命令、分页 history/read model 与 durable notification 能力，GUI 可直接恢复同一 canonical identity。
-- Agent session loop 支持 queued input、steer、interrupt、审批回填、上下文压缩、子代理 mailbox 和跨回合继续执行，并将状态持久化到 current owner。
+- 新增 App Server v2 `thread/fork`，支持按完整历史、指定 Turn 或边界复制 canonical Thread/Turn/Item 前缀，并在重启后从 canonical history 恢复 provider 上下文。
+- 新增 v2 `thread/delete`，以原子子树快照清理持久化与 pending-only 子线程、运行态、Goal、mailbox、trace、telemetry 和投影，并广播 `thread/deleted`。
+- Thread Goal 支持 terminal 后自动续跑、idle wall-time 计量、恢复 admission 与 fork 延迟继承，统一由 canonical goal store 和 continuation owner 管理。
+- App Server client 与 Agent runtime client 新增 typed reverse server-request 回包能力，仅使用 JSON-RPC outer id 完成响应或拒绝。
 
 ### 修复
 
-- 修复会话切换、历史 hydrate、归档/反归档、running turn 重开和长线程分页时的消息重复、终态丢失、identity 漂移与错误恢复问题。
-- 修复 queued/steer/interrupt 在 Electron IPC、App Server notification 和 GUI 输入框之间的时序，停止或失败后可恢复输入并继续同一线程。
-- 修复 provider 路由 readiness、credential lookup、pending generation、stream terminal 和模型错误展示，未知能力继续 fail closed。
-- 修复 Settings 中归档会话、Provider 连接错误、语音模型与系统能力调用的 current bridge 接线，移除已退役快捷键设置面和生产 mock fallback。
-- 修复插件 worker、自动化、MCP elicitation、Browser Session 与系统工具在重启、取消和权限失败下的状态回收。
-- 修复内容工厂首次打开、编辑草稿、reload 恢复和 workflow 操作中的静态 session identity；Article Editor、artifact 与右侧工作区统一消费服务端 canonical Thread/Turn identity 和 durable v2 read model。
+- 修复 fork history 在工具调用、MCP、Reasoning、Context Compaction 与冷启动恢复时的重复、缺失和 lineage 断裂；无法无损表达的历史继续 fail closed。
+- 修复 Provider 模型缓存跨凭证串用，以及 host-managed、图片和 Plugin worker 路径丢失已解析 credential identity 后重新选路的问题。
+- 修复 Provider protocol 依赖名称猜测的问题；current client 现在要求 route 显式给出协议，缺失时返回不可重试的配置错误。
+- 修复 MCP stdio 启动继承宿主敏感环境、启动超时被隐式放大和停止时遗留子进程树的问题，并兼顾 macOS 与 Windows 进程清理。
+- 移除 Claw 空白布局判定中的临时调试日志，避免正常空态产生生产 console 噪音。
 
 ### 优化与重构
 
-- App Server protocol、transport、processor、RuntimeCore、ThreadStore 和 Renderer typed gateway 收口到 v2 current 单轨；已退役 `agentSession` 会话方法和 schema 被删除。
-- Agent runtime 拆分 session loop、turn start、thread state/listener、goal/usage、history merge、route selection 与 provider request owner，降低跨层耦合。
-- Electron Desktop Host 收窄为 App Server 转发和系统宿主能力，Plugin、Voice、System Utility 与 preload/IPC allowlist 同步更新。
-- Renderer 的 canonical projection、event stream、workspace runtime、消息列表、任务轨和右侧工作台按单一 Thread/Turn/Item read model 重组。
-- 统一用户数据、缓存、凭证和数据库根路径迁移，删除 runtime queue、imported session sidecar、重复 repository 和旧兼容入口。
+- 删除生产 `agentSession/delete` 协议、schema、dispatch 与客户端入口，线程删除唯一收口到 v2 `thread/delete`。
+- Plugin runtime 的 approval、AskUser 与 MCP elicitation 回包迁移到 typed reverse request responder，不再通过 action metadata 猜测 waiter。
+- MCP runtime 增加显式 environment identity、auth scopes、step snapshot generation 与 elicitation provenance；本地 stdio 启动收口到单一 launcher/process owner。
+- Provider history、Goal continuation、fork seed、projection repair 和 compaction prompt boundary 收口到 canonical Thread/Turn/Item 事实源，不复制 raw EventLog 作为第二套历史。
+- Plugin worker turn 复用 credential-scoped model metadata cache，并通过 application additional context 传递业务 metadata。
 
 ### 测试与质量
 
-- 扩展 App Server v2 JSON-RPC、session loop、ThreadStore history、provider route、MCP、Multi-Agent、Plugin worker 与 Electron host 的单元/集成回归。
-- 新增 Gate A browser projection 与 Gate B Electron/current fixture 证据入口，断言真实 preload/IPC、`app_server_handle_json_lines`、read model、GUI 终态和零生产 mock。
-- 内容工厂 Gate B 覆盖 Article Editor 打开、编辑、reload 恢复、artifact/read model 与 workflow 控制，70/70 断言通过且 console/page error 为 0。
-- 更新 protocol type generation、command/catalog、storage root、legacy surface 和脚本 owner 守卫，防止 v0/compat 路径回流。
+- 扩展 ThreadGoal、public fork/delete、AgentControl fork、compaction lineage、provider cache/route、typed reverse request 与 MCP lifecycle/provenance 的单元、集成和公共 JSON-RPC 回归。
+- 更新 v2 schema、生成类型、package client、Renderer gateway 与 contract/legacy guard，防止旧 session delete 和 metadata-routed action response 回流。
+- 内容工厂 Plugin worker scoped model cache Gate B 通过真实 Electron、App Server current JSON-RPC、RuntimeCore、Provider metadata 与 Article Editor 投影链路。
 
 ### 文档
 
-- 更新全局架构、数据库/持久化、Provider、治理、Codex/OpenCode 对齐、Writing v2、Agent Workbench 与项目 Gate A/B 事实源。
+- 更新全局架构、Codex 对齐协调计划、Writing v2 验证记录与本次发布执行计划。
 
 ### 其他
 
-- 版本事实源更新到 `1.108.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.109.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.107.0` -> `v1.108.0`
+**完整变更**: `v1.108.0` -> `v1.109.0`

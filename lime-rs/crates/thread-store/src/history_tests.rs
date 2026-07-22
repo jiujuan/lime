@@ -1,7 +1,7 @@
 use super::*;
 use agent_protocol::{
-    ItemKind, ItemStatus, MessageContentPart, ThreadItemPayload, TurnAdmissionState,
-    TurnApprovalState, TurnItemsView, TurnQueueState, TurnStatus,
+    ItemKind, ItemStatus, MessageContentPart, MessageContentReference, ThreadItemPayload,
+    TurnAdmissionState, TurnApprovalState, TurnItemsView, TurnQueueState, TurnStatus,
 };
 
 fn item(sequence: u64, ordinal: u64, id: &str, text: &str) -> ThreadItem {
@@ -46,6 +46,30 @@ fn turn(id: &str, status: TurnStatus) -> Turn {
         completed_at_ms: None,
         duration_ms: None,
     }
+}
+
+fn media_item(sequence: u64, id: &str, uri: &str) -> ThreadItem {
+    let mut item = item(sequence, sequence, id, "media");
+    item.payload = ThreadItemPayload::AgentMessage {
+        text: "media".to_string(),
+        phase: None,
+        content_parts: vec![MessageContentPart::Media {
+            kind: "image".to_string(),
+            reference: MessageContentReference {
+                uri: uri.to_string(),
+                mime_type: "image/png".to_string(),
+                title: None,
+                source_uri: None,
+                source_path: None,
+                preview_url: None,
+                sidecar_ref: None,
+                sha256: Some("abc123".to_string()),
+                byte_size: Some(4),
+            },
+            caption: None,
+        }],
+    };
+    item
 }
 
 #[test]
@@ -97,6 +121,89 @@ fn exact_retry_is_idempotent_and_different_payload_collides() {
     assert!(matches!(
         builder.append_items_at(1, vec![different]),
         Err(ThreadHistoryBuilderError::SequenceCollision { sequence: 1 })
+    ));
+}
+
+#[test]
+fn unsafe_media_batch_is_rejected_atomically() {
+    let mut builder = ThreadHistoryBuilder::new();
+    let safe = item(1, 1, "item-safe", "safe");
+    let unsafe_media = media_item(1, "item-unsafe", "data:image/png;base64,AAAA");
+
+    assert!(matches!(
+        builder.append_items_at(1, vec![safe, unsafe_media]),
+        Err(ThreadHistoryBuilderError::UnsafeItemContent { item_id })
+            if item_id == ItemId::new("item-unsafe")
+    ));
+    assert!(builder.raw_items().is_empty());
+    assert_eq!(builder.sequence(), None);
+}
+
+#[test]
+fn unsafe_direct_media_payload_is_rejected_before_history_mutation() {
+    let mut builder = ThreadHistoryBuilder::new();
+    let mut unsafe_media = item(1, 1, "item-media", "media");
+    unsafe_media.kind = ItemKind::Media;
+    unsafe_media.payload = ThreadItemPayload::Media {
+        uri: "sidecar://media/result".to_string(),
+        mime_type: "image/png".to_string(),
+        preview: Some(" DATA:image/png;base64,AAAA".to_string()),
+    };
+
+    assert!(matches!(
+        builder.append_items_at(1, vec![unsafe_media]),
+        Err(ThreadHistoryBuilderError::UnsafeItemContent { .. })
+    ));
+    assert!(builder.raw_items().is_empty());
+}
+
+#[test]
+fn safe_media_retry_and_snapshot_rebuild_are_stable() {
+    let mut builder = ThreadHistoryBuilder::new();
+    builder
+        .append_turns_at(1, vec![turn("turn-1", TurnStatus::InProgress)])
+        .expect("canonical turn");
+    let media = media_item(2, "item-media", "sidecar://media/result");
+    builder
+        .append_items_at(2, vec![media.clone()])
+        .expect("safe media append");
+
+    assert!(builder
+        .append_items_at(2, vec![media])
+        .expect("exact safe media retry")
+        .changed_items
+        .is_empty());
+    let snapshot = builder.snapshot();
+    let rebuilt =
+        ThreadHistoryBuilder::from_snapshot(snapshot.clone()).expect("safe media snapshot rebuild");
+    let rebuilt_snapshot = rebuilt.snapshot();
+    assert_eq!(rebuilt_snapshot.sequence, snapshot.sequence);
+    assert_eq!(rebuilt_snapshot.turn_sequences, snapshot.turn_sequences);
+    assert_eq!(rebuilt_snapshot.items, snapshot.items);
+    assert_eq!(rebuilt_snapshot.turns[0].items, snapshot.items);
+    assert_eq!(
+        ThreadHistoryBuilder::from_snapshot(rebuilt_snapshot.clone())
+            .expect("normalized media snapshot rebuild")
+            .snapshot(),
+        rebuilt_snapshot
+    );
+}
+
+#[test]
+fn unsafe_media_snapshot_rebuild_fails_closed() {
+    let unsafe_media = media_item(2, "item-media", "data:image/png;base64,AAAA");
+    let snapshot = CanonicalHistory {
+        session_id: Some(SessionId::new("session-1")),
+        thread_id: Some(ThreadId::new("thread-1")),
+        sequence: Some(2),
+        turns: vec![turn("turn-1", TurnStatus::Completed)],
+        turn_sequences: [(TurnId::new("turn-1"), 2)].into_iter().collect(),
+        items: vec![unsafe_media],
+    };
+
+    assert!(matches!(
+        ThreadHistoryBuilder::from_snapshot(snapshot),
+        Err(ThreadHistoryBuilderError::UnsafeItemContent { .. })
     ));
 }
 

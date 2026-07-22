@@ -1,6 +1,24 @@
 use agent_protocol::{AgentInput, ImageDetail};
 use app_server_protocol::{AgentAttachment, AgentSessionTurnStartParams, RuntimeOptions};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum TurnStartInputKind {
+    User,
+    QueuedUser,
+    PendingTriggerUser,
+    GoalContinuation,
+}
+
+impl TurnStartInputKind {
+    pub(super) fn is_agent_only(self) -> bool {
+        matches!(self, Self::GoalContinuation)
+    }
+
+    pub(super) fn runs_idle_scheduler(self) -> bool {
+        !matches!(self, Self::QueuedUser | Self::PendingTriggerUser)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TurnStartRequest {
     pub session_id: String,

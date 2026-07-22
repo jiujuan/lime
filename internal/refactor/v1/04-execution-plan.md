@@ -265,6 +265,49 @@ current home-hotpath fixture 已由上述 definitive evidence 68/68 通过；该
 主链与 instrumentation blocker，不等于 V1-15 全部完成。restart/resume/compaction/model switch、
 approval/MCP/child agent/cold read、live provider 与 Windows cross-platform UDS 仍需分别补证据。
 
+### V1-15 detached 首轮响应式策略与 Soul 复验（2026-07-22）
+
+目标：修复真实首页 detached 首轮仍按退役 session identity 判断响应式策略的问题，并确认
+`memory.soul` 的贱兮兮 Style Pack 与 `compact_tools` 可以在同一 current runtime 请求中生效。
+
+已完成：
+
+- `apply_app_server_turn_policy` 的响应式入口只接受 current `app_id=agent-chat` 与
+  `business_object_ref.kind=agent.thread`；退役 `desktop + agent.session` 不再启用响应式 profile，
+  不新增 alias、compat 或双读。
+- current ingress、follow-up、required search、plugin activation、structured mention 与 retired
+  desktop 负向守卫已覆盖。相关 App Server 模块测试 50/50 通过，其中 Soul prompt 2/2、
+  `session_prompt_context` 15/15、`model_selection` 33/33。
+- 用户配置已从旧 `sassy_cute_executor` 一次性保存为 current
+  `cheeky_sassy_executor`；resolver 未增加旧 id alias。
+
+真实 Electron / CDP 证据：
+
+- source-built App Server mtime 晚于策略源码，隔离 Electron 连接 `127.0.0.1:1420/?nativeStartup=1`，
+  `window.__LIME_ELECTRON__=true`、preload invoke 存在，`electron-ipc` 与 current `turn/start`
+  均命中；detached 首页输入“你好”后 GUI terminal，console/page error 均为 0。
+- 本地 OpenAI-compatible provider capture 只保存结构化摘要：最终请求的 Soul 五个关键 marker
+  全部为 true，system prompt 长度 5387；工具面为 16 个工具，全部属于 `compact_tools`
+  allowlist，无 full-surface 工具泄漏。GUI 可见回复为“哟，终于想起找我啦？说吧，今天想搞点什么事？”。
+- `soul-style` 仓库 fixture 另行证明四类完整 prompt surface marker 与 GUI/read model 输出，但该
+  scenario 主动绑定默认 workspace，并将 usage 固定为 `prompt_tokens=31_000`；这个数字不能用于
+  判断 detached `compact_tools` 是否生效。该 fixture 当前 v2 prompt-ingress 解析仍按旧 flat
+  `params.input.text/sessionId` 读取，导致产品回合完成后 `fixturePromptReachedBackend` 断言失败；
+  归类为共享 fixture evidence parser 漂移，不作为本窄写集产品失败，也不在并行热区夹写。
+
+验证：
+
+- `npm run smoke:agent-runtime-current-fixture`：通过；历史 31/31、流式 32/32、fixture guard
+  84/84 及完整 Electron 场景聚合通过，`liveProviderUsed=false`。
+- `npm run verify:gui-smoke`：通过；Renderer、Electron Host/preload 与 source-built App Server
+  sidecar 构建成功，真实 Electron shell 初始化、Claw reload、Memory settings 与结构化 evidence 均通过。
+- `npm run governance:legacy-report`：通过；零引用候选 0、分类漂移 0、边界违规 0。
+- `npm run test:rust:related -- <本轮 4 个 App Server 文件>` 扩至 App Server 全量后为
+  1456 passed / 6 failed；6 项均位于本轮避让的并行重构热区（ThreadGoal、event-log repair、
+  compaction 与 credential UTF-8），不与本写集重叠。
+- 当前分类：`current = agent-chat + agent.thread`；`dead = 响应式策略中的 desktop +
+  agent.session`；无新增 `compat` / `deprecated`。
+
 ## P4：额外 Codex App Server surface
 
 逐项实现或明确产品范围排除并从 current catalog/完成定义删除：`backgroundTerminals`、

@@ -1,5 +1,4 @@
 use super::*;
-use serde_json::Value;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -194,12 +193,11 @@ async fn auto_compacts_before_turn_when_context_limit_is_due() {
         .as_ref()
         .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
         .expect("second turn metadata");
-    assert_eq!(
+    assert!(
         second_metadata
             .get(crate::runtime::memory_prompt::SESSION_COMPACTION_PROMPT_CONTEXT_KEY)
-            .and_then(|value| value.get("contextEpoch"))
-            .and_then(Value::as_u64),
-        Some(1)
+            .is_none(),
+        "replacement history must not be duplicated as prompt metadata"
     );
     drop(requests);
 

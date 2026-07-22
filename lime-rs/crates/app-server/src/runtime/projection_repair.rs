@@ -4,7 +4,9 @@ use super::projection_store::ProjectionReadWindow;
 use super::projection_store::ProjectionStore;
 use super::turn_input_events;
 use super::StoredSession;
+use agent_protocol::{ThreadId, ThreadTurnsView};
 use std::collections::HashMap;
+use thread_store::ReadThreadParams;
 
 #[derive(Debug, Clone)]
 pub struct ProjectionRepair {
@@ -48,16 +50,73 @@ impl ProjectionRepair {
         projection: &ProjectionReadSession,
         events: &[app_server_protocol::AgentEvent],
     ) -> Result<(), String> {
+        let events = self.canonical_repair_events(projection, events)?;
         let stored = StoredSession {
             session: projection.session.clone(),
             turns: projection.turns.clone(),
-            turn_inputs: turn_input_events::turn_inputs_from_events(events),
+            turn_inputs: turn_input_events::turn_inputs_from_events(&events),
             turn_runtime_options: HashMap::new(),
-            events: events.to_vec(),
+            events: events.clone(),
             output_blobs: HashMap::new(),
         };
         self.projection_store
-            .repair_canonical_history(&stored, events)
+            .repair_canonical_history(&stored, &events)
+    }
+
+    fn canonical_repair_events(
+        &self,
+        projection: &ProjectionReadSession,
+        events: &[app_server_protocol::AgentEvent],
+    ) -> Result<Vec<app_server_protocol::AgentEvent>, String> {
+        let Some(thread) = self
+            .projection_store
+            .read_thread_sync(ReadThreadParams {
+                thread_id: ThreadId::new(projection.session.thread_id.clone()),
+                include_archived: true,
+                turns_view: ThreadTurnsView::Full,
+            })
+            .map_err(|error| error.to_string())?
+        else {
+            return Ok(events.to_vec());
+        };
+        if thread.forked_from_id.is_none() {
+            return Ok(events.to_vec());
+        }
+        let Some(fork_sequence) = thread
+            .metadata
+            .get("forkSequence")
+            .and_then(serde_json::Value::as_u64)
+        else {
+            // AgentControl topology forks have their own persisted history owner and do not use
+            // the public thread/fork canonical seed boundary.
+            return Ok(events.to_vec());
+        };
+        let items = thread
+            .turns
+            .iter()
+            .flat_map(|turn| turn.items.iter())
+            .filter(|item| item.sequence <= fork_sequence)
+            .cloned()
+            .collect::<Vec<_>>();
+        let item_turn_ids = items
+            .iter()
+            .map(|item| item.turn_id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        let turns = thread
+            .turns
+            .iter()
+            .filter(|turn| item_turn_ids.contains(turn.turn_id.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        let seed = super::thread_fork::fork_history_seed_events(
+            &projection.session,
+            &turns,
+            &items,
+            fork_sequence,
+        )
+        .map_err(|error| error.to_string())?;
+        super::thread_fork::merge_fork_history_events(seed, events.to_vec())
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn repair_session_with_audit(

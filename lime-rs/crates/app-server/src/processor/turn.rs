@@ -75,7 +75,10 @@ impl RequestProcessor {
         Ok(dispatch_result(TurnInterruptResponse {})?.with_notifications(notifications))
     }
 
-    async fn resolve_v2_thread_session(&self, thread_id: &str) -> Result<String, JsonRpcError> {
+    pub(super) async fn resolve_v2_thread_session(
+        &self,
+        thread_id: &str,
+    ) -> Result<String, JsonRpcError> {
         let thread_id = non_empty_param(thread_id, "threadId")?;
         let response = self
             .runtime

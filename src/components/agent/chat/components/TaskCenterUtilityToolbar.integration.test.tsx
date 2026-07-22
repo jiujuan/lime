@@ -812,21 +812,19 @@ describe("TaskCenterUtilityToolbar", () => {
         accessMode: "current",
         reasoningEffort: "medium",
         workspaceRootPath: "/tmp/project",
+        threadGoal: {
+          createdAt: 1,
+          objective: "完成任务轨道",
+          status: "active",
+          threadId: "thread-1",
+          timeUsedSeconds: 0,
+          tokensUsed: 0,
+          updatedAt: 1,
+        },
         threadRead: {
           thread_id: "thread-1",
           active_turn_id: "turn-1",
           profile_status: "running",
-          managed_objective: {
-            objective_id: "objective-1",
-            owner_kind: "agent_session",
-            owner_id: "session-1",
-            objective_text: "完成任务轨道",
-            success_criteria: [],
-            status: "active",
-            last_artifact_refs: [],
-            created_at: "2026-06-16T10:00:00.000Z",
-            updated_at: "2026-06-16T10:00:00.000Z",
-          },
           context_summary: {
             sources: [
               "AG-UI spec",
@@ -1763,21 +1761,19 @@ describe("TaskCenterUtilityToolbar", () => {
             prompt: "允许保存 evidence？",
           },
         ],
+        threadGoal: {
+          createdAt: 1,
+          objective: "恢复运行控制区",
+          status: "active",
+          threadId: "restore-thread",
+          timeUsedSeconds: 0,
+          tokensUsed: 0,
+          updatedAt: 1,
+        },
         threadRead: {
           thread_id: "restore-thread",
           active_turn_id: "restore-turn",
           profile_status: "completed",
-          managed_objective: {
-            objective_id: "restore-objective",
-            owner_kind: "agent_session",
-            owner_id: "restore-session",
-            objective_text: "恢复运行控制区",
-            success_criteria: [],
-            status: "active",
-            last_artifact_refs: [],
-            created_at: "2026-06-16T10:00:00.000Z",
-            updated_at: "2026-06-16T10:00:08.000Z",
-          },
           context_summary: {
             sources: ["https://docs.example.com/run-control"],
             retrieval_refs: [

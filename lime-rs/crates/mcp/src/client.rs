@@ -119,10 +119,10 @@ impl LimeMcpClient {
             .ok_or(ElicitationRouterError::NoRequestRouter)?;
         let _pause = self.elicitation_pause_state.enter();
         router
-            .request(
+            .request_with_scope(
                 self.server_name.clone(),
                 runtime_owner.clone(),
-                scope.turn_id().map(ToOwned::to_owned),
+                scope,
                 request,
                 meta,
                 cancellation,
@@ -340,7 +340,6 @@ impl ClientHandler for LimeMcpClient {
 pub struct McpClientWrapper {
     pub server_name: String,
     pub config: super::types::McpServerConfig,
-    pub process: Option<tokio::process::Child>,
     pub server_info: Option<super::types::McpServerCapabilities>,
     pub running_service: Option<
         Arc<
@@ -350,6 +349,8 @@ pub struct McpClientWrapper {
             >,
         >,
     >,
+    stdio_process: Option<crate::stdio_process::StdioProcessHandle>,
+    stderr_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl McpClientWrapper {
@@ -361,14 +362,20 @@ impl McpClientWrapper {
         Self {
             server_name,
             config,
-            process: None,
             server_info: None,
             running_service: None,
+            stdio_process: None,
+            stderr_task: None,
         }
     }
 
-    pub fn set_process(&mut self, process: tokio::process::Child) {
-        self.process = Some(process);
+    pub(crate) fn set_stdio_lifecycle(
+        &mut self,
+        process: crate::stdio_process::StdioProcessHandle,
+        stderr_task: Option<tokio::task::JoinHandle<()>>,
+    ) {
+        self.stdio_process = Some(process);
+        self.stderr_task = stderr_task;
     }
 
     pub fn set_server_info(&mut self, info: super::types::McpServerCapabilities) {
@@ -411,13 +418,17 @@ impl McpClientWrapper {
         self.running_service.clone()
     }
 
-    pub async fn kill_process(&mut self) -> Result<(), std::io::Error> {
-        if let Some(ref mut process) = self.process {
-            process.kill().await?;
+    pub fn shutdown(&mut self) {
+        if let Some(service) = &self.running_service {
+            service.cancellation_token().cancel();
         }
-        self.process = None;
+        if let Some(process) = self.stdio_process.take() {
+            process.terminate();
+        }
+        if let Some(stderr_task) = self.stderr_task.take() {
+            stderr_task.abort();
+        }
         self.running_service = None;
-        Ok(())
     }
 }
 
@@ -529,6 +540,7 @@ mod tests {
                 env: std::collections::HashMap::new(),
                 cwd: None,
             },
+            environment_id: super::super::types::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             startup_timeout: 30,
             tool_timeout: None,
@@ -545,8 +557,10 @@ mod tests {
 
         assert_eq!(wrapper.server_name, "test-server");
         assert_eq!(wrapper.config.command(), "test-command");
-        assert!(wrapper.process.is_none());
         assert!(wrapper.server_info.is_none());
+        assert!(wrapper.running_service.is_none());
+        assert!(wrapper.stdio_process.is_none());
+        assert!(wrapper.stderr_task.is_none());
     }
 
     #[tokio::test]

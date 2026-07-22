@@ -12,7 +12,9 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use tool_runtime::mcp_connection::McpConnectionRegistry;
-use tool_runtime::mcp_connection::{McpCallScope, McpConnection, McpConnectionError};
+use tool_runtime::mcp_connection::{
+    McpCallScope, McpConnection, McpConnectionError, McpConnectionProvenance,
+};
 use tool_runtime::tool_extension::{RuntimeExtensionRegistration, RuntimeExtensionSyncPlan};
 
 pub(crate) struct McpBridgeRuntimeRegistry {
@@ -70,7 +72,16 @@ impl McpBridgeRuntimeRegistry {
             let surface = registration.config.clone();
 
             connections
-                .register(bridge_name.clone(), surface, client)
+                .register(
+                    bridge_name.clone(),
+                    surface,
+                    McpConnectionProvenance::new(
+                        snapshot.environment_id.clone(),
+                        snapshot.auth_scopes.clone(),
+                    ),
+                    snapshot.supports_parallel_tool_calls,
+                    client,
+                )
                 .await;
         }
 

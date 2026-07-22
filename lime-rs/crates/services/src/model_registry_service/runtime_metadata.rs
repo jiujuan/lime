@@ -61,6 +61,7 @@ impl ModelRegistryService {
         provider: Option<&ProviderWithKeys>,
         provider_id: &str,
         model_id: &str,
+        api_key: Option<&str>,
     ) -> Result<ProviderModelRegistryMetadata, String> {
         let Some(provider) = provider else {
             return Ok(ProviderModelRegistryMetadata::runtime_selection_only(
@@ -75,10 +76,26 @@ impl ModelRegistryService {
         let requested_model_id = model_id.trim();
         let provider_type = provider.provider.effective_provider_type();
         let api_host = provider.provider.api_host.trim();
+        let credential_fingerprint = api_key.and_then(Self::credential_cache_fingerprint);
         if !api_host.is_empty() {
-            if let Some(cached) =
-                self.get_cached_provider_models(provider_id, api_host, Some(provider_type))?
-            {
+            let cached = match credential_fingerprint.as_deref() {
+                Some(fingerprint) => self.get_cached_provider_models_scoped(
+                    provider_id,
+                    api_host,
+                    Some(provider_type),
+                    Some(fingerprint),
+                )?,
+                None if !Self::requires_api_key_for_runtime(
+                    provider_id,
+                    api_host,
+                    provider_type,
+                ) =>
+                {
+                    self.get_cached_provider_models(provider_id, api_host, Some(provider_type))?
+                }
+                None => None,
+            };
+            if let Some(cached) = cached {
                 let cached_model_count = Some(cached.models.len());
                 if let Some(model) = find_model_metadata(&cached.models, requested_model_id) {
                     return Ok(ProviderModelRegistryMetadata {
@@ -215,6 +232,7 @@ mod tests {
     fn resolves_cached_provider_model_by_provider_model_id() {
         let service = service();
         let provider = provider("cached-provider", "https://gateway.example.com/v1");
+        let api_key = "sk-cache-a";
         let mut model = EnhancedModelMetadata::new(
             "stable-coder".to_string(),
             "Stable Coder".to_string(),
@@ -245,18 +263,24 @@ mod tests {
         ];
 
         service
-            .save_provider_models_cache(
+            .save_provider_models_cache_scoped(
                 "cached-provider",
                 "https://gateway.example.com/v1",
                 Some(ApiProviderType::Openai),
                 &[model],
                 Some("https://gateway.example.com/v1/models".to_string()),
                 chrono::Utc::now().timestamp(),
+                ModelRegistryService::credential_cache_fingerprint(api_key).as_deref(),
             )
             .expect("save cache");
 
         let metadata = service
-            .resolve_provider_model_metadata(Some(&provider), "cached-provider", "upstream-coder")
+            .resolve_provider_model_metadata(
+                Some(&provider),
+                "cached-provider",
+                "upstream-coder",
+                Some(api_key),
+            )
             .expect("metadata");
 
         assert_eq!(
@@ -271,5 +295,122 @@ mod tests {
         assert_eq!(model.provider_model_id.as_deref(), Some("upstream-coder"));
         assert!(model.capabilities.reasoning);
         assert!(model.capabilities.reasoning_effort.is_some());
+    }
+
+    #[test]
+    fn provider_model_metadata_does_not_cross_credential_scopes() {
+        let service = service();
+        let provider = provider("cached-provider", "https://gateway.example.com/v1");
+        let model = EnhancedModelMetadata::new(
+            "credential-a-model".to_string(),
+            "Credential A Model".to_string(),
+            "cached-provider".to_string(),
+            "Cached Provider".to_string(),
+        );
+        let credential_a = "sk-cache-a";
+
+        service
+            .save_provider_models_cache_scoped(
+                "cached-provider",
+                "https://gateway.example.com/v1",
+                Some(ApiProviderType::Openai),
+                &[model],
+                Some("https://gateway.example.com/v1/models".to_string()),
+                chrono::Utc::now().timestamp(),
+                ModelRegistryService::credential_cache_fingerprint(credential_a).as_deref(),
+            )
+            .expect("save credential A cache");
+
+        let matching = service
+            .resolve_provider_model_metadata(
+                Some(&provider),
+                "cached-provider",
+                "credential-a-model",
+                Some(credential_a),
+            )
+            .expect("matching credential metadata");
+        let isolated = service
+            .resolve_provider_model_metadata(
+                Some(&provider),
+                "cached-provider",
+                "credential-a-model",
+                Some("sk-cache-b"),
+            )
+            .expect("isolated credential metadata");
+
+        assert_eq!(
+            matching.source,
+            ProviderModelRegistryMetadataSource::ProviderModelsCache
+        );
+        assert_eq!(isolated.reason_code, "model_registry_metadata_missing");
+        assert!(isolated.model.is_none());
+    }
+
+    #[test]
+    fn keyless_provider_can_read_unscoped_cache() {
+        let service = service();
+        let mut provider = provider("ollama", "http://127.0.0.1:11434");
+        provider.provider.provider_type = ApiProviderType::Ollama;
+        let model = EnhancedModelMetadata::new(
+            "qwen3".to_string(),
+            "Qwen 3".to_string(),
+            "ollama".to_string(),
+            "Ollama".to_string(),
+        );
+
+        service
+            .save_provider_models_cache(
+                "ollama",
+                "http://127.0.0.1:11434",
+                Some(ApiProviderType::Ollama),
+                &[model],
+                Some("http://127.0.0.1:11434/api/tags".to_string()),
+                chrono::Utc::now().timestamp(),
+            )
+            .expect("save keyless cache");
+
+        let metadata = service
+            .resolve_provider_model_metadata(Some(&provider), "ollama", "qwen3", None)
+            .expect("keyless metadata");
+
+        assert_eq!(
+            metadata.source,
+            ProviderModelRegistryMetadataSource::ProviderModelsCache
+        );
+    }
+
+    #[test]
+    fn key_required_provider_does_not_read_unscoped_cache() {
+        let service = service();
+        let provider = provider("cached-provider", "https://gateway.example.com/v1");
+        let model = EnhancedModelMetadata::new(
+            "credential-model".to_string(),
+            "Credential Model".to_string(),
+            "cached-provider".to_string(),
+            "Cached Provider".to_string(),
+        );
+
+        service
+            .save_provider_models_cache(
+                "cached-provider",
+                "https://gateway.example.com/v1",
+                Some(ApiProviderType::Openai),
+                &[model],
+                Some("https://gateway.example.com/v1/models".to_string()),
+                chrono::Utc::now().timestamp(),
+            )
+            .expect("save unscoped cache");
+
+        let metadata = service
+            .resolve_provider_model_metadata(
+                Some(&provider),
+                "cached-provider",
+                "credential-model",
+                None,
+            )
+            .expect("credential metadata");
+
+        assert_eq!(metadata.reason_code, "model_registry_metadata_missing");
+        assert!(metadata.model.is_none());
     }
 }

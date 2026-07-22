@@ -51,6 +51,10 @@ impl McpServerConfig {
         self.auth_status_with_credentials(false)
     }
 
+    pub fn oauth_scopes(&self) -> Option<Vec<String>> {
+        configured_scopes(self)
+    }
+
     pub fn auth_status_with_credentials(&self, has_credentials: bool) -> McpServerAuthStatus {
         if self.has_oauth_settings() {
             let unsupported = self.has_unsupported_oauth_runtime_settings();
@@ -149,6 +153,7 @@ mod tests {
                 http_headers: None,
                 env_http_headers: None,
             },
+            environment_id: crate::types::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             startup_timeout: 30,
             tool_timeout: None,
@@ -240,6 +245,7 @@ mod tests {
                 )])),
                 env_http_headers: None,
             },
+            environment_id: crate::types::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             startup_timeout: 30,
             tool_timeout: None,

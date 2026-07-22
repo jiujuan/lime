@@ -111,7 +111,6 @@ app_server_client_request_definitions! {
     AgentSessionReviewDecisionTemplateExport => "agentSession/reviewDecisionTemplate/export",
     AgentSessionReviewDecisionSave => "agentSession/reviewDecision/save",
     AgentSessionUpdate => "agentSession/update",
-    AgentSessionDelete => "agentSession/delete",
     AgentSessionObjectiveRead => "agentSession/objective/read",
     AgentSessionObjectiveSet => "agentSession/objective/set",
     AgentSessionObjectiveStatusUpdate => "agentSession/objective/status/update",

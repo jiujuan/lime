@@ -195,6 +195,11 @@ mod tests {
     }
 
     #[test]
+    fn thread_goal_continuation_is_internal_context_without_an_item_notification() {
+        assert!(canonical_notification_target(&event("thread.goal.continuation")).is_none());
+    }
+
+    #[test]
     fn approval_resolution_remains_a_canonical_item_notification() {
         assert!(matches!(
             canonical_notification_target(&event("action.resolved")),

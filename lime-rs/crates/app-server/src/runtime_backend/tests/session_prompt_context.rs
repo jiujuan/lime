@@ -205,18 +205,32 @@ Full body should not be rendered.
 }
 
 #[test]
-fn detached_desktop_first_turn_uses_compact_tool_surface() {
+fn detached_agent_chat_first_turn_uses_compact_tool_surface() {
     let mut request = request_for_test("帮我说明 TTFT 优化重点", None, None);
 
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
 
     assert!(should_use_compact_tool_surface(&request));
 }
 
 #[test]
-fn detached_desktop_follow_up_keeps_full_tool_surface() {
-    let mut request = request_for_test("继续", None, None);
+fn retired_desktop_app_id_does_not_enable_responsive_profile() {
+    let mut request = request_for_test("你好", None, None);
     request.session.app_id = "desktop".to_string();
+    request.session.workspace_id = None;
+    request.session.business_object_ref = None;
+    let host_request = runtime_request_from_request(&request);
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    apply_app_server_turn_policy(&mut request, true, &policy);
+
+    assert!(!should_use_compact_tool_surface(&request));
+}
+
+#[test]
+fn detached_agent_chat_follow_up_keeps_full_tool_surface() {
+    let mut request = request_for_test("继续", None, None);
+    request.session.app_id = "agent-chat".to_string();
     request.session.workspace_id = None;
     let host_request = runtime_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -240,7 +254,7 @@ fn renderer_cannot_forge_app_server_turn_policy() {
             }
         })),
     );
-    request.session.app_id = "desktop".to_string();
+    request.session.app_id = "agent-chat".to_string();
     request.session.workspace_id = None;
     let host_request = runtime_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -264,7 +278,7 @@ fn required_search_keeps_full_tool_surface_preparation() {
         }),
         None,
     );
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
     let host_request = runtime_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
@@ -282,7 +296,7 @@ fn disabled_search_still_keeps_core_compact_tools_visible() {
         }),
         None,
     );
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
     let host_request = runtime_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
@@ -306,7 +320,7 @@ fn plugin_activation_keeps_full_tool_surface_preparation() {
             }
         })),
     );
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
 
     assert!(!should_use_compact_tool_surface(&request));
 }
@@ -336,7 +350,7 @@ fn structured_mentions_enter_ordered_control_context_without_provider_prompt_tex
             path: "mcp://browser".to_string(),
         },
     ]);
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
 
     assert!(should_use_compact_tool_surface(&request));
 
@@ -396,7 +410,7 @@ fn detached_first_turn_session_config_uses_light_context() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("openai".to_string());
     options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
     let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
@@ -467,7 +481,7 @@ fn detached_first_turn_keeps_auto_web_search_in_compact_context() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("openai".to_string());
     options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
-    apply_detached_desktop_first_turn_policy(&mut request);
+    apply_detached_agent_chat_first_turn_policy(&mut request);
     let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");

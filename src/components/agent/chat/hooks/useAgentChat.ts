@@ -31,6 +31,7 @@ import {
   type UseAgentChatOptions,
 } from "./agentChatShared";
 import { useAgentTopicSnapshot } from "./useAgentTopicSnapshot";
+import { useAgentSessionThreadGoal } from "./useAgentSessionThreadGoal";
 import { hasActiveThreadReadActivity } from "../projection/threadReadActivity";
 import { resolveClawWorkspaceProviderSelection } from "../utils/clawWorkspaceProviderSelection";
 import {
@@ -147,6 +148,9 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     setAccessModeState: context.setAccessModeState,
   });
   const applyWorkspaceModelPreference = context.applyWorkspaceModelPreference;
+  const threadGoal = useAgentSessionThreadGoal({
+    threadId: session.threadRead?.thread_id,
+  });
 
   const resolveWarmupWorkspaceModelPreference = useCallback(
     async (
@@ -833,6 +837,9 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
     todoItems: session.todoItems,
     queuedTurnCount: session.queuedTurnCount,
     threadRead: session.threadRead,
+    threadGoal: threadGoal.goal,
+    threadGoalError: threadGoal.error,
+    isThreadGoalLoading: threadGoal.loading,
     executionRuntime: session.executionRuntime,
     sessionWorkingDir: session.sessionWorkingDir,
     activeExecutionRuntime,

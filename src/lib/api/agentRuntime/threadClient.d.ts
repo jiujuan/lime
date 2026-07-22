@@ -1,6 +1,5 @@
 import {
   AppServerClient,
-  type AppServerAgentSessionActionRespondParams,
   type AppServerJsonRpcNotification,
   type AppServerThreadReadResponse,
   type AppServerThreadShellCommandParams,
@@ -43,10 +42,8 @@ export type AgentRuntimeAppServerClient = Pick<
   | "startTurn"
   | "steerTurn"
   | "cancelTurn"
-  | "replayAction"
   | "compactAgentSession"
   | "resumeThread"
-  | "respondAction"
   | "drainEvents"
   | "listAgentSessionFileCheckpoints"
   | "getAgentSessionFileCheckpoint"
@@ -56,7 +53,7 @@ export type AgentRuntimeAppServerClient = Pick<
 >;
 export type AgentRuntimeLifecycleClient = Pick<
   StandardAgentRuntimeClient,
-  "startTurn" | "steerTurn" | "cancelTurn" | "respondAction" | "readThread"
+  "startTurn" | "steerTurn" | "cancelTurn" | "readThread"
 >;
 export interface AgentRuntimeThreadClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
@@ -121,9 +118,6 @@ export declare function publishAppServerAgentSessionNotifications(
 export declare function projectAppServerAgentEventPayload(
   notification: AppServerJsonRpcNotification,
 ): Record<string, unknown> | null;
-export declare function appServerActionRespondParamsFromRequest(
-  request: AgentRuntimeRespondActionRequest,
-): AppServerAgentSessionActionRespondParams;
 export declare const compactAgentRuntimeSession: ReturnType<
     typeof createThreadClient
   >["compactAgentRuntimeSession"],

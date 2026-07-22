@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type {
-  AppServerAgentSessionActionRespondParams,
-  AppServerAgentSessionActionRespondResponse,
   AppServerRequestResult,
   AppServerThread,
   AppServerThreadStartParams,
@@ -107,10 +105,6 @@ function buildAppServerClient() {
     cancelTurn: vi.fn(async (_request: TurnInterruptParams) =>
       appServerResult<TurnInterruptResponse>(4, {}),
     ),
-    respondAction: vi.fn(
-      async (_request: AppServerAgentSessionActionRespondParams) =>
-        appServerResult<AppServerAgentSessionActionRespondResponse>(5, {}),
-    ),
   };
 }
 
@@ -137,13 +131,17 @@ describe("agentRuntimeAppServerClient", () => {
       threadId: "thread-app-server",
       turnId: "turn-app-server",
     });
-    await runtimeClient.respondAction({
-      sessionId: "session-app-server",
-      requestId: "request-app-server",
-      actionType: "ask_user",
-      confirmed: true,
-      response: "继续",
-    });
+    await expect(
+      runtimeClient.respondAction({
+        sessionId: "session-app-server",
+        requestId: "request-app-server",
+        actionType: "ask_user",
+        confirmed: true,
+        response: "继续",
+      }),
+    ).rejects.toThrow(
+      "Typed server request responses must use their JSON-RPC outer id; generic agentSession/action/respond is retired.",
+    );
 
     expect(appServerClient.startTurn).toHaveBeenCalledWith({
       threadId: "thread-app-server",
@@ -161,13 +159,6 @@ describe("agentRuntimeAppServerClient", () => {
     expect(appServerClient.cancelTurn).toHaveBeenCalledWith({
       threadId: "thread-app-server",
       turnId: "turn-app-server",
-    });
-    expect(appServerClient.respondAction).toHaveBeenCalledWith({
-      sessionId: "session-app-server",
-      requestId: "request-app-server",
-      actionType: "ask_user",
-      confirmed: true,
-      response: "继续",
     });
   });
 

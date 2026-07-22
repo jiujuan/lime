@@ -4,13 +4,14 @@
 //! RuntimeCore 已持久化的 user/message/tool 事件恢复 provider 所需的最小 item 顺序，
 //! 避免任何旧 session 或 provider adapter 参与多轮采样。
 
+mod canonical;
+
 use super::StoredSession;
-use agent_protocol::{AgentInput, ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument};
+use agent_protocol::{AgentInput, ThreadItem};
 use agent_runtime::reply_input::{RuntimeReplyInput, RuntimeReplyInputPart};
 use app_server_protocol::AgentEvent;
 use model_provider::current_client::{
-    CurrentProviderContent, CurrentProviderMessage, CurrentProviderRole, CurrentProviderToolCall,
-    CurrentProviderToolResult,
+    CurrentProviderContent, CurrentProviderMessage, CurrentProviderRole,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -29,7 +30,7 @@ pub(in crate::runtime) fn provider_history_excluding_current_turn_input(
         .into_iter()
         .filter(|event| {
             event.turn_id.as_deref() != Some(turn_id)
-                || !super::turn_input_events::is_turn_input_event(event)
+                || !super::turn_input_events::is_provider_input_event(event)
         })
         .collect::<Vec<_>>();
     let mut messages = replacement_history.unwrap_or_default();
@@ -176,7 +177,30 @@ where
 
     for event in events {
         match event.event_type.as_str() {
-            "message.created" => {
+            super::thread_fork::FORK_CANONICAL_ITEM_EVENT_TYPE => {
+                let item = serde_json::from_value::<ThreadItem>(
+                    event.payload.get("item").cloned().ok_or_else(|| {
+                        format!(
+                            "fork canonical history event {} omitted item",
+                            event.event_id
+                        )
+                    })?,
+                )
+                .map_err(|error| {
+                    format!(
+                        "fork canonical history event {} has invalid item: {error}",
+                        event.event_id
+                    )
+                })?;
+                canonical::append_fork_item(
+                    &item,
+                    &mut messages,
+                    &mut assistant_content,
+                    &mut assistant_text_by_item,
+                    &mut tool_results,
+                )?;
+            }
+            "message.created" | "thread.goal.continuation" => {
                 flush_assistant(
                     &mut messages,
                     &mut assistant_content,
@@ -215,13 +239,13 @@ where
                 }
             }
             "item.started" => {
-                if let Some(call) = canonical_tool_call_from_event(event) {
+                if let Some(call) = canonical::tool_call_from_event(event) {
                     flush_tool_results(&mut messages, &mut tool_results);
                     assistant_content.push(CurrentProviderContent::ToolCall(call));
                 }
             }
             "item.completed" => {
-                if let Some(result) = canonical_tool_result_from_event(event) {
+                if let Some(result) = canonical::tool_result_from_event(event) {
                     flush_assistant(
                         &mut messages,
                         &mut assistant_content,
@@ -320,104 +344,6 @@ fn flush_tool_results(
         return;
     }
     messages.push(CurrentProviderMessage::tool(std::mem::take(tool_results)));
-}
-
-fn canonical_tool_call_from_event(event: &AgentEvent) -> Option<CurrentProviderToolCall> {
-    let item = canonical_tool_item(event)?;
-    let ThreadItemPayload::Tool {
-        call_id,
-        name,
-        arguments,
-        ..
-    } = item.payload
-    else {
-        return None;
-    };
-    let (arguments, raw_arguments) = canonical_tool_arguments(&arguments);
-    Some(CurrentProviderToolCall {
-        id: call_id,
-        name,
-        arguments,
-        raw_arguments,
-    })
-}
-
-fn canonical_tool_result_from_event(event: &AgentEvent) -> Option<CurrentProviderToolResult> {
-    let item = canonical_tool_item(event)?;
-    let status = item.status;
-    let ThreadItemPayload::Tool {
-        call_id,
-        name,
-        output,
-        ..
-    } = item.payload
-    else {
-        return None;
-    };
-    let output = output?;
-    let output_ref = output.output_ref;
-    let output_text = output
-        .text
-        .filter(|text| !text.trim().is_empty())
-        .or_else(|| output.structured_content.map(|content| content.to_string()))
-        .map(|text| {
-            tool_runtime::tool_io::format_tool_output_for_model(
-                &text,
-                tool_runtime::tool_io::ToolOutputTruncationPolicy::Bytes(
-                    PROVIDER_TOOL_OUTPUT_MAX_BYTES,
-                ),
-            )
-        })
-        .or_else(|| {
-            output_ref.as_deref().map(|reference| {
-                format!(
-                    "Tool output was omitted from context; retained artifact reference: {reference}"
-                )
-            })
-        })
-        .unwrap_or_default();
-    Some(CurrentProviderToolResult {
-        call_id,
-        name,
-        success: status == ItemStatus::Completed,
-        output: output_text,
-        error: output.error.filter(|error| !error.trim().is_empty()),
-    })
-}
-
-fn canonical_tool_item(event: &AgentEvent) -> Option<ThreadItem> {
-    if !matches!(event.event_type.as_str(), "item.started" | "item.completed") {
-        return None;
-    }
-    serde_json::from_value(event.payload.get("item")?.clone()).ok()
-}
-
-fn canonical_tool_arguments(arguments: &[ToolArgument]) -> (Value, String) {
-    let arguments = if let [argument] = arguments {
-        if argument.name == "value" {
-            serde_json::from_str(&argument.value)
-                .unwrap_or_else(|_| Value::String(argument.value.clone()))
-        } else {
-            canonical_tool_argument_object(arguments)
-        }
-    } else {
-        canonical_tool_argument_object(arguments)
-    };
-    let raw_arguments = serde_json::to_string(&arguments).unwrap_or_else(|_| "{}".to_string());
-    (arguments, raw_arguments)
-}
-
-fn canonical_tool_argument_object(arguments: &[ToolArgument]) -> Value {
-    Value::Object(
-        arguments
-            .iter()
-            .map(|argument| {
-                let value = serde_json::from_str(&argument.value)
-                    .unwrap_or_else(|_| Value::String(argument.value.clone()));
-                (argument.name.clone(), value)
-            })
-            .collect(),
-    )
 }
 
 fn user_message_from_event<G>(
@@ -522,7 +448,10 @@ fn text_from_message_value(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_protocol::{ImageDetail, ItemId, ItemKind, SessionId, ThreadId, ToolOutput, TurnId};
+    use agent_protocol::{
+        ImageDetail, ItemId, ItemKind, ItemStatus, SessionId, ThreadId, ThreadItemPayload,
+        ToolArgument, ToolOutput, TurnId,
+    };
     use serde_json::json;
 
     fn event(sequence: u64, event_type: &str, payload: Value) -> AgentEvent {
@@ -620,6 +549,32 @@ mod tests {
         let (replacement, events) = provider_history_source(&stored);
         assert!(replacement.is_none());
         assert_eq!(events.len(), 2);
+    }
+
+    #[test]
+    fn thread_goal_continuation_is_restored_for_future_turns_but_not_duplicated_in_its_turn() {
+        let stored = stored_with_events(vec![event(
+            1,
+            super::super::turn_input_events::THREAD_GOAL_CONTINUATION_EVENT_TYPE,
+            json!({
+                "visibility": "agent_only",
+                "source": "thread_goal",
+                "input": [{"type": "text", "text": "continue the active goal"}]
+            }),
+        )]);
+
+        let current = provider_history_excluding_current_turn_input(&stored, None, "turn-1")
+            .expect("current continuation history");
+        assert!(current.is_empty());
+
+        let future = provider_history_excluding_current_turn_input(&stored, None, "turn-2")
+            .expect("future continuation history");
+        assert_eq!(future.len(), 1);
+        assert_eq!(future[0].role, CurrentProviderRole::User);
+        assert!(matches!(
+            &future[0].content[..],
+            [CurrentProviderContent::Text(text)] if text == "continue the active goal"
+        ));
     }
 
     fn canonical_tool_event(

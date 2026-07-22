@@ -156,3 +156,159 @@ impl McpBridgeClient {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rmcp::model::{ServerCapabilities, ServerInfo};
+    use rmcp::service::{RequestContext, RoleServer, RunningServiceCancellationToken};
+    use rmcp::{ServerHandler, ServiceExt};
+
+    #[derive(Clone)]
+    struct CancellationAwareToolServer {
+        request_started: CancellationToken,
+        cancellation_observed: CancellationToken,
+    }
+
+    impl ServerHandler for CancellationAwareToolServer {
+        fn get_info(&self) -> ServerInfo {
+            ServerInfo {
+                capabilities: ServerCapabilities::builder().enable_tools().build(),
+                ..Default::default()
+            }
+        }
+
+        async fn call_tool(
+            &self,
+            _request: CallToolRequestParam,
+            context: RequestContext<RoleServer>,
+        ) -> Result<CallToolResult, rmcp::ErrorData> {
+            self.request_started.cancel();
+            context.ct.cancelled().await;
+            self.cancellation_observed.cancel();
+            Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+                "cancelled",
+            )]))
+        }
+    }
+
+    async fn start_cancellation_aware_client(
+        tool_timeout: Duration,
+    ) -> (
+        McpBridgeClient,
+        CancellationToken,
+        CancellationToken,
+        RunningServiceCancellationToken,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let request_started = CancellationToken::new();
+        let cancellation_observed = CancellationToken::new();
+        let (server_transport, client_transport) = tokio::io::duplex(4096);
+        let server = CancellationAwareToolServer {
+            request_started: request_started.clone(),
+            cancellation_observed: cancellation_observed.clone(),
+        };
+        let server_task = tokio::spawn(async move {
+            let service = server
+                .serve(server_transport)
+                .await
+                .expect("start cancellation-aware MCP server");
+            service
+                .waiting()
+                .await
+                .expect("wait for cancellation-aware MCP server");
+        });
+        let service = LimeMcpClientService::new("timeout-server".to_string(), None)
+            .serve(client_transport)
+            .await
+            .expect("start Lime MCP client");
+        let service_cancellation = service.cancellation_token();
+        let client = McpBridgeClient::new(Arc::new(service), tool_timeout);
+        (
+            client,
+            request_started,
+            cancellation_observed,
+            service_cancellation,
+            server_task,
+        )
+    }
+
+    async fn stop_cancellation_aware_client(
+        service_cancellation: RunningServiceCancellationToken,
+        server_task: tokio::task::JoinHandle<()>,
+    ) {
+        service_cancellation.cancel();
+        tokio::time::timeout(Duration::from_secs(2), server_task)
+            .await
+            .expect("cancellation-aware MCP server did not stop")
+            .expect("cancellation-aware MCP server task failed");
+    }
+
+    #[tokio::test]
+    async fn tool_timeout_notifies_server_request_cancellation() {
+        let tool_timeout = Duration::from_millis(25);
+        let (client, _request_started, cancellation_observed, service_cancellation, server_task) =
+            start_cancellation_aware_client(tool_timeout).await;
+
+        let result = client
+            .call_tool(
+                "wait-for-cancellation",
+                None,
+                Default::default(),
+                None,
+                CancellationToken::new(),
+            )
+            .await;
+
+        assert!(
+            matches!(
+                result,
+                Err(ServiceError::Timeout { timeout }) if timeout == tool_timeout
+            ),
+            "tool call must return its captured per-server timeout: {result:?}"
+        );
+        tokio::time::timeout(Duration::from_secs(2), cancellation_observed.cancelled())
+            .await
+            .expect("server request token was not cancelled after client timeout");
+
+        stop_cancellation_aware_client(service_cancellation, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn caller_cancellation_notifies_in_flight_server_request() {
+        let (client, request_started, cancellation_observed, service_cancellation, server_task) =
+            start_cancellation_aware_client(Duration::from_secs(10)).await;
+        let call_cancellation = CancellationToken::new();
+        let cancellation = call_cancellation.clone();
+        let call_task = tokio::spawn(async move {
+            client
+                .call_tool(
+                    "wait-for-cancellation",
+                    None,
+                    Default::default(),
+                    None,
+                    cancellation,
+                )
+                .await
+        });
+
+        tokio::time::timeout(Duration::from_secs(2), request_started.cancelled())
+            .await
+            .expect("server did not receive the tool request before caller cancellation");
+        call_cancellation.cancel();
+        let result = tokio::time::timeout(Duration::from_secs(2), call_task)
+            .await
+            .expect("cancelled tool call did not return")
+            .expect("cancelled tool call task failed");
+
+        assert!(
+            matches!(result, Err(ServiceError::Cancelled { reason: None })),
+            "tool call must return caller cancellation: {result:?}"
+        );
+        tokio::time::timeout(Duration::from_secs(2), cancellation_observed.cancelled())
+            .await
+            .expect("server request token was not cancelled after caller cancellation");
+
+        stop_cancellation_aware_client(service_cancellation, server_task).await;
+    }
+}

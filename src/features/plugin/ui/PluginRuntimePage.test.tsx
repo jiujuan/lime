@@ -418,14 +418,18 @@ describe("PluginRuntimePage", () => {
             text: expect.stringContaining("基于项目知识生成内容场景"),
           }),
         ],
+        additionalContext: {
+          metadata: expect.objectContaining({
+            kind: "application",
+            value: expect.stringContaining("plugin_host_bridge"),
+          }),
+        },
         responsesapiClientMetadata: expect.objectContaining({
+          appId: "content-factory-app",
           eventName: expect.stringMatching(
             /^plugin_runtime:content-factory-app:plugin-task-/,
           ),
-          pluginRuntime: expect.objectContaining({
-            appId: "content-factory-app",
-            taskKind: "content.scenario_planning",
-          }),
+          taskKind: "content.scenario_planning",
         }),
       }),
     );

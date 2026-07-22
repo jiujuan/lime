@@ -37,7 +37,7 @@ export type AppServerSessionRpcClient = Pick<
   | "updateSession"
   | "archiveThread"
   | "unarchiveThread"
-  | "deleteSession"
+  | "deleteThread"
   | "request"
 >;
 
@@ -213,16 +213,12 @@ export function createAppServerSessionClient({
   }
 
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
-    const normalizedSessionId = sessionId.trim();
-    if (!normalizedSessionId) {
-      throw new Error("sessionId is required for agentSession/delete");
-    }
-    const response = await appServerClient.deleteSession({
-      sessionId: normalizedSessionId,
-    });
-    if (response.result.deleted !== true) {
-      throw new Error("agentSession/delete did not confirm deletion");
-    }
+    const threadId = await resolveCanonicalThreadId(
+      appServerClient,
+      sessionId,
+      "thread/delete",
+    );
+    await appServerClient.deleteThread({ threadId });
   }
 
   return {
@@ -412,7 +408,7 @@ async function findCanonicalThreadIdBySessionId(
 async function resolveCanonicalThreadId(
   client: AppServerSessionRpcClient,
   sessionId: string,
-  method: "thread/archive" | "thread/unarchive",
+  method: "thread/archive" | "thread/delete" | "thread/unarchive",
 ): Promise<string> {
   const normalizedSessionId = sessionId.trim();
   if (!normalizedSessionId) {

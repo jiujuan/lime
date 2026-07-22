@@ -1,6 +1,5 @@
 import type {
   AgentRuntimeClient,
-  AgentSessionActionRespondParams,
   StructuredOutputContract,
 } from "@limecloud/agent-runtime-client";
 
@@ -8,6 +7,8 @@ import type {
   PluginRuntimeStartTaskRequest,
   PluginRuntimeSubmitHostResponseRequest,
 } from "@/lib/api/pluginRuntime";
+import { respondPendingTypedServerRequest } from "@/lib/api/agentRuntime/serverRequestReplay";
+import { createApplicationAdditionalContext } from "@/lib/api/agentProtocolOps";
 import type { PluginRuntimeCapabilityApi } from "./agentRuntimeCapabilityApi";
 
 export type { PluginRuntimeCapabilityApi } from "./agentRuntimeCapabilityApi";
@@ -22,18 +23,23 @@ type StartTurnParams = Parameters<AgentRuntimeClient["startTurn"]>[0];
 export interface PluginRuntimeClientApiOptions {
   now?: () => string;
   createId?: (prefix: string) => string;
+  respondTypedServerRequest?: (
+    request: PluginRuntimeSubmitHostResponseRequest["runtimeRequest"],
+  ) => boolean;
 }
 
 export function createPluginRuntimeCapabilityApiFromClient(
   runtimeClient: Pick<
     AgentRuntimeClient,
-    "startTurn" | "readThread" | "cancelTurn" | "respondAction"
+    "startTurn" | "readThread" | "cancelTurn"
   >,
   options: PluginRuntimeClientApiOptions = {},
 ): PluginRuntimeCapabilityApi {
   const now = options.now ?? (() => new Date().toISOString());
   const createId =
     options.createId ?? ((prefix: string) => `${prefix}-${Date.now()}`);
+  const respondTypedServerRequest =
+    options.respondTypedServerRequest ?? respondPendingTypedServerRequest;
 
   return {
     async startTask(request) {
@@ -78,6 +84,7 @@ export function createPluginRuntimeCapabilityApiFromClient(
       const startParams: StartTurnParams = omitUndefined({
         threadId,
         input: [{ type: "text" as const, text: message }],
+        additionalContext: createApplicationAdditionalContext({ metadata }),
         approvalPolicy: runtimeRequest?.approvalPolicy,
         cwd:
           normalizeString(runtimeRequest?.workingDir ?? undefined) ??
@@ -92,17 +99,12 @@ export function createPluginRuntimeCapabilityApiFromClient(
         outputSchema,
         sandboxPolicy: runtimeRequest?.sandboxPolicy,
         responsesapiClientMetadata: omitUndefined({
+          appId: request.appId,
+          entryKey: request.entryKey,
           eventName,
           taskId,
           taskKind: request.taskKind,
           workspaceId: request.workspaceId,
-          pluginRuntime: {
-            appId: request.appId,
-            entryKey: request.entryKey,
-            taskId,
-            taskKind: request.taskKind,
-          },
-          metadata,
         }),
       });
       const response = await runtimeClient.startTurn(startParams);
@@ -178,14 +180,16 @@ export function createPluginRuntimeCapabilityApiFromClient(
       };
     },
     async submitHostResponse(request) {
-      await runtimeClient.respondAction(
-        actionRespondParamsFromRuntimeRequest(request.runtimeRequest),
+      if (respondTypedServerRequest(request.runtimeRequest)) {
+        return {
+          appId: request.appId,
+          taskId: request.taskId,
+          status: "submitted",
+        };
+      }
+      throw new Error(
+        "Typed server request is no longer pending; generic agentSession/action/respond is retired.",
       );
-      return {
-        appId: request.appId,
-        taskId: request.taskId,
-        status: "submitted",
-      };
     },
   };
 }
@@ -228,28 +232,6 @@ function buildPluginRuntimeTaskMessage(
     "Expected Output JSON:",
     stringifyJson(request.expectedOutput),
   ].join("\n");
-}
-
-function actionRespondParamsFromRuntimeRequest(
-  request: PluginRuntimeSubmitHostResponseRequest["runtimeRequest"],
-): AgentSessionActionRespondParams {
-  return omitUndefined({
-    sessionId: request.session_id,
-    requestId: request.request_id,
-    actionType: request.action_type,
-    confirmed: request.confirmed,
-    response: request.response,
-    userData: request.user_data,
-    metadata: request.metadata,
-    eventName: request.event_name,
-    actionScope: request.action_scope
-      ? omitUndefined({
-          sessionId: request.action_scope.session_id,
-          threadId: request.action_scope.thread_id,
-          turnId: request.action_scope.turn_id,
-        })
-      : undefined,
-  });
 }
 
 function threadStatusToPluginTaskStatus(thread: CanonicalThread): string {

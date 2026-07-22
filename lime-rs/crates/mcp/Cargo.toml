@@ -23,6 +23,7 @@ axum.workspace = true
 chrono.workspace = true
 email_address.workspace = true
 url.workspace = true
+libc = "0.2"
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -17,6 +17,10 @@ use std::fmt;
 mod merge;
 use merge::{merge_item_snapshot, merge_turn_snapshot, ChangeAccumulator};
 
+#[path = "history_validation.rs"]
+mod validation;
+use validation::{validate_identity, validate_item_content};
+
 /// A page of the builder's raw canonical history.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ThreadHistoryPage<T> {
@@ -72,6 +76,9 @@ pub enum ThreadHistoryBuilderError {
         expected: TurnId,
         actual: TurnId,
     },
+    UnsafeItemContent {
+        item_id: ItemId,
+    },
 }
 
 impl fmt::Display for ThreadHistoryBuilderError {
@@ -118,6 +125,12 @@ impl fmt::Display for ThreadHistoryBuilderError {
                 formatter,
                 "canonical item {item_id} changed turn identity from {expected} to {actual}"
             ),
+            Self::UnsafeItemContent { item_id } => {
+                write!(
+                    formatter,
+                    "canonical item {item_id} contains unsafe content"
+                )
+            }
         }
     }
 }
@@ -216,6 +229,7 @@ impl ThreadHistoryBuilder {
                 &item.session_id,
                 &item.thread_id,
             )?;
+            validate_item_content(item)?;
         }
 
         let mut builder = Self {
@@ -885,6 +899,7 @@ impl ThreadHistoryBuilder {
                 &item.session_id,
                 &item.thread_id,
             )?;
+            validate_item_content(item)?;
         }
         Ok(())
     }
@@ -911,35 +926,6 @@ impl ThreadHistoryBuilder {
             self.thread_id = Some(thread_id.clone());
         }
     }
-}
-
-fn validate_identity(
-    expected_session: &mut Option<SessionId>,
-    expected_thread: &mut Option<ThreadId>,
-    session_id: &SessionId,
-    thread_id: &ThreadId,
-) -> Result<(), ThreadHistoryBuilderError> {
-    match expected_session {
-        Some(expected) if expected != session_id => {
-            return Err(ThreadHistoryBuilderError::SessionIdentityMismatch {
-                expected: expected.clone(),
-                actual: session_id.clone(),
-            });
-        }
-        None => *expected_session = Some(session_id.clone()),
-        _ => {}
-    }
-    match expected_thread {
-        Some(expected) if expected != thread_id => {
-            return Err(ThreadHistoryBuilderError::ThreadIdentityMismatch {
-                expected: expected.clone(),
-                actual: thread_id.clone(),
-            });
-        }
-        None => *expected_thread = Some(thread_id.clone()),
-        _ => {}
-    }
-    Ok(())
 }
 
 fn push_unique<T: PartialEq>(values: &mut Vec<T>, value: T) {

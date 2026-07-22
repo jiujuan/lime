@@ -41,7 +41,7 @@ describe("canonical roster fallback boundary", () => {
 
   it("Workspace Harness 接线只向 panel 传递 canonical roster", () => {
     const workspaceSource = readSource(
-      "src/components/agent/chat/AgentChatWorkspace.tsx",
+      "src/components/agent/chat/workspace/useAgentChatWorkspaceCommandRuntime.ts",
     );
     const call = workspaceSource.match(
       /useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime\(\{([\s\S]*?)\n\s{4}\}\);/,

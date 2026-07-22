@@ -19,15 +19,13 @@ import type { StreamRequestState } from "./agentStreamSubmissionLifecycle";
 import { executeAgentStreamSubmit } from "./agentStreamSubmitExecution";
 import { MODEL_SELECTION_REQUIRED_ERROR_MESSAGE } from "../utils/agentRuntimeErrorPresentation";
 
-const { getModelRegistryMock, setAgentRuntimeObjectiveMock } = vi.hoisted(
-  () => ({
-    getModelRegistryMock: vi.fn(),
-    setAgentRuntimeObjectiveMock: vi.fn(),
-  }),
-);
+const { getModelRegistryMock, setThreadGoalMock } = vi.hoisted(() => ({
+  getModelRegistryMock: vi.fn(),
+  setThreadGoalMock: vi.fn(),
+}));
 
-vi.mock("@/lib/api/agentRuntime/objectiveClient", () => ({
-  setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
+vi.mock("@/lib/api/agentRuntime/threadGoalClient", () => ({
+  setThreadGoal: setThreadGoalMock,
 }));
 
 vi.mock("@/lib/api/modelRegistry", () => ({
@@ -220,21 +218,7 @@ describe("agentStreamSubmitExecution", () => {
       thinking: true,
       skipSessionRestore: true,
       skipSessionStartHooks: true,
-      requestMetadata: {
-        harness: {
-          managed_objective: {
-            objective_text: "持续推进真实 E2E 目标",
-            source: "inputbar",
-          },
-          thread_goal: {
-            enabled: true,
-            set: {
-              threadId: "draft-send-1",
-              objective: "持续推进真实 E2E 目标",
-            },
-          },
-        },
-      },
+      threadGoal: { objective: "持续推进真实 E2E 目标" },
       eventName: "event-1",
       clientUserMessageId: "user-1",
       requestState,
@@ -300,12 +284,15 @@ describe("agentStreamSubmitExecution", () => {
       skipSessionRestore: true,
       skipSessionStartHooks: true,
     });
-    expect(setAgentRuntimeObjectiveMock).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      workspaceId: "workspace-1",
-      objectiveText: "持续推进真实 E2E 目标",
-      successCriteria: [],
+    expect(setThreadGoalMock).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      objective: "持续推进真实 E2E 目标",
+      status: "active",
+      tokenBudget: undefined,
     });
+    expect(submitOp.mock.invocationCallOrder[0]).toBeLessThan(
+      setThreadGoalMock.mock.invocationCallOrder[0],
+    );
     expect(activateStream).toHaveBeenCalled();
     expect(requestState.requestLogId).toBeTruthy();
   });
@@ -355,6 +342,7 @@ describe("agentStreamSubmitExecution", () => {
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.4",
       effectiveExecutionStrategy: "react",
+      threadGoal: { objective: "重新激活目标" },
       eventName: "event-queued",
       clientUserMessageId: "user-steer",
       requestState,
@@ -392,6 +380,15 @@ describe("agentStreamSubmitExecution", () => {
       clientUserMessageId: "user-steer",
       input: [{ type: "text", text: "排队处理" }],
     });
+    expect(setThreadGoalMock).toHaveBeenCalledWith({
+      threadId: "thread-queued",
+      objective: "重新激活目标",
+      status: "active",
+      tokenBudget: undefined,
+    });
+    expect(setThreadGoalMock.mock.invocationCallOrder[0]).toBeLessThan(
+      steerTurn.mock.invocationCallOrder[0],
+    );
     expect(submitOp).not.toHaveBeenCalled();
     expect(runtime.listenToTurnEvents).not.toHaveBeenCalled();
     expect(activateStream).not.toHaveBeenCalled();
@@ -565,14 +562,7 @@ describe("agentStreamSubmitExecution", () => {
         effectiveExecutionStrategy: "react",
         skipSessionRestore: true,
         skipSessionStartHooks: true,
-        requestMetadata: {
-          harness: {
-            managed_objective: {
-              objective_text: "不要在 capability gap 时写入目标",
-              source: "inputbar",
-            },
-          },
-        },
+        threadGoal: { objective: "不要在 capability gap 时写入目标" },
         eventName: "event-image-1",
         clientUserMessageId: "user-image-1",
         requestState,
@@ -607,7 +597,7 @@ describe("agentStreamSubmitExecution", () => {
     ).rejects.toThrow(`${MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX}:`);
 
     expect(getModelRegistryMock).toHaveBeenCalledWith({ forceRefresh: true });
-    expect(setAgentRuntimeObjectiveMock).not.toHaveBeenCalled();
+    expect(setThreadGoalMock).not.toHaveBeenCalled();
     expect(submitOp).not.toHaveBeenCalled();
   });
 
@@ -769,7 +759,7 @@ describe("agentStreamSubmitExecution", () => {
       },
     });
     expect(submittedOp).not.toHaveProperty("metadata");
-    expect(setAgentRuntimeObjectiveMock).not.toHaveBeenCalled();
+    expect(setThreadGoalMock).not.toHaveBeenCalled();
   });
 
   it("当前模型已与 session durable model 同步时不应重复写入 typed turn.model", async () => {
@@ -917,16 +907,14 @@ describe("agentStreamSubmitExecution", () => {
     expect(submittedOp).not.toHaveProperty("metadata");
   });
 
-  it("追求目标写入失败不应阻断消息提交", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("已接受用户 Turn 后 ThreadGoal 写入失败不应伪装成提交失败", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const unlisten = vi.fn();
     const submitOp = vi.fn(async () => {});
     const ensureSession = vi.fn(async () => "session-1");
     const registerListener = vi.fn();
     const activateStream = vi.fn();
-    setAgentRuntimeObjectiveMock.mockRejectedValueOnce(
-      new Error("bridge timeout"),
-    );
+    setThreadGoalMock.mockRejectedValueOnce(new Error("bridge timeout"));
     const runtime = {
       listenToTurnEvents: vi.fn(async () => unlisten),
       getThreadTurnControl: vi.fn(async (threadId: string) =>
@@ -967,14 +955,7 @@ describe("agentStreamSubmitExecution", () => {
       thinking: false,
       skipSessionRestore: true,
       skipSessionStartHooks: true,
-      requestMetadata: {
-        harness: {
-          managed_objective: {
-            objective_text: "持续推进真实 E2E 目标",
-            source: "inputbar",
-          },
-        },
-      },
+      threadGoal: { objective: "持续推进真实 E2E 目标" },
       eventName: "event-1",
       clientUserMessageId: "user-1",
       requestState,
@@ -1006,9 +987,9 @@ describe("agentStreamSubmitExecution", () => {
       setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
     });
 
-    expect(setAgentRuntimeObjectiveMock).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "[AgentStream] 写入追求目标失败，继续发送消息:",
+    expect(setThreadGoalMock).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[AgentStream] 用户 Turn 已接受，但设置 ThreadGoal 失败:",
       expect.any(Error),
     );
     expect(submitOp).toHaveBeenCalledWith(

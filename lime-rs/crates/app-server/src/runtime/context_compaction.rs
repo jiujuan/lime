@@ -37,13 +37,135 @@ pub(crate) struct CompactionWindow {
     pub(crate) window_id: String,
 }
 
+/// Validated compaction lineage used when rebuilding an AgentControl child history.
+///
+/// The marker remains a session-level event. The fork owner rewrites only the session/thread
+/// identity and tail turn id; replacement and window lineage stay intact.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ForkCompactionSeed {
+    pub(crate) source_tail_start_turn_id: String,
+    pub(crate) payload: Value,
+}
+
+pub(crate) fn latest_fork_compaction_seed(
+    events: &[AgentEvent],
+) -> Result<Option<ForkCompactionSeed>, RuntimeCoreError> {
+    let Some(event) = events
+        .iter()
+        .rev()
+        .find(|event| event.event_type == "context.compaction.completed")
+    else {
+        return Ok(None);
+    };
+    let Some(window) = latest_compaction_window(events)? else {
+        return Ok(None);
+    };
+    validate_replacement_history(&window.replacement_history, event)?;
+    let tail = event
+        .payload
+        .get("tailStartTurnId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| invalid_compaction_lineage(event, "missing tailStartTurnId"))?;
+    let artifact = event
+        .payload
+        .get("artifact")
+        .filter(|value| value.is_object())
+        .and_then(Value::as_object);
+    if let Some(artifact) = artifact {
+        for field in [
+            "tailStartTurnId",
+            "replacementHistory",
+            "windowNumber",
+            "firstWindowId",
+            "previousWindowId",
+            "windowId",
+        ] {
+            let top_level = event.payload.get(field);
+            let nested = artifact.get(field);
+            if top_level != nested {
+                return Err(invalid_compaction_lineage(
+                    event,
+                    format!("top-level and artifact {field} disagree or are incomplete"),
+                ));
+            }
+        }
+    }
+    let replacement_value = Value::Array(window.replacement_history.clone());
+    let window_number_value = Value::from(window.window_number);
+    let first_window_id_value = Value::from(window.first_window_id.clone());
+    let window_id_value = Value::from(window.window_id.clone());
+    for (field, expected) in [
+        ("replacementHistory", &replacement_value),
+        ("windowNumber", &window_number_value),
+        ("firstWindowId", &first_window_id_value),
+        ("windowId", &window_id_value),
+    ] {
+        if let Some(top_level) = event.payload.get(field) {
+            if top_level != expected {
+                return Err(invalid_compaction_lineage(
+                    event,
+                    format!("top-level {field} disagrees with validated lineage"),
+                ));
+            }
+        }
+    }
+    Ok(Some(ForkCompactionSeed {
+        source_tail_start_turn_id: tail.to_string(),
+        payload: event.payload.clone(),
+    }))
+}
+
+fn validate_replacement_history(
+    replacement_history: &[Value],
+    event: &AgentEvent,
+) -> Result<(), RuntimeCoreError> {
+    for (index, item) in replacement_history.iter().enumerate() {
+        item.get("role")
+            .and_then(Value::as_str)
+            .filter(|role| matches!(*role, "user" | "assistant" | "tool"))
+            .ok_or_else(|| {
+                invalid_compaction_lineage(
+                    event,
+                    format!("replacementHistory[{index}] has unsupported role"),
+                )
+            })?;
+        let content = item.get("content").ok_or_else(|| {
+            invalid_compaction_lineage(
+                event,
+                format!("replacementHistory[{index}] is missing content"),
+            )
+        })?;
+        let valid_content = content.as_str().is_some_and(|text| !text.is_empty())
+            || content.as_array().is_some_and(|parts| {
+                !parts.is_empty()
+                    && parts.iter().all(|part| {
+                        part.as_str().is_some_and(|text| !text.is_empty())
+                            || part
+                                .get("text")
+                                .and_then(Value::as_str)
+                                .is_some_and(|text| !text.is_empty())
+                    })
+            });
+        if !valid_content {
+            return Err(invalid_compaction_lineage(
+                event,
+                format!("replacementHistory[{index}] has unsupported content"),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn build_session_context_compaction(
     session: &AgentSession,
     turns: &[AgentTurn],
     events: &[AgentEvent],
     sidecar_store: Option<&SidecarStore>,
 ) -> Result<SessionContextCompaction, RuntimeCoreError> {
-    let context_epoch = next_compaction_window_number(events);
+    let previous_window = latest_compaction_window(events)?;
+    let context_epoch = next_compaction_window_number(events, previous_window.as_ref());
     let compaction_id = format!(
         "ctx_compact_{}_{}",
         safe_id_part(&session.session_id),
@@ -57,6 +179,7 @@ pub(crate) fn build_session_context_compaction(
         turns,
         events,
         tail_start_turn_id.as_deref(),
+        previous_window,
     );
     let artifact = json!({
         "schema": COMPACTION_ARTIFACT_SCHEMA,
@@ -121,9 +244,9 @@ fn build_compaction_window(
     turns: &[AgentTurn],
     events: &[AgentEvent],
     tail_start_turn_id: Option<&str>,
+    previous: Option<CompactionWindow>,
 ) -> CompactionWindow {
     let window_id = Uuid::now_v7().to_string();
-    let previous = latest_compaction_window(events);
     let first_window_id = previous
         .as_ref()
         .map(|window| window.first_window_id.clone())
@@ -139,37 +262,91 @@ fn build_compaction_window(
     }
 }
 
-fn latest_compaction_window(events: &[AgentEvent]) -> Option<CompactionWindow> {
-    events
+fn latest_compaction_window(
+    events: &[AgentEvent],
+) -> Result<Option<CompactionWindow>, RuntimeCoreError> {
+    let Some(event) = events
         .iter()
         .rev()
         .find(|event| event.event_type == "context.compaction.completed")
-        .and_then(|event| {
-            let field = |name: &str| {
-                event
-                    .payload
-                    .get("artifact")
-                    .filter(|value| value.is_object())
-                    .and_then(|artifact| artifact.get(name))
-                    .or_else(|| event.payload.get(name))
-            };
-            let window_number = field("windowNumber")?.as_u64()?;
-            let first_window_id = field("firstWindowId")?.as_str()?.to_string();
-            let window_id = field("windowId")?.as_str()?.to_string();
-            let replacement_history = field("replacementHistory")?.as_array()?.clone();
-            if first_window_id.trim().is_empty() || window_id.trim().is_empty() {
-                return None;
-            }
-            Some(CompactionWindow {
-                replacement_history,
-                window_number,
-                first_window_id,
-                previous_window_id: field("previousWindowId")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                window_id,
-            })
-        })
+    else {
+        return Ok(None);
+    };
+    let field = |name: &str| {
+        event
+            .payload
+            .get("artifact")
+            .filter(|value| value.is_object())
+            .and_then(|artifact| artifact.get(name))
+            .or_else(|| event.payload.get(name))
+    };
+    let lineage_fields = [
+        "replacementHistory",
+        "windowNumber",
+        "firstWindowId",
+        "previousWindowId",
+        "windowId",
+    ];
+    if !lineage_fields.iter().any(|name| field(name).is_some()) {
+        return Ok(None);
+    }
+
+    let required = |name: &str| {
+        field(name).ok_or_else(|| invalid_compaction_lineage(event, format!("missing {name}")))
+    };
+    let window_number = required("windowNumber")?
+        .as_u64()
+        .filter(|number| *number > 0)
+        .ok_or_else(|| {
+            invalid_compaction_lineage(event, "windowNumber must be a positive integer")
+        })?;
+    let first_window_id = parse_window_id(event, "firstWindowId", required("firstWindowId")?)?;
+    let window_id = parse_window_id(event, "windowId", required("windowId")?)?;
+    let previous_window_id = field("previousWindowId")
+        .filter(|value| !value.is_null())
+        .map(|value| parse_window_id(event, "previousWindowId", value))
+        .transpose()?;
+    let replacement_history = required("replacementHistory")?
+        .as_array()
+        .cloned()
+        .ok_or_else(|| invalid_compaction_lineage(event, "replacementHistory must be an array"))?;
+
+    Ok(Some(CompactionWindow {
+        replacement_history,
+        window_number,
+        first_window_id,
+        previous_window_id,
+        window_id,
+    }))
+}
+
+fn parse_window_id(
+    event: &AgentEvent,
+    field: &str,
+    value: &Value,
+) -> Result<String, RuntimeCoreError> {
+    let value = value
+        .as_str()
+        .ok_or_else(|| invalid_compaction_lineage(event, format!("{field} must be a string")))?;
+    let id = Uuid::parse_str(value)
+        .map_err(|_| invalid_compaction_lineage(event, format!("{field} must be a UUIDv7")))?;
+    if id.get_version_num() != 7 {
+        return Err(invalid_compaction_lineage(
+            event,
+            format!("{field} must be a UUIDv7"),
+        ));
+    }
+    Ok(id.to_string())
+}
+
+fn invalid_compaction_lineage(
+    event: &AgentEvent,
+    message: impl std::fmt::Display,
+) -> RuntimeCoreError {
+    RuntimeCoreError::Backend(format!(
+        "invalid compaction lineage in event {}: {message}",
+        event.event_id
+    ))
 }
 
 fn build_replacement_history(
@@ -227,8 +404,11 @@ fn is_compacted_user_message(event: &AgentEvent, compacted_turn_ids: &[String]) 
             .is_some_and(|turn_id| compacted_turn_ids.iter().any(|id| id == turn_id))
 }
 
-fn next_compaction_window_number(events: &[AgentEvent]) -> u64 {
-    latest_compaction_window(events)
+fn next_compaction_window_number(
+    events: &[AgentEvent],
+    previous_window: Option<&CompactionWindow>,
+) -> u64 {
+    previous_window
         .map(|window| window.window_number.saturating_add(1))
         .unwrap_or_else(|| existing_compaction_count(events).saturating_add(1))
 }
@@ -663,6 +843,9 @@ mod tests {
         );
         assert_eq!(second.window.replacement_history.len(), 1);
 
+        let imported_first_window_id = Uuid::now_v7();
+        let imported_previous_window_id = Uuid::now_v7();
+        let imported_window_id = Uuid::now_v7();
         let imported = AgentEvent {
             event_id: "evt-imported-compaction".to_string(),
             sequence: 3,
@@ -673,20 +856,139 @@ mod tests {
             timestamp: "now".to_string(),
             payload: json!({
                 "windowNumber": 7,
-                "firstWindowId": "ctx_window_imported_1",
-                "previousWindowId": "ctx_window_imported_6",
-                "windowId": "ctx_window_imported_7",
+                "firstWindowId": imported_first_window_id.to_string(),
+                "previousWindowId": imported_previous_window_id.to_string(),
+                "windowId": imported_window_id.to_string(),
                 "replacementHistory": [{"role": "assistant", "content": "summary"}]
             }),
         };
         let resumed = build_session_context_compaction(&session, &turns, &[imported], None)
             .expect("imported compaction");
         assert_eq!(resumed.window.window_number, 8);
-        assert_eq!(resumed.window.first_window_id, "ctx_window_imported_1");
+        assert_eq!(
+            resumed.window.first_window_id,
+            imported_first_window_id.to_string()
+        );
         assert_eq!(
             resumed.window.previous_window_id,
-            Some("ctx_window_imported_7".to_string())
+            Some(imported_window_id.to_string())
         );
+    }
+
+    #[test]
+    fn malformed_compaction_lineage_fails_closed_instead_of_resetting_ids() {
+        let session = AgentSession {
+            session_id: "sess-corrupt-lineage".to_string(),
+            thread_id: "thread-corrupt-lineage".to_string(),
+            app_id: "desktop".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            status: AgentSessionStatus::Idle,
+            created_at: "now".to_string(),
+            updated_at: "now".to_string(),
+        };
+        let turns = vec![AgentTurn {
+            turn_id: "turn-corrupt-lineage".to_string(),
+            session_id: session.session_id.clone(),
+            thread_id: session.thread_id.clone(),
+            status: AgentTurnStatus::Completed,
+            started_at: None,
+            completed_at: None,
+        }];
+        let incomplete = AgentEvent {
+            event_id: "evt-corrupt-lineage".to_string(),
+            sequence: 1,
+            session_id: session.session_id.clone(),
+            thread_id: Some(session.thread_id.clone()),
+            turn_id: Some("turn-corrupt-lineage".to_string()),
+            event_type: "context.compaction.completed".to_string(),
+            timestamp: "now".to_string(),
+            payload: json!({
+                "windowNumber": 3,
+                "firstWindowId": Uuid::now_v7().to_string(),
+                "replacementHistory": []
+            }),
+        };
+
+        let error = build_session_context_compaction(&session, &turns, &[incomplete], None)
+            .expect_err("partial lineage must not silently start a new chain");
+
+        assert!(
+            matches!(error, RuntimeCoreError::Backend(message) if message.contains("evt-corrupt-lineage") && message.contains("missing windowId"))
+        );
+    }
+
+    #[test]
+    fn fork_compaction_seed_rejects_mismatched_nested_marker_fields() {
+        let first_window_id = Uuid::now_v7().to_string();
+        let window_id = Uuid::now_v7().to_string();
+        let event = AgentEvent {
+            event_id: "evt-mismatched-fork-marker".to_string(),
+            sequence: 1,
+            session_id: "sess-fork-marker".to_string(),
+            thread_id: Some("thread-fork-marker".to_string()),
+            turn_id: None,
+            event_type: "context.compaction.completed".to_string(),
+            timestamp: "now".to_string(),
+            payload: json!({
+                "tailStartTurnId": "turn-tail",
+                "replacementHistory": [{"role": "user", "content": "summary"}],
+                "windowNumber": 1,
+                "firstWindowId": first_window_id,
+                "windowId": window_id,
+                "artifact": {
+                    "tailStartTurnId": "turn-other",
+                    "replacementHistory": [{"role": "user", "content": "summary"}],
+                    "windowNumber": 1,
+                    "firstWindowId": first_window_id,
+                    "windowId": window_id,
+                }
+            }),
+        };
+
+        let error = latest_fork_compaction_seed(&[event]).expect_err("mismatched marker");
+        assert!(matches!(
+            error,
+            RuntimeCoreError::Backend(message)
+                if message.contains("evt-mismatched-fork-marker")
+                    && message.contains("tailStartTurnId disagree")
+        ));
+    }
+
+    #[test]
+    fn fork_compaction_seed_rejects_partial_nested_marker_fields() {
+        let first_window_id = Uuid::now_v7().to_string();
+        let window_id = Uuid::now_v7().to_string();
+        let event = AgentEvent {
+            event_id: "evt-partial-fork-marker".to_string(),
+            sequence: 1,
+            session_id: "sess-fork-marker".to_string(),
+            thread_id: Some("thread-fork-marker".to_string()),
+            turn_id: None,
+            event_type: "context.compaction.completed".to_string(),
+            timestamp: "now".to_string(),
+            payload: json!({
+                "tailStartTurnId": "turn-tail",
+                "replacementHistory": [{"role": "user", "content": "summary"}],
+                "windowNumber": 1,
+                "firstWindowId": first_window_id,
+                "windowId": window_id,
+                "artifact": {
+                    "tailStartTurnId": "turn-tail",
+                    "replacementHistory": [{"role": "user", "content": "summary"}],
+                    "windowNumber": 1,
+                    "firstWindowId": first_window_id,
+                }
+            }),
+        };
+
+        let error = latest_fork_compaction_seed(&[event]).expect_err("partial marker");
+        assert!(matches!(
+            error,
+            RuntimeCoreError::Backend(message)
+                if message.contains("evt-partial-fork-marker")
+                    && message.contains("windowId disagree or are incomplete")
+        ));
     }
 
     #[test]

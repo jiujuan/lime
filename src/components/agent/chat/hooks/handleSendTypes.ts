@@ -1,4 +1,8 @@
-import type { AssistantDraftState, SlashSkillRequest } from "./agentChatShared";
+import type {
+  AssistantDraftState,
+  SlashSkillRequest,
+  ThreadGoalInput,
+} from "./agentChatShared";
 import type { ModeKind, RuntimeSearchMode } from "@limecloud/app-server-client";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
@@ -17,6 +21,7 @@ export interface HandleSendOptions {
   observer?: HandleSendObserver;
   requestMetadata?: Record<string, unknown>;
   collaborationMode?: ModeKind;
+  threadGoal?: ThreadGoalInput;
   toolPreferencesOverride?: ChatToolPreferences;
   displayContent?: string;
   skillRequest?: SlashSkillRequest;

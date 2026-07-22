@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import type {
   AgentRuntimeThreadReadModel,
@@ -30,6 +31,7 @@ export interface WorkspaceTaskRailRuntimeInput {
   submittedActionsInFlight?: readonly ActionRequired[];
   threadItems?: readonly AgentThreadItem[];
   todoItems?: readonly AgentTodoItem[];
+  threadGoal?: ThreadGoal | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
   executionRuntime?: AgentSessionExecutionRuntime | null;
   canonicalChildren?: CanonicalChildThreadSummary[];
@@ -53,6 +55,7 @@ export interface WorkspaceTaskRailProps {
   submittedActionsInFlight?: readonly ActionRequired[];
   threadItems?: readonly AgentThreadItem[];
   todoItems?: readonly AgentTodoItem[];
+  threadGoal?: ThreadGoal | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
   executionRuntime?: AgentSessionExecutionRuntime | null;
   canonicalChildren?: CanonicalChildThreadSummary[];
@@ -81,6 +84,7 @@ export function buildWorkspaceTaskRailRuntimeContext({
   accessMode,
   reasoningEffort,
   workspaceRootPath,
+  threadGoal,
   threadRead,
   threadItems,
   canonicalChildren = [],
@@ -90,6 +94,7 @@ export function buildWorkspaceTaskRailRuntimeContext({
   | "model"
   | "accessMode"
   | "reasoningEffort"
+  | "threadGoal"
   | "threadRead"
   | "threadItems"
   | "canonicalChildren"
@@ -105,6 +110,7 @@ export function buildWorkspaceTaskRailRuntimeContext({
         reasoningEffort,
         workspacePath: workspaceRootPath,
       },
+      threadGoal,
       threadRead,
       threadItems,
       canonicalChildren,
@@ -122,6 +128,7 @@ export function useWorkspaceTaskRailRuntime({
   submittedActionsInFlight,
   threadItems,
   todoItems,
+  threadGoal,
   threadRead,
   executionRuntime,
   canonicalChildren,
@@ -158,6 +165,7 @@ export function useWorkspaceTaskRailRuntime({
       submittedActionsInFlight,
       threadItems,
       todoItems,
+      threadGoal,
       threadRead,
       executionRuntime,
       canonicalChildren,
@@ -181,6 +189,7 @@ export function useWorkspaceTaskRailRuntime({
       pendingActions,
       providerType,
       reasoningEffort,
+      threadGoal,
       threadRead,
       executionRuntime,
       submittedActionsInFlight,

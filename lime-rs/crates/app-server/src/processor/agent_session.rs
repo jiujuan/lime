@@ -7,7 +7,7 @@ use super::{
 };
 use crate::RuntimeEvent;
 use app_server_protocol::{
-    AgentSessionCompactParams, AgentSessionDeleteParams, AgentSessionFileCheckpointDiffParams,
+    AgentSessionCompactParams, AgentSessionFileCheckpointDiffParams,
     AgentSessionFileCheckpointGetParams, AgentSessionFileCheckpointListParams,
     AgentSessionFileCheckpointRestoreParams, AgentSessionMediaReadParams,
     AgentSessionObjectiveAuditParams, AgentSessionObjectiveClearParams,
@@ -29,20 +29,6 @@ impl RequestProcessor {
         let response = self
             .runtime
             .update_session_current(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_session_delete_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionDeleteParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_agent_session(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

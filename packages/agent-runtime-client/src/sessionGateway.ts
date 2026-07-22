@@ -29,6 +29,8 @@ import {
   EvidenceExportParams,
   EvidenceExportResponse,
   JsonRpcMessage,
+  JsonRpcError,
+  RequestId,
 } from "@limecloud/app-server-client/browser";
 import {
   AgentRuntimeEventPipeline,
@@ -93,6 +95,8 @@ export type AgentRuntimeSessionGateway = {
     AgentSessionActionRespondParams,
     AgentSessionActionRespondResponse
   >;
+  respondServerRequest?<T>(id: RequestId, result: T): void;
+  rejectServerRequest?(id: RequestId, error: JsonRpcError): void;
   exportEvidence?: AgentRuntimeGatewayMethod<
     EvidenceExportParams,
     EvidenceExportResponse
@@ -143,6 +147,22 @@ export function createAgentRuntimeClientFromSessionGateway(
       callAgentRuntimeSessionGateway(gateway.cancelTurn, params, options),
     respondAction: (params, options) =>
       callAgentRuntimeSessionGateway(gateway.respondAction, params, options),
+    respondServerRequest: <T>(id: RequestId, result: T) => {
+      if (!gateway.respondServerRequest) {
+        throw new Error(
+          "AgentRuntime session gateway does not expose respondServerRequest.",
+        );
+      }
+      gateway.respondServerRequest(id, result);
+    },
+    rejectServerRequest: (id: RequestId, error: JsonRpcError) => {
+      if (!gateway.rejectServerRequest) {
+        throw new Error(
+          "AgentRuntime session gateway does not expose rejectServerRequest.",
+        );
+      }
+      gateway.rejectServerRequest(id, error);
+    },
     exportEvidence: (params, options) =>
       callOptionalAgentRuntimeSessionGateway(
         gateway.exportEvidence,

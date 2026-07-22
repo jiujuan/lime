@@ -24,6 +24,8 @@ use tool_runtime::agent_control::{
 mod concurrent;
 #[path = "agent_control/effective_route.rs"]
 mod effective_route;
+#[path = "agent_control/fork.rs"]
+mod fork;
 #[path = "agent_control/restart.rs"]
 mod restart;
 

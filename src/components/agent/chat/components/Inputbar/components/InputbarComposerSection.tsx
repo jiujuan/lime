@@ -12,7 +12,7 @@ import { InputbarModelExtra } from "./InputbarModelExtra";
 import { InputbarVisionCapabilityNotice } from "./InputbarVisionCapabilityNotice";
 import { InputbarAccessModeSelect } from "./InputbarAccessModeSelect";
 import { InputbarModeStatusChip } from "./InputbarModeStatusChip";
-import { InputbarObjectiveInlinePanel } from "./InputbarObjectiveInlinePanel";
+import { ThreadGoalPanel } from "../../ThreadGoalPanel";
 import { InputbarPluginSelector } from "./InputbarPluginSelector";
 import { isGeneralResearchTheme } from "../../../utils/generalAgentPrompt";
 import {
@@ -52,6 +52,7 @@ import type {
   InputbarPluginSkillCapability,
 } from "../pluginInputCapability";
 import type { BaseComposerSendMetadata } from "@/components/input-kit";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 
 interface InputbarComposerSectionProps {
   renderWorkflowGeneratingPanel: boolean;
@@ -119,6 +120,10 @@ interface InputbarComposerSectionProps {
   contextVariant?: "default" | "task-center";
   projectId?: string | null;
   sessionId?: string | null;
+  threadId?: string | null;
+  threadGoal?: ThreadGoal | null;
+  threadGoalError?: unknown;
+  threadGoalLoading?: boolean;
   inputCompletionEnabled?: boolean;
   copy: InputbarComposerSectionCopy;
   inputbarCopy: InputbarCoreCopy;
@@ -189,6 +194,10 @@ export const InputbarComposerSection: React.FC<
   contextVariant = "default",
   projectId = null,
   sessionId = null,
+  threadId = null,
+  threadGoal = null,
+  threadGoalError = null,
+  threadGoalLoading = false,
   inputCompletionEnabled = true,
   copy,
   inputbarCopy,
@@ -232,11 +241,14 @@ export const InputbarComposerSection: React.FC<
       />
     ) : null;
   const objectiveInlinePanel =
-    activeTools["objective_mode"] && sessionId ? (
-      <InputbarObjectiveInlinePanel
-        sessionId={sessionId}
-        workspaceId={projectId}
+    threadId && (threadGoal || threadGoalLoading) ? (
+      <ThreadGoalPanel
         runtimeBusy={inputAdapter.state.isSending}
+        threadGoal={threadGoal}
+        threadGoalError={threadGoalError}
+        threadGoalLoading={threadGoalLoading}
+        threadId={threadId}
+        variant="inline"
       />
     ) : null;
   const resolvedTopExtra =

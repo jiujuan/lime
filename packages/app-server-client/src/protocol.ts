@@ -855,15 +855,6 @@ export type AgentSessionUpdateResponse = {
   session: AgentSessionOverview;
 };
 
-export type AgentSessionDeleteParams = {
-  sessionId: string;
-};
-
-export type AgentSessionDeleteResponse = {
-  sessionId: string;
-  deleted: boolean;
-};
-
 export type ManagedObjectiveStatus =
   | "active"
   | "verifying"

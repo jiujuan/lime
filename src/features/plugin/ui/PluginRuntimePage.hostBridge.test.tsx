@@ -495,16 +495,12 @@ describe("PluginRuntimePage Host Bridge", () => {
     );
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "host:response",
+        type: "host:error",
         requestId: "task-host-response",
         payload: expect.objectContaining({
-          ok: true,
-          result: {
-            taskId,
-            requestId: "runtime-request-1",
-            status: "submitted",
-            submittedAt: expect.any(String),
-          },
+          ok: false,
+          message:
+            "Typed server request is no longer pending; generic agentSession/action/respond is retired.",
         }),
       }),
       "http://127.0.0.1:4199",
@@ -552,17 +548,15 @@ describe("PluginRuntimePage Host Bridge", () => {
     expect(appServerClientMocks.startTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         threadId: "plugin-thread-1",
-        responsesapiClientMetadata: expect.objectContaining({
+        additionalContext: {
           metadata: expect.objectContaining({
-            plugin_host_bridge: expect.objectContaining({
-              retryOfTaskId: taskId,
-              retryAttempt: 1,
-            }),
+            kind: "application",
+            value: expect.stringContaining(`"retryOfTaskId":"${taskId}"`),
           }),
-          pluginRuntime: expect.objectContaining({
-            appId: "content-factory-app",
-            taskKind: "content.scenario_planning",
-          }),
+        },
+        responsesapiClientMetadata: expect.objectContaining({
+          appId: "content-factory-app",
+          taskKind: "content.scenario_planning",
           workspaceId: "workspace-1",
         }),
       }),
@@ -571,25 +565,6 @@ describe("PluginRuntimePage Host Bridge", () => {
       threadId: "plugin-thread-1",
       includeTurns: true,
     });
-    expect(appServerClientMocks.respondAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: "plugin-session-1",
-        requestId: "runtime-request-1",
-        actionType: "ask_user",
-        confirmed: true,
-        response: "补充项目定位：高客单价咨询服务。",
-        actionScope: expect.objectContaining({
-          sessionId: "plugin-session-1",
-          turnId: "plugin-turn-1",
-        }),
-        metadata: expect.objectContaining({
-          plugin_runtime: expect.objectContaining({
-            app_id: "content-factory-app",
-            task_id: taskId,
-          }),
-        }),
-      }),
-    );
     expect(appServerClientMocks.cancelTurn).toHaveBeenCalledWith({
       threadId: "plugin-thread-1",
       turnId: "plugin-turn-1",

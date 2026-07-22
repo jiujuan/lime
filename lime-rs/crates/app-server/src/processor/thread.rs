@@ -1,4 +1,4 @@
-mod projection;
+pub(super) mod projection;
 
 use super::{
     dispatch_result, parse_params, to_jsonrpc_error, ConnectionRequestId, RequestProcessor,
@@ -6,7 +6,8 @@ use super::{
 };
 use app_server_protocol::protocol::v2::{
     ServerNotification, SortDirection, Thread, ThreadArchiveParams, ThreadArchiveResponse,
-    ThreadArchivedNotification, ThreadHistoryMode, ThreadItem, ThreadItemsListParams,
+    ThreadArchivedNotification, ThreadDeleteParams, ThreadDeleteResponse,
+    ThreadDeletedNotification, ThreadHistoryMode, ThreadItem, ThreadItemsListParams,
     ThreadListParams, ThreadReadParams, ThreadResumeParams, ThreadResumeResponse,
     ThreadStartParams, ThreadStartResponse, ThreadStatus, ThreadTurnsListParams,
     ThreadUnarchiveParams, ThreadUnarchiveResponse, ThreadUnarchivedNotification, Turn,
@@ -34,6 +35,32 @@ pub(super) fn project_event(event: &app_server_protocol::AgentEvent) -> Option<P
 }
 
 impl RequestProcessor {
+    pub(super) async fn handle_thread_delete_v2(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ThreadDeleteParams = parse_params(params)?;
+        let thread_id = required_thread_value(&params.thread_id, "thread/delete")?;
+        let deleted = self
+            .runtime
+            .delete_thread(agent_protocol::ThreadId::new(thread_id))
+            .await
+            .map_err(to_jsonrpc_error)?;
+        let notifications = deleted
+            .into_iter()
+            .map(|thread| {
+                let notification: JsonRpcNotification =
+                    ServerNotification::ThreadDeleted(ThreadDeletedNotification {
+                        thread_id: thread.thread_id,
+                    })
+                    .into();
+                notification
+            })
+            .collect();
+        Ok(dispatch_result(ThreadDeleteResponse {})?.with_notifications(notifications))
+    }
+
     pub(super) async fn handle_thread_archive_v2(
         &self,
         params: Option<serde_json::Value>,
@@ -203,6 +230,7 @@ impl RequestProcessor {
             )));
         }
 
+        let session_id = resumed.thread.session_id.to_string();
         let active_turn_id = resumed
             .active_turn_id
             .as_ref()
@@ -250,7 +278,7 @@ impl RequestProcessor {
         let model = required_metadata_string(metadata, &["modelName", "model"], "model")?;
         let model_provider = required_thread_resume_value(&thread.model_provider, "modelProvider")?;
 
-        dispatch_result(ThreadResumeResponse {
+        let response = dispatch_result(ThreadResumeResponse {
             service_tier: metadata_optional_string(metadata, "serviceTier"),
             cwd: thread.cwd.clone(),
             runtime_workspace_roots: metadata_string_array(metadata, "runtimeWorkspaceRoots"),
@@ -270,7 +298,13 @@ impl RequestProcessor {
             thread,
             model,
             model_provider,
-        })
+        })?;
+        if active_turn_id.is_none() {
+            self.runtime
+                .maybe_start_thread_goal_if_idle(&session_id, self.runtime_host_context())
+                .await;
+        }
+        Ok(response)
     }
 
     async fn build_thread_resume_initial_turns_page(

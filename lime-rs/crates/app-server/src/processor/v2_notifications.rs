@@ -44,6 +44,7 @@ impl V2NotificationProjector {
             }
             "action.required" | "action.resolved" | "action.canceled" | "action.cancelled"
             | "action.expired" => return EventProjection::Direct(Vec::new()),
+            "thread.goal.continuation" => return EventProjection::Direct(Vec::new()),
             "provider.usage" => return self.project_token_usage(event),
             "item.started" | "command.started" => self.project_item(event, false),
             "item.completed" | "command.exited" => self.project_item(event, true),
@@ -651,6 +652,19 @@ mod tests {
                 .expect("internal action lifecycle");
             assert!(notifications.is_empty(), "{event_type}");
         }
+    }
+
+    #[test]
+    fn thread_goal_continuation_context_is_not_sent_to_clients() {
+        let mut projector = V2NotificationProjector::default();
+        let notifications = projector
+            .project(event(
+                "thread.goal.continuation",
+                json!({"input": [{"type": "text", "text": "internal objective"}]}),
+            ))
+            .expect("internal thread goal continuation");
+
+        assert!(notifications.is_empty());
     }
 
     #[test]

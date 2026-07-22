@@ -75,88 +75,6 @@ export function extractExistingHarnessMetadata(
   return harnessValue as Record<string, unknown>;
 }
 
-function buildBoundThreadGoalMetadata(
-  existing: Record<string, unknown> | undefined,
-  source: string,
-  sessionId: string,
-): Record<string, unknown> {
-  const existingSet = asRecord(existing?.set) || {};
-
-  return {
-    ...(existing || {}),
-    enabled: true,
-    source,
-    status: "active",
-    set: {
-      ...existingSet,
-      threadId: sessionId,
-      objective: Object.prototype.hasOwnProperty.call(existingSet, "objective")
-        ? existingSet.objective
-        : null,
-      status: "active",
-      tokenBudget: Object.prototype.hasOwnProperty.call(
-        existingSet,
-        "tokenBudget",
-      )
-        ? existingSet.tokenBudget
-        : null,
-    },
-  };
-}
-
-function readThreadGoalSource(
-  threadGoal: Record<string, unknown> | undefined,
-  goal: Record<string, unknown> | undefined,
-): string {
-  const source = threadGoal?.source ?? goal?.source;
-  return typeof source === "string" && source.trim()
-    ? source.trim()
-    : "inputbar";
-}
-
-export function bindThreadGoalMetadataToSession(
-  requestMetadata: Record<string, unknown> | undefined,
-  sessionId?: string | null,
-): Record<string, unknown> | undefined {
-  const normalizedSessionId = sessionId?.trim();
-  if (!requestMetadata || !normalizedSessionId) {
-    return requestMetadata;
-  }
-
-  const root = { ...requestMetadata };
-  const harness = {
-    ...(asRecord(root.harness) || {}),
-  };
-  const existingThreadGoal =
-    asRecord(harness.thread_goal) || asRecord(harness.threadGoal);
-  const existingGoal = asRecord(harness.goal);
-  const hasGoalMetadata =
-    harness.goal_mode_enabled === true ||
-    harness.goalModeEnabled === true ||
-    Boolean(existingThreadGoal) ||
-    Boolean(existingGoal);
-  if (!hasGoalMetadata) {
-    return requestMetadata;
-  }
-
-  const source = readThreadGoalSource(existingThreadGoal, existingGoal);
-  root.harness = {
-    ...harness,
-    thread_goal: buildBoundThreadGoalMetadata(
-      existingThreadGoal,
-      source,
-      normalizedSessionId,
-    ),
-    goal: buildBoundThreadGoalMetadata(
-      existingGoal,
-      source,
-      normalizedSessionId,
-    ),
-  };
-
-  return root;
-}
-
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -183,6 +101,11 @@ const LEGACY_HARNESS_STATE_KEYS = [
   "thinkingEnabled",
   "task_mode_enabled",
   "taskModeEnabled",
+  "goal_mode_enabled",
+  "goalModeEnabled",
+  "thread_goal",
+  "threadGoal",
+  "goal",
   "subagent_mode_enabled",
   "subagentModeEnabled",
   "turn_team_decision",
@@ -289,17 +212,6 @@ export function buildHarnessRequestMetadata(
     readBoolean(base?.task_mode_enabled) ??
     readBoolean(base?.taskModeEnabled) ??
     existingTaskModePreference;
-  const existingGoalPreference =
-    readBoolean(existingPreferences?.objective) ??
-    readBoolean(existingPreferences?.goal);
-  const existingGoalModeEnabled =
-    readBoolean(base?.goal_mode_enabled) ??
-    readBoolean(base?.goalModeEnabled) ??
-    existingGoalPreference;
-  const existingGoalMetadata = asRecord(base?.goal);
-  const existingThreadGoalMetadata =
-    asRecord(base?.thread_goal) ?? asRecord(base?.threadGoal);
-
   const metadata: Record<string, unknown> = {
     ...(base || {}),
     theme,
@@ -310,20 +222,7 @@ export function buildHarnessRequestMetadata(
         ? { task_mode: preferences.task }
         : {}),
       subagent: preferences.subagent,
-      ...(typeof existingGoalPreference === "boolean"
-        ? {
-            goal: existingGoalPreference,
-            objective: existingGoalPreference,
-          }
-        : {}),
     },
-    ...(typeof existingGoalModeEnabled === "boolean"
-      ? { goal_mode_enabled: existingGoalModeEnabled }
-      : {}),
-    ...(existingGoalMetadata ? { goal: existingGoalMetadata } : {}),
-    ...(existingThreadGoalMetadata
-      ? { thread_goal: existingThreadGoalMetadata }
-      : {}),
     ...(accessMode ? { access_mode: accessMode } : {}),
     session_mode: normalizedSessionMode,
     gate_key: isGeneralWorkbenchSessionMode(normalizedSessionMode)

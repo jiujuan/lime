@@ -353,6 +353,14 @@ production current path 命中即阻塞，不得以“兼容”关闭告警。
 - 2026-07-21 Gate B scope evidence 收口：`approval-trace` summary 现保留 resolved `threadId`，`approval-assertions` 强制它与 request/response/current thread 一致，smoke unit fixture 已同步。三条独立真实 Electron 证据均通过：`.lime/qc/gui-evidence/claw-chat-current-fixture/resolved-scope-cancel-v2-summary.json`、`resolved-scope-resume-v2-summary.json`、`resolved-scope-decline-v2-summary.json`。三份 summary 均证明 `request.threadId == response.threadId == resolved.threadId`；cancel 为 interrupted，resume 第二 Turn session-cache 命中，decline 为 completed 且非 canceled。脚本单测 68/68、node check、Prettier、scoped diff check 通过。此前“resolved scope 字段证据 OPEN”已关闭。
 - scope evidence 收尾验证：Renderer dispatcher/EventBus、command/file approval、AskUser、MCP elicitation 与 current fixture smoke 六组共 105/105 通过；`npm run test:contracts` 的 protocol type generation 继续为 770 types / 0 failures / no drift，整体仅保留共享 Rust 重构的 5 条既有 stale snippet（capability deny 3、stdio event helper 2），本刀未新增 contract failure。
 
+- 2026-07-21 ThreadGoal automatic continuation current 骨架：删除旧 `ManagedObjective` 最多 8 次同步自动循环及其 owner，续跑唯一收敛到 `runtime/thread_goal_continuation.rs`。Codex `InternalModelContextFragment(source="goal")` 对应为 durable `thread.goal.continuation`，当前 Turn agent-only 输入不重复进入 provider history，未来 Turn 可恢复；canonical Item 和 v2 notification 均不投影用户消息或 raw side-channel。continuation 改为 admission-only，driver 挂在现有 Tokio runtime，Completed 后异步触发下一轮；per-session single-flight 防重复 admission。terminal idle scheduler 先等待 queued 用户 Turn / TriggerTurn mailbox admission-or-empty，再启动 Goal；pending-owned Turn 使用独立 input kind，避免重入同一 mailbox gate。idle `thread/goal/set(active)` 与无 live Turn 的 `thread/resume` 已接 generic idle gate；set 严格在 response 与 `thread/goal/updated` listener completion 后 admission，resume 复用 barrier 保证 response/snapshot/live 顺序。Plan 跳过，failed 由既有 projection 转 blocked/usageLimited，显式 cancel 不立即续跑。验证：ThreadGoal 8/8、queue 15/15、pending recovery 5/5、Turn lifecycle 29/29、thread listener 8/8、thread v2 JSON-RPC 9/9、`cargo check -p app-server --tests` 通过。隔壁未跟踪 `thread_goal_continuation_jsonrpc.rs` 仍断言旧的“set 后先跑用户 Turn”语义，本进程按窄写集未修改；该测试需由 owner 更新为 idle set immediate continuation 后复跑。分类：ThreadGoal continuation/event/provider history/pending priority 为 `current`；旧 ManagedObjective auto loop 为 `dead / deleted / forbidden-to-restore`；无 compat/deprecated 新增。OPEN_REF：fork deferral、完整 resume/reconnect 自动续跑 evidence；idle wall-clock accounting 已由下一条关闭。
+
+- 2026-07-21 ThreadGoal idle wall-time accounting current 骨架：新增 `canonical_thread_store/goal_idle.rs` 作为唯一进程内 baseline/permit owner，`ProjectionStore` clone 共享 `active_goal_id + last_accounted_at`，durable usage 继续只写 canonical `thread_goals`。set/pause/clear 在 mutation 前 flush；非 Plan `turn.accepted` 在同一 SQLite Immediate 事务内完成 idle seconds、typed outbox 与 exact Goal Turn bind，token delta 固定为零，失败注入证明三者整体回滚；snapshot 按 accepted timestamp 截断，2 秒投影延迟回归证明 idle/per-turn 不重叠；Plan admission 丢弃 prior idle。accepted replay 不重扣、不清当前 baseline，也不覆盖 turn 中途 late-bind baseline。terminal 只有 persisted Goal 仍 active 且非 Plan 时 re-arm；paused/blocked/usageLimited/budgetLimited/complete/Plan 清 baseline。同进程重复 resume 保留同 Goal baseline，cold `ProjectionStore` resume 才从当前时刻重置，进程离线时间不计入。单 permit 覆盖 snapshot -> SQLite write -> mark accounted，并发 clone-store mutation 回归证明只结算一次。验证：`idle_` filter 当前树 11/11；canonical Goal accounting/projection 28/28；continuation 5/5；RuntimeCore Goal 4/4；`cargo check -p app-server --lib`、scoped rustfmt、`git diff --check`、治理扫描（0 零引用/分类漂移/边界违规）通过。完整 `cargo check -p app-server --tests` 当前被隔壁 thread-delete 收口中的旧 `session_archive_jsonrpc.rs` 引用已删除 `METHOD_AGENT_SESSION_DELETE` 阻塞，本进程不恢复 legacy 常量、不夹写其测试；在该并行变化前的合并工作树完整 check 已通过。并行协调：测试期间隔壁 thread-delete owner 先落 `mod` 再落文件、随后修正 sibling visibility，产生两次瞬时编译失败；本进程未补其文件、未改其权限。隔壁 `thread_goal_continuation_jsonrpc.rs` 与 `interrupted` 仍未触碰。分类：idle accounting/baseline/outbox/resume hook 为 `current`；无 compat/deprecated/dead 新 surface。ThreadGoal idle accounting OPEN_REF 已关闭；下一刀是 public fork 后从 canonical Thread/Turn/Item 低层重建跨重启 provider history，继续避开 raw event 复制与并行 runtime 热区。整体 Codex v1 对齐仍约 40%。
+
+- 2026-07-21 public `thread/fork` current 骨架：v2 `ThreadForkParams/Response`、method/envelope/schema registry、独立 `processor/thread_fork.rs`、`RuntimeCore::fork_thread` 与 typed client/gateway catalog 已接为唯一 public Thread fork 链；AgentControl fork 保持独立的 Multi-Agent topology owner，不复用、不做 compat。fork 从 canonical Thread/Turn/Item 复制 full、`lastTurnId` 或 `beforeTurnId` 的 terminal prefix，重写 target thread/session identity，并只生成内存 baseline event，不把 source raw EventLog 复制为第二套 history。普通 fork 不继承 Goal；persistent `deferGoalContinuation` 在 `goal_fork.rs` 持 source idle permit 并于同一 SQLite `IMMEDIATE` 事务 flush source usage、复制 exact Goal snapshot、写 Goal 外键 durable marker。fork/resume 不自动 continuation，首个真实 `turn.accepted` 幂等消费 marker；无 Goal 不造 marker，paused Goal 原样继承，target delete 通过 Goal FK 级联清 marker。`ephemeral + defer`、`lastTurnId + beforeTurnId`、path 和尚无 persistent owner 的 ephemeral 均 fail closed。验证：公共 JSON-RPC `thread_fork_jsonrpc` 2/2（history / Goal / restart / explicit admission；full/last/before、无 Goal、paused Goal、delete cascade、非法参数），App Server tests check、protocol round-trip、schema fixture、scoped rustfmt、`check:protocol-types`（773 generated types）、package client 64/64、`test:contracts`（299 checks）、`governance:legacy-report`（0 分类漂移 / 0 边界违规）和 `git diff --check` 全通过。全 crate `cargo fmt --check` 仍只被隔壁 `session_archive_jsonrpc.rs` 格式漂移阻塞，本切片的三个 fork 文件已经 scoped rustfmt 通过。分类：public `thread/fork`、canonical fork history、Goal snapshot/marker/admission 为 `current`；AgentControl fork 为独立 `current`；无 compat/deprecated 新增。OPEN_REF：fork 后跨重启 provider message history lowering，尤其多模态/tool/compaction，必须从 canonical Thread/Turn/Item 重建，不得回拷 legacy raw event。
+
+- 2026-07-21 `thread/fork` 跨重启 provider history 收口：target metadata 新增内部 `forkSequence` 固化 copied canonical prefix；`thread_fork` 在相同 sequence slot 生成 typed `thread.fork.canonical_item` seed，其余 slot 保持 baseline，因此首个 target event 仍从 `throughSequence + 1` 连续追加。`provider_history/canonical.rs` 成为 User/Agent/Reasoning/Tool/MCP lowering owner，MCP inner/runtime 名通过 `lime_mcp::naming` 去重规范。`thread/read` 在普通 EventLog hydration 成功后仍合并 seed，直接 `turn/start` 与显式 `thread/resume` 都不会漏前缀；ProjectionRepair 修复 canonical history 前也用同一 seed 补齐 target EventLog tail，避免第二次重启删除 copied Turn/Item。source raw EventLog 从未复制。canonical 不能无损表达的 input/assistant media、compaction replacement history、collab arguments、Extension 和无结果 Tool 全部 fail closed。公共 JSON-RPC capture backend 已证明 source user -> tool call -> tool result -> assistant 精确顺序，连续两次 restart 后 target tail 只追加一次且 prefix 不重复；验证 `thread_fork_jsonrpc` 3/3、ProjectionRepair 3/3、MCP 名 1/1、fail-closed 2/2、AgentControl fork 隔离回归 1/1、`cargo check -p app-server --tests`、治理扫描（0 零引用/分类漂移/边界违规）与 scoped diff check 通过。related 全量首轮为 1439/1444：本刀误把 AgentControl fork 当 public fork 的 1 条失败已收紧到 `forked_from_id + forkSequence` 并定向复跑通过；剩余 4 条来自并行 Goal table inventory、repairable EventLog tail 和 compaction 热区，本刀未夹写。架构确认已写入 `internal/aiprompts/architecture.md`；分类：canonical seed/provider lowering/repair merge 为 `current`，raw EventLog copy/有损兼容为 `dead / forbidden-to-restore`，无 compat/deprecated 新增。该 OPEN_REF 以 text/reasoning/tool/MCP 可恢复、不可表达能力 fail-closed 的骨架标准关闭；完整 canonical multimodal 与 compaction payload 扩展仍是下一阶段能力项。整体 Codex v1 仍约 40%。
+
 - 2026-07-21 host interrupt preflight 收口：`RuntimeCore::ensure_turn_interruptible(session_id, turn_id)` 与 `cancel_turn` 现在共享 active-turn 校验；v2 `turn/interrupt` 在 pending-route abort hook 前执行 preflight，`SessionNotFound` / `TurnNotActive` 映射为 `INVALID_REQUEST`，无效或终态 turn 不再提前 detach reverse route。回归覆盖 terminal turn preflight/cancel reject、waiting-action cancel 顺序与 abort hook 调用次数；`cargo check -p app-server --lib`、`cargo test -p app-server --lib processor::tests::turn_steer::`（4/4）、terminal cancel/preflight（1/1）、waiting-action cancel（1/1）、`server_request::tests`（23/23）及本轮 Rust `rustfmt --check` 通过。全 workspace fmt 仍被并行 `app-server-protocol/schema_export/registry.rs` 差异阻塞，未覆盖该写集。该步属于 `current / alignment-open`，尚未证明真实 Electron host-interrupt Gate B，也未关闭 schema/generated client 落盘缺口。
 
 - 2026-07-21 protocol generated write-set audit：Rust `ServerRequestResolvedNotification` 已是必填 `threadId + requestId`，但落盘 `schema/json/v0/ServerRequestResolvedNotification.json`、aggregate schema 与 `packages/app-server-client/src/generated/protocol-types.ts` 仍是 requestId-only；`schema_fixtures` 因此失败，明确为 bundle 与 source 生成结果不一致。`write_schema_fixtures` 会先删除整个 schema root，当前该目录存在大量并行 M/D 与未跟踪 `v2/**`，生成 TS 脚本和产物也在写入中；未获 owner 交接前禁止执行 schema regeneration 或 protocol type generation（包括会临时覆写的 check）。交接后最小顺序为 fixture regeneration、TS generation、schema fixture、contracts；此项保持 `current / alignment-open`，不以旧 schema/client 假装完成。
@@ -392,6 +400,229 @@ production current path 命中即阻塞，不得以“兼容”关闭告警。
 - 2026-07-21 FileChange public JSONL integration 收口：新增独立 `app-server/tests/file_change_transport_jsonrpc.rs`，从真实 `run_json_lines` 进入 initialize、`thread/start`、`turn/start`，由 owned `RuntimeEventHub` 后台发出 `action.required(toolName=apply_patch)`。测试断言只产生一个 `item/fileChange/requestApproval`，Renderer 形态 outer response `{decision:"decline"}` 被 runtime action contract 规范化为 `{confirmed:false}`，且同 outer id 的 `serverRequest/resolved` 严格早于 `turn/completed`；最终 `thread/read` 返回 canonical `item_<patchId>` FileChange、`status=declined`、Turn `completed`，并精确保留 Add/Delete/Update/Move 四项 tagged changes。验证：`cargo test -p app-server --test file_change_transport_jsonrpc` 1/1、`npm run test:rust:related -- lime-rs/crates/app-server/tests/file_change_transport_jsonrpc.rs` 1420/1420、rustfmt check 与未跟踪文件 no-index whitespace check 均通过。分类：public JSON-RPC transport integration 为 `current / App Server integration`，测试 backend 为 `test-only`；无 compat/deprecated/dead 新 surface。该证据补齐 App Server 层，不替代上一条已通过的 Electron Gate B；FileChange transport integration 完成度 100%，整体 Codex v1 对齐仍约 40%。
 
 - 2026-07-21 共享回归与并行写集核对：当前工作树无 Rust 编译进程；本进程未修改隔壁持有的 `tool_executor.rs`、`approval_server_request.rs`、FileChange fixture、ThreadGoal/idle continuation owner 或 ThreadStore raw-rollout owner。验证 `cargo test -p lime-agent tool_approval_exposes_cancel_without_session_grant` 1/1、`cargo test -p app-server approval_server_request --lib` 7/7、`cargo test -p app-server --test file_change_transport_jsonrpc` 1/1；随后执行 `npm run test:rust:related -- lime-rs/crates/app-server-protocol lime-rs/crates/app-server lime-rs/crates/agent-protocol lime-rs/crates/thread-store lime-rs/crates/model-provider`，相关 workspace crate 单测全绿（agent-protocol 34、agent-runtime 159、app-server 1420、thread-store 28、model-provider 156、tool-runtime 249 及其余反向依赖）。只读 Codex 对照确认：`runtime/objectives.rs` 的 ManagedObjective 自动循环不是 ThreadGoal continuation owner；真正下一刀必须由同一 owner 一次性接管 `thread_goal.rs`、`goal_accounting.rs`、`turn_execution.rs`、旧 objective 触发点与独立 JSONL/Gate B 测试，当前这些文件均为并行热区，禁止另起第二 owner。分类：现有审批/FileChange/ThreadStore projection 为 `current`；旧 ManagedObjective continuation 与 snapshot/raw rollout 双轨为 `deprecated/dead` 候选，暂不删除，等待 owner 交接和引用扫描；本轮无新增 compat。`
+
+- 2026-07-21 `thread/delete` current 垂直骨架：v2 protocol/ingress 已接到 App Server dispatch、`RuntimeCore::delete_thread`、RolloutStore 与三库 ProjectionStore；已持久化 spawn descendants 按 deepest-first 停止 session loop/backend，并清 rollout、event log、sidecar、goal/accounting/outbox、Agent identity/mailbox 与 canonical/history/projection rows，响应 `{}` 后按 child-to-root 顺序返回 `thread/deleted`。Renderer/package typed client 已改用 `deleteThread({threadId})`，GUI session facade 先解析 canonical threadId；旧 `agentSession/delete` production catalog/DTO/dispatch/helper、v0 schema 与 generated TS surface 已删除并有负向守卫。公共 `run_json_lines` 集成 1/1 通过，覆盖 parent+child response/notification 顺序、磁盘/三库/identity/mailbox 清理、删除后 read 与冷启动不复活；protocol schema fixture 1/1、package 71/71、Renderer 本刀定向 35/35、完整 typecheck、`test:contracts`（779 schema definitions / 771 TS types / 299 client checks）、`governance:legacy-report`（0 分类漂移 / 0 边界违规）、真实 Electron `verify:gui-smoke` 与非 live Provider `smoke:agent-runtime-current-fixture` 全绿。Rust related 的 App Server 1431 项为 1429 通过、2 项失败，均在并行 ThreadGoal baseline / event-log tail repair 热区；本刀独立 JSONL 与删除 unit 3/3 均绿。分类：`thread/delete` 为 `current`；`agentSession/delete` 为 `dead / deleted / forbidden-to-restore`。尚未闭合：pending-only child、整棵子树单事务、listener/跨连接广播、trace/telemetry 清理；当前仍是骨架阶段，整体 Codex v1 约 40%。
+
+- 2026-07-21 `thread/delete` 完整性收口：`ProjectionStore` 新增 immutable subtree snapshot 与 strict delete，两阶段边界覆盖 persisted、pending-only child 及 `pending_session_id`；`BEGIN IMMEDIATE` 后在同一连接重读 recursive CTE，快照漂移零写入失败，一次 ATTACH transaction 清 state/history/projection、goal/accounting/outbox、spawn graph、Agent identity/mailbox，canonical root 最后删除。RuntimeCore 先停全部 live owner，幂等清 rollout/EventLog/Sidecar/Trace/Telemetry，再单次提交并清内存 session/cache/goal continuation；外部文件已清而最终 SQL 失败时，三库与内存 session 保留，删除可稳定重试，第二次成功删除返回 not found。transport 在 `{}` 响应后经 per-thread listener 向 origin 与订阅连接广播 pending/child/root 通知，随后 `ThreadStateManager::remove_thread` 取消 listener、resume barrier 和双向 connection index；子树 pending server requests 按注册顺序先发 `serverRequest/resolved` 并以 `REQUEST_CANCELLED` 终止。验证：atomic store 2/2、ThreadState 1/1、server-request 1/1、双连接广播 1/1、失败重试/二次删除 1/1、trace 1/1、telemetry 1/1、带 pending-only child 的 public `run_json_lines` integration 1/1、原 RuntimeCore 删除 2/2 均通过；最终复跑 public `thread_delete_jsonrpc` 1/1、ThreadState 双向 connection index 清理 1/1、`npm run test:contracts`（781 schema definitions / 773 generated types / 299 client checks）、`npm run governance:legacy-report`（0 分类漂移 / 0 边界违规）、`npm run smoke:agent-runtime-current-fixture` 与全树 `git diff --check` 均通过，fixture 使用真实 Electron/preload/IPC/App Server/read model 且 `liveProviderUsed=false`。App Server related 1439 项仅有 2 条并行 ThreadGoal/EventLog 热区既有失败；workspace fmt 只被并行 `agent-protocol/src/lib.rs` 与 `app-server/tests/session_archive_jsonrpc.rs` 格式漂移阻塞，本切片 scoped rustfmt 已通过。架构图确认：本轮没有改变 `Electron Desktop Host -> App Server JSON-RPC -> RuntimeCore -> Thread/Turn/Item projection -> GUI` 依赖方向，删除的唯一 storage commit owner 仍是 App Server `ProjectionStore`；确认状态 `confirmed`。分类：`thread/delete` 为 `current`；`agentSession/delete` 继续为 `dead / deleted / forbidden-to-restore`，无 compat/deprecated 新增；本切片实现完成，整体 Codex v1 仍约 40%。
+
+- 2026-07-22 AgentControl fork Codex sanitize 收口：按 Codex `core/src/agent/control/spawn.rs::keep_forked_rollout_item` 对齐 Multi-Agent fork 语义，`fork_turns=none` 在完整 canonical history 读取前短路，只创建 fresh child；`LastNTurns` 先裁剪 Turn 窗口，再读取/校验 durable input。Reasoning、Tool、MCP、Plan、Approval、Command、File、Media、SubAgent、Extension 与 assistant 非 final item 作为内部 rollout 项过滤，不伪造第二套 provider lowering；FullHistory 遇无 replacement history 的 ContextCompaction、final-answer media、非 text user input、重复/未完成 user item 或缺 durable input 时，在 pending edge、child session、mailbox、EventLog 前 fail closed。新增独立 `runtime/tests/agent_control/fork.rs`，覆盖 sanitize 过滤、compaction 零残留、final media 零残留、LastN 选窗与 None fresh child。验证：AgentControl 全族 35/35、fork 专项 4/4、`cargo check -p app-server --lib`、scoped rustfmt/diff check、`npm run governance:legacy-report`（0 零引用候选、0 分类漂移、0 边界违规）通过；`npm run test:rust:related` 为 1445/1449，剩余 4 条来自并行 Goal table inventory、repairable EventLog tail、compaction/session context 热区，本轮未夹写。分类：AgentControl sanitize/fork boundary 为 `current`；未新增 compat/deprecated/dead；public `thread/fork` 的无损 canonical lowering 继续与 AgentControl 拓扑 fork 隔离。下一刀回到未闭合的 Codex Multi-Agent compacted replacement history 或跨重启 Gate B，不在本车道恢复 raw EventLog copy。
+
+- 2026-07-22 ContextCompaction lineage fail-closed：`runtime/context_compaction.rs` 不再把最新但部分缺失的 `replacementHistory/windowNumber/firstWindowId/previousWindowId/windowId` 静默当作新链；完全没有 lineage 字段的 legacy event 才按计数兜底，部分字段必须完整解析，window number 为正数且所有恢复 ID 为 UUIDv7，否则返回带 event identity 的 `RuntimeCoreError::Backend`，阻止 resume/next compaction 生成断裂 lineage。新增 malformed marker 回归并将 imported lineage fixture 改为真实 UUIDv7；验证 `runtime::context_compaction::tests` 7/7、scoped rustfmt 与 `git diff --check` 通过。分类：lineage validation/fail-closed 为 `current`；部分 marker 静默重置 window chain 为 `dead / deleted / forbidden-to-restore`；无 compat/deprecated。完整 canonical `ContextCompaction` replacement payload、rollback/fork/window-chain provider history 仍是 P0 OPEN_REF，未宣称 compaction parity。
+
+- 2026-07-22 provider route identity/cache scoped 骨架：model registry 的 API fetch 现在用 `SHA-256(api_key)` 作为不落盘的 credential fingerprint，将带凭证 fetch 的 cache 读写隔离到 scoped key；无凭证读取继续只访问 unscoped namespace，不跨 credential fallback。credential-scoped cache 与 tenant namespace、taxonomy/expiry/clear generation 共享既有 owner，新增隔离回归；验证 `lime-services model_registry_service` 56/56、无新增 production dead-code warning。非主 Turn 的 host-managed/image direct text 路径补齐 `ResolvedModelRoute.auth.credential_ref -> ModelRouteProviderConfiguration -> configure_model_route_provider_for_session_with_provider_and_credential_ref`，不再重新 round-robin；验证 lime-agent provider configuration 8/8、App Server model route contract 6/6、model route resolver 9/9、scoped rustfmt 与 `git diff --check` 通过。分类：credential-scoped cache 与 route identity 传播为 `current`；非主路径丢失 resolved credential 后重新 round-robin 为 `dead / forbidden-to-restore`；无 compat/deprecated。旧 `agentSession/action/{replay,respond}`、`agentSession/runtimeEvents/append` 仍为共享 protocol/dispatch/frontend 热区 OPEN_REF，本车道未夹写。
+
+- 2026-07-22 compaction prompt boundary：`runtime/memory_prompt.rs` 识别完整 `replacementHistory + window lineage` 后不再把同一摘要重复注入 system prompt；无 lineage 的 legacy compaction 仍保留明确 fail-safe。并行 owner 新增两项单测；复核 `memory_prompt` 16/16、`provider_history` 16/16、scoped rustfmt/diff check 通过。related 全量曾为 1438/1442，剩余 2 条旧 `sessions.rs` compaction 断言与 2 条并行 Goal/storage/EventLog 热区失败，未在本车道夹写。分类：replacement-history prompt boundary 为 `current`；有效 replacement history 的重复 system-prompt 注入为 `dead / deleted / forbidden-to-restore`；legacy summary fallback 为显式 `compat`/fail-safe，不承接新业务逻辑。
+
+- 2026-07-22 typed server-request response ingress 骨架：`packages/app-server-client/src/connection.ts` 新增 `respondServerRequest` 与 `rejectServerRequest`，并由标准 `AgentRuntimeClient` 与 browser-safe session gateway 以可选能力透出；只按 reverse JSON-RPC outer `requestId` 回写 result/error，不从 thread/turn/action 元数据推断路由。连接现在跟踪实际收到的 reverse request id，未知或重复 id 回包直接 fail-closed。新增隔离 `server-request-response.test.mjs` 覆盖成功、取消、重复 id 和缺 responder；README 同步记录 current boundary。验证 package client 全量测试（73/73）、build/typecheck、agent-runtime-client typecheck/test（23/23）、`npm run test:contracts`（299 client checks，773 generated types）、Prettier 与 scoped `git diff --check` 通过。该 helper 仅提供 v2 server-request 回包边界，尚未迁移旧 `agentSession/action/{replay,respond}` 与 `agentSession/runtimeEvents/append` 生产消费者，不能关闭 P0 OPEN_REF；分类：typed response ingress 为 `current`，旧 action/runtime-events 仍 `deprecated -> deleted` 候选。
+
+- 2026-07-22 AgentControl compacted replacement fork 收口：FullHistory 从已验证的 compaction marker 提取 `ForkCompactionSeed`，保留 replacement/window lineage，将 session-level `context.compaction.completed` 重写为 child session/thread，并把 source `tailStartTurnId` 映射到稳定的 child fork Turn；marker、replacement payload、UUIDv7 window lineage 或 tail 映射异常均在 pending edge/session/mailbox/EventLog 前 fail closed。LastN 只重建选中 Turn 并丢弃 compacted prefix，fork `none` 仍保持 fresh child；不复制 raw EventLog，不复用 public `thread/fork` strict validator。验证：AgentControl fork 5/5、provider history 14/14、context compaction 7/7、`cargo check -p app-server --lib`、scoped rustfmt、全树 `git diff --check` 与 `npm run governance:legacy-report`（0 零引用候选、0 分类漂移、0 边界违规）通过。分类：compaction seed/child lineage/provider boundary 为 `current`；无损表达不了的 marker/input/media 及 raw history copy 为 `dead / forbidden-to-restore`；无 compat/deprecated 新增。下一项仍是完整 canonical multimodal replacement payload 与跨重启 Gate B，不得用 raw event 回拷补洞。
+
+- 2026-07-22 typed reverse server-request 回包验证补录：在上一条 ingress 骨架基础上，`AppServerConnection.nextMessage` 与 `nextServerMessage` 都登记实际收到的 reverse JSON-RPC outer id；`respondServerRequest`/`rejectServerRequest` 对未知、重复或已取消 id fail closed，`serverRequest/resolved` 终态通知会撤销 pending outer id，标准 `AgentRuntimeClient` 与 browser-safe `sessionGateway` 只按 outer id 透传，不从 action/thread 元数据推断路由。新增回包测试覆盖成功、取消、重复 id、generic read path 与 gateway 缺 responder；app-server-client 定向 3/3、全量 75/75，agent-runtime-client 23/23，`test:contracts` 773 generated types/299 client checks，治理扫描与窄写集 diff check 均通过。分类：typed reverse response ingress 为 `current`；`agentSession/action/{replay,respond}` 与 `agentSession/runtimeEvents/append` 仍为共享协议/dispatch/frontend 热区的 `deprecated -> deleted` 候选，尚未迁移生产消费者，P0 OPEN_REF 保持开启；本轮不触碰隔壁 `internal/refactor/v1/**`、Rust protocol/runtime 热区及未跟踪 `interrupted`。
+
+- 2026-07-22 AgentControl compaction cold-restart evidence：fork 测试关闭 parent RuntimeCore 后重新 hydrate child，并从同一 EventLog/ProjectionStore 重建 provider history，确认 replacement prefix 与 child tail 在重启后各出现一次；新增 nested/top-level marker 字段一致性 fail-closed 回归。验证：fork 5/5、context compaction 8/8、provider history 14/14、scoped rustfmt、`cargo check -p app-server --lib` 与 `git diff --check` 通过。该证据关闭 AgentControl compaction 的跨重启骨架缺口；完整 public `thread/fork` 多模态/compaction payload 仍由其 current owner 继续推进。
+
+- 2026-07-22 typed reverse response checkpoint：重建 `app-server-client` dist 后，server-request 回包定向 3/3、package 全量 75/75、`agent-runtime-client` 23/23；`npm run test:contracts` 通过（773 generated types、299 client checks），`npm run governance:legacy-report` 通过（0 零引用候选、0 分类漂移、0 边界违规），`git diff --check` 通过。`nextMessage`/`nextServerMessage` 的 reverse outer id 登记与 `serverRequest/resolved` tombstone 已有 current 证据；旧 `agentSession/action/{replay,respond}`、`agentSession/runtimeEvents/append` 生产引用仍未迁移，继续标记 `deprecated -> deleted` / P0 OPEN_REF，不以 domain request id 冒充 outer id。
+
+- 2026-07-22 current fixture recheck：历史/缓存 31/31、流式收尾 32/32、Electron fixture guard 84/84、首页热路径、短问候热路径与 Coding Workbench 均通过；完整 smoke 在 `image-command` 停止于 `image_generate` task artifact 数量为 0。失败 summary 显示 GUI session 仍绑定通用 `fixture-model`，未绑定本场景创建的 `Fixture Image Provider`，且 console/page/invoke errors 均为 0；归属 provider/image route 配置并行写集，不能作为 typed server-request 回包回归。P0-05 的图片 Gate B 保持未验证，待 provider owner 交接后复跑。Renderer/Node `npm run typecheck` 随后通过。
+
+- 2026-07-22 旧 action 迁移映射契约（交接前只读约束）：`ServerRequest.id` 是唯一 JSON-RPC outer id，只能用于 `respond/error`；`itemId`、`approvalId`、`requestId` 等 domain 字段只作为 UI pending/settled 语义键，禁止互相替代。`item/commandExecution/requestApproval` 与 `item/fileChange/requestApproval` 只回 `{decision}`，`item/tool/requestUserInput` 只回 `{answers}`，MCP elicitation 只回其 typed response；`thread/resume` 的 pending reverse request 由 listener/event bus replay，删除 `agentSession/action/replay`，不得再扫描 session/turn/action 猜 waiter。`agentSession/action/respond` 只有在所有旧 UI/Plugin 入口改用 typed responder 后才能删除；`agentSession/runtimeEvents/append` 必须等 current typed Item/artifact writer，禁止把旧 runtime-event payload 猜测转换为 Item。
+
+- 2026-07-22 AgentControl compaction marker 双层完整性守卫：`latest_fork_compaction_seed` 现在要求顶层与 `artifact` 同时提供并逐字段一致的 `tailStartTurnId`、replacement history 与 window lineage；任一侧缺字段或值漂移均在 child side effect 前 fail closed，避免半旧半新的 marker 被静默拼成新链。新增 partial nested marker 回归；`context_compaction` 9/9、AgentControl fork 5/5、scoped rustfmt 与 `git diff --check` 通过。分类：双层 marker 验证为 `current`；部分 lineage marker 的静默合并为 `dead / deleted / forbidden-to-restore`；无 compat/deprecated。隔壁 public `thread/fork`、协议、ThreadGoal、EventLog 写集未触碰，下一刀仍回到其 owner 的 canonical multimodal/compaction Gate B。
+
+- 2026-07-22 MCP step snapshot generation 骨架：`tool-runtime::McpConnectionRegistry` 为 register/remove/inherit mutation 分配单调 generation，并在持 registry lock 的同一视图中捕获 `McpStepSnapshot.generation`；snapshot 保持 immutable，旧 sampling step 不因 registry 替换而改路由，generation 可用于 tool exposure/execution evidence 关联。新增旧快照隔离与 generation 单调性回归。验证：`tool-runtime` MCP 定向 9/9、全量 250/250，`cargo check -p lime-agent --lib`、`cargo check -p agent-runtime --lib`、scoped rustfmt、`git diff --check` 与 `npm run governance:legacy-report`（0 零引用候选、0 分类漂移、0 边界违规）通过。分类：snapshot generation/immutability 为 `current`；无新增 compat/deprecated/dead。下一刀仍是 MCP auth/scopes/environment provenance 或 public `thread/fork` canonical multimodal Gate B，继续避让隔壁协议/ThreadGoal/EventLog 写集。
+- 2026-07-22 MCP generation 调用/elicitation provenance：`McpStepSnapshot::dispatch` 将捕获的 generation 写入 `McpCallScope`，`McpBridgeClient` 保持同一 scope 传递，`ElicitationOwnerGate` 到 `ElicitationRequestRouter` 再保留内部 `snapshot_generation`；该字段不进入 App Server reverse-request wire。新增 dispatch scope 观察回归与真实 scoped elicitation 回归。验证：`tool-runtime` MCP 10/10、`lime-mcp` elicitation 23/23、scoped rustfmt、`git diff --check` 通过。分类：调用/elicitation provenance 为 `current`；无新增 compat/deprecated/dead。MCP auth/scopes/environment provenance 仍为下一刀，继续避让隔壁协议/ThreadGoal/EventLog 写集。
+- 2026-07-22 MCP auth-scope provenance 骨架：`McpServerConfig.scopes` 经过 `McpBridgeSnapshot.auth_scopes`、`McpConnectionProvenance` 和 `McpStepSnapshot` 写入 `McpCallScope`，继续贯通 bridge 与内部 `ElicitationRequest`，不进入 App Server reverse-request wire；未从 stdio `cwd` 臆造 environment identity，environment owner 继续保持 OPEN_REF。验证：`tool-runtime` MCP 10/10、`lime-mcp` elicitation 23/23、auth status 6/6、`cargo check -p tool-runtime --lib`、`cargo check -p lime-mcp --lib`、`cargo check -p lime-agent --lib`、scoped rustfmt 通过。分类：auth-scope provenance 为 `current`；无新增 compat/deprecated/dead；environment provenance 仍待显式配置 owner。
+- 2026-07-22 MCP environment identity provenance 骨架：按 Codex `DEFAULT_MCP_SERVER_ENVIRONMENT_ID = "local"` 语义，`McpServerConfig` 增加显式 `environment_id`（支持 snake/camel 输入，缺省 local，空值 fail closed），不再从 stdio `cwd` 推导环境。配置身份经 `McpBridgeSnapshot -> McpConnectionProvenance -> McpStepSnapshot -> McpCallScope -> ElicitationRequest` 传播；仍不进入 App Server reverse-request wire。新增默认/显式/空值配置回归、dispatch scope 与 nested elicitation provenance 断言。验证：`cargo test -p tool-runtime --lib` 251/251、`cargo test -p lime-mcp --lib` 142/142、`cargo test -p lime-agent --lib mcp` 12/12、三个 crate 测试目标编译、`git diff --check` 均通过。分类：environment identity/provenance 为 `current`；从 cwd 猜测环境身份为 `dead / deleted / forbidden-to-restore`；无 compat/deprecated。尚未实现 Codex `McpRuntimeContext` 的命名 environment registry/remote executor 解析，继续保持 OPEN_REF，不以 cwd 或默认值伪造 unknown environment 的成功解析；下一刀应由 MCP runtime owner 接管解析边界，继续避开隔壁 App Server/protocol/runtime 热区。
+
+| 2026-07-22 | typed server-request / image fixture 交接复核 | 独立 Electron `image-command` fixture 复现：turn 已进入 RuntimeCore 并以 `tool_failure` 完成，但 `image_generate` task artifact 为 0、图片 fixture server 请求数为 0；GUI session 绑定文本 Fixture Provider，且无 console/page/invoke error，归属 provider/image route 并行写集，未在本车道修复。`npm run test:contracts`（773 generated types、299 client checks）、`npm run governance:legacy-report`（0 零引用候选/0 分类漂移/0 边界违规）、`git diff --check` 与 typed server-request 控制器定向 29/29 通过。旧 `agentSession/action/{replay,respond}`、`agentSession/runtimeEvents/append` 仍待 protocol/Renderer/Plugin owner 交接，保持 `deprecated -> deleted` / P0 OPEN_REF。 |
+
+### 2026-07-22 MCP environment registry 启动边界收口
+
+`lime-mcp` 新增唯一运行时 `McpEnvironmentRegistry`，默认只注册 Codex 语义的
+`local` 环境；`McpClientManager::start_server` 在 transport 分派、stdio 进程创建和
+streamable HTTP 连接前解析 `McpServerConfig.environment_id`。未知显式身份（例如
+`remote`）返回 `ConfigError` 并保持 manager 空闲，禁止把配置身份降级成本机执行。
+新增 stdio/streamable HTTP 两条 unknown-environment 不启动/不连接回归。远程 executor/backend 尚未接入，继续保持
+`OPEN_REF`，不伪造注册或 compat fallback。
+
+验证：`cargo test -p lime-mcp --lib` 144/144、`cargo test -p lime-agent --lib mcp -- --nocapture` 12/12、
+`cargo test -p tool-runtime --lib mcp_connection -- --nocapture` 10/10、局部 rustfmt、`git diff --check`。
+分类：环境 registry/启动解析为 `current`；从 `cwd` 猜环境或未知环境本机 fallback 为
+`dead / deleted / forbidden-to-restore`；无新增 `compat/deprecated`。
+
+同日补齐 Codex startup deadline 语义：stdio transport 删除旧的 `max(configured, 60s)`
+隐式放大，startup timeout 现在完全由 `McpServerConfig.startup_timeout` 决定，与
+streamable HTTP 一致。该命令特定 fallback 属于 `dead / deleted / forbidden-to-restore`，
+无兼容层。stdio 子进程环境也改为 Codex 的平台核心变量 allowlist + 显式 `env` 覆盖，
+不再继承宿主全部环境；Windows 白名单同步包含系统盘、Program Files、AppData 与
+PowerShell 核心变量。复验：MCP 145/145、Agent MCP 12/12、tool-runtime MCP 10/10。
+
+### 2026-07-22 typed replay gateway 迁移切片
+
+Renderer `replayAgentRuntimeRequest` 现在只从审批/AskUser typed server-request controller
+的当前 pending snapshot 重建 `action_required` view，并按 `(session/thread, domain requestId)`
+校验作用域；没有当前 typed request 时返回 `null`，不调用或扫描旧
+`agentSession/action/replay`，也不把 JSON-RPC outer id 与 domain request id 混用。旧
+Renderer `replayAction` 客户端依赖、正向 facade 测试和 contract guard 已改为 typed
+pending / fail-closed 断言；协议层 DTO/方法仍由共享 owner 保持，尚未删除协议本身。
+
+验证：typed replay + thread client 定向测试 33/33、Renderer/Node `npm run typecheck`、
+`npm run test:contracts`（773 generated types、299 client checks）、
+`npm run governance:legacy-report`（0 零引用候选、0 分类漂移、0 边界违规）、Prettier 与
+`git diff --check` 通过。`src/lib/api/agent.test.ts` 全文件复跑为 55/68，剩余 13 条是
+并行 session/thread canonical DTO 迁移造成的既有 fixture 失败，本切片未夹写。分类：typed
+pending replay / fail-closed gateway 为 `current`；Renderer 旧 `action/replay` 调用面为
+`deprecated -> deleted`，协议/dispatch 生产消费者仍是 P0 OPEN_REF；无新增 compat。
+
+### 2026-07-22 typed response 短路切片
+
+Renderer `respondAgentRuntimeAction` 现在先按 `(session/thread, domain requestId,
+actionType)` 查找审批/AskUser typed server-request pending snapshot；显式传入
+`action_scope` 时还会逐字段校验。命中后直接 settle 对应 typed controller，由现有
+reverse JSON-RPC dispatcher 使用 outer id 回包，不再重复发送
+`agentSession/action/respond`。Renderer Plugin runtime 的 `submitHostResponse` 同步复用该
+短路，并保留可注入 responder 方便隔离测试。Renderer chat 与 Plugin 未命中 typed
+pending 时均显式 fail closed，已删除 generic client 依赖、旧 DTO 转换、Plugin App
+Server gateway 委托与 Page/Agent Run 正向断言；domain `requestId` 不会冒充 JSON-RPC
+outer id。Plugin capability catalog 外的 `lime.agent.respondAction` 旧别名也已删除，只有
+`submitHostResponse` 能进入 typed responder。MCP elicitation 继续走独立 typed
+controller，不复用本短路。
+
+验证：typed replay + thread client 前序定向 44/44；Renderer Plugin client/host/Page
+Bridge/Agent Run 本轮 38/38；Plugin dispatcher 当前方法/旧 alias 负向场景 1/1；
+Renderer/Node `npm run typecheck`、
+`npm run test:contracts`（773 generated types、299 client checks）、
+`npm run governance:legacy-report`（0 零引用候选、0 分类漂移、0 边界违规）、Prettier 与
+scoped `git diff --check` 通过。分类：typed response 短路为 `current`；旧
+`agentSession/action/respond` 的 Renderer chat/Plugin 生产入口为 `dead / retired
+guard-only`，Plugin SDK `respondAction` alias 为 `dead / deleted / forbidden-to-restore`。
+共享 package/Rust protocol/dispatch、只有 domain requestId 的 Electron
+Plugin task host 仍为 `deprecated -> deleted` / P0 OPEN_REF，由对应热区 owner 继续迁移；
+无新增 compat。`agentSession/runtimeEvents/append` 继续等待 current typed Item/artifact
+writer，未猜测转换旧 runtime-event payload。
+
+### 2026-07-22 MCP stdio process ownership 收口
+
+`lime-mcp` 的 stdio 启动现在为每个本地子进程绑定 current `StdioProcessHandle`；Unix
+进程组由 Codex 风格的 TERM -> 延迟 KILL 终止，Windows 走 `taskkill /T /F`。wrapper
+持有 process handle 与 stderr reader 生命周期，`stop_server`、初始化失败、startup
+timeout 和 wrapper drop 都不再只依赖 rmcp 直接子进程清理。旧未接管的
+`McpClientWrapper.process` 字段和 `kill_process` 入口删除，无 compat 包装。
+macOS/Unix PATH 补全也收回 `environment.rs` 的最小环境 owner；显式 `PATH` 覆盖保持
+优先，Windows 不再误走 Unix 的 glob/冒号拼接分支。
+
+新增 Unix 真实 stdio fixture：完成 MCP initialize 后启动后台孙进程，`stop_server` 验证
+整个进程组退出；同时覆盖 stderr 持续排空。验证：`cargo test -p lime-mcp --lib`
+147/147、`cargo test -p lime-agent --lib mcp -- --nocapture` 12/12、
+`cargo test -p tool-runtime --lib mcp_connection -- --nocapture` 10/10、局部 rustfmt、
+`git diff --check`、`npm run governance:legacy-report`（0 零引用候选、0 分类漂移、0
+边界违规）。分类：本地 stdio process ownership/stderr lifecycle 为 `current`；未接管
+直接子进程的旧 wrapper 字段、只杀 leader 的 stop 语义为 `dead / deleted / forbidden-to-restore`；无
+`compat/deprecated`。未运行 GUI/contract 门禁，因为本刀未改 Electron、App Server 或
+JSON-RPC protocol。下一刀仍是 Codex `McpRuntimeContext` 的真实 remote executor/backend，
+不得注册假 remote 或回退本机执行。
+
+### 2026-07-22 MCP stdio launcher placement 骨架
+
+`McpEnvironmentRegistry` 从环境名集合收敛为 typed placement registry，当前只发布
+`McpEnvironment::Local`；`McpClientManager` 在 transport 启动前解析 placement，并将本地
+stdio 的 command/args、最小环境、cwd、进程组、stderr reader 与 process handle 创建统一
+委托给 `LocalStdioLauncher`。manager lifecycle 只保留环境分派、startup deadline、rmcp
+serve 和连接发布/错误事件，不再内联持有本地 spawn 细节。
+
+验证：`cargo test -p lime-mcp --lib` 148/148、
+`cargo test -p lime-agent --lib mcp -- --nocapture` 12/12、
+`cargo test -p tool-runtime --lib mcp_connection -- --nocapture` 10/10、MCP 相关文件
+`rustfmt --check`、scoped `git diff --check` 与 `npm run governance:legacy-report`
+（0 零引用候选、0 分类漂移、0 边界违规）通过。分类：typed local placement 与
+`LocalStdioLauncher` 为 `current`；manager 内联 spawn/environment/process ownership 为
+`dead / deleted / forbidden-to-restore`；无 `compat/deprecated`。真实 remote executor/backend
+仍为 `OPEN_REF`，当前 registry 不注册 `remote`，未知环境继续在任何 stdio/HTTP I/O 前
+fail closed。未运行 GUI/contract 门禁，因为本刀未触及 Electron、App Server 或 JSON-RPC
+边界。
+
+### 2026-07-22 MCP per-server parallel execution 收口
+
+`McpServerConfig.supports_parallel_tool_calls` 不再只停留在管理状态展示：该能力经
+`McpBridgeSnapshot -> McpConnectionRegistry -> McpStepSnapshot` 固化到当前 sampling step
+的每条 MCP route，registry replacement 后旧 snapshot 的并发策略保持不变。Agent turn
+snapshot 将未 opt-in 的 MCP 工具登记为 serial；provider 允许 parallel tool calls 时，
+`agent-runtime` 使用 Codex 同语义的读写门，让 opt-in 工具共享执行、serial 工具对同批
+其它调用保持独占。未 advertised 的工具继续 fail closed 且不得并发执行；非 MCP 工具的
+既有策略本刀不改变。
+
+验证：`cargo test -p tool-runtime --lib mcp_connection -- --nocapture` 11/11、
+`cargo test -p agent-runtime provider_turn::tests:: -- --nocapture` 21/21、
+`cargo test -p lime-agent --lib mcp -- --nocapture` 12/12、
+`cargo test -p lime-mcp --lib` 148/148、scoped `rustfmt --check`、
+`git diff --check` 与 `npm run governance:legacy-report`（0 零引用候选、0 分类漂移、
+0 边界违规）通过。分类：per-server parallel capability、immutable step policy 与执行门为
+`current`；只展示配置但执行阶段按模型全局开关无条件并发的旧语义为
+`dead / deleted / forbidden-to-restore`；无 `compat/deprecated`。未运行 GUI/contract 门禁，
+因为本刀未改 Electron、App Server 或 JSON-RPC。MCP 真实 remote executor/backend 继续为
+`OPEN_REF`，不得用本地执行 fallback 伪造。
+
+### 2026-07-22 MCP tool lifecycle environment identity 消费收口
+
+`McpStepSnapshot` 现在按已发布 runtime tool name 暴露 immutable `environment_id`；Agent
+turn capture 将该映射与 serial policy 一起固化到 `RuntimeToolStepSnapshot`，缺少 route
+provenance 时 fail closed。`agent-runtime` 构造 canonical `ToolCall` 时使用当前 sampling
+step 捕获的 MCP environment identity，started/completed lifecycle evidence 不再把所有已
+发布 MCP 工具硬编码成 `local`；native 与未发布工具继续显式使用 `local`。registry 替换
+后旧 step 保持原 environment identity。
+
+验证：`cargo test -p tool-runtime --lib mcp_connection -- --nocapture` 11/11、
+`cargo test -p agent-runtime provider_turn::tests:: -- --nocapture` 22/22、
+`cargo test -p lime-agent --lib mcp -- --nocapture` 12/12、scoped `rustfmt --check`、
+`git diff --check` 与 `npm run governance:legacy-report`（0 零引用候选、0 分类漂移、0
+边界违规）通过。`npm run smoke:mcp-current` 也通过：命中
+`app_server_handle_json_lines` 与 7 个 current MCP read methods，legacy MCP 命令命中为 0。
+分类：step environment identity 的 lifecycle 消费为 `current`；已发布 MCP 调用统一写死
+`local` 的旧 evidence 语义为 `dead / deleted / forbidden-to-restore`；无
+`compat/deprecated`。真实 remote executor/backend 与 foreign cwd 仍为 `OPEN_REF`；当前
+lifecycle 保留 host working directory 只作为既有 `PathBuf` 占位，不把它声明为 remote
+cwd，也不注册假 remote 或回退本机执行。
+
+### 2026-07-22 Plugin worker current owner 接线骨架
+
+Renderer Plugin task 的 v2 `turn/start` 已把业务 metadata 从不合法的嵌套
+`responsesapiClientMetadata` 迁到 application-kind `additionalContext.metadata`；前者只保留
+Rust `HashMap<String, String>` 可接收的 scalar trace/task identity。`PluginRuntimePage` 从
+已安装 manifest 计算 worker contract，`AgentRuntimeCapabilityHost` 只为 manifest 声明的
+task kind 生成受信任 `plugin.paneAction`，contract blocker 或缺 output kind 均 fail closed，
+普通 Plugin Agent task 继续进入 provider 主链。
+
+Electron `PluginRuntimeTaskHost` 同步退化为 App Server 委托壳：不再 spawn Node worker，
+不再调用 `agentSession/runtimeEvents/append`，而是把同一 application metadata 交给
+RuntimeCore 的 current plugin worker owner；`submitHostResponse` 也不再回退 generic
+`agentSession/action/respond`。Rust 继续拥有 installed state/signature gate、entrypoint、
+process timeout、output contract、`artifact.snapshot` 内部事件和 Thread/Turn/Item read model。
+
+验证：Plugin typed client/Host 23/23、Plugin Runtime Page/Host Bridge 18/18、Electron task
+host 8/8，相关 ESLint 与 scoped `git diff --check` 通过。workspace `tsc --noEmit` 被并行
+canonical DTO/test fixture 改动的大量既有错误阻塞，本轮目标文件无报错。分类：Rust worker
+和 typed `additionalContext` lowering 为 `current`；Electron IPC 壳为待删除的
+`deprecated`；零生产引用的 `electron/pluginTaskWorker.ts` 为 `dead / delete-pending`，待取得
+文件删除确认后物理删除并补回流守卫。共享协议/dispatch 与编辑器 artifact snapshot 的
+`agentSession/runtimeEvents/append` 仍为 P0 OPEN_REF；编辑器必须等待 typed artifact writer，
+不得复用本次 worker lowering。`scripts/check-app-server-client-contract.mjs` 正由并行车道修改，
+本切片未夹写；其 Plugin Electron 正向守卫需要由脚本 owner 改成 absent guard。
+
+### 2026-07-22 MCP replacement in-flight 快照守卫
+
+新增真实 stdio MCP 受控启动回归：replacement generation 在 initialize 阶段被外部闸门
+暂停时，`AgentRuntimeState::mcp_runtime` 仍返回已发布的旧 generation；放行 initialize、
+完成 tools discovery 后，才原子发布含新 bridge 的 generation。该测试直接守住现有
+`build -> start -> publish` 顺序，避免后续 refresh 把半初始化 manager 或空 snapshot 暴露
+给并发 sampling step。required replacement 失败继续保留旧 generation，optional sibling
+失败继续允许健康 bridge 发布。
+
+验证：单 case 1/1、`cargo test -p lime-agent --lib mcp -- --nocapture` 13/13、scoped
+`rustfmt --check` 与 `git diff --check` 通过。分类：replacement in-flight 旧快照可读与成功
+后的原子切换为 `current`；启动中提前清空/替换 current runtime 的语义为
+`dead / forbidden-to-restore`；无 `compat/deprecated`。本刀只补 owner 级并发证据，没有修改
+生产代码或进入 App Server/protocol/Renderer 热区。Codex configured/runtime/effective
+overlay 与真实 remote executor/backend 仍为 `OPEN_REF`。
 
 ## 8. 完成定义
 

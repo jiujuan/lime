@@ -99,20 +99,9 @@ describe("useWorkspaceConversationSceneRuntime task rail projection", () => {
     expect(sceneProps.taskRail?.todoItems).toBe(todoItems);
   });
 
-  it("应把 read model 目标、变更和子任务事实透传给 Task Center 任务轨道", () => {
+  it("应把 canonical Goal、read model 变更和子任务事实透传给 Task Center 任务轨道", () => {
     const threadRead = {
       thread_id: "thread-1",
-      managed_objective: {
-        objective_id: "objective-1",
-        owner_kind: "agent_session",
-        owner_id: "session-1",
-        objective_text: "完成任务区域摘要",
-        success_criteria: [],
-        status: "active",
-        last_artifact_refs: [],
-        created_at: "2026-06-16T10:00:00.000Z",
-        updated_at: "2026-06-16T10:00:00.000Z",
-      },
       change_summary: {
         changed_file_count: 2,
         changed_files: ["src/App.tsx", "src/index.ts"],
@@ -152,6 +141,15 @@ describe("useWorkspaceConversationSceneRuntime task rail projection", () => {
       },
     ];
     const params = createBaseParams({
+      threadGoal: {
+        createdAt: 1,
+        objective: "完成任务区域摘要",
+        status: "active",
+        threadId: "thread-1",
+        timeUsedSeconds: 0,
+        tokensUsed: 0,
+        updatedAt: 1,
+      },
       threadRead,
       canonicalChildren,
     });
@@ -159,6 +157,9 @@ describe("useWorkspaceConversationSceneRuntime task rail projection", () => {
     const sceneProps = getRenderedSceneProps(params);
 
     expect(sceneProps.taskRail?.threadRead).toBe(threadRead);
+    expect(sceneProps.taskRail?.threadGoal?.objective).toBe(
+      "完成任务区域摘要",
+    );
     expect(sceneProps.taskRail?.canonicalChildren).toBe(canonicalChildren);
     expect(sceneProps.taskRail?.context).toBeUndefined();
   });

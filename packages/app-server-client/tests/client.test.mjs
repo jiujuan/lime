@@ -68,7 +68,6 @@ const {
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
   METHOD_AGENT_SESSION_COMPACT,
-  METHOD_AGENT_SESSION_DELETE,
   METHOD_AGENT_SESSION_EVENT,
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET,
@@ -90,6 +89,7 @@ const {
   METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   METHOD_THREAD_START,
+  METHOD_THREAD_FORK,
   METHOD_THREAD_RESUME,
   METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
   METHOD_TURN_INTERRUPT,
@@ -98,6 +98,7 @@ const {
   METHOD_AGENT_SESSION_UPDATE,
   METHOD_THREAD_ITEMS_LIST,
   METHOD_THREAD_ARCHIVE,
+  METHOD_THREAD_DELETE,
   METHOD_THREAD_LIST,
   METHOD_THREAD_READ,
   METHOD_THREAD_TURNS_LIST,
@@ -475,6 +476,25 @@ test("builds initialize and caller supplied thread start requests", () => {
   assert.equal(ERROR_CODES.capabilityDenied, -32020);
 });
 
+test("builds typed thread fork requests", () => {
+  const client = new AppServerClient();
+  const fork = client.forkThread({
+    threadId: "thread-source",
+    lastTurnId: "turn-2",
+    excludeTurns: true,
+    deferGoalContinuation: true,
+  });
+
+  assert.equal(fork.id, 1);
+  assert.equal(fork.method, METHOD_THREAD_FORK);
+  assert.deepEqual(fork.params, {
+    threadId: "thread-source",
+    lastTurnId: "turn-2",
+    excludeTurns: true,
+    deferGoalContinuation: true,
+  });
+});
+
 test("builds capability list requests with empty params", () => {
   const client = new AppServerClient();
 
@@ -519,8 +539,8 @@ test("builds workspace and skill read requests with current methods", () => {
     recentAccessMode: "full-access",
     recentPreferences: { task: true, subagent: false },
   });
-  const deleteSession = client.deleteSession({
-    sessionId: "session-main",
+  const deleteThread = client.deleteThread({
+    threadId: "thread-main",
   });
   const readObjective = client.readAgentSessionObjective({
     sessionId: "session-main",
@@ -638,9 +658,9 @@ test("builds workspace and skill read requests with current methods", () => {
     recentAccessMode: "full-access",
     recentPreferences: { task: true, subagent: false },
   });
-  assert.equal(deleteSession.method, METHOD_AGENT_SESSION_DELETE);
-  assert.deepEqual(deleteSession.params, {
-    sessionId: "session-main",
+  assert.equal(deleteThread.method, METHOD_THREAD_DELETE);
+  assert.deepEqual(deleteThread.params, {
+    threadId: "thread-main",
   });
   assert.equal(readObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_READ);
   assert.deepEqual(readObjective.params, {

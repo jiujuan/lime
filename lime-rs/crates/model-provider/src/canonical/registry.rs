@@ -13,7 +13,7 @@ static BUNDLED_REGISTRY: Lazy<Result<CanonicalModelRegistry>> = Lazy::new(|| {
 
     let mut registry = CanonicalModelRegistry::new();
     for model in models {
-        registry.register(model);
+        registry.register(model)?;
     }
 
     Ok(registry)
@@ -46,7 +46,7 @@ impl CanonicalModelRegistry {
 
         let mut registry = Self::new();
         for model in models {
-            registry.register(model);
+            registry.register(model)?;
         }
 
         Ok(registry)
@@ -64,8 +64,15 @@ impl CanonicalModelRegistry {
         Ok(())
     }
 
-    pub fn register(&mut self, model: CanonicalModel) {
+    pub fn register(&mut self, model: CanonicalModel) -> Result<()> {
+        if model.id.trim().is_empty() {
+            anyhow::bail!("Canonical model id must not be empty");
+        }
+        if self.models.contains_key(&model.id) {
+            anyhow::bail!("Duplicate canonical model id: {}", model.id);
+        }
         self.models.insert(model.id.clone(), model);
+        Ok(())
     }
 
     pub fn get(&self, name: &str) -> Option<&CanonicalModel> {
@@ -73,7 +80,9 @@ impl CanonicalModelRegistry {
     }
 
     pub fn all_models(&self) -> Vec<&CanonicalModel> {
-        self.models.values().collect()
+        let mut models: Vec<_> = self.models.values().collect();
+        models.sort_by(|left, right| left.id.cmp(&right.id));
+        models
     }
 
     pub fn count(&self) -> usize {
@@ -88,5 +97,65 @@ impl CanonicalModelRegistry {
 impl Default for CanonicalModelRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Pricing;
+    use super::*;
+
+    fn model(id: &str) -> CanonicalModel {
+        CanonicalModel {
+            id: id.to_string(),
+            name: id.to_string(),
+            context_length: 1,
+            max_completion_tokens: None,
+            task_families: Vec::new(),
+            input_modalities: vec!["text".to_string()],
+            output_modalities: vec!["text".to_string()],
+            runtime_features: Vec::new(),
+            supports_tools: false,
+            supports_reasoning: false,
+            supports_prompt_cache: false,
+            pricing: Pricing {
+                prompt: None,
+                completion: None,
+                request: None,
+                image: None,
+            },
+        }
+    }
+
+    #[test]
+    fn all_models_returns_stable_id_order() {
+        let mut registry = CanonicalModelRegistry::new();
+        registry.register(model("provider/zeta")).unwrap();
+        registry.register(model("provider/alpha")).unwrap();
+        registry.register(model("provider/mid")).unwrap();
+
+        let ids: Vec<_> = registry
+            .all_models()
+            .into_iter()
+            .map(|model| model.id.as_str())
+            .collect();
+
+        assert_eq!(ids, vec!["provider/alpha", "provider/mid", "provider/zeta"]);
+    }
+
+    #[test]
+    fn register_rejects_ambiguous_model_identity() {
+        let mut registry = CanonicalModelRegistry::new();
+        registry.register(model("provider/alpha")).unwrap();
+
+        let duplicate = registry.register(model("provider/alpha")).unwrap_err();
+        let blank = registry.register(model("  ")).unwrap_err();
+
+        assert_eq!(
+            duplicate.to_string(),
+            "Duplicate canonical model id: provider/alpha"
+        );
+        assert_eq!(blank.to_string(), "Canonical model id must not be empty");
+        assert_eq!(registry.count(), 1);
     }
 }

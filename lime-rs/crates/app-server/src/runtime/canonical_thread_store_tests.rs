@@ -74,6 +74,7 @@ fn production_storage_paths_keep_physical_table_owners_separate() {
         vec![
             "canonical_thread_spawn_edges".to_string(),
             "canonical_threads".to_string(),
+            "thread_goal_continuation_deferrals".to_string(),
             "thread_goal_turn_accounting".to_string(),
             "thread_goal_update_outbox".to_string(),
             "thread_goals".to_string(),

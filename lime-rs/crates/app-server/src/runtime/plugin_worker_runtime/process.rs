@@ -173,6 +173,9 @@ fn invoke_worker_json_process(
                 )?;
                 let stderr =
                     join_worker_output_reader(stderr_reader, "stderr", MAX_WORKER_STDERR_BYTES)?;
+                if let Some(response) = response {
+                    return Ok(response);
+                }
                 if !status.success() {
                     return Err(RuntimeCoreError::Backend(format!(
                         "{label} exited with {}: {}",
@@ -180,9 +183,9 @@ fn invoke_worker_json_process(
                         String::from_utf8_lossy(&stderr).trim()
                     )));
                 }
-                return response.ok_or_else(|| {
-                    RuntimeCoreError::Backend(format!("{label} returned empty stdout."))
-                });
+                return Err(RuntimeCoreError::Backend(format!(
+                    "{label} returned empty stdout."
+                )));
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(10)),
             Err(error) => {

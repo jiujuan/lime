@@ -6,6 +6,7 @@ import type {
   SendMessageObserver,
   SendMessageOptions,
   SessionModelPreference,
+  ThreadGoalInput,
 } from "./agentChatShared";
 import type { Message, MessageImage } from "../types";
 import { prepareAgentStreamSubmitDraft } from "./agentStreamSubmitDraft";
@@ -67,6 +68,7 @@ export interface PreparedAgentStreamUserInputSend {
   observer?: SendMessageObserver;
   requestMetadata?: Record<string, unknown>;
   collaborationMode?: ModeKind;
+  threadGoal?: ThreadGoalInput;
   modelInputCapabilityGate?: ModelCapabilitySendGateResult;
   assistantDraft?: AssistantDraftState;
   skillRequest?: SendMessageOptions["skillRequest"];
@@ -399,6 +401,7 @@ export function prepareAgentStreamUserInputSend(
     ...(sendOptions?.collaborationMode
       ? { collaborationMode: sendOptions.collaborationMode }
       : {}),
+    ...(sendOptions?.threadGoal ? { threadGoal: sendOptions.threadGoal } : {}),
     modelInputCapabilityGate: projectedModelInputCapabilityGate,
     assistantDraft,
     skillRequest,

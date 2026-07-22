@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
+import type { ThreadGoal } from "@limecloud/app-server-client";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
@@ -62,6 +63,9 @@ export interface HarnessStatusPanelProps {
   toggleLabel?: string;
   leadContent?: HarnessLeadContent;
   threadRead?: AgentRuntimeThreadReadModel | null;
+  threadGoal?: ThreadGoal | null;
+  threadGoalError?: unknown;
+  threadGoalLoading?: boolean;
   turns?: AgentThreadTurn[];
   threadItems?: AgentThreadItem[];
   currentTurnId?: string | null;
@@ -71,7 +75,6 @@ export interface HarnessStatusPanelProps {
   canInterrupt?: boolean;
   onInterruptCurrentTurn?: () => void | Promise<void>;
   onReplayPendingRequest?: (requestId: string) => boolean | Promise<boolean>;
-  onObjectiveChanged?: () => void | Promise<void>;
   onOpenMemoryWorkbench?: () => void;
   onManageProviders?: (context?: ProviderSettingsFocusContext) => void;
   onOpenExecutionPolicySettings?: (

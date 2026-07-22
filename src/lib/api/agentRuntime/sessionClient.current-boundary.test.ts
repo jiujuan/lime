@@ -31,6 +31,7 @@ function appServerClientMock(): AppServerSessionRpcClient {
           canonicalThread("session-archived", "thread-archived"),
           canonicalThread("session-bulk", "thread-bulk"),
           canonicalThread("session-created", "thread-created"),
+          canonicalThread("session-deleted", "thread-deleted"),
         ],
       },
       response: { id: 1, result: {} },
@@ -67,12 +68,9 @@ function appServerClientMock(): AppServerSessionRpcClient {
       notifications: [],
       messages: [],
     }),
-    deleteSession: vi.fn().mockResolvedValue({
+    deleteThread: vi.fn().mockResolvedValue({
       id: 3,
-      result: {
-        sessionId: "session-deleted",
-        deleted: true,
-      },
+      result: {},
       response: { id: 3, result: {} },
       notifications: [],
       messages: [],
@@ -102,10 +100,13 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       title: "重命名",
     });
     expect(appServerClient.updateSession).toHaveBeenCalledTimes(1);
-    expect(appServerClient.deleteSession).toHaveBeenCalledWith({
-      sessionId: "session-deleted",
+    expect(appServerClient.deleteThread).toHaveBeenCalledWith({
+      threadId: "thread-deleted",
     });
-    expect(appServerClient.request).not.toHaveBeenCalled();
+    expect(appServerClient.request).toHaveBeenCalledWith("thread/list", {
+      archived: false,
+      limit: 100,
+    });
   });
 
   it("archive projection must use thread/archive instead of session update", async () => {
@@ -160,7 +161,7 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
     expect(appServerClient.updateSession).not.toHaveBeenCalled();
   });
 
-  it("delete projection must use typed agentSession/delete helper", async () => {
+  it("delete projection must resolve canonical id and use thread/delete", async () => {
     const appServerClient = appServerClientMock();
     const client = createSessionClient({
       appServerClient,
@@ -170,11 +171,14 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       client.deleteAgentRuntimeSession(" session-deleted "),
     ).resolves.toBeUndefined();
 
-    expect(appServerClient.deleteSession).toHaveBeenCalledWith({
-      sessionId: "session-deleted",
+    expect(appServerClient.deleteThread).toHaveBeenCalledWith({
+      threadId: "thread-deleted",
     });
     expect(appServerClient.updateSession).not.toHaveBeenCalled();
-    expect(appServerClient.request).not.toHaveBeenCalled();
+    expect(appServerClient.request).toHaveBeenCalledWith("thread/list", {
+      archived: false,
+      limit: 100,
+    });
   });
 
   it("session mutation should notify current GUI session-list subscribers", async () => {

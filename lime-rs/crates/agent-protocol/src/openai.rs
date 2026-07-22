@@ -238,7 +238,8 @@ pub struct StreamChoice {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionChunk {
-    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub object: String,
     pub created: u64,
     pub model: String,

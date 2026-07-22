@@ -7,6 +7,7 @@ import {
   getRuntimeFrame,
   renderPage,
   appServerClientMocks,
+  runtimeApiMocks,
   unmountLastRenderedPage,
   usePluginRuntimePageTestLifecycle,
 } from "./PluginRuntimePage.testFixtures";
@@ -198,7 +199,9 @@ describe("PluginRuntimePage Host AI run surface", () => {
     expect(container.textContent).toContain("content_factory_writer");
     expect(container.textContent).toContain("模型路由");
     expect(container.textContent).toContain("Skill · content_factory_writer");
-    expect(container.textContent).toContain("先执行技能 content_factory_writer");
+    expect(container.textContent).toContain(
+      "先执行技能 content_factory_writer",
+    );
     expect(container.textContent).toContain("正在调用内容工厂写作 Skill");
     expect(container.textContent).toContain("Tool · 页面截图");
     expect(container.textContent).toContain("先抓取页面状态");
@@ -236,7 +239,9 @@ describe("PluginRuntimePage Host AI run surface", () => {
     ).toBeNull();
     expect(container.textContent).toContain("执行过程");
     expect(container.textContent).toContain("首批文案");
-    expect(container.querySelector('[data-testid="thinking-block"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="thinking-block"]'),
+    ).toBeNull();
     expect(container.textContent).toContain("思考过程");
     expect(container.textContent).toContain("先确认项目资料");
     expect(container.textContent).toContain("待确认");
@@ -272,34 +277,17 @@ describe("PluginRuntimePage Host AI run surface", () => {
     });
     await flush();
 
-    expect(appServerClientMocks.respondAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: "plugin-session-1",
-        requestId: "review-content-batch",
-        actionType: "ask_user",
-        confirmed: false,
-        response: "reject",
-        metadata: expect.objectContaining({
-          source: "host_agent_run_panel",
-          control: "reject",
-          plugin_runtime: expect.objectContaining({
-            app_id: "content-factory-app",
-            entry_key: "dashboard",
-            task_id: "plugin-task-1",
-            source: "plugin_host_bridge",
-          }),
-        }),
-        eventName:
-          "plugin_runtime:content-factory-app:plugin-task-1:host_response",
-        actionScope: expect.objectContaining({
-          sessionId: "plugin-session-1",
-          turnId: "plugin-turn-1",
-        }),
-      }),
-    );
+    expect(
+      runtimeApiMocks.submitPluginRuntimeHostResponse,
+    ).not.toHaveBeenCalled();
     expect(
       container.querySelector(
         '[data-action-id="review-content-batch"][data-action-resolved="true"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '.agent-action-required-list [data-action-id="review-content-batch"]',
       ),
     ).not.toBeNull();
 

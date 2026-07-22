@@ -13,6 +13,7 @@ import {
 import type { PluginPageParams } from "@/types/page";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryPluginCapabilityStore } from "../adapters/InMemoryPluginCapabilityStore";
+import { buildPluginTaskRuntimeContract } from "../host/hostLifecycle";
 import { buildLimeRuntimeProfileForInstalledState } from "../runtime-profile";
 import { createPluginCapabilityDispatcher } from "../runtime/capabilityDispatcher";
 import { wrapPluginCapabilityDispatchWithBrowserIntentLaunch } from "../runtime/browserIntentLaunch";
@@ -125,6 +126,7 @@ export function PluginRuntimePage({
       appVersion: selected.identity.appVersion,
       packageHash: selected.identity.packageHash,
       manifestHash: selected.identity.manifestHash,
+      taskRuntime: buildPluginTaskRuntimeContract(selected.manifest),
       ...(currentProjectId ? { workspaceId: currentProjectId } : {}),
       ...createDefaultPluginRuntimeHostOptions(),
     });

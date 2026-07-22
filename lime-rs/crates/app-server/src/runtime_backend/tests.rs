@@ -120,10 +120,16 @@ pub(super) fn request_for_test(
     }
 }
 
-pub(super) fn apply_detached_desktop_first_turn_policy(request: &mut ExecutionRequest) {
-    request.session.app_id = "desktop".to_string();
+pub(super) fn apply_detached_agent_chat_first_turn_policy(request: &mut ExecutionRequest) {
+    request.session.app_id = "agent-chat".to_string();
     request.session.workspace_id = None;
-    request.session.business_object_ref = None;
+    request.session.business_object_ref = Some(BusinessObjectRef {
+        kind: "agent.thread".to_string(),
+        id: request.session.thread_id.clone(),
+        title: None,
+        uri: None,
+        metadata: None,
+    });
     let host_request = super::request_context::runtime_request_from_request(request);
     let tool_policy =
         super::request_context::request_tool_policy_from_request(host_request.as_ref());

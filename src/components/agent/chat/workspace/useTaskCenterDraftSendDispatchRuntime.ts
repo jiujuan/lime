@@ -6,7 +6,6 @@ import {
   type SetStateAction,
 } from "react";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
-import { bindInputbarThreadGoalMetadata } from "../components/Inputbar/utils/inputbarModeRequestMetadata";
 import { mergeAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerformanceMetrics";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import type { TaskCenterDraftSendRequest } from "../homePendingPreview";
@@ -357,18 +356,15 @@ export function useTaskCenterDraftSendDispatchRuntime({
           targetSessionId: dispatchSessionId,
           skipSessionRestore: true,
           skipSessionStartHooks: true,
-          requestMetadata: bindInputbarThreadGoalMetadata(
-            mergeAgentUiPerformanceTraceMetadata(
-              latestRequest.sendOptions?.requestMetadata,
-              {
-                requestId: latestRequest.id,
-                sessionId: dispatchSessionId,
-                source: latestRequest.source,
-                submittedAt: latestRequest.submittedAt,
-                workspaceId: dispatchWorkspaceId ?? null,
-              },
-            ),
-            dispatchSessionId,
+          requestMetadata: mergeAgentUiPerformanceTraceMetadata(
+            latestRequest.sendOptions?.requestMetadata,
+            {
+              requestId: latestRequest.id,
+              sessionId: dispatchSessionId,
+              source: latestRequest.source,
+              submittedAt: latestRequest.submittedAt,
+              workspaceId: dispatchWorkspaceId ?? null,
+            },
           ),
         };
         const sendPromise = sendRef.current(

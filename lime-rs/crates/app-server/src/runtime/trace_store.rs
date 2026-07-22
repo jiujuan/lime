@@ -127,6 +127,29 @@ impl TraceEventWriter {
         Ok(paths)
     }
 
+    pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
+        let session_dir = self
+            .root
+            .join("sessions")
+            .join(format!("session_{}", safe_file_stem(session_id)));
+        let mut state = self.lock_state();
+        if session_dir
+            .try_exists()
+            .map_err(|error| format!("无法检查 trace event session 目录: {error}"))?
+        {
+            fs::remove_dir_all(&session_dir).map_err(|error| {
+                format!(
+                    "无法删除 trace event session 目录 {}: {error}",
+                    session_dir.display()
+                )
+            })?;
+        }
+        state
+            .next_seq_by_path
+            .retain(|path, _| !path.starts_with(&session_dir));
+        Ok(())
+    }
+
     pub fn list_trace_events(
         &self,
         params: DiagnosticsTraceListParams,
