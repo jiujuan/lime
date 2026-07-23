@@ -124,18 +124,6 @@ pub enum AppServerRequestMethod {
     AgentSessionReviewDecisionSave,
     #[serde(rename = "agentSession/update")]
     AgentSessionUpdate,
-    #[serde(rename = "agentSession/objective/read")]
-    AgentSessionObjectiveRead,
-    #[serde(rename = "agentSession/objective/set")]
-    AgentSessionObjectiveSet,
-    #[serde(rename = "agentSession/objective/status/update")]
-    AgentSessionObjectiveStatusUpdate,
-    #[serde(rename = "agentSession/objective/clear")]
-    AgentSessionObjectiveClear,
-    #[serde(rename = "agentSession/objective/continue")]
-    AgentSessionObjectiveContinue,
-    #[serde(rename = "agentSession/objective/audit")]
-    AgentSessionObjectiveAudit,
     #[serde(rename = "agentSession/compact")]
     AgentSessionCompact,
     #[serde(rename = "agentSession/queuedTurn/remove")]
@@ -578,12 +566,6 @@ pub enum AppServerRequestMethod {
     ModelProviderKeyUpdate,
     #[serde(rename = "modelProviderKey/delete")]
     ModelProviderKeyDelete,
-    #[serde(rename = "modelProviderKey/next")]
-    ModelProviderKeyNext,
-    #[serde(rename = "modelProviderKey/usage/record")]
-    ModelProviderKeyUsageRecord,
-    #[serde(rename = "modelProviderKey/error/record")]
-    ModelProviderKeyErrorRecord,
     #[serde(rename = "modelProviderUiState/read")]
     ModelProviderUiStateRead,
     #[serde(rename = "modelProviderUiState/write")]
@@ -664,12 +646,6 @@ impl AppServerRequestMethod {
             }
             Self::AgentSessionReviewDecisionSave => METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
             Self::AgentSessionUpdate => METHOD_AGENT_SESSION_UPDATE,
-            Self::AgentSessionObjectiveRead => METHOD_AGENT_SESSION_OBJECTIVE_READ,
-            Self::AgentSessionObjectiveSet => METHOD_AGENT_SESSION_OBJECTIVE_SET,
-            Self::AgentSessionObjectiveStatusUpdate => METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
-            Self::AgentSessionObjectiveClear => METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
-            Self::AgentSessionObjectiveContinue => METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
-            Self::AgentSessionObjectiveAudit => METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
             Self::AgentSessionCompact => METHOD_AGENT_SESSION_COMPACT,
             Self::AgentSessionQueuedTurnRemove => METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
             Self::AgentSessionQueuedTurnPromote => METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
@@ -899,9 +875,6 @@ impl AppServerRequestMethod {
             Self::ModelProviderKeyCreate => METHOD_MODEL_PROVIDER_KEY_CREATE,
             Self::ModelProviderKeyUpdate => METHOD_MODEL_PROVIDER_KEY_UPDATE,
             Self::ModelProviderKeyDelete => METHOD_MODEL_PROVIDER_KEY_DELETE,
-            Self::ModelProviderKeyNext => METHOD_MODEL_PROVIDER_KEY_NEXT,
-            Self::ModelProviderKeyUsageRecord => METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
-            Self::ModelProviderKeyErrorRecord => METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
             Self::ModelProviderUiStateRead => METHOD_MODEL_PROVIDER_UI_STATE_READ,
             Self::ModelProviderUiStateWrite => METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
             Self::ModelProviderAliasRead => METHOD_MODEL_PROVIDER_ALIAS_READ,
@@ -966,14 +939,6 @@ impl AppServerRequestMethod {
             }
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE => Some(Self::AgentSessionReviewDecisionSave),
             METHOD_AGENT_SESSION_UPDATE => Some(Self::AgentSessionUpdate),
-            METHOD_AGENT_SESSION_OBJECTIVE_READ => Some(Self::AgentSessionObjectiveRead),
-            METHOD_AGENT_SESSION_OBJECTIVE_SET => Some(Self::AgentSessionObjectiveSet),
-            METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE => {
-                Some(Self::AgentSessionObjectiveStatusUpdate)
-            }
-            METHOD_AGENT_SESSION_OBJECTIVE_CLEAR => Some(Self::AgentSessionObjectiveClear),
-            METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE => Some(Self::AgentSessionObjectiveContinue),
-            METHOD_AGENT_SESSION_OBJECTIVE_AUDIT => Some(Self::AgentSessionObjectiveAudit),
             METHOD_AGENT_SESSION_COMPACT => Some(Self::AgentSessionCompact),
             METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE => Some(Self::AgentSessionQueuedTurnRemove),
             METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE => Some(Self::AgentSessionQueuedTurnPromote),
@@ -1215,9 +1180,6 @@ impl AppServerRequestMethod {
             METHOD_MODEL_PROVIDER_KEY_CREATE => Some(Self::ModelProviderKeyCreate),
             METHOD_MODEL_PROVIDER_KEY_UPDATE => Some(Self::ModelProviderKeyUpdate),
             METHOD_MODEL_PROVIDER_KEY_DELETE => Some(Self::ModelProviderKeyDelete),
-            METHOD_MODEL_PROVIDER_KEY_NEXT => Some(Self::ModelProviderKeyNext),
-            METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD => Some(Self::ModelProviderKeyUsageRecord),
-            METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD => Some(Self::ModelProviderKeyErrorRecord),
             METHOD_MODEL_PROVIDER_UI_STATE_READ => Some(Self::ModelProviderUiStateRead),
             METHOD_MODEL_PROVIDER_UI_STATE_WRITE => Some(Self::ModelProviderUiStateWrite),
             METHOD_MODEL_PROVIDER_ALIAS_READ => Some(Self::ModelProviderAliasRead),
@@ -1423,30 +1385,6 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_UPDATE,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_OBJECTIVE_READ,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_OBJECTIVE_SET,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -2335,18 +2273,6 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_MODEL_PROVIDER_KEY_DELETE,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_MODEL_PROVIDER_KEY_NEXT,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
-        kind: AppServerMethodKind::Request,
-    },
-    AppServerMethodSpec {
-        method: METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {

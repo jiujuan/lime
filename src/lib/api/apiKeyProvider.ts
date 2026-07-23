@@ -17,10 +17,7 @@ import {
   METHOD_MODEL_PROVIDER_DELETE,
   METHOD_MODEL_PROVIDER_KEY_CREATE,
   METHOD_MODEL_PROVIDER_KEY_DELETE,
-  METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
-  METHOD_MODEL_PROVIDER_KEY_NEXT,
   METHOD_MODEL_PROVIDER_KEY_UPDATE,
-  METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
   METHOD_MODEL_PROVIDER_LIST,
   METHOD_MODEL_PROVIDER_READ,
   METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
@@ -34,7 +31,6 @@ import {
   type ModelProviderConfigImportResponse as AppServerModelProviderConfigImportResponse,
   type ModelProviderDeleteResponse as AppServerModelProviderDeleteResponse,
   type ModelProviderKeyDeleteResponse as AppServerModelProviderKeyDeleteResponse,
-  type ModelProviderKeyNextResponse as AppServerModelProviderKeyNextResponse,
   type ModelProviderKeyWriteResponse as AppServerModelProviderKeyWriteResponse,
   type ModelProviderListResponse as AppServerModelProviderListResponse,
   type ModelProviderReadResponse as AppServerModelProviderReadResponse,
@@ -251,15 +247,6 @@ function normalizeProviderKeyDeleteResponse(
     );
   }
   return response.deleted;
-}
-
-function normalizeNextProviderKeyResponse(
-  response: AppServerModelProviderKeyNextResponse | null | undefined,
-): string | null {
-  if (!response || typeof response !== "object") {
-    throw new Error("App Server modelProviderKey/next did not return key");
-  }
-  return response.apiKey ?? null;
 }
 
 function normalizeUiStateReadResponse(
@@ -644,38 +631,6 @@ export const apiKeyProviderApi = {
         METHOD_MODEL_PROVIDER_KEY_UPDATE,
         { keyId, alias },
       ).then(normalizeProviderKeyWriteResponse),
-    );
-  },
-
-  /**
-   * 获取下一个可用的 API Key（用于 API 调用）
-   */
-  async getNextApiKey(providerId: string): Promise<string | null> {
-    const response =
-      await requestApiKeyProviderAppServer<AppServerModelProviderKeyNextResponse>(
-        METHOD_MODEL_PROVIDER_KEY_NEXT,
-        { providerId },
-      );
-    return normalizeNextProviderKeyResponse(response);
-  },
-
-  /**
-   * 记录 API Key 使用
-   */
-  async recordUsage(keyId: string): Promise<void> {
-    await requestApiKeyProviderAppServer(
-      METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
-      { keyId },
-    );
-  },
-
-  /**
-   * 记录 API Key 错误
-   */
-  async recordError(keyId: string): Promise<void> {
-    await requestApiKeyProviderAppServer(
-      METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
-      { keyId },
     );
   },
 

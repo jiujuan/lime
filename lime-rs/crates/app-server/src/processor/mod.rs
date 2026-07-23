@@ -545,6 +545,12 @@ impl RequestProcessor {
         allow_existing_process_initialization: bool,
     ) -> Result<serde_json::Value, JsonRpcError> {
         let params: InitializeParams = parse_params(params)?;
+        crate::agent_ui_event_schema::warm_validators().map_err(|error| {
+            JsonRpcError::new(
+                error_codes::RUNTIME_ERROR,
+                format!("failed to initialize Agent UI event schemas: {error}"),
+            )
+        })?;
         let mut state = self.state.lock().expect("app-server state mutex poisoned");
         if state.initialize_accepted && !allow_existing_process_initialization {
             return Err(JsonRpcError::new(

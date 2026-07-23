@@ -58,19 +58,17 @@
 
 `agent_runtime_*` 等命令名只能作为 retired guard、历史 evidence、测试 fixture 或短期前端 compat request 形状存在；`lime-rs/src/commands/**` 已删除，不是新的 Query Loop 实现目录。本文如提到旧 `runtime_turn.rs`、`tool_runtime.rs`、`command_api/runtime_api.rs`，只表示旧实现来源，不代表 current owner。新增运行时能力必须进入 App Server JSON-RPC、RuntimeCore、ExecutionBackend、services 或 `lime-rs/crates/agent`，不得恢复 compat wrapper、退场 stub 或平行 runtime 分支。
 
-### Managed Objective / `/goal` 类能力边界
+### ThreadGoal / `/goal` 类能力边界
 
-[Codex `/goal`](../research/codex-goal/README.md) 证明了 “persistent objective -> idle continuation turn” 可以由 runtime 管理，但 Lime 不能因此新增第二条 Query Loop。
+[Codex `/goal`](../research/codex-goal/README.md) 证明了 “persistent objective -> idle continuation turn” 可以由 runtime 管理；Lime current owner 是 thread-owned `ThreadGoal`，不能因此新增第二条 Query Loop。
 
-如果后续实现 `Managed Objective`：
+1. continuation turn 仍必须通过 App Server v2 Turn admission / RuntimeCore queue 进入本主链。
+2. Automation 只负责按 schedule 向 persisted Thread 提交 Turn，不拥有第二套 Goal 状态机。
+3. Goal 完成只通过 canonical `update_goal` 语义和 persisted ThreadGoal status 表达，不新增 audit RPC。
+4. `auto_continue` 仍只表示当前已有文稿续写的 prompt augmentation，不等同于 persistent goal。
+5. 如果用户有 queued input、pending elicitation、pause、usage/budget limit 或 blocked 状态，不能自动续跑下一轮。
 
-1. continuation turn 仍必须通过 App Server `agentSession/turn/start` 或 RuntimeCore runtime queue 进入本主链。
-2. durable 后台目标仍必须挂到 `automation job`，不能自建 scheduler。
-3. 完成审计必须消费 `artifact / evidence / thread_read`，不能只靠模型自报完成。
-4. `auto_continue` 仍只表示当前已有文稿续写的 prompt augmentation，不等同于 persistent objective。
-5. 如果用户有 queued input、pending elicitation、pause、budget limit 或 blocked 状态，不能自动续跑下一轮。
-
-详细路线图见 `internal/roadmap/managed-objective/README.md`。这里的固定边界只负责说明：任何 continuation turn 都必须回到 Query Loop 主链。
+旧 `ManagedObjective`、`agentSession/objective/*` 和手动 continue 已删除并禁止恢复。任何 ThreadGoal continuation turn 都必须回到 Query Loop 主链。
 
 ## 代码入口地图
 

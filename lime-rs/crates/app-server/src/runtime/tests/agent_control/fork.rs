@@ -508,7 +508,8 @@ async fn last_n_validates_only_the_selected_turn_window() {
     assert_eq!(child.turns.len(), 1);
     assert!(child.turns[0].items.iter().any(|item| matches!(
         &item.payload,
-        ThreadItemPayload::UserMessage { content, .. } if content == "current task"
+        ThreadItemPayload::UserMessage { content, .. }
+            if content == &vec![agent_protocol::AgentInput::text("current task")]
     )));
 }
 

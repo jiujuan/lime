@@ -288,14 +288,15 @@ pub(super) fn with_canonical_message_reasoning_lifecycle(
                         "in_progress",
                         Some(&event.payload),
                     ));
-                    normalized.push(event);
-                    normalized.push(lifecycle_event(
+                    let completed = lifecycle_event(
                         "item.completed",
                         MessageItemFamily::User,
                         &item_id,
                         "completed",
-                        None,
-                    ));
+                        Some(&event.payload),
+                    );
+                    normalized.push(event);
+                    normalized.push(completed);
                     state.complete(
                         MessageItemFamily::User,
                         &item_id,

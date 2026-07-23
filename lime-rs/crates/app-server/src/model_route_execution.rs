@@ -6,7 +6,7 @@ pub(crate) fn media_route_execution_binding(
     route: &ResolvedModelRoute,
 ) -> Option<Value> {
     let task_kind = task_kind_from_payload(payload)?;
-    let binding = local_service_binding_for_task(task_kind)?;
+    let binding = media_task_binding_for_task(task_kind)?;
     let provider_id = non_empty(Some(&route.model_ref.provider_id))?;
     let model_id = non_empty(Some(&route.model_ref.model_id))?;
     let protocol = serde_json::to_value(&route.protocol).unwrap_or_else(|_| json!("unknown"));
@@ -14,18 +14,15 @@ pub(crate) fn media_route_execution_binding(
     Some(json!({
         "version": 1,
         "status": "ready",
-        "executionOwner": "media_runtime_worker",
+        "executionOwner": "media_task_worker",
         "executor": {
-            "kind": "local_lime_service",
+            "kind": "media_task_worker",
             "bindingKey": binding.binding_key,
-            "endpointSource": "runner_config",
-            "method": "POST",
-            "path": binding.path,
-            "routeHeader": "X-Provider-Id"
+            "endpointSource": "resolved_route"
         },
         "credentialResolver": {
-            "owner": "local_lime_service",
-            "source": "api_key_provider_store",
+            "owner": "media_task_worker",
+            "source": "resolved_route_credential_ref",
             "providerId": provider_id,
             "credentialRef": route.auth.credential_ref,
             "secretMaterialStatus": "not_embedded",
@@ -40,20 +37,14 @@ pub(crate) fn media_route_execution_binding(
     }))
 }
 
-struct LocalServiceBinding {
+struct MediaTaskBinding {
     binding_key: &'static str,
-    path: &'static str,
 }
 
-fn local_service_binding_for_task(task_kind: ModelTaskKind) -> Option<LocalServiceBinding> {
+fn media_task_binding_for_task(task_kind: ModelTaskKind) -> Option<MediaTaskBinding> {
     match task_kind {
-        ModelTaskKind::ImageGenerate => Some(LocalServiceBinding {
-            binding_key: "local_lime_service:/v1/images/generations",
-            path: "/v1/images/generations",
-        }),
-        ModelTaskKind::VideoGenerate => Some(LocalServiceBinding {
-            binding_key: "local_lime_service:/v1/videos/generations",
-            path: "/v1/videos/generations",
+        ModelTaskKind::ImageGenerate => Some(MediaTaskBinding {
+            binding_key: "mediaTaskArtifact/image/create",
         }),
         _ => None,
     }
@@ -83,7 +74,7 @@ mod tests {
     };
 
     #[test]
-    fn image_route_execution_binding_delegates_credentials_to_local_service() {
+    fn image_route_execution_binding_delegates_to_current_media_worker() {
         let route = ResolvedModelRoute {
             model_ref: ModelRef {
                 provider_id: "openai-images".to_string(),
@@ -137,11 +128,11 @@ mod tests {
 
         assert_eq!(
             binding["executor"]["bindingKey"].as_str(),
-            Some("local_lime_service:/v1/images/generations")
+            Some("mediaTaskArtifact/image/create")
         );
         assert_eq!(
             binding["credentialResolver"]["owner"].as_str(),
-            Some("local_lime_service")
+            Some("media_task_worker")
         );
         assert_eq!(
             binding["credentialResolver"]["secretMaterialStatus"].as_str(),
@@ -160,5 +151,16 @@ mod tests {
             Some("Bearer")
         );
         assert!(binding["executor"].get("baseUrl").is_none());
+        assert!(binding["executor"].get("path").is_none());
+
+        assert!(media_route_execution_binding(
+            &json!({
+                "model_task_request": {
+                    "taskKind": "video_generate"
+                }
+            }),
+            &route,
+        )
+        .is_none());
     }
 }

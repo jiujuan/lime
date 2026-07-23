@@ -21,6 +21,18 @@ pub(crate) use responses::build_responses_image_generation_endpoint;
 use responses::request_single_responses_image_generation;
 use zhipu::request_single_zhipu_image_generation;
 
+fn with_optional_bearer_auth(
+    request: reqwest::RequestBuilder,
+    api_key: &str,
+) -> reqwest::RequestBuilder {
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        request
+    } else {
+        request.bearer_auth(api_key)
+    }
+}
+
 pub(crate) const IMAGE_EXECUTOR_MODE_IMAGES_API: &str = "images_api";
 pub(crate) const IMAGE_EXECUTOR_MODE_RESPONSES_IMAGE_GENERATION: &str =
     "responses_image_generation";
@@ -197,5 +209,32 @@ pub(super) fn summarize_response_body(body: &str) -> String {
         format!("{preview}...")
     } else {
         preview
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_optional_bearer_auth;
+
+    #[test]
+    fn optional_bearer_auth_omits_header_for_keyless_route() {
+        let client = reqwest::Client::new();
+        let keyless = with_optional_bearer_auth(client.get("http://127.0.0.1"), "")
+            .build()
+            .expect("build keyless request");
+        let authenticated = with_optional_bearer_auth(client.get("http://127.0.0.1"), "secret")
+            .build()
+            .expect("build authenticated request");
+
+        assert!(!keyless
+            .headers()
+            .contains_key(reqwest::header::AUTHORIZATION));
+        assert_eq!(
+            authenticated
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("Bearer secret")
+        );
     }
 }

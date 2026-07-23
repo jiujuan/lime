@@ -212,9 +212,7 @@ export function buildHarnessStatusPanelSectionModels({
       threadRead?.thread_id &&
       (!threadGoal || threadGoal.threadId === threadRead.thread_id)
         ? {
-            title: String(
-              t(THREAD_GOAL_COPY.sectionTitle as never),
-            ),
+            title: String(t(THREAD_GOAL_COPY.sectionTitle as never)),
             badge: threadGoal
               ? String(
                   t(THREAD_GOAL_STATUS_LABEL_KEYS[threadGoal.status] as never),

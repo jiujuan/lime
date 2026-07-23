@@ -3,7 +3,6 @@ use agent_protocol::{
     AgentInput, CollabAgentOperation, ItemStatus, SessionId, ThreadId, ThreadItemPayload,
     ToolOutput, TurnId,
 };
-use serde_json::json;
 
 fn completed_item(payload: ThreadItemPayload) -> ThreadItem {
     let mut item = ThreadItem::new(
@@ -70,7 +69,7 @@ fn fork_rejects_canonical_history_that_cannot_be_lowered_without_loss() {
 }
 
 #[test]
-fn fork_rejects_source_image_input_missing_from_canonical_user_message() {
+fn fork_accepts_image_input_preserved_by_canonical_user_message() {
     for media in [
         AgentInput::Image {
             uri: "https://example.invalid/image.png".to_string(),
@@ -81,44 +80,19 @@ fn fork_rejects_source_image_input_missing_from_canonical_user_message() {
             detail: None,
         },
     ] {
-        let session = AgentSession {
-            session_id: "session-1".to_string(),
-            thread_id: "thread-1".to_string(),
-            app_id: "agent-chat".to_string(),
-            workspace_id: None,
-            business_object_ref: None,
-            status: AgentSessionStatus::Idle,
-            created_at: "2026-07-21T00:00:00Z".to_string(),
-            updated_at: "2026-07-21T00:00:00Z".to_string(),
-        };
-        let source = StoredSession {
-            session,
-            turns: Vec::new(),
-            turn_inputs: Default::default(),
-            turn_runtime_options: Default::default(),
-            events: vec![AgentEvent {
-                event_id: "event-input".to_string(),
-                sequence: 1,
-                session_id: "session-1".to_string(),
-                thread_id: Some("thread-1".to_string()),
-                turn_id: Some("turn-1".to_string()),
-                event_type: super::super::turn_input_events::TURN_INPUT_EVENT_TYPE.to_string(),
-                timestamp: "2026-07-21T00:00:00Z".to_string(),
-                payload: json!({"input": [AgentInput::text("inspect"), media]}),
-            }],
-            output_blobs: Default::default(),
-        };
+        let item = completed_item(ThreadItemPayload::UserMessage {
+            content: vec![AgentInput::text("inspect"), media],
+            client_id: Some("client-1".to_string()),
+        });
         let history = ForkHistory {
             turn_ids: HashSet::from(["turn-1".to_string()]),
-            changes: None,
+            changes: Some(ThreadHistoryChangeSet {
+                sequence: 1,
+                changed_items: vec![item],
+                ..Default::default()
+            }),
         };
 
-        let error = validate_fork_provider_history(&source, &history)
-            .expect_err("source image history must fail closed");
-        assert!(matches!(
-            error,
-            RuntimeCoreError::Backend(message)
-                if message.contains("cannot preserve source image input")
-        ));
+        validate_fork_provider_history(&history).expect("canonical image input is forkable");
     }
 }

@@ -729,6 +729,35 @@ fn lifecycle_notifications_round_trip_only_the_v2_shapes() {
                 "delta": "hello"
             }
         }),
+        json!({
+            "method": "item/reasoning/summaryTextDelta",
+            "params": {
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "itemId": "reasoning_1",
+                "delta": "先分析",
+                "summaryIndex": 0
+            }
+        }),
+        json!({
+            "method": "item/reasoning/summaryPartAdded",
+            "params": {
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "itemId": "reasoning_1",
+                "summaryIndex": 1
+            }
+        }),
+        json!({
+            "method": "item/reasoning/textDelta",
+            "params": {
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "itemId": "reasoning_1",
+                "delta": "raw reasoning",
+                "contentIndex": 0
+            }
+        }),
     ];
 
     for expected in cases {
@@ -823,6 +852,9 @@ fn typed_v2_envelope_schema_names_are_stable() {
             "item/started",
             "item/completed",
             "item/agentMessage/delta",
+            "item/reasoning/summaryTextDelta",
+            "item/reasoning/summaryPartAdded",
+            "item/reasoning/textDelta",
             "thread/settings/updated",
             "thread/tokenUsage/updated",
             "thread/goal/updated",

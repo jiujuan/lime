@@ -196,7 +196,7 @@ describe("openai-compatible-fixture-server", () => {
       document: {
         schemaVersion: "artifact_document.v1",
         kind: "report",
-        title: "Managed Objective Automation Smoke Report",
+        title: "Offline Fixture Artifact Report",
         status: "ready",
         language: "zh-CN",
       },

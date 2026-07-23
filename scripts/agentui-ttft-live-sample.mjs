@@ -11,7 +11,7 @@ import {
   createAgentSessionCurrent,
   readAgentRuntimeThreadCurrent,
   startAgentSessionTurnCurrent,
-} from "./lib/managed-objective-continuation-smoke-core.mjs";
+} from "./lib/agent-runtime-smoke-core.mjs";
 
 const DEFAULT_HEALTH_URL = "http://127.0.0.1:3030/health";
 const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";

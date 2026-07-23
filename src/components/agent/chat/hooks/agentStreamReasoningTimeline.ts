@@ -3,10 +3,20 @@ import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 export interface AgentStreamReasoningTimelineState {
   currentTurnId?: string | null;
   streamedReasoningItemId?: string | null;
+  streamedReasoningSourceItemId?: string | null;
+  streamedReasoningSummaryIndex?: number | null;
   streamedReasoningText?: string;
   streamedReasoningStartedAt?: string | null;
   streamedReasoningSequence?: number | null;
   streamedReasoningSegmentCounter?: number;
+}
+
+export function buildStreamedReasoningSummaryItemId(params: {
+  itemId: string;
+  summaryIndex: number;
+  turnId: string;
+}): string {
+  return `streamed-reasoning:${params.turnId}:${params.itemId}:summary:${params.summaryIndex}`;
 }
 
 export function appendTextWithOverlapFallback(
@@ -117,6 +127,8 @@ export function resetStreamedReasoningSegment(
   requestState: AgentStreamReasoningTimelineState,
 ): void {
   requestState.streamedReasoningItemId = null;
+  requestState.streamedReasoningSourceItemId = null;
+  requestState.streamedReasoningSummaryIndex = null;
   requestState.streamedReasoningText = "";
   requestState.streamedReasoningStartedAt = null;
   requestState.streamedReasoningSequence = null;

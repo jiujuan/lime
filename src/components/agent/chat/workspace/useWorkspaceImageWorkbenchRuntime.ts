@@ -26,7 +26,6 @@ interface UseWorkspaceImageWorkbenchRuntimeParams {
   projectId: SendCommandParams["projectId"];
   projectImageGenerationPreference: SendCommandParams["projectImageGenerationPreference"];
   projectRootPath: SendCommandParams["projectRootPath"];
-  saveImageWorkbenchImagesToResource: ActionParams["saveImageWorkbenchImagesToResource"];
   setCanvasState: ActionParams["setCanvasState"];
   setInput: ActionParams["setInput"];
   setOnDemandMediaDefaults: SendCommandParams["setOnDemandMediaDefaults"];
@@ -52,7 +51,6 @@ export function useWorkspaceImageWorkbenchRuntime({
   projectId,
   projectImageGenerationPreference,
   projectRootPath,
-  saveImageWorkbenchImagesToResource,
   setCanvasState,
   setInput,
   setOnDemandMediaDefaults,
@@ -87,7 +85,6 @@ export function useWorkspaceImageWorkbenchRuntime({
     imageWorkbenchSessionKey,
     projectId,
     projectRootPath,
-    saveImageWorkbenchImagesToResource,
     setCanvasState,
     setInput,
     updateCurrentImageWorkbenchState,

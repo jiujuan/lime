@@ -36,7 +36,7 @@ describe("buildPluginAgentUiProjectionEvents", () => {
               toolName: "Skill",
               payload: {
                 streamKind: "tool_input_delta",
-                delta: "{\"skill\":\"article-writer\"}",
+                delta: '{"skill":"article-writer"}',
                 runtimeEvent: { tool_id: "tool-1", toolName: "Skill" },
               },
             },
@@ -77,6 +77,52 @@ describe("buildPluginAgentUiProjectionEvents", () => {
         toolName: "Skill",
         streamKind: "tool_input_delta",
       },
+    });
+  });
+
+  it("只接受声明过的 dotted AgentUI event type，未知类型 fail closed", () => {
+    const events = buildPluginAgentUiProjectionEvents({
+      taskId: "task-event-taxonomy",
+      events: [
+        {
+          id: "action-required-1",
+          eventType: "action.required",
+          status: "pending",
+          requestId: "approval-1",
+        },
+        {
+          id: "run-canceled-1",
+          eventType: "run.canceled",
+        },
+        {
+          id: "artifact-unknown-1",
+          eventType: "artifact.unknown",
+          status: "ready",
+          message: "不要把未知事件降级成 runtime status",
+          payload: {
+            streamKind: "assistant_text_delta",
+            delta: "也不要伪装成文本流",
+          },
+        },
+        {
+          id: "team-unknown-1",
+          eventType: "team.unknown",
+          status: "running",
+        },
+      ],
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      type: "action.required",
+      actionId: "approval-1",
+      runtimeStatus: "needs_input",
+    });
+    expect(events[1]).toMatchObject({
+      type: "run.canceled",
+      phase: "cancelled",
+      runtimeStatus: "cancelled",
+      persistence: "archive",
     });
   });
 
@@ -303,7 +349,7 @@ describe("buildPluginAgentUiProjectionEvents", () => {
     });
   });
 
-  it("把 queued / completed / failed task 状态映射为 queue 和 runtime status", () => {
+  it("把 queued / completed / failed / cancelled task 状态映射为 queue 和 runtime status", () => {
     const events = buildPluginAgentUiProjectionEvents({
       taskId: "task-status",
       events: [
@@ -325,6 +371,12 @@ describe("buildPluginAgentUiProjectionEvents", () => {
           status: "failed",
           message: "失败",
         },
+        {
+          id: "task:cancelled:1",
+          eventType: "task:cancelled",
+          status: "cancelled",
+          message: "已取消",
+        },
       ],
     });
 
@@ -332,6 +384,7 @@ describe("buildPluginAgentUiProjectionEvents", () => {
       ["queue.changed", "queued"],
       ["run.finished", "completed"],
       ["run.failed", "failed"],
+      ["run.canceled", "cancelled"],
     ]);
     expect(events[0]).toMatchObject({
       surface: "task_capsule",

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use agent_protocol::{
-    AgentInput, SessionId, Thread, ThreadHistoryChangeSet, ThreadId, ThreadItem, ThreadItemPayload,
+    SessionId, Thread, ThreadHistoryChangeSet, ThreadId, ThreadItem, ThreadItemPayload,
     ThreadStatus, ThreadTurnsView, Turn,
 };
 use app_server_protocol::protocol::v2::ThreadForkParams;
@@ -60,7 +60,7 @@ impl RuntimeCore {
         let target_session_id = format!("sess_{}", Uuid::new_v4().simple());
         let target_thread_id = format!("thread_{}", Uuid::new_v4().simple());
         let history = fork_history(&source, &params, &target_session_id, &target_thread_id)?;
-        validate_fork_provider_history(&source_stored, &history)?;
+        validate_fork_provider_history(&history)?;
         let history_sequence = history
             .changes
             .as_ref()
@@ -253,38 +253,7 @@ impl RuntimeCore {
     }
 }
 
-fn validate_fork_provider_history(
-    source: &StoredSession,
-    history: &ForkHistory,
-) -> Result<(), RuntimeCoreError> {
-    for event in source.events.iter().filter(|event| {
-        event
-            .turn_id
-            .as_ref()
-            .is_some_and(|turn_id| history.turn_ids.contains(turn_id))
-            && super::turn_input_events::is_provider_input_event(event)
-    }) {
-        let Some(input) = event.payload.get("input") else {
-            continue;
-        };
-        let input = serde_json::from_value::<Vec<AgentInput>>(input.clone()).map_err(|error| {
-            invalid(format!(
-                "thread/fork cannot verify source input history at event {}: {error}",
-                event.event_id
-            ))
-        })?;
-        if input.iter().any(|part| {
-            matches!(
-                part,
-                AgentInput::Image { .. } | AgentInput::LocalImage { .. }
-            )
-        }) {
-            return Err(invalid(
-                "thread/fork cannot preserve source image input from canonical history",
-            ));
-        }
-    }
-
+fn validate_fork_provider_history(history: &ForkHistory) -> Result<(), RuntimeCoreError> {
     for item in history
         .changes
         .iter()

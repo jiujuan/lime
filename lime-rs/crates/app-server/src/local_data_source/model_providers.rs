@@ -23,9 +23,6 @@ use app_server_protocol::ModelProviderFetchModelsResponse;
 use app_server_protocol::ModelProviderKeyCreateParams;
 use app_server_protocol::ModelProviderKeyDeleteParams;
 use app_server_protocol::ModelProviderKeyDeleteResponse;
-use app_server_protocol::ModelProviderKeyEventParams;
-use app_server_protocol::ModelProviderKeyNextParams;
-use app_server_protocol::ModelProviderKeyNextResponse;
 use app_server_protocol::ModelProviderKeyUpdateParams;
 use app_server_protocol::ModelProviderKeyWriteResponse;
 use app_server_protocol::ModelProviderListResponse;
@@ -524,45 +521,6 @@ pub(crate) fn delete_model_provider_key(
     Ok(ModelProviderKeyDeleteResponse { deleted })
 }
 
-pub(crate) fn read_next_model_provider_key(
-    db: &DbConnection,
-    api_key_provider_service: &ApiKeyProviderService,
-    params: ModelProviderKeyNextParams,
-) -> Result<ModelProviderKeyNextResponse, RuntimeCoreError> {
-    let next = api_key_provider_service
-        .get_next_api_key_entry(db, &params.provider_id)
-        .map_err(data_error)?;
-    Ok(match next {
-        Some((key_id, api_key)) => ModelProviderKeyNextResponse {
-            api_key: Some(api_key),
-            key_id: Some(key_id),
-        },
-        None => ModelProviderKeyNextResponse::default(),
-    })
-}
-
-pub(crate) fn record_model_provider_key_usage(
-    db: &DbConnection,
-    api_key_provider_service: &ApiKeyProviderService,
-    params: ModelProviderKeyEventParams,
-) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
-    api_key_provider_service
-        .record_usage(db, &params.key_id)
-        .map_err(data_error)?;
-    Ok(ModelProviderMutationResponse::default())
-}
-
-pub(crate) fn record_model_provider_key_error(
-    db: &DbConnection,
-    api_key_provider_service: &ApiKeyProviderService,
-    params: ModelProviderKeyEventParams,
-) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
-    api_key_provider_service
-        .record_error(db, &params.key_id)
-        .map_err(data_error)?;
-    Ok(ModelProviderMutationResponse::default())
-}
-
 pub(crate) fn read_model_provider_ui_state(
     db: &DbConnection,
     api_key_provider_service: &ApiKeyProviderService,
@@ -778,11 +736,39 @@ mod tests {
     use lime_core::database::schema;
     use rusqlite::{params, Connection};
     use std::sync::{Arc, Mutex};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn setup_model_provider_db() -> DbConnection {
         let conn = Connection::open_in_memory().expect("open db");
         schema::create_tables(&conn).expect("create schema");
         Arc::new(Mutex::new(conn))
+    }
+
+    async fn spawn_models_fixture() -> (String, tokio::task::JoinHandle<String>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind models fixture");
+        let address = listener.local_addr().expect("models fixture address");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept models request");
+            let mut request = [0_u8; 4096];
+            let size = stream
+                .read(&mut request)
+                .await
+                .expect("read models request");
+            let body = r#"{"models":[{"name":"qwen3:14b","details":{"family":"qwen3"}}]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("write models response");
+            String::from_utf8_lossy(&request[..size]).into_owned()
+        });
+        (format!("http://{address}"), server)
     }
 
     fn insert_provider(
@@ -851,5 +837,105 @@ mod tests {
         .expect("list models");
 
         assert!(response.models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn keyless_fetch_models_uses_enabled_key_and_scopes_cache() {
+        let db = setup_model_provider_db();
+        let api_key_provider_service = ApiKeyProviderService::new();
+        let model_registry_service = ModelRegistryService::new(db.clone());
+        let (api_host, server) = spawn_models_fixture().await;
+        let provider = api_key_provider_service
+            .add_custom_provider(
+                &db,
+                "Keyless Models Fixture".to_string(),
+                ApiProviderType::Ollama,
+                api_host.clone(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create keyless provider");
+        api_key_provider_service
+            .add_api_key(&db, &provider.id, "scope-keyless-cache", None, false)
+            .expect("add keyless provider key");
+
+        let response = fetch_model_provider_models(
+            &db,
+            &api_key_provider_service,
+            &model_registry_service,
+            ModelProviderFetchModelsParams {
+                provider_id: provider.id.clone(),
+            },
+        )
+        .await
+        .expect("fetch keyless models");
+        let request = server.await.expect("join models fixture");
+
+        assert_eq!(response.models.len(), 1);
+        assert_eq!(response.models[0].id, "qwen3:14b");
+        assert!(request.contains("scope-keyless-cache"));
+        assert!(model_registry_service
+            .get_cached_provider_models(&provider.id, &api_host, Some(ApiProviderType::Ollama))
+            .expect("read unscoped keyless cache")
+            .is_none());
+        let cached = model_registry_service
+            .fetch_models_from_api_with_hints(
+                &provider.id,
+                &api_host,
+                "scope-keyless-cache",
+                Some(ApiProviderType::Ollama),
+                &[],
+            )
+            .await
+            .expect("read scoped keyless cache");
+        assert!(cached.from_cache);
+        assert_eq!(cached.models.len(), 1);
+        assert_eq!(cached.models[0].id, "qwen3:14b");
+    }
+
+    #[tokio::test]
+    async fn keyless_fetch_models_without_enabled_key_writes_unscoped_cache() {
+        let db = setup_model_provider_db();
+        let api_key_provider_service = ApiKeyProviderService::new();
+        let model_registry_service = ModelRegistryService::new(db.clone());
+        let (api_host, server) = spawn_models_fixture().await;
+        let provider = api_key_provider_service
+            .add_custom_provider(
+                &db,
+                "Unscoped Keyless Models Fixture".to_string(),
+                ApiProviderType::Ollama,
+                api_host.clone(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create keyless provider without key");
+
+        let response = fetch_model_provider_models(
+            &db,
+            &api_key_provider_service,
+            &model_registry_service,
+            ModelProviderFetchModelsParams {
+                provider_id: provider.id.clone(),
+            },
+        )
+        .await
+        .expect("fetch keyless models without key");
+        let request = server.await.expect("join models fixture");
+
+        assert_eq!(response.models.len(), 1);
+        assert_eq!(response.models[0].id, "qwen3:14b");
+        assert!(!request.to_ascii_lowercase().contains("authorization:"));
+        let cached = model_registry_service
+            .get_cached_provider_models(&provider.id, &api_host, Some(ApiProviderType::Ollama))
+            .expect("read unscoped keyless cache")
+            .expect("unscoped keyless cache");
+        assert_eq!(cached.models.len(), 1);
+        assert_eq!(cached.models[0].id, "qwen3:14b");
     }
 }

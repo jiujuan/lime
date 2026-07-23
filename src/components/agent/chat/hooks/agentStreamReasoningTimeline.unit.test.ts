@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import {
   appendTextWithOverlapFallback,
+  buildStreamedReasoningSummaryItemId,
   buildStreamedReasoningItem,
   isStreamedReasoningTimelineItem,
   removeStreamedReasoningTimelineItems,
@@ -10,6 +11,16 @@ import {
 } from "./agentStreamReasoningTimeline";
 
 describe("agentStreamReasoningTimeline", () => {
+  it("应按 canonical item 与 summary index 生成稳定的临时段 id", () => {
+    expect(
+      buildStreamedReasoningSummaryItemId({
+        itemId: "reasoning-1",
+        summaryIndex: 2,
+        turnId: "turn-1",
+      }),
+    ).toBe("streamed-reasoning:turn-1:reasoning-1:summary:2");
+  });
+
   it("应按 overlap 追加 thinking delta，避免重复尾段", () => {
     expect(appendTextWithOverlapFallback("", "先分析。")).toBe("先分析。");
     expect(appendTextWithOverlapFallback("先分析。", "")).toBe("先分析。");
@@ -26,6 +37,7 @@ describe("agentStreamReasoningTimeline", () => {
 
   it("应用 queued turn 构造本地临时 reasoning item 并复用稳定 id", () => {
     const requestState: AgentStreamReasoningTimelineState = {
+      currentTurnId: "turn-1",
       streamedReasoningText: " 先分析。 ",
     };
 
@@ -131,6 +143,8 @@ describe("agentStreamReasoningTimeline", () => {
   it("reset 应只清空当前片段，不重置本地计数器", () => {
     const requestState: AgentStreamReasoningTimelineState = {
       streamedReasoningItemId: "streamed-reasoning:turn-1:local-1",
+      streamedReasoningSourceItemId: "reasoning-1",
+      streamedReasoningSummaryIndex: 0,
       streamedReasoningText: "片段一",
       streamedReasoningStartedAt: "2026-06-22T10:00:00.000Z",
       streamedReasoningSequence: null,
@@ -141,6 +155,8 @@ describe("agentStreamReasoningTimeline", () => {
 
     expect(requestState).toEqual({
       streamedReasoningItemId: null,
+      streamedReasoningSourceItemId: null,
+      streamedReasoningSummaryIndex: null,
       streamedReasoningText: "",
       streamedReasoningStartedAt: null,
       streamedReasoningSequence: null,

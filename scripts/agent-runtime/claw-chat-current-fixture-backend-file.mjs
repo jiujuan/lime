@@ -11,6 +11,7 @@ import {
   IMAGE_COMMAND_PRESENTATION_INTRO,
   IMAGE_FIXTURE_MODEL,
   NEWS_PROMPT,
+  TEXT_PROVIDER_FIXTURE_API_KEY,
   TEXT_FIXTURE_PROVIDER_NAME,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { writeFixtureBackend } from "./claw-chat-current-fixture-backend-script.mjs";
@@ -431,6 +432,7 @@ export async function startTextProviderFixtureServer({
   soulStyleExpectation = null,
 } = {}) {
   const requests = [];
+  const expectedAuthorization = `Bearer ${TEXT_PROVIDER_FIXTURE_API_KEY}`;
   const server = http.createServer((request, response) => {
     let body = "";
     request.setEncoding("utf8");
@@ -445,6 +447,19 @@ export async function startTextProviderFixtureServer({
         authorization: request.headers.authorization ? "present" : "missing",
         body,
       });
+
+      if (request.headers.authorization !== expectedAuthorization) {
+        response.writeHead(401, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            error: {
+              message: "fixture text provider requires its scoped credential",
+              type: "authentication_error",
+            },
+          }),
+        );
+        return;
+      }
 
       const pathname = (() => {
         try {

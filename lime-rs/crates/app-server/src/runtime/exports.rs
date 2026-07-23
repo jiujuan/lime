@@ -13,7 +13,6 @@ use super::EvidencePackRequest;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
 use app_server_protocol::AgentEvent;
-use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
 use app_server_protocol::AgentSessionAnalysisHandoffExportResponse;
 use app_server_protocol::AgentSessionHandoffBundleExportParams;
@@ -25,11 +24,8 @@ use app_server_protocol::AgentSessionReviewDecision;
 use app_server_protocol::AgentSessionReviewDecisionSaveParams;
 use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
 use app_server_protocol::AgentSessionReviewDecisionTemplateExportResponse;
-use app_server_protocol::AgentTurn;
-use app_server_protocol::ArtifactSummary;
 use app_server_protocol::EvidenceExportParams;
 use app_server_protocol::EvidenceExportResponse;
-use app_server_protocol::EvidencePackSummary;
 use lime_infra::telemetry::RequestLog;
 use std::collections::BTreeMap;
 use std::fs;
@@ -107,8 +103,7 @@ impl RuntimeCore {
             })
             .collect::<BTreeMap<_, _>>();
         let evidence_pack = if params.include_evidence_pack.unwrap_or(true) {
-            let evidence_pack = self
-                .evidence_export_provider
+            self.evidence_export_provider
                 .export_evidence_pack(&EvidencePackRequest {
                     session: session.clone(),
                     turns: turns.clone(),
@@ -118,15 +113,7 @@ impl RuntimeCore {
                     request_logs: request_logs.clone(),
                     workflow_audit_events: workflow_audit_events.clone(),
                 })
-                .await?;
-            self.with_current_objective_completion_audit_summary(
-                evidence_pack,
-                &session,
-                &turns,
-                &events,
-                &artifacts,
-            )
-            .await
+                .await?
         } else {
             None
         };
@@ -202,43 +189,6 @@ impl RuntimeCore {
                 Vec::new()
             }
         }
-    }
-
-    async fn with_current_objective_completion_audit_summary(
-        &self,
-        evidence_pack: Option<EvidencePackSummary>,
-        session: &AgentSession,
-        turns: &[AgentTurn],
-        events: &[AgentEvent],
-        artifacts: &[ArtifactSummary],
-    ) -> Option<EvidencePackSummary> {
-        let Some(objective) = self
-            .app_data_source
-            .read_managed_objective_by_owner(
-                crate::objective::MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
-                session.session_id.clone(),
-            )
-            .await
-            .ok()
-            .flatten()
-        else {
-            return evidence_pack;
-        };
-        let Some(completion_audit_summary) = current_objective_completion_audit_summary(&objective)
-        else {
-            return evidence_pack;
-        };
-        let mut pack = evidence_pack.unwrap_or_else(|| {
-            build_runtime_evidence_pack_summary(
-                session,
-                turns,
-                events,
-                artifacts,
-                "current_objective_projection",
-            )
-        });
-        pack.completion_audit_summary = Some(completion_audit_summary);
-        Some(pack)
     }
 
     pub async fn export_handoff_bundle(

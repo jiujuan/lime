@@ -1610,18 +1610,6 @@ beforeEach(async () => {
     setSelectedModelId: vi.fn(),
     selectedSize: "1024x1024",
     setSelectedSize: vi.fn(),
-    images: [],
-    selectedImage: null,
-    selectedImageId: null,
-    setSelectedImageId: vi.fn(),
-    generating: false,
-    savingToResource: false,
-    generateImage: vi.fn(async () => undefined),
-    cancelGeneration: vi.fn(),
-    backfillImagesToResource: vi.fn(async () => undefined),
-    saveImagesToResource: vi.fn(async () => ({ saved: false, skipped: true })),
-    deleteImage: vi.fn(),
-    newImage: vi.fn(),
   });
   mockInputbar.mockClear();
   mockWorkspacePendingA2UIPanel.mockClear();

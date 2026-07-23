@@ -407,7 +407,7 @@ async fn trigger_turn_appends_canonical_item_before_ack_and_starts_recipient() {
             .iter()
             .map(|event| event.event_type.as_str())
             .collect::<Vec<_>>(),
-        vec!["item.started", "message.created"]
+        vec!["item.started", "message.created", "item.completed"]
     );
     let mailbox_message = mailbox_events
         .iter()
@@ -966,7 +966,7 @@ async fn existing_canonical_item_is_acknowledged_without_a_duplicate_visible_ite
             .iter()
             .map(|event| event.event_type.as_str())
             .collect::<Vec<_>>(),
-        vec!["item.started", "message.created"]
+        vec!["item.started", "message.created", "item.completed"]
     );
 }
 
@@ -1107,7 +1107,7 @@ async fn event_log_first_queue_only_retry_recovers_canonical_item_before_ack() {
             .iter()
             .map(|event| event.event_type.as_str())
             .collect::<Vec<_>>(),
-        vec!["item.started", "message.created"]
+        vec!["item.started", "message.created", "item.completed"]
     );
     assert!(child_events.iter().any(|event| {
         event.turn_id.as_deref() == Some("second-user-turn")

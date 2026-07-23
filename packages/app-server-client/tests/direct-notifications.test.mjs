@@ -4,6 +4,9 @@ import {
   isAgentMessageDeltaNotification,
   isItemCompletedNotification,
   isItemStartedNotification,
+  isReasoningSummaryPartAddedNotification,
+  isReasoningSummaryTextDeltaNotification,
+  isReasoningTextDeltaNotification,
   isServerNotification,
   isThreadStartedNotification,
   isThreadSettingsUpdatedNotification,
@@ -15,7 +18,7 @@ import {
 const threadId = "thread-1";
 const turnId = "turn-1";
 
-test("recognizes the six native v2 server notifications", () => {
+test("recognizes native v2 lifecycle and reasoning notifications", () => {
   const notifications = [
     {
       method: "thread/started",
@@ -57,6 +60,35 @@ test("recognizes the six native v2 server notifications", () => {
       method: "item/agentMessage/delta",
       params: { delta: "done", itemId: "item-1", threadId, turnId },
     },
+    {
+      method: "item/reasoning/summaryTextDelta",
+      params: {
+        delta: "summary",
+        itemId: "reasoning-1",
+        summaryIndex: 0,
+        threadId,
+        turnId,
+      },
+    },
+    {
+      method: "item/reasoning/summaryPartAdded",
+      params: {
+        itemId: "reasoning-1",
+        summaryIndex: 1,
+        threadId,
+        turnId,
+      },
+    },
+    {
+      method: "item/reasoning/textDelta",
+      params: {
+        contentIndex: 0,
+        delta: "raw reasoning",
+        itemId: "reasoning-1",
+        threadId,
+        turnId,
+      },
+    },
   ];
 
   assert.equal(notifications.every(isServerNotification), true);
@@ -66,6 +98,15 @@ test("recognizes the six native v2 server notifications", () => {
   assert.equal(isItemStartedNotification(notifications[3]), true);
   assert.equal(isItemCompletedNotification(notifications[4]), true);
   assert.equal(isAgentMessageDeltaNotification(notifications[5]), true);
+  assert.equal(
+    isReasoningSummaryTextDeltaNotification(notifications[6]),
+    true,
+  );
+  assert.equal(
+    isReasoningSummaryPartAddedNotification(notifications[7]),
+    true,
+  );
+  assert.equal(isReasoningTextDeltaNotification(notifications[8]), true);
   assert.equal(
     isThreadSettingsUpdatedNotification({
       method: "thread/settings/updated",
@@ -96,4 +137,39 @@ test("fails closed for malformed or unknown notifications", () => {
   assert.equal(isServerNotification(malformed), false);
   assert.equal(serverNotification(retired), undefined);
   assert.equal(isServerNotification(retired), false);
+});
+
+test("fails closed for malformed reasoning notifications", () => {
+  const malformed = [
+    {
+      method: "item/reasoning/summaryTextDelta",
+      params: {
+        delta: "summary",
+        itemId: "reasoning-1",
+        threadId,
+        turnId,
+      },
+    },
+    {
+      method: "item/reasoning/summaryPartAdded",
+      params: {
+        itemId: "reasoning-1",
+        summaryIndex: "0",
+        threadId,
+        turnId,
+      },
+    },
+    {
+      method: "item/reasoning/textDelta",
+      params: {
+        contentIndex: Number.POSITIVE_INFINITY,
+        delta: "raw reasoning",
+        itemId: "reasoning-1",
+        threadId,
+        turnId,
+      },
+    },
+  ];
+
+  assert.equal(malformed.every((message) => !isServerNotification(message)), true);
 });

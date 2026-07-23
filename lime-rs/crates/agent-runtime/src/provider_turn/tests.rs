@@ -9,6 +9,7 @@ use model_provider::provider_stream::RuntimeReplyProviderTraceMetadata;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use tokio::sync::oneshot;
 use tool_runtime::tool_executor::{
     RuntimeToolExecutionFuture, RuntimeToolExecutionRequest, RuntimeToolExecutionResult,
@@ -39,6 +40,23 @@ fn harness_generation_projects_provider_request_controls() {
     let (generation, provider_options) = provider_request_controls(&config);
 
     assert_eq!(generation.max_tokens, Some(128));
+    assert_eq!(provider_options.get("enable_thinking"), Some(&false.into()));
+}
+
+#[test]
+fn app_server_thinking_control_projects_provider_request_option() {
+    let mut turn_context = agent_protocol::turn_context::TurnContextOverride::default();
+    turn_context.metadata.insert(
+        "app_server_runtime_backend".to_string(),
+        serde_json::json!({ "thinkingEnabled": false }),
+    );
+    let config = crate::session_config::SessionConfigBuilder::new("session-1")
+        .turn_context(turn_context)
+        .build();
+
+    let (generation, provider_options) = provider_request_controls(&config);
+
+    assert_eq!(generation.max_tokens, None);
     assert_eq!(provider_options.get("enable_thinking"), Some(&false.into()));
 }
 
@@ -150,6 +168,59 @@ impl CurrentProvider for HangingFirstEventProvider {
                 let _ = sender.send(());
             }
             let stream: CurrentProviderStream = Box::pin(stream::pending());
+            Ok(stream)
+        })
+    }
+}
+
+struct ReasoningHeartbeatProvider;
+
+impl CurrentProvider for ReasoningHeartbeatProvider {
+    fn stream<'a>(
+        &'a self,
+        _request: CurrentProviderRequest,
+    ) -> BoxFuture<'a, Result<CurrentProviderStream, CurrentProviderError>> {
+        Box::pin(async move {
+            let stream: CurrentProviderStream =
+                Box::pin(stream::unfold(0_u64, |sequence| async move {
+                    if sequence > 0 {
+                        tokio::task::yield_now().await;
+                    }
+                    Some((
+                        Ok(CanonicalLlmEvent::ReasoningContentDelta {
+                            id: "reasoning-0".to_string(),
+                            text: format!("heartbeat-{sequence}"),
+                            content_index: 0,
+                        }),
+                        sequence + 1,
+                    ))
+                }));
+            Ok(stream)
+        })
+    }
+}
+
+struct TextHeartbeatProvider;
+
+impl CurrentProvider for TextHeartbeatProvider {
+    fn stream<'a>(
+        &'a self,
+        _request: CurrentProviderRequest,
+    ) -> BoxFuture<'a, Result<CurrentProviderStream, CurrentProviderError>> {
+        Box::pin(async move {
+            let stream: CurrentProviderStream =
+                Box::pin(stream::unfold(0_u64, |sequence| async move {
+                    if sequence > 0 {
+                        tokio::task::yield_now().await;
+                    }
+                    Some((
+                        Ok(CanonicalLlmEvent::TextDelta {
+                            id: "text-0".to_string(),
+                            text: format!("heartbeat-{sequence}"),
+                        }),
+                        sequence + 1,
+                    ))
+                }));
             Ok(stream)
         })
     }
@@ -375,6 +446,116 @@ async fn provider_request_includes_model_visible_working_directory_before_user_i
             && matches!(user_content.as_slice(), [CurrentProviderContent::Text(text)]
                 if text == "inspect the workspace")
     ));
+}
+
+#[tokio::test]
+async fn reasoning_summary_and_content_share_item_but_only_content_enters_provider_history() {
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        vec![
+            Ok(CanonicalLlmEvent::ReasoningSummaryDelta {
+                id: "reasoning-1".to_string(),
+                text: "用户可见摘要".to_string(),
+                summary_index: 0,
+            }),
+            Ok(CanonicalLlmEvent::ReasoningContentDelta {
+                id: "reasoning-1".to_string(),
+                text: "provider 原始推理".to_string(),
+                content_index: 0,
+            }),
+            Ok(CanonicalLlmEvent::ToolCall {
+                id: "call-1".to_string(),
+                name: "Read".to_string(),
+                input: serde_json::json!({ "path": "README.md" }),
+                provider_executed: None,
+            }),
+            Ok(CanonicalLlmEvent::Finish {
+                reason: FinishReason::ToolCall,
+                usage: None,
+                response_id: Some("response-1".to_string()),
+            }),
+        ],
+        vec![
+            Ok(CanonicalLlmEvent::TextDelta {
+                id: "text-0".to_string(),
+                text: "done".to_string(),
+            }),
+            Ok(CanonicalLlmEvent::Finish {
+                reason: FinishReason::Stop,
+                usage: None,
+                response_id: Some("response-2".to_string()),
+            }),
+        ],
+    ]));
+    let requests = Arc::clone(&provider.requests);
+    let mut events = Vec::new();
+
+    run_current_provider_turn(
+        CurrentProviderTurnInput {
+            provider,
+            provider_trace_metadata: None,
+            session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                .turn_id("turn-1")
+                .max_turns(3)
+                .build(),
+            initial_messages: vec![CurrentProviderMessage::user(vec![
+                CurrentProviderContent::Text("read it".to_string()),
+            ])],
+            tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                RuntimeToolStepSnapshot::new(
+                    vec![RuntimeToolDefinition::new(
+                        "Read",
+                        "read files",
+                        serde_json::json!({ "type": "object" }),
+                    )],
+                    RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                ),
+            ),
+            model_request_policy: None,
+            tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+            working_directory: PathBuf::from("."),
+            cancel_token: None,
+            pending_input: None,
+        },
+        |event| events.push(event),
+    )
+    .await
+    .expect("provider turn");
+
+    let reasoning_events = events
+        .iter()
+        .filter_map(|event| match event {
+            CurrentProviderTurnEvent::ReasoningSummaryDelta { item_id, .. } => {
+                Some(("summary", item_id.as_str()))
+            }
+            CurrentProviderTurnEvent::ReasoningContentDelta { item_id, .. } => {
+                Some(("content", item_id.as_str()))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reasoning_events,
+        vec![
+            ("summary", "provider:turn-1:1:reasoning:reasoning-1"),
+            ("content", "provider:turn-1:1:reasoning:reasoning-1"),
+        ]
+    );
+
+    let requests = requests.lock().expect("recorded requests");
+    let assistant = requests[1]
+        .messages
+        .iter()
+        .find(|message| message.role == CurrentProviderRole::Assistant)
+        .expect("assistant provider history");
+    assert!(assistant.content.iter().any(|content| matches!(
+        content,
+        CurrentProviderContent::Reasoning(text) if text == "provider 原始推理"
+    )));
+    assert!(!assistant.content.iter().any(|content| matches!(
+        content,
+        CurrentProviderContent::Text(text) | CurrentProviderContent::Reasoning(text)
+            if text == "用户可见摘要"
+    )));
 }
 
 #[tokio::test]
@@ -1313,9 +1494,10 @@ async fn provider_quota_error_preserves_usage_limit_kind() {
 #[tokio::test]
 async fn turn_fails_when_provider_completes_with_reasoning_but_no_user_visible_output() {
     let provider = Arc::new(ScriptedProvider::new(vec![vec![
-        Ok(CanonicalLlmEvent::ReasoningDelta {
+        Ok(CanonicalLlmEvent::ReasoningContentDelta {
             id: "reasoning-1".to_string(),
             text: "I need to think about this first.".to_string(),
+            content_index: 0,
         }),
         Ok(CanonicalLlmEvent::Finish {
             reason: FinishReason::Stop,
@@ -1359,7 +1541,7 @@ async fn turn_fails_when_provider_completes_with_reasoning_but_no_user_visible_o
                 CurrentProviderTurnEvent::ReasoningStart { item_id } => {
                     Some(("start", item_id.as_str()))
                 }
-                CurrentProviderTurnEvent::ReasoningDelta { item_id, .. } => {
+                CurrentProviderTurnEvent::ReasoningContentDelta { item_id, .. } => {
                     Some(("delta", item_id.as_str()))
                 }
                 CurrentProviderTurnEvent::ReasoningEnd { item_id } => {
@@ -1570,6 +1752,194 @@ async fn turn_requires_canonical_turn_id_before_provider_sampling() {
         "Current provider turn requires a canonical turn_id"
     );
     assert!(requests.lock().expect("provider requests").is_empty());
+}
+
+#[tokio::test]
+async fn reasoning_heartbeats_do_not_bypass_first_visible_output_deadline() {
+    let mut turn_context = agent_protocol::turn_context::TurnContextOverride::default();
+    turn_context.metadata.insert(
+        "runtime_request".to_string(),
+        serde_json::json!({
+            "harness": {
+                "generation": {
+                    "first_visible_output_timeout_ms": 20
+                }
+            }
+        }),
+    );
+    let mut events = Vec::new();
+
+    let error = tokio::time::timeout(
+        Duration::from_secs(1),
+        run_current_provider_turn(
+            CurrentProviderTurnInput {
+                provider: Arc::new(ReasoningHeartbeatProvider),
+                provider_trace_metadata: None,
+                session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                    .turn_id("turn-1")
+                    .turn_context(turn_context)
+                    .build(),
+                initial_messages: vec![CurrentProviderMessage::user(vec![
+                    CurrentProviderContent::Text("hello".to_string()),
+                ])],
+                tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                    RuntimeToolStepSnapshot::new(
+                        Vec::new(),
+                        RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                    ),
+                ),
+                model_request_policy: None,
+                tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+                working_directory: PathBuf::from("."),
+                cancel_token: None,
+                pending_input: None,
+            },
+            |event| events.push(event),
+        ),
+    )
+    .await
+    .expect("reasoning-only stream must stop before outer test timeout")
+    .expect_err("reasoning-only stream must fail without user-visible output");
+
+    assert_eq!(
+        error.message,
+        "Provider produced no user-visible output within 20ms"
+    );
+    assert!(error.emitted_any);
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, CurrentProviderTurnEvent::ReasoningEnd { .. })));
+}
+
+#[tokio::test]
+async fn provider_step_deadline_stops_continuous_heartbeat_stream() {
+    let mut turn_context = agent_protocol::turn_context::TurnContextOverride::default();
+    turn_context.metadata.insert(
+        "runtime_request".to_string(),
+        serde_json::json!({
+            "harness": {
+                "generation": {
+                    "first_visible_output_timeout_ms": 1_000,
+                    "provider_step_timeout_ms": 20
+                }
+            }
+        }),
+    );
+    let mut events = Vec::new();
+
+    let error = tokio::time::timeout(
+        Duration::from_secs(1),
+        run_current_provider_turn(
+            CurrentProviderTurnInput {
+                provider: Arc::new(ReasoningHeartbeatProvider),
+                provider_trace_metadata: None,
+                session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                    .turn_id("turn-1")
+                    .turn_context(turn_context)
+                    .build(),
+                initial_messages: vec![CurrentProviderMessage::user(vec![
+                    CurrentProviderContent::Text("hello".to_string()),
+                ])],
+                tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                    RuntimeToolStepSnapshot::new(
+                        Vec::new(),
+                        RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                    ),
+                ),
+                model_request_policy: None,
+                tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+                working_directory: PathBuf::from("."),
+                cancel_token: None,
+                pending_input: None,
+            },
+            |event| events.push(event),
+        ),
+    )
+    .await
+    .expect("continuous stream must stop before outer test timeout")
+    .expect_err("continuous stream must fail on the absolute deadline");
+
+    assert_eq!(
+        error.message,
+        "Provider step exceeded the absolute deadline of 20ms"
+    );
+    assert!(error.emitted_any);
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, CurrentProviderTurnEvent::ReasoningEnd { .. })));
+}
+
+#[tokio::test]
+async fn provider_step_deadline_closes_continuous_visible_text_stream() {
+    let mut turn_context = agent_protocol::turn_context::TurnContextOverride::default();
+    turn_context.metadata.insert(
+        "runtime_request".to_string(),
+        serde_json::json!({
+            "harness": {
+                "generation": {
+                    "first_visible_output_timeout_ms": 1_000,
+                    "provider_step_timeout_ms": 100
+                }
+            }
+        }),
+    );
+    let mut events = Vec::new();
+
+    let error = tokio::time::timeout(
+        Duration::from_secs(1),
+        run_current_provider_turn(
+            CurrentProviderTurnInput {
+                provider: Arc::new(TextHeartbeatProvider),
+                provider_trace_metadata: None,
+                session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                    .turn_id("turn-1")
+                    .turn_context(turn_context)
+                    .build(),
+                initial_messages: vec![CurrentProviderMessage::user(vec![
+                    CurrentProviderContent::Text("hello".to_string()),
+                ])],
+                tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                    RuntimeToolStepSnapshot::new(
+                        Vec::new(),
+                        RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                    ),
+                ),
+                model_request_policy: None,
+                tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+                working_directory: PathBuf::from("."),
+                cancel_token: None,
+                pending_input: None,
+            },
+            |event| events.push(event),
+        ),
+    )
+    .await
+    .expect("visible text stream must stop before outer test timeout")
+    .expect_err("visible text stream must fail on the absolute deadline");
+
+    assert_eq!(
+        error.message,
+        "Provider step exceeded the absolute deadline of 100ms"
+    );
+    assert!(error.emitted_any);
+
+    let text_item_id = "provider:turn-1:1:text:text-0";
+    assert!(events.iter().any(|event| matches!(
+        event,
+        CurrentProviderTurnEvent::TextStart { item_id } if item_id == text_item_id
+    )));
+    assert!(events.iter().any(|event| matches!(
+        event,
+        CurrentProviderTurnEvent::TextDelta { item_id, text }
+            if item_id == text_item_id && !text.is_empty()
+    )));
+    assert!(events.iter().any(|event| matches!(
+        event,
+        CurrentProviderTurnEvent::TextEnd {
+            item_id,
+            phase: CurrentProviderTextPhase::FinalAnswer,
+        } if item_id == text_item_id
+    )));
 }
 
 #[test]

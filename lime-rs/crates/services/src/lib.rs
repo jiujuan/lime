@@ -73,4 +73,3 @@ pub mod session_context_service;
 // 依赖 providers 的服务
 pub mod api_key_provider_service;
 pub mod provider_type_mapping;
-pub mod video_generation_service;

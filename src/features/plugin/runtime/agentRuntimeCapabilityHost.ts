@@ -3,7 +3,7 @@ import type { AgentRuntimeClient } from "@limecloud/agent-runtime-client";
 import type {
   PluginRuntimeStartTaskRequest,
   PluginRuntimeTaskSnapshot,
-} from "@/lib/api/pluginRuntime";
+} from "@/lib/api/agentRuntime/pluginTaskTypes";
 import type { AgentRuntimeRespondActionRequest } from "@/lib/api/agentRuntime/requestTypes";
 import type { PluginTaskRuntimeContract } from "../host/hostLifecycle";
 import type {

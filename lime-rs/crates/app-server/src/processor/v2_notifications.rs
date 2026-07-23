@@ -53,6 +53,9 @@ impl V2NotificationProjector {
             "message.delta" | "message.delta_batch" | "message.batch" => {
                 self.project_agent_message_delta(event)
             }
+            "reasoning.summary" => self.project_reasoning_summary_text_delta(event),
+            "reasoning.summary_part_added" => self.project_reasoning_summary_part_added(event),
+            "reasoning.delta" => self.project_reasoning_text_delta(event),
             _ => return EventProjection::SideChannel,
         };
         match notification {
@@ -204,6 +207,55 @@ impl V2NotificationProjector {
             },
         ))
     }
+
+    fn project_reasoning_summary_text_delta(
+        &self,
+        event: &AgentEvent,
+    ) -> Option<ServerNotification> {
+        let (thread_id, turn_id, item_id) = reasoning_identity(event)?;
+        let delta = payload_string(&event.payload, &["summary"])?;
+        let summary_index = payload_i64(&event.payload, "summaryIndex")?;
+        Some(ServerNotification::ReasoningSummaryTextDelta(
+            v2::ReasoningSummaryTextDeltaNotification {
+                thread_id,
+                turn_id,
+                item_id,
+                delta,
+                summary_index,
+            },
+        ))
+    }
+
+    fn project_reasoning_summary_part_added(
+        &self,
+        event: &AgentEvent,
+    ) -> Option<ServerNotification> {
+        let (thread_id, turn_id, item_id) = reasoning_identity(event)?;
+        let summary_index = payload_i64(&event.payload, "summaryIndex")?;
+        Some(ServerNotification::ReasoningSummaryPartAdded(
+            v2::ReasoningSummaryPartAddedNotification {
+                thread_id,
+                turn_id,
+                item_id,
+                summary_index,
+            },
+        ))
+    }
+
+    fn project_reasoning_text_delta(&self, event: &AgentEvent) -> Option<ServerNotification> {
+        let (thread_id, turn_id, item_id) = reasoning_identity(event)?;
+        let delta = payload_string(&event.payload, &["delta"])?;
+        let content_index = payload_i64(&event.payload, "contentIndex")?;
+        Some(ServerNotification::ReasoningTextDelta(
+            v2::ReasoningTextDeltaNotification {
+                thread_id,
+                turn_id,
+                item_id,
+                delta,
+                content_index,
+            },
+        ))
+    }
 }
 
 pub(super) fn project_events(
@@ -246,6 +298,18 @@ fn payload_string(payload: &Value, keys: &[&str]) -> Option<String> {
             .filter(|value| !value.is_empty())
             .map(str::to_string)
     })
+}
+
+fn payload_i64(payload: &Value, key: &str) -> Option<i64> {
+    payload.get(key).and_then(Value::as_i64)
+}
+
+fn reasoning_identity(event: &AgentEvent) -> Option<(String, String, String)> {
+    Some((
+        required_event_id(event.thread_id.as_deref())?,
+        required_event_id(event.turn_id.as_deref())?,
+        payload_string(&event.payload, &["itemId"])?,
+    ))
 }
 
 fn text_from_payload(payload: &Value) -> Option<String> {
@@ -376,6 +440,28 @@ mod tests {
                 "revision_id": "proposed_plan:1",
                 "source": "proposed_plan",
                 "plan": [{"step": "验证计划通知", "status": "pending"}]
+            },
+            "metadata": {}
+        })
+    }
+
+    fn canonical_reasoning_item(status: &str, summary: Vec<&str>, content: Vec<&str>) -> Value {
+        json!({
+            "sessionId": "session-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "itemId": "reasoning-1",
+            "sequence": 1,
+            "ordinal": 1,
+            "createdAtMs": 1,
+            "updatedAtMs": 2,
+            "completedAtMs": (status == "completed").then_some(2),
+            "kind": "reasoning",
+            "status": status,
+            "payload": {
+                "type": "reasoning",
+                "summary": summary,
+                "content": content
             },
             "metadata": {}
         })
@@ -626,6 +712,102 @@ mod tests {
 
         assert_eq!(error.code, error_codes::RUNTIME_ERROR);
         assert!(error.message.contains("message.delta"));
+    }
+
+    #[test]
+    fn maps_indexed_reasoning_notifications_in_codex_order() {
+        let mut projector = V2NotificationProjector::default();
+        let events = [
+            event(
+                "item.started",
+                json!({"item": canonical_reasoning_item("inProgress", vec![], vec![])}),
+            ),
+            event(
+                "reasoning.summary",
+                json!({
+                    "itemId": "reasoning-1",
+                    "summary": "first summary",
+                    "summaryIndex": 0
+                }),
+            ),
+            event(
+                "reasoning.summary_part_added",
+                json!({"itemId": "reasoning-1", "summaryIndex": 1}),
+            ),
+            event(
+                "reasoning.delta",
+                json!({
+                    "itemId": "reasoning-1",
+                    "delta": "raw reasoning",
+                    "contentIndex": 0
+                }),
+            ),
+            event(
+                "item.completed",
+                json!({
+                    "item": canonical_reasoning_item(
+                        "completed",
+                        vec!["first summary", "second summary"],
+                        vec!["raw reasoning"]
+                    )
+                }),
+            ),
+        ];
+
+        let notifications = events
+            .into_iter()
+            .flat_map(|event| projector.project(event).expect("reasoning projection"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            notifications
+                .iter()
+                .map(|notification| notification.method.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "item/started",
+                "item/reasoning/summaryTextDelta",
+                "item/reasoning/summaryPartAdded",
+                "item/reasoning/textDelta",
+                "item/completed",
+            ]
+        );
+        assert_eq!(
+            notifications[1].params.as_ref().expect("summary params"),
+            &json!({
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "itemId": "reasoning-1",
+                "delta": "first summary",
+                "summaryIndex": 0
+            })
+        );
+        assert_eq!(
+            notifications[2].params.as_ref().expect("part params")["summaryIndex"],
+            1
+        );
+        assert_eq!(
+            notifications[3].params.as_ref().expect("raw params")["contentIndex"],
+            0
+        );
+        assert_eq!(
+            notifications[4].params.as_ref().expect("completed params")["item"]["type"],
+            "reasoning"
+        );
+    }
+
+    #[test]
+    fn malformed_reasoning_notification_is_rejected_without_wrapper_fallback() {
+        let mut projector = V2NotificationProjector::default();
+        let error = projector
+            .project(event(
+                "reasoning.summary",
+                json!({"itemId": "reasoning-1", "summary": "missing index"}),
+            ))
+            .expect_err("missing summary index must reject");
+
+        assert_eq!(error.code, error_codes::RUNTIME_ERROR);
+        assert!(error.message.contains("reasoning.summary"));
     }
 
     #[test]

@@ -154,8 +154,9 @@ describe("imageGen/catalog", () => {
     expect(entry?.providerKey).toBe("agnes");
     expect(entry?.transport).toBe("openai_images");
     expect(entry?.endpointPath).toBe("/v1/images/generations");
-    expect(resolveImageCapabilityModelIds({ id: "agnes", type: "openai" }))
-      .toContain("agnes-image-2.1-flash");
+    expect(
+      resolveImageCapabilityModelIds({ id: "agnes", type: "openai" }),
+    ).toContain("agnes-image-2.1-flash");
     expect(
       resolveImageCapabilityProviderEntry({
         id: "custom-openai",
@@ -177,10 +178,6 @@ describe("imageGen/catalog", () => {
   });
 
   it("settings 与 workspace 图片命令应共享图片能力目录入口", () => {
-    const imageGenTypesSource = readSource("src/components/image-gen/types.ts");
-    expect(imageGenTypesSource).not.toContain("ImageGenModel");
-    expectNoLegacyImageCapabilityHeuristic(imageGenTypesSource);
-
     const settingsSource = readSource(
       "src/components/settings-v2/agent/image-gen/index.tsx",
     );
@@ -303,31 +300,28 @@ describe("imageGen/catalog", () => {
     expectNoLegacyImageCapabilityHeuristic(imageTaskSource);
   });
 
-  it("useImageGen 执行分支不应重新维护 Provider 关键词判断", () => {
+  it("useImageGen 生产消费者只应复用图片 Provider 与模型选择", () => {
     const hookSource = readSource("src/components/image-gen/useImageGen.ts");
+    const providerRuntimeSource = readSource(
+      "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchProviderRuntime.ts",
+    );
 
-    expect(hookSource).toContain("requestImagesFromLocalImageServer");
-    expect(hookSource).not.toContain("requestImageFromNewApi(");
-    expect(hookSource).not.toContain("requestImageFromFal(");
-    expect(hookSource).not.toContain("requestImageFromGemini(");
-    expect(hookSource).not.toContain("requestImagesFromStandardImagesApi(");
-    expect(hookSource).not.toContain("providerEntry?.transport");
-    expect(hookSource).not.toContain('providerTransport === "fal_queue"');
-    expect(hookSource).not.toContain('providerTransport === "gemini_image"');
+    expect(hookSource).toContain("resolveImageCapabilityModels");
+    expect(providerRuntimeSource).toContain("useImageGen({");
+    expect(providerRuntimeSource).toContain(
+      "imageWorkbenchGenerationRuntime.selectedProvider",
+    );
+    expect(providerRuntimeSource).toContain(
+      "imageWorkbenchGenerationRuntime.selectedModel",
+    );
+    expect(providerRuntimeSource).not.toContain("generateImage");
+    expect(providerRuntimeSource).not.toContain("cancelGeneration");
+    expect(providerRuntimeSource).not.toContain("saveImagesToResource");
+    expect(providerRuntimeSource).not.toContain(
+      "requestImagesFromLocalImageServer",
+    );
     expectNoLegacyImageCapabilityHeuristic(hookSource);
-
-    const openAICompatibleExecutorSource = readSource(
-      "src/components/image-gen/openAICompatibleImageExecutor.ts",
-    );
-    expect(openAICompatibleExecutorSource).toContain(
-      "@/lib/imageGen/providerMatchers",
-    );
-    expect(openAICompatibleExecutorSource).not.toContain(
-      'normalized.includes("gpt-image")',
-    );
-    expect(openAICompatibleExecutorSource).not.toContain(
-      'normalized.includes("gpt-images")',
-    );
+    expectNoLegacyImageCapabilityHeuristic(providerRuntimeSource);
 
     const layeredImageModelCapabilitySource = readSource(
       "src/lib/layered-design/imageModelCapabilities.ts",

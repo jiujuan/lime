@@ -3,13 +3,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agent_protocol::{
-    ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload, ToolArgument,
-    ToolOutput, TurnId,
+    ImageDetail, ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload,
+    ToolArgument, ToolOutput, TurnId,
 };
 use app_server::{
     ActionRespondRequest, AppServer, CancelExecutionRequest, EventLogWriter, ExecutionBackend,
     ExecutionRequest, ProjectionStore, RuntimeCore, RuntimeCoreError, RuntimeEvent,
-    RuntimeEventSink,
+    RuntimeEventSink, SidecarStore,
 };
 use app_server_protocol::protocol::v2::{
     METHOD_THREAD_DELETE, METHOD_THREAD_FORK, METHOD_THREAD_GOAL_GET, METHOD_THREAD_GOAL_SET,
@@ -551,6 +551,40 @@ async fn thread_fork_rebuilds_provider_history_across_restarts_without_duplicate
     let temp = TempDir::new().expect("thread fork provider history temp dir");
     let projection_path = temp.path().join("projection.sqlite");
     let event_log_root = temp.path().join("event-log");
+    let sidecar_root = temp.path().join("sidecar");
+    let local_image_path = temp.path().join("local-input.png");
+    std::fs::write(&local_image_path, b"\x89PNG\r\n\x1a\nfixture")
+        .expect("write local image fixture");
+    let source_input = json!([
+        {
+            "type": "text",
+            "text": "source user prompt",
+            "text_elements": [{
+                "byteRange": {"start": 0, "end": 6},
+                "placeholder": "source"
+            }]
+        },
+        {
+            "type": "image",
+            "url": "https://example.com/remote.png",
+            "detail": "high"
+        },
+        {
+            "type": "localImage",
+            "path": local_image_path,
+            "detail": "original"
+        },
+        {
+            "type": "skill",
+            "name": "review",
+            "path": "/skills/review/SKILL.md"
+        },
+        {
+            "type": "mention",
+            "name": "docs",
+            "path": "app://docs"
+        }
+    ]);
     let backend = Arc::new(HistoryCaptureBackend::default());
     let runtime = || {
         RuntimeCore::with_backend(backend.clone())
@@ -561,6 +595,9 @@ async fn thread_fork_rebuilds_provider_history_across_restarts_without_duplicate
             .with_event_log_writer(Arc::new(
                 EventLogWriter::new(&event_log_root)
                     .expect("thread fork provider history event log"),
+            ))
+            .with_sidecar_store(Arc::new(
+                SidecarStore::new(&sidecar_root).expect("thread fork sidecar store"),
             ))
     };
 
@@ -584,7 +621,8 @@ async fn thread_fork_rebuilds_provider_history_across_restarts_without_duplicate
         METHOD_TURN_START,
         json!({
             "threadId": source_thread_id,
-            "input": [{"type": "text", "text": "source user prompt"}],
+            "input": source_input,
+            "clientUserMessageId": "client-1",
             "model": "fixture-model",
             "approvalPolicy": "never",
             "sandboxPolicy": "workspace-write"
@@ -592,9 +630,24 @@ async fn thread_fork_rebuilds_provider_history_across_restarts_without_duplicate
     )
     .await;
     wait_for_completed_turn_count(&server, &source_thread_id, 1).await;
-    let forked = request(
+    let source_read = request(
         &server,
         303,
+        METHOD_THREAD_READ,
+        json!({"threadId": source_thread_id, "includeTurns": true}),
+    )
+    .await;
+    assert_eq!(
+        source_read.pointer("/result/thread/turns/0/items/0/content"),
+        Some(&source_input)
+    );
+    assert_eq!(
+        source_read.pointer("/result/thread/turns/0/items/0/clientId"),
+        Some(&json!("client-1"))
+    );
+    let forked = request(
+        &server,
+        304,
         METHOD_THREAD_FORK,
         json!({"threadId": source_thread_id}),
     )
@@ -611,9 +664,20 @@ async fn thread_fork_rebuilds_provider_history_across_restarts_without_duplicate
         json!({"threadId": target_thread_id}),
     )
     .await;
-    request(
+    let target_read = request(
         &restarted,
         312,
+        METHOD_THREAD_READ,
+        json!({"threadId": target_thread_id, "includeTurns": true}),
+    )
+    .await;
+    assert_eq!(
+        target_read.pointer("/result/thread/turns/0/items/0/content"),
+        Some(&source_input)
+    );
+    request(
+        &restarted,
+        313,
         METHOD_TURN_START,
         json!({
             "threadId": target_thread_id,
@@ -672,7 +736,23 @@ fn assert_source_provider_history(history: &[CurrentProviderMessage]) {
     assert!(matches!(
         &history[0],
         CurrentProviderMessage { role: CurrentProviderRole::User, content }
-            if matches!(&content[..], [CurrentProviderContent::Text(text)] if text == "source user prompt")
+            if matches!(&content[..], [
+                CurrentProviderContent::Text(text),
+                CurrentProviderContent::Image {
+                    uri: remote_uri,
+                    detail: Some(ImageDetail::High),
+                    ..
+                },
+                CurrentProviderContent::Image {
+                    uri: local_uri,
+                    provider_data: Some(local_data),
+                    detail: Some(ImageDetail::Original),
+                    ..
+                },
+            ] if text == "source user prompt"
+                && remote_uri == "https://example.com/remote.png"
+                && local_uri.starts_with("sidecar://media/")
+                && local_data.starts_with("data:image/png;base64,"))
     ));
     assert!(matches!(
         &history[1],

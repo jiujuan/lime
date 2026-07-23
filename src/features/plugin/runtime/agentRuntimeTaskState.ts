@@ -1,7 +1,7 @@
 import type {
   PluginRuntimeTaskEvent,
   PluginRuntimeTaskSnapshot,
-} from "@/lib/api/pluginRuntime";
+} from "@/lib/api/agentRuntime/pluginTaskTypes";
 import type {
   PluginTaskEventType,
   PluginTaskHostResponseRequest,

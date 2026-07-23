@@ -139,7 +139,7 @@ describe("readCanonicalThreadItem", () => {
       { type: "reasoning", summary: ["summary"], content: ["a", "b"] },
       {
         type: "reasoning",
-        text: "ab",
+        text: "summary",
         summary: ["summary"],
         content: ["a", "b"],
         status: "in_progress",
@@ -240,6 +240,20 @@ describe("readCanonicalThreadItem", () => {
       expect(projected).not.toHaveProperty("metadata");
     },
   );
+
+  it("keeps raw-only reasoning protocol data out of the default display text", () => {
+    expect(
+      readCanonicalThreadItem(
+        item({ type: "reasoning", summary: [], content: ["raw reasoning"] }),
+        event,
+      ),
+    ).toMatchObject({
+      type: "reasoning",
+      text: "",
+      summary: [],
+      content: ["raw reasoning"],
+    });
+  });
 
   it("derives the current plan revision from a canonical v2 item identity", () => {
     const projected = readCanonicalThreadItem(

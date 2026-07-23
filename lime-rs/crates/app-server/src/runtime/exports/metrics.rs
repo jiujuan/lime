@@ -1,7 +1,5 @@
-use super::super::event_request_id;
 use super::super::status::agent_session_status_label;
 use super::super::status::agent_turn_status_label;
-use super::super::status::resolve_agent_session_runtime_state;
 use super::super::string_field;
 use super::super::RuntimeCore;
 use super::super::RuntimeCoreError;
@@ -9,17 +7,8 @@ use super::HANDOFF_RECENT_ARTIFACT_LIMIT;
 use agent_protocol::CollabAgentStatus;
 use agent_protocol::ThreadId;
 use agent_protocol::ThreadTurnsView;
-use app_server_protocol::AgentEvent;
-use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionReadResponse;
-use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
-use app_server_protocol::ArtifactSummary;
-use app_server_protocol::EvidencePackArtifact;
-use app_server_protocol::EvidencePackSummary;
-use app_server_protocol::ManagedObjective;
-use app_server_protocol::ManagedObjectiveStatus;
-use serde_json::json;
 use std::collections::HashSet;
 use thread_store::AgentGraphStore;
 use thread_store::ReadThreadParams;
@@ -44,180 +33,6 @@ pub(super) struct HandoffRecentArtifact {
     pub(super) title: String,
     pub(super) kind: String,
     pub(super) path: String,
-}
-
-pub(super) fn build_runtime_evidence_pack_summary(
-    session: &AgentSession,
-    turns: &[AgentTurn],
-    events: &[AgentEvent],
-    artifacts: &[ArtifactSummary],
-    known_gap: &str,
-) -> EvidencePackSummary {
-    let pending_request_count = pending_request_count_from_events(events);
-    let runtime_state = resolve_agent_session_runtime_state(
-        session.status,
-        pending_request_count,
-        turns,
-        events,
-        chrono::Utc::now(),
-    );
-    EvidencePackSummary {
-        pack_relative_root: format!(".lime/harness/sessions/{}/evidence", session.session_id),
-        pack_absolute_root: None,
-        exported_at: super::super::timestamp(),
-        thread_status: runtime_state.thread_status,
-        latest_turn_status: runtime_state.latest_turn_status,
-        turn_count: turns.len(),
-        item_count: events.len(),
-        pending_request_count,
-        queued_turn_count: runtime_state.queued_turn_count,
-        recent_artifact_count: artifacts.len(),
-        known_gaps: vec![known_gap.to_string()],
-        observability_summary: Some(json!({
-            "schemaVersion": "runtime-evidence-pack.v1",
-            "source": "app-server-current",
-            "sessionId": session.session_id,
-            "threadId": session.thread_id,
-        })),
-        completion_audit_summary: None,
-        artifacts: artifacts
-            .iter()
-            .map(evidence_pack_artifact_from_summary)
-            .collect(),
-    }
-}
-
-fn evidence_pack_artifact_from_summary(artifact: &ArtifactSummary) -> EvidencePackArtifact {
-    let title = artifact
-        .title
-        .clone()
-        .or_else(|| artifact.artifact_id.clone())
-        .unwrap_or_else(|| artifact.artifact_ref.clone());
-    let relative_path = artifact
-        .path
-        .clone()
-        .unwrap_or_else(|| format!("{}/artifact.json", artifact.artifact_ref));
-    EvidencePackArtifact {
-        kind: artifact
-            .kind
-            .clone()
-            .unwrap_or_else(|| "artifact".to_string()),
-        title,
-        relative_path,
-        absolute_path: None,
-        bytes: artifact
-            .content
-            .as_ref()
-            .map(String::len)
-            .unwrap_or_default(),
-    }
-}
-
-fn pending_request_count_from_events(events: &[AgentEvent]) -> usize {
-    let mut pending = HashSet::new();
-    let mut resolved = HashSet::new();
-    for event in events {
-        match event.event_type.as_str() {
-            "action.required" => {
-                if let Some(request_id) = event_request_id(&event.payload) {
-                    pending.insert(request_id);
-                }
-            }
-            "action.resolved" | "action.cancelled" | "action.canceled" => {
-                if let Some(request_id) = event_request_id(&event.payload) {
-                    resolved.insert(request_id);
-                }
-            }
-            _ => {}
-        }
-    }
-    pending.difference(&resolved).count()
-}
-
-pub(super) fn current_objective_completion_audit_summary(
-    objective: &ManagedObjective,
-) -> Option<serde_json::Value> {
-    let decision = managed_objective_completion_audit_decision(objective)?;
-    let mut summary = serde_json::Map::new();
-    summary.insert("decision".to_string(), json!(decision));
-    summary.insert(
-        "status".to_string(),
-        json!(managed_objective_status_value(objective.status)),
-    );
-    if let Some(blocker_reason) = objective.blocker_reason.as_deref() {
-        summary.insert("blockingReasons".to_string(), json!([blocker_reason]));
-    }
-    if let Some(last_audit_summary) = objective.last_audit_summary.as_deref() {
-        summary.insert("summary".to_string(), json!(last_audit_summary));
-        summary.insert("notes".to_string(), json!([last_audit_summary]));
-    }
-    summary.insert(
-        "artifactCount".to_string(),
-        json!(objective.last_artifact_refs.len()),
-    );
-    if !objective.last_artifact_refs.is_empty() {
-        summary.insert(
-            "artifactRefs".to_string(),
-            json!(objective.last_artifact_refs),
-        );
-    }
-    if let Some(evidence_ref) = objective.last_evidence_pack_ref.as_deref() {
-        summary.insert("evidencePackRef".to_string(), json!(evidence_ref));
-    }
-    Some(serde_json::Value::Object(summary))
-}
-
-fn managed_objective_completion_audit_decision(
-    objective: &ManagedObjective,
-) -> Option<&'static str> {
-    match objective.status {
-        ManagedObjectiveStatus::BudgetLimited => Some("budget_limited"),
-        ManagedObjectiveStatus::NeedsInput => Some("needs_input"),
-        ManagedObjectiveStatus::Blocked => Some("blocked"),
-        ManagedObjectiveStatus::Failed => Some("failed"),
-        ManagedObjectiveStatus::Paused => Some("paused"),
-        ManagedObjectiveStatus::Completed => objective
-            .last_audit_summary
-            .as_deref()
-            .is_some_and(|summary| summary.contains("decision=completed"))
-            .then_some("completed"),
-        ManagedObjectiveStatus::Verifying => Some("verifying"),
-        ManagedObjectiveStatus::Active => objective
-            .last_audit_summary
-            .as_deref()
-            .and_then(completion_audit_decision_from_summary),
-    }
-}
-
-fn completion_audit_decision_from_summary(summary: &str) -> Option<&'static str> {
-    if summary.contains("decision=budget_limited") {
-        Some("budget_limited")
-    } else if summary.contains("decision=needs_input") {
-        Some("needs_input")
-    } else if summary.contains("decision=blocked") {
-        Some("blocked")
-    } else if summary.contains("decision=failed") {
-        Some("failed")
-    } else if summary.contains("decision=paused") {
-        Some("paused")
-    } else if summary.contains("decision=verifying") {
-        Some("verifying")
-    } else {
-        None
-    }
-}
-
-fn managed_objective_status_value(status: ManagedObjectiveStatus) -> &'static str {
-    match status {
-        ManagedObjectiveStatus::Active => "active",
-        ManagedObjectiveStatus::Verifying => "verifying",
-        ManagedObjectiveStatus::NeedsInput => "needs_input",
-        ManagedObjectiveStatus::Blocked => "blocked",
-        ManagedObjectiveStatus::BudgetLimited => "budget_limited",
-        ManagedObjectiveStatus::Paused => "paused",
-        ManagedObjectiveStatus::Completed => "completed",
-        ManagedObjectiveStatus::Failed => "failed",
-    }
 }
 
 pub(super) async fn handoff_metrics(

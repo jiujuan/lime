@@ -1,12 +1,10 @@
 use serde_json::{json, Value};
 
-use super::{
-    resolved_model_route_from_payload, LocalRouteExecutionSpec, ModelRouteFailureProjection,
-};
+use super::{resolved_model_route_from_payload, ModelRouteFailureProjection, RouteExecutionSpec};
 
-const LOCAL_LIME_SERVICE_EXECUTOR_KIND: &str = "local_lime_service";
-const RUNNER_CONFIG_ENDPOINT_SOURCE: &str = "runner_config";
-const LOCAL_LIME_SERVICE_CREDENTIAL_OWNER: &str = "local_lime_service";
+const MEDIA_TASK_WORKER_EXECUTOR_KIND: &str = "media_task_worker";
+const RESOLVED_ROUTE_ENDPOINT_SOURCE: &str = "resolved_route";
+const MEDIA_TASK_WORKER_CREDENTIAL_OWNER: &str = "media_task_worker";
 const SECRET_NOT_EMBEDDED_STATUS: &str = "not_embedded";
 
 pub(super) fn unsupported_protocol_failure(
@@ -24,9 +22,9 @@ pub(super) fn unsupported_protocol_failure(
     }
 }
 
-pub(super) fn build_local_route_execution_binding(
+pub(super) fn build_route_execution_binding(
     payload: &Value,
-    spec: &LocalRouteExecutionSpec,
+    spec: &RouteExecutionSpec,
 ) -> Option<Value> {
     let route = resolved_model_route_from_payload(payload)?;
     let provider_id = route.provider_id?;
@@ -41,18 +39,15 @@ pub(super) fn build_local_route_execution_binding(
     Some(json!({
         "version": 1,
         "status": "ready",
-        "executionOwner": "media_runtime_worker",
+        "executionOwner": "media_task_worker",
         "executor": {
-            "kind": LOCAL_LIME_SERVICE_EXECUTOR_KIND,
+            "kind": MEDIA_TASK_WORKER_EXECUTOR_KIND,
             "bindingKey": spec.binding_key,
-            "endpointSource": RUNNER_CONFIG_ENDPOINT_SOURCE,
-            "method": "POST",
-            "path": spec.path,
-            "routeHeader": "X-Provider-Id"
+            "endpointSource": RESOLVED_ROUTE_ENDPOINT_SOURCE
         },
         "credentialResolver": {
-            "owner": LOCAL_LIME_SERVICE_CREDENTIAL_OWNER,
-            "source": "api_key_provider_store",
+            "owner": MEDIA_TASK_WORKER_CREDENTIAL_OWNER,
+            "source": "resolved_route_credential_ref",
             "providerId": provider_id,
             "credentialRef": credential_ref,
             "secretMaterialStatus": SECRET_NOT_EMBEDDED_STATUS,
@@ -63,10 +58,6 @@ pub(super) fn build_local_route_execution_binding(
             "providerId": provider_id,
             "modelId": model_id,
             "protocol": protocol
-        },
-        "migration": {
-            "source": "route_only_payload",
-            "appliedBy": "media_runtime_worker"
         }
     }))
 }
@@ -105,7 +96,7 @@ pub(super) fn secret_value_present(value: &Value) -> bool {
 }
 
 pub(super) fn unsupported_route_execution_failure(
-    spec: &LocalRouteExecutionSpec,
+    spec: &RouteExecutionSpec,
     reason: &str,
 ) -> ModelRouteFailureProjection {
     ModelRouteFailureProjection {

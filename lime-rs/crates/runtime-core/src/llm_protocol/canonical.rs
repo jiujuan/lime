@@ -314,9 +314,19 @@ pub enum LlmEvent {
     ReasoningStart {
         id: String,
     },
-    ReasoningDelta {
+    ReasoningSummaryDelta {
         id: String,
         text: String,
+        summary_index: i64,
+    },
+    ReasoningSummaryPartAdded {
+        id: String,
+        summary_index: i64,
+    },
+    ReasoningContentDelta {
+        id: String,
+        text: String,
+        content_index: i64,
     },
     ReasoningEnd {
         id: String,

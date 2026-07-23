@@ -309,21 +309,40 @@ pub enum AgentEvent {
         boundary: TextDeltaBatchBoundary,
     },
 
-    #[serde(rename = "thinking_start")]
-    ThinkingStart {
+    #[serde(rename = "reasoning_start")]
+    ReasoningStart {
         #[serde(rename = "itemId")]
         item_id: String,
     },
 
-    #[serde(rename = "thinking_delta")]
-    ThinkingDelta {
+    #[serde(rename = "reasoning_summary_delta")]
+    ReasoningSummaryDelta {
         #[serde(rename = "itemId")]
         item_id: String,
         text: String,
+        #[serde(rename = "summaryIndex")]
+        summary_index: i64,
     },
 
-    #[serde(rename = "thinking_end")]
-    ThinkingEnd {
+    #[serde(rename = "reasoning_summary_part_added")]
+    ReasoningSummaryPartAdded {
+        #[serde(rename = "itemId")]
+        item_id: String,
+        #[serde(rename = "summaryIndex")]
+        summary_index: i64,
+    },
+
+    #[serde(rename = "reasoning_content_delta")]
+    ReasoningContentDelta {
+        #[serde(rename = "itemId")]
+        item_id: String,
+        text: String,
+        #[serde(rename = "contentIndex")]
+        content_index: i64,
+    },
+
+    #[serde(rename = "reasoning_end")]
+    ReasoningEnd {
         #[serde(rename = "itemId")]
         item_id: String,
     },
@@ -1184,9 +1203,19 @@ mod tests {
                 item_id: "message-1".to_string(),
                 phase: AgentMessagePhase::FinalAnswer,
             },
-            AgentEvent::ThinkingDelta {
+            AgentEvent::ReasoningSummaryDelta {
                 item_id: "reasoning-1".to_string(),
                 text: "inspect".to_string(),
+                summary_index: 0,
+            },
+            AgentEvent::ReasoningSummaryPartAdded {
+                item_id: "reasoning-1".to_string(),
+                summary_index: 1,
+            },
+            AgentEvent::ReasoningContentDelta {
+                item_id: "reasoning-1".to_string(),
+                text: "raw".to_string(),
+                content_index: 0,
             },
         ];
         let values = events
@@ -1201,7 +1230,14 @@ mod tests {
         assert_eq!(values[2]["phase"], "final_answer");
         assert_eq!(values[2]["type"], "text_end");
         assert_eq!(values[2]["itemId"], "message-1");
-        assert_eq!(values[3]["type"], "thinking_delta");
+        assert_eq!(values[3]["type"], "reasoning_summary_delta");
         assert_eq!(values[3]["itemId"], "reasoning-1");
+        assert_eq!(values[3]["summaryIndex"], 0);
+        assert_eq!(values[4]["type"], "reasoning_summary_part_added");
+        assert_eq!(values[4]["itemId"], "reasoning-1");
+        assert_eq!(values[4]["summaryIndex"], 1);
+        assert_eq!(values[5]["type"], "reasoning_content_delta");
+        assert_eq!(values[5]["itemId"], "reasoning-1");
+        assert_eq!(values[5]["contentIndex"], 0);
     }
 }

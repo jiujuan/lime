@@ -237,36 +237,6 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerThreadDeleteResponse>
     >;
-    readAgentSessionObjective(
-      params: appServer.AppServerAgentSessionObjectiveReadParams,
-    ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionObjectiveReadResponse>
-    >;
-    setAgentSessionObjective(
-      params: appServer.AppServerAgentSessionObjectiveSetParams,
-    ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionObjectiveSetResponse>
-    >;
-    updateAgentSessionObjectiveStatus(
-      params: appServer.AppServerAgentSessionObjectiveStatusUpdateParams,
-    ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionObjectiveStatusUpdateResponse>
-    >;
-    clearAgentSessionObjective(
-      params: appServer.AppServerAgentSessionObjectiveClearParams,
-    ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionObjectiveClearResponse>
-    >;
-    continueAgentSessionObjective(
-      params: appServer.AppServerAgentSessionObjectiveContinueParams,
-    ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionObjectiveContinueResponse>
-    >;
-    auditAgentSessionObjective(
-      params: appServer.AppServerAgentSessionObjectiveAuditParams,
-    ): Promise<
-      appServer.AppServerRequestResult<appServer.AppServerAgentSessionObjectiveAuditResponse>
-    >;
     compactAgentSession(
       params: appServer.AppServerAgentSessionCompactParams,
     ): Promise<

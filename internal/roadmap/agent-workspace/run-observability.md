@@ -42,7 +42,7 @@
 | Workspace shell / 分屏 | `WorkspaceMainArea.tsx`、`WorkspaceShellScene.tsx`、`taskCenterChromeTokens` | 有 chat / canvas / task-center chrome 基础，但不是 Codex 式 run rail。 |
 | 右侧工作台 sidebar | `WorkspaceGeneralWorkbenchSidebar.tsx`、`GeneralWorkbenchSidebar.tsx`、`generalWorkbenchSidebarContract.ts` | 有 context / workflow / exec log 三类 panel，能承载流程和上下文，但还偏内容生产工作台，不是通用 agent run 控制面。 |
 | Plan / progress | `AgentRuntimeStrip.tsx`、`HarnessSessionState.plan`、`workflowSteps`、`AgentThreadPlanItem`、`AgentTodoItem` | 有 plan item 计数、workflow steps、历史 plan / todo 恢复投影和 run-control-restore evidence；缺 turn-level source event id、等待原因和状态下钻。 |
-| Objective / goal | `managedObjectivePanelModel.ts`、`ManagedObjectiveStatus` | 有 active / paused / blocked / completed 等目标状态和操作模型，缺底栏统一控制与 run evidence 绑定。 |
+| Objective / goal | `ThreadGoalPanel.tsx`、`useAgentSessionThreadGoal.ts`、`threadGoalClient.ts`、App Server v2 `thread/goal/*` | thread-owned canonical `ThreadGoal` 已覆盖 active / paused / blocked / usage/budget limited / complete、预算与用量；状态必须绑定 canonical Thread / Turn / Item，缺底栏统一控制与 run evidence 绑定。 |
 | Subagents | `agentUiSubagentsViewModel.ts`、`subagentStatusProjection.ts`、`packages/agent-runtime-projection/src/subagents.ts`、`packages/agent-runtime-ui/src/subagents.tsx` | 投影模型较完整，缺工作台右栏 roster 与主线程控制关系实测。 |
 | Sources / evidence | `harnessEvidenceViewModel.ts`、`packages/agent-runtime-projection/src/readModel.ts`、`packages/agent-runtime-ui/src/runtimeFacts.tsx` | 有 `sourceCount`、artifact refs、evidence refs，缺 Codex 式 Sources slot 和 per-run provenance UI。 |
 | Git status / diff | `src/lib/api/projectGit.ts`、`CanvasWorkbenchChangesPanelViewModel.ts`、`CodingWorkbenchActionPanel.tsx` | 有 status / diff / branch / worktree API 和变化面板基础，缺常驻 run environment card。 |
@@ -133,7 +133,7 @@ AgentRunControlSurfaceViewModel
 | --- | --- | --- |
 | Top project bar | root、thread mode、layout、review / plugin / agent chips | `WorkspaceMainArea`、现有 task center toolbar |
 | Right run rail | environment、progress、subagents、sources、tools、artifacts/evidence | `GeneralWorkbenchSidebar` 可抽新 tab 或新 sibling rail |
-| Bottom run composer | objective 状态、follow-up / steer、permission、model、reasoning、send | `managedObjectivePanelModel`、`InputbarModelExtra`、permission projection |
+| Bottom run composer | goal 状态、follow-up / steer、permission、model、reasoning、send | canonical `ThreadGoalPanel` / `threadGoalClient`、`InputbarModelExtra`、permission projection |
 | Split review lane | diff、artifact、evidence、second thread / review | chat-canvas、changes panel、artifact/evidence view |
 | Restore layer | thread/read 后还原右栏状态 | `appServerReadModelProjection`、`agent-runtime-projection` |
 

@@ -56,14 +56,14 @@
 
 补充边界：
 
-[Codex `/goal`](../research/codex-goal/README.md) 这类 persistent objective / continuation loop 只能作为“目标推进控制层”理解，不能成为第四类执行实体。若 Lime 后续实现 `Managed Objective`：
+[Codex `/goal`](../research/codex-goal/README.md) 对应 Lime current `ThreadGoal`，它只能作为“目标推进控制层”理解，不能成为第四类执行实体：
 
 1. 前台即时推进仍归 `agent turn`。
 2. 协作拆分仍归 `subagent turn`。
 3. durable 后台推进仍归 `automation job`。
-4. objective state、completion audit、budget / pause / resume 只负责控制这些实体是否继续，不单独定义新的 run source、queue、scheduler 或 evidence。
+4. ThreadGoal status、budget / usage / pause / resume 只控制 thread 是否继续，不单独定义新的 run source、queue、scheduler 或 evidence。
 
-详细路线图见 `internal/roadmap/managed-objective/README.md`。本文件只定义 taxonomy 边界：Managed Objective 不是第四类执行实体。
+旧 `ManagedObjective` owner、criteria/audit/evidence 和 Automation Goal 已删除，禁止以第四类执行实体或 ThreadGoal compat 恢复。
 
 ## 固定心智模型
 

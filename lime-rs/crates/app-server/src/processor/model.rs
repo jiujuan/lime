@@ -5,9 +5,8 @@ use app_server_protocol::{
     JsonRpcError, ModelListParams, ModelProviderAliasReadParams, ModelProviderConfigExportParams,
     ModelProviderConfigImportParams, ModelProviderCreateParams, ModelProviderDeleteParams,
     ModelProviderFetchModelsParams, ModelProviderKeyCreateParams, ModelProviderKeyDeleteParams,
-    ModelProviderKeyEventParams, ModelProviderKeyNextParams, ModelProviderKeyUpdateParams,
-    ModelProviderReadParams, ModelProviderSortOrdersUpdateParams, ModelProviderTestChatParams,
-    ModelProviderTestConnectionParams, ModelProviderUiStateReadParams,
+    ModelProviderKeyUpdateParams, ModelProviderReadParams, ModelProviderSortOrdersUpdateParams,
+    ModelProviderTestChatParams, ModelProviderTestConnectionParams, ModelProviderUiStateReadParams,
     ModelProviderUiStateWriteParams, ModelProviderUpdateParams,
 };
 
@@ -269,48 +268,6 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         self.runtime
             .schedule_pending_route_recovery(self.runtime_host_context());
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_model_provider_key_next_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyNextParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_next_model_provider_key(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_model_provider_key_usage_record_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyEventParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .record_model_provider_key_usage(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_model_provider_key_error_record_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyEventParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .record_model_provider_key_error(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
 

@@ -1,19 +1,19 @@
 use app_server_protocol::{ModelTaskRequest, ResolvedModelRoute};
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
-use lime_core::models::runtime_api_key_credential_uuid;
 use runtime_core::ModelRouteProvider;
 pub(crate) use runtime_core::{DirectRouteConfig, ModelRouteSelection};
 use serde_json::Value;
 use std::borrow::Cow;
 
-pub(crate) fn resolved_route_from_task(
+pub(crate) fn resolved_route_from_task_with_credential(
     task_request: &ModelTaskRequest,
     selection: ModelRouteSelection<'_>,
     routing_payload: &Value,
     provider: Option<&ProviderWithKeys>,
+    credential_ref: Option<&str>,
     direct_config: Option<DirectRouteConfig<'_>>,
 ) -> ResolvedModelRoute {
-    let route_provider = provider.map(model_route_provider);
+    let route_provider = provider.map(|provider| model_route_provider(provider, credential_ref));
     runtime_core::resolved_route_from_task(
         task_request,
         selection,
@@ -23,7 +23,10 @@ pub(crate) fn resolved_route_from_task(
     )
 }
 
-fn model_route_provider(provider: &ProviderWithKeys) -> ModelRouteProvider<'_> {
+fn model_route_provider<'a>(
+    provider: &'a ProviderWithKeys,
+    credential_ref: Option<&'a str>,
+) -> ModelRouteProvider<'a> {
     let effective_provider_type = provider.provider.effective_provider_type();
     let spec = effective_provider_type.runtime_spec();
     ModelRouteProvider {
@@ -34,11 +37,7 @@ fn model_route_provider(provider: &ProviderWithKeys) -> ModelRouteProvider<'_> {
         project: provider.provider.project.as_deref(),
         location: provider.provider.location.as_deref(),
         region: provider.provider.region.as_deref(),
-        credential_ref: provider
-            .api_keys
-            .iter()
-            .find(|key| key.enabled)
-            .map(|key| runtime_api_key_credential_uuid(&key.id)),
+        credential_ref: credential_ref.map(ToString::to_string),
         auth_header: spec.auth_header,
         auth_prefix: spec.auth_prefix,
         prompt_cache_mode: provider
@@ -103,7 +102,7 @@ mod tests {
             }
         });
 
-        let route = resolved_route_from_task(
+        let route = resolved_route_from_task_with_credential(
             &task_request,
             ModelRouteSelection {
                 provider_id: "openai",
@@ -112,6 +111,7 @@ mod tests {
                 reasoning_effort: None,
             },
             &routing_payload,
+            None,
             None,
             None,
         );
@@ -155,7 +155,7 @@ mod tests {
             content_id: None,
             trace_id: None,
         });
-        let route = resolved_route_from_task(
+        let route = resolved_route_from_task_with_credential(
             &task_request,
             ModelRouteSelection {
                 provider_id: "openai",
@@ -188,6 +188,7 @@ mod tests {
             }),
             None,
             None,
+            None,
         );
 
         assert_eq!(route.protocol, ProtocolKind::OpenaiImages);
@@ -215,7 +216,7 @@ mod tests {
             content_id: None,
             trace_id: None,
         });
-        let route = resolved_route_from_task(
+        let route = resolved_route_from_task_with_credential(
             &task_request,
             ModelRouteSelection {
                 provider_id: "openai-responses",
@@ -246,6 +247,7 @@ mod tests {
                     }
                 }
             }),
+            None,
             None,
             None,
         );

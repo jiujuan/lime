@@ -1271,6 +1271,109 @@ describe("agentProtocol", () => {
 
     expect(
       parseAgentEvent({
+        type: "reasoning_summary_delta",
+        itemId: "reasoning-v2",
+        reasoningId: "reasoning-v2",
+        summaryIndex: 0,
+        delta: "先核对事实",
+      }),
+    ).toMatchObject({
+      type: "reasoning_summary_delta",
+      itemId: "reasoning-v2",
+      reasoningId: "reasoning-v2",
+      summaryIndex: 0,
+      text: "先核对事实",
+      delta: "先核对事实",
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "reasoning_summary_part_added",
+        item_id: "reasoning-v2",
+        reasoning_id: "reasoning-v2",
+        summary_index: 1,
+      }),
+    ).toMatchObject({
+      type: "reasoning_summary_part_added",
+      itemId: "reasoning-v2",
+      reasoningId: "reasoning-v2",
+      summaryIndex: 1,
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "reasoning_content_delta",
+        item_id: "reasoning-v2",
+        reasoning_id: "reasoning-v2",
+        content_index: 2,
+        delta: "raw reasoning",
+      }),
+    ).toMatchObject({
+      type: "reasoning_content_delta",
+      itemId: "reasoning-v2",
+      reasoningId: "reasoning-v2",
+      contentIndex: 2,
+      text: "raw reasoning",
+      delta: "raw reasoning",
+    });
+
+    for (const malformedReasoningEvent of [
+      {
+        type: "reasoning_summary_delta",
+        summaryIndex: 0,
+        delta: "missing item identity",
+      },
+      {
+        type: "reasoning_summary_delta",
+        itemId: "reasoning-v2",
+        summaryIndex: -1,
+        delta: "negative index",
+      },
+      {
+        type: "reasoning_summary_part_added",
+        itemId: "reasoning-v2",
+        summaryIndex: 0.5,
+      },
+      {
+        type: "reasoning_content_delta",
+        itemId: "reasoning-v2",
+        contentIndex: 0,
+      },
+      {
+        type: "reasoning_content_delta",
+        itemId: "reasoning-v2",
+        reasoningId: "different-item",
+        contentIndex: 0,
+        delta: "conflicting identity",
+      },
+      {
+        type: "reasoning_summary_delta",
+        itemId: "reasoning-v2",
+        item_id: "different-item",
+        summaryIndex: 0,
+        delta: "conflicting item aliases",
+      },
+      {
+        type: "reasoning_summary_delta",
+        itemId: "reasoning-v2",
+        reasoningId: "reasoning-v2",
+        reasoning_id: "different-item",
+        summaryIndex: 0,
+        delta: "conflicting reasoning aliases",
+      },
+      {
+        type: "reasoning_summary_delta",
+        itemId: "reasoning-v2",
+        summaryIndex: 0,
+        summary_index: 1,
+        delta: "conflicting index aliases",
+      },
+    ]) {
+      expect(parseAgentEvent(malformedReasoningEvent)).toBeNull();
+    }
+
+    expect(
+      parseAgentEvent({
         type: "reasoning.started",
         payload: {
           reasoningId: "reasoning-1",

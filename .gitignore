@@ -195,9 +195,6 @@ internal/roadmap/knowledge/**
 !internal/roadmap/skill-forge/
 internal/roadmap/skill-forge/**
 !internal/roadmap/skill-forge/*.md
-!internal/roadmap/managed-objective/
-internal/roadmap/managed-objective/**
-!internal/roadmap/managed-objective/*.md
 !internal/roadmap/agentruntime/
 internal/roadmap/agentruntime/**
 !internal/roadmap/agentruntime/*.md

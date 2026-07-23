@@ -319,17 +319,49 @@ fn handle_provider_event<F>(
         ),
         CurrentProviderTurnEvent::ReasoningStart { item_id } => emit_with_artifacts(
             artifact_events,
-            AgentEvent::ThinkingStart { item_id },
+            AgentEvent::ReasoningStart { item_id },
             on_event,
         ),
-        CurrentProviderTurnEvent::ReasoningDelta { item_id, text } => emit_with_artifacts(
+        CurrentProviderTurnEvent::ReasoningSummaryDelta {
+            item_id,
+            text,
+            summary_index,
+        } => emit_with_artifacts(
             artifact_events,
-            AgentEvent::ThinkingDelta { item_id, text },
+            AgentEvent::ReasoningSummaryDelta {
+                item_id,
+                text,
+                summary_index,
+            },
+            on_event,
+        ),
+        CurrentProviderTurnEvent::ReasoningSummaryPartAdded {
+            item_id,
+            summary_index,
+        } => emit_with_artifacts(
+            artifact_events,
+            AgentEvent::ReasoningSummaryPartAdded {
+                item_id,
+                summary_index,
+            },
+            on_event,
+        ),
+        CurrentProviderTurnEvent::ReasoningContentDelta {
+            item_id,
+            text,
+            content_index,
+        } => emit_with_artifacts(
+            artifact_events,
+            AgentEvent::ReasoningContentDelta {
+                item_id,
+                text,
+                content_index,
+            },
             on_event,
         ),
         CurrentProviderTurnEvent::ReasoningEnd { item_id } => emit_with_artifacts(
             artifact_events,
-            AgentEvent::ThinkingEnd { item_id },
+            AgentEvent::ReasoningEnd { item_id },
             on_event,
         ),
         CurrentProviderTurnEvent::ToolInputDelta {

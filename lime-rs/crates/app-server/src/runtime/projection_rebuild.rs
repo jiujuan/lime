@@ -154,7 +154,8 @@ fn projected_item_payload(item: &ThreadItem) -> (&'static str, Value) {
         ThreadItemPayload::UserMessage { content, client_id } => (
             "message.created",
             json!({
-                "text": content,
+                "input": content,
+                "text": super::turn_start::user_input_text(content),
                 "clientId": client_id,
                 "canonical": identity,
             }),

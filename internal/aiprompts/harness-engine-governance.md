@@ -37,7 +37,7 @@
 其中：
 
 - `evidence pack` 是 **运行时事实源**
-- `replay / analysis / review / history-record summary / Managed Objective audit` 是 **派生物**
+- `replay / analysis / review / history-record summary` 是 **派生物**
 - GUI 面板例如 `HarnessStatusPanel` 与 nightly dashboard 是 **展示层**
 
 允许的数据方向只有：
@@ -48,10 +48,10 @@
 
 - `analysis` 自己再拼一套 observability summary
 - `replay` 不复用 evidence pack，改为本地猜测缺口
-- `Managed Objective` 不读 evidence pack，改由模型自报完成
+- 旧 Goal audit 重新读取 evidence pack 并建立第二套完成状态
 - `UI` 的显示状态反过来成为事实源
 
-Managed Objective 的详细路线图见 `internal/roadmap/managed-objective/README.md`。在 harness 语境中，它只能是 evidence pack 的消费方和审计派生物，不能成为新的证据导出链。
+ThreadGoal 不属于 Harness evidence 派生物；它只消费 canonical Thread 状态并由 RuntimeCore 管理。旧 ManagedObjective audit 已删除，禁止作为新的证据导出链恢复。
 
 ## 分类语言
 

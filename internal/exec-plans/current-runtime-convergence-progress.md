@@ -43,8 +43,10 @@ Current fixture 已通过历史恢复 31、流式终态 32、Electron fixture gu
 - [x] RuntimeCore failed reason 已结构化贯通 session loop 与 EventLog：普通 `turn_error` 把 Active goal 转为 `blocked`，provider `usage_limit_exceeded` 把 Active/BudgetLimited goal 转为 `usage_limited`；Plan turn、cancel 和零事件 rejection 不误改 goal。
 - [x] Turn 中途首次创建 Active Goal 时，RuntimeCore 在 state 锁内提取当前 active Turn、Plan mode、canonical cumulative usage 与 source watermark，并与 Goal 写入同一 SQLite Immediate 事务完成 late-bind；accepted replay 和重复 set 不重置 baseline，创建前 token 不计入新 Goal。
 - [x] 已有 Goal external mutation 在 RuntimeCore state 锁和同一 SQLite Immediate 事务内完成旧增量 flush、set/clear 与 baseline reset/rebind；active patch 返回已计 usage，pause/resume 排除 paused 区间，clear/recreate 改绑新 goal id，mutation 不生成陈旧 outbox，同 sequence 可推进 mutation wall time，过期或 terminal rebind fail closed。
+- [x] idle Goal wall-time 已由 canonical `goal_idle` owner 收口：进程内 `Instant` baseline、permit 串行化与 SQLite 事务保证 admission/mutation/fork exactly-once；live resume 保留本进程 baseline，cold restart 从恢复时刻重新计时，不回填离线 wall clock。fork 同事务 flush source usage、复制 Goal 并写 durable continuation deferral，显式 Turn admission 后消费。`goal_projection` 15/15、公共 JSON-RPC fork/restart 1/1 通过。
+- [x] Goal continuation 的公共 resume/reconnect 证据已关闭：cold restart 从 canonical EventLog/Projection hydration，同一 `thread/resume` transport barrier 保证 response 与 Goal snapshot 先于 `turn/started`；后续仅启动一个读取 durable objective 的 agent-only continuation，pause 后不再续跑。公共 JSONL 2/2、continuation 模块 8/8 通过。
 - [x] 验证：`cargo check -p app-server --tests`、scoped diff check、agent-runtime provider turn 19/19、session loop 37/37、lime-agent 21/21、thread usage 8/8、tool event lowering 15/15、goal projection 8/8、goal accounting 10/10、RuntimeCore Goal mutation 3/3、GoalStore 2/2、thread listener 7/7、failed/read-model 7/7、turn lifecycle 27/27 与治理 0/0/0 通过。
-- [ ] 当前仍不是完整 Codex v1 对齐：provider/tool-finish/abort 完整 usage flush、idle time、自动 continuation、启动期 outbox drain 与 GUI structured owner 保持 `OPEN_REF`。current fixture 前置 31/31、32/32、76/76 通过，真实 Electron 热路径完成 backend、GUI/read model 与 Gate B trace，但性能 trace 未捕获 pre-turn `turnStartAt`，在 `homeHotpathPreTurnTraceWindowAvailable` 退出 1；console/invoke/page error 为 0，本轮未夹写共享 GUI harness。
+- [ ] 当前仍不是完整 Codex v1 对齐：provider/tool-finish/abort usage flush、idle wall-time、fork deferral、自动 continuation、resume/reconnect 与 startup outbox parity 判断已关闭；approval-cancel 独立 Gate B 和 GUI structured terminal reason owner 保持 `OPEN_REF`。current fixture 前置 31/31、32/32、76/76 通过，真实 Electron 热路径完成 backend、GUI/read model 与 Gate B trace，但性能 trace 未捕获 pre-turn `turnStartAt`，在 `homeHotpathPreTurnTraceWindowAvailable` 退出 1；console/invoke/page error 为 0，本轮未夹写共享 GUI harness。
 
 ## 已完成
 
@@ -86,3 +88,19 @@ Current fixture 已通过历史恢复 31、流式终态 32、Electron fixture gu
 - [ ] 已核对目录归属、数据流、依赖方向、协议边界和验证门禁。
 
 未完成责任开发者确认前，本轮不能作为 release evidence 或 current 架构变更的最终合并结论。
+
+## 2026-07-22 Reasoning summary/raw typed stream 骨架
+
+目标：按 Codex 语义拆开 reasoning summary 与 raw content，删除 Lime Rust 内部旧单一 delta / thinking 事件，不增加兼容 alias。
+
+- [x] `runtime-core`、`model-provider`、`agent-runtime` 与 `lime-agent` 已使用 indexed `ReasoningSummaryDelta` / `ReasoningContentDelta` 与 `ReasoningSummaryPartAdded`；OpenAI Chat 与 Anthropic thinking 归 raw content/index 0，Responses summary/raw 分流。
+- [x] summary/content 共用同一 reasoning Item identity；只有 raw content 进入 provider history。App Server `reasoning.final` 同时保存 `summary` 与 `content`，展示 `text` 优先 summary。
+- [x] 同一 index 的 reasoning delta 严格按到达顺序追加，合法重复片段不再被重叠去重；不同 summary/content index 在 final 按 index 稳定排序。Responses EOF 缺少 `response.completed` 时只输出一次 transport `ProviderError`，不合成 `Finish`。
+- [x] Responses `summary_part.added`、summary delta 与 raw delta 使用 `output_item.added.item.id` 作为无顶层 `item_id` 时的 active reasoning identity；缺少对应 index 的 delta 按 Codex 语义忽略，不伪造 index。
+- [x] Rust owner 范围内旧 `ReasoningDelta`、`ThinkingStart`、`ThinkingDelta`、`ThinkingEnd` 已清零；唯一残留是 Anthropic 外部 wire `ThinkingDelta/thinking_delta`。
+- [x] 定向证据：四个受影响 crate `cargo check` 通过；model-provider stream 9/9、agent-runtime reasoning 5/5、App Server summary/content lifecycle 1/1、reasoning state 5/5、reasoning runtime payload 3/3、coding event sequence 1/1、lime-agent protocol 22/22 通过；`npm run smoke:agent-runtime-current-fixture` 通过 history 31/31、streaming 32/32、Electron fixture guard 85/85 和全部 current Electron 场景（`liveProviderUsed=false`）；共享工作树 `git diff --check` 与 `npm run governance:legacy-report`（零引用候选 0、分类漂移 0、边界违规 0）通过。
+- [ ] App Server v2 protocol/catalog/schema/client 仍需由当前热区 owner 将内部 indexed summary/raw/part event 投影为 `item/reasoning/summaryTextDelta`、`item/reasoning/summaryPartAdded`、`item/reasoning/textDelta`；前端历史 `thinking_delta` adapter 后续直接迁移删除，不恢复旧单一 delta 或新增 alias。
+
+本轮 Rust 写集：`runtime-core/src/llm_protocol/canonical.rs`、`model-provider/src/{current_client/stream.rs,current_client/stream_tests.rs,provider_stream/response_event.rs}`、`agent-runtime/src/{provider_turn.rs,provider_turn/tests.rs,reply_stream.rs}`、`agent/src/{current_provider_turn.rs,protocol.rs}`、`app-server/src/runtime_backend/{event_mapper.rs,reasoning_events.rs}`。`provider_turn.rs/tests.rs` 中并存的 first-visible-output timeout 属于隔壁写入，完整保留。
+
+避让写集：`internal/refactor/v1/**`、`thread_item_projection/**`、`thread-store/**`、`provider_history*`、`thread_fork*`、App Server credential route 与共享 GUI/bridge 热区。当前改动保持既有 owner 和依赖方向，未改变仓库架构图。

@@ -10,8 +10,8 @@ use crate::{ImageGenerationRunnerConfig, TaskErrorRecord};
 use super::openai_images::build_openai_compatible_image_generation_llm_request;
 use super::{
     build_image_provider_http_error, build_image_task_error, read_response_error_code,
-    read_response_error_message, summarize_response_body, ImageGenerationRequestInput,
-    IMAGE_EXECUTOR_MODE_RESPONSES_IMAGE_GENERATION,
+    read_response_error_message, summarize_response_body, with_optional_bearer_auth,
+    ImageGenerationRequestInput, IMAGE_EXECUTOR_MODE_RESPONSES_IMAGE_GENERATION,
 };
 
 pub(crate) fn build_responses_image_generation_endpoint(endpoint: &str) -> String {
@@ -253,9 +253,7 @@ async fn send_responses_image_generation_request(
         use_input_list,
     )?;
     let endpoint = build_responses_image_generation_endpoint(&runner_config.endpoint);
-    let response = client
-        .post(&endpoint)
-        .header("Authorization", format!("Bearer {}", runner_config.api_key))
+    let response = with_optional_bearer_auth(client.post(&endpoint), &runner_config.api_key)
         .header("Accept", "text/event-stream")
         .json(&request_body)
         .send()

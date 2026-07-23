@@ -8,12 +8,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+mod append_guard;
 mod delete;
+#[cfg(test)]
+mod tests;
 
 const ROLLOUT_SCHEMA_VERSION: u32 = 1;
 const SESSIONS_DIR_NAME: &str = "sessions";
 const ARCHIVED_SESSIONS_DIR_NAME: &str = "archived_sessions";
 const MAX_THREAD_ID_FILE_CHARS: usize = 128;
+const ROLLOUT_TAIL_READ_CHUNK_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct RolloutStore {
@@ -173,12 +177,11 @@ impl RolloutStore {
         changes: &ThreadHistoryChangeSet,
     ) -> Result<bool, String> {
         let path = self.resolve_active(relative_path)?;
-        let scan = scan_rollout(&path)?;
-        validate_scan_identity(&scan, relative_path, session_id, thread_id, &path)?;
-        if let Some(existing) = scan
-            .history
-            .iter()
-            .find(|record| record.sequence == changes.sequence)
+        let latest =
+            append_guard::latest_history_for_append(&path, relative_path, session_id, thread_id)?;
+        if let Some(existing) = latest
+            .as_ref()
+            .filter(|record| record.sequence == changes.sequence)
         {
             if existing.fingerprint == fingerprint {
                 return Ok(false);
@@ -188,10 +191,9 @@ impl RolloutStore {
                 changes.sequence
             ));
         }
-        if scan
-            .history
-            .iter()
-            .any(|record| record.sequence > changes.sequence)
+        if latest
+            .as_ref()
+            .is_some_and(|record| record.sequence > changes.sequence)
         {
             return Err(format!(
                 "rollout history sequence {} is stale",
@@ -524,6 +526,12 @@ impl RolloutStore {
         }
         Ok(current)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct LatestRolloutHistory {
+    sequence: u64,
+    fingerprint: String,
 }
 
 fn validate_scan_identity(

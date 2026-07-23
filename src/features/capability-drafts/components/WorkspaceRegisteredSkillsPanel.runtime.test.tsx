@@ -503,8 +503,6 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     expect(container.textContent).toContain("结果：试用后展示最近状态");
     expect(container.textContent).toContain("Managed Job：草案暂停");
     expect(container.textContent).toContain("Schedule：Cron 0 9 * * *");
-    expect(container.textContent).toContain("Managed Objective：paused");
-    expect(container.textContent).toContain("Completion Audit：paused");
     expect(
       selectAgentUiProjectionEventsBySurface(
         conversationProjectionStore.getSnapshot(),
@@ -529,9 +527,7 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
         source_verification_report_id: "capver-1",
       },
     });
-    expect(onCreateManagedAutomationDraft.mock.calls[0]?.[1]).toMatchObject({
-      requiresControlledGetEvidence: true,
-    });
+    expect(onCreateManagedAutomationDraft.mock.calls[0]).toHaveLength(1);
 
     await act(async () => {
       toggleButton?.click();
@@ -571,5 +567,4 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
 
     expect(onCreateManagedAutomationDraft).toHaveBeenCalledTimes(2);
   });
-
 });

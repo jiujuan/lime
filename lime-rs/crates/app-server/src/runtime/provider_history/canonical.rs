@@ -1,5 +1,6 @@
 use super::{flush_assistant, flush_tool_results, PROVIDER_TOOL_OUTPUT_MAX_BYTES};
-use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument};
+use agent_protocol::{AgentInput, ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument};
+use agent_runtime::reply_input::RuntimeReplyInput;
 use app_server_protocol::AgentEvent;
 use model_provider::current_client::{
     CurrentProviderContent, CurrentProviderMessage, CurrentProviderToolCall,
@@ -8,21 +9,24 @@ use model_provider::current_client::{
 use serde_json::Value;
 use std::collections::HashMap;
 
-pub(super) fn append_fork_item(
+pub(super) fn append_fork_item<G>(
     item: &ThreadItem,
     messages: &mut Vec<CurrentProviderMessage>,
     assistant_content: &mut Vec<CurrentProviderContent>,
     assistant_text_by_item: &mut HashMap<String, String>,
     tool_results: &mut Vec<CurrentProviderContent>,
-) -> Result<(), String> {
+    provider_input: &mut G,
+) -> Result<(), String>
+where
+    G: FnMut(Vec<AgentInput>) -> Result<RuntimeReplyInput, String>,
+{
     match &item.payload {
         ThreadItemPayload::UserMessage { content, .. } => {
             flush_assistant(messages, assistant_content, assistant_text_by_item);
             flush_tool_results(messages, tool_results);
-            if !content.trim().is_empty() {
-                messages.push(CurrentProviderMessage::user(vec![
-                    CurrentProviderContent::Text(content.clone()),
-                ]));
+            let input = provider_input(content.clone())?;
+            if let Some(message) = super::user_message_from_input(&input) {
+                messages.push(message);
             }
         }
         ThreadItemPayload::AgentMessage {

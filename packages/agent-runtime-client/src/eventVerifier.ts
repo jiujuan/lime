@@ -49,6 +49,16 @@ type EntityLifecycleNotification = Extract<
       | "item/completed";
   }
 >;
+type ItemStreamingNotification = Extract<
+  AgentRuntimeLifecycleNotification,
+  {
+    method:
+      | "item/agentMessage/delta"
+      | "item/reasoning/summaryTextDelta"
+      | "item/reasoning/summaryPartAdded"
+      | "item/reasoning/textDelta";
+  }
+>;
 const CANONICAL_ITEM_TYPES = [
   "userMessage",
   "hookPrompt",
@@ -112,7 +122,7 @@ export class AgentRuntimeEventSequenceGate {
   ): AgentRuntimeSequenceVerificationResult {
     if (
       !this.#verifier ||
-      notification.method === "item/agentMessage/delta" ||
+      isItemStreamingNotification(notification) ||
       notification.method === "thread/settings/updated"
     ) {
       return { accepted: true, violations: [] };
@@ -132,6 +142,18 @@ export class AgentRuntimeEventSequenceGate {
   sequenceViolationError(): AgentRuntimeSequenceViolationError {
     return new AgentRuntimeSequenceViolationError(this.getViolations());
   }
+}
+
+function isItemStreamingNotification(
+  notification: AgentRuntimeLifecycleNotification,
+): notification is ItemStreamingNotification {
+  const method = notification.method;
+  return (
+    method === "item/agentMessage/delta" ||
+    method === "item/reasoning/summaryTextDelta" ||
+    method === "item/reasoning/summaryPartAdded" ||
+    method === "item/reasoning/textDelta"
+  );
 }
 
 /**

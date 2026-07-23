@@ -20,9 +20,6 @@ interface AutomationMockSetters {
   mockGetAutomationHealth: AutomationMock;
   mockGetAutomationRunHistory: AutomationMock;
   mockListProjects: AutomationMock;
-  mockAuditAgentRuntimeObjective: AutomationMock;
-  mockOpenPathWithDefaultApp: AutomationMock;
-  mockRevealPathInFinder: AutomationMock;
 }
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
@@ -240,9 +237,6 @@ export function setupDefaultAutomationMocks(mocks: AutomationMockSetters) {
       rootPath: "/workspace/default",
     },
   ]);
-  mocks.mockAuditAgentRuntimeObjective.mockResolvedValue({});
-  mocks.mockOpenPathWithDefaultApp.mockResolvedValue(undefined);
-  mocks.mockRevealPathInFinder.mockResolvedValue(undefined);
 }
 
 export async function renderSettings(
@@ -408,58 +402,5 @@ export function setupSceneAppAutomationMocks(mocks: AutomationMockSetters) {
 
   return {
     sceneAppJob,
-  };
-}
-
-export function setupManagedObjectiveAutomationMocks(
-  mocks: AutomationMockSetters,
-) {
-  const managedObjectiveJob = createAgentTurnJob({
-    id: "job-managed-objective-1",
-    name: "目标日报",
-    description: "持续推进可审计目标。",
-    max_retries: 1,
-    payload: {
-      kind: "agent_turn",
-      prompt: "请继续推进目标。",
-      session_id: "session-managed-objective-1",
-      thread_id: "thread-managed-objective-1",
-      system_prompt: null,
-      web_search: false,
-      request_metadata: {
-        harness: {
-          managed_objective: {
-            objective_id: "objective-1",
-            owner_type: "automation_job",
-            owner_id: "job-managed-objective-1",
-            objective_text: "产出可审计日报",
-            success_criteria: ["生成 Markdown", "附带证据包"],
-            state: "active",
-            last_evidence_pack_ref:
-              ".lime/harness/job-managed-objective-1/evidence",
-            last_artifact_refs: ["reports/daily.md"],
-          },
-        },
-      },
-    },
-  });
-  const managedObjectiveRun = createAutomationRun({
-    id: "run-managed-objective-1",
-    source_ref: "job-managed-objective-1",
-    session_id: "session-managed-objective-1",
-    status: "success",
-    started_at: "2026-03-16T08:59:00Z",
-    finished_at: "2026-03-16T09:00:10Z",
-    duration_ms: 70_000,
-    metadata: "{}",
-    created_at: "2026-03-16T08:59:00Z",
-    updated_at: "2026-03-16T09:00:10Z",
-  });
-
-  mocks.mockGetAutomationJobs.mockResolvedValue([managedObjectiveJob]);
-  mocks.mockGetAutomationRunHistory.mockResolvedValue([managedObjectiveRun]);
-
-  return {
-    managedObjectiveJob,
   };
 }

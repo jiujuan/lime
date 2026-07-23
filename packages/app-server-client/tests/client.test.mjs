@@ -76,12 +76,6 @@ const {
   METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
   METHOD_AGENT_SESSION_MEDIA_READ,
   METHOD_CANCEL_REQUEST,
-  METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
-  METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
-  METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
-  METHOD_AGENT_SESSION_OBJECTIVE_READ,
-  METHOD_AGENT_SESSION_OBJECTIVE_SET,
-  METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
   METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
   METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
   METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
@@ -219,10 +213,7 @@ const {
   METHOD_MODEL_PROVIDER_FETCH_MODELS,
   METHOD_MODEL_PROVIDER_KEY_CREATE,
   METHOD_MODEL_PROVIDER_KEY_DELETE,
-  METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
-  METHOD_MODEL_PROVIDER_KEY_NEXT,
   METHOD_MODEL_PROVIDER_KEY_UPDATE,
-  METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
   METHOD_MODEL_PROVIDER_LIST,
   METHOD_MODEL_PROVIDER_READ,
   METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
@@ -542,27 +533,6 @@ test("builds workspace and skill read requests with current methods", () => {
   const deleteThread = client.deleteThread({
     threadId: "thread-main",
   });
-  const readObjective = client.readAgentSessionObjective({
-    sessionId: "session-main",
-  });
-  const setObjective = client.setAgentSessionObjective({
-    sessionId: "session-main",
-    workspaceId: "workspace-main",
-    objectiveText: "完成生产命令 current 迁移",
-    successCriteria: ["CRUD 走 App Server current"],
-    budgetPolicy: { maxTurns: 8 },
-    riskPolicy: { level: "medium" },
-    approvalPolicy: { required: false },
-    continuationPolicy: { mode: "manual" },
-  });
-  const updateObjectiveStatus = client.updateAgentSessionObjectiveStatus({
-    sessionId: "session-main",
-    status: "blocked",
-    blockerReason: "等待共享写集释放",
-  });
-  const clearObjective = client.clearAgentSessionObjective({
-    sessionId: "session-main",
-  });
   const workspaces = client.listWorkspaces();
   const workspace = client.readWorkspace({ id: "workspace-main" });
   const workspaceByPath = client.readWorkspaceByPath({
@@ -661,34 +631,6 @@ test("builds workspace and skill read requests with current methods", () => {
   assert.equal(deleteThread.method, METHOD_THREAD_DELETE);
   assert.deepEqual(deleteThread.params, {
     threadId: "thread-main",
-  });
-  assert.equal(readObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_READ);
-  assert.deepEqual(readObjective.params, {
-    sessionId: "session-main",
-  });
-  assert.equal(setObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_SET);
-  assert.deepEqual(setObjective.params, {
-    sessionId: "session-main",
-    workspaceId: "workspace-main",
-    objectiveText: "完成生产命令 current 迁移",
-    successCriteria: ["CRUD 走 App Server current"],
-    budgetPolicy: { maxTurns: 8 },
-    riskPolicy: { level: "medium" },
-    approvalPolicy: { required: false },
-    continuationPolicy: { mode: "manual" },
-  });
-  assert.equal(
-    updateObjectiveStatus.method,
-    METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
-  );
-  assert.deepEqual(updateObjectiveStatus.params, {
-    sessionId: "session-main",
-    status: "blocked",
-    blockerReason: "等待共享写集释放",
-  });
-  assert.equal(clearObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_CLEAR);
-  assert.deepEqual(clearObjective.params, {
-    sessionId: "session-main",
   });
   assert.equal(workspaces.method, METHOD_WORKSPACE_LIST);
   assert.deepEqual(workspaces.params, {});

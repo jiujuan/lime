@@ -6,9 +6,9 @@ mod tests;
 
 use self::helpers::*;
 
-const LOCAL_LIME_SERVICE_EXECUTOR_KIND: &str = "local_lime_service";
-const RUNNER_CONFIG_ENDPOINT_SOURCE: &str = "runner_config";
-const LOCAL_LIME_SERVICE_CREDENTIAL_OWNER: &str = "local_lime_service";
+const MEDIA_TASK_WORKER_EXECUTOR_KIND: &str = "media_task_worker";
+const RESOLVED_ROUTE_ENDPOINT_SOURCE: &str = "resolved_route";
+const MEDIA_TASK_WORKER_CREDENTIAL_OWNER: &str = "media_task_worker";
 const SECRET_NOT_EMBEDDED_STATUS: &str = "not_embedded";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -32,24 +32,21 @@ pub(crate) struct RoutePayloadPreflight {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LocalRouteExecutionSpec {
+pub(crate) struct RouteExecutionSpec {
     pub(crate) binding_key: &'static str,
-    pub(crate) path: &'static str,
     pub(crate) task_label: &'static str,
 }
 
-pub(crate) fn image_generation_local_execution_spec() -> LocalRouteExecutionSpec {
-    LocalRouteExecutionSpec {
-        binding_key: "local_lime_service:/v1/images/generations",
-        path: "/v1/images/generations",
+pub(crate) fn image_generation_execution_spec() -> RouteExecutionSpec {
+    RouteExecutionSpec {
+        binding_key: "mediaTaskArtifact/image/create",
         task_label: "图片生成",
     }
 }
 
-pub(crate) fn video_generation_local_execution_spec() -> LocalRouteExecutionSpec {
-    LocalRouteExecutionSpec {
-        binding_key: "local_lime_service:/v1/videos/generations",
-        path: "/v1/videos/generations",
+pub(crate) fn video_generation_execution_spec() -> RouteExecutionSpec {
+    RouteExecutionSpec {
+        binding_key: "mediaTaskArtifact/video/create",
         task_label: "视频生成",
     }
 }
@@ -57,7 +54,7 @@ pub(crate) fn video_generation_local_execution_spec() -> LocalRouteExecutionSpec
 pub(crate) fn image_route_payload_preflight(payload: &Value) -> RoutePayloadPreflight {
     route_payload_preflight(
         payload,
-        &image_generation_local_execution_spec(),
+        &image_generation_execution_spec(),
         supports_image_generation_route_protocol,
     )
 }
@@ -65,7 +62,7 @@ pub(crate) fn image_route_payload_preflight(payload: &Value) -> RoutePayloadPref
 pub(crate) fn video_route_payload_preflight(payload: &Value) -> RoutePayloadPreflight {
     route_payload_preflight(
         payload,
-        &video_generation_local_execution_spec(),
+        &video_generation_execution_spec(),
         supports_video_generation_route_protocol,
     )
 }
@@ -125,9 +122,9 @@ pub(crate) fn route_failure_from_payload(payload: &Value) -> Option<ModelRouteFa
     })
 }
 
-pub(crate) fn local_route_execution_patch_from_payload(
+pub(crate) fn route_execution_patch_from_payload(
     payload: &Value,
-    spec: &LocalRouteExecutionSpec,
+    spec: &RouteExecutionSpec,
 ) -> Option<Value> {
     resolved_model_route_from_payload(payload)?;
     if route_failure_from_payload(payload).is_some() {
@@ -137,7 +134,7 @@ pub(crate) fn local_route_execution_patch_from_payload(
         return None;
     }
 
-    let binding = build_local_route_execution_binding(payload, spec)?;
+    let binding = build_route_execution_binding(payload, spec)?;
     Some(json!({
         "model_route_execution": binding.clone(),
         "modelRouteExecution": binding
@@ -146,7 +143,7 @@ pub(crate) fn local_route_execution_patch_from_payload(
 
 pub(crate) fn route_execution_failure_from_payload(
     payload: &Value,
-    spec: &LocalRouteExecutionSpec,
+    spec: &RouteExecutionSpec,
 ) -> Option<ModelRouteFailureProjection> {
     let route = resolved_model_route_from_payload(payload)?;
     let Some(execution) = route_execution_value(payload) else {
@@ -161,10 +158,10 @@ pub(crate) fn route_execution_failure_from_payload(
         object_field(execution, &["credentialResolver", "credential_resolver"]);
     let execution_route = object_field(execution, &["route"]);
     let executor_kind = executor.and_then(|value| string_field(value, &["kind"]));
-    if normalized_token(executor_kind.as_deref()) != Some(LOCAL_LIME_SERVICE_EXECUTOR_KIND.into()) {
+    if normalized_token(executor_kind.as_deref()) != Some(MEDIA_TASK_WORKER_EXECUTOR_KIND.into()) {
         return Some(unsupported_route_execution_failure(
             spec,
-            "执行器必须是本地 Lime 服务",
+            "执行器必须是媒体任务 worker",
         ));
     }
 
@@ -179,20 +176,20 @@ pub(crate) fn route_execution_failure_from_payload(
 
     let endpoint_source =
         executor.and_then(|value| string_field(value, &["endpointSource", "endpoint_source"]));
-    if normalized_token(endpoint_source.as_deref()) != Some(RUNNER_CONFIG_ENDPOINT_SOURCE.into()) {
+    if normalized_token(endpoint_source.as_deref()) != Some(RESOLVED_ROUTE_ENDPOINT_SOURCE.into()) {
         return Some(unsupported_route_execution_failure(
             spec,
-            "执行 endpoint 必须来自 runner config",
+            "执行 endpoint 必须来自 resolved route",
         ));
     }
 
     let credential_owner = credential_resolver.and_then(|value| string_field(value, &["owner"]));
     if normalized_token(credential_owner.as_deref())
-        != Some(LOCAL_LIME_SERVICE_CREDENTIAL_OWNER.into())
+        != Some(MEDIA_TASK_WORKER_CREDENTIAL_OWNER.into())
     {
         return Some(unsupported_route_execution_failure(
             spec,
-            "凭证解析 owner 必须是本地 Lime 服务",
+            "凭证解析 owner 必须是媒体任务 worker",
         ));
     }
 
@@ -243,7 +240,7 @@ pub(crate) fn route_execution_failure_from_payload(
 
 fn route_payload_preflight(
     payload: &Value,
-    spec: &LocalRouteExecutionSpec,
+    spec: &RouteExecutionSpec,
     supports_protocol: fn(Option<&str>) -> bool,
 ) -> RoutePayloadPreflight {
     if let Some(failure) = route_failure_from_payload(payload) {
@@ -268,7 +265,7 @@ fn route_payload_preflight(
     }
 
     if route_execution_value(payload).is_none() {
-        if let Some(payload_patch) = local_route_execution_patch_from_payload(payload, spec) {
+        if let Some(payload_patch) = route_execution_patch_from_payload(payload, spec) {
             return RoutePayloadPreflight {
                 payload_patch: Some(payload_patch),
                 failure: None,

@@ -8,9 +8,7 @@ import {
   type CapabilityDraftVerificationEvidence,
   type WorkspaceRegisteredSkillRecord,
 } from "@/lib/api/capabilityDrafts";
-import {
-  exportAgentRuntimeEvidencePack,
-} from "@/lib/api/agentRuntime/exportClient";
+import { exportAgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/exportClient";
 import { listWorkspaceSkillBindings } from "@/lib/api/agentRuntime/inventoryClient";
 import type { AgentRuntimeCompletionAuditSummary } from "@/lib/api/agentRuntime/evidenceTypes";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
@@ -37,7 +35,6 @@ import {
   canBuildWorkspaceSkillAgentAutomationDraft,
   isWorkspaceSkillAgentAutomationJobForDirectory,
   type WorkspaceSkillManagedAutomationPresentationCopy,
-  type WorkspaceSkillAgentAutomationDraftOptions,
 } from "../workspaceSkillAgentAutomationDraft";
 
 interface WorkspaceRegisteredSkillsPanelProps {
@@ -49,7 +46,6 @@ interface WorkspaceRegisteredSkillsPanelProps {
   onEnableRuntime?: (binding: AgentRuntimeWorkspaceSkillBinding) => void;
   onCreateManagedAutomationDraft?: (
     binding: AgentRuntimeWorkspaceSkillBinding,
-    options?: WorkspaceSkillAgentAutomationDraftOptions,
   ) => void;
   completionAuditSummariesByDirectory?: Record<
     string,
@@ -136,19 +132,6 @@ const REGISTRATION_EVIDENCE_LABELS: Record<string, string> = {
 };
 
 const READONLY_HTTP_PREFLIGHT_CHECK_ID = "readonly_http_execution_preflight";
-
-function skillRequiresControlledGetEvidence(
-  skill: WorkspaceRegisteredSkillRecord,
-): boolean {
-  return Boolean(
-    skill.registration.approvalRequests?.some(
-      (request) => request.sourceCheckId === READONLY_HTTP_PREFLIGHT_CHECK_ID,
-    ) ||
-    skill.registration.verificationGates?.some(
-      (gate) => gate.checkId === READONLY_HTTP_PREFLIGHT_CHECK_ID,
-    ),
-  );
-}
 
 function formatRegistrationEvidenceKey(
   key: string,
@@ -363,7 +346,6 @@ function WorkspaceRegisteredSkillCard({
   onEnableRuntime?: (binding: AgentRuntimeWorkspaceSkillBinding) => void;
   onCreateManagedAutomationDraft?: (
     binding: AgentRuntimeWorkspaceSkillBinding,
-    options?: WorkspaceSkillAgentAutomationDraftOptions,
   ) => void;
 }) {
   const { i18n, t } = useTranslation("agent");
@@ -659,49 +641,11 @@ function WorkspaceRegisteredSkillCard({
   const managedAutomationCopy =
     useMemo<WorkspaceSkillManagedAutomationPresentationCopy>(
       () => ({
-        auditBlocked: t(
-          "capabilityDraft.registeredPanel.managedJob.audit.blocked",
-          "Completion Audit：blocked，需处理失败原因。",
-        ),
-        auditMissing: t(
-          "capabilityDraft.registeredPanel.managedJob.audit.missing",
-          "Completion Audit：缺少运行与 evidence，不能判定完成。",
-        ),
-        auditPaused: t(
-          "capabilityDraft.registeredPanel.managedJob.audit.paused",
-          "Completion Audit：paused，恢复并产生运行证据后再审计。",
-        ),
-        auditPlanned: t(
-          "capabilityDraft.registeredPanel.managedJob.audit.planned",
-          "Completion Audit：planned，等待首次运行证据。",
-        ),
-        auditRunning: t(
-          "capabilityDraft.registeredPanel.managedJob.audit.running",
-          "Completion Audit：运行中，等待 automation run 结束后再审计。",
-        ),
-        auditVerifying: t(
-          "capabilityDraft.registeredPanel.managedJob.audit.verifying",
-          "Completion Audit：运行成功后仍需 artifact / timeline / evidence 审计，暂不直接标记 completed。",
-        ),
         formatAtSchedule: (at) =>
           t("capabilityDraft.registeredPanel.managedJob.schedule.at", {
             defaultValue: "一次性 {{at}}",
             at,
           }),
-        formatAuditBlocked: (error) =>
-          error
-            ? t(
-                "capabilityDraft.registeredPanel.managedJob.audit.blockedWithError",
-                {
-                  defaultValue:
-                    "Completion Audit：blocked，需处理失败原因：{{error}}",
-                  error,
-                },
-              )
-            : t(
-                "capabilityDraft.registeredPanel.managedJob.audit.blocked",
-                "Completion Audit：blocked，需处理失败原因。",
-              ),
         formatCronSchedule: (expr, timezone) =>
           t("capabilityDraft.registeredPanel.managedJob.schedule.cron", {
             defaultValue: "Cron {{expr}}{{timezone}}",
@@ -732,11 +676,6 @@ function WorkspaceRegisteredSkillCard({
               : "",
             lastRun,
           }),
-        formatManagedObjective: (state) =>
-          t("capabilityDraft.registeredPanel.managedJob.objective.withState", {
-            defaultValue: "Managed Objective：{{state}}",
-            state,
-          }),
         formatSchedule: (schedule, nextRun) =>
           t("capabilityDraft.registeredPanel.managedJob.schedule.withValue", {
             defaultValue: "Schedule：{{schedule}}{{nextRun}}",
@@ -764,10 +703,6 @@ function WorkspaceRegisteredSkillCard({
         lastRunValueNone: t(
           "capabilityDraft.registeredPanel.managedJob.lastRun.valueNone",
           "暂无",
-        ),
-        managedObjectivePlanned: t(
-          "capabilityDraft.registeredPanel.managedJob.objective.planned",
-          "Managed Objective：planned，等待绑定 automation job。",
         ),
         notCreatedSchedule: t(
           "capabilityDraft.registeredPanel.managedJob.schedule.notCreated",
@@ -799,9 +734,6 @@ function WorkspaceRegisteredSkillCard({
   const bindingBlocked = binding?.binding_status === "blocked";
   const runtimeEnableReady =
     binding?.binding_status === "ready_for_manual_enable";
-  const automationDraftOptions = {
-    requiresControlledGetEvidence: skillRequiresControlledGetEvidence(skill),
-  };
   const envelopeDraft = buildAgentEnvelopeDraftPresentation({
     skill,
     binding,
@@ -1682,8 +1614,6 @@ function WorkspaceRegisteredSkillCard({
             <span>{managedAutomationPresentation.statusLabel}</span>
             <span>{managedAutomationPresentation.scheduleLabel}</span>
             <span>{managedAutomationPresentation.lastRunLabel}</span>
-            <span>{managedAutomationPresentation.objectiveLabel}</span>
-            <span>{managedAutomationPresentation.auditLabel}</span>
           </div>
         </details>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1709,9 +1639,7 @@ function WorkspaceRegisteredSkillCard({
               variant="outline"
               className="h-8 rounded-2xl border-slate-200 bg-white px-3 text-[12px] text-slate-700 hover:bg-slate-50"
               disabled={!canCreateManagedAutomationDraft}
-              onClick={() =>
-                onCreateManagedAutomationDraft(binding, automationDraftOptions)
-              }
+              onClick={() => onCreateManagedAutomationDraft(binding)}
               data-testid="workspace-registered-agent-managed-automation"
             >
               {t(
@@ -1782,10 +1710,7 @@ function WorkspaceRegisteredSkillCard({
             disabled={!canCreateAgentEnvelopeDraft}
             onClick={() => {
               if (binding && canCreateAgentEnvelopeDraft) {
-                onCreateManagedAutomationDraft?.(
-                  binding,
-                  automationDraftOptions,
-                );
+                onCreateManagedAutomationDraft?.(binding);
               }
             }}
             data-testid="workspace-registered-agent-envelope-action"

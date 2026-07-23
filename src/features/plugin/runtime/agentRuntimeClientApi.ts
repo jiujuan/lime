@@ -6,7 +6,7 @@ import type {
 import type {
   PluginRuntimeStartTaskRequest,
   PluginRuntimeSubmitHostResponseRequest,
-} from "@/lib/api/pluginRuntime";
+} from "@/lib/api/agentRuntime/pluginTaskTypes";
 import { respondPendingTypedServerRequest } from "@/lib/api/agentRuntime/serverRequestReplay";
 import { createApplicationAdditionalContext } from "@/lib/api/agentProtocolOps";
 import type { PluginRuntimeCapabilityApi } from "./agentRuntimeCapabilityApi";

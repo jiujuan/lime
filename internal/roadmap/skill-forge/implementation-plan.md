@@ -11,7 +11,7 @@
 - [./architecture-review.md](./architecture-review.md)
 - [./diagrams.md](./diagrams.md)
 - [./prototype.md](./prototype.md)
-- [../managed-objective/README.md](../managed-objective/README.md)
+- [../../aiprompts/architecture.md](../../aiprompts/architecture.md)
 - [../../research/skill-forge/pivot-and-org-harness.md](../../research/skill-forge/pivot-and-org-harness.md)
 - [../../research/skill-forge/agent-product-model.md](../../research/skill-forge/agent-product-model.md)
 - [../../exec-plans/skill-forge-completion-audit.md](../../exec-plans/skill-forge-completion-audit.md)
@@ -41,7 +41,7 @@
 13. P4 第一刀已新增 Agent envelope 草案 presentation：Workspace 已注册能力面板可展示 runbook、permission、manual rerun schedule 与 evidence 状态，但不新增 runtime、scheduler 或长期授权。
 14. P4 evidence 第一刀已补 `timeline.json` source metadata 透传：ToolCall item 在存在 P3E metadata 时会保留 `workspaceSkillSource` / `workspaceSkillRuntimeEnable`，供后续 Agent envelope 和 evidence pack 展示消费。
 15. P4 第二刀已新增 Managed Job 草案入口：ready binding 可从 Workspace 已注册能力面板打开现有持续流程弹窗，生成默认暂停的 automation job 草案。
-16. Managed Job 草案的 payload 仍是 `agent_turn`，并通过 `request_metadata.harness.agent_envelope`、`managed_objective`、`workspace_skill_runtime_enable` 绑定来源、目标和 P3E session-scoped runtime enable。
+16. Managed Job 草案的 payload 仍是 `agent_turn`，并通过 `request_metadata.harness.agent_envelope` 与 `workspace_skill_runtime_enable` 绑定来源和 P3E session-scoped runtime enable；目标状态只归 ThreadGoal。
 17. P4 evidence 第二刀已补 automation owner 导出：evidence pack 的 `runtime.json` / `artifacts.json` 会写入 `automationOwners`，用于审计 automation job、Agent envelope、Managed Objective 与 workspace skill runtime enable 的关系。
 18. Workspace 已注册能力面板已补 managed job 状态投影：从既有 automation jobs 读取 `agent_envelope` metadata，显示草案/启用状态、调度摘要、最近运行与错误摘要。
 19. Workspace 已注册能力面板已补暂停 / 恢复最小闭环：对匹配到的 Managed Job 直接复用 `updateAutomationJob` 修改 `enabled`，并用返回记录刷新状态投影。
@@ -364,14 +364,13 @@ P1 不做完整独立 Coding Agent。首期只做受控的 `Capability Authoring
 8. evidence pack 能看到注册来源和运行事实。
 9. P3E ToolResult metadata 能看到 source draft、verification report、registered directory 与 session 授权范围。
 
-## 6. P3.5：Managed Objective 边界
+## 6. P3.5：ThreadGoal 边界
 
 目标：在进入长期任务前，先固定“目标推进控制层”不是新的 runtime。
 
 参考研究：
 
 - [../../research/codex-goal/README.md](../../research/codex-goal/README.md)
-- [../managed-objective/README.md](../managed-objective/README.md)
 - [../../research/skill-forge/pivot-and-org-harness.md](../../research/skill-forge/pivot-and-org-harness.md)
 - [../../research/skill-forge/agent-product-model.md](../../research/skill-forge/agent-product-model.md)
 - [./coding-agent-layer.md](./coding-agent-layer.md)
@@ -396,9 +395,9 @@ P1 不做完整独立 Coding Agent。首期只做受控的 `Capability Authoring
 
 固定边界：
 
-**Managed Objective 是挂在 `agent session / automation job` 上的控制层，不是第四类执行实体。**
+**ThreadGoal 是挂在 canonical Thread 上的控制层，不是第四类执行实体；Automation 不拥有 Goal。**
 
-详细状态机、audit contract、automation owner binding 和自动续跑策略不在本文件展开，统一以 [../managed-objective/architecture.md](../managed-objective/architecture.md) 与 [../managed-objective/implementation-plan.md](../managed-objective/implementation-plan.md) 为准。
+详细状态机、预算、用量和自动续跑策略统一以 [../../aiprompts/architecture.md](../../aiprompts/architecture.md) 为准。旧 audit contract 与 automation owner binding 已删除并禁止恢复。
 
 ### 6.2 与现有主链关系
 

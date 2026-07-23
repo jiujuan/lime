@@ -1,7 +1,5 @@
 use super::request_context::RuntimeModelSelection;
-use crate::model_route_assembly::{
-    resolved_route_from_task, DirectRouteConfig, ModelRouteSelection,
-};
+use crate::model_route_assembly::{DirectRouteConfig, ModelRouteSelection};
 use crate::model_task_contract::{build_model_task_request, ModelTaskRequestInput};
 use crate::ExecutionRequest;
 use agent_protocol::ModelId;
@@ -68,9 +66,10 @@ pub(super) fn resolved_route_from_runtime(
     selection: &RuntimeModelSelection,
     routing_payload: &Value,
     provider: Option<&ProviderWithKeys>,
+    credential_ref: Option<&str>,
     direct_provider_config: Option<&SessionProviderConfig>,
 ) -> ResolvedModelRoute {
-    resolved_route_from_task(
+    crate::model_route_assembly::resolved_route_from_task_with_credential(
         task_request,
         ModelRouteSelection {
             provider_id: &selection.provider,
@@ -80,6 +79,7 @@ pub(super) fn resolved_route_from_runtime(
         },
         routing_payload,
         provider,
+        credential_ref,
         direct_provider_config.map(direct_route_config),
     )
 }
@@ -356,8 +356,14 @@ mod tests {
             }
         });
         let task_request = chat_task_request_from_runtime(&request, &selection, &routing_payload);
-        let route =
-            resolved_route_from_runtime(&task_request, &selection, &routing_payload, None, None);
+        let route = resolved_route_from_runtime(
+            &task_request,
+            &selection,
+            &routing_payload,
+            None,
+            None,
+            None,
+        );
 
         let failure = route.failure.expect("capability failure");
         assert_eq!(failure.category, RouteFailureCategory::CapabilityGap);
@@ -410,8 +416,14 @@ mod tests {
                 "modelCapabilities": null
             }
         });
-        let route =
-            resolved_route_from_runtime(&task_request, &selection, &routing_payload, None, None);
+        let route = resolved_route_from_runtime(
+            &task_request,
+            &selection,
+            &routing_payload,
+            None,
+            None,
+            None,
+        );
 
         let failure = route.failure.expect("missing capability snapshot failure");
         assert_eq!(failure.category, RouteFailureCategory::CapabilityGap);
@@ -475,8 +487,14 @@ mod tests {
                 }
             }
         });
-        let resolved_route =
-            resolved_route_from_runtime(&task_request, &selection, &routing_payload, None, None);
+        let resolved_route = resolved_route_from_runtime(
+            &task_request,
+            &selection,
+            &routing_payload,
+            None,
+            None,
+            None,
+        );
         let model_route = model_route_from_runtime(&selection, &resolved_route);
 
         assert_eq!(model_route.provider, "openai");
@@ -557,6 +575,7 @@ mod tests {
             &task_request,
             &selection,
             &routing_payload,
+            None,
             None,
             Some(&route_seed),
         );

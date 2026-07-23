@@ -77,9 +77,9 @@ Plugin Runtime Electron SDK Fixture Smoke
   createLimeHostBridgeCapabilityInvoker 调用 lime.agent start/get/respond/cancel。
   后端使用一次性 external backend fixture 记录 App Server RuntimeCore 请求。
 
-目标链路:
+  目标链路:
   Plugin iframe SDK -> PluginRuntimePage Host Bridge
-    -> AgentRuntimeCapabilityHost -> src/lib/api/pluginRuntime.ts
+    -> AgentRuntimeCapabilityHost -> AgentRuntimeClient
     -> Electron Desktop Host IPC -> App Server JSON-RPC -> RuntimeCore/backend
 
 说明:

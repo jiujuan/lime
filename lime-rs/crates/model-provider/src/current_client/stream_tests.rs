@@ -59,6 +59,49 @@ async fn collect_openai_events(body: &'static str) -> Vec<CanonicalLlmEvent> {
     events
 }
 
+async fn collect_responses_events(body: &'static str) -> Vec<CanonicalLlmEvent> {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fixture server");
+    let address = listener.local_addr().expect("fixture address");
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.expect("accept request");
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 1024];
+        while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+            let read = socket.read(&mut buffer).await.expect("read request");
+            if read == 0 {
+                break;
+            }
+            request.extend_from_slice(&buffer[..read]);
+        }
+
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len(),
+        );
+        socket
+            .write_all(response.as_bytes())
+            .await
+            .expect("write response");
+    });
+
+    let response = Client::builder()
+        .no_proxy()
+        .build()
+        .expect("HTTP client")
+        .get(format!("http://{address}"))
+        .send()
+        .await
+        .expect("SSE response");
+    let events = responses_sse(response)
+        .map(|event| event.expect("valid Responses SSE event"))
+        .collect()
+        .await;
+    server.await.expect("fixture server");
+    events
+}
+
 async fn assert_finish_releases_http_body(
     body: &'static str,
     stream_from_response: impl FnOnce(Response) -> TestProviderStream,
@@ -260,6 +303,78 @@ async fn responses_finish_releases_http_body_before_consumer_polls_again() {
         |response| Box::pin(responses_sse(response)),
     )
     .await;
+}
+
+#[tokio::test]
+async fn responses_separates_reasoning_summary_from_raw_content() {
+    let events = collect_responses_events(concat!(
+        "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"reasoning\",\"id\":\"reasoning-wire\",\"summary\":[]}}\n\n",
+        "data: {\"type\":\"response.reasoning_summary_part.added\",\"output_index\":0,\"summary_index\":0}\n\n",
+        "data: {\"type\":\"response.reasoning_summary_text.delta\",\"output_index\":0,\"delta\":\"摘要\",\"summary_index\":0}\n\n",
+        "data: {\"type\":\"response.reasoning_text.delta\",\"output_index\":0,\"delta\":\"原始推理\",\"content_index\":0}\n\n",
+        "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-reasoning\",\"output\":[]}}\n\n",
+    ))
+    .await;
+
+    assert!(matches!(
+        events.as_slice(),
+        [
+            CanonicalLlmEvent::ReasoningStart { id: start_id },
+            CanonicalLlmEvent::ReasoningSummaryPartAdded { id: part_id, summary_index: part_index },
+            CanonicalLlmEvent::ReasoningSummaryDelta { id: summary_id, text: summary, summary_index },
+            CanonicalLlmEvent::ReasoningContentDelta { id: content_id, text: content, content_index },
+            CanonicalLlmEvent::ReasoningEnd { id: end_id },
+            CanonicalLlmEvent::Finish { .. },
+        ] if start_id == "reasoning-reasoning-wire"
+            && part_id == "reasoning-reasoning-wire"
+            && *part_index == 0
+            && summary_id == "reasoning-reasoning-wire"
+            && summary == "摘要"
+            && *summary_index == 0
+            && content_id == "reasoning-reasoning-wire"
+            && content == "原始推理"
+            && *content_index == 0
+            && end_id == "reasoning-reasoning-wire"
+    ));
+}
+
+#[tokio::test]
+async fn responses_reasoning_deltas_without_indexes_are_ignored() {
+    let events = collect_responses_events(concat!(
+        "data: {\"type\":\"response.reasoning_summary_text.delta\",\"item_id\":\"1\",\"delta\":\"摘要\"}\n\n",
+        "data: {\"type\":\"response.reasoning_text.delta\",\"item_id\":\"1\",\"delta\":\"原始推理\"}\n\n",
+        "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-reasoning\",\"output\":[]}}\n\n",
+    ))
+    .await;
+
+    assert!(matches!(
+        events.as_slice(),
+        [CanonicalLlmEvent::Finish { .. }]
+    ));
+}
+
+#[tokio::test]
+async fn responses_eof_before_completed_fails_closed_without_finish() {
+    let events = collect_responses_events(
+        "data: {\"type\":\"response.output_text.delta\",\"item_id\":\"message-1\",\"delta\":\"partial\"}\n\n",
+    )
+    .await;
+
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, CanonicalLlmEvent::ProviderError { .. }))
+            .count(),
+        1
+    );
+    assert!(events.iter().any(|event| matches!(
+        event,
+        CanonicalLlmEvent::ProviderError { message, .. }
+            if message == "stream closed before response.completed"
+    )));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, CanonicalLlmEvent::Finish { .. })));
 }
 
 #[tokio::test]

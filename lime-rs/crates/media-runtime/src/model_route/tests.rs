@@ -88,8 +88,8 @@ fn protocol_support_rejects_chat_for_media_tasks() {
 }
 
 #[test]
-fn local_execution_patch_migrates_route_only_image_payload() {
-    let patch = local_route_execution_patch_from_payload(
+fn route_execution_patch_binds_route_only_image_payload_to_media_worker() {
+    let patch = route_execution_patch_from_payload(
         &json!({
             "resolvedRoute": {
                 "modelRef": {
@@ -103,13 +103,13 @@ fn local_execution_patch_migrates_route_only_image_payload() {
                 }
             }
         }),
-        &image_generation_local_execution_spec(),
+        &image_generation_execution_spec(),
     )
     .expect("patch");
 
     assert_eq!(
         patch["model_route_execution"]["executor"]["bindingKey"].as_str(),
-        Some("local_lime_service:/v1/images/generations")
+        Some("mediaTaskArtifact/image/create")
     );
     assert_eq!(
         patch["model_route_execution"]["credentialResolver"]["secretMaterialStatus"].as_str(),
@@ -145,7 +145,7 @@ fn image_route_preflight_migrates_route_only_payload() {
             .as_ref()
             .and_then(|patch| patch.pointer("/modelRouteExecution/executor/kind"))
             .and_then(Value::as_str),
-        Some("local_lime_service")
+        Some("media_task_worker")
     );
 }
 
@@ -184,12 +184,12 @@ fn route_execution_validation_rejects_embedded_secret() {
             },
             "modelRouteExecution": {
                 "executor": {
-                    "kind": "local_lime_service",
-                    "bindingKey": "local_lime_service:/v1/images/generations",
-                    "endpointSource": "runner_config"
+                    "kind": "media_task_worker",
+                    "bindingKey": "mediaTaskArtifact/image/create",
+                    "endpointSource": "resolved_route"
                 },
                 "credentialResolver": {
-                    "owner": "local_lime_service",
+                    "owner": "media_task_worker",
                     "secretMaterialStatus": "embedded",
                     "apiKey": "sk-test"
                 },
@@ -200,7 +200,7 @@ fn route_execution_validation_rejects_embedded_secret() {
                 }
             }
         }),
-        &image_generation_local_execution_spec(),
+        &image_generation_execution_spec(),
     )
     .expect("failure");
 

@@ -37,7 +37,7 @@ async fn prepared_route_pins_the_round_robin_credential_for_execution() {
             &provider.id,
             "second-key",
             Some("second".to_string()),
-            true,
+            false,
         )
         .expect("second key");
     backend
@@ -58,13 +58,34 @@ async fn prepared_route_pins_the_round_robin_credential_for_execution() {
             Some(vec!["route-pin-model".to_string()]),
         )
         .expect("declared model");
+    assert_eq!(
+        backend
+            .api_key_provider_service
+            .get_provider(&db, &provider.id)
+            .expect("read provider")
+            .expect("configured provider")
+            .api_keys
+            .iter()
+            .filter(|key| key.enabled)
+            .count(),
+        2
+    );
 
-    backend
+    let advanced_ref = backend
         .api_key_provider_service
         .select_credential_for_provider(&db, &provider.id, Some(&provider.id), None)
         .await
         .expect("advance round robin")
-        .expect("first credential");
+        .expect("first credential")
+        .uuid;
+    let next_ref = backend
+        .api_key_provider_service
+        .select_credential_for_provider(&db, &provider.id, Some(&provider.id), None)
+        .await
+        .expect("read next round-robin credential")
+        .expect("second credential")
+        .uuid;
+    assert_ne!(next_ref, advanced_ref);
 
     let mut request = request_for_test("hello", None, None);
     let runtime_request = request
@@ -80,16 +101,20 @@ async fn prepared_route_pins_the_round_robin_credential_for_execution() {
         .await
         .expect("prepare route")
         .expect("prepared options");
-    let expected_ref = lime_core::models::runtime_api_key_credential_uuid(&second_key.id);
     let first_ref = lime_core::models::runtime_api_key_credential_uuid(&first_key.id);
+    let second_ref = lime_core::models::runtime_api_key_credential_uuid(&second_key.id);
     let prepared_ref = prepared
         .runtime_request
         .as_ref()
         .and_then(|runtime_request| runtime_request.metadata.as_ref())
         .and_then(|metadata| metadata.pointer("/agentControlRoute/credentialRef"))
-        .and_then(Value::as_str);
-    assert_eq!(prepared_ref, Some(expected_ref.as_str()));
-    assert_ne!(prepared_ref, Some(first_ref.as_str()));
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    assert!(
+        matches!(prepared_ref.as_deref(), Some(value) if value == first_ref || value == second_ref)
+    );
+    assert_eq!(prepared_ref.as_deref(), Some(advanced_ref.as_str()));
+    assert_ne!(prepared_ref.as_deref(), Some(next_ref.as_str()));
 
     request.runtime_options = Some(prepared);
     let execution_route = backend
@@ -103,7 +128,7 @@ async fn prepared_route_pins_the_round_robin_credential_for_execution() {
             .auth
             .credential_ref
             .as_deref(),
-        Some(expected_ref.as_str())
+        prepared_ref.as_deref()
     );
 }
 

@@ -676,8 +676,6 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
         [],
     )?;
 
-    crate::database::managed_objective_repository::create_managed_objectives_table(conn)?;
-
     // ============================================================================
     // Workspace 相关表
     // ============================================================================
@@ -986,45 +984,6 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_materials_type ON materials(material_type)",
-        [],
-    )?;
-
-    // ============================================================================
-    // 视频生成任务表 (VideoGenerationTask)
-    // 存储视频生成任务状态与结果
-    // ============================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS video_generation_tasks (
-            id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
-            provider_id TEXT NOT NULL,
-            model TEXT NOT NULL,
-            prompt TEXT NOT NULL,
-            request_payload TEXT,
-            provider_task_id TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            progress INTEGER,
-            result_url TEXT,
-            error_message TEXT,
-            metadata_json TEXT,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            finished_at INTEGER,
-            FOREIGN KEY (project_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_video_tasks_project_created ON video_generation_tasks(project_id, created_at DESC)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_video_tasks_status ON video_generation_tasks(status)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_video_tasks_provider_task ON video_generation_tasks(provider_task_id)",
         [],
     )?;
 

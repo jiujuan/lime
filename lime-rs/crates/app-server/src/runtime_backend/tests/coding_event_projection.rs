@@ -381,14 +381,14 @@ fn no_reasoning_capability_snapshot() -> app_server_protocol::CapabilitySnapshot
 }
 
 #[test]
-fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
+fn runtime_reasoning_summary_and_content_emit_distinct_lifecycle_events() {
     let mut sink = TestRuntimeEventSink::default();
     let mut mirror = coding_events::CodingEventMirror::default();
     let mut proposed_plan_parser = proposed_plan_parser::ProposedPlanParser::default();
     let mut reasoning_state = reasoning_events::ReasoningEventState::default();
 
     emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
-        &RuntimeAgentEvent::ThinkingStart {
+        &RuntimeAgentEvent::ReasoningStart {
             item_id: "reasoning-1".to_string(),
         },
         &mut sink,
@@ -396,20 +396,44 @@ fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
         &mut proposed_plan_parser,
         &mut reasoning_state,
     )
-    .expect("thinking start should emit");
+    .expect("reasoning start should emit");
     emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
-        &RuntimeAgentEvent::ThinkingDelta {
+        &RuntimeAgentEvent::ReasoningSummaryPartAdded {
             item_id: "reasoning-1".to_string(),
-            text: "先理解目标".to_string(),
+            summary_index: 0,
         },
         &mut sink,
         &mut mirror,
         &mut proposed_plan_parser,
         &mut reasoning_state,
     )
-    .expect("thinking delta should emit");
+    .expect("reasoning summary part should emit");
     emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
-        &RuntimeAgentEvent::ThinkingEnd {
+        &RuntimeAgentEvent::ReasoningSummaryDelta {
+            item_id: "reasoning-1".to_string(),
+            text: "摘要".to_string(),
+            summary_index: 0,
+        },
+        &mut sink,
+        &mut mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_state,
+    )
+    .expect("reasoning summary delta should emit");
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        &RuntimeAgentEvent::ReasoningContentDelta {
+            item_id: "reasoning-1".to_string(),
+            text: "原始推理".to_string(),
+            content_index: 0,
+        },
+        &mut sink,
+        &mut mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_state,
+    )
+    .expect("reasoning content delta should emit");
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        &RuntimeAgentEvent::ReasoningEnd {
             item_id: "reasoning-1".to_string(),
         },
         &mut sink,
@@ -417,7 +441,7 @@ fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
         &mut proposed_plan_parser,
         &mut reasoning_state,
     )
-    .expect("thinking end should emit");
+    .expect("reasoning end should emit");
 
     let event_types = sink
         .events
@@ -428,6 +452,8 @@ fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
         event_types,
         vec![
             "reasoning.started",
+            "reasoning.summary_part_added",
+            "reasoning.summary",
             "reasoning.delta",
             "reasoning.final",
             "reasoning.ended",
@@ -435,9 +461,15 @@ fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
     );
     assert_eq!(sink.events[0].payload["reasoningId"], "reasoning-1");
     assert_eq!(sink.events[1].payload["itemId"], "reasoning-1");
-    assert_eq!(sink.events[1].payload["delta"], "先理解目标");
-    assert_eq!(sink.events[2].payload["text"], "先理解目标");
-    assert_eq!(sink.events[3].payload["status"], "completed");
+    assert_eq!(sink.events[1].payload["summaryIndex"], 0);
+    assert_eq!(sink.events[2].payload["summary"], "摘要");
+    assert_eq!(sink.events[2].payload["summaryIndex"], 0);
+    assert_eq!(sink.events[3].payload["delta"], "原始推理");
+    assert_eq!(sink.events[3].payload["contentIndex"], 0);
+    assert_eq!(sink.events[4].payload["text"], "摘要");
+    assert_eq!(sink.events[4].payload["summary"], json!(["摘要"]));
+    assert_eq!(sink.events[4].payload["content"], json!(["原始推理"]));
+    assert_eq!(sink.events[5].payload["status"], "completed");
 }
 
 #[test]
@@ -501,14 +533,15 @@ fn runtime_output_items_keep_distinct_provider_identities() {
     let mut parser = proposed_plan_parser::ProposedPlanParser::default();
     let mut reasoning_state = reasoning_events::ReasoningEventState::default();
     let events = [
-        RuntimeAgentEvent::ThinkingStart {
+        RuntimeAgentEvent::ReasoningStart {
             item_id: "reasoning-1".to_string(),
         },
-        RuntimeAgentEvent::ThinkingDelta {
+        RuntimeAgentEvent::ReasoningContentDelta {
             item_id: "reasoning-1".to_string(),
             text: "first reasoning".to_string(),
+            content_index: 0,
         },
-        RuntimeAgentEvent::ThinkingEnd {
+        RuntimeAgentEvent::ReasoningEnd {
             item_id: "reasoning-1".to_string(),
         },
         RuntimeAgentEvent::TextStart {
@@ -522,14 +555,15 @@ fn runtime_output_items_keep_distinct_provider_identities() {
             item_id: "message-1".to_string(),
             phase: lime_agent::protocol::AgentMessagePhase::Commentary,
         },
-        RuntimeAgentEvent::ThinkingStart {
+        RuntimeAgentEvent::ReasoningStart {
             item_id: "reasoning-2".to_string(),
         },
-        RuntimeAgentEvent::ThinkingDelta {
+        RuntimeAgentEvent::ReasoningContentDelta {
             item_id: "reasoning-2".to_string(),
             text: "second reasoning".to_string(),
+            content_index: 0,
         },
-        RuntimeAgentEvent::ThinkingEnd {
+        RuntimeAgentEvent::ReasoningEnd {
             item_id: "reasoning-2".to_string(),
         },
         RuntimeAgentEvent::TextStart {
@@ -630,12 +664,13 @@ fn failed_runtime_output_items_finish_before_turn_failure() {
     let mut parser = proposed_plan_parser::ProposedPlanParser::default();
     let mut reasoning_state = reasoning_events::ReasoningEventState::default();
     for event in [
-        RuntimeAgentEvent::ThinkingStart {
+        RuntimeAgentEvent::ReasoningStart {
             item_id: "reasoning-1".to_string(),
         },
-        RuntimeAgentEvent::ThinkingDelta {
+        RuntimeAgentEvent::ReasoningContentDelta {
             item_id: "reasoning-1".to_string(),
             text: "partial reasoning".to_string(),
+            content_index: 0,
         },
         RuntimeAgentEvent::TextStart {
             item_id: "message-1".to_string(),

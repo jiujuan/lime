@@ -28,8 +28,8 @@ import {
   threadSettled,
   updateAgentSessionRuntimeCurrent,
   waitForHealth,
-} from "../lib/managed-objective-continuation-smoke-core.mjs";
-import { workspaceIdFromDefaultProject } from "../lib/managed-objective-automation-smoke-support.mjs";
+} from "../lib/agent-runtime-smoke-core.mjs";
+import { workspaceIdFromDefaultProject } from "../lib/agent-runtime-smoke-support.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

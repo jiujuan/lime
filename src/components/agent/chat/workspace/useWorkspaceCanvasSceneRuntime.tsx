@@ -324,7 +324,7 @@ export function useWorkspaceCanvasSceneRuntime({
         selectedSize: imageWorkbenchGenerationRuntime.selectedSize,
         onSizeChange: imageWorkbenchGenerationRuntime.setSelectedSize,
         generating: imageWorkbenchHasPendingTasks,
-        savingToResource: imageWorkbenchGenerationRuntime.savingToResource,
+        savingToResource: imageWorkbenchActionRuntime.savingToResource,
         onStopGeneration: imageWorkbenchHasPendingTasks
           ? imageWorkbenchActionRuntime.handleStopImageWorkbenchGeneration
           : undefined,

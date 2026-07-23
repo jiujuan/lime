@@ -419,7 +419,7 @@ export function usePluginRuntimePageTestLifecycle() {
       notifications: [],
       messages: [],
     }));
-    appServerClientMocks.startTurn.mockImplementation(async (request) => {
+    appServerClientMocks.startTurn.mockImplementation(async (_request) => {
       runtimeTaskCounter += 1;
       return {
         id: 2,
@@ -546,61 +546,6 @@ export function usePluginRuntimePageTestLifecycle() {
         apps: [],
       },
     });
-    runtimeApiMocks.startPluginRuntimeTask.mockImplementation(
-      async (request) => {
-        runtimeTaskCounter += 1;
-        return {
-          appId: request.appId,
-          entryKey: request.entryKey,
-          taskId: `plugin-task-${runtimeTaskCounter}`,
-          traceId: `plugin-trace-${runtimeTaskCounter}`,
-          taskKind: request.taskKind,
-          sessionId: request.sessionId ?? "plugin-session-1",
-          turnId: `plugin-turn-${runtimeTaskCounter}`,
-          eventName: `plugin_runtime:${request.appId}:plugin-task-${runtimeTaskCounter}`,
-          status: "accepted",
-          submittedAt: "2026-05-15T00:00:00.000Z",
-        };
-      },
-    );
-    runtimeApiMocks.getPluginRuntimeTask.mockImplementation(
-      async (request) => ({
-        appId: request.appId,
-        taskId: request.taskId,
-        sessionId: request.sessionId,
-        status: "thread_read_available",
-        taskStatus: "running",
-        taskEvents: [
-          {
-            id: `${request.taskId}:progress`,
-            eventType: "task:progress",
-            status: "running",
-            message: "任务正在执行",
-            occurredAt: "2026-05-15T00:00:01.000Z",
-          },
-        ],
-        threadRead: {
-          sessionId: request.sessionId,
-          source: "plugin_runtime",
-        },
-      }),
-    );
-    runtimeApiMocks.cancelPluginRuntimeTask.mockImplementation(
-      async (request) => ({
-        appId: request.appId,
-        taskId: request.taskId,
-        sessionId: request.sessionId,
-        cancelled: true,
-        status: "cancelled",
-      }),
-    );
-    runtimeApiMocks.submitPluginRuntimeHostResponse.mockImplementation(
-      async (request) => ({
-        appId: request.appId,
-        taskId: request.taskId,
-        status: "submitted",
-      }),
-    );
   });
 
   afterEach(() => {

@@ -116,7 +116,11 @@ pub(super) fn openai_chat_sse(
                     if state.reasoning_ids.insert(reasoning_id.clone()) {
                         yield LlmEvent::ReasoningStart { id: reasoning_id.clone() };
                     }
-                    yield LlmEvent::ReasoningDelta { id: reasoning_id, text: reasoning };
+                    yield LlmEvent::ReasoningContentDelta {
+                        id: reasoning_id,
+                        text: reasoning,
+                        content_index: 0,
+                    };
                 }
                 for delta in choice.delta.tool_calls.unwrap_or_default() {
                     let index = delta.index;
@@ -291,6 +295,7 @@ struct ResponsesStreamState {
     usage: Option<Usage>,
     text_ids: HashSet<String>,
     reasoning_ids: HashSet<String>,
+    active_reasoning_id: Option<String>,
 }
 
 pub(super) struct ResponsesEventBatch {
@@ -328,24 +333,56 @@ impl ResponsesEventReducer {
                     });
                 }
             }
-            "response.reasoning_text.delta" | "response.reasoning_summary_text.delta" => {
-                let id = response_block_id(payload, "reasoning");
-                if let Some(delta) = payload
-                    .get("delta")
-                    .and_then(Value::as_str)
-                    .filter(|value| !value.is_empty())
-                {
+            "response.reasoning_summary_text.delta" => {
+                let id = response_reasoning_id(payload, &self.state);
+                if let (Some(delta), Some(summary_index)) = (
+                    payload
+                        .get("delta")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty()),
+                    payload.get("summary_index").and_then(Value::as_i64),
+                ) {
                     if self.state.reasoning_ids.insert(id.clone()) {
                         events.push(LlmEvent::ReasoningStart { id: id.clone() });
                     }
-                    events.push(LlmEvent::ReasoningDelta {
+                    events.push(LlmEvent::ReasoningSummaryDelta {
                         id,
                         text: delta.to_string(),
+                        summary_index,
+                    });
+                }
+            }
+            "response.reasoning_summary_part.added" => {
+                let id = response_reasoning_id(payload, &self.state);
+                if let Some(summary_index) = payload.get("summary_index").and_then(Value::as_i64) {
+                    if self.state.reasoning_ids.insert(id.clone()) {
+                        events.push(LlmEvent::ReasoningStart { id: id.clone() });
+                    }
+                    events.push(LlmEvent::ReasoningSummaryPartAdded { id, summary_index });
+                }
+            }
+            "response.reasoning_text.delta" => {
+                let id = response_reasoning_id(payload, &self.state);
+                if let (Some(delta), Some(content_index)) = (
+                    payload
+                        .get("delta")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty()),
+                    payload.get("content_index").and_then(Value::as_i64),
+                ) {
+                    if self.state.reasoning_ids.insert(id.clone()) {
+                        events.push(LlmEvent::ReasoningStart { id: id.clone() });
+                    }
+                    events.push(LlmEvent::ReasoningContentDelta {
+                        id,
+                        text: delta.to_string(),
+                        content_index,
                     });
                 }
             }
             "response.output_item.added" => {
                 if let Some(item) = payload.get("item") {
+                    observe_active_responses_reasoning_item(item, &mut self.state);
                     absorb_responses_call(item, &mut self.state);
                 }
             }
@@ -397,6 +434,7 @@ impl ResponsesEventReducer {
             }
             "response.output_item.done" => {
                 if let Some(item) = payload.get("item") {
+                    clear_active_responses_reasoning_item(item, &mut self.state);
                     absorb_responses_call(item, &mut self.state);
                     if item.get("type").and_then(Value::as_str) == Some("function_call") {
                         let key = response_call_key(item);
@@ -481,7 +519,11 @@ impl ResponsesEventReducer {
                 .drain()
                 .map(|id| LlmEvent::ReasoningEnd { id }),
         );
-        events.push(truncated_stream_error("OpenAI Responses"));
+        events.push(LlmEvent::ProviderError {
+            message: "stream closed before response.completed".to_string(),
+            classification: Some(FailureClassification::Transport),
+            retryable: Some(true),
+        });
         events
     }
 }
@@ -568,6 +610,45 @@ fn response_block_id(payload: &Value, prefix: &str) -> String {
     payload
         .get("item_id")
         .or_else(|| payload.get("output_index"))
+        .map(|value| {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| value.to_string())
+        })
+        .map(|id| format!("{prefix}-{id}"))
+        .unwrap_or_else(|| format!("{prefix}-0"))
+}
+
+fn response_reasoning_id(payload: &Value, state: &ResponsesStreamState) -> String {
+    payload
+        .get("item_id")
+        .map(|_| response_block_id(payload, "reasoning"))
+        .or_else(|| state.active_reasoning_id.clone())
+        .unwrap_or_else(|| response_block_id(payload, "reasoning"))
+}
+
+fn observe_active_responses_reasoning_item(item: &Value, state: &mut ResponsesStreamState) {
+    if item.get("type").and_then(Value::as_str) != Some("reasoning") {
+        return;
+    }
+    state.active_reasoning_id = Some(response_item_id(item, "reasoning"));
+}
+
+fn clear_active_responses_reasoning_item(item: &Value, state: &mut ResponsesStreamState) {
+    if item.get("type").and_then(Value::as_str) != Some("reasoning") {
+        return;
+    }
+    let item_id = response_item_id(item, "reasoning");
+    if state.active_reasoning_id.as_deref() == Some(item_id.as_str()) {
+        state.active_reasoning_id = None;
+    }
+}
+
+fn response_item_id(item: &Value, prefix: &str) -> String {
+    item.get("id")
+        .or_else(|| item.get("item_id"))
+        .or_else(|| item.get("output_index"))
         .map(|value| {
             value
                 .as_str()
@@ -690,7 +771,13 @@ pub(super) fn anthropic_sse(
                         let id = format!("reasoning-{index}");
                         state.reasoning_ids.insert(id.clone());
                         yield LlmEvent::ReasoningStart { id: id.clone() };
-                        if !thinking.is_empty() { yield LlmEvent::ReasoningDelta { id, text: thinking }; }
+                        if !thinking.is_empty() {
+                            yield LlmEvent::ReasoningContentDelta {
+                                id,
+                                text: thinking,
+                                content_index: 0,
+                            };
+                        }
                     }
                     anthropic::AnthropicContentBlock::ToolUse { id, name, input } => {
                         let call = state.calls.entry(index).or_default();
@@ -712,7 +799,11 @@ pub(super) fn anthropic_sse(
                     anthropic::AnthropicDelta::ThinkingDelta { thinking } => if !thinking.is_empty() {
                         let id = format!("reasoning-{index}");
                         if state.reasoning_ids.insert(id.clone()) { yield LlmEvent::ReasoningStart { id: id.clone() }; }
-                        yield LlmEvent::ReasoningDelta { id, text: thinking };
+                        yield LlmEvent::ReasoningContentDelta {
+                            id,
+                            text: thinking,
+                            content_index: 0,
+                        };
                     },
                     anthropic::AnthropicDelta::InputJsonDelta { partial_json } => {
                         let call = state.calls.entry(index).or_default();

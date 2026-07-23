@@ -112,60 +112,58 @@ export type AgentUiControl =
   | "close"
   | "request_review";
 
-export type AgentUiEventClass =
-  | "session.opened"
-  | "session.hydrated"
-  | "session.updated"
-  | "session.closed"
-  | "run.started"
-  | "run.status"
-  | "run.finished"
-  | "run.failed"
-  | "plan.delta"
-  | "plan.final"
-  | "text.delta"
-  | "text.final"
-  | "reasoning.delta"
-  | "reasoning.summary"
-  | "tool.started"
-  | "tool.args"
-  | "tool.args.delta"
-  | "tool.progress"
-  | "tool.output.delta"
-  | "tool.result"
-  | "tool.failed"
-  | "action.required"
-  | "action.resolved"
-  | "queue.changed"
-  | "task.changed"
-  | "agent.changed"
-  | "context.changed"
-  | "context.compaction.started"
-  | "context.compaction.completed"
-  | "permission.changed"
-  | "artifact.created"
-  | "artifact.updated"
-  | "artifact.preview.ready"
-  | "artifact.version.created"
-  | "artifact.diff.ready"
-  | "artifact.export.started"
-  | "artifact.export.completed"
-  | "artifact.failed"
-  | "artifact.deleted"
-  | "artifact.changed"
-  | "evidence.changed"
-  | "state.snapshot"
-  | "state.delta"
-  | "messages.snapshot"
-  | "diagnostic.changed"
-  | "metric.changed"
-  | "agent.spawned"
-  | "agent.completed"
-  | "agent.handoff"
-  | "worker.notification"
-  | "review.requested"
-  | "review.completed"
-  | string;
+export const AGENT_UI_EVENT_CLASSES = [
+  "session.opened",
+  "session.hydrated",
+  "run.started",
+  "run.status",
+  "run.finished",
+  "run.failed",
+  "run.canceled",
+  "plan.delta",
+  "plan.final",
+  "text.delta",
+  "text.final",
+  "reasoning.delta",
+  "reasoning.summary",
+  "tool.started",
+  "tool.args",
+  "tool.args.delta",
+  "tool.progress",
+  "tool.output.delta",
+  "tool.result",
+  "tool.failed",
+  "tool.changed",
+  "action.required",
+  "action.resolved",
+  "queue.changed",
+  "task.changed",
+  "agent.changed",
+  "context.changed",
+  "context.compaction.started",
+  "context.compaction.completed",
+  "permission.changed",
+  "artifact.created",
+  "artifact.updated",
+  "artifact.preview.ready",
+  "artifact.diff.ready",
+  "artifact.failed",
+  "artifact.changed",
+  "evidence.changed",
+  "state.snapshot",
+  "state.delta",
+  "messages.snapshot",
+  "diagnostic.changed",
+  "metric.changed",
+  "agent.spawned",
+  "agent.completed",
+  "agent.handoff",
+  "worker.notification",
+  "review.requested",
+  "review.completed",
+] as const;
+
+export type AgentUiEventClass = (typeof AGENT_UI_EVENT_CLASSES)[number];
 
 export type AgentUiRuntimeEntity =
   | "agent_turn"

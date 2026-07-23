@@ -62,7 +62,7 @@ export function useAgentChatWorkspaceCommandRuntime({
     initialCreationReplay, initialCreationReplaySurface, initialPendingServiceSkillLaunchSignature, validatedRuntimeProjectId, generalCanvasState, setGeneralCanvasState, taskFiles, setTaskFiles,
     selectedFileId, setSelectedFileId, taskFilesRef, socialStageLogRef, openedProjects, serviceModels, agentResponseLanguage, refreshServiceModelsConfig,
     soulArtifactVoiceGenerationBrief, soulInteractionCopy, soulArtifactVoiceEnabledForTurn, setSoulArtifactVoiceEnabledForTurn, effectiveImageWorkbenchPreference, imageWorkbenchGenerationRuntime, setOnDemandMediaDefaults, imageWorkbenchSelectedProviderId,
-    imageWorkbenchSelectedModelId, imageWorkbenchSelectedSize, setImageWorkbenchSelectedSize, imageWorkbenchPreferredProviderUnavailable, ensureImageWorkbenchProvidersLoaded, imageWorkbenchProvidersLoading, saveImageWorkbenchImagesToResource, mentionedCharacters,
+    imageWorkbenchSelectedModelId, imageWorkbenchSelectedSize, setImageWorkbenchSelectedSize, imageWorkbenchPreferredProviderUnavailable, ensureImageWorkbenchProvidersLoaded, imageWorkbenchProvidersLoading, mentionedCharacters,
     setMentionedCharacters, serviceSkills, pendingSkillKey, consumePendingSkill, processedMessageIds, handleWriteFileRef, sceneGateResumeHandlerRef, mappedTheme,
     syncContent, isSpecializedThemeMode, workbenchRequests,
   } = entryRuntime;
@@ -177,7 +177,6 @@ export function useAgentChatWorkspaceCommandRuntime({
         ? refreshServiceModelsConfig
         : undefined,
       savedSoulArtifactVoiceGenerationBrief: soulArtifactVoiceGenerationBrief,
-      saveImageWorkbenchImagesToResource,
       serviceModels,
       serviceSkills: activeTheme === "general" ? serviceSkills : [],
       setCanvasState,

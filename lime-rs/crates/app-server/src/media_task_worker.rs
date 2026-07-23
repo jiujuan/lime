@@ -11,10 +11,7 @@ use tokio::task::JoinHandle;
 
 mod route;
 mod scheduler;
-use route::{
-    image_generation_runner_config_from_resolved_route,
-    image_generation_runner_config_from_task_provider,
-};
+use route::image_generation_runner_config_from_resolved_route;
 use scheduler::should_execute_pending_image_task;
 #[cfg(test)]
 use scheduler::{
@@ -189,7 +186,13 @@ pub(super) async fn execute_image_task(
             )
             .await;
         }
-        Ok(None) => {}
+        Ok(None) => {
+            return mark_image_task_worker_start_failed(
+                &workspace_root,
+                &task_id,
+                "图片任务缺少完整 resolved route，请重新创建任务。".to_string(),
+            );
+        }
         Err(error) => {
             tracing::warn!(
                 task_id = %task_id,
@@ -199,37 +202,6 @@ pub(super) async fn execute_image_task(
             return mark_image_task_worker_start_failed(&workspace_root, &task_id, error);
         }
     }
-    match image_generation_runner_config_from_task_provider(&workspace_root, &task_id, context) {
-        Ok(Some(runner_config)) => {
-            tracing::info!(
-                task_id = %task_id,
-                endpoint = %runner_config.endpoint,
-                request_body_format = %runner_config.request_body_format.as_str(),
-                "image task worker using provider store route"
-            );
-            return execute_image_task_with_runner_config_and_sidecar(
-                workspace_root,
-                task_id,
-                runner_config,
-                context.sidecar_store.as_deref(),
-            )
-            .await;
-        }
-        Ok(None) => {}
-        Err(error) => {
-            tracing::warn!(
-                task_id = %task_id,
-                error = %error,
-                "failed to resolve image task provider runner config"
-            );
-            return mark_image_task_worker_start_failed(&workspace_root, &task_id, error);
-        }
-    }
-    mark_image_task_worker_start_failed(
-        &workspace_root,
-        &task_id,
-        "图片任务缺少可执行 Provider 路由，请重新选择图片模型后重试。".to_string(),
-    )
 }
 
 #[cfg(test)]
@@ -732,17 +704,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execute_image_task_uses_provider_store_for_recovered_pending_task() {
+    async fn execute_image_task_rejects_route_less_task_without_reading_provider_key() {
         let workspace = tempfile::tempdir().expect("workspace");
         let db = test_db();
         let service = ApiKeyProviderService::new();
-        let (listener, address) = SingleImageGenerationServer::bind();
         let provider = service
             .add_custom_provider(
                 &db,
                 "Provider Store Images".to_string(),
                 ApiProviderType::NewApi,
-                format!("http://{address}"),
+                "http://127.0.0.1:9".to_string(),
                 None,
                 None,
                 None,
@@ -753,12 +724,6 @@ mod tests {
         service
             .add_api_key(&db, &provider.id, "provider-db-key", None, true)
             .expect("add provider key");
-        let image_server = SingleImageGenerationServer::start_on(
-            listener,
-            address,
-            "provider-db-key",
-            &provider.id,
-        );
         let created = create_image_generation_task_artifact(
             MediaTaskArtifactImageCreateParams {
                 project_root_path: workspace.path().to_string_lossy().to_string(),
@@ -776,31 +741,30 @@ mod tests {
         let result = execute_image_task(
             workspace.path().to_path_buf(),
             created.task_id.clone(),
-            &ImageTaskWorkerContext::new(db),
+            &ImageTaskWorkerContext::new(db.clone()),
         )
         .await
-        .expect("execute image task from provider store");
+        .expect("mark route-less image task failed");
 
-        assert_eq!(result.normalized_status, "succeeded");
-        assert_eq!(image_server.join(), 1);
-
-        let persisted = load_task_output(workspace.path(), &created.task_id, None)
-            .expect("load persisted task");
+        assert_eq!(result.normalized_status, "failed");
         assert_eq!(
-            persisted
-                .record
-                .payload
-                .get("provider_id")
-                .and_then(serde_json::Value::as_str),
-            Some(provider.id.as_str())
+            result.last_error.as_ref().map(|error| error.code.as_str()),
+            Some("image_worker_start_failed")
         );
-        assert_eq!(
-            persisted
-                .record
-                .payload
-                .get("executor_mode")
-                .and_then(serde_json::Value::as_str),
-            Some("images_api")
+        assert!(result
+            .last_error
+            .as_ref()
+            .is_some_and(|error| error.message.contains("resolved route")));
+        let persisted_provider = service
+            .get_provider(&db, &provider.id)
+            .expect("read provider")
+            .expect("provider");
+        assert!(
+            persisted_provider
+                .api_keys
+                .iter()
+                .all(|key| key.usage_count == 0),
+            "route-less task must not select or consume a provider key"
         );
     }
 

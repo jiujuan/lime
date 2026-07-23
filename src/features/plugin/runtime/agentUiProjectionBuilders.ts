@@ -60,6 +60,9 @@ export function buildProjectionEvent(
   if (directAgentUiType) {
     return buildDirectAgentUiProjection(event, context, directAgentUiType);
   }
+  if (eventType?.includes(".")) {
+    return null;
+  }
   const streamKind = readStreamKind(event);
   if (streamKind) {
     return buildStreamProjection(event, context, streamKind);
@@ -117,7 +120,7 @@ export function buildProjectionEvent(
       });
     case "task:cancelled":
       return buildBaseProjection(event, context, {
-        type: "run.finished",
+        type: "run.canceled",
         sourceType: "runtime_status",
         phase: "cancelled",
         surface: "runtime_status",
@@ -158,10 +161,12 @@ function buildDirectAgentUiProjection(
     partId: readString(event, "partId") ?? readEventId(event),
     diagnosticId: readString(event, "diagnosticId") ?? readEventId(event),
     control: controlForDirectAgentUiEvent(event),
-    refs: (recordValue(event, "refs") ?? undefined) as AgentUiProjectionEvent["refs"],
+    refs: (recordValue(event, "refs") ??
+      undefined) as AgentUiProjectionEvent["refs"],
     payload: {
       ...payload,
-      controls: controls.length > 0 ? uniqueControls(controls) : payload.controls,
+      controls:
+        controls.length > 0 ? uniqueControls(controls) : payload.controls,
       preview:
         readString(payload, "preview") ??
         truncateText(readString(event, "message")),
@@ -308,7 +313,8 @@ function buildArtifactProjection(
   context: PluginProjectionEventContext,
 ): Omit<AgentUiProjectionEvent, "sequence"> {
   const status = normalizeStatus(readString(event, "status"));
-  const artifactRef = readString(event, "artifactRef") ?? readArtifactRef(event);
+  const artifactRef =
+    readString(event, "artifactRef") ?? readArtifactRef(event);
   const artifactPreview = readArtifactPreview(event);
   return buildBaseProjection(event, context, {
     type: status === "failed" ? "artifact.failed" : "artifact.created",
@@ -333,7 +339,8 @@ function buildEvidenceProjection(
   event: Record<string, unknown>,
   context: PluginProjectionEventContext,
 ): Omit<AgentUiProjectionEvent, "sequence"> {
-  const evidenceRef = readString(event, "evidenceRef") ?? readEvidenceRef(event);
+  const evidenceRef =
+    readString(event, "evidenceRef") ?? readEvidenceRef(event);
   return buildBaseProjection(event, context, {
     type: "evidence.changed",
     sourceType: "evidence_projection",
@@ -373,7 +380,8 @@ function buildMetricProjection(
         readString(event, "eventType"),
       status,
       providerName:
-        readString(event, "providerName") ?? readString(payload, "providerName"),
+        readString(event, "providerName") ??
+        readString(payload, "providerName"),
       modelName:
         readString(event, "modelName") ??
         readString(payload, "modelName") ??
@@ -404,7 +412,9 @@ function buildDiagnosticProjection(
     diagnosticId: readEventId(event),
     payload: {
       status,
-      code: readString(event, "code") ?? readString(recordValue(event, "payload"), "code"),
+      code:
+        readString(event, "code") ??
+        readString(recordValue(event, "payload"), "code"),
       preview: truncateText(readString(event, "message")),
       payloadKeys: payloadKeys(event),
     },
@@ -423,7 +433,10 @@ function buildRuntimeStatusProjection(
     phase: phaseForRuntimeStatus(status),
     surface: "runtime_status",
     runtimeStatus: runtimeStatusForTaskStatus(status),
-    persistence: status === "completed" || status === "failed" ? "archive" : "ephemeral_live",
+    persistence:
+      status === "completed" || status === "failed"
+        ? "archive"
+        : "ephemeral_live",
     payload: {
       ...runtimeTimelinePayload(event),
       status,

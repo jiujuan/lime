@@ -32,6 +32,13 @@ pub(super) fn validate_identity(
 
 pub(super) fn validate_item_content(item: &ThreadItem) -> Result<(), ThreadHistoryBuilderError> {
     let safe = match &item.payload {
+        ThreadItemPayload::UserMessage { content, .. } => {
+            !content.is_empty()
+                && content.iter().all(|part| part.validate().is_ok())
+                && !content.iter().all(|part| {
+                    matches!(part, agent_protocol::AgentInput::Text { text, .. } if text.trim().is_empty())
+                })
+        }
         ThreadItemPayload::AgentMessage { content_parts, .. } => {
             content_parts.iter().all(|part| part.is_safe())
         }

@@ -136,27 +136,6 @@ pub trait ModelProviderAppDataSource: Send + Sync {
         Err(unavailable("modelProviderKey/delete"))
     }
 
-    async fn read_next_model_provider_key(
-        &self,
-        _params: ModelProviderKeyNextParams,
-    ) -> Result<ModelProviderKeyNextResponse, RuntimeCoreError> {
-        Err(unavailable("modelProviderKey/next"))
-    }
-
-    async fn record_model_provider_key_usage(
-        &self,
-        _params: ModelProviderKeyEventParams,
-    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
-        Err(unavailable("modelProviderKey/usage/record"))
-    }
-
-    async fn record_model_provider_key_error(
-        &self,
-        _params: ModelProviderKeyEventParams,
-    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
-        Err(unavailable("modelProviderKey/error/record"))
-    }
-
     async fn read_model_provider_ui_state(
         &self,
         _params: ModelProviderUiStateReadParams,

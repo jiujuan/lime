@@ -124,7 +124,7 @@ fn media_payload_patch(
         "providerId": route.as_ref().and_then(|route| route.provider_id.clone()),
         "modelId": route.as_ref().and_then(|route| route.model_id.clone()),
         "protocol": route.as_ref().and_then(|route| route.protocol.clone()),
-        "transport": "local_lime_service",
+        "transport": "provider_http",
         "credential": "not_embedded",
         "eventOwner": "media_runtime",
         "details": diagnostics,

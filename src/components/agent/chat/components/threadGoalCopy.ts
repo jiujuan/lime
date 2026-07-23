@@ -17,8 +17,7 @@ export const THREAD_GOAL_COPY = {
   badgeEmpty: "agentChat.threadGoal.badge.empty",
   descriptionEmpty: "agentChat.threadGoal.description.empty",
   formObjectiveLabel: "agentChat.threadGoal.form.objectiveLabel",
-  formObjectivePlaceholder:
-    "agentChat.threadGoal.form.objectivePlaceholder",
+  formObjectivePlaceholder: "agentChat.threadGoal.form.objectivePlaceholder",
   inlineCancel: "agentChat.threadGoal.inline.cancel",
   inlineDialogTitleEdit: "agentChat.threadGoal.inline.dialogTitle.edit",
   inlineEdit: "agentChat.threadGoal.inline.edit",

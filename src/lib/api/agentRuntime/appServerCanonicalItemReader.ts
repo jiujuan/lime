@@ -102,7 +102,7 @@ export function readCanonicalThreadItem(
       return {
         ...base,
         type: "reasoning",
-        text: (content.length > 0 ? content : summary).join(""),
+        text: summary.join("\n\n"),
         summary,
         content,
       };

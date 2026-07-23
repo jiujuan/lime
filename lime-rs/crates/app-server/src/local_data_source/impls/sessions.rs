@@ -3,51 +3,6 @@ use async_trait::async_trait;
 
 #[async_trait]
 impl SessionAppDataSource for LocalAppDataSource {
-    async fn read_agent_session_objective(
-        &self,
-        params: AgentSessionObjectiveReadParams,
-    ) -> Result<AgentSessionObjectiveReadResponse, RuntimeCoreError> {
-        session_objectives::read_agent_session_objective(&self.db, params)
-    }
-
-    async fn set_agent_session_objective(
-        &self,
-        params: AgentSessionObjectiveSetParams,
-    ) -> Result<AgentSessionObjectiveSetResponse, RuntimeCoreError> {
-        session_objectives::set_agent_session_objective(&self.db, params)
-    }
-
-    async fn update_agent_session_objective_status(
-        &self,
-        params: AgentSessionObjectiveStatusUpdateParams,
-    ) -> Result<AgentSessionObjectiveStatusUpdateResponse, RuntimeCoreError> {
-        session_objectives::update_agent_session_objective_status(&self.db, params)
-    }
-
-    async fn clear_agent_session_objective(
-        &self,
-        params: AgentSessionObjectiveClearParams,
-    ) -> Result<AgentSessionObjectiveClearResponse, RuntimeCoreError> {
-        session_objectives::clear_agent_session_objective(&self.db, params)
-    }
-
-    async fn read_managed_objective_by_owner(
-        &self,
-        owner_kind: String,
-        owner_id: String,
-    ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
-        session_objectives::read_managed_objective_by_owner(&self.db, owner_kind, owner_id)
-    }
-
-    async fn audit_agent_session_objective(
-        &self,
-        owner_kind: String,
-        owner_id: String,
-        update: ManagedObjectiveAuditUpdate,
-    ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
-        session_objectives::audit_agent_session_objective(&self.db, owner_kind, owner_id, update)
-    }
-
     async fn get_or_create_session_file(
         &self,
         params: SessionFileGetOrCreateParams,

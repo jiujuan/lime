@@ -118,6 +118,9 @@ pub const V2_SCHEMA_TYPE_NAMES: &[&str] = &[
     "ItemStartedNotification",
     "ItemCompletedNotification",
     "AgentMessageDeltaNotification",
+    "ReasoningSummaryTextDeltaNotification",
+    "ReasoningSummaryPartAddedNotification",
+    "ReasoningTextDeltaNotification",
     "ServerRequestResolvedNotification",
     "Method",
 ];

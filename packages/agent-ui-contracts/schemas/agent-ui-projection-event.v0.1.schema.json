@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://limecloud.dev/schemas/agent-ui-projection-event.v0.1.schema.json",
+  "title": "AgentUiProjectionEvent",
+  "type": "object",
+  "required": ["type", "sourceType", "owner", "scope", "phase"],
+  "additionalProperties": true,
+  "properties": {
+    "type": {
+      "enum": [
+        "session.opened",
+        "session.hydrated",
+        "run.started",
+        "run.status",
+        "run.finished",
+        "run.failed",
+        "run.canceled",
+        "plan.delta",
+        "plan.final",
+        "text.delta",
+        "text.final",
+        "reasoning.delta",
+        "reasoning.summary",
+        "tool.started",
+        "tool.args",
+        "tool.args.delta",
+        "tool.progress",
+        "tool.output.delta",
+        "tool.result",
+        "tool.failed",
+        "tool.changed",
+        "action.required",
+        "action.resolved",
+        "queue.changed",
+        "task.changed",
+        "agent.changed",
+        "context.changed",
+        "context.compaction.started",
+        "context.compaction.completed",
+        "permission.changed",
+        "artifact.created",
+        "artifact.updated",
+        "artifact.preview.ready",
+        "artifact.diff.ready",
+        "artifact.failed",
+        "artifact.changed",
+        "evidence.changed",
+        "state.snapshot",
+        "state.delta",
+        "messages.snapshot",
+        "diagnostic.changed",
+        "metric.changed",
+        "agent.spawned",
+        "agent.completed",
+        "agent.handoff",
+        "worker.notification",
+        "review.requested",
+        "review.completed"
+      ]
+    },
+    "sourceType": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "messageId": {
+      "type": "string"
+    },
+    "partId": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "toolCallId": {
+      "type": "string"
+    },
+    "actionId": {
+      "type": "string"
+    },
+    "artifactId": {
+      "type": "string"
+    },
+    "evidenceId": {
+      "type": "string"
+    },
+    "agentId": {
+      "type": "string"
+    },
+    "diagnosticId": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "type": "string",
+      "minLength": 1
+    },
+    "surface": {
+      "type": "string"
+    },
+    "persistence": {
+      "type": "string"
+    },
+    "control": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "refs": {
+      "type": "object"
+    },
+    "rawEventRef": {
+      "type": "string"
+    }
+  }
+}

@@ -15,6 +15,7 @@ mod mention_selection;
 mod model_capability;
 mod model_registry_metadata;
 mod model_route_contract;
+pub(crate) mod model_route_credential;
 mod model_route_resolver;
 mod model_routing;
 mod native_tools;
@@ -160,21 +161,6 @@ fn durable_credential_ref_for_generation<'a>(
     .flatten()
     .map(str::trim)
     .filter(|value| !value.is_empty())
-}
-
-fn bind_route_evidence_credential_ref(payload: &mut Value, credential_ref: &str) {
-    for route_key in ["resolvedRoute", "resolved_route"] {
-        if let Some(auth) = payload
-            .get_mut(route_key)
-            .and_then(|route| route.get_mut("auth"))
-            .and_then(Value::as_object_mut)
-        {
-            auth.insert(
-                "credentialRef".to_string(),
-                Value::String(credential_ref.to_string()),
-            );
-        }
-    }
 }
 
 fn runtime_error_from_route_failure(
@@ -323,60 +309,69 @@ impl RuntimeBackend {
             &effective_requested_selection,
             effective_requested_selection.reasoning_effort.clone(),
         );
+        let mut retry_credential_binding: Option<(String, String, String)> = None;
         for _ in 0..3 {
             let generation_before = read_route_generation(&db)?;
-            let mut resolution = model_route_resolver::resolve_chat_model_route(
+            let prepared = model_route_resolver::prepare_chat_model_route(
                 &db,
                 &self.api_key_provider_service,
                 request,
                 &effective_requested_selection,
                 direct_provider_config.as_ref(),
             )
-            .await
             .map_err(backend_error)?;
-            if direct_provider_config.is_none()
-                && resolution.resolved_route.failure.is_none()
-                && resolution.resolved_route.auth.kind == app_server_protocol::AuthKind::ApiKeyRef
-            {
-                let selection = selection_with_effective_reasoning(&resolution.selection);
-                let durable_credential_ref =
-                    durable_credential_ref_for_generation(request, &selection, generation_before);
-                let credential = match durable_credential_ref {
-                    Some(credential_ref) => self
-                        .api_key_provider_service
-                        .select_runtime_credential_by_ref(&db, &selection.provider, credential_ref)
-                        .map_err(backend_error)?,
-                    None => self
-                        .api_key_provider_service
-                        .select_credential_for_provider(
-                            &db,
-                            &selection.provider,
-                            Some(&selection.provider),
-                            None,
-                        )
-                        .await
-                        .map_err(backend_error)?,
+            let prepared_selection = selection_with_effective_reasoning(prepared.selection());
+            let durable_credential_ref = if direct_provider_config.is_none() {
+                durable_credential_ref_for_generation(
+                    request,
+                    &prepared_selection,
+                    generation_before,
+                )
+            } else {
+                None
+            };
+            let retry_credential_ref = retry_credential_binding
+                .as_ref()
+                .filter(|(provider, model, _)| {
+                    provider == &prepared_selection.provider && model == &prepared_selection.model
+                })
+                .map(|(_, _, credential_ref)| credential_ref.as_str());
+            let resolution = model_route_resolver::assemble_chat_model_route(
+                &db,
+                &self.api_key_provider_service,
+                request,
+                &effective_requested_selection,
+                direct_provider_config.as_ref(),
+                prepared,
+                durable_credential_ref.or(retry_credential_ref),
+            )
+            .await
+            .map_err(|error| {
+                if error == "resolved_credential_unavailable" {
+                    RuntimeCoreError::PendingRoute {
+                        session_id: request.session.session_id.clone(),
+                        provider: Some(prepared_selection.provider.clone()),
+                        model: Some(prepared_selection.model.clone()),
+                        reason_code: error,
+                    }
+                } else {
+                    backend_error(error)
                 }
-                .ok_or_else(|| RuntimeCoreError::PendingRoute {
-                    session_id: request.session.session_id.clone(),
-                    provider: Some(selection.provider.clone()),
-                    model: Some(selection.model.clone()),
-                    reason_code: "resolved_credential_unavailable".to_string(),
-                })?;
-                resolution.resolved_route.auth.credential_ref = Some(credential.uuid.clone());
-                bind_route_evidence_credential_ref(
-                    &mut resolution.decision_payload,
-                    &credential.uuid,
-                );
-                if let Some(payload) = resolution.fallback_payload.as_mut() {
-                    bind_route_evidence_credential_ref(payload, &credential.uuid);
-                }
-                if let Some(payload) = resolution.not_possible_payload.as_mut() {
-                    bind_route_evidence_credential_ref(payload, &credential.uuid);
-                }
-            }
+            })?;
             let generation_after = read_route_generation(&db)?;
             if generation_before != generation_after {
+                retry_credential_binding = resolution
+                    .resolved_route
+                    .auth
+                    .credential_ref
+                    .as_ref()
+                    .map(|credential_ref| {
+                        (
+                            prepared_selection.provider.clone(),
+                            prepared_selection.model.clone(),
+                            credential_ref.clone(),
+                        )
+                    });
                 continue;
             }
             let selection = selection_with_effective_reasoning(&resolution.selection);
@@ -493,7 +488,9 @@ impl RuntimeBackend {
                 &request,
                 &session_scope.session_id,
             );
-        for event in agent_skills_telemetry::runtime_status_events_for_agent_skills(&request) {
+        let agent_skill_events =
+            agent_skills_telemetry::runtime_status_events_for_agent_skills(&request);
+        for event in agent_skill_events {
             sink.emit(event)?;
         }
         if let Some(event) = permission_preflight::browser_control_permission_event(

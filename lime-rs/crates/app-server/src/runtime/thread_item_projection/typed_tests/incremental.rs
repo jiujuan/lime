@@ -31,6 +31,82 @@ fn incremental_item_snapshot_matches_full_history_materialization() {
 }
 
 #[test]
+fn reasoning_deltas_preserve_repeated_fragments_and_final_snapshot() {
+    let events = [
+        event(
+            "reasoning-1",
+            1,
+            "reasoning.delta",
+            "turn-1",
+            json!({"reasoningId": "reasoning-1", "delta": "你"}),
+        ),
+        event(
+            "reasoning-2",
+            2,
+            "reasoning.delta",
+            "turn-1",
+            json!({"reasoningId": "reasoning-1", "delta": "好"}),
+        ),
+        event(
+            "reasoning-3",
+            3,
+            "reasoning.delta",
+            "turn-1",
+            json!({"reasoningId": "reasoning-1", "delta": "你"}),
+        ),
+        event(
+            "reasoning-final",
+            4,
+            "reasoning.final",
+            "turn-1",
+            json!({"reasoningId": "reasoning-1", "text": "你好你"}),
+        ),
+    ];
+
+    let deltas = materialize_events(&events[..3], "session-1", "thread-1")
+        .expect("materialize repeated reasoning deltas");
+    let delta_reasoning = deltas
+        .changed_items
+        .iter()
+        .find(|item| {
+            matches!(
+                item.payload,
+                agent_protocol::ThreadItemPayload::Reasoning { .. }
+            )
+        })
+        .expect("reasoning delta item");
+
+    assert_eq!(
+        delta_reasoning.payload,
+        agent_protocol::ThreadItemPayload::Reasoning {
+            summary: Vec::new(),
+            content: vec!["你".to_string(), "好".to_string(), "你".to_string()],
+        }
+    );
+
+    let changes = materialize_events(&events, "session-1", "thread-1")
+        .expect("materialize repeated reasoning deltas");
+    let reasoning = changes
+        .changed_items
+        .iter()
+        .find(|item| {
+            matches!(
+                item.payload,
+                agent_protocol::ThreadItemPayload::Reasoning { .. }
+            )
+        })
+        .expect("reasoning item");
+
+    assert_eq!(
+        reasoning.payload,
+        agent_protocol::ThreadItemPayload::Reasoning {
+            summary: Vec::new(),
+            content: vec!["你好你".to_string()],
+        }
+    );
+}
+
+#[test]
 fn incremental_materializer_does_not_revive_removed_item_identity() {
     let started = event(
         "event-started",

@@ -13,7 +13,7 @@ pub use model_provider::provider_stream::{
     RuntimeReplyResponseEvent, RuntimeReplyResponseItem, RuntimeReplyResponseItemPayload,
 };
 use serde_json::Value;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::Duration;
 
 pub const MIN_PROVIDER_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -97,8 +97,16 @@ pub enum RuntimeReplyResponseProjection {
     TextDelta {
         text: String,
     },
-    ThinkingDelta {
+    ReasoningSummaryDelta {
         text: String,
+        summary_index: i64,
+    },
+    ReasoningSummaryPartAdded {
+        summary_index: i64,
+    },
+    ReasoningContentDelta {
+        text: String,
+        content_index: i64,
     },
     ToolInputDelta {
         tool_id: String,
@@ -133,7 +141,8 @@ pub struct RuntimeReplyResponseMaterializer {
     item_sequences: HashMap<String, i64>,
     tool_names: HashMap<String, String>,
     tool_arguments: HashMap<String, String>,
-    reasoning_text: HashMap<String, String>,
+    reasoning_summary: HashMap<String, BTreeMap<i64, String>>,
+    reasoning_content: HashMap<String, BTreeMap<i64, String>>,
 }
 
 impl RuntimeReplyResponseMaterializer {
@@ -144,7 +153,8 @@ impl RuntimeReplyResponseMaterializer {
             item_sequences: HashMap::new(),
             tool_names: HashMap::new(),
             tool_arguments: HashMap::new(),
-            reasoning_text: HashMap::new(),
+            reasoning_summary: HashMap::new(),
+            reasoning_content: HashMap::new(),
         }
     }
 
@@ -193,23 +203,58 @@ impl RuntimeReplyResponseMaterializer {
                 }
                 projections
             }
-            RuntimeReplyResponseEvent::ReasoningDelta { item_id, delta } => {
-                let text = {
-                    let reasoning_text = self.reasoning_text.entry(item_id.clone()).or_default();
-                    reasoning_text.push_str(&delta);
-                    reasoning_text.clone()
-                };
-                let item = self.project_timeline_item(
-                    item_id,
-                    RuntimeTimelineItemStatusSource::InProgress,
-                    RuntimeTimelineItemPayloadSource::Reasoning {
-                        text,
-                        summary: None,
-                        metadata: None,
-                    },
-                );
+            RuntimeReplyResponseEvent::ReasoningSummaryDelta {
+                item_id,
+                delta,
+                summary_index,
+            } => {
+                self.reasoning_summary
+                    .entry(item_id.clone())
+                    .or_default()
+                    .entry(summary_index)
+                    .or_default()
+                    .push_str(&delta);
+                let item = self.project_reasoning_item(item_id);
                 vec![
-                    RuntimeReplyResponseProjection::ThinkingDelta { text: delta },
+                    RuntimeReplyResponseProjection::ReasoningSummaryDelta {
+                        text: delta,
+                        summary_index,
+                    },
+                    RuntimeReplyResponseProjection::ItemUpdated { item },
+                ]
+            }
+            RuntimeReplyResponseEvent::ReasoningSummaryPartAdded {
+                item_id,
+                summary_index,
+            } => {
+                self.reasoning_summary
+                    .entry(item_id.clone())
+                    .or_default()
+                    .entry(summary_index)
+                    .or_default();
+                let item = self.project_reasoning_item(item_id);
+                vec![
+                    RuntimeReplyResponseProjection::ReasoningSummaryPartAdded { summary_index },
+                    RuntimeReplyResponseProjection::ItemUpdated { item },
+                ]
+            }
+            RuntimeReplyResponseEvent::ReasoningContentDelta {
+                item_id,
+                delta,
+                content_index,
+            } => {
+                self.reasoning_content
+                    .entry(item_id.clone())
+                    .or_default()
+                    .entry(content_index)
+                    .or_default()
+                    .push_str(&delta);
+                let item = self.project_reasoning_item(item_id);
+                vec![
+                    RuntimeReplyResponseProjection::ReasoningContentDelta {
+                        text: delta,
+                        content_index,
+                    },
                     RuntimeReplyResponseProjection::ItemUpdated { item },
                 ]
             }
@@ -226,6 +271,27 @@ impl RuntimeReplyResponseMaterializer {
                 vec![RuntimeReplyResponseProjection::RateLimits { payload }]
             }
         }
+    }
+
+    fn project_reasoning_item(&mut self, item_id: String) -> RuntimeTimelineItemProjection {
+        let summary = self.reasoning_summary.get(&item_id).map(indexed_parts);
+        let text = self
+            .reasoning_content
+            .get(&item_id)
+            .map(indexed_parts)
+            .filter(|parts| !parts.is_empty())
+            .or_else(|| summary.clone())
+            .map(|parts| parts.concat())
+            .unwrap_or_default();
+        self.project_timeline_item(
+            item_id,
+            RuntimeTimelineItemStatusSource::InProgress,
+            RuntimeTimelineItemPayloadSource::Reasoning {
+                text,
+                summary: summary.filter(|parts| !parts.is_empty()),
+                metadata: None,
+            },
+        )
     }
 
     fn project_response_item(
@@ -344,6 +410,14 @@ impl RuntimeReplyResponseMaterializer {
         self.item_sequences.insert(item_id.to_string(), sequence);
         sequence
     }
+}
+
+fn indexed_parts(parts: &BTreeMap<i64, String>) -> Vec<String> {
+    parts
+        .values()
+        .filter(|part| !part.is_empty())
+        .cloned()
+        .collect()
 }
 
 fn parse_response_tool_arguments(arguments: &str) -> Value {
@@ -711,7 +785,7 @@ mod tests {
     }
 
     #[test]
-    fn response_materializer_accumulates_reasoning_delta_as_item_update() {
+    fn response_materializer_keeps_reasoning_summary_separate_from_raw_content() {
         let mut materializer =
             RuntimeReplyResponseMaterializer::new(RuntimeReplyResponseContext::new(
                 "thread-response",
@@ -719,25 +793,82 @@ mod tests {
                 "2026-07-09T00:00:00Z",
             ));
 
-        let first = materializer.project_event(RuntimeReplyResponseEvent::ReasoningDelta {
+        let first = materializer.project_event(RuntimeReplyResponseEvent::ReasoningSummaryDelta {
             item_id: "reasoning-1".to_string(),
-            delta: "先分析".to_string(),
+            delta: "摘要".to_string(),
+            summary_index: 0,
         });
-        let second = materializer.project_event(RuntimeReplyResponseEvent::ReasoningDelta {
+        let second = materializer.project_event(RuntimeReplyResponseEvent::ReasoningContentDelta {
             item_id: "reasoning-1".to_string(),
-            delta: "再执行".to_string(),
+            delta: "原始推理".to_string(),
+            content_index: 0,
         });
 
         assert!(matches!(
             &first[0],
-            RuntimeReplyResponseProjection::ThinkingDelta { text } if text == "先分析"
+            RuntimeReplyResponseProjection::ReasoningSummaryDelta { text, summary_index }
+                if text == "摘要" && *summary_index == 0
+        ));
+        assert!(matches!(
+            &second[0],
+            RuntimeReplyResponseProjection::ReasoningContentDelta { text, content_index }
+                if text == "原始推理" && *content_index == 0
         ));
         let RuntimeReplyResponseProjection::ItemUpdated { item } = &second[1] else {
             panic!("expected reasoning item update");
         };
         match &item.payload {
-            crate::runtime_timeline::RuntimeTimelineItemPayload::Reasoning { text, .. } => {
-                assert_eq!(text, "先分析再执行");
+            crate::runtime_timeline::RuntimeTimelineItemPayload::Reasoning {
+                text,
+                summary,
+                ..
+            } => {
+                assert_eq!(text, "原始推理");
+                assert_eq!(summary.as_ref(), Some(&vec!["摘要".to_string()]));
+            }
+            other => panic!("expected reasoning payload, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn response_materializer_orders_reasoning_parts_by_provider_index() {
+        let mut materializer =
+            RuntimeReplyResponseMaterializer::new(RuntimeReplyResponseContext::new(
+                "thread-response",
+                "turn-response",
+                "2026-07-09T00:00:00Z",
+            ));
+
+        let boundary =
+            materializer.project_event(RuntimeReplyResponseEvent::ReasoningSummaryPartAdded {
+                item_id: "reasoning-1".to_string(),
+                summary_index: 1,
+            });
+        materializer.project_event(RuntimeReplyResponseEvent::ReasoningSummaryDelta {
+            item_id: "reasoning-1".to_string(),
+            delta: "第二段".to_string(),
+            summary_index: 1,
+        });
+        let ordered =
+            materializer.project_event(RuntimeReplyResponseEvent::ReasoningSummaryDelta {
+                item_id: "reasoning-1".to_string(),
+                delta: "第一段".to_string(),
+                summary_index: 0,
+            });
+
+        assert!(matches!(
+            boundary.first(),
+            Some(RuntimeReplyResponseProjection::ReasoningSummaryPartAdded { summary_index: 1 })
+        ));
+        let RuntimeReplyResponseProjection::ItemUpdated { item } = &ordered[1] else {
+            panic!("expected reasoning item update");
+        };
+        match &item.payload {
+            crate::runtime_timeline::RuntimeTimelineItemPayload::Reasoning { summary, .. } => {
+                assert_eq!(
+                    summary.as_ref(),
+                    Some(&vec!["第一段".to_string(), "第二段".to_string()])
+                );
             }
             other => panic!("expected reasoning payload, got {other:?}"),
         }

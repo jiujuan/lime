@@ -1,12 +1,15 @@
 use super::model_registry_metadata;
 use super::model_route_contract;
+use super::model_route_credential::{self, RouteCredential};
 use super::model_routing;
 use super::request_context::RuntimeModelSelection;
 use crate::ExecutionRequest;
 use app_server_protocol::{ModelTaskRequest, ResolvedModelRoute};
 use lime_agent::SessionProviderConfig;
+use lime_core::database::dao::api_key_provider::ProviderWithKeys;
 use lime_core::database::DbConnection;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
+use runtime_core::RoutingResolution;
 use serde_json::Value;
 
 #[derive(Debug, Clone)]
@@ -30,13 +33,24 @@ impl ChatModelRouteResolution {
     }
 }
 
-pub(super) async fn resolve_chat_model_route(
+pub(super) struct PreparedChatModelRoute {
+    routing_resolution: RoutingResolution,
+    provider_record: Option<ProviderWithKeys>,
+}
+
+impl PreparedChatModelRoute {
+    pub(super) fn selection(&self) -> &RuntimeModelSelection {
+        &self.routing_resolution.selection
+    }
+}
+
+pub(super) fn prepare_chat_model_route(
     db: &DbConnection,
     api_key_provider_service: &ApiKeyProviderService,
     request: &ExecutionRequest,
     requested_selection: &RuntimeModelSelection,
     direct_provider_config: Option<&SessionProviderConfig>,
-) -> Result<ChatModelRouteResolution, String> {
+) -> Result<PreparedChatModelRoute, String> {
     let routing_resolution = model_routing::resolve_ready_routing(
         db,
         api_key_provider_service,
@@ -44,21 +58,52 @@ pub(super) async fn resolve_chat_model_route(
         requested_selection,
         direct_provider_config,
     )?;
+    let provider_record = if direct_provider_config.is_some() {
+        None
+    } else {
+        api_key_provider_service.get_provider(db, &routing_resolution.selection.provider)?
+    };
+
+    Ok(PreparedChatModelRoute {
+        routing_resolution,
+        provider_record,
+    })
+}
+
+pub(super) async fn assemble_chat_model_route(
+    db: &DbConnection,
+    api_key_provider_service: &ApiKeyProviderService,
+    request: &ExecutionRequest,
+    requested_selection: &RuntimeModelSelection,
+    direct_provider_config: Option<&SessionProviderConfig>,
+    prepared: PreparedChatModelRoute,
+    preferred_credential_ref: Option<&str>,
+) -> Result<ChatModelRouteResolution, String> {
+    let routing_resolution = prepared.routing_resolution;
     let selection = &routing_resolution.selection;
     let model_routing = &routing_resolution.routing;
     let provider_readiness = &routing_resolution.readiness;
+    let route_credential = if provider_readiness.ready {
+        model_route_credential::resolve_route_credential(
+            db,
+            api_key_provider_service,
+            &selection.provider,
+            prepared.provider_record.as_ref(),
+            direct_provider_config,
+            preferred_credential_ref,
+        )
+        .await?
+    } else {
+        RouteCredential::unavailable()
+    };
     let model_registry = model_registry_metadata::resolve_runtime_model_registry_metadata(
         db,
         api_key_provider_service,
         selection,
         direct_provider_config,
+        route_credential.runtime_credential(),
     )
     .await?;
-    let provider_record = if direct_provider_config.is_some() {
-        None
-    } else {
-        api_key_provider_service.get_provider(db, &selection.provider)?
-    };
     let routing_payload = model_routing::routing_decision_payload(
         selection,
         model_routing,
@@ -67,13 +112,23 @@ pub(super) async fn resolve_chat_model_route(
     );
     let model_task_request =
         model_route_contract::chat_task_request_from_runtime(request, selection, &routing_payload);
-    let resolved_route = model_route_contract::resolved_route_from_runtime(
+    let mut resolved_route = model_route_contract::resolved_route_from_runtime(
         &model_task_request,
         selection,
         &routing_payload,
-        provider_record.as_ref(),
+        prepared.provider_record.as_ref(),
+        route_credential.credential_ref(),
         direct_provider_config,
     );
+    if direct_provider_config.is_none()
+        && resolved_route.auth.kind == app_server_protocol::AuthKind::ApiKeyRef
+    {
+        resolved_route.auth.credential_ref =
+            route_credential.credential_ref().map(ToString::to_string);
+        if resolved_route.failure.is_none() && resolved_route.auth.credential_ref.is_none() {
+            return Err("resolved_credential_unavailable".to_string());
+        }
+    }
     let evidence = runtime_core::route_resolution_evidence_payloads(
         requested_selection,
         &routing_resolution,
@@ -81,7 +136,6 @@ pub(super) async fn resolve_chat_model_route(
         &model_task_request,
         &resolved_route,
     );
-
     Ok(ChatModelRouteResolution {
         selection: selection.clone(),
         model_task_request,
@@ -92,6 +146,32 @@ pub(super) async fn resolve_chat_model_route(
     })
 }
 
+pub(super) async fn resolve_chat_model_route(
+    db: &DbConnection,
+    api_key_provider_service: &ApiKeyProviderService,
+    request: &ExecutionRequest,
+    requested_selection: &RuntimeModelSelection,
+    direct_provider_config: Option<&SessionProviderConfig>,
+) -> Result<ChatModelRouteResolution, String> {
+    let prepared = prepare_chat_model_route(
+        db,
+        api_key_provider_service,
+        request,
+        requested_selection,
+        direct_provider_config,
+    )?;
+    assemble_chat_model_route(
+        db,
+        api_key_provider_service,
+        request,
+        requested_selection,
+        direct_provider_config,
+        prepared,
+        None,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,6 +180,7 @@ mod tests {
     use lime_core::database::dao::api_key_provider::ApiProviderType;
     use lime_core::database::schema::create_tables;
     use lime_core::database::DbConnection;
+    use lime_services::model_registry_service::ModelRegistryService;
     use rusqlite::Connection;
     use serde_json::json;
     use std::sync::{Arc, Mutex};
@@ -732,6 +813,119 @@ mod tests {
                 .and_then(|value| value.as_array())
                 .map(Vec::len),
             Some(2)
+        );
+    }
+
+    #[tokio::test]
+    async fn durable_credential_binds_scoped_metadata_route_and_evidence() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let api_host = "https://api.xiaomimimo.com/v1";
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Scoped Route Fixture".to_string(),
+                ApiProviderType::Openai,
+                api_host.to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("custom provider");
+        let key_a = service
+            .add_api_key(&db, &provider.id, "scope-key-a", None, true)
+            .expect("key A");
+        let key_b = service
+            .add_api_key(&db, &provider.id, "scope-key-b", None, false)
+            .expect("key B");
+        ModelRegistryService::new(db.clone())
+            .fetch_models_from_api_with_hints(
+                &provider.id,
+                api_host,
+                "scope-key-b",
+                Some(ApiProviderType::Openai),
+                &["scoped-route-model".to_string()],
+            )
+            .await
+            .expect("seed key B scoped cache");
+
+        let request = request_for_test("hello", None, None);
+        let requested_selection = selection(&provider.id, "scoped-route-model");
+        let ref_a = lime_core::models::runtime_api_key_credential_uuid(&key_a.id);
+        let ref_b = lime_core::models::runtime_api_key_credential_uuid(&key_b.id);
+        assert!(service
+            .select_runtime_credential_by_ref(&db, &provider.id, &ref_a)
+            .expect("read key A")
+            .is_some());
+        assert!(service
+            .select_runtime_credential_by_ref(&db, &provider.id, &ref_b)
+            .expect("read key B")
+            .is_some());
+
+        let route_b = assemble_chat_model_route(
+            &db,
+            &service,
+            &request,
+            &requested_selection,
+            None,
+            prepare_chat_model_route(&db, &service, &request, &requested_selection, None)
+                .expect("prepare key B route"),
+            Some(&ref_b),
+        )
+        .await
+        .expect("assemble key B route");
+
+        assert!(route_b.resolved_route.failure.is_none());
+        assert_eq!(
+            route_b.resolved_route.auth.credential_ref.as_deref(),
+            Some(ref_b.as_str())
+        );
+        assert_eq!(
+            route_b
+                .decision_payload
+                .pointer("/modelRegistry/source")
+                .and_then(Value::as_str),
+            Some("provider_models_cache")
+        );
+        assert_eq!(
+            route_b
+                .decision_payload
+                .pointer("/resolvedRoute/auth/credentialRef")
+                .and_then(Value::as_str),
+            Some(ref_b.as_str())
+        );
+        let evidence = route_b.decision_payload.to_string();
+        assert!(!evidence.contains("scope-key-a"));
+        assert!(!evidence.contains("scope-key-b"));
+
+        let route_a = assemble_chat_model_route(
+            &db,
+            &service,
+            &request,
+            &requested_selection,
+            None,
+            prepare_chat_model_route(&db, &service, &request, &requested_selection, None)
+                .expect("prepare key A route"),
+            Some(&ref_a),
+        )
+        .await
+        .expect("assemble key A route");
+        assert_eq!(
+            route_a
+                .resolved_route
+                .failure
+                .as_ref()
+                .map(|failure| failure.reason_code.as_str()),
+            Some("model_registry_metadata_missing")
+        );
+        assert_eq!(
+            route_a
+                .decision_payload
+                .pointer("/modelRegistry/source")
+                .and_then(Value::as_str),
+            Some("runtime_selection_only")
         );
     }
 }

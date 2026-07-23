@@ -208,6 +208,11 @@ pub(in crate::runtime) fn merge_item_snapshot(
     previous: ThreadItem,
     mut next: ThreadItem,
 ) -> ThreadItem {
+    let source_event_type = next
+        .metadata
+        .get("source_event_type")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
     next.created_at_ms = previous.created_at_ms;
     next.ordinal = previous.ordinal;
     if next.completed_at_ms.is_none() {
@@ -216,29 +221,26 @@ pub(in crate::runtime) fn merge_item_snapshot(
     if previous.status.is_terminal() && !next.status.is_terminal() {
         next.status = previous.status;
     }
-    next.payload = merge_payload(previous.payload, next.payload);
+    next.payload = merge_payload(previous.payload, next.payload, source_event_type.as_deref());
     next
 }
 
 fn merge_payload(
     previous: agent_protocol::ThreadItemPayload,
     next: agent_protocol::ThreadItemPayload,
+    source_event_type: Option<&str>,
 ) -> agent_protocol::ThreadItemPayload {
     use agent_protocol::ThreadItemPayload;
 
     match (previous, next) {
         (
             ThreadItemPayload::UserMessage {
-                content: previous_content,
                 client_id: previous_client_id,
+                ..
             },
             ThreadItemPayload::UserMessage { content, client_id },
         ) => ThreadItemPayload::UserMessage {
-            content: if content.is_empty() {
-                previous_content
-            } else {
-                content
-            },
+            content,
             client_id: client_id.or(previous_client_id),
         },
         (
@@ -294,11 +296,19 @@ fn merge_payload(
                 summary: next_summary,
                 content: next_content,
             },
-        ) => {
-            extend_distinct(&mut summary, next_summary);
-            extend_distinct(&mut content, next_content);
-            ThreadItemPayload::Reasoning { summary, content }
-        }
+        ) => match source_event_type {
+            Some("reasoning.final" | "item.completed" | "item.updated") => {
+                ThreadItemPayload::Reasoning {
+                    summary: next_summary,
+                    content: next_content,
+                }
+            }
+            _ => {
+                summary.extend(next_summary);
+                content.extend(next_content);
+                ThreadItemPayload::Reasoning { summary, content }
+            }
+        },
         (
             ThreadItemPayload::Tool {
                 call_id: previous_call_id,
@@ -556,14 +566,6 @@ fn merge_stream_text(previous: String, next: String) -> String {
         next
     } else {
         format!("{previous}{next}")
-    }
-}
-
-fn extend_distinct(values: &mut Vec<String>, next: Vec<String>) {
-    for value in next {
-        if !values.contains(&value) {
-            values.push(value);
-        }
     }
 }
 

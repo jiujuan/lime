@@ -42,12 +42,11 @@ fn merge_payload(previous: ThreadItemPayload, next: ThreadItemPayload) -> Thread
     match (previous, next) {
         (
             UserMessage {
-                content: old,
-                client_id: old_id,
+                client_id: old_id, ..
             },
             UserMessage { content, client_id },
         ) => UserMessage {
-            content: if content.is_empty() { old } else { content },
+            content,
             client_id: client_id.or(old_id),
         },
         (

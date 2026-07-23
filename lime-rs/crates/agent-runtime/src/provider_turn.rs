@@ -26,6 +26,8 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use tool_runtime::tool_call::{ToolCall, ToolEnvironment};
 use tool_runtime::tool_definition::{RuntimeToolDefinition, RuntimeToolExposure};
@@ -48,6 +50,8 @@ use output_lifecycle::{
 use tool_runtime::tool_result_projection::NormalizedToolOutput;
 
 const LOCAL_TOOL_ENVIRONMENT_ID: &str = "local";
+const DEFAULT_FIRST_VISIBLE_OUTPUT_TIMEOUT: Duration = Duration::from_secs(60);
+const DEFAULT_PROVIDER_STEP_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Clone)]
 pub struct RuntimeToolStepSnapshot {
@@ -169,9 +173,19 @@ pub enum CurrentProviderTurnEvent {
     ReasoningStart {
         item_id: String,
     },
-    ReasoningDelta {
+    ReasoningSummaryDelta {
         item_id: String,
         text: String,
+        summary_index: i64,
+    },
+    ReasoningSummaryPartAdded {
+        item_id: String,
+        summary_index: i64,
+    },
+    ReasoningContentDelta {
+        item_id: String,
+        text: String,
+        content_index: i64,
     },
     ReasoningEnd {
         item_id: String,
@@ -234,6 +248,8 @@ where
     let mut emitted_tool_call = false;
     let mut provider_budget_tokens_used = 0_u64;
     let (generation, provider_options) = provider_request_controls(&session_config);
+    let first_visible_output_timeout = first_visible_output_timeout(&session_config);
+    let provider_step_timeout = provider_step_timeout(&session_config);
 
     loop {
         if is_cancelled(&cancel_token) {
@@ -319,40 +335,75 @@ where
                 trace.request_started().with_tool_names(tool_names),
             );
         }
-        let mut stream =
-            match start_provider_stream(&provider, request, cancel_token.as_ref()).await {
-                Ok(Some(stream)) => stream,
-                Ok(None) => {
-                    if let Some(trace) = provider_trace_attempt.as_ref() {
-                        emit_provider_trace(
-                            &mut on_event,
-                            provider_trace_metadata.as_ref(),
-                            trace.canceled("turn_canceled"),
-                        );
-                    }
-                    return Ok(RuntimeReplyExecution::new(
-                        text_output,
-                        errors,
-                        emitted_any,
-                        attempts_summary(&loop_state),
-                        true,
-                    ));
+        let first_visible_output_deadline = Instant::now() + first_visible_output_timeout;
+        let provider_step_deadline = Instant::now() + provider_step_timeout;
+        let mut stream = match start_provider_stream(
+            &provider,
+            request,
+            cancel_token.as_ref(),
+            first_visible_output_deadline,
+            provider_step_deadline,
+        )
+        .await
+        {
+            Ok(ProviderStreamStart::Started(stream)) => stream,
+            Ok(ProviderStreamStart::Cancelled) => {
+                if let Some(trace) = provider_trace_attempt.as_ref() {
+                    emit_provider_trace(
+                        &mut on_event,
+                        provider_trace_metadata.as_ref(),
+                        trace.canceled("turn_canceled"),
+                    );
                 }
-                Err(error) => {
-                    if let Some(trace) = provider_trace_attempt.as_ref() {
-                        emit_provider_trace(
-                            &mut on_event,
-                            provider_trace_metadata.as_ref(),
-                            trace.failed(provider_trace_failure_from_error(&error)),
-                        );
-                    }
-                    return Err(provider_attempt_error(
-                        error.message,
-                        emitted_any,
-                        error.classification,
-                    ));
+                return Ok(RuntimeReplyExecution::new(
+                    text_output,
+                    errors,
+                    emitted_any,
+                    attempts_summary(&loop_state),
+                    true,
+                ));
+            }
+            Ok(ProviderStreamStart::FirstVisibleOutputDeadlineElapsed) => {
+                if let Some(trace) = provider_trace_attempt.as_ref() {
+                    emit_provider_trace(
+                        &mut on_event,
+                        provider_trace_metadata.as_ref(),
+                        trace.failed(first_visible_output_timeout_trace_failure()),
+                    );
                 }
-            };
+                return Err(first_visible_output_timeout_error(
+                    first_visible_output_timeout,
+                    emitted_any,
+                ));
+            }
+            Ok(ProviderStreamStart::ProviderStepDeadlineElapsed) => {
+                if let Some(trace) = provider_trace_attempt.as_ref() {
+                    emit_provider_trace(
+                        &mut on_event,
+                        provider_trace_metadata.as_ref(),
+                        trace.failed(provider_step_timeout_trace_failure()),
+                    );
+                }
+                return Err(provider_step_timeout_error(
+                    provider_step_timeout,
+                    emitted_any,
+                ));
+            }
+            Err(error) => {
+                if let Some(trace) = provider_trace_attempt.as_ref() {
+                    emit_provider_trace(
+                        &mut on_event,
+                        provider_trace_metadata.as_ref(),
+                        trace.failed(provider_trace_failure_from_error(&error)),
+                    );
+                }
+                return Err(provider_attempt_error(
+                    error.message,
+                    emitted_any,
+                    error.classification,
+                ));
+            }
+        };
         let mut assistant_content = Vec::new();
         let mut calls = Vec::new();
         let mut completed = false;
@@ -364,9 +415,69 @@ where
         let mut step_text_output_chars = 0_u64;
         let mut step_reasoning_output_chars = 0_u64;
         let mut step_usage = None;
+        let mut has_user_visible_output = false;
 
         loop {
-            let event = next_provider_event(&mut stream, cancel_token.as_ref()).await;
+            let event = match next_provider_event(
+                &mut stream,
+                cancel_token.as_ref(),
+                (!has_user_visible_output).then_some(first_visible_output_deadline),
+                Some(provider_step_deadline),
+            )
+            .await
+            {
+                Ok(event) => event,
+                Err(DeadlineElapsed::FirstVisibleOutput) => {
+                    finish_active_output_items(
+                        &mut active_reasoning_item_id,
+                        &mut active_text_item_id,
+                        &mut pending_text_item_ids,
+                        &mut on_event,
+                    );
+                    for item_id in pending_text_item_ids.drain(..) {
+                        on_event(CurrentProviderTurnEvent::TextEnd {
+                            item_id,
+                            phase: CurrentProviderTextPhase::FinalAnswer,
+                        });
+                    }
+                    if let Some(trace) = provider_trace_attempt.as_ref() {
+                        emit_provider_trace(
+                            &mut on_event,
+                            provider_trace_metadata.as_ref(),
+                            trace.failed(first_visible_output_timeout_trace_failure()),
+                        );
+                    }
+                    return Err(first_visible_output_timeout_error(
+                        first_visible_output_timeout,
+                        emitted_any,
+                    ));
+                }
+                Err(DeadlineElapsed::ProviderStep) => {
+                    finish_active_output_items(
+                        &mut active_reasoning_item_id,
+                        &mut active_text_item_id,
+                        &mut pending_text_item_ids,
+                        &mut on_event,
+                    );
+                    for item_id in pending_text_item_ids.drain(..) {
+                        on_event(CurrentProviderTurnEvent::TextEnd {
+                            item_id,
+                            phase: CurrentProviderTextPhase::FinalAnswer,
+                        });
+                    }
+                    if let Some(trace) = provider_trace_attempt.as_ref() {
+                        emit_provider_trace(
+                            &mut on_event,
+                            provider_trace_metadata.as_ref(),
+                            trace.failed(provider_step_timeout_trace_failure()),
+                        );
+                    }
+                    return Err(provider_step_timeout_error(
+                        provider_step_timeout,
+                        emitted_any,
+                    ));
+                }
+            };
             if is_cancelled(&cancel_token) {
                 if let Some(Ok(event)) = event.as_ref() {
                     if let Some(usage) = provider_usage_from_event(event) {
@@ -427,6 +538,7 @@ where
                     )?;
                 }
                 CanonicalLlmEvent::TextDelta { id, text } => {
+                    has_user_visible_output |= !text.trim().is_empty();
                     let id =
                         provider_output_item_id(&turn_id, attempt, ProviderOutputFamily::Text, &id);
                     if let Some(event) = provider_trace_attempt
@@ -475,7 +587,58 @@ where
                         emitted_any,
                     )?;
                 }
-                CanonicalLlmEvent::ReasoningDelta { id, text } => {
+                CanonicalLlmEvent::ReasoningSummaryDelta {
+                    id,
+                    text,
+                    summary_index,
+                } => {
+                    step_reasoning_output_chars =
+                        step_reasoning_output_chars.saturating_add(text.chars().count() as u64);
+                    let id = provider_output_item_id(
+                        &turn_id,
+                        attempt,
+                        ProviderOutputFamily::Reasoning,
+                        &id,
+                    );
+                    emitted_any = true;
+                    start_output_item(
+                        &mut active_reasoning_item_id,
+                        id.clone(),
+                        ProviderOutputFamily::Reasoning,
+                        &mut on_event,
+                        emitted_any,
+                    )?;
+                    on_event(CurrentProviderTurnEvent::ReasoningSummaryDelta {
+                        item_id: id,
+                        text,
+                        summary_index,
+                    });
+                }
+                CanonicalLlmEvent::ReasoningSummaryPartAdded { id, summary_index } => {
+                    let id = provider_output_item_id(
+                        &turn_id,
+                        attempt,
+                        ProviderOutputFamily::Reasoning,
+                        &id,
+                    );
+                    emitted_any = true;
+                    start_output_item(
+                        &mut active_reasoning_item_id,
+                        id.clone(),
+                        ProviderOutputFamily::Reasoning,
+                        &mut on_event,
+                        emitted_any,
+                    )?;
+                    on_event(CurrentProviderTurnEvent::ReasoningSummaryPartAdded {
+                        item_id: id,
+                        summary_index,
+                    });
+                }
+                CanonicalLlmEvent::ReasoningContentDelta {
+                    id,
+                    text,
+                    content_index,
+                } => {
                     step_reasoning_output_chars =
                         step_reasoning_output_chars.saturating_add(text.chars().count() as u64);
                     let id = provider_output_item_id(
@@ -493,7 +656,11 @@ where
                         &mut on_event,
                         emitted_any,
                     )?;
-                    on_event(CurrentProviderTurnEvent::ReasoningDelta { item_id: id, text });
+                    on_event(CurrentProviderTurnEvent::ReasoningContentDelta {
+                        item_id: id,
+                        text,
+                        content_index,
+                    });
                 }
                 CanonicalLlmEvent::ReasoningEnd { id } => {
                     let id = provider_output_item_id(
@@ -523,6 +690,7 @@ where
                 CanonicalLlmEvent::ToolCall {
                     id, name, input, ..
                 } => {
+                    has_user_visible_output = true;
                     emitted_any = true;
                     emitted_tool_call = true;
                     let call = CurrentProviderToolCall::new(id, name, input);
@@ -735,30 +903,110 @@ fn provider_request_controls(
 ) -> (GenerationOptions, ProviderMetadata) {
     let mut generation = GenerationOptions::default();
     let mut provider_options = ProviderMetadata::new();
-    let Some(harness_generation) = session_config
+    let harness_generation = session_config
         .turn_context
         .as_ref()
         .and_then(|context| context.metadata.get("runtime_request"))
-        .and_then(|metadata| metadata.pointer("/harness/generation"))
-    else {
-        return (generation, provider_options);
-    };
+        .and_then(|metadata| metadata.pointer("/harness/generation"));
 
     generation.max_tokens = harness_generation
-        .get("max_output_tokens")
-        .or_else(|| harness_generation.get("maxOutputTokens"))
+        .and_then(|generation| {
+            generation
+                .get("max_output_tokens")
+                .or_else(|| generation.get("maxOutputTokens"))
+        })
         .and_then(serde_json::Value::as_u64)
         .and_then(|value| u32::try_from(value).ok())
         .filter(|value| *value > 0);
-    if let Some(enable_thinking) = harness_generation
-        .get("enable_thinking")
-        .or_else(|| harness_generation.get("enableThinking"))
+    let enable_thinking = harness_generation
+        .and_then(|generation| {
+            generation
+                .get("enable_thinking")
+                .or_else(|| generation.get("enableThinking"))
+        })
         .and_then(serde_json::Value::as_bool)
-    {
+        .or_else(|| {
+            session_config
+                .turn_context
+                .as_ref()
+                .and_then(|context| context.metadata.get("app_server_runtime_backend"))
+                .and_then(|metadata| {
+                    metadata
+                        .get("thinkingEnabled")
+                        .or_else(|| metadata.get("thinking_enabled"))
+                })
+                .and_then(serde_json::Value::as_bool)
+        });
+    if let Some(enable_thinking) = enable_thinking {
         provider_options.insert("enable_thinking".to_string(), enable_thinking.into());
     }
 
     (generation, provider_options)
+}
+
+fn first_visible_output_timeout(session_config: &AgentSessionConfig) -> Duration {
+    session_config
+        .turn_context
+        .as_ref()
+        .and_then(|context| context.metadata.get("runtime_request"))
+        .and_then(|metadata| metadata.pointer("/harness/generation"))
+        .and_then(|generation| {
+            generation
+                .get("first_visible_output_timeout_ms")
+                .or_else(|| generation.get("firstVisibleOutputTimeoutMs"))
+        })
+        .and_then(serde_json::Value::as_u64)
+        .filter(|timeout_ms| *timeout_ms > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(DEFAULT_FIRST_VISIBLE_OUTPUT_TIMEOUT)
+}
+
+fn provider_step_timeout(session_config: &AgentSessionConfig) -> Duration {
+    session_config
+        .turn_context
+        .as_ref()
+        .and_then(|context| context.metadata.get("runtime_request"))
+        .and_then(|metadata| metadata.pointer("/harness/generation"))
+        .and_then(|generation| {
+            generation
+                .get("provider_step_timeout_ms")
+                .or_else(|| generation.get("providerStepTimeoutMs"))
+        })
+        .and_then(serde_json::Value::as_u64)
+        .filter(|timeout_ms| *timeout_ms > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(DEFAULT_PROVIDER_STEP_TIMEOUT)
+}
+
+fn first_visible_output_timeout_error(
+    timeout: Duration,
+    emitted_any: bool,
+) -> RuntimeReplyAttemptError {
+    RuntimeReplyAttemptError::new(
+        format!(
+            "Provider produced no user-visible output within {}ms",
+            timeout.as_millis()
+        ),
+        emitted_any,
+    )
+}
+
+fn first_visible_output_timeout_trace_failure() -> ProviderTraceFailure {
+    ProviderTraceFailure::new("execution", false, false)
+}
+
+fn provider_step_timeout_error(timeout: Duration, emitted_any: bool) -> RuntimeReplyAttemptError {
+    RuntimeReplyAttemptError::new(
+        format!(
+            "Provider step exceeded the absolute deadline of {}ms",
+            timeout.as_millis()
+        ),
+        emitted_any,
+    )
+}
+
+fn provider_step_timeout_trace_failure() -> ProviderTraceFailure {
+    ProviderTraceFailure::new("execution", false, false)
 }
 
 fn provider_trace_failure_from_error(error: &CurrentProviderError) -> ProviderTraceFailure {
@@ -828,35 +1076,121 @@ fn insert_environment_context_before_current_user(
     messages.insert(insertion_index, context);
 }
 
+enum ProviderStreamStart {
+    Started(CurrentProviderStream),
+    Cancelled,
+    FirstVisibleOutputDeadlineElapsed,
+    ProviderStepDeadlineElapsed,
+}
+
 async fn start_provider_stream(
     provider: &Arc<dyn CurrentProvider>,
     request: CurrentProviderRequest,
     cancel_token: Option<&CancellationToken>,
-) -> Result<Option<CurrentProviderStream>, CurrentProviderError> {
+    first_visible_output_deadline: Instant,
+    provider_step_deadline: Instant,
+) -> Result<ProviderStreamStart, CurrentProviderError> {
     match cancel_token {
         Some(cancel_token) => {
             tokio::select! {
-                _ = cancel_token.cancelled() => Ok(None),
-                result = provider.stream(request) => result.map(Some),
+                biased;
+                _ = cancel_token.cancelled() => Ok(ProviderStreamStart::Cancelled),
+                _ = tokio::time::sleep_until(first_visible_output_deadline) => {
+                    Ok(ProviderStreamStart::FirstVisibleOutputDeadlineElapsed)
+                }
+                _ = tokio::time::sleep_until(provider_step_deadline) => {
+                    Ok(ProviderStreamStart::ProviderStepDeadlineElapsed)
+                }
+                result = provider.stream(request) => result.map(ProviderStreamStart::Started),
             }
         }
-        None => provider.stream(request).await.map(Some),
+        None => {
+            tokio::select! {
+                biased;
+                _ = tokio::time::sleep_until(first_visible_output_deadline) => {
+                    Ok(ProviderStreamStart::FirstVisibleOutputDeadlineElapsed)
+                }
+                _ = tokio::time::sleep_until(provider_step_deadline) => {
+                    Ok(ProviderStreamStart::ProviderStepDeadlineElapsed)
+                }
+                result = provider.stream(request) => result.map(ProviderStreamStart::Started),
+            }
+        }
     }
 }
 
 async fn next_provider_event(
     stream: &mut CurrentProviderStream,
     cancel_token: Option<&CancellationToken>,
-) -> Option<Result<CanonicalLlmEvent, CurrentProviderError>> {
-    match cancel_token {
-        Some(cancel_token) => {
+    first_visible_output_deadline: Option<Instant>,
+    provider_step_deadline: Option<Instant>,
+) -> Result<Option<Result<CanonicalLlmEvent, CurrentProviderError>>, DeadlineElapsed> {
+    match (
+        cancel_token,
+        first_visible_output_deadline,
+        provider_step_deadline,
+    ) {
+        (Some(cancel_token), Some(first_deadline), Some(step_deadline)) => {
             tokio::select! {
-                _ = cancel_token.cancelled() => None,
-                event = stream.next() => event,
+                biased;
+                _ = cancel_token.cancelled() => Ok(None),
+                _ = tokio::time::sleep_until(first_deadline) => Err(DeadlineElapsed::FirstVisibleOutput),
+                _ = tokio::time::sleep_until(step_deadline) => Err(DeadlineElapsed::ProviderStep),
+                event = stream.next() => Ok(event),
             }
         }
-        None => stream.next().await,
+        (Some(cancel_token), None, Some(step_deadline)) => {
+            tokio::select! {
+                biased;
+                _ = cancel_token.cancelled() => Ok(None),
+                _ = tokio::time::sleep_until(step_deadline) => Err(DeadlineElapsed::ProviderStep),
+                event = stream.next() => Ok(event),
+            }
+        }
+        (Some(cancel_token), Some(first_deadline), None) => {
+            tokio::select! {
+                biased;
+                _ = cancel_token.cancelled() => Ok(None),
+                _ = tokio::time::sleep_until(first_deadline) => Err(DeadlineElapsed::FirstVisibleOutput),
+                event = stream.next() => Ok(event),
+            }
+        }
+        (None, Some(first_deadline), Some(step_deadline)) => {
+            tokio::select! {
+                biased;
+                _ = tokio::time::sleep_until(first_deadline) => Err(DeadlineElapsed::FirstVisibleOutput),
+                _ = tokio::time::sleep_until(step_deadline) => Err(DeadlineElapsed::ProviderStep),
+                event = stream.next() => Ok(event),
+            }
+        }
+        (None, None, Some(step_deadline)) => {
+            tokio::select! {
+                biased;
+                _ = tokio::time::sleep_until(step_deadline) => Err(DeadlineElapsed::ProviderStep),
+                event = stream.next() => Ok(event),
+            }
+        }
+        (None, Some(first_deadline), None) => {
+            tokio::select! {
+                biased;
+                _ = tokio::time::sleep_until(first_deadline) => Err(DeadlineElapsed::FirstVisibleOutput),
+                event = stream.next() => Ok(event),
+            }
+        }
+        (Some(cancel_token), None, None) => {
+            tokio::select! {
+                biased;
+                _ = cancel_token.cancelled() => Ok(None),
+                event = stream.next() => Ok(event),
+            }
+        }
+        (None, None, None) => Ok(stream.next().await),
     }
+}
+
+enum DeadlineElapsed {
+    FirstVisibleOutput,
+    ProviderStep,
 }
 
 fn emit_provider_trace<F>(

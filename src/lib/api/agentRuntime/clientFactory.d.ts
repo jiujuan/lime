@@ -6,13 +6,11 @@ import {
 import type { AppServerSessionRpcClient } from "./appServerSessionClient";
 import type { AgentRuntimeEvidenceExportAppServerClient } from "./exportClient";
 import type { AgentRuntimeWorkspaceSkillBindingsAppServerClient } from "./inventoryClient";
-import type { AgentRuntimeObjectiveAppServerClient } from "./objectiveClient";
 import type { AgentRuntimeThreadClientDeps } from "./threadClient";
 export type AgentRuntimeAppServerClient =
   AgentRuntimeThreadClientDeps["appServerClient"] &
     AppServerSessionRpcClient &
     AgentRuntimeEvidenceExportAppServerClient &
-    AgentRuntimeObjectiveAppServerClient &
     AgentRuntimeWorkspaceSkillBindingsAppServerClient;
 export interface AgentRuntimeClientDeps extends AgentRuntimeTransportDeps {
   bridgeInvoke?: AgentRuntimeBridgeInvoke;
@@ -98,24 +96,6 @@ export declare function createAgentRuntimeClient({
   ) => Promise<
     import("./toolInventoryTypes").AgentRuntimeWorkspaceSkillBindings
   >;
-  auditAgentRuntimeObjective: (
-    request: import("./sessionTypes").AgentRuntimeObjectiveSessionRequest,
-  ) => Promise<import("./sessionTypes").ManagedObjective>;
-  clearAgentRuntimeObjective: (
-    request: import("./sessionTypes").AgentRuntimeObjectiveSessionRequest,
-  ) => Promise<import("./sessionTypes").AgentRuntimeClearObjectiveResult>;
-  continueAgentRuntimeObjective: (
-    request: import("./sessionTypes").AgentRuntimeObjectiveSessionRequest,
-  ) => Promise<import("./sessionTypes").AgentRuntimeContinueObjectiveResult>;
-  getAgentRuntimeObjective: (
-    sessionId: string,
-  ) => Promise<import("./sessionTypes").ManagedObjective | null>;
-  setAgentRuntimeObjective: (
-    request: import("./sessionTypes").AgentRuntimeSetObjectiveRequest,
-  ) => Promise<import("./sessionTypes").ManagedObjective>;
-  updateAgentRuntimeObjectiveStatus: (
-    request: import("./sessionTypes").AgentRuntimeUpdateObjectiveStatusRequest,
-  ) => Promise<import("./sessionTypes").ManagedObjective | null>;
   exportAgentRuntimeAnalysisHandoff: (
     sessionId: string,
     options?: import("./exportClient").AgentRuntimeExportOptions,

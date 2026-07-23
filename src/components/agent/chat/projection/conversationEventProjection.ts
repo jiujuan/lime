@@ -1,7 +1,10 @@
 import type {
   AgentEvent,
   AgentEventMessage,
+  AgentEventReasoningContentDelta,
   AgentEventReasoningEnded,
+  AgentEventReasoningSummaryDelta,
+  AgentEventReasoningSummaryPartAdded,
   AgentEventReasoningStarted,
   AgentEventTextDelta,
   AgentEventTextDeltaBatch,
@@ -28,6 +31,9 @@ type ConversationProjectionEvent = Extract<
       | "text_delta_batch"
       | "thinking_delta"
       | "reasoning_delta"
+      | "reasoning_summary_delta"
+      | "reasoning_summary_part_added"
+      | "reasoning_content_delta"
       | "reasoning_final"
       | "reasoning_started"
       | "reasoning_ended";
@@ -48,6 +54,11 @@ export function buildConversationProjectionEvents(
     case "reasoning_delta":
     case "reasoning_final":
       return [buildThinkingDeltaEvent(event, context)];
+    case "reasoning_summary_delta":
+      return [buildReasoningSummaryEvent(event, context)];
+    case "reasoning_summary_part_added":
+    case "reasoning_content_delta":
+      return buildReasoningNonVisibleEvents(event, context);
     case "reasoning_started":
     case "reasoning_ended":
       return buildReasoningLifecycleEvents(event, context);
@@ -103,10 +114,33 @@ export function buildThinkingDeltaEvent(
           ? event.text || event.delta || ""
           : event.type === "reasoning_final"
             ? event.text
-          : event.text,
+            : event.text,
     },
     context,
   );
+}
+
+export function buildReasoningSummaryEvent(
+  event: AgentEventReasoningSummaryDelta,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent {
+  return buildAgentUiReasoningDeltaEvent(
+    {
+      itemId: event.itemId,
+      sourceType: event.type,
+      streamKind: "summary",
+      summaryIndex: event.summaryIndex,
+      text: event.text,
+    },
+    context,
+  );
+}
+
+export function buildReasoningNonVisibleEvents(
+  _event: AgentEventReasoningSummaryPartAdded | AgentEventReasoningContentDelta,
+  _context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  return [];
 }
 
 export function buildReasoningLifecycleEvents(

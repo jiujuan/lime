@@ -234,8 +234,6 @@ export function readObjectiveTextFromHarness(harness) {
     harness?.thread_goal?.set?.objective ??
     harness?.threadGoal?.set?.objective ??
     harness?.goal?.set?.objective ??
-    harness?.managed_objective?.objective_text ??
-    harness?.managedObjective?.objectiveText ??
     null
   );
 }

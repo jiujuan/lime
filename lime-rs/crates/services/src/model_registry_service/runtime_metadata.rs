@@ -1,7 +1,15 @@
 use super::ModelRegistryService;
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
 use lime_core::models::model_registry::EnhancedModelMetadata;
+use lime_core::models::{RuntimeCredentialData, RuntimeProviderCredential};
 use serde::Serialize;
+
+#[derive(Clone, Copy)]
+pub enum ProviderModelCacheAccess<'a> {
+    Credential(&'a RuntimeProviderCredential),
+    Keyless,
+    Unavailable,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -61,7 +69,7 @@ impl ModelRegistryService {
         provider: Option<&ProviderWithKeys>,
         provider_id: &str,
         model_id: &str,
-        api_key: Option<&str>,
+        cache_access: ProviderModelCacheAccess<'_>,
     ) -> Result<ProviderModelRegistryMetadata, String> {
         let Some(provider) = provider else {
             return Ok(ProviderModelRegistryMetadata::runtime_selection_only(
@@ -76,24 +84,30 @@ impl ModelRegistryService {
         let requested_model_id = model_id.trim();
         let provider_type = provider.provider.effective_provider_type();
         let api_host = provider.provider.api_host.trim();
-        let credential_fingerprint = api_key.and_then(Self::credential_cache_fingerprint);
+        let credential_fingerprint = match cache_access {
+            ProviderModelCacheAccess::Credential(credential) => {
+                Self::credential_cache_fingerprint(runtime_credential_api_key(credential))
+            }
+            ProviderModelCacheAccess::Keyless | ProviderModelCacheAccess::Unavailable => None,
+        };
         if !api_host.is_empty() {
-            let cached = match credential_fingerprint.as_deref() {
-                Some(fingerprint) => self.get_cached_provider_models_scoped(
+            let cached = match cache_access {
+                ProviderModelCacheAccess::Credential(_) => self.get_cached_provider_models_scoped(
                     provider_id,
                     api_host,
                     Some(provider_type),
-                    Some(fingerprint),
+                    credential_fingerprint.as_deref(),
                 )?,
-                None if !Self::requires_api_key_for_runtime(
-                    provider_id,
-                    api_host,
-                    provider_type,
-                ) =>
+                ProviderModelCacheAccess::Keyless
+                    if !Self::requires_api_key_for_runtime(
+                        provider_id,
+                        api_host,
+                        provider_type,
+                    ) =>
                 {
                     self.get_cached_provider_models(provider_id, api_host, Some(provider_type))?
                 }
-                None => None,
+                ProviderModelCacheAccess::Keyless | ProviderModelCacheAccess::Unavailable => None,
             };
             if let Some(cached) = cached {
                 let cached_model_count = Some(cached.models.len());
@@ -146,6 +160,16 @@ impl ModelRegistryService {
     }
 }
 
+fn runtime_credential_api_key(credential: &RuntimeProviderCredential) -> &str {
+    match &credential.credential {
+        RuntimeCredentialData::OpenAIKey { api_key, .. }
+        | RuntimeCredentialData::ClaudeKey { api_key, .. }
+        | RuntimeCredentialData::VertexKey { api_key, .. }
+        | RuntimeCredentialData::GeminiApiKey { api_key, .. }
+        | RuntimeCredentialData::AnthropicKey { api_key, .. } => api_key,
+    }
+}
+
 fn find_model_metadata<'a>(
     models: &'a [EnhancedModelMetadata],
     requested_model_id: &str,
@@ -194,6 +218,7 @@ mod tests {
         ModelCapabilities, ModelReasoningEffortLevel, ModelReasoningEffortSource,
         ModelReasoningEffortSupport, ModelRuntimeFeature, ModelTaskFamily,
     };
+    use lime_core::models::RuntimeProviderType;
     use rusqlite::Connection;
     use std::sync::{Arc, Mutex};
 
@@ -225,6 +250,19 @@ mod tests {
                 updated_at: now,
             },
             api_keys: Vec::new(),
+        }
+    }
+
+    fn credential(id: &str, api_key: &str) -> RuntimeProviderCredential {
+        RuntimeProviderCredential {
+            uuid: id.to_string(),
+            provider_type: RuntimeProviderType::OpenAI,
+            credential: RuntimeCredentialData::OpenAIKey {
+                api_key: api_key.to_string(),
+                base_url: None,
+            },
+            name: None,
+            prompt_cache_mode_override: None,
         }
     }
 
@@ -279,7 +317,7 @@ mod tests {
                 Some(&provider),
                 "cached-provider",
                 "upstream-coder",
-                Some(api_key),
+                ProviderModelCacheAccess::Credential(&credential("key-a", api_key)),
             )
             .expect("metadata");
 
@@ -308,6 +346,8 @@ mod tests {
             "Cached Provider".to_string(),
         );
         let credential_a = "sk-cache-a";
+        let runtime_credential_a = credential("key-a", credential_a);
+        let runtime_credential_b = credential("key-b", "sk-cache-b");
 
         service
             .save_provider_models_cache_scoped(
@@ -326,7 +366,7 @@ mod tests {
                 Some(&provider),
                 "cached-provider",
                 "credential-a-model",
-                Some(credential_a),
+                ProviderModelCacheAccess::Credential(&runtime_credential_a),
             )
             .expect("matching credential metadata");
         let isolated = service
@@ -334,7 +374,7 @@ mod tests {
                 Some(&provider),
                 "cached-provider",
                 "credential-a-model",
-                Some("sk-cache-b"),
+                ProviderModelCacheAccess::Credential(&runtime_credential_b),
             )
             .expect("isolated credential metadata");
 
@@ -370,7 +410,12 @@ mod tests {
             .expect("save keyless cache");
 
         let metadata = service
-            .resolve_provider_model_metadata(Some(&provider), "ollama", "qwen3", None)
+            .resolve_provider_model_metadata(
+                Some(&provider),
+                "ollama",
+                "qwen3",
+                ProviderModelCacheAccess::Keyless,
+            )
             .expect("keyless metadata");
 
         assert_eq!(
@@ -406,7 +451,7 @@ mod tests {
                 Some(&provider),
                 "cached-provider",
                 "credential-model",
-                None,
+                ProviderModelCacheAccess::Unavailable,
             )
             .expect("credential metadata");
 

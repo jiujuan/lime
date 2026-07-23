@@ -62,6 +62,8 @@ export interface StreamRequestState extends AgentStreamReasoningTimelineState {
   agentUiEventSequence?: number;
   currentTurnId?: string | null;
   streamedReasoningItemId?: string | null;
+  streamedReasoningSourceItemId?: string | null;
+  streamedReasoningSummaryIndex?: number | null;
   streamedReasoningText?: string;
   streamedReasoningStartedAt?: string | null;
   streamedReasoningSequence?: number | null;

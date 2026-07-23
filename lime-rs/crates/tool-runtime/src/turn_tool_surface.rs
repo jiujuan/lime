@@ -16,7 +16,7 @@ pub const LOCAL_WORKSPACE_TOOL_NAMES: &[&str] = &[
     "Grep",
 ];
 pub const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
-    "ToolSearch",
+    "tool_search",
     "list_mcp_resources",
     "read_mcp_resource",
     "extensionmanager__search_available_extensions",
@@ -378,6 +378,7 @@ mod tests {
 
     #[test]
     fn compact_surface_exposes_codex_unified_exec_pair() {
+        assert!(runtime_turn_tool_surface_is_compact_tool("tool_search"));
         assert!(runtime_turn_tool_surface_is_compact_tool("exec_command"));
         assert!(runtime_turn_tool_surface_is_compact_tool("write_stdin"));
         assert!(!runtime_turn_tool_surface_is_compact_tool("Bash"));

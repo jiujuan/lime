@@ -144,6 +144,212 @@ describe("agentStreamRuntimeHandler storage", () => {
     });
   });
 
+  it("Codex reasoning v2 应分段显示 summary 并由 completed snapshot 单次接管", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-reasoning-v2",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-23T02:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const requestState = {
+      accumulatedContent: "",
+      currentTurnId: "turn-reasoning-v2",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems = typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        clearActiveStreamIfMatch: () => true,
+        appendThinkingToParts: (
+          parts: NonNullable<Message["contentParts"]>,
+          textDelta: string,
+        ) => [...parts, { type: "thinking" as const, text: textDelta }],
+      },
+      eventName: "agent-runtime-reasoning-v2-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-reasoning-v2",
+      activeSessionId: "session-reasoning-v2",
+      resolvedWorkspaceId: "workspace-reasoning-v2",
+      effectiveExecutionStrategy: "react" as const,
+      surfaceThinkingDeltas: false,
+      content: "验证 reasoning v2",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      getThreadItems: () => threadItems,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_summary_delta",
+        itemId: "reasoning-v2",
+        reasoningId: "reasoning-v2",
+        summaryIndex: 0,
+        text: "ha",
+        delta: "ha",
+        sequence: 2,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_summary_delta",
+        itemId: "reasoning-v2",
+        reasoningId: "reasoning-v2",
+        summaryIndex: 0,
+        text: "ha",
+        delta: "ha",
+        sequence: 3,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_summary_part_added",
+        itemId: "reasoning-v2",
+        reasoningId: "reasoning-v2",
+        summaryIndex: 1,
+        sequence: 4,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_summary_delta",
+        itemId: "reasoning-v2",
+        reasoningId: "reasoning-v2",
+        summaryIndex: 1,
+        text: "第二段",
+        delta: "第二段",
+        sequence: 5,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_content_delta",
+        itemId: "reasoning-v2",
+        reasoningId: "reasoning-v2",
+        contentIndex: 0,
+        text: "raw chain of thought",
+        delta: "raw chain of thought",
+        sequence: 6,
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.thinkingContent).toBe("haha\n\n第二段");
+    expect(messages[0]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "haha",
+        metadata: expect.objectContaining({
+          source: "streamed_reasoning_summary",
+          threadItemId: "reasoning-v2",
+          summaryIndex: 0,
+        }),
+      },
+      {
+        type: "thinking",
+        text: "第二段",
+        metadata: expect.objectContaining({
+          source: "streamed_reasoning_summary",
+          threadItemId: "reasoning-v2",
+          summaryIndex: 1,
+        }),
+      },
+    ]);
+    expect(threadItems).toEqual([
+      expect.objectContaining({
+        id: "streamed-reasoning:turn-reasoning-v2:reasoning-v2:summary:0",
+        status: "completed",
+        text: "haha",
+      }),
+      expect.objectContaining({
+        id: "streamed-reasoning:turn-reasoning-v2:reasoning-v2:summary:1",
+        status: "in_progress",
+        text: "第二段",
+      }),
+    ]);
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "item_completed",
+        item: {
+          id: "reasoning-v2",
+          thread_id: "session-reasoning-v2",
+          turn_id: "turn-reasoning-v2",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-07-23T02:00:00.000Z",
+          completed_at: "2026-07-23T02:00:01.000Z",
+          updated_at: "2026-07-23T02:00:01.000Z",
+          type: "reasoning",
+          text: "haha\n\n第二段",
+          summary: ["haha", "第二段"],
+          content: ["raw chain of thought"],
+        },
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "thinking",
+        text: "haha\n\n第二段",
+        metadata: expect.objectContaining({
+          source: "thread_item_reasoning",
+          threadItemId: "reasoning-v2",
+        }),
+      }),
+    ]);
+    expect(messages[0]?.thinkingContent).not.toContain("raw chain of thought");
+    expect(threadItems).toEqual([
+      expect.objectContaining({
+        id: "reasoning-v2",
+        status: "completed",
+        text: "haha\n\n第二段",
+      }),
+    ]);
+  });
+
   it("普通会话 item reasoning 应在 text_delta 和 turn_completed 后继续保留到消息过程", () => {
     let messages: Message[] = [
       {

@@ -198,6 +198,7 @@ where
                     &mut assistant_content,
                     &mut assistant_text_by_item,
                     &mut tool_results,
+                    &mut provider_input,
                 )?;
             }
             "message.created" | "thread.goal.continuation" => {

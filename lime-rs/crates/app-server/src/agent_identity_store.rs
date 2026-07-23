@@ -283,7 +283,7 @@ mod tests {
             updated
         );
 
-        let rebound = identity("thread", "other-root", "/other-root/worker");
+        let rebound = identity("thread", "other-root", "/root/other_worker");
         assert!(block_on(store.upsert_agent_identity(rebound))
             .expect_err("rebind")
             .to_string()

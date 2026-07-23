@@ -65,13 +65,9 @@ describe("managed-objective-guardrails-core", () => {
     ]);
   });
 
-  it(
-    "默认扫描当前仓库实现路径时不应出现禁用命名",
-    () => {
-      expect(scanManagedObjectiveForbiddenSurfaces()).toEqual([]);
-    },
-    20_000,
-  );
+  it("默认扫描当前仓库实现路径时不应出现禁用命名", () => {
+    expect(scanManagedObjectiveForbiddenSurfaces()).toEqual([]);
+  }, 20_000);
 
   it("禁用 surface 列表应覆盖路线图第 10 节约束", () => {
     expect(managedObjectiveForbiddenSurfaceTokens()).toEqual([
@@ -79,7 +75,87 @@ describe("managed-objective-guardrails-core", () => {
       "objective_scheduler",
       "objective_queue",
       "objective_evidence_pack",
+      "ManagedObjective",
+      "managed_objective",
+      "managed_objectives",
     ]);
+  });
+
+  it("应阻断 Rust storage 与 TypeScript 恢复旧 Managed Objective owner", () => {
+    const repoRoot = createTempRepo();
+    writeFile(
+      repoRoot,
+      "lime-rs/crates/core/src/database/schema.rs",
+      'const SQL: &str = "CREATE TABLE managed_objectives";\n',
+    );
+    writeFile(
+      repoRoot,
+      "src/runtime/objective.ts",
+      "export interface ManagedObjective {}\nexport const key = 'managed_objective';\n",
+    );
+
+    expect(scanManagedObjectiveForbiddenSurfaces({ repoRoot })).toEqual(
+      expect.arrayContaining([
+        {
+          relativePath: "lime-rs/crates/core/src/database/schema.rs",
+          token: "managed_objectives",
+        },
+        {
+          relativePath: "src/runtime/objective.ts",
+          token: "ManagedObjective",
+        },
+        {
+          relativePath: "src/runtime/objective.ts",
+          token: "managed_objective",
+        },
+      ]),
+    );
+  });
+
+  it("应排除测试、文档、生成物、历史 evidence 与负向守卫本身", () => {
+    const repoRoot = createTempRepo();
+    const retiredSource =
+      "ManagedObjective managed_objective managed_objectives\n";
+    writeFile(repoRoot, "src/runtime/objective.test.ts", retiredSource);
+    writeFile(repoRoot, "src/runtime/objective_tests.rs", retiredSource);
+    writeFile(
+      repoRoot,
+      "lime-rs/crates/app-server/tests/objective.rs",
+      retiredSource,
+    );
+    writeFile(repoRoot, "src/runtime/objective.md", retiredSource);
+    writeFile(
+      repoRoot,
+      "packages/app-server-client/src/generated/protocol-types.ts",
+      retiredSource,
+    );
+    writeFile(
+      repoRoot,
+      "lime-rs/crates/app-server-protocol/schema/json/v0/ManagedObjective.json",
+      retiredSource,
+    );
+    writeFile(
+      repoRoot,
+      "internal/research/refactor/evidence.md",
+      retiredSource,
+    );
+    writeFile(
+      repoRoot,
+      "scripts/check-app-server-client-contract.mjs",
+      retiredSource,
+    );
+    writeFile(
+      repoRoot,
+      "scripts/lib/managed-objective-guardrails-core.mjs",
+      retiredSource,
+    );
+
+    expect(
+      scanManagedObjectiveForbiddenSurfaces({
+        repoRoot,
+        roots: ["src", "lime-rs", "scripts", "packages", "internal"],
+      }),
+    ).toEqual([]);
   });
 
   it("应阻断模型工具面暴露 objective mutation 命令", () => {

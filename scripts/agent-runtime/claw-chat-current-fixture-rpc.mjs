@@ -765,6 +765,16 @@ export async function ensureFixtureTextProvider(
     : [];
   const fixtureModel = fetchedModels.find((model) => model?.id === modelId);
 
+  const providerRequests =
+    typeof options.readProviderRequests === "function"
+      ? options.readProviderRequests()
+      : null;
+  const authorization = providerRequests
+    ? assertFixtureTextProviderAuthorization(providerRequests, {
+        requireChatRequest: false,
+      })
+    : null;
+
   return sanitizeJson({
     providerId,
     providerName: provider?.name ?? TEXT_FIXTURE_PROVIDER_NAME,
@@ -777,6 +787,52 @@ export async function ensureFixtureTextProvider(
       fixtureModelInputModalities:
         fixtureModel?.inputModalities ?? fixtureModel?.input_modalities ?? null,
     },
+    authorization,
+  });
+}
+
+export function assertFixtureTextProviderAuthorization(
+  requests,
+  { requireChatRequest = true } = {},
+) {
+  const snapshots = Array.isArray(requests) ? requests : [];
+  const modelDiscoveryRequests = snapshots.filter(
+    (request) =>
+      request?.method === "GET" &&
+      ["/models", "/v1/models"].includes(request?.url),
+  );
+  const chatRequests = snapshots.filter(
+    (request) =>
+      request?.method === "POST" &&
+      ["/chat/completions", "/v1/chat/completions"].includes(request?.url),
+  );
+  const missingAuthorization = [...modelDiscoveryRequests, ...chatRequests]
+    .filter((request) => request?.authorization !== "present")
+    .map((request) => ({
+      method: request?.method ?? null,
+      url: request?.url ?? null,
+      authorization: request?.authorization ?? null,
+    }));
+
+  assert(
+    modelDiscoveryRequests.length > 0,
+    "fixture text provider 未观察到模型发现请求",
+  );
+  assert(
+    !requireChatRequest || chatRequests.length > 0,
+    "fixture text provider 未观察到后续 chat completion 请求",
+  );
+  assert(
+    missingAuthorization.length === 0,
+    `fixture text provider 请求缺少 Authorization: ${JSON.stringify(
+      missingAuthorization,
+    )}`,
+  );
+
+  return sanitizeJson({
+    modelDiscoveryRequestCount: modelDiscoveryRequests.length,
+    chatRequestCount: chatRequests.length,
+    allObservedRequestsAuthorized: true,
   });
 }
 

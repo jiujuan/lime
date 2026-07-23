@@ -40,6 +40,61 @@ fn canonical_thread_projects_to_v2_shape_and_seconds() {
 }
 
 #[test]
+fn canonical_user_message_projects_ordered_parts_without_flattening() {
+    let mut thread = canonical_thread(false);
+    let content = vec![
+        canonical::AgentInput::Text {
+            text: "inspect".to_string(),
+            text_elements: vec![canonical::TextElement::new(0..7, None)],
+        },
+        canonical::AgentInput::Image {
+            uri: "https://example.com/remote.png".to_string(),
+            detail: Some(canonical::ImageDetail::High),
+        },
+        canonical::AgentInput::LocalImage {
+            path: "/tmp/local.png".to_string(),
+            detail: Some(canonical::ImageDetail::Original),
+        },
+        canonical::AgentInput::Skill {
+            name: "review".to_string(),
+            path: "/skills/review/SKILL.md".to_string(),
+        },
+        canonical::AgentInput::Mention {
+            name: "docs".to_string(),
+            path: "app://docs".to_string(),
+        },
+    ];
+    thread.turns[0].items[0].payload = canonical::ThreadItemPayload::UserMessage {
+        content,
+        client_id: Some("client-1".to_string()),
+    };
+
+    let projected = project_thread(thread).expect("project multimodal user message");
+    let v2::ThreadItem::UserMessage {
+        client_id, content, ..
+    } = &projected.turns[0].items[0]
+    else {
+        panic!("user message item");
+    };
+    assert_eq!(client_id.as_deref(), Some("client-1"));
+    assert!(matches!(
+        &content[..],
+        [
+            v2::UserInput::Text { text, text_elements },
+            v2::UserInput::Image { url, detail: Some(canonical::ImageDetail::High) },
+            v2::UserInput::LocalImage { path, detail: Some(canonical::ImageDetail::Original) },
+            v2::UserInput::Skill { name, .. },
+            v2::UserInput::Mention { path: mention_path, .. },
+        ] if text == "inspect"
+            && text_elements.len() == 1
+            && url == "https://example.com/remote.png"
+            && path == "/tmp/local.png"
+            && name == "review"
+            && mention_path == "app://docs"
+    ));
+}
+
+#[test]
 fn user_shell_command_metadata_projects_to_the_v2_item() {
     let mut thread = canonical_thread(false);
     thread.turns[0].items[0] = canonical::ThreadItem {
@@ -274,7 +329,7 @@ fn canonical_thread(archived: bool) -> canonical::Thread {
                 kind: canonical::ItemKind::UserMessage,
                 status: canonical::ItemStatus::Completed,
                 payload: canonical::ThreadItemPayload::UserMessage {
-                    content: "hello".to_string(),
+                    content: vec![canonical::AgentInput::text("hello")],
                     client_id: Some("client-1".to_string()),
                 },
                 metadata: json!({}),

@@ -29,6 +29,9 @@ pub const METHOD_TURN_COMPLETED: &str = "turn/completed";
 pub const METHOD_ITEM_STARTED: &str = "item/started";
 pub const METHOD_ITEM_COMPLETED: &str = "item/completed";
 pub const METHOD_AGENT_MESSAGE_DELTA: &str = "item/agentMessage/delta";
+pub const METHOD_REASONING_SUMMARY_TEXT_DELTA: &str = "item/reasoning/summaryTextDelta";
+pub const METHOD_REASONING_SUMMARY_PART_ADDED: &str = "item/reasoning/summaryPartAdded";
+pub const METHOD_REASONING_TEXT_DELTA: &str = "item/reasoning/textDelta";
 pub const METHOD_THREAD_SETTINGS_UPDATED: &str = "thread/settings/updated";
 pub const METHOD_THREAD_TOKEN_USAGE_UPDATED: &str = "thread/tokenUsage/updated";
 pub const METHOD_THREAD_GOAL_UPDATED: &str = "thread/goal/updated";
@@ -166,6 +169,9 @@ pub const NOTIFICATION_METHODS: &[&str] = &[
     METHOD_ITEM_STARTED,
     METHOD_ITEM_COMPLETED,
     METHOD_AGENT_MESSAGE_DELTA,
+    METHOD_REASONING_SUMMARY_TEXT_DELTA,
+    METHOD_REASONING_SUMMARY_PART_ADDED,
+    METHOD_REASONING_TEXT_DELTA,
     METHOD_THREAD_SETTINGS_UPDATED,
     METHOD_THREAD_TOKEN_USAGE_UPDATED,
     METHOD_THREAD_GOAL_UPDATED,

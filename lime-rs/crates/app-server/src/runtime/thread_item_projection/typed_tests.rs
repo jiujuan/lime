@@ -1,8 +1,8 @@
 use super::materializer::materialize_events;
 use agent_protocol::{
-    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChange,
-    FileChangeKind, ItemKind, ItemStatus, PlanStepStatus, ThreadItemPayload, TurnApprovalState,
-    TurnQueueState, TurnStatus,
+    AgentInput, ApprovalAction, ApprovalDecision, ApprovalScope, ByteRange, CollabAgentOperation,
+    FileChange, FileChangeKind, ImageDetail, ItemKind, ItemStatus, PlanStepStatus, TextElement,
+    ThreadItemPayload, TurnApprovalState, TurnQueueState, TurnStatus,
 };
 use app_server_protocol::AgentEvent;
 use serde_json::json;
@@ -194,7 +194,7 @@ fn user_and_agent_messages_have_explicit_terminal_item_lifecycle() {
                 1,
                 "message.created",
                 "turn-1",
-                json!({"role": "user", "input": {"text": "hello"}}),
+                json!({"role": "user", "input": [AgentInput::text("hello")]}),
             ),
             event(
                 "agent-delta",
@@ -538,6 +538,108 @@ fn maps_core_families_to_typed_payloads() {
         .changed_items
         .iter()
         .any(|item| matches!(item.payload, ThreadItemPayload::ContextCompaction { .. })));
+}
+
+#[test]
+fn user_message_materialization_preserves_ordered_input_parts() {
+    let input = vec![
+        AgentInput::Text {
+            text: "inspect this".to_string(),
+            text_elements: vec![TextElement::new(
+                ByteRange { start: 0, end: 7 },
+                Some("inspect".to_string()),
+            )],
+        },
+        AgentInput::Image {
+            uri: "https://example.com/remote.png".to_string(),
+            detail: Some(ImageDetail::High),
+        },
+        AgentInput::LocalImage {
+            path: "/tmp/local.png".to_string(),
+            detail: Some(ImageDetail::Original),
+        },
+        AgentInput::Skill {
+            name: "review".to_string(),
+            path: "/skills/review/SKILL.md".to_string(),
+        },
+        AgentInput::Mention {
+            name: "docs".to_string(),
+            path: "app://docs".to_string(),
+        },
+    ];
+    let changes = materialize_events(
+        &[event(
+            "multimodal-user",
+            1,
+            "message.created",
+            "turn-1",
+            json!({"input": input, "clientId": "client-1"}),
+        )],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize multimodal user message");
+
+    assert_eq!(
+        changes.changed_items[0].payload,
+        ThreadItemPayload::UserMessage {
+            content: input,
+            client_id: Some("client-1".to_string()),
+        }
+    );
+}
+
+#[test]
+fn invalid_structured_user_input_does_not_create_a_canonical_item() {
+    let changes = materialize_events(
+        &[event(
+            "invalid-user",
+            1,
+            "message.created",
+            "turn-1",
+            json!({"input": [{"type": "image", "uri": ""}]}),
+        )],
+        "session-1",
+        "thread-1",
+    )
+    .expect("invalid input event remains readable");
+
+    assert!(changes.changed_items.is_empty());
+}
+
+#[test]
+fn user_message_snapshot_does_not_restore_empty_content_from_a_previous_item() {
+    let previous = materialize_events(
+        &[event(
+            "user-created",
+            1,
+            "message.created",
+            "turn-1",
+            json!({"input": [AgentInput::text("first")], "clientId": "client-1"}),
+        )],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize user message")
+    .changed_items
+    .into_iter()
+    .next()
+    .expect("canonical user item");
+    let mut next = previous.clone();
+    next.sequence = 2;
+    next.payload = ThreadItemPayload::UserMessage {
+        content: Vec::new(),
+        client_id: None,
+    };
+
+    let merged = super::change_set::merge_item_snapshot(previous, next);
+    assert_eq!(
+        merged.payload,
+        ThreadItemPayload::UserMessage {
+            content: Vec::new(),
+            client_id: Some("client-1".to_string()),
+        }
+    );
 }
 
 #[test]
@@ -914,7 +1016,7 @@ fn request_id_does_not_collapse_user_agent_and_reasoning_items() {
                 json!({
                     "request_id": "request-1",
                     "role": "user",
-                    "input": {"text": "hello"}
+                    "input": [AgentInput::text("hello")]
                 }),
             ),
             event(

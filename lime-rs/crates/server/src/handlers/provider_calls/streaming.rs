@@ -79,7 +79,7 @@ impl OpenAiStreamEncoder {
             CanonicalLlmEvent::TextDelta { text, .. } if !text.is_empty() => vec![self.frame(
                 json!({"choices": [{"index": 0, "delta": {"content": text}, "finish_reason": null}]}),
             )],
-            CanonicalLlmEvent::ReasoningDelta { text, .. } if !text.is_empty() => vec![self.frame(
+            CanonicalLlmEvent::ReasoningContentDelta { text, .. } if !text.is_empty() => vec![self.frame(
                 json!({"choices": [{"index": 0, "delta": {"reasoning_content": text}, "finish_reason": null}]}),
             )],
             CanonicalLlmEvent::ToolInputStart { id, name } => {
@@ -134,6 +134,8 @@ impl OpenAiStreamEncoder {
             CanonicalLlmEvent::TextStart { .. }
             | CanonicalLlmEvent::TextEnd { .. }
             | CanonicalLlmEvent::ReasoningStart { .. }
+            | CanonicalLlmEvent::ReasoningSummaryDelta { .. }
+            | CanonicalLlmEvent::ReasoningSummaryPartAdded { .. }
             | CanonicalLlmEvent::ReasoningEnd { .. }
             | CanonicalLlmEvent::ToolInputEnd { .. }
             | CanonicalLlmEvent::ToolResult { .. }
@@ -141,7 +143,7 @@ impl OpenAiStreamEncoder {
             | CanonicalLlmEvent::StepStart { .. }
             | CanonicalLlmEvent::ToolCall { .. }
             | CanonicalLlmEvent::TextDelta { .. }
-            | CanonicalLlmEvent::ReasoningDelta { .. }
+            | CanonicalLlmEvent::ReasoningContentDelta { .. }
             | CanonicalLlmEvent::ProviderError { .. } => Vec::new(),
         }
     }
@@ -245,7 +247,7 @@ impl AnthropicStreamEncoder {
                 frames
             }
             CanonicalLlmEvent::ReasoningStart { id } => self.ensure_block(id, "thinking", None),
-            CanonicalLlmEvent::ReasoningDelta { id, text } if !text.is_empty() => {
+            CanonicalLlmEvent::ReasoningContentDelta { id, text, .. } if !text.is_empty() => {
                 let mut frames = self.ensure_block(id, "thinking", None);
                 let index = self.block_index(id).expect("thinking block inserted");
                 frames.push(Self::frame(
@@ -308,7 +310,9 @@ impl AnthropicStreamEncoder {
             | CanonicalLlmEvent::ToolError { .. }
             | CanonicalLlmEvent::StepStart { .. }
             | CanonicalLlmEvent::TextDelta { .. }
-            | CanonicalLlmEvent::ReasoningDelta { .. }
+            | CanonicalLlmEvent::ReasoningSummaryDelta { .. }
+            | CanonicalLlmEvent::ReasoningSummaryPartAdded { .. }
+            | CanonicalLlmEvent::ReasoningContentDelta { .. }
             | CanonicalLlmEvent::ProviderError { .. } => Vec::new(),
         }
     }

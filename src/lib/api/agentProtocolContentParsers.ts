@@ -183,6 +183,66 @@ export function parseAgentContentEvent(
           normalizeRecord(source.metadata),
       };
     }
+    case "reasoning_summary_delta": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      const identity = readReasoningItemIdentity(source);
+      const summaryIndex = readReasoningPartIndex(
+        source,
+        "summaryIndex",
+        "summary_index",
+      );
+      const delta = readReasoningDelta(source);
+      if (!identity || summaryIndex === null || delta === null) {
+        return null;
+      }
+      return {
+        type: "reasoning_summary_delta",
+        ...identity,
+        summaryIndex,
+        text: delta,
+        delta,
+      };
+    }
+    case "reasoning_summary_part_added": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      const identity = readReasoningItemIdentity(source);
+      const summaryIndex = readReasoningPartIndex(
+        source,
+        "summaryIndex",
+        "summary_index",
+      );
+      if (!identity || summaryIndex === null) {
+        return null;
+      }
+      return {
+        type: "reasoning_summary_part_added",
+        ...identity,
+        summaryIndex,
+      };
+    }
+    case "reasoning_content_delta": {
+      const payload = normalizeRecord(event.payload);
+      const source = payload ?? event;
+      const identity = readReasoningItemIdentity(source);
+      const contentIndex = readReasoningPartIndex(
+        source,
+        "contentIndex",
+        "content_index",
+      );
+      const delta = readReasoningDelta(source);
+      if (!identity || contentIndex === null || delta === null) {
+        return null;
+      }
+      return {
+        type: "reasoning_content_delta",
+        ...identity,
+        contentIndex,
+        text: delta,
+        delta,
+      };
+    }
     case "reasoning_final":
     case "reasoning.final": {
       const payload = normalizeRecord(event.payload);
@@ -256,4 +316,81 @@ export function parseAgentContentEvent(
     default:
       return null;
   }
+}
+
+function readReasoningItemIdentity(
+  source: Record<string, unknown>,
+): { itemId: string; reasoningId: string } | null {
+  const itemId = readConsistentReasoningIdentityAlias(
+    source,
+    "itemId",
+    "item_id",
+  );
+  const reasoningId = readConsistentReasoningIdentityAlias(
+    source,
+    "reasoningId",
+    "reasoning_id",
+  );
+  if (
+    !itemId ||
+    reasoningId === null ||
+    (reasoningId && reasoningId !== itemId)
+  ) {
+    return null;
+  }
+  return { itemId, reasoningId: itemId };
+}
+
+function readConsistentReasoningIdentityAlias(
+  source: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+): string | null | undefined {
+  const camelValue = source[camelKey];
+  const snakeValue = source[snakeKey];
+  if (
+    (camelValue !== undefined && typeof camelValue !== "string") ||
+    (snakeValue !== undefined && typeof snakeValue !== "string")
+  ) {
+    return null;
+  }
+  const camelText = typeof camelValue === "string" ? camelValue.trim() : "";
+  const snakeText = typeof snakeValue === "string" ? snakeValue.trim() : "";
+  if (camelText && snakeText && camelText !== snakeText) {
+    return null;
+  }
+  return camelText || snakeText || undefined;
+}
+
+function readReasoningPartIndex(
+  source: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+): number | null {
+  const camelValue = source[camelKey];
+  const snakeValue = source[snakeKey];
+  if (
+    (camelValue !== undefined && !isReasoningPartIndex(camelValue)) ||
+    (snakeValue !== undefined && !isReasoningPartIndex(snakeValue)) ||
+    (camelValue !== undefined &&
+      snakeValue !== undefined &&
+      camelValue !== snakeValue)
+  ) {
+    return null;
+  }
+  const value = camelValue ?? snakeValue;
+  return isReasoningPartIndex(value) ? value : null;
+}
+
+function isReasoningPartIndex(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0
+  );
+}
+
+function readReasoningDelta(source: Record<string, unknown>): string | null {
+  return typeof source.delta === "string" ? source.delta : null;
 }

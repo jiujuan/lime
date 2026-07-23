@@ -21,7 +21,8 @@ impl MediaAppDataSource for LocalAppDataSource {
             &self.model_registry_service,
             &params,
         )
-        .await;
+        .await
+        .map_err(data_error)?;
         let response = media_tasks::create_image_media_task_artifact(params, route_assessment)
             .map_err(data_error)?;
         let _ = crate::media_task_worker::spawn_image_task_worker_for_created_task(
@@ -49,7 +50,8 @@ impl MediaAppDataSource for LocalAppDataSource {
             &self.model_registry_service,
             &params,
         )
-        .await;
+        .await
+        .map_err(data_error)?;
         media_tasks::create_video_media_task_artifact(params, route_assessment).map_err(data_error)
     }
 

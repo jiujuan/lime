@@ -192,6 +192,28 @@ function resolveTurnIdentity({
   };
 }
 
+export function readTraceTurnStartInputText(input) {
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    if (typeof input.text === "string") {
+      return input.text;
+    }
+    if (typeof input.content === "string") {
+      return input.content;
+    }
+  }
+
+  if (!Array.isArray(input)) {
+    return null;
+  }
+
+  const text = input
+    .filter((part) => part && typeof part === "object")
+    .map((part) => (typeof part.text === "string" ? part.text : ""))
+    .filter(Boolean)
+    .join("\n");
+  return text || null;
+}
+
 export function buildAssertionContext({
   backendLedger,
   traceMessages,
@@ -214,7 +236,7 @@ export function buildAssertionContext({
           status: entry.status ?? null,
           sessionId: message.params?.sessionId ?? message.params?.session_id,
           turnId: message.params?.turnId ?? message.params?.turn_id,
-          inputText: message.params?.input?.text ?? null,
+          inputText: readTraceTurnStartInputText(message.params?.input),
         })),
     );
   const appServerRequestMethods = Array.from(
@@ -462,8 +484,7 @@ export function buildAssertionContext({
     options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO ||
     isContentFactoryInlineImageArticleWorkspaceScenario;
   const isAnyExpertSkillsRuntimeScenario =
-    isExpertPlazaSkillsRuntimeScenario ||
-    isExpertPanelSkillsRuntimeScenario;
+    isExpertPlazaSkillsRuntimeScenario || isExpertPanelSkillsRuntimeScenario;
   const expertRuntimeTurnStartForAssertions = isExpertPanelSkillsRuntimeScenario
     ? expertPanelSkillsRuntimeTurnStart
     : expertSkillsRuntimeTurnStart;
@@ -694,7 +715,6 @@ export function buildAssertionContext({
     expertRuntimeTurnStartForAssertions,
     runtimeRequest,
     hasCancelPhase,
-    goalHarness,
     goalObjectiveText,
     imageCommandHarness,
     manualEnableRuntimeMetadata,

@@ -63,9 +63,19 @@ pub enum RuntimeReplyResponseEvent {
         accumulated_arguments: Option<String>,
         provider: Option<String>,
     },
-    ReasoningDelta {
+    ReasoningSummaryDelta {
         item_id: String,
         delta: String,
+        summary_index: i64,
+    },
+    ReasoningSummaryPartAdded {
+        item_id: String,
+        summary_index: i64,
+    },
+    ReasoningContentDelta {
+        item_id: String,
+        delta: String,
+        content_index: i64,
     },
     Completed {
         response_id: Option<String>,

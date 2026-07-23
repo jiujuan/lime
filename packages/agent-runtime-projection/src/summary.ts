@@ -100,12 +100,8 @@ export const AGENT_UI_ARTIFACT_EVENT_TYPES = new Set<AgentUiEventClass>([
   "artifact.created",
   "artifact.updated",
   "artifact.preview.ready",
-  "artifact.version.created",
   "artifact.diff.ready",
-  "artifact.export.started",
-  "artifact.export.completed",
   "artifact.failed",
-  "artifact.deleted",
   "artifact.changed",
 ]);
 

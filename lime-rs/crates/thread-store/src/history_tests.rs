@@ -1,7 +1,8 @@
 use super::*;
 use agent_protocol::{
-    ItemKind, ItemStatus, MessageContentPart, MessageContentReference, ThreadItemPayload,
-    TurnAdmissionState, TurnApprovalState, TurnItemsView, TurnQueueState, TurnStatus,
+    AgentInput, ImageDetail, ItemKind, ItemStatus, MessageContentPart, MessageContentReference,
+    ThreadItemPayload, TurnAdmissionState, TurnApprovalState, TurnItemsView, TurnQueueState,
+    TurnStatus,
 };
 
 fn item(sequence: u64, ordinal: u64, id: &str, text: &str) -> ThreadItem {
@@ -187,6 +188,38 @@ fn safe_media_retry_and_snapshot_rebuild_are_stable() {
             .snapshot(),
         rebuilt_snapshot
     );
+}
+
+#[test]
+fn multimodal_user_message_snapshot_rebuild_is_exact() {
+    let mut builder = ThreadHistoryBuilder::new();
+    builder
+        .append_turns_at(1, vec![turn("turn-1", TurnStatus::Completed)])
+        .expect("canonical turn");
+    let mut user = item(2, 1, "item-user", "unused");
+    user.kind = ItemKind::UserMessage;
+    user.status = ItemStatus::Completed;
+    user.payload = ThreadItemPayload::UserMessage {
+        content: vec![
+            AgentInput::text("inspect"),
+            AgentInput::Image {
+                uri: "https://example.com/remote.png".to_string(),
+                detail: Some(ImageDetail::High),
+            },
+            AgentInput::LocalImage {
+                path: "/tmp/local.png".to_string(),
+                detail: Some(ImageDetail::Original),
+            },
+        ],
+        client_id: Some("client-1".to_string()),
+    };
+    builder
+        .append_items_at(2, vec![user.clone()])
+        .expect("multimodal user item");
+
+    let snapshot = builder.snapshot();
+    let rebuilt = ThreadHistoryBuilder::from_snapshot(snapshot).expect("rebuild canonical history");
+    assert_eq!(rebuilt.raw_items(), &[user]);
 }
 
 #[test]

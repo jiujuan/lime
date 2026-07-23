@@ -104,42 +104,6 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
       params: "required",
     },
     {
-      name: "readAgentSessionObjective",
-      method: protocol.METHOD_AGENT_SESSION_OBJECTIVE_READ,
-      kind: "request",
-      params: "required",
-    },
-    {
-      name: "setAgentSessionObjective",
-      method: protocol.METHOD_AGENT_SESSION_OBJECTIVE_SET,
-      kind: "request",
-      params: "required",
-    },
-    {
-      name: "updateAgentSessionObjectiveStatus",
-      method: protocol.METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
-      kind: "request",
-      params: "required",
-    },
-    {
-      name: "clearAgentSessionObjective",
-      method: protocol.METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
-      kind: "request",
-      params: "required",
-    },
-    {
-      name: "continueAgentSessionObjective",
-      method: protocol.METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
-      kind: "request",
-      params: "required",
-    },
-    {
-      name: "auditAgentSessionObjective",
-      method: protocol.METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
-      kind: "request",
-      params: "required",
-    },
-    {
       name: "appendAgentSessionRuntimeEvents",
       method: protocol.METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
       kind: "request",
@@ -1678,24 +1642,6 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
     {
       name: "deleteModelProviderKey",
       method: protocol.METHOD_MODEL_PROVIDER_KEY_DELETE,
-      kind: "request",
-      params: "required",
-    },
-    {
-      name: "readNextModelProviderKey",
-      method: protocol.METHOD_MODEL_PROVIDER_KEY_NEXT,
-      kind: "request",
-      params: "required",
-    },
-    {
-      name: "recordModelProviderKeyUsage",
-      method: protocol.METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
-      kind: "request",
-      params: "required",
-    },
-    {
-      name: "recordModelProviderKeyError",
-      method: protocol.METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
       kind: "request",
       params: "required",
     },

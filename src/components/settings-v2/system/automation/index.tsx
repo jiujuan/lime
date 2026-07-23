@@ -44,11 +44,6 @@ import {
   updateAutomationJob,
   updateAutomationSchedulerConfig,
 } from "@/lib/api/automation";
-import { auditAgentRuntimeObjective } from "@/lib/api/agentRuntime/objectiveClient";
-import {
-  openPathWithDefaultApp,
-  revealPathInFinder,
-} from "@/lib/api/fileSystem";
 import type { Project } from "@/lib/api/project";
 import { listProjects } from "@/lib/api/project";
 import type { AgentRun } from "@/lib/api/executionRun";
@@ -56,10 +51,6 @@ import { LatestRunStatusBadge } from "@/components/execution/LatestRunStatusBadg
 import { AutomationHealthPanel } from "./AutomationHealthPanel";
 import { AutomationJobDetailsDialog } from "./AutomationJobDetailsDialog";
 import { AutomationJobFocusStrip } from "./AutomationJobFocusStrip";
-import {
-  AutomationManagedObjectiveSummary,
-  type AutomationManagedObjectiveSummaryCopy,
-} from "./AutomationManagedObjectiveSummary";
 import { AutomationOverviewFocusCard } from "./AutomationOverviewFocusCard";
 import {
   AutomationJobDialog,
@@ -93,11 +84,6 @@ import {
 } from "./automationPresentation";
 import type { AutomationAccessModeCopy } from "./automationAccessMode";
 import { resolveLegacySceneAppAutomationContext } from "./legacySceneAppContext";
-import {
-  buildAutomationObjectiveAuditRequest,
-  resolveLatestAutomationObjectiveAuditSessionId,
-} from "./managedObjectiveAutomationEvidence";
-import { resolveManagedObjectiveAutomationProjection } from "./managedObjectiveAutomationProjection";
 import type { AutomationWorkspaceTab } from "@/types/page";
 
 const AUTOMATION_CORE_LOAD_TIMEOUT_MS = 8000;
@@ -437,7 +423,6 @@ export function AutomationSettings({
 }: AutomationSettingsProps) {
   const { i18n, t: rawT } = useTranslation("settings");
   const t = rawT as SettingsTranslate;
-  const translateGlobal = i18n.t as SettingsTranslate;
   const serviceSkillContextCopy = useMemo(
     () => buildAutomationServiceSkillContextCopy(t),
     [t],
@@ -453,26 +438,6 @@ export function AutomationSettings({
   const serviceSkillExecutionCompatLabel = t(
     "settings.automation.tasks.list.badge.serviceSkillLegacyCompat",
   );
-  const managedObjectiveSummaryCopy =
-    useMemo<AutomationManagedObjectiveSummaryCopy>(
-      () => ({
-        badge: t("settings.automation.tasks.list.managedObjective.badge"),
-        auditArtifactOrEvidenceRequired: t(
-          "settings.automation.tasks.list.managedObjective.auditArtifactOrEvidenceRequired",
-        ),
-        criteriaCount: (count) =>
-          t("settings.automation.tasks.list.managedObjective.criteriaCount", {
-            count,
-          }),
-        statusLabel: (status) =>
-          String(
-            translateGlobal(`agentChat.managedObjective.status.${status}`, {
-              ns: "agent",
-            }),
-          ),
-      }),
-      [t, translateGlobal],
-    );
   const workspaceTemplates = useMemo(() => createWorkspaceTemplates(t), [t]);
   const workspaceOnly = mode === "workspace";
   const settingsOnly = mode === "settings";
@@ -492,9 +457,6 @@ export function AutomationSettings({
   const [schedulerSaving, setSchedulerSaving] = useState(false);
   const [jobSaving, setJobSaving] = useState(false);
   const [runningJobId, setRunningJobId] = useState<string | null>(null);
-  const [auditingObjectiveJobId, setAuditingObjectiveJobId] = useState<
-    string | null
-  >(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
   const [dialogInitialValues, setDialogInitialValues] =
@@ -1097,63 +1059,6 @@ export function AutomationSettings({
     }
   }
 
-  async function handleAuditManagedObjective(job: AutomationJobRecord) {
-    const sessionId = resolveLatestAutomationObjectiveAuditSessionId(
-      job.id,
-      jobRuns,
-    );
-    if (!sessionId) {
-      toast.error(
-        t("settings.automation.details.managedObjective.auditUnavailable"),
-      );
-      return;
-    }
-
-    setAuditingObjectiveJobId(job.id);
-    try {
-      await auditAgentRuntimeObjective(
-        buildAutomationObjectiveAuditRequest(job, sessionId),
-      );
-      toast.success(
-        t("settings.automation.details.managedObjective.toast.auditCompleted"),
-      );
-      await refreshAll(true);
-      await refreshHistory(job.id);
-    } catch (error) {
-      toast.error(
-        t("settings.automation.details.managedObjective.toast.auditFailed", {
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    } finally {
-      setAuditingObjectiveJobId(null);
-    }
-  }
-
-  async function handleOpenManagedObjectiveReference(path: string) {
-    try {
-      await openPathWithDefaultApp(path);
-    } catch (error) {
-      toast.error(
-        t("settings.automation.details.managedObjective.toast.openFailed", {
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    }
-  }
-
-  async function handleRevealManagedObjectiveReference(path: string) {
-    try {
-      await revealPathInFinder(path);
-    } catch (error) {
-      toast.error(
-        t("settings.automation.details.managedObjective.toast.revealFailed", {
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    }
-  }
-
   function openCreateDialog(
     initialValues?: AutomationJobDialogInitialValues | null,
   ) {
@@ -1652,8 +1557,6 @@ export function AutomationSettings({
                             isLegacyBrowserAutomation(job);
                           const isOverviewFocusRow =
                             overviewFocusJob?.id === job.id;
-                          const managedObjectiveProjection =
-                            resolveManagedObjectiveAutomationProjection(job);
                           return (
                             <TableRow
                               key={job.id}
@@ -1725,13 +1628,6 @@ export function AutomationSettings({
                                         </div>
                                       ) : null}
                                     </div>
-                                  ) : null}
-                                  {managedObjectiveProjection ? (
-                                    <AutomationManagedObjectiveSummary
-                                      jobId={job.id}
-                                      projection={managedObjectiveProjection}
-                                      copy={managedObjectiveSummaryCopy}
-                                    />
                                   ) : null}
                                   {isOverviewFocusRow ? (
                                     <AutomationJobFocusStrip
@@ -2038,24 +1934,11 @@ export function AutomationSettings({
             ? (workspaceNameMap.get(selectedJob.workspace_id) ?? null)
             : null
         }
-        workspaceRoot={
-          selectedJob
-            ? (workspaceRootMap.get(selectedJob.workspace_id) ?? null)
-            : null
-        }
         serviceSkillContext={selectedServiceSkillContext}
         jobRuns={jobRuns}
         historyLoading={historyLoading}
         retiredSceneAppMessage={selectedRetiredSceneAppMessage}
-        managedObjectiveAuditing={
-          selectedJob ? auditingObjectiveJobId === selectedJob.id : false
-        }
         onRefreshHistory={refreshHistory}
-        onAuditManagedObjective={handleAuditManagedObjective}
-        onOpenManagedObjectiveReference={handleOpenManagedObjectiveReference}
-        onRevealManagedObjectiveReference={
-          handleRevealManagedObjectiveReference
-        }
       />
     </div>
   );

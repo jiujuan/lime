@@ -5,6 +5,7 @@ const REQUIRED_METHODS = [
   "thread/read",
   "thread/list",
   "thread/turns/list",
+  "thread/items/list",
   "thread/resume",
 ];
 const FORBIDDEN_METHODS = ["thread/start", "turn/start"];
@@ -89,6 +90,98 @@ function expectedCanonicalItemIds() {
     canonicalItemId(turn.reasoningItemId),
     canonicalItemId(turn.assistantItemId),
   ]);
+}
+
+function expectedUserInputContent(turn) {
+  return turn.userInputs.map((part) => {
+    switch (part.type) {
+      case "text":
+        return { type: "text", text: part.text };
+      case "image":
+        return { type: "image", uri: part.uri, detail: part.detail ?? null };
+      case "local_image":
+        return {
+          type: "localImage",
+          path: part.path,
+          detail: part.detail ?? null,
+        };
+      default:
+        return {
+          type: part.type,
+          name: part.name,
+          path: part.path,
+        };
+    }
+  });
+}
+
+function normalizedUserInputContent(item) {
+  return (Array.isArray(item?.content) ? item.content : []).map((part) => {
+    const type = part?.type;
+    if (type === "text") {
+      return { type, text: part.text };
+    }
+    if (type === "image") {
+      return {
+        type,
+        uri: part.url,
+        detail: part.detail ?? null,
+      };
+    }
+    if (type === "localImage") {
+      return {
+        type: "localImage",
+        path: part.path,
+        detail: part.detail ?? null,
+      };
+    }
+    return { type, name: part.name, path: part.path };
+  });
+}
+
+function userMessageItems(items) {
+  return (Array.isArray(items) ? items : []).filter(
+    (item) => item?.type === "userMessage",
+  );
+}
+
+function expectedImageUris(turns = THREAD_READ_PAGE_ISOMORPHIC.turns) {
+  return turns.flatMap((turn) =>
+    turn.userInputs
+      .filter((part) => part.type === "image" || part.type === "local_image")
+      .map((part) => part.uri ?? part.path),
+  );
+}
+
+function assertOrderedUserInputContent(
+  items,
+  label,
+  expectedTurns = THREAD_READ_PAGE_ISOMORPHIC.turns,
+) {
+  const messages = userMessageItems(items);
+  assert(
+    messages.length === expectedTurns.length,
+    `${label} userMessage 数量不正确: ${messages.length}`,
+  );
+  assertEqualArray(
+    messages.map(normalizedUserInputContent),
+    expectedTurns.map(expectedUserInputContent),
+    `${label} ordered user content`,
+  );
+  const imageUris = messages.flatMap((item) =>
+    normalizedUserInputContent(item)
+      .filter((part) => part.type === "image" || part.type === "localImage")
+      .map((part) => part.uri ?? part.path),
+  );
+  assertEqualArray(
+    imageUris,
+    expectedImageUris(expectedTurns),
+    `${label} image attachment order`,
+  );
+  assert(
+    new Set(imageUris).size === imageUris.length,
+    `${label} image attachments 不得重复: ${JSON.stringify(imageUris)}`,
+  );
 }
 
 function assertReasoningItems(items, label) {
@@ -247,6 +340,11 @@ export async function runThreadReadPageIsomorphicReadPhase(page, command) {
         sortDirection: "desc",
         itemsView: "full",
       });
+      const itemsPage = await call("thread/items/list", {
+        threadId: fixture.threadId,
+        limit: fixture.turns.length * 3,
+        sortDirection: "asc",
+      });
       const list = await call("thread/list", {
         archived: false,
         limit: 20,
@@ -266,6 +364,7 @@ export async function runThreadReadPageIsomorphicReadPhase(page, command) {
         newestPage,
         middlePage,
         oldestPage,
+        itemsPage,
         list,
         resume,
         requests,
@@ -294,6 +393,10 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
   const resumeTurns = result?.resume?.initialTurnsPage?.data;
   const resumeTurnIds = turnIds(resumeTurns);
   const resumeItems = turnItems(resumeTurns);
+  const itemsPageEntries = result?.itemsPage?.data ?? [];
+  const itemsPageItems = itemsPageEntries
+    .map((entry) => entry?.item)
+    .filter((item) => item && typeof item === "object");
   const listedThread = (result?.list?.data ?? []).find(
     (thread) => thread?.id === THREAD_READ_PAGE_ISOMORPHIC.threadId,
   );
@@ -339,6 +442,26 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
     expectedItemIds,
     "thread/resume initialTurnsPage items order",
   );
+  assertEqualArray(
+    itemIds(itemsPageItems),
+    expectedItemIds,
+    "thread/items/list items order",
+  );
+  assertEqualArray(
+    itemsPageEntries.map((entry) => entry?.turnId ?? null),
+    THREAD_READ_PAGE_ISOMORPHIC.turns.flatMap((turn) => [
+      turn.turnId,
+      turn.turnId,
+      turn.turnId,
+    ]),
+    "thread/items/list turn order",
+  );
+  assertOrderedUserInputContent(fullItems, "thread.turns items");
+  assertOrderedUserInputContent(
+    resumeItems,
+    "thread/resume initialTurnsPage items",
+  );
+  assertOrderedUserInputContent(itemsPageItems, "thread/items/list items");
   assertReasoningItems(fullItems, "thread.turns items");
   assertReasoningItems(resumeItems, "thread/resume initialTurnsPage items");
   assert(
@@ -397,6 +520,21 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
     oldestTexts,
     "oldest page",
   );
+  assertOrderedUserInputContent(
+    turnItems(result?.newestPage?.data),
+    "newest page",
+    [THREAD_READ_PAGE_ISOMORPHIC.turns[2]],
+  );
+  assertOrderedUserInputContent(
+    turnItems(result?.middlePage?.data),
+    "middle page",
+    [THREAD_READ_PAGE_ISOMORPHIC.turns[1]],
+  );
+  assertOrderedUserInputContent(
+    turnItems(result?.oldestPage?.data),
+    "oldest page",
+    [THREAD_READ_PAGE_ISOMORPHIC.turns[0]],
+  );
 
   return {
     requestMethods,
@@ -406,6 +544,8 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
     fullTurnIds,
     resumeTurnIds,
     fullItemIds,
+    itemsPageItemIds: itemIds(itemsPageItems),
+    imageAttachmentCount: expectedImageUris().length,
     resumeMetadataOnly: result?.resume?.thread?.turns?.length === 0,
     pageCursors: [
       result?.newestPage?.nextCursor ?? null,
@@ -640,6 +780,9 @@ async function waitForThreadReadDomSnapshot(page, options) {
       const testIds = Array.from(document.querySelectorAll("[data-testid]"))
         .map((element) => element.getAttribute("data-testid") || "")
         .filter(Boolean);
+      const imageAttachmentTestIds = testIds.filter((testId) =>
+        /^message-image-attachment-(?:unavailable-)?\d+$/.test(testId),
+      );
       return {
         messageListReady: Boolean(
           document.querySelector('[data-testid="message-list-frame"]'),
@@ -657,6 +800,11 @@ async function waitForThreadReadDomSnapshot(page, options) {
           bodyText.includes("正在启动") ||
           bodyText.includes("初始化"),
         toolRows: testIds.filter((testId) => testId === "tool-call-row").length,
+        imageAttachmentTestIds,
+        imageAttachmentCount: imageAttachmentTestIds.length,
+        imageAttachmentIdsUnique:
+          new Set(imageAttachmentTestIds).size ===
+          imageAttachmentTestIds.length,
       };
     }, THREAD_READ_PAGE_ISOMORPHIC);
     if (
@@ -717,10 +865,20 @@ export function assertThreadReadPageIsomorphicDomOracle(result) {
     !snapshot.startupNoteVisible,
     "threadReadPageIsomorphic DOM 不应出现启动说明/初始化说明",
   );
+  assert(
+    snapshot.imageAttachmentCount === expectedImageUris().length,
+    `threadReadPageIsomorphic 图片附件数量不正确: actual=${snapshot.imageAttachmentCount} expected=${expectedImageUris().length}`,
+  );
+  assert(
+    snapshot.imageAttachmentIdsUnique,
+    `threadReadPageIsomorphic 图片附件 test id 重复: ${JSON.stringify(snapshot.imageAttachmentTestIds)}`,
+  );
   return {
     turnGroupCount: snapshot.turnGroups.length,
     textOrderStable: snapshot.textOrderStable,
     startupNoteVisible: snapshot.startupNoteVisible,
     toolRows: snapshot.toolRows,
+    imageAttachmentCount: snapshot.imageAttachmentCount,
+    imageAttachmentIdsUnique: snapshot.imageAttachmentIdsUnique,
   };
 }

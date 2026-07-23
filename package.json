@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.109.0",
+  "version": "1.110.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -263,8 +263,6 @@
     "smoke:agent-control-cold-restart-gate-b": "node scripts/agent-runtime/tool-execution-managed-smoke.mjs --batch agent-control-tools --cold-restart",
     "smoke:agent-runtime-soak-current-fixture": "node scripts/agent-runtime/tool-execution-managed-smoke.mjs --batch agent-control-tools --cold-restart --soak-rounds 10 --cold-restarts 2 --output .lime/qc/soak-01/agent-control-soak-current-fixture.json",
     "smoke:code-runtime-fixture": "node scripts/code-runtime-fixture-smoke.mjs",
-    "smoke:managed-objective-continuation": "node scripts/managed-objective-continuation-smoke.mjs",
-    "smoke:managed-objective-automation": "node scripts/managed-objective-automation-smoke.mjs",
     "agent-qc:gui-owner-check": "node scripts/agent-qc/gui-owner-check.mjs",
     "agent-qc:process-owner-check": "node scripts/agent-qc/process-owner-check.mjs",
     "agent-qc:secret-scan": "node scripts/agent-qc/secret-scan.mjs",

@@ -90,10 +90,7 @@ function processNotification(
 ): GateResult {
   const directRoute = readAppServerV2NotificationRoute(notification);
   if (directRoute) {
-    if (
-      notification.method === "item/agentMessage/delta" ||
-      notification.method === "thread/tokenUsage/updated"
-    ) {
+    if (isDirectStreamingNotification(notification.method)) {
       return { kind: "accepted", notifications: [notification] };
     }
     return processDirectLifecycleNotification(
@@ -112,6 +109,16 @@ function processNotification(
     return { kind: "accepted", notifications: [notification] };
   }
   return { kind: "ignored" };
+}
+
+function isDirectStreamingNotification(method: string): boolean {
+  return (
+    method === "item/agentMessage/delta" ||
+    method === "item/reasoning/summaryTextDelta" ||
+    method === "item/reasoning/summaryPartAdded" ||
+    method === "item/reasoning/textDelta" ||
+    method === "thread/tokenUsage/updated"
+  );
 }
 
 function processDirectLifecycleNotification(

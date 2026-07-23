@@ -29,7 +29,9 @@ use url::form_urlencoded;
 
 mod managed_model_fetch_access;
 mod runtime_metadata;
-pub use runtime_metadata::{ProviderModelRegistryMetadata, ProviderModelRegistryMetadataSource};
+pub use runtime_metadata::{
+    ProviderModelCacheAccess, ProviderModelRegistryMetadata, ProviderModelRegistryMetadataSource,
+};
 
 const LIME_TENANT_HEADER: &str = "X-Lime-Tenant-ID";
 const LIME_TENANT_PARAM: &str = "lime_tenant_id";
@@ -3664,6 +3666,8 @@ mod tests {
     use rusqlite::{params, Connection};
     use std::sync::{Arc, Mutex};
 
+    const RESPONSES_IMAGE_TEST_HOST: &str = "https://images.example/codex";
+
     fn setup_cache_service() -> (ModelRegistryService, DbConnection) {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute(
@@ -4470,7 +4474,7 @@ mod tests {
         let result = service
             .fetch_models_from_api_with_hints(
                 "airgate-openai-images",
-                "https://code.ylsagi.com/codex",
+                RESPONSES_IMAGE_TEST_HOST,
                 "sk-test",
                 Some(ApiProviderType::Openai),
                 &["gpt-images-2".to_string()],
@@ -4498,7 +4502,7 @@ mod tests {
         let cached = service
             .get_cached_provider_models_scoped(
                 "airgate-openai-images",
-                "https://code.ylsagi.com/codex",
+                RESPONSES_IMAGE_TEST_HOST,
                 Some(ApiProviderType::Openai),
                 credential_fingerprint.as_deref(),
             )
@@ -4722,7 +4726,7 @@ mod tests {
         let result = service
             .fetch_models_from_api_with_hints(
                 "airgate-openai-images",
-                "https://code.ylsagi.com/codex",
+                RESPONSES_IMAGE_TEST_HOST,
                 "sk-test",
                 Some(ApiProviderType::Openai),
                 &[],

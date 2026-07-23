@@ -381,7 +381,6 @@ export function useAgentChatWorkspaceEntryRuntime({
     preferredProviderUnavailable: imageWorkbenchPreferredProviderUnavailable,
     ensureProvidersLoaded: ensureImageWorkbenchProvidersLoaded,
     providersLoading: imageWorkbenchProvidersLoading,
-    saveImagesToResource: saveImageWorkbenchImagesToResource,
   } = imageWorkbenchGenerationRuntime;
 
   useWorkspaceTaskFilesRefSyncRuntime({
@@ -598,7 +597,6 @@ export function useAgentChatWorkspaceEntryRuntime({
     imageWorkbenchPreferredProviderUnavailable,
     ensureImageWorkbenchProvidersLoaded,
     imageWorkbenchProvidersLoading,
-    saveImageWorkbenchImagesToResource,
     mentionedCharacters,
     setMentionedCharacters,
     skills,

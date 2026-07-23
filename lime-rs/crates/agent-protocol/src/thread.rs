@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ItemId, MessageContentPart, SessionId, ThreadId, TurnId};
+use crate::{AgentInput, ItemId, MessageContentPart, SessionId, ThreadId, TurnId};
 
 /// Codex runtime status for a thread. Persistence operations such as archive or
 /// delete are commands, not runtime status values.
@@ -284,7 +284,7 @@ pub struct PlanStep {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ThreadItemPayload {
     UserMessage {
-        content: String,
+        content: Vec<AgentInput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         client_id: Option<String>,
     },
@@ -714,6 +714,7 @@ pub struct ThreadHistoryChangeSet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ImageDetail, TextElement};
     use serde_json::json;
 
     fn item() -> ThreadItem {
@@ -781,6 +782,58 @@ mod tests {
         assert!(encoded["payload"].get("contentParts").is_none());
         assert_eq!(encoded["metadata"], Value::Null);
         assert!(serde_json::from_value::<ThreadItem>(encoded).is_ok());
+    }
+
+    #[test]
+    fn user_message_payload_round_trips_ordered_input_parts() {
+        let payload = ThreadItemPayload::UserMessage {
+            content: vec![
+                AgentInput::Text {
+                    text: "inspect".to_string(),
+                    text_elements: vec![TextElement::new(0..7, None)],
+                },
+                AgentInput::Image {
+                    uri: "https://example.com/remote.png".to_string(),
+                    detail: Some(ImageDetail::High),
+                },
+                AgentInput::LocalImage {
+                    path: "/tmp/local.png".to_string(),
+                    detail: Some(ImageDetail::Original),
+                },
+                AgentInput::Skill {
+                    name: "review".to_string(),
+                    path: "/skills/review/SKILL.md".to_string(),
+                },
+                AgentInput::Mention {
+                    name: "docs".to_string(),
+                    path: "app://docs".to_string(),
+                },
+            ],
+            client_id: Some("client-1".to_string()),
+        };
+
+        let encoded = serde_json::to_value(&payload).expect("serialize user message payload");
+        assert_eq!(encoded["type"], "userMessage");
+        assert_eq!(encoded["content"][0]["type"], "text");
+        assert_eq!(
+            encoded["content"][0]["text_elements"][0]["byteRange"],
+            json!({"start": 0, "end": 7})
+        );
+        assert_eq!(encoded["content"][1]["type"], "image");
+        assert_eq!(encoded["content"][2]["type"], "local_image");
+        assert_eq!(encoded["content"][3]["type"], "skill");
+        assert_eq!(encoded["content"][4]["type"], "mention");
+        assert_eq!(encoded["client_id"], "client-1");
+        assert_eq!(
+            serde_json::from_value::<ThreadItemPayload>(encoded)
+                .expect("deserialize user message payload"),
+            payload
+        );
+        assert!(serde_json::from_value::<ThreadItemPayload>(json!({
+            "type": "userMessage",
+            "content": "legacy scalar content"
+        }))
+        .is_err());
     }
 
     #[test]

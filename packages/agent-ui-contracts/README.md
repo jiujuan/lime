@@ -10,6 +10,7 @@
 - 跨宿主 Agent UI adapter event 最小公共形状。
 - action、read model、message parts、process timeline、execution graph、Subagents 和 projection state 类型。
 - `AgentUiProjector` 等纯接口定义。
+- runtime event、projection event/state 与 capability manifest 的 JSON Schema。
 - 标准 conformance fixtures：text、tool、HITL、artifact/evidence、stream repair、subagent handoff。
 - validation helpers：runtime event、read model、projection state、fixture 的最小结构校验。
 
@@ -56,7 +57,9 @@ src/timeline.ts   -> process timeline contracts
 src/graph.ts      -> execution graph contracts
 src/fixtures.ts   -> standard conformance fixtures
 src/validation.ts -> minimal contract validation helpers
+src/schemas.ts    -> exported JSON Schema constants and event taxonomy guards
 src/index.ts      -> barrel exports
+schemas/          -> checked-in JSON Schema files
 ```
 
 新增类型必须落在对应职责文件；不得把事件、runtime、projection、message、timeline 和 graph 类型重新合并回 `src/index.ts`。
@@ -122,18 +125,20 @@ Subagents view model 的 thread、delegation 和 activity 都可以携带 `Agent
 
 Contracts 层只定义事实 envelope 和稳定枚举，不规定传输方式。事件族按 `eventClass` 划分：
 
-| Event family | Required scope | Standard UI surface |
-| --- | --- | --- |
-| `turn.*` / `run.*` | `threadId`、`turnId`、`runId` | runtime status、ProcessTimeline。 |
-| `model.*` / `reasoning.*` | message id 或 turn scope | `UIMessageParts`。 |
-| `tool.*` | `toolCallId` | ToolGroup、ProcessTimeline、ExecutionGraph。 |
-| `action.*` | `actionId` | ActionRequired。 |
-| `artifact.*` | `artifactId` 或 `artifactRefs` | ArtifactRef / artifact workspace。 |
-| `evidence.*` / `review.*` | `evidenceId` 或 `evidenceRefs` | EvidenceRef、review lane。 |
+| Event family                          | Required scope                      | Standard UI surface                                                                                 |
+| ------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `turn.*` / `run.*`                    | `threadId`、`turnId`、`runId`       | runtime status、ProcessTimeline。                                                                   |
+| `model.*` / `reasoning.*`             | message id 或 turn scope            | `UIMessageParts`。                                                                                  |
+| `tool.*`                              | `toolCallId`                        | ToolGroup、ProcessTimeline、ExecutionGraph。                                                        |
+| `action.*`                            | `actionId`                          | ActionRequired。                                                                                    |
+| `artifact.*`                          | `artifactId` 或 `artifactRefs`      | ArtifactRef / artifact workspace。                                                                  |
+| `evidence.*` / `review.*`             | `evidenceId` 或 `evidenceRefs`      | EvidenceRef、review lane。                                                                          |
 | `task.*` / `subagent.*` / `handoff.*` | `taskId`、`subagentId`、`handoffId` | ExecutionGraph、Subagents；协作 facts 通过 `AgentUiCollaborationFactsView` 随 Subagents view 传递。 |
-| `snapshot.*` / `stream.*` | sequence / cursor | hydration、repair diagnostics。 |
+| `snapshot.*` / `stream.*`             | sequence / cursor                   | hydration、repair diagnostics。                                                                     |
 
 新增事件族时先补 contracts fixture 和 validation 文档，再让 projection / UI 包消费；不要先在产品组件里私有解释。
+
+`AgentUiEventClass` 由 `AGENT_UI_EVENT_CLASSES` 唯一派生。adapter 边界必须通过 `isAgentUiEventClass` 验证事件类型；未知 dotted type 不得降级为通用 runtime status。
 
 ## Fixtures
 
@@ -236,27 +241,27 @@ Product App runtime service
 
 一个 runtime provider 或产品 adapter 声称兼容 Lime AgentUI contracts 时，至少要证明：
 
-| Slice | Required proof |
-| --- | --- |
-| Text turn | `text-basic` fixture validation 通过，streaming text 可 replay。 |
-| Tool lifecycle | `tool-success` / `tool-failure` 有 `toolCallId`，大输出走 refs。 |
-| HITL | `hitl-action` 有 `action.required` / `action.resolved` 和 `actionId`。 |
-| Artifact / evidence | refs 不内联大 payload，不泄露 secret-bearing key。 |
-| Stream repair | sequence gap 只在声明 repair diagnostics 的 fixture 中允许。 |
-| Subagents | `subagent-handoff` 能表达 task、subagent、handoff、review scope。 |
-| Subagents | projection state 包含完整 `subagents` 字段，且协作事件可以保留 `AgentUiCollaborationFactsView`。 |
+| Slice               | Required proof                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| Text turn           | `text-basic` fixture validation 通过，streaming text 可 replay。                                 |
+| Tool lifecycle      | `tool-success` / `tool-failure` 有 `toolCallId`，大输出走 refs。                                 |
+| HITL                | `hitl-action` 有 `action.required` / `action.resolved` 和 `actionId`。                           |
+| Artifact / evidence | refs 不内联大 payload，不泄露 secret-bearing key。                                               |
+| Stream repair       | sequence gap 只在声明 repair diagnostics 的 fixture 中允许。                                     |
+| Subagents           | `subagent-handoff` 能表达 task、subagent、handoff、review scope。                                |
+| Subagents           | projection state 包含完整 `subagents` 字段，且协作事件可以保留 `AgentUiCollaborationFactsView`。 |
 
 下游包应从 `agentUiConformanceFixtures` 读取标准样本，而不是在自己的测试里复制一套私有 fixture。
 
 ## Package Metadata
 
-| Item | Value |
-| --- | --- |
-| Runtime | Node `>=20`，ESM。 |
-| Side effects | `false`，只导出类型、fixtures 和 validation helpers。 |
-| Public files | `dist`、`README.md`。 |
-| License | `MIT`。 |
-| Versioning | 与 AgentUI 四包同步发布；contracts 破坏性变更必须走 major。 |
+| Item         | Value                                                       |
+| ------------ | ----------------------------------------------------------- |
+| Runtime      | Node `>=20`，ESM。                                          |
+| Side effects | `false`，只导出类型、fixtures 和 validation helpers。       |
+| Public files | `dist`、`schemas`、`README.md`。                            |
+| License      | `MIT`。                                                     |
+| Versioning   | 与 AgentUI 四包同步发布；contracts 破坏性变更必须走 major。 |
 
 ## Do Not
 

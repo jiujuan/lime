@@ -20,4 +20,3 @@ pub mod providers;
 pub mod publish_config_dao;
 pub mod route_state;
 pub mod skills;
-pub mod video_generation_task_dao;

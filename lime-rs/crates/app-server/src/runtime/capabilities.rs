@@ -208,4 +208,20 @@ impl RuntimeCore {
             session_id: Some(session_id),
         })
     }
+
+    pub async fn read_agent_session_tool_inventory(
+        &self,
+        params: AgentSessionToolInventoryReadParams,
+    ) -> Result<AgentSessionToolInventoryReadResponse, RuntimeCoreError> {
+        let inventory = self
+            .backend
+            .read_tool_inventory(ToolInventoryReadRequest {
+                caller: params.caller,
+                workbench: params.workbench,
+                browser_assist: params.browser_assist,
+                metadata: params.metadata,
+            })
+            .await?;
+        Ok(AgentSessionToolInventoryReadResponse { inventory })
+    }
 }

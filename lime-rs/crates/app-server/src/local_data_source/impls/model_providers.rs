@@ -155,39 +155,6 @@ impl ModelProviderAppDataSource for LocalAppDataSource {
         model_providers::delete_model_provider_key(&self.db, &self.api_key_provider_service, params)
     }
 
-    async fn read_next_model_provider_key(
-        &self,
-        params: ModelProviderKeyNextParams,
-    ) -> Result<ModelProviderKeyNextResponse, RuntimeCoreError> {
-        model_providers::read_next_model_provider_key(
-            &self.db,
-            &self.api_key_provider_service,
-            params,
-        )
-    }
-
-    async fn record_model_provider_key_usage(
-        &self,
-        params: ModelProviderKeyEventParams,
-    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
-        model_providers::record_model_provider_key_usage(
-            &self.db,
-            &self.api_key_provider_service,
-            params,
-        )
-    }
-
-    async fn record_model_provider_key_error(
-        &self,
-        params: ModelProviderKeyEventParams,
-    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
-        model_providers::record_model_provider_key_error(
-            &self.db,
-            &self.api_key_provider_service,
-            params,
-        )
-    }
-
     async fn read_model_provider_ui_state(
         &self,
         params: ModelProviderUiStateReadParams,

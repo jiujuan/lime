@@ -44,6 +44,7 @@ import {
 import { buildAgentStreamTextDeltaApplyPlan } from "./agentStreamTextDeltaController";
 import {
   appendTextWithOverlapFallback,
+  buildStreamedReasoningSummaryItemId,
   buildStreamedReasoningItem,
   resetStreamedReasoningSegment,
 } from "./agentStreamReasoningTimeline";
@@ -234,6 +235,7 @@ export function handleTurnStreamEvent({
     clearStreamingTextOverlay,
     commitRenderedTextBeforeProcessPart,
     completeAssistantStreamMessageFromCompletionPlan,
+    completeCurrentStreamedReasoningSegment,
     completeInterruptedTurn,
     finalizeMissingFinalReplyFailure,
     finalizeTerminalStreamState,
@@ -881,8 +883,28 @@ export function handleTurnStreamEvent({
 
     case "thinking_delta":
     case "reasoning_delta":
+    case "reasoning_summary_delta":
       {
         const eventSequence = sequenceFromAgentEvent(data);
+        const isSummaryDelta = data.type === "reasoning_summary_delta";
+        const isNewSummaryPart =
+          isSummaryDelta &&
+          (requestState.streamedReasoningSourceItemId !== data.itemId ||
+            requestState.streamedReasoningSummaryIndex !== data.summaryIndex);
+        if (isNewSummaryPart) {
+          completeCurrentStreamedReasoningSegment(data.timestamp);
+          requestState.streamedReasoningSourceItemId = data.itemId;
+          requestState.streamedReasoningSummaryIndex = data.summaryIndex;
+          requestState.streamedReasoningSequence = eventSequence;
+          const turnId = requestState.currentTurnId?.trim();
+          requestState.streamedReasoningItemId = turnId
+            ? buildStreamedReasoningSummaryItemId({
+                itemId: data.itemId,
+                summaryIndex: data.summaryIndex,
+                turnId,
+              })
+            : null;
+        }
         const shouldSurfaceVisibleProcessReasoning =
           data.type === "reasoning_delta" &&
           shouldSurfaceReasoningEventAsVisibleProcess(data);
@@ -890,9 +912,14 @@ export function handleTurnStreamEvent({
           requestState.shouldSurfaceVisibleProcessReasoning = true;
         }
         const effectiveSurfaceThinkingDeltas =
+          isSummaryDelta ||
           surfaceThinkingDeltas ||
           requestState.shouldSurfaceVisibleProcessReasoning === true;
-        if (data.type === "reasoning_delta" || eventSequence !== null) {
+        if (
+          data.type === "reasoning_delta" ||
+          data.type === "reasoning_summary_delta" ||
+          eventSequence !== null
+        ) {
           noteFinalAnswerRequiredProcessBoundary(eventSequence);
           commitRenderedTextBeforeProcessPart();
         }
@@ -946,6 +973,20 @@ export function handleTurnStreamEvent({
               ...msg,
               ...buildAgentStreamThinkingDeltaMessagePatch({
                 appendThinkingToParts,
+                ...(isSummaryDelta
+                  ? {
+                      appendMode: "verbatim" as const,
+                      forceNewPart: isNewSummaryPart,
+                      partMetadata: {
+                        source: "streamed_reasoning_summary",
+                        threadItemId: data.itemId,
+                        summaryIndex: data.summaryIndex,
+                        ...(requestState.currentTurnId
+                          ? { turnId: requestState.currentTurnId }
+                          : {}),
+                      },
+                    }
+                  : {}),
                 contentParts: msg.contentParts,
                 textDelta: reasoningText,
                 thinkingContent: msg.thinkingContent,
@@ -954,10 +995,12 @@ export function handleTurnStreamEvent({
           }),
         );
         if (thinkingPlan.shouldApplyThinkingDelta) {
-          requestState.streamedReasoningText = appendTextWithOverlapFallback(
-            requestState.streamedReasoningText || "",
-            reasoningText,
-          );
+          requestState.streamedReasoningText = isSummaryDelta
+            ? `${requestState.streamedReasoningText || ""}${reasoningText}`
+            : appendTextWithOverlapFallback(
+                requestState.streamedReasoningText || "",
+                reasoningText,
+              );
           const nowIso = new Date().toISOString();
           const streamedReasoningItem = buildStreamedReasoningItem({
             activeSessionId,
@@ -975,6 +1018,19 @@ export function handleTurnStreamEvent({
           }
         }
       }
+      break;
+
+    case "reasoning_summary_part_added":
+      if (requestState.streamedReasoningSourceItemId === data.itemId) {
+        completeCurrentStreamedReasoningSegment(data.timestamp);
+      }
+      activateStream();
+      break;
+
+    case "reasoning_content_delta":
+      // Raw reasoning remains protocol-only unless an explicit Codex-style
+      // show_raw_agent_reasoning product policy is introduced.
+      activateStream();
       break;
 
     case "reasoning_started":

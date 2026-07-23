@@ -21,12 +21,12 @@ import {
   threadSettled,
   updateAgentSessionRuntimeCurrent,
   waitForHealth,
-} from "../lib/managed-objective-continuation-smoke-core.mjs";
+} from "../lib/agent-runtime-smoke-core.mjs";
 import {
   fixtureChatRequestCount,
   workspaceIdFromDefaultProject,
   workspaceRootFromDefaultProject,
-} from "../lib/managed-objective-automation-smoke-support.mjs";
+} from "../lib/agent-runtime-smoke-support.mjs";
 import {
   assertLiveProviderSmokeAllowed,
   liveProviderSmokeAllowed,

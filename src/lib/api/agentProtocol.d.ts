@@ -198,6 +198,7 @@ export interface AgentThreadReasoningItem extends AgentThreadItemBase {
   type: "reasoning";
   text: string;
   summary?: string[];
+  content?: string[];
 }
 export interface AgentThreadToolCallItem extends AgentThreadItemBase {
   type: "tool_call";
@@ -481,6 +482,28 @@ export interface AgentEventReasoningDelta {
   delta?: string;
   model?: unknown;
   providerMetadata?: Record<string, unknown>;
+}
+export interface AgentEventReasoningSummaryDelta {
+  type: "reasoning_summary_delta";
+  itemId: string;
+  reasoningId: string;
+  summaryIndex: number;
+  text: string;
+  delta: string;
+}
+export interface AgentEventReasoningSummaryPartAdded {
+  type: "reasoning_summary_part_added";
+  itemId: string;
+  reasoningId: string;
+  summaryIndex: number;
+}
+export interface AgentEventReasoningContentDelta {
+  type: "reasoning_content_delta";
+  itemId: string;
+  reasoningId: string;
+  contentIndex: number;
+  text: string;
+  delta: string;
 }
 export interface AgentEventReasoningFinal {
   type: "reasoning_final";
@@ -816,6 +839,9 @@ export type AgentEvent =
   | AgentEventThinkingDelta
   | AgentEventReasoningStarted
   | AgentEventReasoningDelta
+  | AgentEventReasoningSummaryDelta
+  | AgentEventReasoningSummaryPartAdded
+  | AgentEventReasoningContentDelta
   | AgentEventReasoningFinal
   | AgentEventReasoningEnded
   | AgentEventPlanDelta

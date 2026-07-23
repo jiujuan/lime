@@ -838,9 +838,9 @@ async fn export_evidence_marks_completed_with_workspace_skill_and_artifact() {
             RuntimeEvent::new(
                 "artifact.snapshot",
                 json!({
-                    "artifactId": "artifact-managed-objective-report",
-                    "path": "reports/managed-objective-automation-smoke.md",
-                    "title": "Managed Objective Automation Smoke Report"
+                    "artifactId": "artifact-workspace-skill-evidence",
+                    "path": "reports/workspace-skill-evidence.md",
+                    "title": "Workspace Skill Evidence Report"
                 }),
             ),
             RuntimeEvent::new("turn.completed", json!({})),

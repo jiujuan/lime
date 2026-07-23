@@ -56,30 +56,6 @@
     },
     {
       "kind": "request",
-      "method": "agentSession/objective/audit"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/objective/clear"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/objective/continue"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/objective/read"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/objective/set"
-    },
-    {
-      "kind": "request",
-      "method": "agentSession/objective/status/update"
-    },
-    {
-      "kind": "request",
       "method": "agentSession/queuedTurn/promote"
     },
     {
@@ -424,6 +400,18 @@
     },
     {
       "kind": "notification",
+      "method": "item/reasoning/summaryPartAdded"
+    },
+    {
+      "kind": "notification",
+      "method": "item/reasoning/summaryTextDelta"
+    },
+    {
+      "kind": "notification",
+      "method": "item/reasoning/textDelta"
+    },
+    {
+      "kind": "notification",
       "method": "item/started"
     },
     {
@@ -716,19 +704,7 @@
     },
     {
       "kind": "request",
-      "method": "modelProviderKey/error/record"
-    },
-    {
-      "kind": "request",
-      "method": "modelProviderKey/next"
-    },
-    {
-      "kind": "request",
       "method": "modelProviderKey/update"
-    },
-    {
-      "kind": "request",
-      "method": "modelProviderKey/usage/record"
     },
     {
       "kind": "request",
@@ -1501,18 +1477,6 @@
       "AgentSessionListResponse",
       "AgentSessionMediaReadParams",
       "AgentSessionMediaReadResponse",
-      "AgentSessionObjectiveAuditParams",
-      "AgentSessionObjectiveAuditResponse",
-      "AgentSessionObjectiveClearParams",
-      "AgentSessionObjectiveClearResponse",
-      "AgentSessionObjectiveContinueParams",
-      "AgentSessionObjectiveContinueResponse",
-      "AgentSessionObjectiveReadParams",
-      "AgentSessionObjectiveReadResponse",
-      "AgentSessionObjectiveSetParams",
-      "AgentSessionObjectiveSetResponse",
-      "AgentSessionObjectiveStatusUpdateParams",
-      "AgentSessionObjectiveStatusUpdateResponse",
       "AgentSessionOverview",
       "AgentSessionQueuedTurnPromoteParams",
       "AgentSessionQueuedTurnPromoteResponse",
@@ -1735,8 +1699,6 @@
       "LogPersistedTailParams",
       "LogPersistedTailResponse",
       "LogStorageDiagnosticsResponse",
-      "ManagedObjective",
-      "ManagedObjectiveStatus",
       "McpContent",
       "McpPromptGetParams",
       "McpPromptGetResponse",
@@ -1825,9 +1787,6 @@
       "ModelProviderKeyCreateParams",
       "ModelProviderKeyDeleteParams",
       "ModelProviderKeyDeleteResponse",
-      "ModelProviderKeyEventParams",
-      "ModelProviderKeyNextParams",
-      "ModelProviderKeyNextResponse",
       "ModelProviderKeyUpdateParams",
       "ModelProviderKeyWriteResponse",
       "ModelProviderListResponse",
@@ -2147,6 +2106,9 @@
       "Method",
       "PatchApplyStatus",
       "PatchChangeKind",
+      "ReasoningSummaryPartAddedNotification",
+      "ReasoningSummaryTextDeltaNotification",
+      "ReasoningTextDeltaNotification",
       "ServerNotification",
       "ServerRequest",
       "ServerRequestResolvedNotification",

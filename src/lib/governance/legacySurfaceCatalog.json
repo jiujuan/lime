@@ -586,6 +586,36 @@
       "allowedPaths": []
     },
     {
+      "id": "frontend-retired-direct-provider-image-executor-files",
+      "classification": "dead",
+      "description": "已删除的 Renderer Provider 直连图片 executors、正向测试与 live test；current 图片网络执行归 App Server media task worker + media-runtime",
+      "targets": [
+        "src/components/image-gen/falImageExecutor.ts",
+        "src/components/image-gen/falImageExecutor.test.ts",
+        "src/components/image-gen/geminiImageExecutor.ts",
+        "src/components/image-gen/geminiImageExecutor.test.ts",
+        "src/components/image-gen/openAICompatibleImageExecutor.ts",
+        "src/components/image-gen/openAICompatibleImageExecutor.test.ts",
+        "src/components/image-gen/standardImageExecutor.ts",
+        "src/components/image-gen/standardImageExecutor.test.ts",
+        "src/components/image-gen/imageGenerationBatchRunner.ts",
+        "src/components/image-gen/useImageGen.live.test.ts",
+        "src/components/image-gen/localImageServerExecutor.ts",
+        "src/components/image-gen/localImageServerExecutor.test.ts",
+        "src/components/image-gen/useImageGen.transport.test.tsx",
+        "src/components/image-gen/useImageGen.resource.test.tsx",
+        "src/components/image-gen/imageGenLocalState.ts",
+        "src/components/image-gen/types.ts",
+        "src/components/image-gen/imageExecutorUtils.ts",
+        "src/components/image-gen/imageErrorPresentation.ts",
+        "src/components/image-gen/imageErrorPresentation.test.ts",
+        "src/components/image-gen/imageResponseParsers.ts",
+        "src/components/image-gen/imageResponseParsers.test.ts",
+        "src/components/image-gen/localImageServerErrors.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "agent-chat-plain-visual-brief-confirmation-helper",
       "classification": "dead-candidate",
       "description": "已删除的普通视觉 brief 确认旧 helper；普通输入意图确认当前收敛到 catalog + i18n 驱动的 plainInputIntentConfirmation",
@@ -2916,6 +2946,18 @@
   ],
   "frontendText": [
     {
+      "id": "frontend-retired-model-provider-key-telemetry-methods",
+      "classification": "dead",
+      "description": "Renderer 不得恢复读取明文 Provider key 或直接操纵 key usage/error telemetry 的已删除 App Server 方法",
+      "patterns": [
+        "modelProviderKey/next",
+        "modelProviderKey/usage/record",
+        "modelProviderKey/error/record"
+      ],
+      "includePathPrefixes": ["src/lib"],
+      "allowedPaths": []
+    },
+    {
       "id": "voice-audio-device-list-helper-surface",
       "classification": "dead",
       "description": "asrProvider 不得恢复无产品消费者的麦克风设备列表 helper；Inputbar dictation 直接使用 renderer mediaDevices 完成录音",
@@ -3675,7 +3717,7 @@
     {
       "id": "image-generation-runtime-entry-usage",
       "classification": "dead-candidate",
-      "description": "AI 图片生成 runtime 不允许继续扩散新的 useImageGen 主入口，当前只允许 Claw 工作台复用",
+      "description": "图片 Provider / 模型选择 Hook 不允许继续扩散新入口，当前只允许 Claw 工作台 provider runtime 复用",
       "patterns": ["useImageGen({"],
       "includePathPrefixes": ["src/components"],
       "allowedPaths": [
@@ -3683,9 +3725,33 @@
       ]
     },
     {
+      "id": "frontend-deprecated-local-image-http-executor",
+      "classification": "dead",
+      "description": "已删除的 Renderer 本机图片 HTTP executor、历史 Hook 状态与正向测试；current 图片执行只允许走 mediaTaskArtifact/image/create -> App Server worker -> media-runtime -> Provider",
+      "patterns": ["requestImagesFromLocalImageServer"],
+      "includePathPrefixes": ["src/components/image-gen"],
+      "allowedPaths": []
+    },
+    {
+      "id": "frontend-retired-direct-provider-image-executors",
+      "classification": "dead",
+      "description": "Renderer Provider 直连图片 executors 已删除；provider lowering 与网络执行归 current Rust owner",
+      "patterns": [
+        "requestImageFromFal(",
+        "requestImageFromFalQueue(",
+        "requestImageFromGemini(",
+        "requestImageFromNewApi(",
+        "requestImageFromNewApiResponsesStream(",
+        "requestImagesFromStandardImagesApi(",
+        "runSingleImageGenerationBatch("
+      ],
+      "includePathPrefixes": ["src"],
+      "allowedPaths": []
+    },
+    {
       "id": "image-generation-runtime-barrel-imports",
       "classification": "dead-candidate",
-      "description": "前端不允许恢复 @/components/image-gen 目录级 barrel 导入，图片生成 runtime 必须直连 useImageGen/types/test-utils 子路径",
+      "description": "前端不允许恢复 @/components/image-gen 目录级 barrel 导入，现役选择 Hook 与测试辅助必须直连 useImageGen/test-utils 子路径",
       "patterns": [
         "from \"@/components/image-gen\"",
         "from '@/components/image-gen'",
@@ -4657,6 +4723,44 @@
     }
   ],
   "rustText": [
+    {
+      "id": "rust-retired-video-generation-database-surface",
+      "classification": "dead",
+      "description": "Rust 不得恢复旧 VideoGenerationService、Product DB DAO/表或其模块导出；current owner 是 App Server media task artifact 与 media-runtime",
+      "patterns": [
+        "pub mod video_generation_service;",
+        "pub mod video_generation_task_dao;",
+        "VideoGenerationService",
+        "VideoGenerationTaskDao",
+        "video_generation_tasks"
+      ],
+      "includePathPrefixes": ["lime-rs/crates/core", "lime-rs/crates/services"],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-local-media-service-execution-contract",
+      "classification": "dead",
+      "description": "媒体任务不得恢复固定本机 HTTP broker execution owner；current owner 是 App Server media task worker + resolved route + durable credential ref",
+      "patterns": ["local_lime_service"],
+      "includePathPrefixes": [
+        "lime-rs/crates/app-server/src",
+        "lime-rs/crates/media-runtime/src",
+        "lime-rs/crates/media-runtime/tests"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-model-provider-key-telemetry-methods",
+      "classification": "dead",
+      "description": "App Server 不得恢复向 Renderer 暴露明文 Provider key 或 credential telemetry 写入口",
+      "patterns": [
+        "modelProviderKey/next",
+        "modelProviderKey/usage/record",
+        "modelProviderKey/error/record"
+      ],
+      "includePathPrefixes": ["lime-rs/crates/app-server"],
+      "allowedPaths": []
+    },
     {
       "id": "rust-subagent-scheduler-event-bus",
       "classification": "dead-candidate",

@@ -47,16 +47,12 @@ describe("live-provider-smoke-gate", () => {
   });
 
   it("应识别 live Provider 测试文件路径", () => {
-    expect(
-      isLiveProviderTestPath(
-        "src/components/image-gen/useImageGen.live.test.ts",
-      ),
-    ).toBe(true);
-    expect(
-      isLiveProviderTestPath(
-        "src\\components\\image-gen\\useImageGen.live.test.ts",
-      ),
-    ).toBe(true);
+    expect(isLiveProviderTestPath("src/example/provider.live.test.ts")).toBe(
+      true,
+    );
+    expect(isLiveProviderTestPath("src\\example\\provider.live.test.ts")).toBe(
+      true,
+    );
     expect(
       isLiveProviderTestPath("src/components/image-gen/useImageGen.test.ts"),
     ).toBe(false);
@@ -67,10 +63,7 @@ describe("live-provider-smoke-gate", () => {
     () => {
       const result = spawnSync(
         "node",
-        [
-          "scripts/run-vitest-smart.mjs",
-          "src/components/image-gen/useImageGen.live.test.ts",
-        ],
+        ["scripts/run-vitest-smart.mjs", "src/example/provider.live.test.ts"],
         {
           cwd: process.cwd(),
           encoding: "utf8",
@@ -284,37 +277,6 @@ describe("live-provider-smoke-gate", () => {
           "deepseek",
           "--model",
           "deepseek-v4-flash",
-        ],
-        {
-          cwd: process.cwd(),
-          encoding: "utf8",
-          timeout: CHILD_PROCESS_TIMEOUT_MS,
-          env: {
-            ...process.env,
-            [LIVE_PROVIDER_SMOKE_ENV]: "",
-            [REAL_API_TEST_ENV]: "",
-          },
-        },
-      );
-
-      expect(result.status).toBe(1);
-      expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
-    },
-    CHILD_PROCESS_TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "Managed Objective continuation 指定 Deepseek 时必须显式授权",
-    () => {
-      const result = spawnSync(
-        "node",
-        [
-          "scripts/managed-objective-continuation-smoke.mjs",
-          "--provider-preference",
-          "deepseek",
-          "--model-preference",
-          "deepseek-v4-flash",
-          "--no-write",
         ],
         {
           cwd: process.cwd(),

@@ -94,7 +94,6 @@ const {
   mockGetChromeBridgeStatus: vi.fn(),
 }));
 
-const mockGetAgentRuntimeObjective = vi.hoisted(() => vi.fn(async () => null));
 
 const mockCharacterMention = vi.fn<
   (props: {
@@ -128,17 +127,6 @@ vi.mock("@/lib/api/appConfig", () => ({
 vi.mock("@/lib/api/channelsRuntime", () => ({
   gatewayChannelStatus: mockGatewayChannelStatus,
 }));
-
-vi.mock("@/lib/api/agentRuntime/objectiveClient", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@/lib/api/agentRuntime/objectiveClient")
-    >();
-  return {
-    ...actual,
-    getAgentRuntimeObjective: mockGetAgentRuntimeObjective,
-  };
-});
 
 vi.mock("@/lib/api/skillCatalog", async (importOriginal) => {
   const actual =

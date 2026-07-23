@@ -1,4 +1,5 @@
 import { LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES } from "./runtimeTerminal.js";
+import { AGENT_UI_EVENT_CLASSES } from "./events.js";
 
 export type JsonSchemaObject = Record<string, unknown>;
 
@@ -6,6 +7,54 @@ const stringSchema = { type: "string", minLength: 1 } as const;
 const stringArraySchema = {
   type: "array",
   items: { type: "string" },
+} as const;
+
+export { AGENT_UI_EVENT_CLASSES } from "./events.js";
+
+export function isAgentUiEventClass(
+  value: unknown,
+): value is (typeof AGENT_UI_EVENT_CLASSES)[number] {
+  return (
+    typeof value === "string" &&
+    (AGENT_UI_EVENT_CLASSES as readonly string[]).includes(value)
+  );
+}
+
+export const AGENT_UI_PROJECTION_EVENT_SCHEMA: JsonSchemaObject = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://limecloud.dev/schemas/agent-ui-projection-event.v0.1.schema.json",
+  title: "AgentUiProjectionEvent",
+  type: "object",
+  required: ["type", "sourceType", "owner", "scope", "phase"],
+  additionalProperties: true,
+  properties: {
+    type: { enum: [...AGENT_UI_EVENT_CLASSES] },
+    sourceType: stringSchema,
+    sequence: { type: "integer", minimum: 0 },
+    timestamp: { type: "string" },
+    sessionId: { type: "string" },
+    threadId: { type: "string" },
+    runId: { type: "string" },
+    turnId: { type: "string" },
+    messageId: { type: "string" },
+    partId: { type: "string" },
+    taskId: { type: "string" },
+    toolCallId: { type: "string" },
+    actionId: { type: "string" },
+    artifactId: { type: "string" },
+    evidenceId: { type: "string" },
+    agentId: { type: "string" },
+    diagnosticId: { type: "string" },
+    owner: stringSchema,
+    scope: stringSchema,
+    phase: stringSchema,
+    surface: { type: "string" },
+    persistence: { type: "string" },
+    control: { type: "string" },
+    payload: { type: "object" },
+    refs: { type: "object" },
+    rawEventRef: { type: "string" },
+  },
 } as const;
 
 export const AGENT_RUNTIME_EVENT_SCHEMA: JsonSchemaObject = {
@@ -242,4 +291,5 @@ export const agentUiJsonSchemas = {
   runtimeStateDelta: AGENT_RUNTIME_STATE_DELTA_SCHEMA,
   projectionState: AGENT_UI_PROJECTION_STATE_SCHEMA,
   runtimeCapabilityManifest: AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA,
+  projectionEvent: AGENT_UI_PROJECTION_EVENT_SCHEMA,
 } as const;

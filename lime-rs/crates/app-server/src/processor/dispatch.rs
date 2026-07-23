@@ -156,20 +156,6 @@ impl RequestProcessor {
                 self.handle_review_decision_save(params).boxed()
             }
             METHOD_AGENT_SESSION_UPDATE => self.handle_session_update_impl(params).boxed(),
-            METHOD_AGENT_SESSION_OBJECTIVE_READ => self.handle_objective_read_impl(params).boxed(),
-            METHOD_AGENT_SESSION_OBJECTIVE_SET => self.handle_objective_set_impl(params).boxed(),
-            METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE => {
-                self.handle_objective_status_update_impl(params).boxed()
-            }
-            METHOD_AGENT_SESSION_OBJECTIVE_CLEAR => {
-                self.handle_objective_clear_impl(params).boxed()
-            }
-            METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE => {
-                self.handle_objective_continue_impl(params).boxed()
-            }
-            METHOD_AGENT_SESSION_OBJECTIVE_AUDIT => {
-                self.handle_objective_audit_impl(params).boxed()
-            }
             METHOD_AGENT_SESSION_COMPACT => self.handle_session_compact_impl(params).boxed(),
             METHOD_THREAD_RESUME => self
                 .handle_thread_resume_v2(params, thread_resume_request_id)
@@ -699,15 +685,6 @@ impl RequestProcessor {
             METHOD_MODEL_PROVIDER_KEY_DELETE => {
                 self.handle_model_provider_key_delete_impl(params).boxed()
             }
-            METHOD_MODEL_PROVIDER_KEY_NEXT => {
-                self.handle_model_provider_key_next_impl(params).boxed()
-            }
-            METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD => self
-                .handle_model_provider_key_usage_record_impl(params)
-                .boxed(),
-            METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD => self
-                .handle_model_provider_key_error_record_impl(params)
-                .boxed(),
             METHOD_MODEL_PROVIDER_UI_STATE_READ => self
                 .handle_model_provider_ui_state_read_impl(params)
                 .boxed(),

@@ -6,8 +6,12 @@ import {
   APPROVAL_REQUEST_RESUME_REQUEST_ID,
   HOME_HOTPATH_GREETING_SCENARIO,
   HOME_HOTPATH_SCENARIO,
+  TEXT_PROVIDER_FIXTURE_API_KEY,
 } from "./claw-chat-current-fixture-constants.mjs";
-import { resolveGateBExpectedIdentity } from "./claw-chat-current-fixture-assertion-context.mjs";
+import {
+  readTraceTurnStartInputText,
+  resolveGateBExpectedIdentity,
+} from "./claw-chat-current-fixture-assertion-context.mjs";
 import {
   buildCanonicalToolItem,
   runtimeInputText,
@@ -45,6 +49,7 @@ import {
 } from "./claw-chat-current-fixture-home-hotpath.mjs";
 import { runtimeEventFromDirectNotification } from "./claw-chat-current-fixture-rpc.mjs";
 import { isGuiChatCompletedSnapshotReady } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
+import { startTextProviderFixtureServer } from "./claw-chat-current-fixture-backend-file.mjs";
 
 const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -806,6 +811,15 @@ describe("claw chat current Electron fixture smoke guard", () => {
       },
     });
     expect(assertions.homeHotpathPreTurnTraceWindowAvailable).toBe(false);
+  });
+
+  it("reads typed turn/start text parts from the renderer trace", () => {
+    expect(
+      readTraceTurnStartInputText([
+        { type: "text", text: "整理今天的国际新闻" },
+        { type: "image", url: "data:image/png;base64,ignored" },
+      ]),
+    ).toBe("整理今天的国际新闻");
   });
 
   it("passes home hotpath text matchers into page.evaluate instead of closing over Node imports", () => {
@@ -1896,6 +1910,33 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(regressionContent).not.toContain(
       '"inputbar-pending-steer-pop-front-resume"',
     );
+  });
+
+  it("requires scoped credential for text provider model discovery", async () => {
+    const fixture = await startTextProviderFixtureServer();
+    try {
+      const unauthorized = await fetch(`${fixture.baseUrl}/models`);
+      expect(unauthorized.status).toBe(401);
+      expect(await unauthorized.json()).toMatchObject({
+        error: { type: "authentication_error" },
+      });
+
+      const authorized = await fetch(`${fixture.baseUrl}/models`, {
+        headers: {
+          Authorization: `Bearer ${TEXT_PROVIDER_FIXTURE_API_KEY}`,
+        },
+      });
+      expect(authorized.status).toBe(200);
+      expect(await authorized.json()).toMatchObject({
+        data: [{ id: expect.any(String) }],
+      });
+      expect(fixture.requests()).toEqual([
+        expect.objectContaining({ authorization: "missing" }),
+        expect.objectContaining({ authorization: "present" }),
+      ]);
+    } finally {
+      await fixture.close();
+    }
   });
 
   it("covers Plan mode revisioned thread item and history hydrate in the real Electron fixture", () => {

@@ -409,6 +409,7 @@ fn render_interaction_soul(packet: &ContextPacket, content: &str, truncated: boo
     format!(
         "## Interaction Soul\n\
          来源：saved app config `memory.soul`，scope `{scope}`。\n\
+         这些内容已经由 App Server 注入当前模型上下文；`memory.soul` 是配置键，不是文件路径。不要为了获取人格、口吻或风格再次调用文件或 memory 工具，也不要尝试读取 `memory.soul` 或 `SOUL.md`。\n\
          这些内容只影响对话方式和协作节奏，不是用户本轮输入，也不是长期事实。正式 artifact / 创作声线只能使用显式 generation brief；不要从这里推断或写入 artifact voice。{budget_hint}\n\
         {content}"
     )

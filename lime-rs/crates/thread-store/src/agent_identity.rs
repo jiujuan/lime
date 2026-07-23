@@ -24,28 +24,53 @@ impl AgentIdentity {
     }
 }
 
-/// Validates a canonical absolute agent path and returns its final task-name segment.
+/// Validates a Codex-compatible absolute agent path and returns its final task-name segment.
 pub fn canonical_agent_path_task_name(agent_path: &str) -> ThreadStoreResult<&str> {
-    if !agent_path.starts_with('/') || agent_path.len() <= 1 || agent_path.ends_with('/') {
+    if agent_path == "/morpheus" {
+        return Ok("morpheus");
+    }
+
+    let Some(path) = agent_path.strip_prefix('/') else {
         return Err(ThreadStoreError::new(
-            "agent path must be a non-root canonical absolute path",
+            "absolute agent paths must start with `/root` or be `/morpheus`",
+        ));
+    };
+    let mut segments = path.split('/');
+    if segments.next() != Some("root") {
+        return Err(ThreadStoreError::new(
+            "absolute agent paths must start with `/root` or be `/morpheus`",
         ));
     }
-    let task_name = agent_path
-        .rsplit('/')
-        .next()
-        .filter(|segment| !segment.is_empty())
-        .ok_or_else(|| ThreadStoreError::new("agent path is missing a task name"))?;
-    if agent_path
-        .split('/')
-        .skip(1)
-        .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
-    {
+    if path.ends_with('/') {
         return Err(ThreadStoreError::new(
-            "agent path contains an invalid segment",
+            "absolute agent path must not end with `/`",
         ));
+    }
+
+    let mut task_name = "root";
+    for segment in segments {
+        validate_agent_name(segment)?;
+        task_name = segment;
     }
     Ok(task_name)
+}
+
+fn validate_agent_name(agent_name: &str) -> ThreadStoreResult<()> {
+    if agent_name.is_empty() {
+        return Err(ThreadStoreError::new("agent name must not be empty"));
+    }
+    if matches!(agent_name, "root" | "." | "..") {
+        return Err(ThreadStoreError::new("agent name is reserved"));
+    }
+    if !agent_name
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+    {
+        return Err(ThreadStoreError::new(
+            "agent name must use only lowercase letters, digits, and underscores",
+        ));
+    }
+    Ok(())
 }
 
 /// Future returned by [`AgentIdentityStore`] operations.
@@ -86,11 +111,29 @@ mod tests {
             canonical_agent_path_task_name("/root/research/refactor_v2").expect("task name"),
             "refactor_v2"
         );
+        assert_eq!(
+            canonical_agent_path_task_name("/root").expect("root task name"),
+            "root"
+        );
+        assert_eq!(
+            canonical_agent_path_task_name("/morpheus").expect("morpheus task name"),
+            "morpheus"
+        );
     }
 
     #[test]
     fn rejects_ambiguous_agent_paths() {
-        for path in ["root/worker", "/root/", "/root//worker", "/root/../worker"] {
+        for path in [
+            "root/worker",
+            "/other/worker",
+            "/root/",
+            "/root//worker",
+            "/root/../worker",
+            "/root/Worker",
+            "/root/worker-name",
+            "/root/root",
+            "/morpheus/worker",
+        ] {
             assert!(canonical_agent_path_task_name(path).is_err(), "{path}");
         }
     }

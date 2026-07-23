@@ -1841,6 +1841,26 @@ test("conversation event helpers build standard message and model output events"
     textLength: 3,
     preview: "先分析",
   });
+
+  const reasoningSummary = buildAgentUiReasoningDeltaEvent(
+    {
+      itemId: "reasoning-1",
+      sourceType: "reasoning_summary_delta",
+      streamKind: "summary",
+      summaryIndex: 2,
+      text: "核对实现",
+    },
+    context,
+  );
+
+  assert.equal(reasoningSummary.type, "reasoning.delta");
+  assert.equal(reasoningSummary.partId, "reasoning-1");
+  assert.deepEqual(reasoningSummary.payload, {
+    textLength: 4,
+    preview: "核对实现",
+    streamKind: "summary",
+    summaryIndex: 2,
+  });
 });
 
 test("action projection helpers build standard HITL events", () => {
@@ -2711,6 +2731,7 @@ test("thread item helpers build standard projection events", () => {
       status: "completed",
       text: "完整推理",
       summary: ["完成推理"],
+      content: ["默认隐藏的原始推理"],
     },
     context,
   );

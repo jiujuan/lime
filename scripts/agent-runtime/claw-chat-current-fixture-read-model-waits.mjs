@@ -34,6 +34,7 @@ import {
 } from "./claw-chat-current-fixture-rpc.mjs";
 import {
   collectReadModelToolCalls,
+  findReadModelToolCall,
   readModelLatestTurnStatus,
   summarizeSkillsRuntimeReadModel,
 } from "./claw-chat-current-fixture-read-model-core.mjs";

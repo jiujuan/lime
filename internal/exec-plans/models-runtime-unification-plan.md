@@ -1,7 +1,7 @@
 # 多模型多模态统一运行时实现计划
 
 > 状态：in progress
-> 更新时间：2026-06-18
+> 更新时间：2026-07-22
 > Owner：Runtime / Model Registry / App Server / Media Task 主链
 > 关联 PRD：`internal/roadmap/models/prd.md`
 
@@ -41,13 +41,13 @@
 - [x] 聊天 runtime 已基于 `ModelTaskRequest.requirements` 与注册表 `CapabilitySnapshot` 产出 `capability_gap`，并在 capability gap 时通过 `RouteFailure(category=capability_gap)` 阻断执行。
 - [x] 新增通用 `model_route_assembly`，把 provider / endpoint / auth / protocol / route defaults / capability snapshot / `RouteFailure` 组装从聊天模块抽出，聊天内部 `model_route_resolver` 只负责 ready candidate、registry metadata、provider record 和 evidence 编排。
 - [x] 媒体 task 创建链路在 provider record、enabled key、registry declared model 都明确时，复用 `model_route_assembly` 写入真实 `resolved_route` / `resolvedRoute`，并保留 capability gap fail-closed 语义。
-- [ ] 把 RouteResolver 从 App Server 内部模块提升为可复用 RuntimeCore resolver，并覆盖音频 / 转写 / embedding 等非 chat task 的 worker 执行；当前 `ResolvedModelRoute` 组装、route evidence bundle、decision/fallback/not_possible evidence 生成已在 RuntimeCore，App Server 只保留 provider record / readiness / registry metadata 适配；图片 / 视频 worker 已消费 `resolved_route` 的安全执行投影，并校验本地 broker `model_route_execution` 合同；音频当前只保留 `ModelTaskRequest` / capability evidence，不写可执行 `resolved_route`，直到 audio worker 或 RuntimeCore 级 provider protocol mapper 落地。
+- [ ] 把 RouteResolver 从 App Server 内部模块提升为可复用 RuntimeCore resolver，并覆盖音频 / 转写 / embedding 等非 chat task 的 worker 执行；当前 `ResolvedModelRoute` 组装、route evidence bundle、decision/fallback/not_possible evidence 生成已在 RuntimeCore，App Server 只保留 provider record / readiness / registry metadata 适配；图片 worker 已消费 `resolved_route` 的 endpoint/protocol 与 durable `credentialRef`，通过 App Server media task worker 精确取凭证后由 media-runtime 直连 Provider；音频当前只保留 `ModelTaskRequest` / capability evidence，不写可执行 `resolved_route`，直到 audio worker 或 RuntimeCore 级 provider protocol mapper 落地。
 - [x] 媒体 task 创建链路在 registry 明确声明能力快照时写入 `route_failure` / `model_route_assessment`，并在 `capability_gap` 时标记任务为 blocked。
-- [x] 图片 / 视频 worker 消费 task payload 中的 `failure_code=capability_gap` 并 fail closed，不再请求 provider。
+- [x] 图片 worker 消费 task payload 中的 `failure_code=capability_gap` 并 fail closed，不再请求 provider；视频 task 没有产品 worker，不生成 ready execution binding。
 - [x] 拆出 `media_task_payload.rs`，让媒体 payload / `ModelTaskRequest` 构建离开超过 `1000` 行的 `media_task.rs`。
-- [x] 图片 / 视频 worker 消费 `resolved_route` 的 provider / model / protocol 安全投影，并消费通用 `route_failure` fail closed；旧任务缺字段时仍按原 payload / runner config 执行。
-- [x] App Server 写入不含 secret 的 `model_route_execution` / `modelRouteExecution` 执行绑定，明确图片 / 视频任务只能通过本地 Lime 服务 broker 解析 Provider credential；media-runtime 对旧 route-only task artifact 做执行期幂等迁移，并对非本地 broker / 内嵌 secret 的执行绑定 fail closed。
-- [ ] 实现 RuntimeCore 级 provider protocol mapper；OpenAI Images API、Responses image-generation 与 Fal video-generation 的请求体 mapper 已进入 RuntimeCore，图片 / 视频 worker 已复用这些 body builder；endpoint 转换、SSE 结果解析、fallback 和本地 broker credential 仍在 media-runtime，当前仍不会直接使用 artifact 中的 Provider endpoint，避免把本地 Lime 服务 API key 发往第三方 Provider。
+- [x] 图片 worker 消费 `resolved_route` 的 provider / model / protocol / endpoint 安全投影，并消费通用 `route_failure` fail closed；旧 route-only task artifact 按 current execution binding 幂等补齐。
+- [x] App Server 为图片任务写入不含 secret 的 `model_route_execution` / `modelRouteExecution` 执行绑定，worker 按 durable `credentialRef` 精确取凭证，再由 media-runtime 直连 resolved Provider endpoint。
+- [ ] 实现 RuntimeCore 级 provider protocol mapper；OpenAI Images API、Responses image-generation 与 Fal video-generation 的请求体 mapper 已进入 RuntimeCore，图片 worker 已复用对应 body builder；视频 mapper 仍只是库级能力，没有 App Server 产品 worker 消费者，不作为 current 视频执行证据。
 
 ### Phase 3：Canonical LLM Runtime
 
@@ -57,7 +57,8 @@
 
 ### Phase 4：媒体任务复用
 
-- [x] 图片 / 视频任务通过 RouteResolver 选择模型和协议，并由 media-runtime worker 消费 `resolved_route` / `model_route_execution` 的本地 broker 执行绑定。
+- [x] 图片任务通过 RouteResolver 选择模型和协议，并由 App Server worker + media-runtime 消费 `resolved_route` / `model_route_execution` 的 direct-provider 执行绑定。
+- [ ] 视频任务尚无产品 worker；不得把 media-runtime 库级 video runner 或 artifact route metadata 记作 current 产品执行链。
 - [ ] 音频 / 转写任务通过 RouteResolver 选择模型和协议；当前音频仍是 metadata-only task artifact + App Server complete 回写，没有独立 worker，转写 worker 也未接入 RuntimeCore mapper。
 - [x] 图片 / 视频 media task artifact 持久化 `resolved_route`、`llm_events`、`provider_diagnostics`，同时保留 snake/camel 双字段便于 current UI / evidence 消费。
 - [ ] 音频 / 转写 media task artifact 持久化 executable `resolved_route` / `llm_events` / `provider_diagnostics`；退出条件是 audio / transcription worker 或 RuntimeCore provider protocol mapper 能真实执行对应 provider wire。
@@ -65,18 +66,18 @@
 
 ## 本轮当前刀
 
-本轮快速完成 Phase 4 的图片 / 视频媒体任务复用闭环：
+本轮快速完成 Phase 4 的图片媒体任务 direct-provider 闭环，并明确视频只停留在库级能力：
 
 1. 在 `runtime-core` 保持 canonical `LlmRequest` / `LlmInputPart` / `LlmOutputPart` / `LlmEvent` 为模型协议唯一输入边界。
 2. 把 OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini、Ollama、OpenAI Images、Responses image-generation、Fal video-generation 的协议映射集中到 `llm_protocol/mapper/`。
-3. 图片 / 视频 worker 请求体构建复用 RuntimeCore body builder，不再在 `media-runtime` 维护第二套 Images API / Responses image-generation / Fal video-generation body shape。
-4. 图片 / 视频 worker 在 running / succeeded / failed 状态写入 RuntimeCore canonical LLM event 投影，并把 provider/model/protocol/transport/credential 诊断持久化到 task payload。
+3. 图片 worker 请求体构建复用 RuntimeCore body builder，不再在 `media-runtime` 维护第二套 Images API / Responses image-generation body shape；Fal video mapper 保留为库级能力，不伪造产品 worker。
+4. 图片 worker 在 running / succeeded / failed 状态写入 RuntimeCore canonical LLM event 投影，并把 provider/model/protocol/transport/credential 诊断持久化到 task payload。
 5. 只做纯协议映射，不在 mapper 里承接数据库、认证、transport 或 GUI 逻辑。
-6. App Server 仍保留 provider record、credential 和 readiness facade，media-runtime 仍保留本地 broker endpoint、Authorization header、SSE 结果解析和 fallback 编排，避免把 runtime 协议与存储 / transport 面再绑死。
-7. 音频 / 转写不伪造可执行复用；继续停留在 metadata-only / typed request evidence，等待 worker 或 RuntimeCore provider protocol mapper 落地。
+6. App Server 保留 provider record、credential 和 readiness facade，media-runtime 只执行 App Server 已解析的 endpoint/protocol，并使用按 durable ref 精确取得的凭证。
+7. 视频 / 音频 / 转写不伪造可执行复用；继续停留在库级 mapper 或 metadata-only / typed request evidence，等待产品 worker 落地。
 8. 通过定向 Rust 测试和全文扫描确认协议层与媒体 evidence 已经收口。
 
-这样做的主线收益是：模型输入/输出、工具调用、图片/文件 parts、provider wire body 和图片 / 视频媒体任务 evidence 已经有统一协议边界；图片与视频 worker 的 provider-specific body shape 和任务事件语义已开始从 `media-runtime` 下沉到 RuntimeCore，后续新增协议只需要补 mapper / event projector，不需要在 App Server、worker、前端三处重复补特判。
+这样做的主线收益是：模型输入/输出、工具调用、图片/文件 parts、provider wire body 和图片任务 evidence 已经有统一协议边界；图片 worker 的 provider-specific body shape 和任务事件语义已开始从 `media-runtime` 下沉到 RuntimeCore，后续新增协议只需要补 mapper / event projector，不需要在 App Server、worker、前端三处重复补特判。
 
 ## 验证计划
 
@@ -104,13 +105,26 @@
 - `customModels` 等可空数组依赖 schema 生成器正确保留数组 item 类型；生成器已补 `type: ["array", "null"]` 支持，后续必须由 `npm run check:protocol-types` 守住。
 - 本轮没有修改 Provider 数据库存储 schema，也没有改旧数据格式；旧 Provider / API Key 数据由投影层自动映射到 typed response，route evidence 只进入事件 / artifact payload，因此无需新增数据迁移脚本。后续若 Phase 2/4 引入新的持久化 route / model binding 字段，必须补启动期迁移或 scripts 迁移入口。
 - 当前能力门禁只在注册表明确返回能力快照时阻断；direct provider config、registry 缺失或模型没有声明任务族 / 模态 / 能力时不按未知能力失败。退出条件是 RouteResolver 具备显式的 `unknown / inferred / declared` 能力置信度，并能把用户可行动错误返回给 GUI。
-- 媒体任务目前写入 `model_task_request`、capability assessment，并在 provider record / enabled key / registry declared model 明确时为图片 / 视频写入真实 `resolved_route` 与 `model_route_execution`。图片 / 视频 worker 已消费 `resolved_route` 的 provider/model/protocol 安全投影，并校验 `local_lime_service` broker 执行绑定；旧 route-only task artifact 会执行期自动补齐顶层 binding。音频任务没有独立 worker，创建时只保留 `ModelTaskRequest` / required capability evidence，完成态仍由 App Server `audio/complete` 写回，不能把 voice route 伪装成可执行 current 路径。退出条件是 image/video/audio worker 或 RuntimeCore 统一消费 `ResolvedModelRoute` 执行对应 provider wire，并把 provider protocol mapper 从本地媒体 broker 旁路提升到 RuntimeCore 主链。
+- 媒体任务目前写入 `model_task_request` 与 capability assessment，并只在最终 provider/model、credential-scoped metadata 与 capability snapshot 明确时为图片写入 ready `resolved_route` 与 `model_route_execution`。图片 worker 以 `media_task_worker + resolved_route_credential_ref` 校验执行绑定，按同一 durable ref 精确取 key，并由 media-runtime 对 resolved endpoint 执行 Provider HTTP；route-only task artifact 会执行期按同一 current 合同补齐顶层 binding。视频和音频都没有产品 worker，不能把库级 runner、route metadata 或 `audio/complete` 回写伪装成可执行 current 路径。退出条件是 video/audio worker 采用同一 exact-ref execution，并把剩余 provider protocol mapper 收敛到 current owner。
 - `runtime_contract` 仍是 App Server protocol 和 TS client 中的 JSON/unknown 字段，因为前端工作台、Skill launch、ImageTaskViewer 和历史 task payload 都在消费它；本轮只把 App Server 默认生成和列表投影收敛到单一模块，不做全协议 typed 化。退出条件是同步 protocol schema、TS generated/client、前端 view model、mock/fixture 后，把 `runtimeContract?: unknown` 升级为 typed display/runtime metadata DTO。
 - `runtime_backend/model_routing.rs` 仍超过 `1000` 行，本轮没有继续往里追加业务逻辑，只删除了迁移后未使用的 `service_model_slot()` helper。退出条件是后续把 profile slot 解析、readiness、payload projection 分拆成独立小模块。
 
 ## 进度日志
 
+### 2026-07-22
+
+- 图片媒体执行合同已从旧本机 broker 描述改为 current App Server media task worker：binding key 复用 `mediaTaskArtifact/image/create`，endpoint 只取 `resolved_route`，凭证只按 `resolved_route_credential_ref` 精确解析，telemetry transport 标记为 `provider_http`。App Server 不再为没有产品 worker 消费者的视频 task 写 ready execution binding。
+- 删除固定本机图片/视频 path、route header 和 runner-config endpoint evidence；route/evidence 不写 Provider base URL 或明文 secret。
+- Renderer Fal / Gemini / OpenAI-compatible / standard Provider 直连 executors、本机图片 HTTP executor、batch runner、历史状态、错误解析、正向测试与旧 live test 已按 `dead / deleted / forbidden-to-restore` 清理；current 工作台创建、轮询和取消均走 `mediaTaskArtifact/*` App Server JSON-RPC。`useImageGen` 已收缩为 Provider、模型和尺寸选择 owner，不再暴露 `generateImage/cancelGeneration`。
+- 图片工作台“保存到素材库”已从 `hookImageId -> useImageGen image-gen-history` 迁到 `ImageWorkbenchOutput.url -> projectMaterial/importFromUrl` current 主链，保存中状态归 `useWorkspaceImageWorkbenchActionRuntime`。`useImageGen.saveImagesToResource/backfillImagesToResource` 及其历史记录类型和测试已物理删除，图片生成产品能力保持在 current media task 主链。
+- Renderer 图片执行面收口验证：`useImageGen.preference`、图片 catalog 与 legacy catalog 共 243/243 通过；工作台 Provider/画布边界、素材导入与 action runtime 共 45/45 通过；`npm run governance:legacy-report` 为 0 分类漂移、0 边界违规。`image-command` Gate B controlled fixture 为 `ok=true`、`backendMode=runtime`，真实 Electron/preload/IPC/App Server 主链命中，任务产物 `succeeded`、可见预览刷新后恢复，legacy command、mock fallback、页面和控制台错误均为 0。仓库级 `npm run typecheck` 被并行协议热区 `packages/agent-runtime-client/src/eventVerifier.ts` 对新增 reasoning notification 的未穷尽类型收窄阻断，本轮图片定向测试与 renderer production build 均通过，未跨写集修复该错误。`npm run test:related -- <图片路径>` 还暴露智能入口把仓库 `electron/` 目录当文件读取的 `EISDIR` 发现器问题，因此改用明确测试文件取得上述结果。
+- 图片 Gate B Electron fixture 已转绿：`claw-chat-current-fixture-image-command-scoped-credential-v2-summary.json` 为 `ok=true`。受控 Electron 场景证明文本模型发现与 presentation 请求均携带 credential，纯文生图的 `ModelTaskRequest.requirements.inputModalities=[text]`，图片 Provider 收到一次带凭证的 `/v1/images/generations`，`lime-image-api-worker` 将同一 task 推进 `succeeded`，read model / GUI 进入 terminal，刷新后任务卡与预览图恢复，且 production mock fallback、console/page/invoke error 命中均为 0。本证据等级为 Gate B controlled fixture，不扩张为 live Provider 证明。
+- 验证：App Server route binding 1/1、image payload 1/1、media-runtime route unit 8/8、route integration 9/9、media-runtime lib 52/52、治理边界扫描通过。
+- 本次补证：`media_task_payload::tests` 6/6；`image-command` Gate B controlled fixture 通过。`npm run test:rust:related -- lime-rs/crates/app-server/src/media_task_payload.rs` 为 1463/1469，余下 6 项均位于并行修改的 canonical projection / mailbox 热区，不属于图片 payload 或 worker 主链，本车道未跨写集处理。
+
 ### 2026-06-18
+
+> 以下为历史执行 evidence；其中 `local_lime_service` / 本机 broker 与视频 worker 的描述已被 2026-07-22 direct-provider 图片合同取代，不代表 current 产品路径。
 
 - Phase 3 canonical LLM protocol 第一刀：新增 `runtime-core/src/llm_protocol/`，定义 `LlmRequest`、`LlmMessage`、`LlmInputPart`、`LlmOutputPart`、`LlmEvent`、`ProviderWireRequest`，显式支持 text / image / audio / file / tool call / tool result。
 - 协议 mapper 已拆成 `mapper/mod.rs`、`common.rs`、`openai_responses.rs`、`openai_chat.rs`、`anthropic_messages.rs`、`gemini.rs`、`ollama_chat.rs`，避免继续形成单文件巨型 mapper。

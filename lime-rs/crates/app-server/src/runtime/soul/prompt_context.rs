@@ -117,6 +117,10 @@ pub(crate) fn soul_packet_from_metadata(
     if let Some(summary) = non_empty_str(summary) {
         lines.push(format!("- Summary: {summary}"));
     }
+    lines.push(
+        "- Turn relevance: Answer simple greetings directly in one or two short sentences. Do not infer an unstated task, continue unrelated work, or summarize a project from style or persona context."
+            .to_string(),
+    );
     append_style_boundary_lines(style_boundary, &mut lines);
     append_persona_context_lines(runtime_metadata, &mut lines);
     append_style_profile_lines(style_profile, &mut lines);
@@ -293,11 +297,12 @@ fn append_style_profile_lines(style_profile: Option<&Value>, lines: &mut Vec<Str
         "Anti-repetition rules",
         string_array(style_profile.get("antiRepetitionRules")),
     );
-    append_named_list(
-        lines,
-        "Few-shot anchors",
-        string_array(style_profile.get("fewShotAnchors")),
-    );
+    if style_profile.get("fewShotAnchors").is_some() {
+        lines.push(
+            "- Few-shot anchors: examples are design-time fixtures and are intentionally omitted from the runtime prompt; never reuse a fixed opener."
+                .to_string(),
+        );
+    }
     if let Some(fallback) = non_empty_str(
         style_profile
             .get("seriousModeFallback")
@@ -378,4 +383,34 @@ fn string_array(value: Option<&Value>) -> Vec<String> {
 
 fn non_empty_str(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::context_packet::assemble_context_packets;
+
+    #[test]
+    fn runtime_soul_prompt_excludes_few_shot_example_text() {
+        let soul = MemorySoulConfig {
+            enabled: true,
+            style_profile_id: Some("cheeky_sassy_executor".to_string()),
+            ..MemorySoulConfig::default()
+        };
+        let context = memory_soul_prompt_context_from_config(Some(&soul)).expect("soul context");
+        let metadata = json!({
+            "memory": {
+                "soul": context
+            }
+        });
+        let packet = soul_packet_from_metadata(Some(&metadata), None).expect("soul packet");
+        let prompt = assemble_context_packets(vec![packet])
+            .rendered
+            .expect("rendered soul prompt");
+
+        assert!(prompt.contains("Answer simple greetings directly"));
+        assert!(prompt.contains("examples are design-time fixtures"));
+        assert!(!prompt.contains("资料回来了"));
+        assert!(!prompt.contains("我先把证据抓回来"));
+    }
 }

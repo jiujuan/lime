@@ -1,4 +1,121 @@
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallRepairFailureKind {
+    MissingName,
+    UnknownTool,
+    MalformedArguments,
+    ArgumentsNotObject,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ToolArgumentChange {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<Value>,
+    pub after: Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ToolCallRepair {
+    pub requested_name: String,
+    pub resolved_name: String,
+    pub original_arguments: Map<String, Value>,
+    pub arguments: Map<String, Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub argument_changes: Vec<ToolArgumentChange>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ToolCallRepairFailure {
+    pub requested_name: String,
+    pub raw_arguments: String,
+    pub kind: ToolCallRepairFailureKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ToolCallRepairOutcome {
+    Ready(ToolCallRepair),
+    Invalid(ToolCallRepairFailure),
+}
+
+pub fn repair_tool_call<T: AsRef<str>>(
+    available_tool_names: &[T],
+    requested_name: &str,
+    raw_arguments: &str,
+    canonical_name: &dyn Fn(&str) -> Option<String>,
+) -> ToolCallRepairOutcome {
+    let requested_name = requested_name.trim();
+    if requested_name.is_empty() {
+        return invalid_tool_call_repair(
+            requested_name,
+            raw_arguments,
+            ToolCallRepairFailureKind::MissingName,
+        );
+    }
+    let Some(resolved_name) =
+        runtime_tool_call_surface_name(available_tool_names, requested_name, canonical_name)
+    else {
+        return invalid_tool_call_repair(
+            requested_name,
+            raw_arguments,
+            ToolCallRepairFailureKind::UnknownTool,
+        );
+    };
+    let parsed_arguments = match serde_json::from_str::<Value>(raw_arguments) {
+        Ok(value) => value,
+        Err(_) => {
+            return invalid_tool_call_repair(
+                requested_name,
+                raw_arguments,
+                ToolCallRepairFailureKind::MalformedArguments,
+            );
+        }
+    };
+    let Value::Object(original_arguments) = parsed_arguments else {
+        return invalid_tool_call_repair(
+            requested_name,
+            raw_arguments,
+            ToolCallRepairFailureKind::ArgumentsNotObject,
+        );
+    };
+    let mut arguments = original_arguments.clone();
+    runtime_tool_call_normalize_arguments(&resolved_name, &mut arguments);
+    let argument_changes = arguments
+        .iter()
+        .filter_map(|(key, after)| {
+            let before = original_arguments.get(key);
+            (before != Some(after)).then(|| ToolArgumentChange {
+                key: key.clone(),
+                before: before.cloned(),
+                after: after.clone(),
+            })
+        })
+        .collect();
+
+    ToolCallRepairOutcome::Ready(ToolCallRepair {
+        requested_name: requested_name.to_string(),
+        resolved_name,
+        original_arguments,
+        arguments,
+        argument_changes,
+    })
+}
+
+fn invalid_tool_call_repair(
+    requested_name: &str,
+    raw_arguments: &str,
+    kind: ToolCallRepairFailureKind,
+) -> ToolCallRepairOutcome {
+    ToolCallRepairOutcome::Invalid(ToolCallRepairFailure {
+        requested_name: requested_name.to_string(),
+        raw_arguments: raw_arguments.to_string(),
+        kind,
+    })
+}
 
 pub fn runtime_tool_call_surface_name<T: AsRef<str>>(
     available_tool_names: &[T],
@@ -173,5 +290,152 @@ mod tests {
 
         assert_eq!(grep_arguments.get("pattern"), Some(&json!("TODO")));
         assert_eq!(glob_arguments.get("pattern"), Some(&json!("*.rs")));
+    }
+
+    #[test]
+    fn repair_resolves_alias_and_records_read_argument_changes() {
+        let outcome = repair_tool_call(
+            &["Read", "Grep"],
+            "read_file",
+            r#"{"file_path":" src/lib.rs ","head":"42"}"#,
+            &canonical_name,
+        );
+
+        let ToolCallRepairOutcome::Ready(repair) = outcome else {
+            panic!("repair should be ready");
+        };
+        assert_eq!(repair.requested_name, "read_file");
+        assert_eq!(repair.resolved_name, "Read");
+        assert_eq!(repair.original_arguments.get("path"), None);
+        assert_eq!(repair.arguments.get("path"), Some(&json!("src/lib.rs")));
+        assert_eq!(repair.arguments.get("start_line"), Some(&json!(1)));
+        assert_eq!(repair.arguments.get("end_line"), Some(&json!(42)));
+        assert_eq!(
+            repair.argument_changes,
+            vec![
+                ToolArgumentChange {
+                    key: "end_line".to_string(),
+                    before: None,
+                    after: json!(42),
+                },
+                ToolArgumentChange {
+                    key: "path".to_string(),
+                    before: None,
+                    after: json!("src/lib.rs"),
+                },
+                ToolArgumentChange {
+                    key: "start_line".to_string(),
+                    before: None,
+                    after: json!(1),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn repair_preserves_existing_target_arguments() {
+        let outcome = repair_tool_call(
+            &["Read"],
+            "read",
+            r#"{"filePath":"other.rs","path":"current.rs","head":10,"end_line":5}"#,
+            &canonical_name,
+        );
+
+        let ToolCallRepairOutcome::Ready(repair) = outcome else {
+            panic!("repair should be ready");
+        };
+        assert_eq!(repair.resolved_name, "Read");
+        assert_eq!(repair.arguments.get("path"), Some(&json!("current.rs")));
+        assert_eq!(repair.arguments.get("end_line"), Some(&json!(5)));
+        assert!(repair.argument_changes.is_empty());
+    }
+
+    #[test]
+    fn repair_returns_typed_invalid_for_bad_arguments() {
+        let malformed = repair_tool_call(
+            &["Read"],
+            "Read",
+            r#"{"path": "unfinished"#,
+            &canonical_name,
+        );
+        let scalar = repair_tool_call(&["Read"], "Read", r#"["src/lib.rs"]"#, &canonical_name);
+
+        assert!(matches!(
+            malformed,
+            ToolCallRepairOutcome::Invalid(ToolCallRepairFailure {
+                kind: ToolCallRepairFailureKind::MalformedArguments,
+                ..
+            })
+        ));
+        assert!(matches!(
+            scalar,
+            ToolCallRepairOutcome::Invalid(ToolCallRepairFailure {
+                kind: ToolCallRepairFailureKind::ArgumentsNotObject,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn repair_returns_typed_invalid_for_missing_or_unknown_tool() {
+        let missing = repair_tool_call(&["Read"], " ", "{}", &canonical_name);
+        let unknown = repair_tool_call(&["Read"], "write_file", "{}", &canonical_name);
+
+        assert!(matches!(
+            missing,
+            ToolCallRepairOutcome::Invalid(ToolCallRepairFailure {
+                kind: ToolCallRepairFailureKind::MissingName,
+                ..
+            })
+        ));
+        assert!(matches!(
+            unknown,
+            ToolCallRepairOutcome::Invalid(ToolCallRepairFailure {
+                kind: ToolCallRepairFailureKind::UnknownTool,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn repair_outcome_serializes_as_typed_contract() {
+        let ready = repair_tool_call(&["Grep"], "ripgrep", r#"{"query":"TODO"}"#, &canonical_name);
+        let invalid = repair_tool_call(&["Read"], "unknown", "{}", &canonical_name);
+
+        let ready_value = json!({
+            "status": "ready",
+            "requested_name": "ripgrep",
+            "resolved_name": "Grep",
+            "original_arguments": { "query": "TODO" },
+            "arguments": { "pattern": "TODO", "query": "TODO" },
+            "argument_changes": [
+                { "key": "pattern", "after": "TODO" }
+            ]
+        });
+        let invalid_value = json!({
+            "status": "invalid",
+            "requested_name": "unknown",
+            "raw_arguments": "{}",
+            "kind": "unknown_tool"
+        });
+
+        assert_eq!(
+            serde_json::to_value(&ready).expect("serialize ready repair"),
+            ready_value
+        );
+        assert_eq!(
+            serde_json::to_value(&invalid).expect("serialize invalid repair"),
+            invalid_value
+        );
+        assert_eq!(
+            serde_json::from_value::<ToolCallRepairOutcome>(ready_value)
+                .expect("deserialize ready repair"),
+            ready
+        );
+        assert_eq!(
+            serde_json::from_value::<ToolCallRepairOutcome>(invalid_value)
+                .expect("deserialize invalid repair"),
+            invalid
+        );
     }
 }

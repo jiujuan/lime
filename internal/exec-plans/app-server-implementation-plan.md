@@ -6,6 +6,13 @@
 > 参考实现：`/Users/coso/Documents/dev/rust/codex/codex-rs/app-server*`（Codex CLI 仓库内的 codex-rs Rust 分层，不包含 Codex App 前端）
 > 当前阶段：`P3.314 legacy agent_runtime command manifest generator retired`
 
+> 2026-07-22 current correction：v0 `ManagedObjective`、`agentSession/objective/*`、
+> `managed_objectives` repository/table 与 Desktop objective continuation port 已
+> `dead / deleted / forbidden-to-restore`。唯一继续演进的 Goal owner 是 thread-owned
+> canonical `ThreadGoal`，由 App Server v2 `thread/goal/*`、RuntimeCore continuation、
+> ThreadStore budget/usage accounting 与 Thread/Turn/Item projection 共同承接。下文 P3.13
+> 对旧 objective host port 的描述仅保留为 dated migration evidence，不再表示 current 或 compat。
+
 ## 1. 当前目标
 
 把 Lime Agent Runtime 的服务化路线从规划推进到可运行骨架：

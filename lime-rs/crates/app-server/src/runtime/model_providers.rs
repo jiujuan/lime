@@ -206,33 +206,6 @@ impl RuntimeCore {
         self.app_data_source.delete_model_provider_key(params).await
     }
 
-    pub async fn read_next_model_provider_key(
-        &self,
-        params: ModelProviderKeyNextParams,
-    ) -> Result<ModelProviderKeyNextResponse, RuntimeCoreError> {
-        self.app_data_source
-            .read_next_model_provider_key(params)
-            .await
-    }
-
-    pub async fn record_model_provider_key_usage(
-        &self,
-        params: ModelProviderKeyEventParams,
-    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
-        self.app_data_source
-            .record_model_provider_key_usage(params)
-            .await
-    }
-
-    pub async fn record_model_provider_key_error(
-        &self,
-        params: ModelProviderKeyEventParams,
-    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
-        self.app_data_source
-            .record_model_provider_key_error(params)
-            .await
-    }
-
     pub async fn read_model_provider_ui_state(
         &self,
         params: ModelProviderUiStateReadParams,

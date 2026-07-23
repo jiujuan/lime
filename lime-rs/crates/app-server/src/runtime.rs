@@ -51,7 +51,6 @@ mod media_tasks;
 mod memory;
 pub(crate) mod memory_prompt;
 mod model_providers;
-mod objectives;
 mod output_refs;
 pub(crate) mod pending_action_descriptor;
 mod permission_state_projection;
@@ -199,7 +198,6 @@ use app_server_protocol::ArtifactSummary;
 use app_server_protocol::ClientInfo;
 use app_server_protocol::EvidencePackSummary;
 use app_server_protocol::JsonRpcError;
-use app_server_protocol::ManagedObjectiveStatus;
 use app_server_protocol::RuntimeOptions;
 use async_trait::async_trait;
 use lime_browser_runtime::{BrowserProfileScope, BrowserRuntimeManager};
@@ -491,15 +489,6 @@ pub struct EvidencePackRequest {
     pub turn_runtime_metadata: BTreeMap<String, serde_json::Value>,
     pub request_logs: Vec<RequestLog>,
     pub workflow_audit_events: Vec<AgentEvent>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ManagedObjectiveAuditUpdate {
-    pub status: ManagedObjectiveStatus,
-    pub last_audit_summary: Option<String>,
-    pub last_evidence_pack_ref: Option<String>,
-    pub last_artifact_refs: Vec<String>,
-    pub blocker_reason: Option<String>,
 }
 
 #[async_trait]

@@ -47,9 +47,9 @@
 
 补充边界：
 
-[Codex `/goal`](../research/codex-goal/README.md) 这类目标续跑模式如果在 Lime 演进为 `Managed Objective`，其状态投影也必须消费 `SessionDetail / AgentRuntimeThreadReadModel / evidence pack`。不得让 objective UI、automation job、review/handoff 各自重建“目标是否完成”的第二套真相。
+[Codex `/goal`](../research/codex-goal/README.md) 在 Lime 的 current owner 是 canonical ThreadStore `ThreadGoal`。Renderer、Automation、review/handoff 不得各自重建“目标是否完成”的第二套真相。
 
-详细路线图见 `internal/roadmap/managed-objective/README.md`。本文件只定义状态与历史事实源边界：objective projection 是下游投影，不是 session / thread 的第二套真相。
+旧 ManagedObjective projection、repository 和 v0 RPC 已删除；ThreadGoal 状态只能从 canonical thread identity 读取。
 
 ## 代码入口地图
 

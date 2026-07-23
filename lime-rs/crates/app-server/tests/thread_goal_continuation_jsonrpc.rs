@@ -3,16 +3,16 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use app_server::{
-    run_json_lines, ActionRespondRequest, AppServer, CancelExecutionRequest, ExecutionBackend,
-    ExecutionRequest, ProjectionStore, RuntimeCore, RuntimeCoreError, RuntimeEvent,
-    RuntimeEventSink,
+    run_json_lines, ActionRespondRequest, AppServer, CancelExecutionRequest, EventLogWriter,
+    ExecutionBackend, ExecutionRequest, ProjectionStore, RuntimeCore, RuntimeCoreError,
+    RuntimeEvent, RuntimeEventSink,
 };
 use app_server_protocol::protocol::v2::{
     METHOD_THREAD_GOAL_SET, METHOD_TURN_COMPLETED, METHOD_TURN_STARTED,
 };
 use app_server_protocol::{
-    METHOD_INITIALIZE, METHOD_INITIALIZED, METHOD_THREAD_READ, METHOD_THREAD_START,
-    METHOD_TURN_START,
+    METHOD_INITIALIZE, METHOD_INITIALIZED, METHOD_THREAD_READ, METHOD_THREAD_RESUME,
+    METHOD_THREAD_START, METHOD_TURN_START,
 };
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -31,6 +31,8 @@ struct CapturedTurn {
 struct SequencedGoalBackend {
     calls: AtomicUsize,
     captured: Mutex<Vec<CapturedTurn>>,
+    user_started: Notify,
+    release_user: Notify,
     continuation_started: Notify,
     release_continuation: Notify,
 }
@@ -40,6 +42,8 @@ impl SequencedGoalBackend {
         Self {
             calls: AtomicUsize::new(0),
             captured: Mutex::new(Vec::new()),
+            user_started: Notify::new(),
+            release_user: Notify::new(),
             continuation_started: Notify::new(),
             release_continuation: Notify::new(),
         }
@@ -72,7 +76,11 @@ impl ExecutionBackend for SequencedGoalBackend {
         sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
 
         match call_index {
-            0 => sink.emit(RuntimeEvent::new("turn.completed", json!({}))),
+            0 => {
+                self.user_started.notify_one();
+                self.release_user.notified().await;
+                sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+            }
             1 => {
                 self.continuation_started.notify_one();
                 self.release_continuation.notified().await;
@@ -90,7 +98,87 @@ impl ExecutionBackend for SequencedGoalBackend {
         _request: CancelExecutionRequest,
         _sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
+        self.release_user.notify_one();
         self.release_continuation.notify_one();
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct ResumedGoalBackend {
+    captured: Mutex<Vec<CapturedTurn>>,
+    started: Notify,
+    release: Notify,
+}
+
+#[async_trait]
+impl ExecutionBackend for ResumedGoalBackend {
+    async fn start_turn(
+        &self,
+        request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.captured
+            .lock()
+            .expect("resumed goal backend capture mutex poisoned")
+            .push(CapturedTurn {
+                turn_id: request.turn.turn_id.clone(),
+                agent_only: request.input.agent_only,
+                text: request.input.concat_text(),
+            });
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        self.started.notify_one();
+        self.release.notified().await;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.release.notify_one();
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
+struct DurableHistoryBackend;
+
+#[async_trait]
+impl ExecutionBackend for DurableHistoryBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new(
+            "turn.failed",
+            json!({ "reason": "cold_resume_fixture_history" }),
+        ))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
         Ok(())
     }
 
@@ -163,27 +251,6 @@ async fn completed_turn_starts_one_agent_only_goal_continuation_over_public_json
         json!({
             "jsonrpc": "2.0",
             "id": 3,
-            "method": METHOD_THREAD_GOAL_SET,
-            "params": {
-                "threadId": thread_id,
-                "objective": "finish the verified current owner",
-                "tokenBudget": 500
-            }
-        }),
-    )
-    .await;
-    let goal_set = read_response(&mut output_lines, 3).await;
-    assert_response_ok(&goal_set, "thread/goal/set");
-    assert_eq!(
-        goal_set.pointer("/result/goal/status"),
-        Some(&json!("active"))
-    );
-
-    write_message(
-        &mut input_client,
-        json!({
-            "jsonrpc": "2.0",
-            "id": 4,
             "method": METHOD_TURN_START,
             "params": {
                 "threadId": thread_id,
@@ -195,6 +262,34 @@ async fn completed_turn_starts_one_agent_only_goal_continuation_over_public_json
         }),
     )
     .await;
+    let turn_start = read_response(&mut output_lines, 3).await;
+    assert_response_ok(&turn_start, "turn/start");
+    let first_turn_id = required_string(&turn_start, "/result/turn/id", "turn/start id");
+    timeout(Duration::from_secs(3), backend.user_started.notified())
+        .await
+        .expect("user turn should start before setting the goal");
+
+    write_message(
+        &mut input_client,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": METHOD_THREAD_GOAL_SET,
+            "params": {
+                "threadId": thread_id,
+                "objective": "finish the verified current owner",
+                "tokenBudget": 500
+            }
+        }),
+    )
+    .await;
+    let goal_set = read_response(&mut output_lines, 4).await;
+    assert_response_ok(&goal_set, "thread/goal/set during active turn");
+    assert_eq!(
+        goal_set.pointer("/result/goal/status"),
+        Some(&json!("active"))
+    );
+    backend.release_user.notify_one();
 
     timeout(
         Duration::from_secs(3),
@@ -204,7 +299,7 @@ async fn completed_turn_starts_one_agent_only_goal_continuation_over_public_json
     .expect("active goal should start a continuation turn");
     let captured = backend.captured();
     assert_eq!(captured.len(), 2, "one user turn plus one continuation");
-    let first_turn_id = captured[0].turn_id.clone();
+    assert_eq!(captured[0].turn_id, first_turn_id);
     let continuation_turn_id = captured[1].turn_id.clone();
 
     let observed = wait_for_turn_admission_and_continuation(
@@ -214,7 +309,6 @@ async fn completed_turn_starts_one_agent_only_goal_continuation_over_public_json
         &continuation_turn_id,
     )
     .await;
-    assert!(observed.turn_start_response);
     assert!(observed.first_turn_completed);
     assert!(observed.continuation_started);
 
@@ -303,8 +397,196 @@ async fn completed_turn_starts_one_agent_only_goal_continuation_over_public_json
         .expect("JSONL runner result");
 }
 
+#[tokio::test]
+async fn cold_resume_starts_goal_continuation_after_public_response() {
+    let temp = TempDir::new().expect("cold resume goal continuation temp dir");
+    let projection_path = temp.path().join("projection.sqlite");
+    let event_log_root = temp.path().join("event-log");
+    let initial_runtime = RuntimeCore::with_backend(Arc::new(DurableHistoryBackend))
+        .with_projection_store(Arc::new(
+            ProjectionStore::initialize(&projection_path)
+                .expect("initial cold resume projection store"),
+        ))
+        .with_event_log_writer(Arc::new(
+            EventLogWriter::new(&event_log_root).expect("initial cold resume event log"),
+        ));
+    let initial_server = AppServer::with_runtime(initial_runtime);
+    let (mut initial_input, initial_input_server) = tokio::io::duplex(32 * 1024);
+    let (initial_output_server, initial_output) = tokio::io::duplex(32 * 1024);
+    let initial_runner = tokio::spawn(run_json_lines(
+        initial_server,
+        initial_input_server,
+        initial_output_server,
+    ));
+    let mut initial_lines = BufReader::new(initial_output).lines();
+    initialize_jsonl(
+        &mut initial_input,
+        &mut initial_lines,
+        1,
+        "goal-resume-initial",
+    )
+    .await;
+    write_message(
+        &mut initial_input,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": METHOD_THREAD_START,
+            "params": {
+                "model": "fixture-model",
+                "modelProvider": "fixture-provider",
+                "cwd": temp.path()
+            }
+        }),
+    )
+    .await;
+    let started = read_response(&mut initial_lines, 2).await;
+    assert_response_ok(&started, "initial thread/start");
+    let thread_id = required_string(&started, "/result/thread/id", "initial thread id");
+    write_message(
+        &mut initial_input,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": METHOD_TURN_START,
+            "params": {
+                "threadId": thread_id,
+                "input": [{"type": "text", "text": "persist resume history"}],
+                "model": "fixture-model",
+                "approvalPolicy": "never",
+                "sandboxPolicy": "workspace-write"
+            }
+        }),
+    )
+    .await;
+    let initial_turn = read_response(&mut initial_lines, 3).await;
+    assert_response_ok(&initial_turn, "initial turn/start");
+    let initial_turn_id = required_string(&initial_turn, "/result/turn/id", "initial turn id");
+    let terminal =
+        read_turn_notification(&mut initial_lines, METHOD_TURN_COMPLETED, &initial_turn_id).await;
+    assert_eq!(
+        terminal.pointer("/params/turn/status"),
+        Some(&json!("failed"))
+    );
+    drop(initial_input);
+    timeout(Duration::from_secs(2), initial_runner)
+        .await
+        .expect("initial JSONL runner should stop")
+        .expect("initial JSONL runner task")
+        .expect("initial JSONL runner result");
+
+    let connection =
+        rusqlite::Connection::open(&projection_path).expect("open cold resume projection database");
+    connection
+        .execute(
+            r#"INSERT INTO thread_goals (
+                   thread_id, goal_id, objective, status, token_budget,
+                   tokens_used, time_used_seconds, created_at_ms, updated_at_ms
+               ) VALUES (?1, 'goal-cold-resume', ?2, 'active', 500, 0, 0, 1, 1)"#,
+            rusqlite::params![thread_id, "continue after reconnect"],
+        )
+        .expect("seed durable active goal before cold resume");
+    drop(connection);
+
+    let backend = Arc::new(ResumedGoalBackend::default());
+    let restarted_runtime = RuntimeCore::with_backend(backend.clone())
+        .with_projection_store(Arc::new(
+            ProjectionStore::initialize(&projection_path)
+                .expect("restarted cold resume projection store"),
+        ))
+        .with_event_log_writer(Arc::new(
+            EventLogWriter::new(&event_log_root).expect("restarted cold resume event log"),
+        ));
+    let restarted_server = AppServer::with_runtime(restarted_runtime);
+    let (mut input_client, input_server) = tokio::io::duplex(32 * 1024);
+    let (output_server, output_client) = tokio::io::duplex(32 * 1024);
+    let runner = tokio::spawn(run_json_lines(
+        restarted_server,
+        input_server,
+        output_server,
+    ));
+    let mut output_lines = BufReader::new(output_client).lines();
+    initialize_jsonl(
+        &mut input_client,
+        &mut output_lines,
+        10,
+        "goal-resume-restarted",
+    )
+    .await;
+
+    write_message(
+        &mut input_client,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": METHOD_THREAD_RESUME,
+            "params": { "threadId": thread_id }
+        }),
+    )
+    .await;
+    let mut resume_response_seen = false;
+    let continuation_turn_id = loop {
+        let message = next_message(&mut output_lines).await;
+        if message.get("id") == Some(&json!(11)) {
+            assert_response_ok(&message, "thread/resume");
+            assert_eq!(
+                message.pointer("/result/thread/id"),
+                Some(&json!(thread_id))
+            );
+            resume_response_seen = true;
+        }
+        if message.get("method") == Some(&json!(METHOD_TURN_STARTED)) {
+            assert!(
+                resume_response_seen,
+                "continuation notification must remain behind the resume response"
+            );
+            break required_string(&message, "/params/turn/id", "resumed continuation turn id");
+        }
+    };
+    timeout(Duration::from_secs(3), backend.started.notified())
+        .await
+        .expect("cold-resumed goal continuation should reach the backend");
+    let captured = backend
+        .captured
+        .lock()
+        .expect("resumed goal capture mutex poisoned")
+        .clone();
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0].turn_id, continuation_turn_id);
+    assert!(captured[0].agent_only);
+    assert!(captured[0].text.contains("continue after reconnect"));
+
+    write_message(
+        &mut input_client,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": METHOD_THREAD_GOAL_SET,
+            "params": { "threadId": thread_id, "status": "paused" }
+        }),
+    )
+    .await;
+    assert_response_ok(
+        &read_response(&mut output_lines, 12).await,
+        "pause cold-resumed goal",
+    );
+    backend.release.notify_one();
+    read_turn_notification(
+        &mut output_lines,
+        METHOD_TURN_COMPLETED,
+        &continuation_turn_id,
+    )
+    .await;
+
+    drop(input_client);
+    timeout(Duration::from_secs(2), runner)
+        .await
+        .expect("restarted JSONL runner should stop")
+        .expect("restarted JSONL runner task")
+        .expect("restarted JSONL runner result");
+}
+
 struct ObservedContinuation {
-    turn_start_response: bool,
     first_turn_completed: bool,
     continuation_started: bool,
 }
@@ -316,20 +598,11 @@ async fn wait_for_turn_admission_and_continuation(
     continuation_turn_id: &str,
 ) -> ObservedContinuation {
     let mut observed = ObservedContinuation {
-        turn_start_response: false,
         first_turn_completed: false,
         continuation_started: false,
     };
     for _ in 0..96 {
         let message = next_message(lines).await;
-        if message.get("id") == Some(&json!(4)) {
-            assert_response_ok(&message, "turn/start");
-            assert_eq!(
-                message.pointer("/result/turn/id"),
-                Some(&json!(first_turn_id))
-            );
-            observed.turn_start_response = true;
-        }
         if message.get("method") == Some(&json!(METHOD_TURN_COMPLETED))
             && message.pointer("/params/turn/id") == Some(&json!(first_turn_id))
         {
@@ -342,10 +615,7 @@ async fn wait_for_turn_admission_and_continuation(
             assert_eq!(message.pointer("/params/threadId"), Some(&json!(thread_id)));
             observed.continuation_started = true;
         }
-        if observed.turn_start_response
-            && observed.first_turn_completed
-            && observed.continuation_started
-        {
+        if observed.first_turn_completed && observed.continuation_started {
             return observed;
         }
     }
@@ -369,6 +639,30 @@ async fn write_message(client: &mut DuplexStream, message: Value) {
         .await
         .expect("write JSON-RPC message");
     client.flush().await.expect("flush JSON-RPC message");
+}
+
+async fn initialize_jsonl(
+    input: &mut DuplexStream,
+    output: &mut Lines<BufReader<DuplexStream>>,
+    id: u64,
+    name: &str,
+) {
+    write_message(
+        input,
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": METHOD_INITIALIZE,
+            "params": { "clientInfo": { "name": name, "version": "1.0.0" } }
+        }),
+    )
+    .await;
+    assert_response_ok(&read_response(output, id).await, "initialize");
+    write_message(
+        input,
+        json!({ "jsonrpc": "2.0", "method": METHOD_INITIALIZED, "params": {} }),
+    )
+    .await;
 }
 
 async fn read_response(lines: &mut Lines<BufReader<DuplexStream>>, id: u64) -> Value {

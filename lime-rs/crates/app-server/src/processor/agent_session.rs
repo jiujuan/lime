@@ -10,9 +10,6 @@ use app_server_protocol::{
     AgentSessionCompactParams, AgentSessionFileCheckpointDiffParams,
     AgentSessionFileCheckpointGetParams, AgentSessionFileCheckpointListParams,
     AgentSessionFileCheckpointRestoreParams, AgentSessionMediaReadParams,
-    AgentSessionObjectiveAuditParams, AgentSessionObjectiveClearParams,
-    AgentSessionObjectiveContinueParams, AgentSessionObjectiveReadParams,
-    AgentSessionObjectiveSetParams, AgentSessionObjectiveStatusUpdateParams,
     AgentSessionQueuedTurnPromoteParams, AgentSessionQueuedTurnRemoveParams,
     AgentSessionRuntimeEventAppendParams, AgentSessionRuntimeEventAppendResponse,
     AgentSessionToolInventoryReadParams, AgentSessionUpdateParams, JsonRpcError, JsonRpcMessage,
@@ -79,91 +76,6 @@ impl RequestProcessor {
                 })
                 .map_err(to_jsonrpc_error)?
         };
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_objective_read_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_agent_session_objective(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_objective_set_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveSetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .set_agent_session_objective(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_objective_status_update_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveStatusUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_agent_session_objective_status(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_objective_clear_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveClearParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .clear_agent_session_objective(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    pub(super) async fn handle_objective_continue_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveContinueParams = parse_params(params)?;
-        let host = self.runtime_host_context();
-        let output = self
-            .runtime
-            .continue_agent_session_objective(params, host)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result_with_events(output.response, output.events)
-    }
-
-    pub(super) async fn handle_objective_audit_impl(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveAuditParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .audit_agent_session_objective(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
 

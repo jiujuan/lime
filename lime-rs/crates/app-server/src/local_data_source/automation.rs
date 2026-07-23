@@ -521,7 +521,6 @@ fn validate_automation_payload(payload: &Value) -> Result<(), RuntimeCoreError> 
                         "自动化任务 request_metadata 必须为对象".to_string(),
                     ));
                 }
-                validate_automation_managed_objective_metadata(metadata)?;
             }
             Ok(())
         }
@@ -532,51 +531,6 @@ fn validate_automation_payload(payload: &Value) -> Result<(), RuntimeCoreError> 
             "不支持的自动化任务 payload.kind: {kind}"
         ))),
     }
-}
-
-fn validate_automation_managed_objective_metadata(
-    metadata: &Value,
-) -> Result<(), RuntimeCoreError> {
-    let Some(harness) = metadata.get("harness").and_then(Value::as_object) else {
-        return Ok(());
-    };
-    let Some(managed_objective) = harness
-        .get("managed_objective")
-        .or_else(|| harness.get("managedObjective"))
-        .and_then(Value::as_object)
-    else {
-        return Ok(());
-    };
-
-    let owner_type = managed_objective
-        .get("owner_type")
-        .or_else(|| managed_objective.get("ownerType"))
-        .or_else(|| managed_objective.get("owner_kind"))
-        .or_else(|| managed_objective.get("ownerKind"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    if let Some(owner_type) = owner_type {
-        if owner_type != "automation_job" {
-            return Err(RuntimeCoreError::Backend(format!(
-                "自动化任务 managed_objective.owner_type 必须为 automation_job，当前为 {owner_type}"
-            )));
-        }
-    }
-
-    let objective_text = managed_objective
-        .get("objective_text")
-        .or_else(|| managed_objective.get("objectiveText"))
-        .or_else(|| managed_objective.get("objective"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    if objective_text.is_none() {
-        return Err(RuntimeCoreError::Backend(
-            "自动化任务 managed_objective.objective 必填".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 fn preview_next_automation_run(schedule: &TaskSchedule) -> Result<Option<String>, String> {

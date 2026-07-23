@@ -321,4 +321,53 @@ describe("agentStreamReasoningContentSync", () => {
       { type: "text", text: "最终正文。" },
     ]);
   });
+
+  it("completed snapshot 应一次接管同 item 的多个 streamed summary part", () => {
+    const messages = applyReasoningSync({
+      messages: [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "",
+          timestamp: new Date("2026-06-22T10:00:00.000Z"),
+          runtimeTurnId: "turn-1",
+          thinkingContent: "第一段\n\n第二段",
+          contentParts: [
+            {
+              type: "thinking",
+              text: "第一段",
+              metadata: {
+                source: "streamed_reasoning_summary",
+                threadItemId: "reasoning-1",
+                summaryIndex: 0,
+                turnId: "turn-1",
+              },
+            },
+            {
+              type: "thinking",
+              text: "第二段",
+              metadata: {
+                source: "streamed_reasoning_summary",
+                threadItemId: "reasoning-1",
+                summaryIndex: 1,
+                turnId: "turn-1",
+              },
+            },
+          ],
+        },
+      ],
+      item: buildReasoningItem({ text: "第一段\n\n第二段" }),
+    });
+
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "thinking",
+        text: "第一段\n\n第二段",
+        metadata: expect.objectContaining({
+          source: "thread_item_reasoning",
+          threadItemId: "reasoning-1",
+        }),
+      }),
+    ]);
+  });
 });

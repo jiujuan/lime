@@ -50,6 +50,9 @@ export type AgentRuntimeLifecycleNotification = Extract<
       | "item/started"
       | "item/completed"
       | "item/agentMessage/delta"
+      | "item/reasoning/summaryTextDelta"
+      | "item/reasoning/summaryPartAdded"
+      | "item/reasoning/textDelta"
       | "thread/settings/updated";
   }
 >;

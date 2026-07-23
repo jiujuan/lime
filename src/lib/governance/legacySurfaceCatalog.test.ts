@@ -2908,6 +2908,41 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.targets).toEqual(["src/components/image-gen/index.ts"]);
   });
 
+  it("应记录已删除的 Renderer Provider 直连图片 executor 文件", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) =>
+        entry.id === "frontend-retired-direct-provider-image-executor-files",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/components/image-gen/falImageExecutor.ts",
+      "src/components/image-gen/falImageExecutor.test.ts",
+      "src/components/image-gen/geminiImageExecutor.ts",
+      "src/components/image-gen/geminiImageExecutor.test.ts",
+      "src/components/image-gen/openAICompatibleImageExecutor.ts",
+      "src/components/image-gen/openAICompatibleImageExecutor.test.ts",
+      "src/components/image-gen/standardImageExecutor.ts",
+      "src/components/image-gen/standardImageExecutor.test.ts",
+      "src/components/image-gen/imageGenerationBatchRunner.ts",
+      "src/components/image-gen/useImageGen.live.test.ts",
+      "src/components/image-gen/localImageServerExecutor.ts",
+      "src/components/image-gen/localImageServerExecutor.test.ts",
+      "src/components/image-gen/useImageGen.transport.test.tsx",
+      "src/components/image-gen/useImageGen.resource.test.tsx",
+      "src/components/image-gen/imageGenLocalState.ts",
+      "src/components/image-gen/types.ts",
+      "src/components/image-gen/imageExecutorUtils.ts",
+      "src/components/image-gen/imageErrorPresentation.ts",
+      "src/components/image-gen/imageErrorPresentation.test.ts",
+      "src/components/image-gen/imageResponseParsers.ts",
+      "src/components/image-gen/imageResponseParsers.test.ts",
+      "src/components/image-gen/localImageServerErrors.ts",
+    ]);
+  });
+
   it("应限制 AI 图片生成 runtime 入口继续扩散到 Claw 工作台之外", () => {
     const monitor = legacySurfaceCatalogJson.frontendText.find(
       (entry) => entry.id === "image-generation-runtime-entry-usage",
@@ -2920,6 +2955,39 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.allowedPaths).toEqual([
       "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchProviderRuntime.ts",
     ]);
+  });
+
+  it("应冻结无生产消费者的 Renderer 本机图片 HTTP executor", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "frontend-deprecated-local-image-http-executor",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.patterns).toEqual(["requestImagesFromLocalImageServer"]);
+    expect(monitor?.includePathPrefixes).toEqual(["src/components/image-gen"]);
+    expect(monitor?.allowedPaths).toEqual([]);
+  });
+
+  it("应禁止已删除的 Renderer Provider 直连图片 executors 回流", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "frontend-retired-direct-provider-image-executors",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.patterns).toEqual([
+      "requestImageFromFal(",
+      "requestImageFromFalQueue(",
+      "requestImageFromGemini(",
+      "requestImageFromNewApi(",
+      "requestImageFromNewApiResponsesStream(",
+      "requestImagesFromStandardImagesApi(",
+      "runSingleImageGenerationBatch(",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual(["src"]);
+    expect(monitor?.allowedPaths).toEqual([]);
   });
 
   it("应禁止前端恢复 image-gen 目录级 barrel 导入", () => {
@@ -4249,9 +4317,6 @@ describe("legacySurfaceCatalog", () => {
       "modelProviderKey/create",
       "modelProviderKey/update",
       "modelProviderKey/delete",
-      "modelProviderKey/next",
-      "modelProviderKey/usage/record",
-      "modelProviderKey/error/record",
       "modelProviderUiState/read",
       "modelProviderUiState/write",
     ]);
@@ -4326,9 +4391,6 @@ describe("legacySurfaceCatalog", () => {
       create_api_key_provider_key: "modelProviderKey/create",
       update_api_key_provider_key: "modelProviderKey/update",
       delete_api_key_provider_key: "modelProviderKey/delete",
-      next_api_key_provider_key: "modelProviderKey/next",
-      record_api_key_provider_key_usage: "modelProviderKey/usage/record",
-      record_api_key_provider_key_error: "modelProviderKey/error/record",
       get_provider_ui_state: "modelProviderUiState/read",
       set_provider_ui_state: "modelProviderUiState/write",
     });
@@ -4366,6 +4428,66 @@ describe("legacySurfaceCatalog", () => {
         "set_provider_ui_state",
       ]),
     );
+  });
+
+  it("应阻止已删除的 Provider key telemetry JSON-RPC 回流", () => {
+    const frontendMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "frontend-retired-model-provider-key-telemetry-methods",
+    );
+    const rustMonitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) =>
+        entry.id === "rust-retired-model-provider-key-telemetry-methods",
+    );
+
+    for (const monitor of [frontendMonitor, rustMonitor]) {
+      expect(monitor).toBeTruthy();
+      expect(monitor?.classification).toBe("dead");
+      expect(monitor?.allowedPaths).toEqual([]);
+      expect(monitor?.patterns).toEqual([
+        "modelProviderKey/next",
+        "modelProviderKey/usage/record",
+        "modelProviderKey/error/record",
+      ]);
+    }
+  });
+
+  it("应阻止旧视频生成 service、DAO 与 Product DB 表回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-retired-video-generation-database-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/core",
+      "lime-rs/crates/services",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual([
+      "pub mod video_generation_service;",
+      "pub mod video_generation_task_dao;",
+      "VideoGenerationService",
+      "VideoGenerationTaskDao",
+      "video_generation_tasks",
+    ]);
+  });
+
+  it("应阻止媒体任务恢复固定本机 HTTP broker execution owner", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) =>
+        entry.id === "rust-retired-local-media-service-execution-contract",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.patterns).toEqual(["local_lime_service"]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/app-server/src",
+      "lime-rs/crates/media-runtime/src",
+      "lime-rs/crates/media-runtime/tests",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
   });
 
   it("应将旧 content workflow 命令面固定为 dead", () => {

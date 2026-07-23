@@ -83,6 +83,10 @@ fn canonical_payload_to_agent_detail(
     let item_type = match payload {
         ThreadItemPayload::UserMessage { content, client_id } => {
             detail.insert("content".to_string(), json!(content));
+            detail.insert(
+                "text".to_string(),
+                json!(super::super::turn_start::user_input_text(content)),
+            );
             if let Some(client_id) = client_id {
                 detail.insert("client_id".to_string(), json!(client_id));
             }

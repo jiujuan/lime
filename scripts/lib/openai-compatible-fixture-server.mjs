@@ -10,21 +10,20 @@ function buildStructuredOutputArguments() {
     document: {
       schemaVersion: "artifact_document.v1",
       kind: "report",
-      title: "Managed Objective Automation Smoke Report",
+      title: "Offline Fixture Artifact Report",
       status: "ready",
       language: "zh-CN",
-      summary:
-        "Managed Objective automation smoke completed with localhost fixture.",
+      summary: "Offline artifact smoke completed with localhost fixture.",
       blocks: [
         {
           id: "summary",
           type: "rich_text",
           text: [
-            "# Managed Objective Automation Smoke Report",
+            "# Offline Fixture Artifact Report",
             "",
             "- status: completed",
-            "- evidence: workspace skill preexecution and automation owner run were recorded.",
-            "- next step: export evidence pack and verify completion audit summary.",
+            "- evidence: workspace skill preexecution and artifact output were recorded.",
+            "- next step: export the evidence pack.",
           ].join("\n"),
         },
       ],

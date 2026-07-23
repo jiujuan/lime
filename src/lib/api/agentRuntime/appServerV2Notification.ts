@@ -11,6 +11,9 @@ const DIRECT_V2_NOTIFICATION_METHODS = new Set([
   "item/started",
   "item/completed",
   "item/agentMessage/delta",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/summaryPartAdded",
+  "item/reasoning/textDelta",
   "thread/tokenUsage/updated",
 ]);
 
@@ -88,6 +91,12 @@ export function readAppServerV2NotificationRoute(
         ? { itemId, terminal: false, threadId, turnId }
         : null;
     }
+    case "item/reasoning/summaryTextDelta":
+      return readReasoningNotificationRoute(params, "summaryIndex", true);
+    case "item/reasoning/summaryPartAdded":
+      return readReasoningNotificationRoute(params, "summaryIndex", false);
+    case "item/reasoning/textDelta":
+      return readReasoningNotificationRoute(params, "contentIndex", true);
     case "thread/tokenUsage/updated": {
       const threadId = readString(params, "threadId");
       const turnId = readString(params, "turnId");
@@ -189,6 +198,49 @@ export function projectAppServerV2NotificationPayload(
         itemId: route.itemId,
         item_id: route.itemId,
       };
+    case "item/reasoning/summaryTextDelta": {
+      const summaryIndex = readFiniteNumber(params, "summaryIndex");
+      return {
+        ...basePayload,
+        type: "reasoning_summary_delta",
+        reasoningId: route.itemId,
+        reasoning_id: route.itemId,
+        itemId: route.itemId,
+        item_id: route.itemId,
+        text: params.delta,
+        delta: params.delta,
+        summaryIndex,
+        summary_index: summaryIndex,
+      };
+    }
+    case "item/reasoning/summaryPartAdded": {
+      const summaryIndex = readFiniteNumber(params, "summaryIndex");
+      return {
+        ...basePayload,
+        type: "reasoning_summary_part_added",
+        reasoningId: route.itemId,
+        reasoning_id: route.itemId,
+        itemId: route.itemId,
+        item_id: route.itemId,
+        summaryIndex,
+        summary_index: summaryIndex,
+      };
+    }
+    case "item/reasoning/textDelta": {
+      const contentIndex = readFiniteNumber(params, "contentIndex");
+      return {
+        ...basePayload,
+        type: "reasoning_content_delta",
+        reasoningId: route.itemId,
+        reasoning_id: route.itemId,
+        itemId: route.itemId,
+        item_id: route.itemId,
+        text: params.delta,
+        delta: params.delta,
+        contentIndex,
+        content_index: contentIndex,
+      };
+    }
     case "thread/tokenUsage/updated": {
       const tokenUsage = asRecord(params.tokenUsage);
       const last = asRecord(tokenUsage?.last);
@@ -213,6 +265,27 @@ export function projectAppServerV2NotificationPayload(
     default:
       return null;
   }
+}
+
+function readReasoningNotificationRoute(
+  params: Record<string, unknown>,
+  indexKey: "summaryIndex" | "contentIndex",
+  requiresDelta: boolean,
+): AppServerV2NotificationRoute | null {
+  const threadId = readString(params, "threadId");
+  const turnId = readString(params, "turnId");
+  const itemId = readString(params, "itemId");
+  const index = readFiniteNumber(params, indexKey);
+  if (
+    !threadId ||
+    !turnId ||
+    !itemId ||
+    index === undefined ||
+    (requiresDelta && typeof params.delta !== "string")
+  ) {
+    return null;
+  }
+  return { itemId, terminal: false, threadId, turnId };
 }
 
 function projectTurn(

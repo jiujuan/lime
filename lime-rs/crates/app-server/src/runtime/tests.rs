@@ -30,7 +30,6 @@ mod gateway_runner;
 mod knowledge;
 mod media_context;
 mod memory_prompt;
-mod objectives;
 mod pending_work_recovery;
 mod permission_preflight;
 mod plugin_worker_turn;

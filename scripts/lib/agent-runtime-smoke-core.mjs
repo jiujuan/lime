@@ -1,0 +1,594 @@
+const PROVIDER_PICK_ORDER = ["deepseek", "doubao", "lime-hub", "openai"];
+const TERMINAL_THREAD_STATUSES = new Set([
+  "completed",
+  "failed",
+  "aborted",
+  "idle",
+  "waiting_request",
+]);
+const RUNNING_THREAD_STATUSES = new Set(["running", "queued", "interrupting"]);
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
+const APP_SERVER_METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
+const APP_SERVER_METHOD_THREAD_START = "thread/start";
+const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
+const APP_SERVER_METHOD_THREAD_READ = "thread/read";
+const APP_SERVER_METHOD_TURN_START = "turn/start";
+const APP_SERVER_METHOD_TURN_INTERRUPT = "turn/interrupt";
+const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
+  "agentSession/action/respond";
+const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
+
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function assertSmoke(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+export function normalizeProviderId(provider) {
+  return String(
+    provider?.id || provider?.provider_id || provider?.providerId || "",
+  ).trim();
+}
+
+export function providerEnabled(provider) {
+  return provider?.enabled !== false;
+}
+
+export function providerHasUsableKey(provider) {
+  const keys = Array.isArray(provider?.api_keys)
+    ? provider.api_keys
+    : Array.isArray(provider?.apiKeys)
+      ? provider.apiKeys
+      : [];
+  return keys.some((key) => key?.enabled !== false);
+}
+
+export function pickModelPreference(provider) {
+  const candidates = [
+    ...(Array.isArray(provider?.custom_models) ? provider.custom_models : []),
+    ...(Array.isArray(provider?.customModels) ? provider.customModels : []),
+    ...(Array.isArray(provider?.models) ? provider.models : []),
+  ]
+    .map((value) =>
+      typeof value === "string"
+        ? value
+        : String(value?.name || value?.id || value?.model || "").trim(),
+    )
+    .filter(Boolean);
+
+  return (
+    candidates.find((value) => /flash|mini|lite|small/i.test(value)) ||
+    candidates[0] ||
+    ""
+  );
+}
+
+export function pickProvider(providers, preferredProviderId = "") {
+  const enabled = providers.filter((provider) => providerEnabled(provider));
+  const keyed = enabled.filter((provider) => providerHasUsableKey(provider));
+  const pool = keyed.length > 0 ? keyed : enabled;
+
+  if (preferredProviderId) {
+    return (
+      pool.find(
+        (provider) => normalizeProviderId(provider) === preferredProviderId,
+      ) ||
+      enabled.find(
+        (provider) => normalizeProviderId(provider) === preferredProviderId,
+      ) ||
+      providers.find(
+        (provider) => normalizeProviderId(provider) === preferredProviderId,
+      ) ||
+      null
+    );
+  }
+
+  for (const providerId of PROVIDER_PICK_ORDER) {
+    const match = pool.find(
+      (provider) => normalizeProviderId(provider) === providerId,
+    );
+    if (match) {
+      return match;
+    }
+  }
+
+  return pool[0] || enabled[0] || null;
+}
+
+export function providerRuntimeName(provider) {
+  return String(
+    provider?.runtime_provider_name ||
+      provider?.runtimeProviderName ||
+      provider?.type ||
+      provider?.provider_type ||
+      provider?.providerType ||
+      provider?.id ||
+      "",
+  ).trim();
+}
+
+export async function waitForHealth({
+  healthUrl,
+  timeoutMs,
+  intervalMs,
+  logPrefix,
+}) {
+  const startedAt = Date.now();
+  let lastError = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(healthUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(Math.min(intervalMs, 5_000)),
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const payload = text ? JSON.parse(text) : {};
+      console.log(
+        `${logPrefix} DevBridge ready elapsedMs=${Date.now() - startedAt}${
+          payload?.status ? ` status=${payload.status}` : ""
+        }`,
+      );
+      return payload;
+    } catch (error) {
+      lastError = error;
+      await sleep(intervalMs);
+    }
+  }
+
+  const detail =
+    lastError instanceof Error
+      ? lastError.message
+      : String(lastError || "unknown");
+  throw new Error(`${logPrefix} DevBridge health timeout: ${detail}`);
+}
+
+export async function invokeDevBridge(
+  options,
+  cmd,
+  args = {},
+  timeoutMs = options.timeoutMs,
+) {
+  const response = await fetch(options.invokeUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ cmd, args }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${cmd} HTTP ${response.status}: ${text}`);
+  }
+  const payload = text ? JSON.parse(text) : null;
+  if (payload?.error) {
+    throw new Error(`${cmd} error: ${payload.error}`);
+  }
+  return payload?.result;
+}
+
+let appServerRequestId = 1;
+
+export async function invokeAppServerMethod(
+  options,
+  method,
+  params,
+  timeoutMs = options.timeoutMs,
+) {
+  const id = `agent-runtime-smoke-${appServerRequestId++}`;
+  const request =
+    params === undefined ? { id, method } : { id, method, params };
+  const result = await invokeDevBridge(
+    options,
+    APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+    { request: { lines: [`${JSON.stringify(request)}\n`] } },
+    timeoutMs,
+  );
+  const responseLines = result?.result?.lines ?? result?.lines;
+  const messages = (Array.isArray(responseLines) ? responseLines : [])
+    .map((line) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    throw new Error(
+      `${method} error: ${error.error?.message || "App Server JSON-RPC error"}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method} missing App Server response`);
+  }
+  return response.result;
+}
+
+export async function createAgentSessionCurrent(
+  options,
+  { workspaceId, title, executionStrategy = "react", metadata = {} },
+) {
+  const metadataRecord =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? metadata
+      : {};
+  const harnessMetadata =
+    metadataRecord.harness &&
+    typeof metadataRecord.harness === "object" &&
+    !Array.isArray(metadataRecord.harness)
+      ? metadataRecord.harness
+      : {};
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_THREAD_START,
+    {
+      appId: "desktop",
+      workspaceId,
+      businessObjectRef: {
+        kind: "agent.session",
+        id: `agent-session:${workspaceId}:${Date.now()}`,
+        title,
+        metadata: {
+          ...metadataRecord,
+          title,
+          executionStrategy,
+          runStartHooks: false,
+          harness: {
+            source: "smoke:agent-runtime",
+            ...harnessMetadata,
+          },
+        },
+      },
+    },
+    30_000,
+  );
+  const sessionId = String(response?.session?.sessionId || "").trim();
+  if (!sessionId) {
+    throw new Error("thread/start 未返回 sessionId");
+  }
+  return sessionId;
+}
+
+export async function updateAgentSessionRuntimeCurrent(
+  options,
+  { sessionId, provider, executionStrategy = "react" },
+  invoke = invokeAppServerMethod,
+) {
+  await invoke(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
+    {
+      sessionId,
+      providerSelector: provider.providerPreference,
+      providerName: provider.providerName,
+      modelName: provider.modelPreference,
+      executionStrategy,
+    },
+    30_000,
+  );
+}
+
+export async function exportAgentSessionEvidencePackCurrent(
+  options,
+  { sessionId, turnId },
+) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_EVIDENCE_EXPORT,
+    compactRecord({
+      sessionId,
+      turnId,
+      includeEvents: true,
+      includeArtifacts: true,
+      includeEvidencePack: true,
+    }),
+  );
+  return response?.evidencePack || null;
+}
+
+export async function readAgentSessionDetailCurrent(
+  options,
+  sessionId,
+  { historyLimit = 20 } = {},
+) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_THREAD_READ,
+    {
+      sessionId,
+      historyLimit,
+    },
+  );
+  const detail = response?.detail;
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    return detail;
+  }
+  return {
+    id: response?.session?.sessionId || sessionId,
+    thread_id: response?.session?.threadId || sessionId,
+    workspace_id: response?.session?.workspaceId || null,
+    turns: Array.isArray(response?.turns) ? response.turns : [],
+    messages: [],
+    items: [],
+  };
+}
+
+function compactRecord(record) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== undefined),
+  );
+}
+
+export async function startAgentSessionTurnCurrent(
+  options,
+  {
+    sessionId,
+    workspaceId,
+    message,
+    eventName,
+    turnId,
+    runtimeRequest = {},
+    queueIfBusy,
+    queuedTurnId,
+    skipPreSubmitResume = true,
+  },
+  invoke = invokeAppServerMethod,
+) {
+  const runtimeOptions = compactRecord({
+    stream: true,
+    eventName,
+    queuedTurnId,
+    runtimeRequest: compactRecord({
+      workspaceId,
+      ...runtimeRequest,
+    }),
+  });
+  return invoke(
+    options,
+    APP_SERVER_METHOD_TURN_START,
+    compactRecord({
+      sessionId,
+      turnId,
+      input: {
+        text: message,
+      },
+      runtimeOptions,
+      queueIfBusy,
+      skipPreSubmitResume,
+    }),
+  );
+}
+
+export async function cancelAgentSessionTurnCurrent(
+  options,
+  { sessionId, turnId },
+) {
+  return invokeAppServerMethod(options, APP_SERVER_METHOD_TURN_INTERRUPT, {
+    sessionId,
+    turnId,
+  });
+}
+
+export async function respondAgentSessionActionCurrent(
+  options,
+  {
+    sessionId,
+    requestId,
+    actionType,
+    confirmed,
+    response,
+    userData,
+    metadata,
+    eventName,
+    actionScope,
+  },
+) {
+  const normalizedScope =
+    actionScope &&
+    typeof actionScope === "object" &&
+    !Array.isArray(actionScope)
+      ? {
+          sessionId: actionScope.sessionId ?? actionScope.session_id,
+          threadId: actionScope.threadId ?? actionScope.thread_id,
+          turnId: actionScope.turnId ?? actionScope.turn_id,
+        }
+      : undefined;
+  return invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+    compactRecord({
+      sessionId,
+      requestId,
+      actionType,
+      confirmed,
+      response,
+      userData,
+      metadata,
+      eventName,
+      actionScope: normalizedScope ? compactRecord(normalizedScope) : undefined,
+    }),
+  );
+}
+
+export async function readAgentRuntimeThreadCurrent(
+  options,
+  sessionId,
+  { historyLimit } = {},
+  invoke = invokeAppServerMethod,
+) {
+  const response = await invoke(
+    options,
+    APP_SERVER_METHOD_THREAD_READ,
+    compactRecord({
+      sessionId,
+      historyLimit,
+    }),
+  );
+  const threadRead =
+    response?.detail?.thread_read || response?.detail?.threadRead;
+  if (
+    threadRead &&
+    typeof threadRead === "object" &&
+    !Array.isArray(threadRead)
+  ) {
+    return threadRead;
+  }
+  const turns = Array.isArray(response?.turns) ? response.turns : [];
+  const latestTurn = turns[turns.length - 1] || null;
+  return {
+    thread_id: response?.session?.threadId || sessionId,
+    status: response?.session?.status || latestTurn?.status || "idle",
+    active_turn_id:
+      response?.session?.activeTurnId ||
+      response?.session?.active_turn_id ||
+      latestTurn?.turnId ||
+      null,
+    turns,
+    queued_turns: [],
+    pending_requests: [],
+  };
+}
+
+export async function resolveProviderPreference(
+  options,
+  invoke = invokeAppServerMethod,
+) {
+  const explicitProvider = String(options.providerPreference || "").trim();
+  const explicitModel = String(options.modelPreference || "").trim();
+  if (explicitProvider && explicitModel) {
+    return {
+      providerPreference: explicitProvider,
+      providerName: explicitProvider,
+      modelPreference: explicitModel,
+      source: "explicit",
+    };
+  }
+
+  const providerList = await invoke(
+    options,
+    APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
+    {},
+    30_000,
+  );
+  const providers = providerList?.providers;
+  const selected = pickProvider(
+    Array.isArray(providers) ? providers : [],
+    explicitProvider,
+  );
+  const providerId = normalizeProviderId(selected);
+  if (!providerId) {
+    throw new Error(
+      `${options.logPrefix} no usable provider found; pass --provider-preference and --model-preference`,
+    );
+  }
+
+  let providerDetail = selected;
+  try {
+    providerDetail =
+      (
+        await invoke(
+          options,
+          APP_SERVER_METHOD_MODEL_PROVIDER_READ,
+          { providerId },
+          30_000,
+        )
+      )?.provider || selected;
+  } catch (error) {
+    console.warn(
+      `${options.logPrefix} provider detail failed, using list item: ${error.message}`,
+    );
+  }
+
+  const modelPreference = explicitModel || pickModelPreference(providerDetail);
+  if (!modelPreference) {
+    throw new Error(
+      `${options.logPrefix} provider ${providerId} has no configured model`,
+    );
+  }
+
+  return {
+    providerPreference: providerId,
+    providerName: providerRuntimeName(providerDetail) || providerId,
+    modelPreference,
+    source:
+      explicitProvider || explicitModel
+        ? "partial-explicit"
+        : "auto-enabled-provider",
+  };
+}
+
+export function latestTurnStatus(threadRead) {
+  return (
+    threadRead?.diagnostics?.latest_turn_status ||
+    threadRead?.diagnostics?.latestTurnStatus ||
+    threadRead?.runtime_summary?.latestTurnStatus ||
+    threadRead?.runtimeSummary?.latestTurnStatus ||
+    threadRead?.status ||
+    null
+  );
+}
+
+export function summarizeThreadRead(threadRead) {
+  const pendingRequests = Array.isArray(threadRead?.pending_requests)
+    ? threadRead.pending_requests
+    : Array.isArray(threadRead?.pendingRequests)
+      ? threadRead.pendingRequests
+      : [];
+  const queuedTurns = Array.isArray(threadRead?.queued_turns)
+    ? threadRead.queued_turns
+    : Array.isArray(threadRead?.queuedTurns)
+      ? threadRead.queuedTurns
+      : [];
+  return {
+    threadStatus: threadRead?.status || null,
+    latestTurnStatus: latestTurnStatus(threadRead),
+    activeTurnId:
+      threadRead?.active_turn_id || threadRead?.activeTurnId || null,
+    turnCount: Array.isArray(threadRead?.turns) ? threadRead.turns.length : 0,
+    queuedTurnCount: queuedTurns.length,
+    pendingRequestCount: pendingRequests.length,
+  };
+}
+
+export function summarizeEvidencePack(pack) {
+  if (!pack) {
+    return null;
+  }
+  return {
+    sessionId: pack.session_id || pack.sessionId || null,
+    threadId: pack.thread_id || pack.threadId || null,
+    threadStatus: pack.thread_status || pack.threadStatus || null,
+    latestTurnStatus: pack.latest_turn_status || pack.latestTurnStatus || null,
+    turnCount: pack.turn_count ?? pack.turnCount ?? null,
+    itemCount: pack.item_count ?? pack.itemCount ?? null,
+    pendingRequestCount:
+      pack.pending_request_count ?? pack.pendingRequestCount ?? null,
+    queuedTurnCount: pack.queued_turn_count ?? pack.queuedTurnCount ?? null,
+    knownGaps: pack.known_gaps || pack.knownGaps || [],
+    completionAuditSummary:
+      pack.completion_audit_summary || pack.completionAuditSummary || null,
+  };
+}
+
+export function threadSettled(threadRead) {
+  const status = String(threadRead?.status || "").toLowerCase();
+  if (RUNNING_THREAD_STATUSES.has(status)) {
+    return false;
+  }
+  if (TERMINAL_THREAD_STATUSES.has(status)) {
+    return true;
+  }
+  return !threadRead?.active_turn_id && !threadRead?.activeTurnId;
+}

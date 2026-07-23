@@ -8,6 +8,13 @@
 > source plan: `internal/research/refactor/v2/12-plan/slices.md`
 > architecture: `internal/research/refactor/v2/04-target/architecture.md`
 
+> 2026-07-22 current correction：v0 `ManagedObjective`、`agentSession/objective/*`、旧
+> Objective client/DTO/GUI/Automation projection 与 `managed_objectives` storage 已
+> `dead / deleted / forbidden-to-restore`。唯一 current Goal owner 是 thread-owned canonical
+> `ThreadGoal`，并通过 App Server v2 `thread/goal/*`、RuntimeCore continuation、durable
+> budget/usage accounting 和 Thread/Turn/Item projection 继续演进。旧 S5 Objective slice
+> 只保留为 dated execution evidence，不得按其 owner 分类恢复实现。
+
 ## 1. 主目标
 
 在没有外部用户和历史兼容负担的前提下，按 v2 `copy -> adapt -> delete` 顺序实施 Codex-first runtime 重构，并让多个本地进程能够并行施工而不夹写、不抢占、不恢复旧路径。
@@ -399,6 +406,10 @@ S5c Gate B 的完整 AgentDebug 证明 `queuedPromotion.start` 本身直到 120 
 | `S5f-active-stream-queue-intent` | `hooks/agentStreamUserInputSendPreparation{,.test}.ts`、`agentStreamPreparedSendEnv{,.test}.ts`、`agentStreamUserInputSubmission{,.test}.ts`、`agentStreamSubmitExecution{,.test}.ts`、`useAgentStream.ts` prepared-env wiring | queue intent 必须把同会话、带真实 turnId 的 active stream 视为 busy；保留无 turnId stale binding 的既有恢复语义。queued listener 不得覆盖 active binding，accepted 后必须释放 listener 并立即 refresh canonical read model，不创建第二个 active stream或 120 秒 watchdog；复跑同一 Gate B。不得恢复 legacy read truth或 local active turn fallback。 |
 
 ### 4.13a S5 Managed Objective current owner migration
+
+> Superseded on 2026-07-22：本节记录当时的 import/type owner 迁移，不再定义 current
+> owner。相关 DTO、client、panel、Automation consumer 与 v0 RPC 已删除；后续只允许使用
+> canonical `ThreadGoal` 与 Thread/Turn/Item 主链。
 
 Managed Objective 的 DTO 已归 `agentRuntime/sessionTypes`，行为已归 `agentRuntime/objectiveClient`；
 Agent Chat 叶子组件继续从 root `@/lib/api/agentRuntime` compat barrel 导入只会扩大旧入口。

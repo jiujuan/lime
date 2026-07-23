@@ -238,36 +238,6 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
     params: "required",
   },
   {
-    name: "readAgentSessionObjective",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ,
-    params: "required",
-  },
-  {
-    name: "setAgentSessionObjective",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET,
-    params: "required",
-  },
-  {
-    name: "updateAgentSessionObjectiveStatus",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
-    params: "required",
-  },
-  {
-    name: "clearAgentSessionObjective",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
-    params: "required",
-  },
-  {
-    name: "continueAgentSessionObjective",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
-    params: "required",
-  },
-  {
-    name: "auditAgentSessionObjective",
-    method: constants.APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
-    params: "required",
-  },
-  {
     name: "compactAgentSession",
     method: constants.APP_SERVER_METHOD_AGENT_SESSION_COMPACT,
     params: "required",

@@ -587,6 +587,86 @@
         }
       ]
     },
+    "ReasoningSummaryPartAddedNotification": {
+      "properties": {
+        "itemId": {
+          "type": "string"
+        },
+        "summaryIndex": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "itemId",
+        "summaryIndex",
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
+    },
+    "ReasoningSummaryTextDeltaNotification": {
+      "properties": {
+        "delta": {
+          "type": "string"
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "summaryIndex": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "delta",
+        "itemId",
+        "summaryIndex",
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
+    },
+    "ReasoningTextDeltaNotification": {
+      "properties": {
+        "contentIndex": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "delta": {
+          "type": "string"
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "contentIndex",
+        "delta",
+        "itemId",
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
+    },
     "RequestId": {
       "anyOf": [
         {
@@ -2079,6 +2159,54 @@
         },
         "params": {
           "$ref": "#/$defs/AgentMessageDeltaNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "const": "item/reasoning/summaryTextDelta",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ReasoningSummaryTextDeltaNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "const": "item/reasoning/summaryPartAdded",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ReasoningSummaryPartAddedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "const": "item/reasoning/textDelta",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ReasoningTextDeltaNotification"
         }
       },
       "required": [

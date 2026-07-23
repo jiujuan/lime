@@ -171,7 +171,7 @@ async fn execute_video_generation_task_should_advance_task_file_to_succeeded() {
             .payload
             .pointer("/provider_diagnostics/transport")
             .and_then(Value::as_str),
-        Some("local_lime_service")
+        Some("provider_http")
     );
 
     server.abort();

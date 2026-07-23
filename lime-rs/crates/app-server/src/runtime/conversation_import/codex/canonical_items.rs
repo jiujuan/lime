@@ -167,7 +167,7 @@ fn lowered_message_item_events(
     let item_payload = if role == "user" {
         json!({
             "type": "userMessage",
-            "content": text,
+            "content": input,
             "clientId": client_id,
         })
     } else {

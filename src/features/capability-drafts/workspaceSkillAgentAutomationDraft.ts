@@ -9,35 +9,24 @@ export interface WorkspaceSkillManagedAutomationPresentation {
   statusLabel: string;
   scheduleLabel: string;
   lastRunLabel: string;
-  objectiveLabel: string;
-  auditLabel: string;
   jobId?: string;
   jobName?: string;
   enabled?: boolean;
 }
 
 export interface WorkspaceSkillManagedAutomationPresentationCopy {
-  auditBlocked?: string;
-  auditMissing?: string;
-  auditPaused?: string;
-  auditPlanned?: string;
-  auditRunning?: string;
-  auditVerifying?: string;
   lastRunNone?: string;
   lastRunValueNone?: string;
-  managedObjectivePlanned?: string;
   notCreatedSchedule?: string;
   notCreatedStatus?: string;
   notRunStatus?: string;
   stateEnabled?: string;
   statePaused?: string;
   unknownSchedule?: string;
-  formatAuditBlocked?: (error?: string | null) => string;
   formatEverySchedule?: (seconds: number) => string;
   formatAtSchedule?: (at: string) => string;
   formatCronSchedule?: (expr: string, timezone?: string | null) => string;
   formatLastRun?: (lastRun: string, error?: string | null) => string;
-  formatManagedObjective?: (state: string) => string;
   formatSchedule?: (schedule: string, nextRun?: string | null) => string;
   formatStatus?: (state: string, lastStatus: string) => string;
 }
@@ -51,19 +40,10 @@ export interface WorkspaceSkillManagedAutomationInitialValuesCopy {
   ) => string;
   formatDescriptionSkill?: (skillName: string) => string;
   formatName?: (displayName: string) => string;
-  formatObjective?: (displayName: string) => string;
   formatPromptIntro?: (displayName: string, skillName: string) => string;
   promptNeedsInput?: string;
   promptReadRunbook?: string;
   promptResultEvidence?: string;
-  successCriteriaControlledGet?: string;
-  successCriteriaEvidence?: string;
-  successCriteriaRuntimeEnable?: string;
-  successCriteriaSubmitTurn?: string;
-}
-
-export interface WorkspaceSkillAgentAutomationDraftOptions {
-  requiresControlledGetEvidence?: boolean;
 }
 
 function normalizeText(value?: string | null): string {
@@ -126,7 +106,6 @@ export function canBuildWorkspaceSkillAgentAutomationDraft(
 export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
   binding: AgentRuntimeWorkspaceSkillBinding;
   workspaceRoot: string;
-  options?: WorkspaceSkillAgentAutomationDraftOptions;
   copy?: WorkspaceSkillManagedAutomationInitialValuesCopy;
 }): Record<string, unknown> | null {
   const { binding } = input;
@@ -140,10 +119,6 @@ export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
   const permissionSummary = buildPermissionSummary(binding);
   const sourceDraftId = resolveSourceDraftId(binding);
   const sourceVerificationReportId = resolveSourceVerificationReportId(binding);
-  const requiresControlledGetEvidence =
-    input.options?.requiresControlledGetEvidence === true;
-  const copy = input.copy;
-
   return {
     harness: {
       theme: "general",
@@ -158,39 +133,6 @@ export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
         source_draft_id: sourceDraftId,
         source_verification_report_id: sourceVerificationReportId,
         authorization_scope: "scheduled_run_session",
-      },
-      managed_objective: {
-        source: "skill_forge_p4_managed_execution",
-        owner_type: "automation_job",
-        state: "planned",
-        objective:
-          copy?.formatObjective?.(displayName) ??
-          `按计划运行 Workspace Skill「${displayName}」，交付可审计结果。`,
-        success_criteria: [
-          copy?.successCriteriaSubmitTurn ??
-            "必须通过 turn/start current JSON-RPC 执行",
-          copy?.successCriteriaRuntimeEnable ??
-            "必须由 workspace_skill_runtime_enable 在本次运行 session 内显式授权",
-          copy?.successCriteriaEvidence ??
-            "完成状态必须依赖 artifact / timeline / evidence，而不是模型自报",
-          ...(requiresControlledGetEvidence
-            ? [
-                copy?.successCriteriaControlledGet ??
-                  "Read-Only HTTP API 任务必须包含 executed 受控 GET evidence",
-              ]
-            : []),
-        ],
-        completion_audit: "artifact_or_evidence_required",
-        ...(requiresControlledGetEvidence
-          ? {
-              required_external_evidence: ["controlled_get_evidence"],
-              completion_evidence_policy: {
-                controlled_get_evidence_required: true,
-                controlled_get_evidence_source:
-                  "capability_draft_controlled_get_evidence",
-              },
-            }
-          : {}),
       },
       workspace_skill_runtime_enable: {
         source: "manual_session_enable",
@@ -233,14 +175,12 @@ export function buildWorkspaceSkillAgentAutomationInitialValues(input: {
   binding: AgentRuntimeWorkspaceSkillBinding;
   workspaceRoot: string;
   workspaceId: string;
-  options?: WorkspaceSkillAgentAutomationDraftOptions;
   copy?: WorkspaceSkillManagedAutomationInitialValuesCopy;
 }): AutomationJobDialogInitialValues | null {
   const workspaceId = normalizeText(input.workspaceId);
   const requestMetadata = buildWorkspaceSkillAgentAutomationRequestMetadata({
     binding: input.binding,
     workspaceRoot: input.workspaceRoot,
-    options: input.options,
     copy: input.copy,
   });
   if (!workspaceId || !requestMetadata) {
@@ -365,19 +305,12 @@ export function buildWorkspaceSkillManagedAutomationPresentation(
       scheduleLabel:
         copy?.notCreatedSchedule ?? "Schedule：等待创建 automation job 草案。",
       lastRunLabel: copy?.lastRunNone ?? "最近运行：暂无",
-      objectiveLabel:
-        copy?.managedObjectivePlanned ??
-        "Managed Objective：planned，等待绑定 automation job。",
-      auditLabel:
-        copy?.auditMissing ??
-        "Completion Audit：缺少运行与 evidence，不能判定完成。",
     };
   }
 
   const stateLabel = job.enabled
     ? (copy?.stateEnabled ?? "已启用")
     : (copy?.statePaused ?? "草案暂停");
-  const objectiveState = resolveManagedObjectiveState(job);
   const lastStatus = job.last_status ?? copy?.notRunStatus ?? "尚未运行";
   const lastRun = job.last_run_at ?? copy?.lastRunValueNone ?? "暂无";
   const schedule = describeSchedule(job.schedule, copy);
@@ -396,57 +329,5 @@ export function buildWorkspaceSkillManagedAutomationPresentation(
       `最近运行：${job.last_run_at ?? "暂无"}${
         job.last_error ? ` · ${job.last_error}` : ""
       }`,
-    objectiveLabel:
-      copy?.formatManagedObjective?.(objectiveState) ??
-      `Managed Objective：${objectiveState}`,
-    auditLabel: buildCompletionAuditLabel(job, objectiveState, copy),
   };
-}
-
-function resolveManagedObjectiveState(job: AutomationJobRecord): string {
-  if (job.running_started_at) {
-    return "running";
-  }
-  if (!job.enabled) {
-    return "paused";
-  }
-  if (job.last_error || job.last_status === "failed") {
-    return "blocked";
-  }
-  if (job.last_status === "success") {
-    return "verifying";
-  }
-  return "planned";
-}
-
-function buildCompletionAuditLabel(
-  job: AutomationJobRecord,
-  objectiveState: string,
-  copy?: WorkspaceSkillManagedAutomationPresentationCopy,
-): string {
-  if (objectiveState === "verifying") {
-    return (
-      copy?.auditVerifying ??
-      "Completion Audit：运行成功后仍需 artifact / timeline / evidence 审计，暂不直接标记 completed。"
-    );
-  }
-  if (objectiveState === "blocked") {
-    return (
-      copy?.formatAuditBlocked?.(job.last_error) ??
-      `Completion Audit：blocked，需处理失败原因${job.last_error ? `：${job.last_error}` : "。"}`
-    );
-  }
-  if (objectiveState === "running") {
-    return (
-      copy?.auditRunning ??
-      "Completion Audit：运行中，等待 automation run 结束后再审计。"
-    );
-  }
-  if (objectiveState === "paused") {
-    return (
-      copy?.auditPaused ??
-      "Completion Audit：paused，恢复并产生运行证据后再审计。"
-    );
-  }
-  return copy?.auditPlanned ?? "Completion Audit：planned，等待首次运行证据。";
 }

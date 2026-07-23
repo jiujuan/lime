@@ -253,10 +253,7 @@ fn project_item(item: canonical::ThreadItem) -> Result<v2::ThreadItem, JsonRpcEr
             Ok(v2::ThreadItem::UserMessage {
                 id,
                 client_id,
-                content: vec![v2::UserInput::Text {
-                    text: content,
-                    text_elements: Vec::new(),
-                }],
+                content: content.into_iter().map(project_user_input).collect(),
             })
         }
         canonical::ThreadItemPayload::AgentMessage { text, phase, .. } => {
@@ -413,6 +410,24 @@ fn project_item(item: canonical::ThreadItem) -> Result<v2::ThreadItem, JsonRpcEr
         canonical::ThreadItemPayload::Extension { name, .. } => Err(projection_error(format!(
             "canonical extension item {id} ({name}) has no v2 ThreadItem representation"
         ))),
+    }
+}
+
+fn project_user_input(input: canonical::AgentInput) -> v2::UserInput {
+    match input {
+        canonical::AgentInput::Text {
+            text,
+            text_elements,
+        } => v2::UserInput::Text {
+            text,
+            text_elements,
+        },
+        canonical::AgentInput::Image { uri, detail } => v2::UserInput::Image { detail, url: uri },
+        canonical::AgentInput::LocalImage { path, detail } => {
+            v2::UserInput::LocalImage { detail, path }
+        }
+        canonical::AgentInput::Skill { name, path } => v2::UserInput::Skill { name, path },
+        canonical::AgentInput::Mention { name, path } => v2::UserInput::Mention { name, path },
     }
 }
 

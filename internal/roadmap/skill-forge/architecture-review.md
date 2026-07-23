@@ -10,7 +10,7 @@
 - [./coding-agent-layer.md](./coding-agent-layer.md)
 - [./implementation-plan.md](./implementation-plan.md)
 - [./diagrams.md](./diagrams.md)
-- [../managed-objective/README.md](../managed-objective/README.md)
+- [../../aiprompts/architecture.md](../../aiprompts/architecture.md)
 - [../../research/skill-forge/pivot-and-org-harness.md](../../research/skill-forge/pivot-and-org-harness.md)
 - [../../research/skill-forge/agent-product-model.md](../../research/skill-forge/agent-product-model.md)
 - [../../research/skill-forge/architecture-breakdown.md](../../research/skill-forge/architecture-breakdown.md)
@@ -83,17 +83,17 @@ Level 6: policy-approved scheduled external write
 3. Draft 未验证前不是 tool、不是 runtime。
 4. Coding Agent 仍通过 Query Loop 和 tool_runtime 执行。
 
-### 3.2 已有：Managed Objective 层
+### 3.2 已有：ThreadGoal 层
 
 来源：
 
-- [../managed-objective/README.md](../managed-objective/README.md)
+- [../../aiprompts/architecture.md](../../aiprompts/architecture.md)
 
 已明确：
 
-1. Managed Objective 是目标推进控制层。
-2. 它只能挂到 `agent turn / subagent turn / automation job`。
-3. 它不能新增 `goal_runtime / objective_scheduler / objective_queue / objective_evidence`。
+1. ThreadGoal 是 thread-owned 目标推进控制层。
+2. Automation 只提交 Turn，不拥有 Goal 状态。
+3. 旧 ManagedObjective 协议、存储与 audit 已删除，不能恢复平行 runtime。
 4. 完成审计必须消费 artifact / thread_read / evidence pack。
 
 ### 3.3 已有：三层产品骨架

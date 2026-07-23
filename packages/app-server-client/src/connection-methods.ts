@@ -78,42 +78,6 @@ declare module "./connection.js" {
       params: protocol.ThreadDeleteParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.ThreadDeleteResponse>>;
-    readAgentSessionObjective(
-      params: protocol.AgentSessionObjectiveReadParams,
-      options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.AgentSessionObjectiveReadResponse>
-    >;
-    setAgentSessionObjective(
-      params: protocol.AgentSessionObjectiveSetParams,
-      options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.AgentSessionObjectiveSetResponse>
-    >;
-    updateAgentSessionObjectiveStatus(
-      params: protocol.AgentSessionObjectiveStatusUpdateParams,
-      options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.AgentSessionObjectiveStatusUpdateResponse>
-    >;
-    clearAgentSessionObjective(
-      params: protocol.AgentSessionObjectiveClearParams,
-      options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.AgentSessionObjectiveClearResponse>
-    >;
-    continueAgentSessionObjective(
-      params: protocol.AgentSessionObjectiveContinueParams,
-      options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.AgentSessionObjectiveContinueResponse>
-    >;
-    auditAgentSessionObjective(
-      params: protocol.AgentSessionObjectiveAuditParams,
-      options?: AppServerRequestOptions,
-    ): Promise<
-      AppServerRequestResult<protocol.AgentSessionObjectiveAuditResponse>
-    >;
     compactAgentSession(
       params: protocol.AgentSessionCompactParams,
       options?: AppServerRequestOptions,
@@ -1237,9 +1201,6 @@ const CONNECTION_CLIENT_METHOD_EXCLUSIONS = new Set<string>([
   "createModelProviderKey",
   "updateModelProviderKey",
   "deleteModelProviderKey",
-  "readNextModelProviderKey",
-  "recordModelProviderKeyUsage",
-  "recordModelProviderKeyError",
   "readModelProviderUiState",
   "writeModelProviderUiState",
 ]);

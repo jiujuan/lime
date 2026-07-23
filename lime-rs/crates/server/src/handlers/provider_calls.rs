@@ -164,7 +164,9 @@ async fn collect_provider_output(
         let event = event?;
         match event {
             CanonicalLlmEvent::TextDelta { text, .. } => output.text.push_str(&text),
-            CanonicalLlmEvent::ReasoningDelta { text, .. } => output.reasoning.push_str(&text),
+            CanonicalLlmEvent::ReasoningContentDelta { text, .. } => {
+                output.reasoning.push_str(&text)
+            }
             CanonicalLlmEvent::ToolCall {
                 id, name, input, ..
             } => output
@@ -203,6 +205,8 @@ async fn collect_provider_output(
             CanonicalLlmEvent::TextStart { .. }
             | CanonicalLlmEvent::TextEnd { .. }
             | CanonicalLlmEvent::ReasoningStart { .. }
+            | CanonicalLlmEvent::ReasoningSummaryDelta { .. }
+            | CanonicalLlmEvent::ReasoningSummaryPartAdded { .. }
             | CanonicalLlmEvent::ReasoningEnd { .. }
             | CanonicalLlmEvent::ToolInputStart { .. }
             | CanonicalLlmEvent::ToolInputDelta { .. }
@@ -855,6 +859,56 @@ mod tests {
         assert!(delta < block_stop);
         assert!(block_stop < message_stop);
         assert!(body.contains("hello"));
+    }
+
+    #[tokio::test]
+    async fn provider_outputs_only_lower_raw_reasoning_content() {
+        let events = vec![
+            Ok(CanonicalLlmEvent::ReasoningStart {
+                id: "reasoning-0".to_string(),
+            }),
+            Ok(CanonicalLlmEvent::ReasoningSummaryPartAdded {
+                id: "reasoning-0".to_string(),
+                summary_index: 0,
+            }),
+            Ok(CanonicalLlmEvent::ReasoningSummaryDelta {
+                id: "reasoning-0".to_string(),
+                text: "summary-only".to_string(),
+                summary_index: 0,
+            }),
+            Ok(CanonicalLlmEvent::ReasoningContentDelta {
+                id: "reasoning-0".to_string(),
+                text: "raw-reasoning".to_string(),
+                content_index: 0,
+            }),
+            Ok(CanonicalLlmEvent::ReasoningEnd {
+                id: "reasoning-0".to_string(),
+            }),
+            Ok(CanonicalLlmEvent::Finish {
+                reason: FinishReason::Stop,
+                usage: None,
+                response_id: None,
+            }),
+        ];
+
+        let collected = collect_provider_output(Box::pin(stream::iter(events.clone())))
+            .await
+            .expect("collect provider output");
+        assert_eq!(collected.reasoning, "raw-reasoning");
+
+        for format in [OutputFormat::OpenAi, OutputFormat::Anthropic] {
+            let response = stream_provider_response(
+                Box::pin(stream::iter(events.clone())),
+                "reasoning-model",
+                format,
+            );
+            let body = axum::body::to_bytes(response.into_body(), 64 * 1024)
+                .await
+                .expect("collect reasoning SSE body");
+            let body = String::from_utf8(body.to_vec()).expect("reasoning SSE UTF-8");
+            assert!(body.contains("raw-reasoning"));
+            assert!(!body.contains("summary-only"));
+        }
     }
 
     #[tokio::test]

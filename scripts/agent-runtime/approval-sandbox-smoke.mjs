@@ -14,7 +14,7 @@ import {
   readAgentRuntimeThreadCurrent,
   respondAgentSessionActionCurrent,
   startAgentSessionTurnCurrent,
-} from "../lib/managed-objective-continuation-smoke-core.mjs";
+} from "../lib/agent-runtime-smoke-core.mjs";
 import {
   assertLiveProviderSmokeAllowed,
   liveProviderSmokeAllowed,
@@ -391,12 +391,14 @@ async function resolveProviderPreference(options) {
   let providerDetail = selected;
   try {
     providerDetail =
-      (await invokeAppServerMethod(
-        options,
-        APP_SERVER_METHOD_MODEL_PROVIDER_READ,
-        { providerId },
-        30_000,
-      ))?.provider || selected;
+      (
+        await invokeAppServerMethod(
+          options,
+          APP_SERVER_METHOD_MODEL_PROVIDER_READ,
+          { providerId },
+          30_000,
+        )
+      )?.provider || selected;
   } catch (error) {
     console.warn(
       `[smoke:agent-runtime-approval-sandbox] 读取 provider 详情失败，使用列表摘要继续: ${error.message}`,

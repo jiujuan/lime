@@ -1,14 +1,57 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import type { Message } from "../types";
 import {
   buildImageWorkbenchPreviewResourceManagerInput,
+  importImageWorkbenchOutputToResource,
   resolveImageWorkbenchPreviewImages,
 } from "./imageWorkbenchResourceManager";
+
+const materialMocks = vi.hoisted(() => ({
+  importMaterialFromUrl: vi.fn(),
+}));
+
+vi.mock("@/lib/api/materials", () => ({
+  importMaterialFromUrl: materialMocks.importMaterialFromUrl,
+}));
 
 describe("imageWorkbenchResourceManager", () => {
   beforeEach(async () => {
     await changeLimeLocale("zh-CN");
+    localStorage.clear();
+    materialMocks.importMaterialFromUrl.mockReset();
+    materialMocks.importMaterialFromUrl.mockResolvedValue({
+      id: "material-image-1",
+    });
+  });
+
+  it("当前图片任务输出应直接按 URL 导入资源库", async () => {
+    await expect(
+      importImageWorkbenchOutputToResource({
+        projectId: " project-1 ",
+        output: {
+          id: "task-image-1:output:1",
+          taskId: "task-image-1",
+          hookImageId: "task-image-1:hook:1",
+          refId: "img-task-image-1-1",
+          url: " https://example.com/image-1.png ",
+          prompt: "青柠/主图",
+          createdAt: new Date("2026-05-14T00:00:00.000Z").getTime(),
+          providerName: "GPT Images",
+          modelName: "gpt-image-2",
+          size: "1024x1024",
+          applyTarget: null,
+        },
+      }),
+    ).resolves.toEqual({ materialId: "material-image-1" });
+
+    expect(materialMocks.importMaterialFromUrl).toHaveBeenCalledWith({
+      projectId: "project-1",
+      name: expect.stringMatching(/^青柠 主图-\d{8}-\d{6}\.png$/),
+      type: "image",
+      url: "https://example.com/image-1.png",
+      tags: ["image-gen"],
+    });
   });
 
   it("消息内图片点击应构造资源管理器会话并按点击图片定位", () => {

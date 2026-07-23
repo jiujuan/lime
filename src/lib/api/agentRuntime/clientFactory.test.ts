@@ -14,26 +14,6 @@ const appServerCheckpointSummary = {
   validationIssueCount: 0,
 };
 
-const appServerManagedObjective = {
-  objectiveId: "objective-1",
-  workspaceId: "workspace-1",
-  ownerKind: "agent_session",
-  ownerId: "session-1",
-  objectiveText: "完成生产命令 current 迁移",
-  successCriteria: ["前端网关 fail closed"],
-  status: "active",
-  budgetPolicy: null,
-  riskPolicy: null,
-  approvalPolicy: null,
-  continuationPolicy: null,
-  lastAuditSummary: null,
-  lastEvidencePackRef: null,
-  lastArtifactRefs: [],
-  blockerReason: null,
-  createdAt: "2026-06-06T00:00:00.000Z",
-  updatedAt: "2026-06-06T00:00:00.000Z",
-};
-
 function appServerClientMock(): AgentRuntimeAppServerClient {
   const client = {
     startSession: vi.fn().mockResolvedValue({
@@ -361,80 +341,6 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
           generatedAt: "2026-06-12T00:00:00.000Z",
           capabilities: [],
         },
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    readAgentSessionObjective: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        objective: appServerManagedObjective,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    setAgentSessionObjective: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        objective: appServerManagedObjective,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    updateAgentSessionObjectiveStatus: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        objective: appServerManagedObjective,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    clearAgentSessionObjective: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        cleared: true,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    continueAgentSessionObjective: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        submitted: true,
-        queuedTurnId: "queued-1",
-        objective: appServerManagedObjective,
-      },
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
-      notifications: [],
-    }),
-    auditAgentSessionObjective: vi.fn().mockResolvedValue({
-      id: 1,
-      result: {
-        objective: appServerManagedObjective,
       },
       response: {
         id: 1,

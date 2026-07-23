@@ -461,6 +461,38 @@ describe("resolveTaskCenterHomeChromeState", () => {
     expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBeNull();
   });
 
+  it("new-task 首页首发创建 session 后不应被后台恢复状态重新压回首页", () => {
+    const state = resolveTaskCenterHomeChromeState({
+      agentEntry: "new-task",
+      draftSurfaceActive: false,
+      draftTabActive: false,
+      shouldSuppressDraftContent: false,
+      draftSendRequest: createDraftSendRequest({ materializeDraft: false }),
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: false,
+      isHomeSessionBackgroundRecovery: true,
+      displayMessageCount: 1,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: true,
+      isHomePendingPreviewActive: false,
+      queuedTurnCount: 0,
+      sessionId: "fresh-home-session",
+      embeddedHomeSessionIds: new Set(),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+      shouldUseBrowserWorkspaceHomeChrome: true,
+    });
+
+    expect(state.isTaskCenterDraftSendPending).toBe(true);
+    expect(state.hasCurrentSessionActivity).toBe(true);
+    expect(state.hasHomeConversationActivity).toBe(true);
+    expect(
+      state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
+    ).toBe(false);
+  });
+
   it("new-task 后台执行态应隐藏旧会话内容但保留顶栏工具入口", () => {
     const state = resolveTaskCenterHomeChromeState({
       agentEntry: "new-task",

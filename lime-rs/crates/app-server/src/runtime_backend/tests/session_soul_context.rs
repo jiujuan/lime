@@ -43,12 +43,14 @@ fn session_config_appends_soul_context_from_config_metadata() {
     let prompt = config.system_prompt.expect("system prompt");
     assert!(prompt.contains("## Interaction Soul"));
     assert!(prompt.contains("saved app config `memory.soul`"));
+    assert!(prompt.contains("`memory.soul` 是配置键，不是文件路径"));
+    assert!(prompt.contains("不要为了获取人格、口吻或风格再次调用文件或 memory 工具"));
     assert!(prompt.contains("Style profile: warm_supportive_companion"));
     assert!(prompt.contains("Style pack: com.lime.soul.warm-supportive-companion"));
     assert!(prompt.contains("Lead with the answer."));
     assert!(prompt.contains("State risks plainly"));
     assert!(prompt.contains("generation brief"));
-    assert!(!prompt.contains("SOUL.md"));
+    assert!(prompt.contains("不要尝试读取 `memory.soul` 或 `SOUL.md`"));
 }
 
 #[test]
@@ -114,6 +116,7 @@ fn session_config_appends_persona_context_from_request_metadata_to_soul_prompt()
 
     let prompt = config.system_prompt.expect("system prompt");
     assert!(prompt.contains("## Interaction Soul"));
+    assert!(prompt.contains("不要尝试读取 `memory.soul` 或 `SOUL.md`"));
     assert!(prompt.contains("Style profile: cheeky_sassy_executor"));
     assert!(prompt.contains("Style pack: com.lime.soul.cheeky-sassy-executor"));
     assert!(prompt.contains("Persona knowledge packs (context only)"));

@@ -102,6 +102,62 @@ describe("conversationEventProjection", () => {
     });
   });
 
+  it("应只把 Codex reasoning summary delta 投影到可见 reasoning surface", () => {
+    expect(
+      buildConversationProjectionEvents(
+        {
+          type: "reasoning_summary_delta",
+          itemId: "reasoning-1",
+          reasoningId: "reasoning-1",
+          summaryIndex: 2,
+          text: "先核对事实",
+          delta: "先核对事实",
+        },
+        baseContext,
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: "reasoning.delta",
+        sourceType: "reasoning_summary_delta",
+        partId: "reasoning-1",
+        surface: "inline_process",
+        payload: {
+          textLength: 5,
+          preview: "先核对事实",
+          streamKind: "summary",
+          summaryIndex: 2,
+        },
+      }),
+    ]);
+  });
+
+  it("应保留 summary part/raw content 语义但不投影为用户可见文本", () => {
+    expect(
+      buildConversationProjectionEvents(
+        {
+          type: "reasoning_summary_part_added",
+          itemId: "reasoning-1",
+          reasoningId: "reasoning-1",
+          summaryIndex: 1,
+        },
+        baseContext,
+      ),
+    ).toEqual([]);
+    expect(
+      buildConversationProjectionEvents(
+        {
+          type: "reasoning_content_delta",
+          itemId: "reasoning-1",
+          reasoningId: "reasoning-1",
+          contentIndex: 0,
+          text: "raw chain of thought",
+          delta: "raw chain of thought",
+        },
+        baseContext,
+      ),
+    ).toEqual([]);
+  });
+
   it("应把 reasoning lifecycle 事件保留为空投影", () => {
     expect(
       buildConversationProjectionEvents(

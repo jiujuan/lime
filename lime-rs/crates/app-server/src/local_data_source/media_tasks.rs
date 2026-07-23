@@ -1,10 +1,11 @@
 use crate::media_task;
 use crate::media_task_payload::{image_model_task_request, video_model_task_request};
-use crate::model_route_assembly::{resolved_route_from_task, ModelRouteSelection};
+use crate::model_route_assembly::{resolved_route_from_task_with_credential, ModelRouteSelection};
 use crate::model_task_contract::{
     capability_snapshot_from_model_capabilities, MediaRouteAssessment,
 };
 use crate::runtime::SidecarStore;
+use crate::runtime_backend::model_route_credential;
 use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
 use app_server_protocol::MediaTaskArtifactAudioCreateParams;
 use app_server_protocol::MediaTaskArtifactImageCompleteParams;
@@ -22,14 +23,14 @@ use lime_core::database::dao::api_key_provider::{
 use lime_core::database::DbConnection;
 use lime_core::models::model_registry::EnhancedModelMetadata;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
-use lime_services::model_registry_service::ModelRegistryService;
+use lime_services::model_registry_service::{ModelRegistryService, ProviderModelRegistryMetadata};
 use serde_json::{json, Value};
 
 pub(crate) fn create_image_media_task_artifact(
     params: MediaTaskArtifactImageCreateParams,
-    route_assessment: Option<MediaRouteAssessment>,
+    route_assessment: MediaRouteAssessment,
 ) -> Result<MediaTaskArtifactResponse, String> {
-    media_task::create_image_generation_task_artifact(params, route_assessment)
+    media_task::create_image_generation_task_artifact(params, Some(route_assessment))
 }
 
 pub(crate) fn create_audio_media_task_artifact(
@@ -40,9 +41,9 @@ pub(crate) fn create_audio_media_task_artifact(
 
 pub(crate) fn create_video_media_task_artifact(
     params: MediaTaskArtifactVideoCreateParams,
-    route_assessment: Option<MediaRouteAssessment>,
+    route_assessment: MediaRouteAssessment,
 ) -> Result<MediaTaskArtifactResponse, String> {
-    media_task::create_video_generation_task_artifact(params, route_assessment)
+    media_task::create_video_generation_task_artifact(params, Some(route_assessment))
 }
 
 pub(crate) fn complete_audio_media_task_artifact(
@@ -82,7 +83,7 @@ pub(crate) async fn assess_image_route(
     api_key_provider_service: &ApiKeyProviderService,
     model_registry_service: &ModelRegistryService,
     params: &MediaTaskArtifactImageCreateParams,
-) -> Option<MediaRouteAssessment> {
+) -> Result<MediaRouteAssessment, String> {
     assess_media_route(
         db,
         api_key_provider_service,
@@ -449,7 +450,7 @@ pub(crate) async fn assess_video_route(
     api_key_provider_service: &ApiKeyProviderService,
     model_registry_service: &ModelRegistryService,
     params: &MediaTaskArtifactVideoCreateParams,
-) -> Option<MediaRouteAssessment> {
+) -> Result<MediaRouteAssessment, String> {
     assess_media_route(
         db,
         api_key_provider_service,
@@ -464,24 +465,48 @@ async fn assess_media_route(
     api_key_provider_service: &ApiKeyProviderService,
     model_registry_service: &ModelRegistryService,
     task_request: &ModelTaskRequest,
-) -> Option<MediaRouteAssessment> {
-    let model_ref = task_request.model_ref.as_ref()?;
+) -> Result<MediaRouteAssessment, String> {
+    let model_ref = task_request
+        .model_ref
+        .as_ref()
+        .ok_or_else(|| "media_model_ref_missing".to_string())?;
     let provider = api_key_provider_service
         .get_provider(db, &model_ref.provider_id)
-        .ok()
-        .flatten()?;
-    let models = model_registry_service
-        .get_models_by_provider(&model_ref.provider_id)
-        .await;
-    let model = models
-        .iter()
-        .find(|model| model_matches(&model_ref.model_id, model))?;
+        .map_err(|error| format!("provider_lookup_failed: {error}"))?
+        .ok_or_else(|| "provider_not_configured".to_string())?;
+    let route_credential = model_route_credential::resolve_route_credential(
+        db,
+        api_key_provider_service,
+        &model_ref.provider_id,
+        Some(&provider),
+        None,
+        None,
+    )
+    .await?;
+    let requires_api_key = ModelRegistryService::requires_api_key_for_runtime(
+        &provider.provider.id,
+        &provider.provider.api_host,
+        provider.provider.effective_provider_type(),
+    );
+    if requires_api_key && route_credential.credential_ref().is_none() {
+        return Err("resolved_credential_unavailable".to_string());
+    }
+    let model_registry = model_registry_service.resolve_provider_model_metadata(
+        Some(&provider),
+        &model_ref.provider_id,
+        &model_ref.model_id,
+        route_credential.model_cache_access(Some(&provider)),
+    )?;
+    let model = model_registry
+        .model
+        .as_ref()
+        .ok_or_else(|| model_registry.reason_code.to_string())?;
     if !model_has_declared_capability_snapshot(model) {
-        return None;
+        return Err("model_capability_snapshot_missing".to_string());
     }
     let snapshot = capability_snapshot_from_model_capabilities(&model_capabilities_value(model));
     let assessment = MediaRouteAssessment::from_snapshot(task_request, snapshot);
-    let route = resolved_route_from_task(
+    let route = resolved_route_from_task_with_credential(
         task_request,
         ModelRouteSelection {
             provider_id: &model_ref.provider_id,
@@ -489,11 +514,12 @@ async fn assess_media_route(
             model_ref_source: ModelRefSource::Task,
             reasoning_effort: None,
         },
-        &media_route_payload(task_request, model, &provider),
+        &media_route_payload(task_request, &model_registry, &provider),
         Some(&provider),
+        route_credential.credential_ref(),
         None,
     );
-    Some(assessment.with_resolved_route(route))
+    Ok(assessment.with_resolved_route(route))
 }
 
 fn model_has_declared_capability_snapshot(model: &EnhancedModelMetadata) -> bool {
@@ -510,34 +536,18 @@ fn model_has_declared_capability_snapshot(model: &EnhancedModelMetadata) -> bool
         || model.capabilities.reasoning_effort.is_some()
 }
 
-fn model_matches(requested_model_id: &str, model: &EnhancedModelMetadata) -> bool {
-    let requested = normalize_model_id(requested_model_id);
-    [
-        Some(model.id.as_str()),
-        model.provider_model_id.as_deref(),
-        model.canonical_model_id.as_deref(),
-    ]
-    .into_iter()
-    .flatten()
-    .any(|candidate| normalize_model_id(candidate) == requested)
-}
-
-fn normalize_model_id(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
-}
-
 fn model_capabilities_value(model: &EnhancedModelMetadata) -> Value {
     serde_json::to_value(model).unwrap_or(Value::Null)
 }
 
 fn media_route_payload(
     task_request: &ModelTaskRequest,
-    model: &EnhancedModelMetadata,
+    model_registry: &ProviderModelRegistryMetadata,
     provider: &ProviderWithKeys,
 ) -> Value {
     let model_ref = task_request.model_ref.as_ref();
     let provider_readiness = readiness_payload(provider);
-    let registry_payload = model_registry_payload(model);
+    let registry_payload = model_registry_payload(model_registry);
     json!({
         "backend": "media_task_artifact",
         "routingMode": "task_route",
@@ -568,10 +578,15 @@ fn media_route_payload(
 fn readiness_payload(provider: &ProviderWithKeys) -> Value {
     let enabled_key_count = provider.api_keys.iter().filter(|key| key.enabled).count();
     let total_key_count = provider.api_keys.len();
-    let ready = provider.provider.enabled && enabled_key_count > 0;
+    let requires_api_key = ModelRegistryService::requires_api_key_for_runtime(
+        &provider.provider.id,
+        &provider.provider.api_host,
+        provider.provider.effective_provider_type(),
+    );
+    let ready = provider.provider.enabled && (!requires_api_key || enabled_key_count > 0);
     let reason_code = if !provider.provider.enabled {
         Some("provider_disabled")
-    } else if enabled_key_count == 0 {
+    } else if requires_api_key && enabled_key_count == 0 {
         Some("missing_enabled_api_key")
     } else {
         None
@@ -585,6 +600,8 @@ fn readiness_payload(provider: &ProviderWithKeys) -> Value {
         "providerType": provider.provider.provider_type.to_string(),
         "provider_type": provider.provider.provider_type.to_string(),
         "enabled": provider.provider.enabled,
+        "requiresApiKey": requires_api_key,
+        "requires_api_key": requires_api_key,
         "enabledKeyCount": enabled_key_count,
         "enabled_key_count": enabled_key_count,
         "totalKeyCount": total_key_count,
@@ -594,22 +611,26 @@ fn readiness_payload(provider: &ProviderWithKeys) -> Value {
     })
 }
 
-fn model_registry_payload(model: &EnhancedModelMetadata) -> Value {
+fn model_registry_payload(model_registry: &ProviderModelRegistryMetadata) -> Value {
+    let model = model_registry
+        .model
+        .as_ref()
+        .expect("media route requires resolved model metadata");
     let model_value = serde_json::to_value(model).unwrap_or(Value::Null);
     let capabilities = model_capabilities_value(model);
     json!({
-        "source": model.source.to_string(),
-        "sourceLabel": model.source.to_string(),
-        "source_label": model.source.to_string(),
+        "source": model_registry.source.as_str(),
+        "sourceLabel": model_registry.source.as_str(),
+        "source_label": model_registry.source.as_str(),
         "status": "matched",
-        "reasonCode": "matched_media_task_model",
-        "reason_code": "matched_media_task_model",
-        "providerId": model.provider_id,
-        "provider_id": model.provider_id,
-        "requestedModelId": model.provider_model_id.as_deref().unwrap_or(model.id.as_str()),
-        "requested_model_id": model.provider_model_id.as_deref().unwrap_or(model.id.as_str()),
-        "matchedModelId": model.id,
-        "matched_model_id": model.id,
+        "reasonCode": model_registry.reason_code,
+        "reason_code": model_registry.reason_code,
+        "providerId": model_registry.provider_id,
+        "provider_id": model_registry.provider_id,
+        "requestedModelId": model_registry.requested_model_id,
+        "requested_model_id": model_registry.requested_model_id,
+        "matchedModelId": model_registry.matched_model_id,
+        "matched_model_id": model_registry.matched_model_id,
         "model": model_value,
         "modelCapabilities": capabilities,
         "model_capabilities": capabilities,
@@ -624,8 +645,11 @@ mod tests {
         ApiKeyEntry, ApiKeyProvider, ApiProviderType, ProviderGroup,
     };
     use lime_core::database::schema::create_tables;
+    use lime_core::models::runtime_api_key_credential_uuid;
+    use lime_services::model_registry_service::ProviderModelCacheAccess;
     use rusqlite::Connection;
     use std::sync::{Arc, Mutex};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn image_create_params() -> MediaTaskArtifactImageCreateParams {
         MediaTaskArtifactImageCreateParams {
@@ -832,6 +856,182 @@ mod tests {
             .expect_err("placeholder provider should fail");
 
         assert!(error.contains("API Host 是示例地址"));
+    }
+
+    #[tokio::test]
+    async fn media_route_rejects_missing_scoped_model_metadata() {
+        let db = test_db();
+        let api_key_service = ApiKeyProviderService::new();
+        let model_registry_service = ModelRegistryService::new(db.clone());
+        let provider = api_key_service
+            .add_custom_provider(
+                &db,
+                "Missing Media Metadata".to_string(),
+                ApiProviderType::Openai,
+                "http://127.0.0.1:9".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create media provider");
+        api_key_service
+            .add_api_key(&db, &provider.id, "missing-media-metadata-key", None, false)
+            .expect("add media key");
+
+        let error = assess_image_route(
+            &db,
+            &api_key_service,
+            &model_registry_service,
+            &MediaTaskArtifactImageCreateParams {
+                provider_id: Some(provider.id),
+                model: Some("missing-image-model".to_string()),
+                ..image_create_params()
+            },
+        )
+        .await
+        .expect_err("missing scoped metadata must reject task creation");
+
+        assert_eq!(error, "model_registry_metadata_missing");
+    }
+
+    #[tokio::test]
+    async fn media_route_binds_scoped_metadata_and_execution_to_one_credential() {
+        let db = test_db();
+        let api_key_service = ApiKeyProviderService::new();
+        let model_registry_service = ModelRegistryService::new(db.clone());
+        let model_id = "gpt-image-edit-2";
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local models fixture");
+        let address = listener.local_addr().expect("local models address");
+        let models_body = serde_json::json!({
+            "data": [{
+                "id": model_id,
+                "task_families": ["image_generation", "image_edit"],
+                "input_modalities": ["text", "image"],
+                "output_modalities": ["image"],
+                "runtime_features": ["images_api"]
+            }]
+        })
+        .to_string();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept models request");
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request).await;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                models_body.len(),
+                models_body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("write models response");
+        });
+        let api_host = format!("http://{address}");
+        let provider = api_key_service
+            .add_custom_provider(
+                &db,
+                "Scoped Media Fixture".to_string(),
+                ApiProviderType::Openai,
+                api_host.clone(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create media provider");
+        let key_a = api_key_service
+            .add_api_key(&db, &provider.id, "media-scope-key-a", None, false)
+            .expect("add key A");
+        let key_b = api_key_service
+            .add_api_key(&db, &provider.id, "media-scope-key-b", None, false)
+            .expect("add key B");
+        let ref_a = runtime_api_key_credential_uuid(&key_a.id);
+        let ref_b = runtime_api_key_credential_uuid(&key_b.id);
+        let first = api_key_service
+            .select_credential_for_provider(&db, &provider.id, Some(&provider.id), None)
+            .await
+            .expect("advance media credential rotation")
+            .expect("first media credential");
+        let (expected_ref, expected_api_key, other_ref) = if first.uuid == ref_a {
+            (&ref_b, "media-scope-key-b", &ref_a)
+        } else {
+            (&ref_a, "media-scope-key-a", &ref_b)
+        };
+
+        model_registry_service
+            .fetch_models_from_api_with_hints(
+                &provider.id,
+                &api_host,
+                expected_api_key,
+                Some(ApiProviderType::Openai),
+                &[],
+            )
+            .await
+            .expect("seed selected credential model cache");
+
+        let provider_with_keys = api_key_service
+            .get_provider(&db, &provider.id)
+            .expect("read provider")
+            .expect("media provider");
+        let expected_credential = api_key_service
+            .select_runtime_credential_by_ref(&db, &provider.id, expected_ref)
+            .expect("read expected credential")
+            .expect("expected credential");
+        let other_credential = api_key_service
+            .select_runtime_credential_by_ref(&db, &provider.id, other_ref)
+            .expect("read other credential")
+            .expect("other credential");
+        let selected_metadata = model_registry_service
+            .resolve_provider_model_metadata(
+                Some(&provider_with_keys),
+                &provider.id,
+                model_id,
+                ProviderModelCacheAccess::Credential(&expected_credential),
+            )
+            .expect("selected credential metadata");
+        let other_metadata = model_registry_service
+            .resolve_provider_model_metadata(
+                Some(&provider_with_keys),
+                &provider.id,
+                model_id,
+                ProviderModelCacheAccess::Credential(&other_credential),
+            )
+            .expect("other credential metadata");
+        assert_eq!(selected_metadata.source.as_str(), "provider_models_cache");
+        assert_eq!(other_metadata.source.as_str(), "runtime_selection_only");
+        assert!(other_metadata.model.is_none());
+
+        let assessment = assess_image_route(
+            &db,
+            &api_key_service,
+            &model_registry_service,
+            &MediaTaskArtifactImageCreateParams {
+                provider_id: Some(provider.id.clone()),
+                model: Some(model_id.to_string()),
+                ..image_create_params()
+            },
+        )
+        .await
+        .expect("media route assessment");
+        let route = assessment.resolved_route.expect("resolved media route");
+
+        assert!(
+            route.failure.is_none(),
+            "route failure: {:?}",
+            route.failure
+        );
+        assert_eq!(
+            route.auth.credential_ref.as_deref(),
+            Some(expected_ref.as_str())
+        );
+        let evidence = serde_json::to_string(&route).expect("serialize route");
+        assert!(!evidence.contains("media-scope-key-a"));
+        assert!(!evidence.contains("media-scope-key-b"));
     }
 
     fn test_db() -> DbConnection {

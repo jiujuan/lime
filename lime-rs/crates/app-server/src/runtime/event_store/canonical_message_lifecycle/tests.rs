@@ -157,7 +157,7 @@ fn explicit_user_message_identity_preserves_content_at_terminal() {
             json!({
                 "role": "user",
                 "itemId": "user-1",
-                "input": {"text": "delegated task"}
+                "input": [{"type": "text", "text": "delegated task"}]
             }),
         )],
         None,
@@ -181,7 +181,7 @@ fn explicit_user_message_identity_preserves_content_at_terminal() {
     assert!(matches!(
         &item.payload,
         agent_protocol::ThreadItemPayload::UserMessage { content, .. }
-            if content == "delegated task"
+            if content == &vec![agent_protocol::AgentInput::text("delegated task")]
     ));
 }
 

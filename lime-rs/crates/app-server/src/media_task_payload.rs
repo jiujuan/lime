@@ -42,6 +42,18 @@ fn image_required_capabilities(params: &MediaTaskArtifactImageCreateParams) -> V
     }
 }
 
+fn image_input_modalities(params: &MediaTaskArtifactImageCreateParams) -> Vec<String> {
+    let mut modalities = vec!["text".to_string()];
+    if params
+        .reference_images
+        .iter()
+        .any(|reference| !reference.trim().is_empty())
+    {
+        modalities.push("image".to_string());
+    }
+    modalities
+}
+
 pub(crate) fn image_model_task_request(
     params: &MediaTaskArtifactImageCreateParams,
 ) -> ModelTaskRequest {
@@ -58,7 +70,7 @@ pub(crate) fn image_model_task_request(
         modality_contract_key: Some(modality_contract_key),
         routing_slot: Some(routing_slot),
         task_families: vec!["image_generation".to_string()],
-        input_modalities: vec!["text".to_string(), "image".to_string()],
+        input_modalities: image_input_modalities(params),
         output_modalities: vec!["image".to_string()],
         runtime_features: Vec::new(),
         capabilities: image_required_capabilities(params),
@@ -438,7 +450,9 @@ pub(crate) fn create_audio_payload(params: &MediaTaskArtifactAudioCreateParams) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model_route_assembly::{resolved_route_from_task, ModelRouteSelection};
+    use crate::model_route_assembly::{
+        resolved_route_from_task_with_credential, ModelRouteSelection,
+    };
     use app_server_protocol::ModelRefSource;
 
     #[test]
@@ -477,6 +491,66 @@ mod tests {
         assert_eq!(
             payload["model_task_request"]["requirements"]["outputModalities"][0].as_str(),
             Some("image")
+        );
+        assert_eq!(
+            payload["model_task_request"]["requirements"]["inputModalities"],
+            json!(["text"])
+        );
+    }
+
+    #[test]
+    fn image_task_requires_image_input_only_when_reference_is_present() {
+        let text_to_image = image_model_task_request(&MediaTaskArtifactImageCreateParams {
+            prompt: "生成封面".to_string(),
+            reference_images: vec!["  ".to_string()],
+            ..MediaTaskArtifactImageCreateParams::default()
+        });
+        let image_to_image = image_model_task_request(&MediaTaskArtifactImageCreateParams {
+            prompt: "改成夜景".to_string(),
+            reference_images: vec!["https://cdn.example.test/source.png".to_string()],
+            ..MediaTaskArtifactImageCreateParams::default()
+        });
+
+        assert_eq!(
+            text_to_image.requirements.input_modalities,
+            vec!["text".to_string()]
+        );
+        assert_eq!(
+            image_to_image.requirements.input_modalities,
+            vec!["text".to_string(), "image".to_string()]
+        );
+    }
+
+    #[test]
+    fn image_reference_reports_exact_image_input_capability_gap() {
+        let params = MediaTaskArtifactImageCreateParams {
+            prompt: "改成夜景".to_string(),
+            reference_images: vec!["https://cdn.example.test/source.png".to_string()],
+            ..MediaTaskArtifactImageCreateParams::default()
+        };
+        let snapshot =
+            crate::model_task_contract::capability_snapshot_from_model_capabilities(&json!({
+                "capabilities": {
+                    "vision": false,
+                    "streaming": true
+                },
+                "taskFamilies": ["image_generation"],
+                "inputModalities": ["text"],
+                "outputModalities": ["image"],
+                "runtimeFeatures": ["streaming", "images_api"]
+            }));
+
+        let assessment =
+            MediaRouteAssessment::from_snapshot(&image_model_task_request(&params), snapshot);
+
+        let failure = assessment
+            .route_failure
+            .as_ref()
+            .expect("image input capability gap");
+        assert_eq!(failure.reason_code, "capability_gap");
+        assert_eq!(
+            failure.capability_gap.as_deref(),
+            Some("input_modality:image")
         );
     }
 
@@ -583,7 +657,7 @@ mod tests {
             ..MediaTaskArtifactImageCreateParams::default()
         };
         let task_request = image_model_task_request(&params);
-        let route = resolved_route_from_task(
+        let route = resolved_route_from_task_with_credential(
             &task_request,
             ModelRouteSelection {
                 provider_id: "openai",
@@ -605,16 +679,17 @@ mod tests {
                     "reasonCode": "matched_media_task_model",
                     "modelCapabilities": {
                         "capabilities": {
-                            "vision": true,
+                            "vision": false,
                             "streaming": false
                         },
                         "taskFamilies": ["image_generation"],
-                        "inputModalities": ["text", "image"],
+                        "inputModalities": ["text"],
                         "outputModalities": ["image"],
                         "runtimeFeatures": ["images_api"]
                     }
                 }
             }),
+            None,
             None,
             None,
         );
@@ -642,15 +717,15 @@ mod tests {
         );
         assert_eq!(
             payload["model_route_execution"]["executor"]["kind"].as_str(),
-            Some("local_lime_service")
+            Some("media_task_worker")
         );
         assert_eq!(
             payload["model_route_execution"]["executor"]["bindingKey"].as_str(),
-            Some("local_lime_service:/v1/images/generations")
+            Some("mediaTaskArtifact/image/create")
         );
         assert_eq!(
             payload["model_route_execution"]["credentialResolver"]["owner"].as_str(),
-            Some("local_lime_service")
+            Some("media_task_worker")
         );
         assert_eq!(
             payload["model_route_execution"]["credentialResolver"]["secretMaterialStatus"].as_str(),

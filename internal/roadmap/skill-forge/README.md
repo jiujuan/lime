@@ -31,10 +31,14 @@
 
 相关路线图：
 
-- [../managed-objective/README.md](../managed-objective/README.md)：把 Codex `/goal` 的 thread goal loop 启发收敛为 Lime 的跨 turn 目标推进控制层。
+- [../../aiprompts/architecture.md](../../aiprompts/architecture.md)：current ThreadGoal 与跨 turn idle continuation owner。
 - [../ai-layered-design/README.md](../ai-layered-design/README.md)：AI 图层化设计路线图；它是 generated adapter 的潜在消费方，但 `LayeredDesignDocument`、Canvas Editor 和设计工程协议不归 Skill Forge 定义。
 
 ## 0. 当前落地状态
+
+> 2026-07-22 更正：以下清单中的 `ManagedObjective`、`managed_objective` metadata 和
+> completion-audit Goal 状态仅为历史实施证据，已由 canonical ThreadGoal 取代并物理删除；不得按
+> 这些旧条目恢复协议、存储、Automation Goal 或 GUI。
 
 截至 2026-05-06，Skill Forge 路线已经完成 **P0-P4 最小闭环**，并通过 [P0-P4 completion audit](../../exec-plans/skill-forge-completion-audit.md) 收口：
 
@@ -53,7 +57,7 @@
 13. P4 第一刀已新增 Agent envelope 草案 presentation：Workspace 已注册能力面板可展示 runbook、permission、manual rerun schedule 与 evidence 状态，但“转成 Agent 草案”仍是 disabled / explanation，不创建长期任务。
 14. P4 evidence 第一刀已补 `timeline.json` source metadata 透传：ToolCall item 在存在 P3E metadata 时会保留 `workspaceSkillSource` / `workspaceSkillRuntimeEnable`，供后续 Agent envelope 和 evidence pack 展示消费。
 15. P4 第二刀已新增 Managed Job 草案入口：ready binding 可在 Workspace 已注册能力面板打开现有持续流程弹窗，生成 `automation_job` 草案；草案默认暂停，提交后仍走既有 `createAutomationJob`。
-16. Managed Job payload 仍是 `agent_turn`，`request_metadata.harness` 写入 `agent_envelope`、`managed_objective` 与 `workspace_skill_runtime_enable`；scheduled run 仍通过 P3E session-scoped allowlist 授权，不新增 scheduler / runtime。
+16. Managed Job payload 仍是 `agent_turn`，`request_metadata.harness` 只写入 `agent_envelope` 与 `workspace_skill_runtime_enable`；scheduled run 不拥有第二套 Goal 状态机。
 17. P4 evidence 第二刀已补 automation owner 导出：`agent_runtime_export_evidence_pack` 会把当前 session 关联的 `agent_runs` 写入 `runtime.json` / `artifacts.json` 的 `automationOwners`，保留 automation job、Agent envelope、Managed Objective 与 P3E runtime enable 的关系。
 18. Workspace 已注册能力面板已能读取既有 automation jobs，并按 `agent_envelope.directory` / `skill` 反投影 Managed Job 状态、调度摘要与最近运行，避免只停留在“创建草案”入口。
 19. Workspace 已注册能力面板已补暂停 / 恢复最小闭环：对匹配到的 Managed Job 复用 `updateAutomationJob(job.id, { enabled })` 切换状态，不新增平行 pause state。
@@ -261,9 +265,9 @@ Level 6: policy-approved scheduled external write
 
 固定边界：
 
-**Managed Objective 必须挂到 `agent turn / subagent turn / automation job` 之一，不允许成为新的 runtime taxonomy。**
+**目标推进只由 thread-owned ThreadGoal 控制，不允许恢复 ManagedObjective 或新的 runtime taxonomy。**
 
-详细架构、状态机和实施阶段独立维护在 [../managed-objective/README.md](../managed-objective/README.md)。本路线图只描述它与 Skill Forge / generated skill 的衔接关系。
+详细架构见 [../../aiprompts/architecture.md](../../aiprompts/architecture.md)。本路线图只描述 Skill Forge / generated skill 与 Automation 的衔接关系。
 
 ## 6. 分阶段路线
 

@@ -539,7 +539,7 @@ test("pipeline flush verifies buffered direct notifications", async () => {
   );
 });
 
-test("delta crosses the pipeline without synthesizing verifier sequence", async () => {
+test("item streaming notifications cross the pipeline without synthesizing verifier sequence", async () => {
   let pushes = 0;
   const pipeline = new AgentRuntimeEventPipeline({
     sequenceVerifier: {
@@ -553,10 +553,33 @@ test("delta crosses the pipeline without synthesizing verifier sequence", async 
     },
   });
 
-  const processed = await pipeline.process(agentMessageDeltaNotification());
+  const notifications = [
+    agentMessageDeltaNotification(),
+    reasoningNotification("item/reasoning/summaryTextDelta", {
+      delta: "summary",
+      summaryIndex: 0,
+    }),
+    reasoningNotification("item/reasoning/summaryPartAdded", {
+      summaryIndex: 1,
+    }),
+    reasoningNotification("item/reasoning/textDelta", {
+      contentIndex: 0,
+      delta: "raw",
+    }),
+  ];
+  const processed = [];
+  for (const notification of notifications) {
+    processed.push(await pipeline.process(notification));
+  }
 
-  assert.equal(processed.accepted, true);
-  assert.equal(processed.notification.method, "item/agentMessage/delta");
+  assert.deepEqual(
+    processed.map((result) => result.accepted),
+    [true, true, true, true],
+  );
+  assert.deepEqual(
+    processed.map((result) => result.notification.method),
+    notifications.map((notification) => notification.method),
+  );
   assert.equal(pushes, 0);
 });
 
@@ -782,6 +805,18 @@ function agentMessageDeltaNotification(overrides = {}) {
       threadId: "thread-1",
       turnId: "turn-1",
       ...overrides,
+    },
+  };
+}
+
+function reasoningNotification(method, fields) {
+  return {
+    method,
+    params: {
+      itemId: "reasoning-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      ...fields,
     },
   };
 }

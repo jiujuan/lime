@@ -14,6 +14,9 @@ export type RuntimeServerNotification = Extract<
       | "item/started"
       | "item/completed"
       | "item/agentMessage/delta"
+      | "item/reasoning/summaryTextDelta"
+      | "item/reasoning/summaryPartAdded"
+      | "item/reasoning/textDelta"
       | "thread/settings/updated";
   }
 >;
@@ -57,6 +60,18 @@ export function serverNotification(
     case "item/agentMessage/delta":
       return hasAgentMessageDelta(message.params)
         ? (message as ServerNotificationFor<"item/agentMessage/delta">)
+        : undefined;
+    case "item/reasoning/summaryTextDelta":
+      return hasReasoningDelta(message.params, "summaryIndex")
+        ? (message as ServerNotificationFor<"item/reasoning/summaryTextDelta">)
+        : undefined;
+    case "item/reasoning/summaryPartAdded":
+      return hasReasoningIdentity(message.params, "summaryIndex")
+        ? (message as ServerNotificationFor<"item/reasoning/summaryPartAdded">)
+        : undefined;
+    case "item/reasoning/textDelta":
+      return hasReasoningDelta(message.params, "contentIndex")
+        ? (message as ServerNotificationFor<"item/reasoning/textDelta">)
         : undefined;
     case "thread/settings/updated":
       return hasThreadSettings(message.params)
@@ -109,6 +124,30 @@ export function isAgentMessageDeltaNotification(
   return serverNotification(message)?.method === "item/agentMessage/delta";
 }
 
+export function isReasoningSummaryTextDeltaNotification(
+  message: JsonRpcMessage,
+): message is ServerNotificationFor<"item/reasoning/summaryTextDelta"> {
+  return (
+    serverNotification(message)?.method ===
+    "item/reasoning/summaryTextDelta"
+  );
+}
+
+export function isReasoningSummaryPartAddedNotification(
+  message: JsonRpcMessage,
+): message is ServerNotificationFor<"item/reasoning/summaryPartAdded"> {
+  return (
+    serverNotification(message)?.method ===
+    "item/reasoning/summaryPartAdded"
+  );
+}
+
+export function isReasoningTextDeltaNotification(
+  message: JsonRpcMessage,
+): message is ServerNotificationFor<"item/reasoning/textDelta"> {
+  return serverNotification(message)?.method === "item/reasoning/textDelta";
+}
+
 export function isThreadSettingsUpdatedNotification(
   message: JsonRpcMessage,
 ): message is ServerNotificationFor<"thread/settings/updated"> {
@@ -147,6 +186,29 @@ function hasAgentMessageDelta(value: unknown): boolean {
     hasString(params, "turnId") &&
     hasString(params, "itemId") &&
     typeof params?.delta === "string"
+  );
+}
+
+function hasReasoningIdentity(
+  value: unknown,
+  indexKey: "summaryIndex" | "contentIndex",
+): boolean {
+  const params = record(value);
+  return (
+    hasString(params, "threadId") &&
+    hasString(params, "turnId") &&
+    hasString(params, "itemId") &&
+    hasFiniteNumber(params, indexKey)
+  );
+}
+
+function hasReasoningDelta(
+  value: unknown,
+  indexKey: "summaryIndex" | "contentIndex",
+): boolean {
+  const params = record(value);
+  return (
+    hasReasoningIdentity(params, indexKey) && typeof params?.delta === "string"
   );
 }
 

@@ -6,7 +6,8 @@ use crate::{ImageGenerationRequestBodyFormat, ImageGenerationRunnerConfig, TaskE
 
 use super::{
     build_image_provider_http_error, build_image_task_error, read_response_error_code,
-    read_response_error_message, summarize_response_body, ImageGenerationRequestInput,
+    read_response_error_message, summarize_response_body, with_optional_bearer_auth,
+    ImageGenerationRequestInput,
 };
 
 const AGNES_DEFAULT_SIZE_FOR_RATIO: &str = "2K";
@@ -31,9 +32,8 @@ pub(super) async fn request_single_image_generation(
         !prepared_input.reference_image_urls.is_empty(),
         runner_config.request_body_format,
     );
-    let mut request_builder = client
-        .post(&endpoint)
-        .header("Authorization", format!("Bearer {}", runner_config.api_key));
+    let mut request_builder =
+        with_optional_bearer_auth(client.post(&endpoint), &runner_config.api_key);
     if let Some(provider_id) = prepared_input
         .provider_id
         .as_deref()

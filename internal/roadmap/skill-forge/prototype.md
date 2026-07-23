@@ -9,7 +9,7 @@
 - [./README.md](./README.md)
 - [./implementation-plan.md](./implementation-plan.md)
 - [./diagrams.md](./diagrams.md)
-- [../managed-objective/prototype.md](../managed-objective/prototype.md)
+- [../../aiprompts/architecture.md](../../aiprompts/architecture.md)
 - [../../research/skill-forge/agent-product-model.md](../../research/skill-forge/agent-product-model.md)
 
 ## 1. 原型原则

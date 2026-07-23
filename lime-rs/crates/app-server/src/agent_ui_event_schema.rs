@@ -15,6 +15,12 @@ const STATE_DELTA_SCHEMA: &str = include_str!(
 static RUNTIME_EVENT_VALIDATOR: OnceLock<Result<Validator, String>> = OnceLock::new();
 static STATE_DELTA_VALIDATOR: OnceLock<Result<Validator, String>> = OnceLock::new();
 
+pub(crate) fn warm_validators() -> Result<(), String> {
+    runtime_event_validator()?;
+    state_delta_validator()?;
+    Ok(())
+}
+
 pub(crate) fn validate_agent_event(event: &AgentEvent) -> Result<(), String> {
     reject_legacy_turn_terminal_event(&event.event_type)?;
     if is_text_delta_fast_path_event(&event.event_type) {
@@ -380,6 +386,11 @@ mod tests {
             timestamp: "2026-06-12T00:00:00.000Z".to_string(),
             payload,
         }
+    }
+
+    #[test]
+    fn warms_embedded_agent_ui_event_schemas() {
+        warm_validators().expect("embedded Agent UI event schemas should compile");
     }
 
     #[test]

@@ -214,6 +214,7 @@ export interface AgentThreadReasoningItem extends AgentThreadItemBase {
   type: "reasoning";
   text: string;
   summary?: string[];
+  content?: string[];
 }
 
 export interface AgentThreadToolCallItem extends AgentThreadItemBase {

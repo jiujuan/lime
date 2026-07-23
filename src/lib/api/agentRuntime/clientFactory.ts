@@ -7,10 +7,6 @@ import {
   createInventoryClient,
   type AgentRuntimeWorkspaceSkillBindingsAppServerClient,
 } from "./inventoryClient";
-import {
-  createObjectiveClient,
-  type AgentRuntimeObjectiveAppServerClient,
-} from "./objectiveClient";
 import type { AppServerSessionRpcClient } from "./appServerSessionClient";
 import { createSessionClient } from "./sessionClient";
 import {
@@ -29,7 +25,6 @@ export type AgentRuntimeAppServerClient =
   AgentRuntimeThreadClientDeps["appServerClient"] &
     AppServerSessionRpcClient &
     AgentRuntimeEvidenceExportAppServerClient &
-    AgentRuntimeObjectiveAppServerClient &
     AgentRuntimeWorkspaceSkillBindingsAppServerClient;
 
 export interface AgentRuntimeClientDeps extends AgentRuntimeTransportDeps {
@@ -62,9 +57,6 @@ export function createAgentRuntimeClient({
       appServerClient,
     }),
     ...createInventoryClient({
-      appServerClient,
-    }),
-    ...createObjectiveClient({
       appServerClient,
     }),
     ...createSessionClient({

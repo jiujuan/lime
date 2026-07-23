@@ -20,17 +20,6 @@ export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE =
 export const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
   "agentSession/handoffBundle/export";
 export const METHOD_AGENT_SESSION_MEDIA_READ = "agentSession/media/read";
-export const METHOD_AGENT_SESSION_OBJECTIVE_AUDIT =
-  "agentSession/objective/audit";
-export const METHOD_AGENT_SESSION_OBJECTIVE_CLEAR =
-  "agentSession/objective/clear";
-export const METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE =
-  "agentSession/objective/continue";
-export const METHOD_AGENT_SESSION_OBJECTIVE_READ =
-  "agentSession/objective/read";
-export const METHOD_AGENT_SESSION_OBJECTIVE_SET = "agentSession/objective/set";
-export const METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE =
-  "agentSession/objective/status/update";
 export const METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE =
   "agentSession/queuedTurn/promote";
 export const METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE =
@@ -151,6 +140,11 @@ export const METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL =
 export const METHOD_ITEM_COMPLETED = "item/completed";
 export const METHOD_ITEM_FILE_CHANGE_REQUEST_APPROVAL =
   "item/fileChange/requestApproval";
+export const METHOD_REASONING_SUMMARY_PART_ADDED =
+  "item/reasoning/summaryPartAdded";
+export const METHOD_REASONING_SUMMARY_TEXT_DELTA =
+  "item/reasoning/summaryTextDelta";
+export const METHOD_REASONING_TEXT_DELTA = "item/reasoning/textDelta";
 export const METHOD_ITEM_STARTED = "item/started";
 export const METHOD_ITEM_TOOL_REQUEST_USER_INPUT = "item/tool/requestUserInput";
 export const METHOD_KNOWLEDGE_CONTEXT_RESOLVE = "knowledgeContext/resolve";
@@ -235,12 +229,7 @@ export const METHOD_MODEL_PROVIDER_CONFIG_EXPORT = "modelProviderConfig/export";
 export const METHOD_MODEL_PROVIDER_CONFIG_IMPORT = "modelProviderConfig/import";
 export const METHOD_MODEL_PROVIDER_KEY_CREATE = "modelProviderKey/create";
 export const METHOD_MODEL_PROVIDER_KEY_DELETE = "modelProviderKey/delete";
-export const METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD =
-  "modelProviderKey/error/record";
-export const METHOD_MODEL_PROVIDER_KEY_NEXT = "modelProviderKey/next";
 export const METHOD_MODEL_PROVIDER_KEY_UPDATE = "modelProviderKey/update";
-export const METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD =
-  "modelProviderKey/usage/record";
 export const METHOD_MODEL_PROVIDER_UI_STATE_READ = "modelProviderUiState/read";
 export const METHOD_MODEL_PROVIDER_UI_STATE_WRITE =
   "modelProviderUiState/write";
@@ -455,30 +444,6 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "agentSession/media/read",
-  },
-  {
-    kind: "request",
-    method: "agentSession/objective/audit",
-  },
-  {
-    kind: "request",
-    method: "agentSession/objective/clear",
-  },
-  {
-    kind: "request",
-    method: "agentSession/objective/continue",
-  },
-  {
-    kind: "request",
-    method: "agentSession/objective/read",
-  },
-  {
-    kind: "request",
-    method: "agentSession/objective/set",
-  },
-  {
-    kind: "request",
-    method: "agentSession/objective/status/update",
   },
   {
     kind: "request",
@@ -826,6 +791,18 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "notification",
+    method: "item/reasoning/summaryPartAdded",
+  },
+  {
+    kind: "notification",
+    method: "item/reasoning/summaryTextDelta",
+  },
+  {
+    kind: "notification",
+    method: "item/reasoning/textDelta",
+  },
+  {
+    kind: "notification",
     method: "item/started",
   },
   {
@@ -1118,19 +1095,7 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
-    method: "modelProviderKey/error/record",
-  },
-  {
-    kind: "request",
-    method: "modelProviderKey/next",
-  },
-  {
-    kind: "request",
     method: "modelProviderKey/update",
-  },
-  {
-    kind: "request",
-    method: "modelProviderKey/usage/record",
   },
   {
     kind: "request",
@@ -2149,70 +2114,6 @@ export interface AgentSessionMediaReadResponse {
   uri: string;
 }
 
-export interface AgentSessionObjectiveAuditParams {
-  ownerId?: null | string;
-  ownerKind?: null | string;
-  sessionId: string;
-}
-
-export interface AgentSessionObjectiveAuditResponse {
-  objective: ManagedObjective;
-}
-
-export interface AgentSessionObjectiveClearParams {
-  sessionId: string;
-}
-
-export interface AgentSessionObjectiveClearResponse {
-  cleared: boolean;
-}
-
-export interface AgentSessionObjectiveContinueParams {
-  ownerId?: null | string;
-  ownerKind?: null | string;
-  sessionId: string;
-}
-
-export interface AgentSessionObjectiveContinueResponse {
-  objective: ManagedObjective;
-  queuedTurnId: string;
-  submitted: boolean;
-  turn: AgentTurn;
-}
-
-export interface AgentSessionObjectiveReadParams {
-  sessionId: string;
-}
-
-export interface AgentSessionObjectiveReadResponse {
-  objective?: ManagedObjective | null;
-}
-
-export interface AgentSessionObjectiveSetParams {
-  approvalPolicy?: unknown;
-  budgetPolicy?: unknown;
-  continuationPolicy?: unknown;
-  objectiveText: string;
-  riskPolicy?: unknown;
-  sessionId: string;
-  successCriteria?: string[];
-  workspaceId?: null | string;
-}
-
-export interface AgentSessionObjectiveSetResponse {
-  objective: ManagedObjective;
-}
-
-export interface AgentSessionObjectiveStatusUpdateParams {
-  blockerReason?: null | string;
-  sessionId: string;
-  status: ManagedObjectiveStatus;
-}
-
-export interface AgentSessionObjectiveStatusUpdateResponse {
-  objective?: ManagedObjective | null;
-}
-
 export interface AgentSessionOverview {
   activeTurnId?: null | string;
   archivedAt?: null | string;
@@ -2655,36 +2556,6 @@ export type AppServerClientRequest =
   | {
       id: number | string;
       method: "agentSession/update";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/objective/read";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/objective/set";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/objective/status/update";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/objective/clear";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/objective/continue";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "agentSession/objective/audit";
       params?: unknown;
     }
   | {
@@ -3794,21 +3665,6 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
-      method: "modelProviderKey/next";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "modelProviderKey/usage/record";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
-      method: "modelProviderKey/error/record";
-      params?: unknown;
-    }
-  | {
-      id: number | string;
       method: "modelProviderUiState/read";
       params?: unknown;
     }
@@ -3939,12 +3795,6 @@ export type AppServerRequestMethod =
   | "agentSession/fileCheckpoint/restore"
   | "agentSession/handoffBundle/export"
   | "agentSession/media/read"
-  | "agentSession/objective/audit"
-  | "agentSession/objective/clear"
-  | "agentSession/objective/continue"
-  | "agentSession/objective/read"
-  | "agentSession/objective/set"
-  | "agentSession/objective/status/update"
   | "agentSession/queuedTurn/promote"
   | "agentSession/queuedTurn/remove"
   | "agentSession/replayCase/export"
@@ -4095,10 +3945,7 @@ export type AppServerRequestMethod =
   | "modelProviderConfig/import"
   | "modelProviderKey/create"
   | "modelProviderKey/delete"
-  | "modelProviderKey/error/record"
-  | "modelProviderKey/next"
   | "modelProviderKey/update"
-  | "modelProviderKey/usage/record"
   | "modelProviderUiState/read"
   | "modelProviderUiState/write"
   | "modelSyncState/read"
@@ -5752,36 +5599,6 @@ export interface LogStorageDiagnosticsResponse {
   relatedLogFiles?: LogArtifactEntry[];
 }
 
-export interface ManagedObjective {
-  approvalPolicy?: unknown;
-  blockerReason?: null | string;
-  budgetPolicy?: unknown;
-  continuationPolicy?: unknown;
-  createdAt: string;
-  lastArtifactRefs?: string[];
-  lastAuditSummary?: null | string;
-  lastEvidencePackRef?: null | string;
-  objectiveId: string;
-  objectiveText: string;
-  ownerId: string;
-  ownerKind: string;
-  riskPolicy?: unknown;
-  status: ManagedObjectiveStatus;
-  successCriteria?: string[];
-  updatedAt: string;
-  workspaceId?: null | string;
-}
-
-export type ManagedObjectiveStatus =
-  | "active"
-  | "blocked"
-  | "budget_limited"
-  | "completed"
-  | "failed"
-  | "needs_input"
-  | "paused"
-  | "verifying";
-
 export type McpContent =
   | {
       text: string;
@@ -6540,19 +6357,6 @@ export interface ModelProviderKeyDeleteParams {
 
 export interface ModelProviderKeyDeleteResponse {
   deleted: boolean;
-}
-
-export interface ModelProviderKeyEventParams {
-  keyId: string;
-}
-
-export interface ModelProviderKeyNextParams {
-  providerId: string;
-}
-
-export interface ModelProviderKeyNextResponse {
-  apiKey?: null | string;
-  keyId?: null | string;
 }
 
 export interface ModelProviderKeyUpdateParams {
@@ -7314,6 +7118,29 @@ export interface ProviderKeyInfo {
   usageCount: number;
 }
 
+export interface ReasoningSummaryPartAddedNotification {
+  itemId: string;
+  summaryIndex: number;
+  threadId: string;
+  turnId: string;
+}
+
+export interface ReasoningSummaryTextDeltaNotification {
+  delta: string;
+  itemId: string;
+  summaryIndex: number;
+  threadId: string;
+  turnId: string;
+}
+
+export interface ReasoningTextDeltaNotification {
+  contentIndex: number;
+  delta: string;
+  itemId: string;
+  threadId: string;
+  turnId: string;
+}
+
 export interface ResolvedModelRoute {
   auth: AuthMaterialRef;
   capabilitySnapshot: CapabilitySnapshot;
@@ -7495,6 +7322,18 @@ export type ServerNotification =
   | {
       method: "item/agentMessage/delta";
       params: AgentMessageDeltaNotification;
+    }
+  | {
+      method: "item/reasoning/summaryTextDelta";
+      params: ReasoningSummaryTextDeltaNotification;
+    }
+  | {
+      method: "item/reasoning/summaryPartAdded";
+      params: ReasoningSummaryPartAddedNotification;
+    }
+  | {
+      method: "item/reasoning/textDelta";
+      params: ReasoningTextDeltaNotification;
     }
   | {
       method: "thread/settings/updated";

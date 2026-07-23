@@ -266,3 +266,55 @@
 - 验证：services metadata 4/4、App Server metadata 3/3、sidecar rebuild、局部 rustfmt 与 diff check 通过。Gate B `root-plugin-worker-generation-v5` 通过：fixture 收到 2 次 `/v1/chat/completions`，worker read model 为 `completed`，EventLog 落 `turn.completed`，Article Editor 正文、编辑、刷新和重开恢复均通过。summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/root-plugin-worker-generation-v5-summary.json`。
 - 分类：credential-scoped cache、keyless cache、RuntimeCore Plugin worker 与 Article Editor 投影均为 `current`；本刀未新增 `compat / deprecated / dead` surface。
 - 下一刀：正式支持多 enabled key 时，把 route resolution 拆成 routing/assembly 两阶段；最终 provider/model 确定后只选择一次 credential，并让 metadata、route evidence 与 execution 复用同一 durable ref。
+
+## 2026-07-22 Plugin worker multi-key route binding
+
+- 写集：`lime-services` model registry cache access、App Server route prepare/assembly、runtime credential binding、Knowledge Builder 和定向回归；继续避让 `internal/refactor/v1/**`、protocol、renderer 与并行 objective 删除热区。
+- 实现：chat route 已拆为 prepare/assembly 两阶段。prepare 只确定 fallback 后的最终 provider/model；assembly 优先精确复用 generation 匹配的 durable `credentialRef`，否则 round-robin 选择一次，并把同一 runtime credential 同时交给 scoped metadata、ResolvedModelRoute、route evidence 和 execution provider configuration。RuntimeBackend 原有 metadata 后二次选 key/补写 evidence 的逻辑已删除。
+- cache 边界：`ProviderModelCacheAccess::{Credential, Keyless, Unavailable}` 取代 `Option<&str>`；API key 解包与 fingerprint 保持在 `model_registry` owner 内，route、evidence、error 与 payload 只携带 credential ref。key-required Provider 不读 unscoped/其它 key cache，明确 keyless Provider 才读 unscoped cache。
+- 调用链：Plugin worker 与 image presentation 继续复用统一 chat resolver；Knowledge Builder 已接入同一 credential binding。已迁移路径使用显式 credential-ref assembly，不再从 Provider keys 中自行挑第一个 enabled key；尚未迁移的 media task 入口保留原行为，本刀不扩写集。
+- 回归：新增两个 enabled keys、仅 key B 有 scoped cache 的 route/evidence 测试；key B 必须命中 cache 且 auth/evidence 同 ref，key A 必须 fail-closed 且不能读取 B cache。现有 prepared-route pin 测试第二个 key 的 `replace_existing` 已改为 `false`，测试现在真实覆盖两个 enabled keys，而不是误删第一个 key。
+- 验证：`lime-services` runtime metadata 4/4、App Server resolver 10/10、metadata 2/2、route contract 6/6、Knowledge Builder 3/3、prepared durable pin 1/1 均通过；sidecar rebuild 通过。代际变化回归确认 retry 会精确复用首次绑定 ref，不再次推进 round-robin。Gate B `root-plugin-worker-multikey-v1` 通过：fixture `/v1/chat/completions` 命中 2 次，worker read model 为 `completed`，Article Editor 正文、编辑、刷新和重开恢复均通过。summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/root-plugin-worker-multikey-v1-summary.json`。
+- 分类：上述能力均为 `current`；未新增 `compat / deprecated / dead` surface。完成度：本刀 `100%`。后续若迁移 media task route，应直接切到显式 credential-ref assembly，不新增另一套选择逻辑。
+
+## 2026-07-22 Media task multi-key route binding
+
+- 写集：App Server media route assessment、共享 route credential helper、resolved-route image worker、route assembly 与定向回归；继续避让 `internal/refactor/v1/**`、protocol、renderer 与并行 objective 删除热区。
+- 实现：media assessment 不再读取启动后会被清空的全局 `models_cache`，也不再从 Provider 中取第一个 enabled key。当前链路先 round-robin 选择一次 runtime credential，再用同一 credential 读取 fingerprint-scoped model metadata，并把同一 durable `credentialRef` 写入 `ResolvedModelRoute`。
+- 执行绑定：image worker 的 resolved-route 分支不再二次 round-robin；它通过 `select_runtime_credential_by_ref` 精确解密 route 指定的 key，并只记录该 key 的 usage。缺失、跨 Provider、禁用或不可解密的 ref 均 fail closed。
+- route-less 收口：图片与视频创建必须先得到完整 `MediaRouteAssessment`，缺 model ref、Provider、credential、scoped model metadata 或 capability snapshot 时直接返回稳定 reason code，不写 route-less artifact。image worker 已删除从 task payload 回读 Provider store、重新推断 endpoint/protocol 并再次 round-robin 的生产 fallback；历史 route-less artifact 只会写入 `image_worker_start_failed`，不会读取或消耗 Provider key。
+- 事实源清理：删除会隐式选择第一个 enabled key 的默认 route assembly；所有调用改为显式 credential-ref assembly。key-required Provider 只读所选 credential 的 scoped cache，明确 keyless Provider 才读 unscoped cache。
+- 回归：media 两 key 测试先推进一次 RR，只给下一 key 写 scoped cache，断言另一 key 无法读取该 cache，最终 route auth 绑定所选 ref 且 evidence 不含明文 key；worker 测试指定 key B 的 ref 并证明真实解密结果为 B。模型列表 fixture 使用随机 localhost `/v1/models` 服务，不依赖外部域名或厂商特判。
+- 验证：media assessment 10/10、image worker 9/9、image worker route 3/3、model route assembly 3/3、media task payload 5/5 通过；局部 rustfmt、禁止域名扫描与 diff check 通过。首次定向测试因共享 Cargo target 被并行进程清理而重建依赖，最终无代码失败。
+- 分类：media credential-scoped metadata、显式 route credential 与 image worker exact-ref execution 均为 `current`；默认 first-enabled-key assembly 和 route-less task-provider worker fallback 均为 `dead / deleted`；未新增 `compat / deprecated` surface。完成度：本刀 `100%`。
+
+## 2026-07-22 Keyless Provider cache and image execution
+
+- 写集：App Server `modelProvider/fetchModels`、resolved-route image auth、media-runtime OpenAI Images / Responses 请求头与定向回归；继续避让 `internal/refactor/v1/**`、protocol、renderer 和并行热区。
+- cache 收口：`fetchModels` 对明确 keyless Provider 不再读取数据库中偶然存在的 key，始终用空 credential 访问模型 API并写入 unscoped cache；runtime 的 `ProviderModelCacheAccess::Keyless` 因此能读取同一事实源。
+- 执行收口：image worker 接受 resolved route 的 `auth.kind=no_auth`，不查 Provider store、不生成 credentialRef、不记录 key usage；media-runtime 仅在 API key 非空时为 OpenAI Images / Responses 请求附加 Bearer header，避免把空 `Authorization` 伪装成 no-auth。
+- 回归：随机 localhost Ollama fixture 证明有已配置 key 时 `fetchModels` 仍写 unscoped cache且请求不携带该 key；route helper 证明 no-auth 不选择 credential；请求构造证明 keyless 不写 Authorization、authenticated route 仍写 Bearer。
+- 测试配置：Responses 图片模型测试不再引用真实部署域名，统一使用保留 `/codex` 协议形状的 `images.example` 测试地址；继续验证 host-based Responses 识别但不绑定外部环境。
+- 验证：App Server model provider tests 3/3、image route tests 4/4、media-runtime image request tests 10/10、services Responses-compatible fetch tests 2/2 通过；`npm run verify:gui-smoke` 通过，evidence 为 `.lime/qc/project-gates/standalone-shell-01-20260722122807-71374/shell-01-electron-smoke/summary.json`；局部 rustfmt、禁止域名扫描与 diff check 通过。
+- 分类：keyless fetch cache、no-auth resolved route 和 optional Bearer request 均为 `current`；未新增 `compat / deprecated / dead` surface。完成度：本刀 `100%`。
+- credential telemetry 命令收口：`modelProviderKey/next`、`modelProviderKey/usage/record`、`modelProviderKey/error/record` 无生产调用，其中 `next` 会向 Renderer 返回明文 key，三者已按 protocol DTO/catalog、App Server handler/runtime/data source、typed client、Renderer gateway、command policy 与治理 catalog 整链删除，分类为 `dead / deleted / forbidden-to-restore`；内部 credential 选择与 usage/error 记录 service 继续由 backend current 执行链使用。schema 与 TypeScript client 已统一重生，三份专用 DTO schema 已物理删除，并新增 Rust 方法拒绝测试、frontend/Rust text 回流守卫。验证：App Server/protocol `cargo check` 通过，schema fixture 1/1、退役方法拒绝 1/1、typed client 75/75、Renderer/治理定向测试 236/236、`npm run test:contracts`（App Server client contract 296 checks）与 `npm run governance:legacy-report`（边界违规 0）通过；禁止部署域名全仓扫描零命中。
+
+## 2026-07-22 Retired video Product DB path deletion
+
+- 写集：删除 `lime-services::video_generation_service`、`lime-core::database::dao::video_generation_task_dao` 及模块导出，精确移除 Product DB schema 的 `video_generation_tasks` 表与三个索引创建块；同步 DB inventory、legacy catalog/test 和本执行计划。继续避让 `internal/refactor/v1/**`、App Server protocol/schema 生成物与 managed-objective 并行删除热区。
+- 事实源：Renderer `videoGenerationApi` 已只投影 App Server `mediaTaskArtifact/video/create|get|list|cancel`；持久化归 workspace `.lime/tasks/video_generate/*.json` task artifact，执行归 `lime-media-runtime::execute_video_generation_task`。旧 `VideoGenerationService` 无生产消费者，旧 DAO 只有该 service 使用。
+- credential 收口：旧 service 在 create、refresh/query、cancel 各自调用 `get_next_api_key_entry`，同一 provider task 可能在不同操作中切换 credential。整条旧 service/DAO/table 路径已判定为 `dead / deleted / forbidden-to-restore`，不保留 wrapper、双写或 Product DB 兼容 owner。
+- 回流守卫：新增 `rust-retired-video-generation-database-surface`，阻止旧 service/DAO 模块导出、类型和 `video_generation_tasks` 表名回流；DB inventory 将旧表与 DAO 更新为已删除，并指向唯一 current owner。
+- 部署地址：禁止部署域名全仓扫描零命中；Responses 兼容识别只按通用 `/responses` 或 `/codex` 终止路径，测试使用 `example` 保留域，不绑定具体部署域名。
+- 验证：legacy catalog 定向测试 `217/217`；`lime-core` `693/693`；`lime-services` `201/201`，另有 4 个既有 ignored 网络/本地监听测试；`npm run governance:legacy-report` 边界违规 `0`。`npm run test:rust:related` 已完成全部相关 crate 编译，`agent-runtime` `163/163`，但 App Server 在并行 canonical item/mailbox/projection/WebSocket fixture 热区有 `1458/1466` 通过、8 项失败；失败文件均不在本轮写集，不据此扩写或覆盖隔壁改动。
+- 完成度：本刀 `100%`。下一刀继续审计 `lime-rs/crates/server/src/handlers/image_api_provider.rs` 及其子模块是否仍存在 production 自行轮转 credential；只在确认 current owner 与消费者后收口。
+
+## 2026-07-22 Media route execution evidence convergence
+
+- 写集：App Server media route execution payload、`media-runtime` route preflight / diagnostics 及定向测试；继续避让 `internal/refactor/v1/**`、App Server credential route 热区、protocol/schema 与 Renderer。
+- 部署地址：三份本机 ignored `network-invoke.json` 中残留的真实 Provider host 已替换为 `example.com` 脱敏地址；全仓含 ignored 文件扫描对该部署域名零命中。生产代码从未包含该 host，Provider endpoint 始终来自 resolved route 的配置事实源。
+- 执行合同：删除固定本机图片/视频 path 和 `X-Provider-Id` route hint。图片 evidence 声明 `media_task_worker`，binding key 复用 `mediaTaskArtifact/image/create`，endpoint source 为 `resolved_route`，credential source 为 `resolved_route_credential_ref`。App Server 当前没有视频产品 worker，因此不再为视频 task 伪造 ready execution binding；media-runtime 视频 preflight 只保留为未接入产品入口的库级能力。
+- telemetry：media-runtime provider diagnostics 的 transport 从错误的本机服务标记改为 `provider_http`；route/evidence 仍只携带 durable `credentialRef` 与 auth header metadata，不嵌入明文 secret 或 Provider base URL。
+- 回流守卫：新增 `rust-retired-local-media-service-execution-contract`，在 App Server 与 media-runtime current 代码/集成测试中禁止恢复固定本机 HTTP broker execution owner。
+- 验证：App Server route binding 1/1、image payload 1/1、media-runtime route unit 8/8、route integration 9/9、media-runtime lib 52/52 通过；局部 rustfmt、JSON 语法、禁止部署域名扫描与 diff check 通过。
+- 分类：App Server 图片 direct-provider worker 合同为 `current`；media-runtime 视频 worker 为无产品消费者的库级能力；旧 local service execution evidence 为 `dead / deleted`；未新增 `compat / deprecated` surface。完成度：本刀 `100%`。

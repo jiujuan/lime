@@ -13,7 +13,7 @@ import {
   startAgentSessionTurnCurrent,
   updateAgentSessionRuntimeCurrent,
   waitForHealth,
-} from "../lib/managed-objective-continuation-smoke-core.mjs";
+} from "../lib/agent-runtime-smoke-core.mjs";
 
 export const DEEPSWE_MANIFEST_PATH =
   "internal/test/deepswe-coding-slice-v2.json";
@@ -755,8 +755,7 @@ export function createCurrentChainRpc({
       readAgentRuntimeThreadCurrent(options, sessionId, readOptions, invoke),
     startTurn: (options, params) =>
       startAgentSessionTurnCurrent(options, params, invoke),
-    cancelTurn: (options, params) =>
-      invoke(options, "turn/interrupt", params),
+    cancelTurn: (options, params) => invoke(options, "turn/interrupt", params),
     updateSession: (options, params) =>
       updateAgentSessionRuntimeCurrent(options, params, invoke),
     sleep,

@@ -180,32 +180,6 @@ export type AppServerAgentSessionUpdateResponse =
   protocol.AgentSessionUpdateResponse;
 export type AppServerThreadDeleteParams = protocol.ThreadDeleteParams;
 export type AppServerThreadDeleteResponse = protocol.ThreadDeleteResponse;
-export type AppServerManagedObjectiveStatus = protocol.ManagedObjectiveStatus;
-export type AppServerManagedObjective = protocol.ManagedObjective;
-export type AppServerAgentSessionObjectiveReadParams =
-  protocol.AgentSessionObjectiveReadParams;
-export type AppServerAgentSessionObjectiveReadResponse =
-  protocol.AgentSessionObjectiveReadResponse;
-export type AppServerAgentSessionObjectiveSetParams =
-  protocol.AgentSessionObjectiveSetParams;
-export type AppServerAgentSessionObjectiveSetResponse =
-  protocol.AgentSessionObjectiveSetResponse;
-export type AppServerAgentSessionObjectiveStatusUpdateParams =
-  protocol.AgentSessionObjectiveStatusUpdateParams;
-export type AppServerAgentSessionObjectiveStatusUpdateResponse =
-  protocol.AgentSessionObjectiveStatusUpdateResponse;
-export type AppServerAgentSessionObjectiveClearParams =
-  protocol.AgentSessionObjectiveClearParams;
-export type AppServerAgentSessionObjectiveClearResponse =
-  protocol.AgentSessionObjectiveClearResponse;
-export type AppServerAgentSessionObjectiveContinueParams =
-  protocol.AgentSessionObjectiveContinueParams;
-export type AppServerAgentSessionObjectiveContinueResponse =
-  protocol.AgentSessionObjectiveContinueResponse;
-export type AppServerAgentSessionObjectiveAuditParams =
-  protocol.AgentSessionObjectiveAuditParams;
-export type AppServerAgentSessionObjectiveAuditResponse =
-  protocol.AgentSessionObjectiveAuditResponse;
 export type AppServerAgentSessionCompactParams =
   protocol.AgentSessionCompactParams;
 export type AppServerAgentSessionCompactResponse =

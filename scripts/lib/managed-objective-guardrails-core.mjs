@@ -22,6 +22,8 @@ const SKIPPED_DIRS = new Set([
   "dist",
   "node_modules",
   "target",
+  "tests",
+  "__tests__",
 ]);
 const SKIPPED_FILE_SUFFIXES = [
   ".lock",
@@ -45,7 +47,17 @@ const SKIPPED_FILE_SUFFIXES = [
   ".spec.rs",
   ".spec.ts",
   ".spec.tsx",
+  "_test.rs",
+  "_tests.rs",
 ];
+const SKIPPED_GENERATED_PATH_PREFIXES = [
+  "lime-rs/crates/app-server-protocol/schema",
+  "packages/app-server-client/src/generated",
+];
+const SKIPPED_NEGATIVE_GUARD_FILES = new Set([
+  "scripts/check-app-server-client-contract.mjs",
+  "scripts/lib/managed-objective-guardrails-core.mjs",
+]);
 const DEFAULT_TOOL_SURFACE_PATHS = [
   "lime-rs/crates/agent/src/agent_tools",
   "lime-rs/crates/tool-runtime/src",
@@ -57,6 +69,9 @@ export function managedObjectiveForbiddenSurfaceTokens() {
     ["objective", "scheduler"].join("_"),
     ["objective", "queue"].join("_"),
     ["objective", "evidence", "pack"].join("_"),
+    ["Managed", "Objective"].join(""),
+    ["managed", "objective"].join("_"),
+    ["managed", "objectives"].join("_"),
   ];
 }
 
@@ -131,13 +146,28 @@ function walkPath(currentPath, repoRoot, tokens, violations) {
     return;
   }
 
-  const relativePath = path.relative(repoRoot, currentPath).replaceAll("\\", "/");
+  const relativePath = path
+    .relative(repoRoot, currentPath)
+    .replaceAll("\\", "/");
+  if (shouldSkipRelativePath(relativePath)) {
+    return;
+  }
   const content = fs.readFileSync(currentPath, "utf8");
   for (const token of tokens) {
     if (content.includes(token)) {
       violations.push({ relativePath, token });
     }
   }
+}
+
+function shouldSkipRelativePath(relativePath) {
+  if (SKIPPED_NEGATIVE_GUARD_FILES.has(relativePath)) {
+    return true;
+  }
+  return SKIPPED_GENERATED_PATH_PREFIXES.some(
+    (prefix) =>
+      relativePath === prefix || relativePath.startsWith(`${prefix}/`),
+  );
 }
 
 function shouldScanFile(filePath) {

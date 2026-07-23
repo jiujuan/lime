@@ -23,6 +23,9 @@ export interface AgentUiTextDeltaProjectionInput {
 export interface AgentUiReasoningDeltaProjectionInput {
   sourceType?: AgentUiProjectionSourceType | string;
   text: string;
+  itemId?: string;
+  streamKind?: "summary" | "content";
+  summaryIndex?: number;
 }
 
 export function buildAgentUiMessageSnapshotEvent(
@@ -85,6 +88,7 @@ export function buildAgentUiReasoningDeltaEvent(
       context,
     ),
     type: "reasoning.delta",
+    ...(input.itemId ? { partId: input.itemId } : {}),
     owner: "model",
     scope: "part",
     phase: "reasoning",
@@ -93,6 +97,10 @@ export function buildAgentUiReasoningDeltaEvent(
     payload: {
       textLength: input.text.length,
       preview: truncateText(input.text),
+      ...(input.streamKind ? { streamKind: input.streamKind } : {}),
+      ...(typeof input.summaryIndex === "number"
+        ? { summaryIndex: input.summaryIndex }
+        : {}),
     },
   };
 }

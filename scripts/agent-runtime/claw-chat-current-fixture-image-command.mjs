@@ -429,16 +429,27 @@ async function waitForImageCommandWorkflowTaskArtifact({
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const listResult = await invokeAppServerFromPage(
-      page,
-      APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
-      {
-        projectRootPath: workspace.rootPath,
-        taskType: "image_generate",
-        limit: 20,
-      },
-      appServerRequests,
-    );
+    const [listResult, sessionRead] = await Promise.all([
+      invokeAppServerFromPage(
+        page,
+        APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
+        {
+          projectRootPath: workspace.rootPath,
+          taskType: "image_generate",
+          limit: 20,
+        },
+        appServerRequests,
+      ),
+      invokeAppServerFromPage(
+        page,
+        APP_SERVER_METHOD_SESSION_READ,
+        {
+          threadId: options.threadId,
+          includeTurns: true,
+        },
+        appServerRequests,
+      ),
+    ]);
     const tasks = Array.isArray(listResult?.result?.tasks)
       ? listResult.result.tasks
       : [];
@@ -460,12 +471,20 @@ async function waitForImageCommandWorkflowTaskArtifact({
       rawText: scenarioConfig.routedPrompt,
       entrySource: scenarioConfig.entrySource,
       listResult: listResult?.result ?? null,
+      createFailure: summarizeImageCommandCreateFailure(sessionRead?.result),
     });
     if (matched) {
       return {
         response: matched,
         listSummary: lastSnapshot,
       };
+    }
+    if (lastSnapshot.createFailure) {
+      throw new Error(
+        `ImageCommandWorkflow 创建 image task 失败: ${JSON.stringify(
+          lastSnapshot.createFailure,
+        )}`,
+      );
     }
     await sleep(options.intervalMs);
   }
@@ -474,6 +493,75 @@ async function waitForImageCommandWorkflowTaskArtifact({
       sanitizeJson(lastSnapshot),
     )}`,
   );
+}
+
+export function summarizeImageCommandCreateFailure(readModel) {
+  const failedItem = collectReadModelToolCalls(readModel).find((item) => {
+    const toolName =
+      item?.tool_name ?? item?.toolName ?? item?.tool ?? item?.name ?? null;
+    return (
+      toolName === IMAGE_COMMAND_CREATE_TASK_TOOL_NAME &&
+      String(item?.status ?? "").toLowerCase() === "failed"
+    );
+  });
+  const failedEvent = findImageTaskCreateFailedEvent(readModel);
+  if (!failedItem && !failedEvent) {
+    return null;
+  }
+
+  const metadata =
+    failedItem?.metadata &&
+    typeof failedItem.metadata === "object" &&
+    !Array.isArray(failedItem.metadata)
+      ? failedItem.metadata
+      : {};
+  const failurePayload =
+    failedEvent?.payload &&
+    typeof failedEvent.payload === "object" &&
+    !Array.isArray(failedEvent.payload)
+      ? failedEvent.payload
+      : failedEvent ?? {};
+  return sanitizeJson({
+    reasonCode:
+      optionalPayloadString(failurePayload, ["reasonCode", "reason_code"]) ??
+      optionalPayloadString(metadata, ["reasonCode", "reason_code"]),
+    message:
+      optionalPayloadString(failedItem, [
+        "error",
+        "output",
+        "outputPreview",
+        "output_preview",
+      ]) ?? optionalPayloadString(failurePayload, ["message", "error"]),
+    itemId: optionalPayloadString(failedItem, ["id", "item_id", "itemId"]),
+    turnId:
+      optionalPayloadString(failedItem, ["turn_id", "turnId"]) ??
+      optionalPayloadString(failurePayload, ["turn_id", "turnId"]),
+    toolName: IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
+  });
+}
+
+function findImageTaskCreateFailedEvent(value, depth = 0) {
+  if (depth > 8 || value == null) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => findImageTaskCreateFailedEvent(entry, depth + 1))
+      .find(Boolean);
+  }
+  if (typeof value !== "object") {
+    return null;
+  }
+  if (
+    [value.type, value.event_type, value.eventType].includes(
+      "image_task.create_failed",
+    )
+  ) {
+    return value;
+  }
+  return Object.values(value)
+    .map((entry) => findImageTaskCreateFailedEvent(entry, depth + 1))
+    .find(Boolean);
 }
 
 function readTaskArtifactFile(taskPath) {

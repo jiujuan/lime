@@ -52,19 +52,21 @@ export interface HarnessStatusPanelSectionsProps {
     key: HarnessSectionKey,
     node: HTMLElement | null,
   ) => void;
-  runtimeTaskSectionProps:
-    | ComponentProps<typeof HarnessRuntimeTaskSection>
-    | null;
-  handoffSectionProps: ComponentProps<typeof HarnessHandoffExportSection> | null;
+  runtimeTaskSectionProps: ComponentProps<
+    typeof HarnessRuntimeTaskSection
+  > | null;
+  handoffSectionProps: ComponentProps<
+    typeof HarnessHandoffExportSection
+  > | null;
   objectiveSection: HarnessObjectiveSectionModel | null;
   reliabilitySection: HarnessReliabilitySectionModel;
   fileReviewSection: HarnessFileReviewSectionModel | null;
-  agentUiProjectionSectionProps:
-    | ComponentProps<typeof HarnessAgentUiProjectionSection>
-    | null;
-  runtimeFactsSectionProps:
-    | ComponentProps<typeof HarnessRuntimeFactsSection>
-    | null;
+  agentUiProjectionSectionProps: ComponentProps<
+    typeof HarnessAgentUiProjectionSection
+  > | null;
+  runtimeFactsSectionProps: ComponentProps<
+    typeof HarnessRuntimeFactsSection
+  > | null;
   activeWritesSection: HarnessActiveWritesSectionModel | null;
   outputSignalsSection: HarnessOutputSignalsSectionModel | null;
   toolInventorySectionProps: ComponentProps<typeof HarnessToolInventorySection>;
@@ -159,7 +161,10 @@ export function HarnessStatusPanelSections({
       {outputSignalsSection ? (
         <Section
           sectionKey="outputs"
-          title={agentText("agentChat.harness.generated.fb7edd231f", "工具输出")}
+          title={agentText(
+            "agentChat.harness.generated.fb7edd231f",
+            "工具输出",
+          )}
           badge={
             outputSignalsSection.filteredCount ===
             outputSignalsSection.totalCount

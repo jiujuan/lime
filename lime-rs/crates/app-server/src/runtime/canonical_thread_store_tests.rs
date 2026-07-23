@@ -1,7 +1,8 @@
 use agent_protocol::{
-    ItemId, ItemStatus, PlanStepStatus, SessionId, SortDirection, Thread, ThreadHistoryChangeSet,
-    ThreadId, ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn,
-    TurnAdmissionState, TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
+    AgentInput, ImageDetail, ItemId, ItemStatus, PlanStepStatus, SessionId, SortDirection,
+    TextElement, Thread, ThreadHistoryChangeSet, ThreadId, ThreadItem, ThreadItemPayload,
+    ThreadStatus, ThreadTurnsView, Turn, TurnAdmissionState, TurnApprovalState, TurnId,
+    TurnItemsView, TurnQueueState, TurnStatus,
 };
 use app_server_protocol::{
     AgentEvent, AgentSession, AgentSessionListParams, AgentSessionStatus, BusinessObjectRef,
@@ -301,7 +302,7 @@ fn user_item(
         kind: agent_protocol::ItemKind::UserMessage,
         status: ItemStatus::Completed,
         payload: ThreadItemPayload::UserMessage {
-            content,
+            content: vec![agent_protocol::AgentInput::text(content)],
             client_id: None,
         },
         metadata: json!({}),
@@ -313,6 +314,69 @@ fn create(store: &ProjectionStore, thread: &Thread) {
         thread: thread.clone(),
     }))
     .expect("create thread");
+}
+
+#[test]
+fn multimodal_user_message_survives_store_restart_exactly() {
+    let (temp, store) = store();
+    let path = temp.path().join("projection.sqlite");
+    let source = thread("multimodal-restart", 1_700_000_000_000);
+    create(&store, &source);
+    let content = vec![
+        AgentInput::Text {
+            text: "inspect".to_string(),
+            text_elements: vec![TextElement::new(0..7, Some("inspect".to_string()))],
+        },
+        AgentInput::Image {
+            uri: "https://example.com/remote.png".to_string(),
+            detail: Some(ImageDetail::High),
+        },
+        AgentInput::LocalImage {
+            path: "/tmp/local.png".to_string(),
+            detail: Some(ImageDetail::Original),
+        },
+        AgentInput::Skill {
+            name: "review".to_string(),
+            path: "/skills/review/SKILL.md".to_string(),
+        },
+        AgentInput::Mention {
+            name: "docs".to_string(),
+            path: "app://docs".to_string(),
+        },
+    ];
+    let mut user = user_item(&source, "turn-1", "user-1", "unused".to_string(), 1, 1);
+    user.payload = ThreadItemPayload::UserMessage {
+        content: content.clone(),
+        client_id: Some("client-1".to_string()),
+    };
+    block_on(store.apply_history(ApplyThreadHistoryParams {
+        session_id: source.session_id.clone(),
+        thread_id: source.thread_id.clone(),
+        changes: ThreadHistoryChangeSet {
+            sequence: 1,
+            changed_turns: vec![turn(&source, "turn-1", TurnStatus::Completed)],
+            changed_items: vec![user],
+            ..Default::default()
+        },
+    }))
+    .expect("persist multimodal canonical history");
+    drop(store);
+
+    let reopened = ProjectionStore::initialize(path).expect("reopen canonical store");
+    let thread = block_on(reopened.read_thread(ReadThreadParams {
+        thread_id: source.thread_id,
+        include_archived: false,
+        turns_view: ThreadTurnsView::Full,
+    }))
+    .expect("read canonical thread")
+    .expect("canonical thread exists");
+    assert_eq!(
+        thread.turns[0].items[0].payload,
+        ThreadItemPayload::UserMessage {
+            content,
+            client_id: Some("client-1".to_string()),
+        }
+    );
 }
 
 fn page(direction: SortDirection, limit: u32) -> PageRequest {
@@ -893,7 +957,11 @@ fn empty_projection_rebuilds_active_and_archived_threads_from_rollouts() {
         .expect("rebuilt user summary");
     let user_summary: serde_json::Value =
         serde_json::from_str(&user_summary).expect("parse rebuilt user summary");
-    assert!(user_summary.get("input").is_none());
+    assert_eq!(
+        serde_json::from_value::<Vec<AgentInput>>(user_summary["input"].clone())
+            .expect("rebuilt typed user input"),
+        vec![AgentInput::text(long_user_message.clone())]
+    );
     assert_ne!(user_summary["text"], long_user_message);
     let active_overviews = rebuilt
         .list_session_overviews(&AgentSessionListParams {

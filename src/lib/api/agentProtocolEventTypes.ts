@@ -143,6 +143,31 @@ export interface AgentEventReasoningDelta {
   providerMetadata?: Record<string, unknown>;
 }
 
+export interface AgentEventReasoningSummaryDelta {
+  type: "reasoning_summary_delta";
+  itemId: string;
+  reasoningId: string;
+  summaryIndex: number;
+  text: string;
+  delta: string;
+}
+
+export interface AgentEventReasoningSummaryPartAdded {
+  type: "reasoning_summary_part_added";
+  itemId: string;
+  reasoningId: string;
+  summaryIndex: number;
+}
+
+export interface AgentEventReasoningContentDelta {
+  type: "reasoning_content_delta";
+  itemId: string;
+  reasoningId: string;
+  contentIndex: number;
+  text: string;
+  delta: string;
+}
+
 export interface AgentEventReasoningFinal {
   type: "reasoning_final";
   reasoningId?: string;
@@ -532,6 +557,9 @@ export type AgentEvent = (
   | AgentEventProviderTrace
   | AgentEventReasoningStarted
   | AgentEventReasoningDelta
+  | AgentEventReasoningSummaryDelta
+  | AgentEventReasoningSummaryPartAdded
+  | AgentEventReasoningContentDelta
   | AgentEventReasoningFinal
   | AgentEventReasoningEnded
   | AgentEventPlanDelta

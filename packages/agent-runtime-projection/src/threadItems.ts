@@ -56,7 +56,7 @@ export interface AgentUiThreadItemProjectionInput {
   response?: unknown;
   path?: string;
   source?: string;
-  content?: string;
+  content?: string | readonly string[];
   stage?: string;
   trigger?: string;
   detail?: string;

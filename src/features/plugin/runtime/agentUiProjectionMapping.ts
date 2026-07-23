@@ -4,6 +4,7 @@ import type {
   AgentUiProjectionEvent,
   AgentUiRuntimeStatus,
 } from "@limecloud/agent-ui-contracts";
+import { isAgentUiEventClass } from "@limecloud/agent-ui-contracts";
 
 import {
   normalizeStatus,
@@ -81,6 +82,7 @@ export function phaseForRuntimeStatus(status: string): AgentUiPhase {
       return "completed";
     case "failed":
       return "failed";
+    case "canceled":
     case "cancelled":
       return "cancelled";
     case "routing":
@@ -90,7 +92,9 @@ export function phaseForRuntimeStatus(status: string): AgentUiPhase {
   }
 }
 
-export function runtimeStatusForTaskStatus(status: string): AgentUiRuntimeStatus {
+export function runtimeStatusForTaskStatus(
+  status: string,
+): AgentUiRuntimeStatus {
   switch (status) {
     case "queued":
       return "queued";
@@ -109,6 +113,7 @@ export function runtimeStatusForTaskStatus(status: string): AgentUiRuntimeStatus
     case "failed":
     case "error":
       return "failed";
+    case "canceled":
     case "cancelled":
       return "cancelled";
     default:
@@ -119,30 +124,7 @@ export function runtimeStatusForTaskStatus(status: string): AgentUiRuntimeStatus
 export function readDirectAgentUiEventClass(
   value: string | null | undefined,
 ): AgentUiEventClass | null {
-  if (!value || value.includes(":")) {
-    return null;
-  }
-  const prefix = value.split(".")[0];
-  return [
-    "run",
-    "text",
-    "reasoning",
-    "tool",
-    "action",
-    "queue",
-    "task",
-    "artifact",
-    "evidence",
-    "diagnostic",
-    "metric",
-    "state",
-    "messages",
-    "review",
-    "team",
-    "agent",
-  ].includes(prefix)
-    ? (value as AgentUiEventClass)
-    : null;
+  return isAgentUiEventClass(value) ? value : null;
 }
 
 export function sourceTypeForDirectAgentUiType(
@@ -187,7 +169,9 @@ export function sourceTypeForDirectAgentUiType(
   return "runtime_status";
 }
 
-export function phaseForDirectAgentUiType(type: AgentUiEventClass): AgentUiPhase {
+export function phaseForDirectAgentUiType(
+  type: AgentUiEventClass,
+): AgentUiPhase {
   if (type.startsWith("text.")) {
     return "producing";
   }
@@ -215,6 +199,9 @@ export function phaseForDirectAgentUiType(type: AgentUiEventClass): AgentUiPhase
   }
   if (type === "run.failed") {
     return "failed";
+  }
+  if (type === "run.canceled") {
+    return "cancelled";
   }
   if (type.startsWith("queue.")) {
     return "submitted";
@@ -256,20 +243,36 @@ export function runtimeStatusForDirectAgentUiType(
   type: AgentUiEventClass,
   event: Record<string, unknown>,
 ): AgentUiRuntimeStatus {
-  const status = readString(event, "runtimeStatus") ?? readString(event, "status");
+  const status =
+    readString(event, "runtimeStatus") ?? readString(event, "status");
   if (status) {
     return runtimeStatusForTaskStatus(normalizeStatus(status));
   }
-  if (type === "run.finished" || type === "tool.result" || type === "action.resolved") {
+  if (
+    type === "run.finished" ||
+    type === "tool.result" ||
+    type === "action.resolved"
+  ) {
     return "completed";
   }
-  if (type === "run.failed" || type === "tool.failed" || type.endsWith(".failed")) {
+  if (
+    type === "run.failed" ||
+    type === "tool.failed" ||
+    type.endsWith(".failed")
+  ) {
     return "failed";
+  }
+  if (type === "run.canceled") {
+    return "cancelled";
   }
   if (type === "action.required") {
     return "needs_input";
   }
-  if (type.startsWith("text.") || type.startsWith("reasoning.") || type.startsWith("tool.")) {
+  if (
+    type.startsWith("text.") ||
+    type.startsWith("reasoning.") ||
+    type.startsWith("tool.")
+  ) {
     return "running";
   }
   return "unknown";
@@ -293,6 +296,7 @@ export function persistenceForDirectAgentUiType(
   if (
     type === "run.finished" ||
     type === "run.failed" ||
+    type === "run.canceled" ||
     type === "tool.result" ||
     type === "tool.failed" ||
     type === "action.resolved"

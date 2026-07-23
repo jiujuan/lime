@@ -47,12 +47,6 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
             METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
             METHOD_AGENT_SESSION_UPDATE,
-            METHOD_AGENT_SESSION_OBJECTIVE_READ,
-            METHOD_AGENT_SESSION_OBJECTIVE_SET,
-            METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
-            METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
-            METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
-            METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
             METHOD_AGENT_SESSION_COMPACT,
             METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
             METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
@@ -275,9 +269,6 @@ fn app_server_method_catalog_keeps_all_method_kinds_together() {
             METHOD_MODEL_PROVIDER_KEY_CREATE,
             METHOD_MODEL_PROVIDER_KEY_UPDATE,
             METHOD_MODEL_PROVIDER_KEY_DELETE,
-            METHOD_MODEL_PROVIDER_KEY_NEXT,
-            METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
-            METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
             METHOD_MODEL_PROVIDER_UI_STATE_READ,
             METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
             METHOD_MODEL_PROVIDER_ALIAS_READ,
@@ -405,6 +396,18 @@ fn legacy_core_agent_session_methods_are_rejected() {
         "agentSession/thread/resume",
         "agentSession/turn/start",
         "agentSession/turn/cancel",
+    ] {
+        assert!(!is_app_server_request_method(method), "{method}");
+        assert!(AppServerRequestMethod::parse(method).is_none(), "{method}");
+    }
+}
+
+#[test]
+fn retired_model_provider_key_renderer_methods_are_rejected() {
+    for method in [
+        "modelProviderKey/next",
+        "modelProviderKey/usage/record",
+        "modelProviderKey/error/record",
     ] {
         assert!(!is_app_server_request_method(method), "{method}");
         assert!(AppServerRequestMethod::parse(method).is_none(), "{method}");

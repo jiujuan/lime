@@ -230,6 +230,124 @@ describe("App Server v2 direct notifications", () => {
     ).toEqual([notification]);
   });
 
+  it("projects indexed reasoning notifications without collapsing their semantics", () => {
+    const notifications = [
+      directNotification("item/started", {
+        item: {
+          id: "reasoning-v2",
+          summary: [],
+          content: [],
+          type: "reasoning",
+        },
+        startedAtMs: 1_783_814_400_100,
+        threadId,
+        turnId,
+      }),
+      directNotification("item/reasoning/summaryTextDelta", {
+        delta: "summary",
+        itemId: "reasoning-v2",
+        summaryIndex: 0,
+        threadId,
+        turnId,
+      }),
+      directNotification("item/reasoning/summaryPartAdded", {
+        itemId: "reasoning-v2",
+        summaryIndex: 1,
+        threadId,
+        turnId,
+      }),
+      directNotification("item/reasoning/textDelta", {
+        contentIndex: 0,
+        delta: "raw",
+        itemId: "reasoning-v2",
+        threadId,
+        turnId,
+      }),
+      directNotification("item/completed", {
+        completedAtMs: 1_783_814_400_900,
+        item: {
+          id: "reasoning-v2",
+          summary: ["summary"],
+          content: ["raw"],
+          type: "reasoning",
+        },
+        threadId,
+        turnId,
+      }),
+    ];
+
+    const projected = notifications.flatMap((notification) =>
+      projectAgentRuntimeSequenceGateNotifications(
+        "agent_stream_direct_v2_reasoning",
+        notification,
+      ).map(projectAppServerAgentEventPayload),
+    );
+
+    expect(projected.map((payload) => payload?.type)).toEqual([
+      "item_started",
+      "reasoning_summary_delta",
+      "reasoning_summary_part_added",
+      "reasoning_content_delta",
+      "item_completed",
+    ]);
+    expect(projected[1]).toMatchObject({
+      delta: "summary",
+      itemId: "reasoning-v2",
+      item_id: "reasoning-v2",
+      reasoningId: "reasoning-v2",
+      reasoning_id: "reasoning-v2",
+      summaryIndex: 0,
+      summary_index: 0,
+      text: "summary",
+    });
+    expect(projected[2]).toMatchObject({
+      item_id: "reasoning-v2",
+      summaryIndex: 1,
+      summary_index: 1,
+    });
+    expect(projected[3]).toMatchObject({
+      contentIndex: 0,
+      content_index: 0,
+      delta: "raw",
+      item_id: "reasoning-v2",
+      text: "raw",
+    });
+    expect(projected[4]).toMatchObject({
+      item: {
+        id: "reasoning-v2",
+        summary: ["summary"],
+        content: ["raw"],
+        status: "completed",
+      },
+    });
+  });
+
+  it.each([
+    [
+      "item/reasoning/summaryTextDelta",
+      { delta: "missing index", itemId: "reasoning-v2", threadId, turnId },
+    ],
+    [
+      "item/reasoning/summaryPartAdded",
+      { itemId: "reasoning-v2", threadId, turnId },
+    ],
+    [
+      "item/reasoning/textDelta",
+      { contentIndex: 0, itemId: "reasoning-v2", threadId, turnId },
+    ],
+  ])("fails closed for malformed %s", (method, params) => {
+    const notification = directNotification(method, params);
+
+    expect(readAppServerV2NotificationRoute(notification)).toBeNull();
+    expect(projectAppServerV2NotificationPayload(notification)).toBeNull();
+    expect(
+      projectAgentRuntimeSequenceGateNotifications(
+        "agent_stream_direct_v2_malformed_reasoning",
+        notification,
+      ),
+    ).toEqual([]);
+  });
+
   it("accepts valid direct notifications through the current lifecycle verifier", () => {
     const notification = directNotification("turn/started", {
       threadId,

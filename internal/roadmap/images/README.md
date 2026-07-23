@@ -38,15 +38,15 @@ Lime 现在已经有图片主链，但职责还没有完全拆开：
 - `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 把 `@配图`、`@修图`、`@重绘` 解析成 launch metadata，而不是独立的图片能力事实源。
 - `lime-rs/crates/app-server/src/runtime_backend/skill_runtime_enable.rs` 仍在写 session 级 skill allowlist。
 - `lime-rs/crates/agent/src/tools/skill_tool_gate.rs` 仍以会话允许列表决定 `Skill(image_generate)` 能否执行。
-- `src/components/image-gen/useImageGen.ts` 仍承担生成调度和 provider 执行，但已经直接消费统一 catalog。
+- `src/components/image-gen/useImageGen.ts` 只承担 Provider、模型和尺寸选择，生成调度与 Provider 执行归 App Server media task worker + media-runtime。
 - `lime-rs/resources/default-skills/image_generate/SKILL.md` 仍承担迁移期兼容入口。
 
 2026-06-30 的第一刀已经开始收口：
 
 - `src/lib/imageGen/models.ts` 变成图片模型目录的单一出口。
-- `src/components/image-gen/types.ts` 不再承载重复模型表，只转发 `lib` 层目录。
+- 图片模型目录统一由 `src/lib/imageGen/catalog.ts` 提供，组件层不再维护模型类型或执行器。
 - `src/lib/imageGeneration.ts` 已删除，不再作为 current / compat 入口。
-- `src/components/image-gen/useImageGen.ts` 已取消按预设档位兜底的历史路径，并开始按 transport 分流。
+- `src/components/image-gen/useImageGen.ts` 已删除 Renderer 执行、历史记录与保存职责，只保留统一 catalog 驱动的选择状态。
 
 对齐 Codex 后，Lime 的目标边界应当是：
 
@@ -501,7 +501,7 @@ flowchart TD
 
 | 领域           | 当前事实源                                                                                                                             | 重构动作                                                                               |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 设置与模型选择 | `src/lib/imageGen/catalog.ts`、`src/components/image-gen/useImageGen.ts`                                                               | 抽出统一 catalog resolver，统一 provider / model / alias / fallback / 错误分类。       |
+| 设置与模型选择 | `src/lib/imageGen/catalog.ts`、`src/components/image-gen/useImageGen.ts`                                                               | 统一 provider / model / alias / fallback 选择；执行错误归 current media task runtime。 |
 | 图片意图入口   | `src/components/agent/chat/workspace/modelSkillLaunchDescriptors.ts`、`src/components/agent/chat/workspace/useWorkspaceSendActions.ts` | 保留 `image_skill_launch`，补齐 `image_generation` capability hint 和 route metadata。 |
 | 运行时授权     | `lime-rs/crates/app-server/src/runtime_backend/skill_runtime_enable.rs`、`lime-rs/crates/agent/src/tools/skill_tool_gate.rs`           | 图片能力不再由 session allowlist 决定，只保留普通 Skill gate。                         |
 | 兼容 skill     | `lime-rs/resources/default-skills/image_generate/SKILL.md`                                                                             | 作为迁移期 facade 保留，最终不再承担权限事实源。                                       |

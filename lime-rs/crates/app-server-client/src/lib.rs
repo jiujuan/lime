@@ -30,14 +30,6 @@ pub use app_server_protocol::AgentSessionHandoffArtifact;
 pub use app_server_protocol::AgentSessionHandoffBundleExportParams;
 pub use app_server_protocol::AgentSessionHandoffBundleExportResponse;
 pub use app_server_protocol::AgentSessionListParams;
-pub use app_server_protocol::AgentSessionObjectiveClearParams;
-pub use app_server_protocol::AgentSessionObjectiveClearResponse;
-pub use app_server_protocol::AgentSessionObjectiveReadParams;
-pub use app_server_protocol::AgentSessionObjectiveReadResponse;
-pub use app_server_protocol::AgentSessionObjectiveSetParams;
-pub use app_server_protocol::AgentSessionObjectiveSetResponse;
-pub use app_server_protocol::AgentSessionObjectiveStatusUpdateParams;
-pub use app_server_protocol::AgentSessionObjectiveStatusUpdateResponse;
 pub use app_server_protocol::AgentSessionQueuedTurnPromoteParams;
 pub use app_server_protocol::AgentSessionQueuedTurnPromoteResponse;
 pub use app_server_protocol::AgentSessionQueuedTurnRemoveParams;
@@ -140,8 +132,6 @@ pub use app_server_protocol::LogListResponse;
 pub use app_server_protocol::LogPersistedTailParams;
 pub use app_server_protocol::LogPersistedTailResponse;
 pub use app_server_protocol::LogStorageDiagnosticsResponse;
-pub use app_server_protocol::ManagedObjective;
-pub use app_server_protocol::ManagedObjectiveStatus;
 pub use app_server_protocol::McpPromptGetParams;
 pub use app_server_protocol::McpPromptGetResponse;
 pub use app_server_protocol::McpPromptListResponse;
@@ -298,10 +288,6 @@ pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET;
 pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST;
 pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT;
-pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_CLEAR;
-pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_READ;
-pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_SET;
-pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT;
@@ -722,34 +708,6 @@ impl AppServerClient {
         params: WorkflowRespondParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::respond_workflow(params))
-    }
-
-    pub fn read_agent_session_objective(
-        &mut self,
-        params: AgentSessionObjectiveReadParams,
-    ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::read_agent_session_objective(params))
-    }
-
-    pub fn set_agent_session_objective(
-        &mut self,
-        params: AgentSessionObjectiveSetParams,
-    ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::set_agent_session_objective(params))
-    }
-
-    pub fn update_agent_session_objective_status(
-        &mut self,
-        params: AgentSessionObjectiveStatusUpdateParams,
-    ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::update_agent_session_objective_status(params))
-    }
-
-    pub fn clear_agent_session_objective(
-        &mut self,
-        params: AgentSessionObjectiveClearParams,
-    ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::clear_agent_session_objective(params))
     }
 
     pub fn list_workspaces(&mut self) -> Result<JsonRpcRequest, ClientError> {
@@ -1780,30 +1738,6 @@ pub mod typed {
 
     pub fn respond_workflow(params: WorkflowRespondParams) -> TypedRequest<WorkflowRespondParams> {
         TypedRequest::new(METHOD_WORKFLOW_RESPOND, params)
-    }
-
-    pub fn read_agent_session_objective(
-        params: AgentSessionObjectiveReadParams,
-    ) -> TypedRequest<AgentSessionObjectiveReadParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_OBJECTIVE_READ, params)
-    }
-
-    pub fn set_agent_session_objective(
-        params: AgentSessionObjectiveSetParams,
-    ) -> TypedRequest<AgentSessionObjectiveSetParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_OBJECTIVE_SET, params)
-    }
-
-    pub fn update_agent_session_objective_status(
-        params: AgentSessionObjectiveStatusUpdateParams,
-    ) -> TypedRequest<AgentSessionObjectiveStatusUpdateParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE, params)
-    }
-
-    pub fn clear_agent_session_objective(
-        params: AgentSessionObjectiveClearParams,
-    ) -> TypedRequest<AgentSessionObjectiveClearParams> {
-        TypedRequest::new(METHOD_AGENT_SESSION_OBJECTIVE_CLEAR, params)
     }
 
     pub fn list_workspaces() -> TypedRequest<serde_json::Value> {
@@ -3085,67 +3019,6 @@ mod tests {
                 "limit": 50,
             })
         );
-    }
-
-    #[test]
-    fn agent_session_objective_methods_preserve_current_contract() {
-        let mut client = AppServerClient::new();
-
-        let set = client
-            .set_agent_session_objective(AgentSessionObjectiveSetParams {
-                session_id: "session-1".to_string(),
-                workspace_id: Some("workspace-1".to_string()),
-                objective_text: "完成 current 迁移".to_string(),
-                success_criteria: vec!["test:contracts 通过".to_string()],
-                budget_policy: None,
-                risk_policy: None,
-                approval_policy: None,
-                continuation_policy: None,
-            })
-            .expect("set objective request");
-        assert_eq!(set.id, RequestId::Integer(1));
-        assert_eq!(set.method, METHOD_AGENT_SESSION_OBJECTIVE_SET);
-        assert_eq!(
-            set.params.expect("set params"),
-            json!({
-                "sessionId": "session-1",
-                "workspaceId": "workspace-1",
-                "objectiveText": "完成 current 迁移",
-                "successCriteria": ["test:contracts 通过"]
-            })
-        );
-
-        let update = client
-            .update_agent_session_objective_status(AgentSessionObjectiveStatusUpdateParams {
-                session_id: "session-1".to_string(),
-                status: ManagedObjectiveStatus::Blocked,
-                blocker_reason: Some("等待共享写集释放".to_string()),
-            })
-            .expect("update objective request");
-        assert_eq!(update.id, RequestId::Integer(2));
-        assert_eq!(update.method, METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE);
-        assert_eq!(
-            update.params.expect("update params"),
-            json!({
-                "sessionId": "session-1",
-                "status": "blocked",
-                "blockerReason": "等待共享写集释放",
-            })
-        );
-
-        let read = client
-            .read_agent_session_objective(AgentSessionObjectiveReadParams {
-                session_id: "session-1".to_string(),
-            })
-            .expect("read objective request");
-        assert_eq!(read.method, METHOD_AGENT_SESSION_OBJECTIVE_READ);
-
-        let clear = client
-            .clear_agent_session_objective(AgentSessionObjectiveClearParams {
-                session_id: "session-1".to_string(),
-            })
-            .expect("clear objective request");
-        assert_eq!(clear.method, METHOD_AGENT_SESSION_OBJECTIVE_CLEAR);
     }
 
     #[test]

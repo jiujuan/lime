@@ -22,7 +22,7 @@ use tool_runtime::tool_executor::RuntimeToolExecutorHandle;
 use tool_runtime::tool_extension::RuntimeToolCaller;
 use tool_runtime::turn_tool_surface::{
     runtime_turn_tool_scope_from_metadata, runtime_turn_tool_surface_allows_tool_name,
-    runtime_turn_tool_surface_mode_from_metadata, RuntimeTurnToolSurfaceMode,
+    runtime_turn_tool_surface_mode_from_metadata,
 };
 
 const MCP_TOOL_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(2);
@@ -144,25 +144,18 @@ fn tool_definitions(
     let mut seen = HashSet::new();
     definitions.retain(|definition| {
         let key = definition.name.to_ascii_lowercase();
-        let compact_agent_control_tool = agent_control_gateway.is_some()
-            && matches!(
-                tool_surface_mode.as_ref(),
-                Some(RuntimeTurnToolSurfaceMode::CompactTools)
-            )
-            && tool_runtime::agent_control::is_agent_control_tool_name(&definition.name);
         seen.insert(key)
             && !blocked_by_model
                 .iter()
                 .any(|name| is_same_tool(name, &definition.name))
             && !policy.matches_any_disallowed_tool(&definition.name)
             && (policy.allows_web_search() || !is_web_tool(&definition.name))
-            && (compact_agent_control_tool
-                || runtime_turn_tool_surface_allows_tool_name(
-                    &definition.name,
-                    tool_surface_mode.as_ref(),
-                    &tool_scope.allowed_tools,
-                    &canonical_name,
-                ))
+            && runtime_turn_tool_surface_allows_tool_name(
+                &definition.name,
+                tool_surface_mode.as_ref(),
+                &tool_scope.allowed_tools,
+                &canonical_name,
+            )
     });
     definitions.sort_by(|left, right| left.name.cmp(&right.name));
     definitions
@@ -280,9 +273,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn provider_step_applies_structured_turn_tool_surface() {
+    #[tokio::test]
+    async fn provider_step_applies_structured_turn_tool_surface() {
         let state = AgentRuntimeState::new();
+        state
+            .register_tool_search_tools(Arc::new(EmptyToolSearchGateway))
+            .await
+            .expect("tool search registration");
         let policy = resolve_request_tool_policy_with_mode(None, Some(RequestToolPolicyMode::Auto));
         let snapshot =
             tool_runtime::mcp_connection::McpStepSnapshot::empty(RuntimeToolCaller::assistant());
@@ -294,6 +291,7 @@ mod tests {
 
         assert!(compact.len() < full.len());
         assert!(compact.iter().any(|tool| tool.name == "WebSearch"));
+        assert!(compact.iter().any(|tool| tool.name == "tool_search"));
         assert!(compact.iter().any(|tool| tool.name == "exec_command"));
         assert!(compact.iter().any(|tool| tool.name == "write_stdin"));
         assert!(compact.iter().any(|tool| tool.name == "apply_patch"));
@@ -303,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_surface_exposes_agent_control_only_with_a_turn_gateway() {
+    fn compact_surface_defers_agent_control_unless_explicitly_allowed() {
         let state = AgentRuntimeState::new();
         let policy = resolve_request_tool_policy_with_mode(None, Some(RequestToolPolicyMode::Auto));
         let snapshot =
@@ -326,25 +324,51 @@ mod tests {
             &snapshot,
             Some(&gateway),
         );
-        let names = with_gateway
+        assert!(!with_gateway
+            .iter()
+            .any(|tool| tool_runtime::agent_control::is_agent_control_tool_name(&tool.name)));
+
+        let mut explicitly_allowed_context = compact_context;
+        explicitly_allowed_context.metadata.insert(
+            "tool_scope".to_string(),
+            json!({ "allowed_tools": ["spawn_agent", "list_agents"] }),
+        );
+        let explicitly_allowed = tool_definitions(
+            &state,
+            &policy,
+            Some(&explicitly_allowed_context),
+            &snapshot,
+            Some(&gateway),
+        );
+        let names = explicitly_allowed
             .iter()
             .filter(|tool| tool_runtime::agent_control::is_agent_control_tool_name(&tool.name))
             .map(|tool| tool.name.as_str())
             .collect::<Vec<_>>();
+        assert_eq!(names, vec!["list_agents", "spawn_agent"]);
+
+        let full = tool_definitions(&state, &policy, None, &snapshot, Some(&gateway));
         assert_eq!(
-            names,
-            vec![
-                "followup_task",
-                "interrupt_agent",
-                "list_agents",
-                "send_message",
-                "spawn_agent",
-                "wait_agent",
-            ]
+            full.iter()
+                .filter(|tool| tool_runtime::agent_control::is_agent_control_tool_name(&tool.name))
+                .count(),
+            tool_runtime::agent_control::agent_control_tool_definitions().len()
         );
     }
 
     struct RejectingAgentControlGateway;
+
+    struct EmptyToolSearchGateway;
+
+    #[async_trait::async_trait]
+    impl tool_runtime::tool_search::ToolSearchGateway for EmptyToolSearchGateway {
+        async fn search_tools(
+            &self,
+            _params: app_server_protocol::McpToolSearchParams,
+        ) -> Result<app_server_protocol::McpToolListResponse, String> {
+            Ok(app_server_protocol::McpToolListResponse { tools: Vec::new() })
+        }
+    }
 
     #[async_trait::async_trait]
     impl tool_runtime::agent_control::AgentControlGateway for RejectingAgentControlGateway {

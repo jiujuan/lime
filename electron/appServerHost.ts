@@ -58,6 +58,8 @@ const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_CANCEL_REQUEST_METHOD = "$/cancelRequest";
 const APP_SERVER_CONFIG_FILE_NAME = "config.yaml";
 const APP_SERVER_RECENT_NOTIFICATION_LIMIT = 500;
+const APP_SERVER_DRAIN_FIRST_MESSAGE_WAIT_MS = 25;
+const APP_SERVER_DRAIN_BUFFERED_MESSAGE_WAIT_MS = 0;
 const APP_SERVER_PROXY_PROBE_URL = "https://llm.limeai.run/v1/models";
 const APP_SERVER_PROXY_ENV_KEYS = [
   "HTTP_PROXY",
@@ -195,7 +197,13 @@ export class ElectronAppServerHost {
 
     for (let index = 0; index < limit; index += 1) {
       try {
-        drained.push(await connected.connection.nextServerMessage(25));
+        drained.push(
+          await connected.connection.nextServerMessage(
+            index === 0
+              ? APP_SERVER_DRAIN_FIRST_MESSAGE_WAIT_MS
+              : APP_SERVER_DRAIN_BUFFERED_MESSAGE_WAIT_MS,
+          ),
+        );
       } catch {
         break;
       }

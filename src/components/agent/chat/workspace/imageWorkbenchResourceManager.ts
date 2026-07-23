@@ -1,4 +1,6 @@
 import { getLimeI18n } from "@/i18n/createI18n";
+import { importMaterialFromUrl } from "@/lib/api/materials";
+import { setStoredResourceProjectId } from "@/lib/resourceProjectSelection";
 import type {
   OpenResourceManagerInput,
   ResourceManagerItemInput,
@@ -9,10 +11,67 @@ import type {
   MessageImageWorkbenchPreview,
   MessageImageWorkbenchPreviewSelection,
 } from "../types";
+import type { ImageWorkbenchOutput } from "./imageWorkbenchHelpers";
+
+const IMAGE_TASK_MATERIAL_TAG = "image-gen";
+const IMAGE_MATERIAL_NAME_MAX_LENGTH = 48;
 
 function normalizeOptionalText(value?: string | null): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function sanitizeMaterialName(value: string): string {
+  return value
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatDateForMaterialName(timestamp: number): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  const hour = `${date.getHours()}`.padStart(2, "0");
+  const minute = `${date.getMinutes()}`.padStart(2, "0");
+  const second = `${date.getSeconds()}`.padStart(2, "0");
+  return `${year}${month}${day}-${hour}${minute}${second}`;
+}
+
+function buildImageTaskMaterialName(output: ImageWorkbenchOutput): string {
+  const promptHead = sanitizeMaterialName(output.prompt).slice(
+    0,
+    IMAGE_MATERIAL_NAME_MAX_LENGTH,
+  );
+  const prefix = promptHead || output.refId || "image";
+  return `${prefix}-${formatDateForMaterialName(output.createdAt)}.png`;
+}
+
+export async function importImageWorkbenchOutputToResource(params: {
+  output: ImageWorkbenchOutput;
+  projectId: string;
+}): Promise<{ materialId: string }> {
+  const projectId = params.projectId.trim();
+  const url = params.output.url.trim();
+  if (!projectId || !url) {
+    throw new Error("image workbench output is not importable");
+  }
+
+  const material = await importMaterialFromUrl({
+    projectId,
+    name: buildImageTaskMaterialName(params.output),
+    type: "image",
+    url,
+    tags: [IMAGE_TASK_MATERIAL_TAG],
+  });
+  setStoredResourceProjectId(projectId, {
+    source: "image-gen-save",
+    syncLegacy: true,
+    emitEvent: true,
+  });
+
+  return { materialId: material.id };
 }
 
 export function resolveImageWorkbenchPreviewImages(
@@ -60,9 +119,7 @@ function normalizeSelectionIndex(
   selection?: MessageImageWorkbenchPreviewSelection,
 ): number | null {
   const value = selection?.imageIndex;
-  return typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= 0
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
     ? value
     : null;
 }

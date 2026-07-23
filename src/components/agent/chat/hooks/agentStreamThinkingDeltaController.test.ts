@@ -64,4 +64,63 @@ describe("agentStreamThinkingDeltaController", () => {
       "contentParts" | "isThinking" | "thinkingContent"
     >);
   });
+
+  it("Codex summary 应逐字追加合法重复片段并保留分段 metadata", () => {
+    const first = buildAgentStreamThinkingDeltaMessagePatch({
+      appendThinkingToParts,
+      appendMode: "verbatim",
+      forceNewPart: true,
+      partMetadata: {
+        source: "streamed_reasoning_summary",
+        threadItemId: "reasoning-1",
+        summaryIndex: 0,
+      },
+      textDelta: "ha",
+    });
+    const repeated = buildAgentStreamThinkingDeltaMessagePatch({
+      appendThinkingToParts,
+      appendMode: "verbatim",
+      contentParts: first.contentParts,
+      partMetadata: {
+        source: "streamed_reasoning_summary",
+        threadItemId: "reasoning-1",
+        summaryIndex: 0,
+      },
+      textDelta: "ha",
+      thinkingContent: first.thinkingContent,
+    });
+    const nextPart = buildAgentStreamThinkingDeltaMessagePatch({
+      appendThinkingToParts,
+      appendMode: "verbatim",
+      contentParts: repeated.contentParts,
+      forceNewPart: true,
+      partMetadata: {
+        source: "streamed_reasoning_summary",
+        threadItemId: "reasoning-1",
+        summaryIndex: 1,
+      },
+      textDelta: "next",
+      thinkingContent: repeated.thinkingContent,
+    });
+
+    expect(repeated.thinkingContent).toBe("haha");
+    expect(repeated.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "haha",
+        metadata: {
+          source: "streamed_reasoning_summary",
+          threadItemId: "reasoning-1",
+          summaryIndex: 0,
+        },
+      },
+    ]);
+    expect(nextPart.thinkingContent).toBe("haha\n\nnext");
+    expect(nextPart.contentParts).toHaveLength(2);
+    expect(nextPart.contentParts?.[1]).toMatchObject({
+      type: "thinking",
+      text: "next",
+      metadata: { summaryIndex: 1 },
+    });
+  });
 });

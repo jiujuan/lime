@@ -9,6 +9,8 @@ import {
   AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA,
   AGENT_RUNTIME_EVENT_SCHEMA,
   AGENT_RUNTIME_STATE_DELTA_SCHEMA,
+  AGENT_UI_EVENT_CLASSES,
+  AGENT_UI_PROJECTION_EVENT_SCHEMA,
   AGENT_UI_PROJECTION_STATE_SCHEMA,
   agentUiConformanceFixtures,
   agentUiJsonSchemas,
@@ -19,6 +21,7 @@ import {
   createRuntimeSequenceVerifier,
   getAgentUiFixture,
   isLegacyRuntimeTurnTerminalEventClass,
+  isAgentUiEventClass,
   isRuntimeSettledStatusValue,
   isRuntimeTerminalStatusValue,
   isRuntimeTurnTerminalEventClass,
@@ -55,7 +58,9 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
       "AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA",
       "AGENT_RUNTIME_EVENT_SCHEMA",
       "AGENT_RUNTIME_STATE_DELTA_SCHEMA",
+      "AGENT_UI_EVENT_CLASSES",
       "AGENT_UI_PROJECTION_STATE_SCHEMA",
+      "AGENT_UI_PROJECTION_EVENT_SCHEMA",
       "AgentUiContractValidationError",
       "agentUiJsonSchemas",
       "agentUiConformanceFixtures",
@@ -66,6 +71,7 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
       "collectThreadReadModelValidationIssues",
       "createRuntimeSequenceVerifier",
       "getAgentUiFixture",
+      "isAgentUiEventClass",
       "isLegacyRuntimeTurnTerminalEventClass",
       "isRuntimeSettledStatusValue",
       "isRuntimeTerminalStatusValue",
@@ -273,6 +279,30 @@ test("agent ui contracts expose JSON schemas for cross-language validation", () 
     agentUiJsonSchemas.runtimeCapabilityManifest,
     AGENT_RUNTIME_CAPABILITY_MANIFEST_SCHEMA,
   );
+  assert.deepEqual(AGENT_UI_PROJECTION_EVENT_SCHEMA.properties.type.enum, [
+    ...AGENT_UI_EVENT_CLASSES,
+  ]);
+  assert.equal(isAgentUiEventClass("action.required"), true);
+  assert.equal(isAgentUiEventClass("artifact.unknown"), false);
+  assert.equal(isAgentUiEventClass("team.unknown"), false);
+});
+
+test("agent ui taxonomy does not retain dead artifact lifecycle events", () => {
+  for (const eventClass of [
+    "artifact.version.created",
+    "artifact.export.started",
+    "artifact.export.completed",
+    "artifact.deleted",
+  ]) {
+    assert.equal(isAgentUiEventClass(eventClass), false, eventClass);
+    assert.equal(
+      AGENT_UI_PROJECTION_EVENT_SCHEMA.properties.type.enum.includes(
+        eventClass,
+      ),
+      false,
+      eventClass,
+    );
+  }
 });
 
 test("checked-in JSON schema files match exported schema constants", async () => {
@@ -289,6 +319,10 @@ test("checked-in JSON schema files match exported schema constants", async () =>
     [
       "agent-ui-projection-state.v0.1.schema.json",
       AGENT_UI_PROJECTION_STATE_SCHEMA,
+    ],
+    [
+      "agent-ui-projection-event.v0.1.schema.json",
+      AGENT_UI_PROJECTION_EVENT_SCHEMA,
     ],
   ];
 

@@ -281,7 +281,6 @@ export function buildScenarioAssertions(context) {
     expertPanelSkillsRuntimeTurnStart,
     expertSkillsRuntimeTurnStart,
     expectedImageIntentRoutedPrompt,
-    goalHarness,
     goalObjectiveText,
     goalTurnStart,
     homeHotpathPrompt,
@@ -633,11 +632,6 @@ export function buildScenarioAssertions(context) {
                     goalTurnStart?.inputText === GOAL_PROMPT,
                   goalObjectiveTextReachedBackend:
                     goalObjectiveText === GOAL_PROMPT,
-                  goalManagedObjectiveReachedBackend:
-                    goalHarness?.managed_objective?.objective_text ===
-                      GOAL_PROMPT ||
-                    goalHarness?.managedObjective?.objectiveText ===
-                      GOAL_PROMPT,
                   guiGoalCompleted:
                     summary.guiGoalCompleted?.hasPrompt === true &&
                     (summary.guiGoalCompleted?.hasAssistantSummary === true ||

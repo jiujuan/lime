@@ -213,9 +213,13 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
         message.contentParts || [],
         sequenceByToolId,
       );
-      const existingIndex = parts.findIndex((part) =>
-        isReasoningPartForThreadItem(part, params.item.id),
-      );
+      const matchingPartIndexes = new Set<number>();
+      parts.forEach((part, index) => {
+        if (isReasoningPartForThreadItem(part, params.item.id)) {
+          matchingPartIndexes.add(index);
+        }
+      });
+      const existingIndex = matchingPartIndexes.values().next().value ?? -1;
       const compatibleThinkingIndex =
         existingIndex >= 0
           ? existingIndex
@@ -226,32 +230,25 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
                 text,
               ),
             );
+      if (compatibleThinkingIndex >= 0) {
+        matchingPartIndexes.add(compatibleThinkingIndex);
+      }
       const nextPart: MessageContentPart = {
         type: "thinking",
         text,
         metadata,
       };
 
-      if (compatibleThinkingIndex >= 0) {
-        const existingPart = parts[compatibleThinkingIndex];
-        const remainingParts = [
-          ...parts.slice(0, compatibleThinkingIndex),
-          ...parts.slice(compatibleThinkingIndex + 1),
-        ];
+      if (matchingPartIndexes.size > 0) {
+        const remainingParts = parts.filter(
+          (_part, index) => !matchingPartIndexes.has(index),
+        );
         const nextParts = insertReasoningPartByContentSequence({
           parts: remainingParts,
           reasoningPart: nextPart,
           reasoningSequence: timelinePosition,
           sequenceByToolId,
         });
-        if (
-          existingPart?.type === "thinking" &&
-          existingPart.text === text &&
-          existingPart.metadata?.turnId === params.item.turn_id &&
-          nextParts === parts
-        ) {
-          return message;
-        }
         return {
           ...message,
           contentParts: nextParts,

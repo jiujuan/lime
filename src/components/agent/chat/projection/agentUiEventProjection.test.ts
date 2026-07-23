@@ -60,6 +60,65 @@ describe("agentUiEventProjection", () => {
     expect(
       buildAgentUiProjectionEvents(
         {
+          type: "reasoning_summary_delta",
+          itemId: "reasoning-1",
+          reasoningId: "reasoning-1",
+          summaryIndex: 0,
+          text: "先分析",
+          delta: "先分析",
+        },
+        baseContext,
+      )[0],
+    ).toMatchObject({
+      type: "reasoning.delta",
+      sourceType: "reasoning_summary_delta",
+      partId: "reasoning-1",
+      payload: {
+        streamKind: "summary",
+        summaryIndex: 0,
+      },
+    });
+
+    expect(
+      buildAgentUiProjectionEvents(
+        {
+          type: "reasoning_content_delta",
+          itemId: "reasoning-1",
+          reasoningId: "reasoning-1",
+          contentIndex: 0,
+          text: "raw",
+          delta: "raw",
+        },
+        baseContext,
+      ),
+    ).toEqual([]);
+
+    expect(
+      buildAgentUiProjectionEvents(
+        {
+          type: "item_completed",
+          item: {
+            id: "reasoning-1",
+            thread_id: "session-1",
+            turn_id: "turn-1",
+            sequence: 2,
+            status: "completed",
+            started_at: "2026-05-09T00:00:00.000Z",
+            completed_at: "2026-05-09T00:00:01.000Z",
+            updated_at: "2026-05-09T00:00:01.000Z",
+            type: "reasoning",
+            text: "先分析",
+            summary: ["先分析"],
+            content: ["raw"],
+          },
+        },
+        baseContext,
+      ).map((event) => event.type),
+    ).toEqual(["reasoning.summary"]);
+
+    expect(
+      buildAgentUiProjectionEvents(
+        {
           type: "reasoning_final",
           reasoningId: "runtime-thinking",
           text: "先分析完整过程",

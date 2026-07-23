@@ -83,6 +83,21 @@ describe("agentMessagePhase", () => {
     expect([...selected]).toEqual(["assistant-final"]);
   });
 
+  it("非字符串 content 不应阻断 message 文本候选", () => {
+    const selected = resolveFinalAgentMessageItemIds([
+      {
+        id: "assistant-final",
+        type: "agent_message",
+        turn_id: "turn-content-parts",
+        phase: "final_answer",
+        content: ["raw-content"],
+        message: "最终正文。",
+      },
+    ]);
+
+    expect([...selected]).toEqual(["assistant-final"]);
+  });
+
   it("旧数据缺少 phase 时每个 turn 只选最后一条 agent_message", () => {
     const selected = resolveFinalAgentMessageItemIds([
       {

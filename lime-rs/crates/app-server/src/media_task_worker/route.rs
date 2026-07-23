@@ -1,7 +1,5 @@
 use super::ImageTaskWorkerContext;
-use lime_core::database::dao::api_key_provider::{
-    ApiKeyProvider, ApiProviderType, ProviderProtocolFamily,
-};
+use lime_core::models::{runtime_api_key_id_from_credential_uuid, RuntimeCredentialData};
 use lime_media_runtime::{
     patch_task_artifact, ImageGenerationRequestBodyFormat, ImageGenerationRunnerConfig,
     TaskArtifactPatch, IMAGE_TASK_RUNNER_WORKER_ID,
@@ -37,19 +35,17 @@ pub(super) fn image_generation_runner_config_from_resolved_route(
     };
     let request_body_format = image_request_body_format_from_route(route, &protocol);
     let api_key_service = ApiKeyProviderService::new();
-    let Some((key_id, api_key)) = api_key_service
-        .get_next_api_key_entry(&context.db, &provider_id)
-        .map_err(|error| format!("读取图片 Provider API Key 失败: {error}"))?
-    else {
-        return Err(format!("图片 Provider {provider_id} 没有可用 API Key"));
-    };
-    if let Err(error) = api_key_service.record_usage(&context.db, &key_id) {
-        tracing::warn!(
-            provider_id = %provider_id,
-            key_id = %key_id,
-            error = %error,
-            "failed to record image provider api key usage"
-        );
+    let (key_id, api_key) =
+        image_api_key_from_resolved_route(route, &context.db, &api_key_service, &provider_id)?;
+    if let Some(key_id) = key_id {
+        if let Err(error) = api_key_service.record_usage(&context.db, &key_id) {
+            tracing::warn!(
+                provider_id = %provider_id,
+                key_id = %key_id,
+                error = %error,
+                "failed to record image provider api key usage"
+            );
+        }
     }
 
     patch_task_artifact(
@@ -76,78 +72,38 @@ pub(super) fn image_generation_runner_config_from_resolved_route(
     }))
 }
 
-pub(super) fn image_generation_runner_config_from_task_provider(
-    workspace_root: &Path,
-    task_id: &str,
-    context: &ImageTaskWorkerContext,
-) -> Result<Option<ImageGenerationRunnerConfig>, String> {
-    let task = lime_media_runtime::load_task_output(workspace_root, task_id, None)
-        .map_err(|error| error.to_string())?;
-    let payload = &task.record.payload;
-    if route_failure_present(payload) {
-        return Ok(None);
+fn image_api_key_from_resolved_route(
+    route: &Value,
+    db: &lime_core::database::DbConnection,
+    api_key_service: &ApiKeyProviderService,
+    provider_id: &str,
+) -> Result<(Option<String>, String), String> {
+    let auth = route
+        .get("auth")
+        .ok_or_else(|| format!("图片 Provider {provider_id} 的 resolved route 缺少 auth"))?;
+    let credential_ref = read_value_string(auth, &["credentialRef", "credential_ref"]);
+    if credential_ref.is_none() && read_value_string(auth, &["kind"]).as_deref() == Some("no_auth")
+    {
+        return Ok((None, String::new()));
     }
-    let Some(provider_id) = read_value_string(payload, &["provider_id", "providerId"]) else {
-        return Ok(None);
+    let credential_ref = credential_ref.ok_or_else(|| {
+        format!("图片 Provider {provider_id} 的 resolved route 缺少 credentialRef")
+    })?;
+    let credential = api_key_service
+        .select_runtime_credential_by_ref(db, provider_id, &credential_ref)
+        .map_err(|error| format!("读取图片 Provider 精确凭证失败: {error}"))?
+        .ok_or_else(|| format!("图片 Provider {provider_id} 的 resolved credential 不可用"))?;
+    let key_id = runtime_api_key_id_from_credential_uuid(&credential.uuid)
+        .ok_or_else(|| "图片 Provider resolved credentialRef 格式无效".to_string())?
+        .to_string();
+    let api_key = match credential.credential {
+        RuntimeCredentialData::OpenAIKey { api_key, .. }
+        | RuntimeCredentialData::ClaudeKey { api_key, .. }
+        | RuntimeCredentialData::VertexKey { api_key, .. }
+        | RuntimeCredentialData::GeminiApiKey { api_key, .. }
+        | RuntimeCredentialData::AnthropicKey { api_key, .. } => api_key,
     };
-    let Some(model_id) = read_value_string(payload, &["model"]) else {
-        return Ok(None);
-    };
-
-    let api_key_service = ApiKeyProviderService::new();
-    let Some(provider) = api_key_service
-        .get_provider(&context.db, &provider_id)
-        .map_err(|error| format!("读取图片 Provider 失败: {error}"))?
-    else {
-        return Err(format!("图片 Provider {provider_id} 不存在"));
-    };
-    if !provider.provider.enabled {
-        return Err(format!("图片 Provider {provider_id} 当前未启用"));
-    }
-    let Some(endpoint) =
-        image_generation_endpoint_from_provider(&provider.provider, Some(model_id.as_str()))
-    else {
-        return Ok(None);
-    };
-    let request_body_format =
-        image_request_body_format_from_provider(&provider.provider, Some(model_id.as_str()));
-    let Some((key_id, api_key)) = api_key_service
-        .get_next_api_key_entry(&context.db, &provider_id)
-        .map_err(|error| format!("读取图片 Provider API Key 失败: {error}"))?
-    else {
-        return Err(format!("图片 Provider {provider_id} 没有可用 API Key"));
-    };
-    if let Err(error) = api_key_service.record_usage(&context.db, &key_id) {
-        tracing::warn!(
-            provider_id = %provider_id,
-            key_id = %key_id,
-            error = %error,
-            "failed to record image provider api key usage"
-        );
-    }
-
-    patch_task_artifact(
-        workspace_root,
-        task_id,
-        None,
-        TaskArtifactPatch {
-            payload_patch: Some(serde_json::json!({
-                "executor_mode": image_executor_mode_from_provider(&provider.provider, Some(model_id.as_str())),
-                "provider_id": provider_id,
-                "model": model_id,
-                "request_body_format": request_body_format.as_str(),
-            })),
-            current_attempt_worker_id: Some(Some(IMAGE_TASK_RUNNER_WORKER_ID.to_string())),
-            ..TaskArtifactPatch::default()
-        },
-    )
-    .map_err(|error| error.to_string())?;
-
-    Ok(Some(ImageGenerationRunnerConfig {
-        endpoint,
-        api_key,
-        request_body_format,
-    }))
+    Ok((Some(key_id), api_key))
 }
 
 fn route_failure_present(payload: &Value) -> bool {
@@ -204,43 +160,6 @@ fn image_generation_endpoint_from_route(route: &Value, protocol: &str) -> Option
                 .and_then(|endpoint| read_value_string(endpoint, &["baseUrl", "base_url"]))?;
             Some(image_generation_endpoint_from_gemini_base(&base_url))
         }
-        _ => None,
-    }
-}
-
-fn image_generation_endpoint_from_provider(
-    provider: &ApiKeyProvider,
-    model_id: Option<&str>,
-) -> Option<String> {
-    if is_zhipu_image_provider(provider) {
-        return Some(image_generation_endpoint_from_zhipu_base(
-            &provider.api_host,
-        ));
-    }
-    if is_dashscope_image_provider(provider, model_id) {
-        return Some(image_generation_endpoint_from_dashscope_base(
-            &provider.api_host,
-        ));
-    }
-
-    let effective_type = provider.effective_provider_type();
-    let spec = effective_type.runtime_spec();
-    match effective_type {
-        ApiProviderType::Openai
-        | ApiProviderType::OpenaiResponse
-        | ApiProviderType::Codex
-        | ApiProviderType::NewApi
-        | ApiProviderType::Gateway
-            if spec.protocol_family == ProviderProtocolFamily::OpenAiCompatible
-                || matches!(effective_type, ApiProviderType::Codex) =>
-        {
-            Some(image_generation_endpoint_from_openai_base(
-                &provider.api_host,
-            ))
-        }
-        ApiProviderType::Gemini if spec.protocol_family == ProviderProtocolFamily::Gemini => Some(
-            image_generation_endpoint_from_gemini_base(&provider.api_host),
-        ),
         _ => None,
     }
 }
@@ -383,24 +302,6 @@ fn image_executor_mode_from_route(route: &Value, protocol: &str) -> &'static str
     }
 }
 
-fn image_executor_mode_from_provider(
-    provider: &ApiKeyProvider,
-    model_id: Option<&str>,
-) -> &'static str {
-    if is_zhipu_image_provider(provider) {
-        return "zhipu_images";
-    }
-    if is_dashscope_image_provider(provider, model_id) {
-        return "dashscope_images";
-    }
-
-    match provider.effective_provider_type() {
-        ApiProviderType::OpenaiResponse | ApiProviderType::Codex => "responses_image_generation",
-        ApiProviderType::Gemini => "gemini_generate_content",
-        _ => "images_api",
-    }
-}
-
 fn image_request_body_format_from_route(
     route: &Value,
     protocol: &str,
@@ -414,75 +315,6 @@ fn image_request_body_format_from_route(
     }
 
     ImageGenerationRequestBodyFormat::OpenaiImages
-}
-
-fn image_request_body_format_from_provider(
-    provider: &ApiKeyProvider,
-    model_id: Option<&str>,
-) -> ImageGenerationRequestBodyFormat {
-    if is_agnes_image_provider(provider, model_id) {
-        return ImageGenerationRequestBodyFormat::AgnesImages;
-    }
-
-    ImageGenerationRequestBodyFormat::OpenaiImages
-}
-
-fn is_zhipu_image_provider(provider: &ApiKeyProvider) -> bool {
-    let provider_id = provider.id.to_ascii_lowercase();
-    let provider_name = provider.name.to_ascii_lowercase();
-    let api_host = provider.api_host.to_ascii_lowercase();
-    let has_zhipu_identity = provider_id.contains("zhipu")
-        || provider_id.contains("bigmodel")
-        || provider_name.contains("zhipu")
-        || provider_name.contains("智谱")
-        || api_host.contains("bigmodel.cn/api/paas");
-    let has_zhipu_model = provider.custom_models.iter().any(|model| {
-        let normalized = model.trim().to_ascii_lowercase();
-        matches!(
-            normalized.as_str(),
-            "glm-image" | "cogview-4-250304" | "cogview-4" | "cogview-3-flash"
-        ) || normalized.contains("cogview")
-            || normalized.contains("glm-image")
-    });
-    has_zhipu_identity || has_zhipu_model
-}
-
-fn is_dashscope_image_provider(provider: &ApiKeyProvider, model_id: Option<&str>) -> bool {
-    let provider_id = provider.id.to_ascii_lowercase();
-    let provider_name = provider.name.to_ascii_lowercase();
-    let api_host = provider.api_host.to_ascii_lowercase();
-    let has_dashscope_identity = provider_id.contains("dashscope")
-        || provider_id.contains("alibaba")
-        || provider_id.contains("qwen")
-        || provider_id.contains("tongyi")
-        || provider_name.contains("dashscope")
-        || provider_name.contains("通义")
-        || provider_name.contains("百炼")
-        || api_host.contains("dashscope.aliyuncs.com")
-        || api_host.contains("dashscope-intl.aliyuncs.com")
-        || api_host.contains("maas.aliyuncs.com");
-    let has_dashscope_image_model = model_id.map(is_dashscope_image_model_id).unwrap_or(false)
-        || provider
-            .custom_models
-            .iter()
-            .any(|model| is_dashscope_image_model_id(model));
-    has_dashscope_identity && has_dashscope_image_model
-}
-
-fn is_agnes_image_provider(provider: &ApiKeyProvider, model_id: Option<&str>) -> bool {
-    let provider_id = provider.id.to_ascii_lowercase();
-    let provider_name = provider.name.to_ascii_lowercase();
-    let api_host = provider.api_host.to_ascii_lowercase();
-    let provider_matches = provider_id.contains("agnes")
-        || provider_name.contains("agnes")
-        || api_host.contains("agnes-ai.com");
-    let model_matches = model_id.map(is_agnes_image_model_id).unwrap_or(false)
-        || provider
-            .custom_models
-            .iter()
-            .any(|model| is_agnes_image_model_id(model));
-
-    provider_matches || model_matches
 }
 
 fn is_zhipu_image_route(route: &Value) -> bool {
@@ -618,6 +450,71 @@ fn read_value_string(value: &Value, keys: &[&str]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lime_core::database::dao::api_key_provider::ApiProviderType;
+    use lime_core::database::schema::create_tables;
+    use lime_core::models::runtime_api_key_credential_uuid;
+    use rusqlite::Connection;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn resolved_route_uses_exact_credential_ref_instead_of_round_robin() {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        create_tables(&conn).expect("create schema");
+        let db = Arc::new(Mutex::new(conn));
+        let service = ApiKeyProviderService::new();
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Exact Image Credential".to_string(),
+                ApiProviderType::Openai,
+                "https://images.example/v1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create provider");
+        service
+            .add_api_key(&db, &provider.id, "image-key-a", None, false)
+            .expect("add key A");
+        let key_b = service
+            .add_api_key(&db, &provider.id, "image-key-b", None, false)
+            .expect("add key B");
+        let credential_ref = runtime_api_key_credential_uuid(&key_b.id);
+        let route = serde_json::json!({
+            "auth": {
+                "credentialRef": credential_ref
+            }
+        });
+
+        let (key_id, api_key) =
+            image_api_key_from_resolved_route(&route, &db, &service, &provider.id)
+                .expect("resolve exact image credential");
+
+        assert_eq!(key_id.as_deref(), Some(key_b.id.as_str()));
+        assert_eq!(api_key, "image-key-b");
+    }
+
+    #[test]
+    fn resolved_no_auth_route_does_not_select_provider_credential() {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        create_tables(&conn).expect("create schema");
+        let db = Arc::new(Mutex::new(conn));
+        let service = ApiKeyProviderService::new();
+        let route = serde_json::json!({
+            "auth": {
+                "kind": "no_auth"
+            }
+        });
+
+        let (key_id, api_key) =
+            image_api_key_from_resolved_route(&route, &db, &service, "keyless-images")
+                .expect("resolve no-auth image route");
+
+        assert!(key_id.is_none());
+        assert!(api_key.is_empty());
+    }
 
     #[test]
     fn image_generation_endpoint_from_openai_base_normalizes_common_shapes() {
@@ -722,118 +619,5 @@ mod tests {
         );
         assert!(image_generation_endpoint_from_route(&zhipu_route, "anthropic_messages").is_none());
         assert!(image_generation_endpoint_from_route(&route, "anthropic_messages").is_none());
-    }
-
-    #[test]
-    fn image_generation_endpoint_from_provider_supports_openai_compatible_image_api() {
-        let mut provider = ApiKeyProvider {
-            id: "custom-provider".to_string(),
-            name: "Custom Images".to_string(),
-            provider_type: ApiProviderType::NewApi,
-            api_host: "https://gateway.example.com/proxy".to_string(),
-            is_system: false,
-            group: lime_core::database::dao::api_key_provider::ProviderGroup::Custom,
-            enabled: true,
-            sort_order: 0,
-            api_version: None,
-            project: None,
-            location: None,
-            region: None,
-            custom_models: Vec::new(),
-            prompt_cache_mode: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
-
-        assert_eq!(
-            image_generation_endpoint_from_provider(&provider, Some("gpt-image-1")).as_deref(),
-            Some("https://gateway.example.com/proxy/v1/images/generations")
-        );
-        assert_eq!(
-            image_executor_mode_from_provider(&provider, Some("gpt-image-1")),
-            "images_api"
-        );
-
-        provider.provider_type = ApiProviderType::OpenaiResponse;
-        assert_eq!(
-            image_executor_mode_from_provider(&provider, Some("gpt-images-2")),
-            "responses_image_generation"
-        );
-
-        provider.provider_type = ApiProviderType::Gemini;
-        provider.api_host = "https://generativelanguage.googleapis.com".to_string();
-        assert_eq!(
-            image_generation_endpoint_from_provider(&provider, Some("gemini-3-pro-image"))
-                .as_deref(),
-            Some("https://generativelanguage.googleapis.com/v1beta")
-        );
-        assert_eq!(
-            image_executor_mode_from_provider(&provider, Some("gemini-3-pro-image")),
-            "gemini_generate_content"
-        );
-
-        provider.id = "zhipuai".to_string();
-        provider.name = "Zhipu AI".to_string();
-        provider.provider_type = ApiProviderType::Openai;
-        provider.api_host = "https://open.bigmodel.cn/api/paas/v4".to_string();
-        provider.custom_models = vec!["glm-image".to_string()];
-        assert_eq!(
-            image_generation_endpoint_from_provider(&provider, Some("glm-image")).as_deref(),
-            Some("https://open.bigmodel.cn/api/paas/v4/images/generations")
-        );
-        assert_eq!(
-            image_executor_mode_from_provider(&provider, Some("glm-image")),
-            "zhipu_images"
-        );
-
-        provider.id = "alibaba".to_string();
-        provider.name = "百炼/通义千问 (DashScope)".to_string();
-        provider.provider_type = ApiProviderType::Openai;
-        provider.api_host = "https://dashscope.aliyuncs.com/compatible-mode/v1/".to_string();
-        provider.custom_models = Vec::new();
-        assert_eq!(
-            image_generation_endpoint_from_provider(&provider, Some("qwen-image-plus")).as_deref(),
-            Some(
-                "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
-            )
-        );
-        assert_eq!(
-            image_executor_mode_from_provider(&provider, Some("qwen-image-plus")),
-            "dashscope_images"
-        );
-
-        provider.id = "agnes".to_string();
-        provider.name = "Agnes".to_string();
-        provider.provider_type = ApiProviderType::Openai;
-        provider.api_host = "https://apihub.agnes-ai.com/v1".to_string();
-        provider.custom_models = vec!["agnes-image-2.1-flash".to_string()];
-        assert_eq!(
-            image_generation_endpoint_from_provider(&provider, Some("agnes-image-2.1-flash"))
-                .as_deref(),
-            Some("https://apihub.agnes-ai.com/v1/images/generations")
-        );
-        assert_eq!(
-            image_executor_mode_from_provider(&provider, Some("agnes-image-2.1-flash")),
-            "images_api"
-        );
-        assert_eq!(
-            image_request_body_format_from_provider(&provider, Some("agnes-image-2.1-flash")),
-            ImageGenerationRequestBodyFormat::AgnesImages
-        );
-        provider.api_host = "https://api.agnes-ai.com/v1".to_string();
-        assert_eq!(
-            image_generation_endpoint_from_provider(&provider, Some("agnes-image-2.1-flash"))
-                .as_deref(),
-            Some("https://api.agnes-ai.com/v1/images/generations")
-        );
-
-        provider.id = "anthropic".to_string();
-        provider.name = "Anthropic".to_string();
-        provider.provider_type = ApiProviderType::Anthropic;
-        provider.api_host = "https://api.anthropic.com".to_string();
-        provider.custom_models = Vec::new();
-        assert!(
-            image_generation_endpoint_from_provider(&provider, Some("claude-sonnet-4-5")).is_none()
-        );
     }
 }

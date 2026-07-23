@@ -43,6 +43,7 @@ pub mod tool_lifecycle;
 pub mod tool_result;
 pub mod tool_result_projection;
 pub mod tool_search;
+pub mod turn_snapshot;
 pub mod turn_tool_surface;
 pub mod unified_exec;
 pub mod update_plan;

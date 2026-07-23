@@ -103,6 +103,9 @@ export function buildAgentUiProjectionEvents(
         return buildConversationProjectionEvents(event, context);
       case "thinking_delta":
       case "reasoning_delta":
+      case "reasoning_summary_delta":
+      case "reasoning_summary_part_added":
+      case "reasoning_content_delta":
       case "reasoning_final":
         return buildConversationProjectionEvents(event, context);
       case "reasoning_started":

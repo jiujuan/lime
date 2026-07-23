@@ -1,4 +1,4 @@
-use super::{model_registry_metadata, model_route_contract, model_routing};
+use super::{model_registry_metadata, model_route_contract, model_route_credential, model_routing};
 use crate::model_route_assembly::{self, ModelRouteSelection};
 use crate::model_task_contract::{build_model_task_request, ModelTaskRequestInput};
 use crate::RuntimeCoreError;
@@ -83,17 +83,35 @@ async fn resolve_builder_provider_configuration(
     let service = ApiKeyProviderService::new();
     let readiness = model_routing::resolve_provider_readiness(db, &service, &selection, None)
         .map_err(RuntimeCoreError::Backend)?;
+    let provider = service
+        .get_provider(db, &selection.provider)
+        .map_err(RuntimeCoreError::Backend)?;
+    let route_credential = if readiness.ready {
+        model_route_credential::resolve_route_credential(
+            db,
+            &service,
+            &selection.provider,
+            provider.as_ref(),
+            None,
+            None,
+        )
+        .await
+        .map_err(RuntimeCoreError::Backend)?
+    } else {
+        model_route_credential::RouteCredential::unavailable()
+    };
     let registry = model_registry_metadata::resolve_runtime_model_registry_metadata(
-        db, &service, &selection, None,
+        db,
+        &service,
+        &selection,
+        None,
+        route_credential.runtime_credential(),
     )
     .await
     .map_err(RuntimeCoreError::Backend)?;
     let task_request = builder_model_task_request(plan, &selection);
     let routing_payload = builder_route_payload(&task_request, &selection, &readiness, &registry);
-    let provider = service
-        .get_provider(db, &selection.provider)
-        .map_err(RuntimeCoreError::Backend)?;
-    let resolved_route = model_route_assembly::resolved_route_from_task(
+    let mut resolved_route = model_route_assembly::resolved_route_from_task_with_credential(
         &task_request,
         ModelRouteSelection {
             provider_id: &selection.provider,
@@ -103,8 +121,18 @@ async fn resolve_builder_provider_configuration(
         },
         &routing_payload,
         provider.as_ref(),
+        route_credential.credential_ref(),
         None,
     );
+    if resolved_route.auth.kind == app_server_protocol::AuthKind::ApiKeyRef {
+        resolved_route.auth.credential_ref =
+            route_credential.credential_ref().map(ToString::to_string);
+        if resolved_route.failure.is_none() && resolved_route.auth.credential_ref.is_none() {
+            return Err(RuntimeCoreError::Backend(
+                "resolved_credential_unavailable".to_string(),
+            ));
+        }
+    }
     if let Some(failure) = resolved_route.failure.as_ref() {
         return Err(RuntimeCoreError::Backend(format!(
             "Knowledge Builder model route unavailable: {}",

@@ -6,8 +6,6 @@ pub(in crate::runtime::tests) struct TestSessionDataSource {
     memory_store_read_response: Mutex<Option<Result<MemoryStoreReadResponse, String>>>,
     memory_store_read_requests: Mutex<Vec<MemoryStoreReadParams>>,
     memory_backend: Option<crate::LocalMemoryBackend>,
-    objective: Mutex<Option<ManagedObjective>>,
-    audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
     plugin_installed_states: Mutex<Vec<serde_json::Value>>,
     knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
     right_surface_pending: Mutex<Vec<WorkspaceRightSurfacePendingRequest>>,
@@ -23,8 +21,6 @@ impl TestSessionDataSource {
             memory_store_read_response: Mutex::new(None),
             memory_store_read_requests: Mutex::new(Vec::new()),
             memory_backend: None,
-            objective: Mutex::new(None),
-            audit_updates: Mutex::new(Vec::new()),
             plugin_installed_states: Mutex::new(Vec::new()),
             knowledge_compile_requests: Mutex::new(Vec::new()),
             right_surface_pending: Mutex::new(Vec::new()),
@@ -62,14 +58,6 @@ impl TestSessionDataSource {
         self
     }
 
-    pub(in crate::runtime::tests) fn with_objective(self, objective: ManagedObjective) -> Self {
-        *self
-            .objective
-            .lock()
-            .expect("test objective mutex poisoned") = Some(objective);
-        self
-    }
-
     pub(in crate::runtime::tests) fn with_plugin_installed_states(
         self,
         states: Vec<serde_json::Value>,
@@ -90,20 +78,6 @@ impl TestSessionDataSource {
             .lock()
             .expect("test media task artifacts mutex poisoned") = tasks;
         self
-    }
-
-    pub(in crate::runtime::tests) fn objective(&self) -> Option<ManagedObjective> {
-        self.objective
-            .lock()
-            .expect("test objective mutex poisoned")
-            .clone()
-    }
-
-    pub(in crate::runtime::tests) fn audit_updates(&self) -> Vec<ManagedObjectiveAuditUpdate> {
-        self.audit_updates
-            .lock()
-            .expect("test audit updates mutex poisoned")
-            .clone()
     }
 
     pub(in crate::runtime::tests) fn knowledge_compile_requests(
@@ -143,73 +117,8 @@ impl TestSessionDataSource {
     }
 }
 
-pub(in crate::runtime::tests) fn managed_objective(session_id: &str) -> ManagedObjective {
-    ManagedObjective {
-        objective_id: "objective-1".to_string(),
-        workspace_id: Some("workspace-main".to_string()),
-        owner_kind: crate::objective::MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
-        owner_id: session_id.to_string(),
-        objective_text: "完成生产命令 current 迁移".to_string(),
-        success_criteria: vec!["契约通过".to_string()],
-        status: ManagedObjectiveStatus::Active,
-        budget_policy: None,
-        risk_policy: None,
-        approval_policy: None,
-        continuation_policy: None,
-        last_audit_summary: None,
-        last_evidence_pack_ref: None,
-        last_artifact_refs: Vec::new(),
-        blocker_reason: None,
-        created_at: timestamp(),
-        updated_at: timestamp(),
-    }
-}
-
 #[async_trait]
-impl SessionAppDataSource for TestSessionDataSource {
-    async fn read_agent_session_objective(
-        &self,
-        _params: AgentSessionObjectiveReadParams,
-    ) -> Result<AgentSessionObjectiveReadResponse, RuntimeCoreError> {
-        Ok(AgentSessionObjectiveReadResponse {
-            objective: self.objective(),
-        })
-    }
-
-    async fn read_managed_objective_by_owner(
-        &self,
-        owner_kind: String,
-        owner_id: String,
-    ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
-        Ok(self.objective().filter(|objective| {
-            objective.owner_kind == owner_kind && objective.owner_id == owner_id
-        }))
-    }
-
-    async fn audit_agent_session_objective(
-        &self,
-        _owner_kind: String,
-        _owner_id: String,
-        update: ManagedObjectiveAuditUpdate,
-    ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
-        self.audit_updates
-            .lock()
-            .expect("test audit updates mutex poisoned")
-            .push(update.clone());
-        let mut objective = self
-            .objective
-            .lock()
-            .expect("test objective mutex poisoned");
-        if let Some(objective) = objective.as_mut() {
-            objective.status = update.status;
-            objective.last_audit_summary = update.last_audit_summary;
-            objective.last_evidence_pack_ref = update.last_evidence_pack_ref;
-            objective.last_artifact_refs = update.last_artifact_refs;
-            objective.blocker_reason = update.blocker_reason;
-        }
-        Ok(objective.clone())
-    }
-}
+impl SessionAppDataSource for TestSessionDataSource {}
 
 #[async_trait]
 impl KnowledgeAppDataSource for TestSessionDataSource {

@@ -2124,759 +2124,6 @@
       "title": "AgentSessionMediaReadResponse",
       "type": "object"
     },
-    "AgentSessionObjectiveAuditParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "ownerId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "ownerKind": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "sessionId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "sessionId"
-      ],
-      "title": "AgentSessionObjectiveAuditParams",
-      "type": "object"
-    },
-    "AgentSessionObjectiveAuditResponse": {
-      "$defs": {
-        "ManagedObjective": {
-          "properties": {
-            "approvalPolicy": true,
-            "blockerReason": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "budgetPolicy": true,
-            "continuationPolicy": true,
-            "createdAt": {
-              "type": "string"
-            },
-            "lastArtifactRefs": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "lastAuditSummary": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lastEvidencePackRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "objectiveId": {
-              "type": "string"
-            },
-            "objectiveText": {
-              "type": "string"
-            },
-            "ownerId": {
-              "type": "string"
-            },
-            "ownerKind": {
-              "type": "string"
-            },
-            "riskPolicy": true,
-            "status": {
-              "$ref": "#/$defs/ManagedObjectiveStatus"
-            },
-            "successCriteria": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "updatedAt": {
-              "type": "string"
-            },
-            "workspaceId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "createdAt",
-            "objectiveId",
-            "objectiveText",
-            "ownerId",
-            "ownerKind",
-            "status",
-            "updatedAt"
-          ],
-          "type": "object"
-        },
-        "ManagedObjectiveStatus": {
-          "enum": [
-            "active",
-            "blocked",
-            "budget_limited",
-            "completed",
-            "failed",
-            "needs_input",
-            "paused",
-            "verifying"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "objective": {
-          "$ref": "#/$defs/ManagedObjective"
-        }
-      },
-      "required": [
-        "objective"
-      ],
-      "title": "AgentSessionObjectiveAuditResponse",
-      "type": "object"
-    },
-    "AgentSessionObjectiveClearParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "sessionId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "sessionId"
-      ],
-      "title": "AgentSessionObjectiveClearParams",
-      "type": "object"
-    },
-    "AgentSessionObjectiveClearResponse": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "cleared": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "cleared"
-      ],
-      "title": "AgentSessionObjectiveClearResponse",
-      "type": "object"
-    },
-    "AgentSessionObjectiveContinueParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "ownerId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "ownerKind": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "sessionId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "sessionId"
-      ],
-      "title": "AgentSessionObjectiveContinueParams",
-      "type": "object"
-    },
-    "AgentSessionObjectiveContinueResponse": {
-      "$defs": {
-        "AgentTurn": {
-          "properties": {
-            "completedAt": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sessionId": {
-              "type": "string"
-            },
-            "startedAt": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "status": {
-              "$ref": "#/$defs/AgentTurnStatus"
-            },
-            "threadId": {
-              "type": "string"
-            },
-            "turnId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "sessionId",
-            "status",
-            "threadId",
-            "turnId"
-          ],
-          "type": "object"
-        },
-        "AgentTurnStatus": {
-          "enum": [
-            "accepted",
-            "canceled",
-            "completed",
-            "failed",
-            "queued",
-            "running",
-            "waitingAction"
-          ],
-          "type": "string"
-        },
-        "ManagedObjective": {
-          "properties": {
-            "approvalPolicy": true,
-            "blockerReason": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "budgetPolicy": true,
-            "continuationPolicy": true,
-            "createdAt": {
-              "type": "string"
-            },
-            "lastArtifactRefs": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "lastAuditSummary": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lastEvidencePackRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "objectiveId": {
-              "type": "string"
-            },
-            "objectiveText": {
-              "type": "string"
-            },
-            "ownerId": {
-              "type": "string"
-            },
-            "ownerKind": {
-              "type": "string"
-            },
-            "riskPolicy": true,
-            "status": {
-              "$ref": "#/$defs/ManagedObjectiveStatus"
-            },
-            "successCriteria": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "updatedAt": {
-              "type": "string"
-            },
-            "workspaceId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "createdAt",
-            "objectiveId",
-            "objectiveText",
-            "ownerId",
-            "ownerKind",
-            "status",
-            "updatedAt"
-          ],
-          "type": "object"
-        },
-        "ManagedObjectiveStatus": {
-          "enum": [
-            "active",
-            "blocked",
-            "budget_limited",
-            "completed",
-            "failed",
-            "needs_input",
-            "paused",
-            "verifying"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "objective": {
-          "$ref": "#/$defs/ManagedObjective"
-        },
-        "queuedTurnId": {
-          "type": "string"
-        },
-        "submitted": {
-          "type": "boolean"
-        },
-        "turn": {
-          "$ref": "#/$defs/AgentTurn"
-        }
-      },
-      "required": [
-        "objective",
-        "queuedTurnId",
-        "submitted",
-        "turn"
-      ],
-      "title": "AgentSessionObjectiveContinueResponse",
-      "type": "object"
-    },
-    "AgentSessionObjectiveReadParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "sessionId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "sessionId"
-      ],
-      "title": "AgentSessionObjectiveReadParams",
-      "type": "object"
-    },
-    "AgentSessionObjectiveReadResponse": {
-      "$defs": {
-        "ManagedObjective": {
-          "properties": {
-            "approvalPolicy": true,
-            "blockerReason": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "budgetPolicy": true,
-            "continuationPolicy": true,
-            "createdAt": {
-              "type": "string"
-            },
-            "lastArtifactRefs": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "lastAuditSummary": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lastEvidencePackRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "objectiveId": {
-              "type": "string"
-            },
-            "objectiveText": {
-              "type": "string"
-            },
-            "ownerId": {
-              "type": "string"
-            },
-            "ownerKind": {
-              "type": "string"
-            },
-            "riskPolicy": true,
-            "status": {
-              "$ref": "#/$defs/ManagedObjectiveStatus"
-            },
-            "successCriteria": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "updatedAt": {
-              "type": "string"
-            },
-            "workspaceId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "createdAt",
-            "objectiveId",
-            "objectiveText",
-            "ownerId",
-            "ownerKind",
-            "status",
-            "updatedAt"
-          ],
-          "type": "object"
-        },
-        "ManagedObjectiveStatus": {
-          "enum": [
-            "active",
-            "blocked",
-            "budget_limited",
-            "completed",
-            "failed",
-            "needs_input",
-            "paused",
-            "verifying"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "objective": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ManagedObjective"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "title": "AgentSessionObjectiveReadResponse",
-      "type": "object"
-    },
-    "AgentSessionObjectiveSetParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "approvalPolicy": true,
-        "budgetPolicy": true,
-        "continuationPolicy": true,
-        "objectiveText": {
-          "type": "string"
-        },
-        "riskPolicy": true,
-        "sessionId": {
-          "type": "string"
-        },
-        "successCriteria": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "workspaceId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "objectiveText",
-        "sessionId"
-      ],
-      "title": "AgentSessionObjectiveSetParams",
-      "type": "object"
-    },
-    "AgentSessionObjectiveSetResponse": {
-      "$defs": {
-        "ManagedObjective": {
-          "properties": {
-            "approvalPolicy": true,
-            "blockerReason": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "budgetPolicy": true,
-            "continuationPolicy": true,
-            "createdAt": {
-              "type": "string"
-            },
-            "lastArtifactRefs": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "lastAuditSummary": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lastEvidencePackRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "objectiveId": {
-              "type": "string"
-            },
-            "objectiveText": {
-              "type": "string"
-            },
-            "ownerId": {
-              "type": "string"
-            },
-            "ownerKind": {
-              "type": "string"
-            },
-            "riskPolicy": true,
-            "status": {
-              "$ref": "#/$defs/ManagedObjectiveStatus"
-            },
-            "successCriteria": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "updatedAt": {
-              "type": "string"
-            },
-            "workspaceId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "createdAt",
-            "objectiveId",
-            "objectiveText",
-            "ownerId",
-            "ownerKind",
-            "status",
-            "updatedAt"
-          ],
-          "type": "object"
-        },
-        "ManagedObjectiveStatus": {
-          "enum": [
-            "active",
-            "blocked",
-            "budget_limited",
-            "completed",
-            "failed",
-            "needs_input",
-            "paused",
-            "verifying"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "objective": {
-          "$ref": "#/$defs/ManagedObjective"
-        }
-      },
-      "required": [
-        "objective"
-      ],
-      "title": "AgentSessionObjectiveSetResponse",
-      "type": "object"
-    },
-    "AgentSessionObjectiveStatusUpdateParams": {
-      "$defs": {
-        "ManagedObjectiveStatus": {
-          "enum": [
-            "active",
-            "blocked",
-            "budget_limited",
-            "completed",
-            "failed",
-            "needs_input",
-            "paused",
-            "verifying"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "blockerReason": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "sessionId": {
-          "type": "string"
-        },
-        "status": {
-          "$ref": "#/$defs/ManagedObjectiveStatus"
-        }
-      },
-      "required": [
-        "sessionId",
-        "status"
-      ],
-      "title": "AgentSessionObjectiveStatusUpdateParams",
-      "type": "object"
-    },
-    "AgentSessionObjectiveStatusUpdateResponse": {
-      "$defs": {
-        "ManagedObjective": {
-          "properties": {
-            "approvalPolicy": true,
-            "blockerReason": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "budgetPolicy": true,
-            "continuationPolicy": true,
-            "createdAt": {
-              "type": "string"
-            },
-            "lastArtifactRefs": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "lastAuditSummary": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lastEvidencePackRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "objectiveId": {
-              "type": "string"
-            },
-            "objectiveText": {
-              "type": "string"
-            },
-            "ownerId": {
-              "type": "string"
-            },
-            "ownerKind": {
-              "type": "string"
-            },
-            "riskPolicy": true,
-            "status": {
-              "$ref": "#/$defs/ManagedObjectiveStatus"
-            },
-            "successCriteria": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "updatedAt": {
-              "type": "string"
-            },
-            "workspaceId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "createdAt",
-            "objectiveId",
-            "objectiveText",
-            "ownerId",
-            "ownerKind",
-            "status",
-            "updatedAt"
-          ],
-          "type": "object"
-        },
-        "ManagedObjectiveStatus": {
-          "enum": [
-            "active",
-            "blocked",
-            "budget_limited",
-            "completed",
-            "failed",
-            "needs_input",
-            "paused",
-            "verifying"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "objective": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ManagedObjective"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "title": "AgentSessionObjectiveStatusUpdateResponse",
-      "type": "object"
-    },
     "AgentSessionOverview": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -5946,120 +5193,6 @@
             },
             "method": {
               "const": "agentSession/update",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
-              "const": "agentSession/objective/read",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
-              "const": "agentSession/objective/set",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
-              "const": "agentSession/objective/status/update",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
-              "const": "agentSession/objective/clear",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
-              "const": "agentSession/objective/continue",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
-              "const": "agentSession/objective/audit",
               "type": "string"
             },
             "params": {
@@ -10277,63 +9410,6 @@
               "$ref": "#/$defs/RequestId"
             },
             "method": {
-              "const": "modelProviderKey/next",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
-              "const": "modelProviderKey/usage/record",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
-              "const": "modelProviderKey/error/record",
-              "type": "string"
-            },
-            "params": {
-              "default": null
-            }
-          },
-          "required": [
-            "id",
-            "method"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "$ref": "#/$defs/RequestId"
-            },
-            "method": {
               "const": "modelProviderUiState/read",
               "type": "string"
             },
@@ -10807,12 +9883,6 @@
         "agentSession/fileCheckpoint/restore",
         "agentSession/handoffBundle/export",
         "agentSession/media/read",
-        "agentSession/objective/audit",
-        "agentSession/objective/clear",
-        "agentSession/objective/continue",
-        "agentSession/objective/read",
-        "agentSession/objective/set",
-        "agentSession/objective/status/update",
         "agentSession/queuedTurn/promote",
         "agentSession/queuedTurn/remove",
         "agentSession/replayCase/export",
@@ -10963,10 +10033,7 @@
         "modelProviderConfig/import",
         "modelProviderKey/create",
         "modelProviderKey/delete",
-        "modelProviderKey/error/record",
-        "modelProviderKey/next",
         "modelProviderKey/update",
-        "modelProviderKey/usage/record",
         "modelProviderUiState/read",
         "modelProviderUiState/write",
         "modelSyncState/read",
@@ -27184,115 +26251,6 @@
       "title": "LogStorageDiagnosticsResponse",
       "type": "object"
     },
-    "ManagedObjective": {
-      "$defs": {
-        "ManagedObjectiveStatus": {
-          "enum": [
-            "active",
-            "blocked",
-            "budget_limited",
-            "completed",
-            "failed",
-            "needs_input",
-            "paused",
-            "verifying"
-          ],
-          "type": "string"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "approvalPolicy": true,
-        "blockerReason": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "budgetPolicy": true,
-        "continuationPolicy": true,
-        "createdAt": {
-          "type": "string"
-        },
-        "lastArtifactRefs": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "lastAuditSummary": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "lastEvidencePackRef": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "objectiveId": {
-          "type": "string"
-        },
-        "objectiveText": {
-          "type": "string"
-        },
-        "ownerId": {
-          "type": "string"
-        },
-        "ownerKind": {
-          "type": "string"
-        },
-        "riskPolicy": true,
-        "status": {
-          "$ref": "#/$defs/ManagedObjectiveStatus"
-        },
-        "successCriteria": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "updatedAt": {
-          "type": "string"
-        },
-        "workspaceId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "createdAt",
-        "objectiveId",
-        "objectiveText",
-        "ownerId",
-        "ownerKind",
-        "status",
-        "updatedAt"
-      ],
-      "title": "ManagedObjective",
-      "type": "object"
-    },
-    "ManagedObjectiveStatus": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "enum": [
-        "active",
-        "blocked",
-        "budget_limited",
-        "completed",
-        "failed",
-        "needs_input",
-        "paused",
-        "verifying"
-      ],
-      "title": "ManagedObjectiveStatus",
-      "type": "string"
-    },
     "McpContent": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "oneOf": [
@@ -32146,51 +31104,6 @@
         "deleted"
       ],
       "title": "ModelProviderKeyDeleteResponse",
-      "type": "object"
-    },
-    "ModelProviderKeyEventParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "keyId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "keyId"
-      ],
-      "title": "ModelProviderKeyEventParams",
-      "type": "object"
-    },
-    "ModelProviderKeyNextParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "providerId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "providerId"
-      ],
-      "title": "ModelProviderKeyNextParams",
-      "type": "object"
-    },
-    "ModelProviderKeyNextResponse": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "apiKey": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "keyId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "title": "ModelProviderKeyNextResponse",
       "type": "object"
     },
     "ModelProviderKeyUpdateParams": {
@@ -37739,6 +36652,92 @@
       "title": "ProviderKeyInfo",
       "type": "object"
     },
+    "ReasoningSummaryPartAddedNotification": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "itemId": {
+          "type": "string"
+        },
+        "summaryIndex": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "itemId",
+        "summaryIndex",
+        "threadId",
+        "turnId"
+      ],
+      "title": "ReasoningSummaryPartAddedNotification",
+      "type": "object"
+    },
+    "ReasoningSummaryTextDeltaNotification": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "delta": {
+          "type": "string"
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "summaryIndex": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "delta",
+        "itemId",
+        "summaryIndex",
+        "threadId",
+        "turnId"
+      ],
+      "title": "ReasoningSummaryTextDeltaNotification",
+      "type": "object"
+    },
+    "ReasoningTextDeltaNotification": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "contentIndex": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "delta": {
+          "type": "string"
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "contentIndex",
+        "delta",
+        "itemId",
+        "threadId",
+        "turnId"
+      ],
+      "title": "ReasoningTextDeltaNotification",
+      "type": "object"
+    },
     "RequestId": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "anyOf": [
@@ -40072,6 +39071,86 @@
             }
           ]
         },
+        "ReasoningSummaryPartAddedNotification": {
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "summaryIndex": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId",
+            "summaryIndex",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "ReasoningSummaryTextDeltaNotification": {
+          "properties": {
+            "delta": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "summaryIndex": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "delta",
+            "itemId",
+            "summaryIndex",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "ReasoningTextDeltaNotification": {
+          "properties": {
+            "contentIndex": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "delta": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "contentIndex",
+            "delta",
+            "itemId",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
         "RequestId": {
           "anyOf": [
             {
@@ -41564,6 +40643,54 @@
             },
             "params": {
               "$ref": "#/$defs/AgentMessageDeltaNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "item/reasoning/summaryTextDelta",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/ReasoningSummaryTextDeltaNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "item/reasoning/summaryPartAdded",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/ReasoningSummaryPartAddedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "item/reasoning/textDelta",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/ReasoningTextDeltaNotification"
             }
           },
           "required": [
@@ -75304,6 +74431,9 @@
               "initialized",
               "item/agentMessage/delta",
               "item/completed",
+              "item/reasoning/summaryPartAdded",
+              "item/reasoning/summaryTextDelta",
+              "item/reasoning/textDelta",
               "item/started",
               "serverRequest/resolved",
               "thread/archived",
@@ -75334,12 +74464,6 @@
               "agentSession/fileCheckpoint/restore",
               "agentSession/handoffBundle/export",
               "agentSession/media/read",
-              "agentSession/objective/audit",
-              "agentSession/objective/clear",
-              "agentSession/objective/continue",
-              "agentSession/objective/read",
-              "agentSession/objective/set",
-              "agentSession/objective/status/update",
               "agentSession/queuedTurn/promote",
               "agentSession/queuedTurn/remove",
               "agentSession/replayCase/export",
@@ -75490,10 +74614,7 @@
               "modelProviderConfig/import",
               "modelProviderKey/create",
               "modelProviderKey/delete",
-              "modelProviderKey/error/record",
-              "modelProviderKey/next",
               "modelProviderKey/update",
-              "modelProviderKey/usage/record",
               "modelProviderUiState/read",
               "modelProviderUiState/write",
               "modelSyncState/read",

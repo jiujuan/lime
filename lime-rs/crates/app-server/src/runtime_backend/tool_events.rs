@@ -83,7 +83,9 @@ pub(super) fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "item_completed" => "item.completed",
         "text_delta" => "message.delta",
         "text_delta_batch" => "message.delta_batch",
-        "thinking_delta" => "reasoning.delta",
+        "reasoning_summary_delta" => "reasoning.summary",
+        "reasoning_summary_part_added" => "reasoning.summary_part_added",
+        "reasoning_content_delta" => "reasoning.delta",
         "tool_progress" => "tool.progress",
         "tool_output_delta" => "tool.output.delta",
         "tool_input_delta" => "tool.input.delta",
@@ -128,10 +130,36 @@ fn enrich_reasoning_payload(
     event: &RuntimeAgentEvent,
     payload_object: &mut serde_json::Map<String, Value>,
 ) {
-    let RuntimeAgentEvent::ThinkingDelta { item_id, text } = event else {
-        return;
+    let item_id = match event {
+        RuntimeAgentEvent::ReasoningSummaryDelta {
+            item_id,
+            text,
+            summary_index,
+        } => {
+            payload_object.remove("text");
+            payload_object.insert("summary".to_string(), Value::String(text.clone()));
+            payload_object.insert("summaryIndex".to_string(), Value::from(*summary_index));
+            item_id
+        }
+        RuntimeAgentEvent::ReasoningSummaryPartAdded {
+            item_id,
+            summary_index,
+        } => {
+            payload_object.insert("summaryIndex".to_string(), Value::from(*summary_index));
+            item_id
+        }
+        RuntimeAgentEvent::ReasoningContentDelta {
+            item_id,
+            text,
+            content_index,
+        } => {
+            payload_object.remove("text");
+            payload_object.insert("delta".to_string(), Value::String(text.clone()));
+            payload_object.insert("contentIndex".to_string(), Value::from(*content_index));
+            item_id
+        }
+        _ => return,
     };
-    payload_object.insert("delta".to_string(), Value::String(text.clone()));
     payload_object.insert("reasoningId".to_string(), Value::String(item_id.clone()));
     payload_object.insert("itemId".to_string(), Value::String(item_id.clone()));
 }
@@ -272,18 +300,53 @@ mod tests {
     }
 
     #[test]
-    fn thinking_delta_maps_to_standard_reasoning_delta_event() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ThinkingDelta {
+    fn reasoning_summary_delta_maps_to_standard_reasoning_summary_event() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ReasoningSummaryDelta {
             item_id: "reasoning-1".to_string(),
             text: "先理解目标".to_string(),
+            summary_index: 2,
         })
-        .expect("thinking delta should emit");
+        .expect("reasoning summary delta should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "reasoning.summary");
+        assert_eq!(events[0].payload["summary"], "先理解目标");
+        assert_eq!(events[0].payload["summaryIndex"], 2);
+        assert!(events[0].payload.get("text").is_none());
+        assert_eq!(events[0].payload["reasoningId"], "reasoning-1");
+        assert_eq!(events[0].payload["itemId"], "reasoning-1");
+    }
+
+    #[test]
+    fn reasoning_content_delta_maps_to_standard_reasoning_delta_event() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ReasoningContentDelta {
+            item_id: "reasoning-1".to_string(),
+            text: "原始推理".to_string(),
+            content_index: 3,
+        })
+        .expect("reasoning content delta should emit");
 
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "reasoning.delta");
-        assert_eq!(events[0].payload["delta"], "先理解目标");
-        assert_eq!(events[0].payload["text"], "先理解目标");
+        assert_eq!(events[0].payload["delta"], "原始推理");
+        assert_eq!(events[0].payload["contentIndex"], 3);
+        assert!(events[0].payload.get("text").is_none());
         assert_eq!(events[0].payload["reasoningId"], "reasoning-1");
+        assert_eq!(events[0].payload["itemId"], "reasoning-1");
+    }
+
+    #[test]
+    fn reasoning_summary_part_added_maps_to_distinct_runtime_event() {
+        let events =
+            runtime_events_from_agent_event(&RuntimeAgentEvent::ReasoningSummaryPartAdded {
+                item_id: "reasoning-1".to_string(),
+                summary_index: 4,
+            })
+            .expect("reasoning summary part should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "reasoning.summary_part_added");
+        assert_eq!(events[0].payload["summaryIndex"], 4);
         assert_eq!(events[0].payload["itemId"], "reasoning-1");
     }
 

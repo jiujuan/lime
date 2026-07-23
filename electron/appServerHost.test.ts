@@ -140,7 +140,7 @@ const {
       }
       return notification;
     }),
-    nextServerMessage: vi.fn(async () => {
+    nextServerMessage: vi.fn(async (_timeoutMs?: number) => {
       const message = mirroredNotifications.shift();
       if (!message) {
         throw new Error("no server message");
@@ -722,6 +722,32 @@ describe("ElectronAppServerHost", () => {
       },
     });
     expect(fakeConnection.nextServerMessage).toHaveBeenCalled();
+  });
+
+  it("drainEvents 首条后只排空已缓冲消息，避免把流式首字扣到回合结束", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+    enqueueFakeNotifications([
+      agentSessionEventMessage({
+        eventId: "evt-first-delta",
+        sequence: 2,
+        type: "message.delta",
+      }),
+      agentSessionEventMessage({
+        eventId: "evt-second-delta",
+        sequence: 3,
+        type: "message.delta",
+      }),
+    ]);
+
+    const drained = await host.drainEvents({ limit: 50 });
+
+    expect(drained.lines).toHaveLength(2);
+    expect(
+      fakeConnection.nextServerMessage.mock.calls.map(([timeoutMs]) =>
+        timeoutMs,
+      ),
+    ).toEqual([25, 0, 0]);
   });
 
   it("drainEvents 应上行 server request 并透传 renderer exact-id response", async () => {

@@ -68,21 +68,50 @@ pub(super) fn emit_runtime_agent_event_with_coding_mirror_and_plan_parser_with_s
                 sink,
             )?;
         }
-        RuntimeAgentEvent::ThinkingStart { item_id } => {
+        RuntimeAgentEvent::ReasoningStart { item_id } => {
             reasoning_event_state
                 .start(item_id)
                 .map_err(RuntimeCoreError::Backend)?;
         }
-        RuntimeAgentEvent::ThinkingDelta { item_id, text } => {
+        RuntimeAgentEvent::ReasoningSummaryDelta {
+            item_id,
+            text,
+            summary_index,
+        } => {
             for event in reasoning_event_state
-                .observe_delta(item_id, text)
+                .observe_summary_delta(item_id, text, *summary_index)
                 .map_err(RuntimeCoreError::Backend)?
             {
                 sink.emit(event)?;
             }
             emit_presentation_events(event, soul_style, proposed_plan_parser, sink)?;
         }
-        RuntimeAgentEvent::ThinkingEnd { item_id } => {
+        RuntimeAgentEvent::ReasoningSummaryPartAdded {
+            item_id,
+            summary_index,
+        } => {
+            for event in reasoning_event_state
+                .observe_summary_part_added(item_id, *summary_index)
+                .map_err(RuntimeCoreError::Backend)?
+            {
+                sink.emit(event)?;
+            }
+            emit_presentation_events(event, soul_style, proposed_plan_parser, sink)?;
+        }
+        RuntimeAgentEvent::ReasoningContentDelta {
+            item_id,
+            text,
+            content_index,
+        } => {
+            for event in reasoning_event_state
+                .observe_content_delta(item_id, text, *content_index)
+                .map_err(RuntimeCoreError::Backend)?
+            {
+                sink.emit(event)?;
+            }
+            emit_presentation_events(event, soul_style, proposed_plan_parser, sink)?;
+        }
+        RuntimeAgentEvent::ReasoningEnd { item_id } => {
             for event in reasoning_event_state
                 .end(item_id, "completed")
                 .map_err(RuntimeCoreError::Backend)?

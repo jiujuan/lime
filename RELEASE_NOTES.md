@@ -1,40 +1,35 @@
-## Lime v1.109.0
+## Lime v1.110.0
 
 ### 新功能
 
-- 新增 App Server v2 `thread/fork`，支持按完整历史、指定 Turn 或边界复制 canonical Thread/Turn/Item 前缀，并在重启后从 canonical history 恢复 provider 上下文。
-- 新增 v2 `thread/delete`，以原子子树快照清理持久化与 pending-only 子线程、运行态、Goal、mailbox、trace、telemetry 和投影，并广播 `thread/deleted`。
-- Thread Goal 支持 terminal 后自动续跑、idle wall-time 计量、恢复 admission 与 fork 延迟继承，统一由 canonical goal store 和 continuation owner 管理。
-- App Server client 与 Agent runtime client 新增 typed reverse server-request 回包能力，仅使用 JSON-RPC outer id 完成响应或拒绝。
+- 完善 current Agent runtime 的 Thread/Turn/Item 投影、历史恢复、fork 与工具回合快照，统一 canonical history 和 read model。
+- 增加 reasoning summary/text delta 的 App Server v2 通知、schema 与前端投影支持。
+- 扩展图片/视频任务路由与 provider lowering，补齐多模型、多模态请求的 credential、协议和事件传递。
 
 ### 修复
 
-- 修复 fork history 在工具调用、MCP、Reasoning、Context Compaction 与冷启动恢复时的重复、缺失和 lineage 断裂；无法无损表达的历史继续 fail closed。
-- 修复 Provider 模型缓存跨凭证串用，以及 host-managed、图片和 Plugin worker 路径丢失已解析 credential identity 后重新选路的问题。
-- 修复 Provider protocol 依赖名称猜测的问题；current client 现在要求 route 显式给出协议，缺失时返回不可重试的配置错误。
-- 修复 MCP stdio 启动继承宿主敏感环境、启动超时被隐式放大和停止时遗留子进程树的问题，并兼顾 macOS 与 Windows 进程清理。
-- 移除 Claw 空白布局判定中的临时调试日志，避免正常空态产生生产 console 噪音。
+- 修复 provider stream、reasoning、MCP 与工具事件在 runtime/read model/GUI 之间的重复、丢失和顺序问题。
+- 修复 credential-scoped model metadata、路由解析、媒体 worker 和 plugin worker 之间的凭证与协议上下文丢失。
+- 修复 Electron/App Server 边界、历史合并、投影重建和冷启动测试中的不一致，并移除生产路径临时日志。
 
 ### 优化与重构
 
-- 删除生产 `agentSession/delete` 协议、schema、dispatch 与客户端入口，线程删除唯一收口到 v2 `thread/delete`。
-- Plugin runtime 的 approval、AskUser 与 MCP elicitation 回包迁移到 typed reverse request responder，不再通过 action metadata 猜测 waiter。
-- MCP runtime 增加显式 environment identity、auth scopes、step snapshot generation 与 elicitation provenance；本地 stdio 启动收口到单一 launcher/process owner。
-- Provider history、Goal continuation、fork seed、projection repair 和 compaction prompt boundary 收口到 canonical Thread/Turn/Item 事实源，不复制 raw EventLog 作为第二套历史。
-- Plugin worker turn 复用 credential-scoped model metadata cache，并通过 application additional context 传递业务 metadata。
+- 移除 managed-objective、旧媒体任务和 retired session/objective API 的生产协议、schema、服务与测试入口，收敛到 current owner。
+- 将 App Server client、Agent runtime、plugin runtime 的 server-request/approval 响应改为 typed contract，减少 metadata waiter 和兼容分支。
+- 收口 MCP environment identity、auth scopes、step snapshot 与 elicitation provenance；统一 stdio launcher/process owner。
+- 清理 legacy catalog、脚本和文档入口，更新治理基线、协议生成物与五语言 GUI contract。
 
 ### 测试与质量
 
-- 扩展 ThreadGoal、public fork/delete、AgentControl fork、compaction lineage、provider cache/route、typed reverse request 与 MCP lifecycle/provenance 的单元、集成和公共 JSON-RPC 回归。
-- 更新 v2 schema、生成类型、package client、Renderer gateway 与 contract/legacy guard，防止旧 session delete 和 metadata-routed action response 回流。
-- 内容工厂 Plugin worker scoped model cache Gate B 通过真实 Electron、App Server current JSON-RPC、RuntimeCore、Provider metadata 与 Article Editor 投影链路。
+- 扩展 Agent runtime、App Server JSON-RPC、provider/media route、MCP lifecycle、projection 与 plugin contract 的单元、集成和 smoke 回归。
+- 更新 v2 schema、生成类型、客户端 gateway、Electron 边界和 legacy/governance guard，覆盖 reasoning、snapshot、credential 与多模态事件。
 
 ### 文档
 
-- 更新全局架构、Codex 对齐协调计划、Writing v2 验证记录与本次发布执行计划。
+- 更新架构、runtime 收敛、协议边界、治理与执行计划，记录 current/compat/dead owner 变化。
 
 ### 其他
 
-- 版本事实源更新到 `1.109.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.110.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.108.0` -> `v1.109.0`
+**完整变更**: `v1.109.0` -> `v1.110.0`

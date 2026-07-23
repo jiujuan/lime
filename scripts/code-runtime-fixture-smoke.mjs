@@ -13,12 +13,12 @@ import {
   summarizeThreadRead,
   threadSettled,
   waitForHealth,
-} from "./lib/managed-objective-continuation-smoke-core.mjs";
+} from "./lib/agent-runtime-smoke-core.mjs";
 import {
   fixtureChatRequestCount,
   workspaceIdFromDefaultProject,
   workspaceRootFromDefaultProject,
-} from "./lib/managed-objective-automation-smoke-support.mjs";
+} from "./lib/agent-runtime-smoke-support.mjs";
 import {
   assertLiveProviderSmokeAllowed,
   liveProviderSmokeAllowed,
@@ -523,11 +523,7 @@ function appServerEvidenceSummary(evidenceExport) {
   };
 }
 
-function buildRuntimeRequest({
-  fixture,
-  turnId,
-  workspaceId,
-}) {
+function buildRuntimeRequest({ fixture, turnId, workspaceId }) {
   return {
     providerConfig: fixture.provider.providerConfig,
     providerPreference: fixture.provider.providerPreference,

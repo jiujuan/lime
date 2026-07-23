@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import * as ts from "typescript";
@@ -7,6 +7,11 @@ import { describe, expect, it } from "vitest";
 const REPO_ROOT = process.cwd();
 const AGENT_UI_EVENT_PROJECTION =
   "src/components/agent/chat/projection/agentUiEventProjection.ts";
+const DELETED_PROJECTION_DECLARATIONS = [
+  "src/components/agent/chat/projection/agentUiEventProjection.d.ts",
+  "src/components/agent/chat/projection/conversationProjectionStore.d.ts",
+  "src/components/agent/chat/projection/remoteTaskAgentUiProjection.d.ts",
+] as const;
 
 const ALLOWED_RELATIVE_IMPORTS = new Map<string, Set<string>>([
   ["./actionProjection", new Set(["buildActionProjectionEvents"])],
@@ -94,6 +99,24 @@ function importedNames(node: ts.ImportDeclaration): string[] {
 }
 
 describe("Agent UI projection boundary", () => {
+  it("已删除的重复 projection 声明不得回流", () => {
+    const restored = DELETED_PROJECTION_DECLARATIONS.filter((relativePath) =>
+      existsSync(join(REPO_ROOT, relativePath)),
+    );
+    const missingCurrentOwners = DELETED_PROJECTION_DECLARATIONS.map(
+      (relativePath) => relativePath.replace(/\.d\.ts$/, ".ts"),
+    ).filter((relativePath) => !existsSync(join(REPO_ROOT, relativePath)));
+
+    expect(
+      restored,
+      "重复 .d.ts 已被 current .ts owner 替代，不得恢复第二套声明事实源",
+    ).toEqual([]);
+    expect(
+      missingCurrentOwners,
+      "删除重复 .d.ts 的前提是同名 current .ts owner 保持存在",
+    ).toEqual([]);
+  });
+
   it("聚合器只能导入 owner dispatcher，不应回流单个 adapter builder", () => {
     const source = readProjectionSource();
     const sourceFile = ts.createSourceFile(

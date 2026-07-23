@@ -47,7 +47,7 @@
 | `world_building` | keep | 创作产品资产 | 保留 |
 | `personas` | keep | 创作 / Agent persona 产品资产 | 保留 |
 | `materials` | keep | 素材资产 metadata | 保留 |
-| `video_generation_tasks` | keep / sidecar-linked | 产品任务 metadata 可保留，生成产物内容不得进入主库 | P5 确认产物只通过 sidecar/ref |
+| `video_generation_tasks` | dead / deleted | 旧 service/DAO 已无生产消费者；current 视频任务由 App Server `mediaTaskArtifact/video/*` 投影 workspace task artifact | forbidden-to-restore；不得恢复 Product DB 任务表或平行 credential 轮转 |
 | `publish_configs` | keep | 发布配置低频数据 | 保留 |
 | `outline_nodes` | keep | 大纲产品资产 | 保留 |
 | `gallery_material_metadata` | keep | 素材扩展 metadata | 保留 |
@@ -62,7 +62,7 @@
 | `agent_thread_items` | projection / move | `AgentTimelineDao::upsert_item` 写 `payload_json` | projection 只保留摘要和 refs；完整 event 和大输出进入 Event Log / Sidecar |
 | `agent_turn_outcomes` | projection | reliability outcome read model | 迁到 Projection DB |
 | `agent_thread_incidents` | projection | reliability incident read model | 迁到 Projection DB |
-| `managed_objectives` | projection / product-metadata | owner/session/workspace 目标管理状态，引用 evidence/artifact refs | P0 后确认：objective metadata 可留 Product DB，audit/evidence projection 迁出 |
+| `managed_objectives` | dead / deleted | Codex 无对应对象；canonical goal 已由 ThreadStore `thread_goals` 按 thread identity 持久化 | forbidden-to-restore，不保留 Product DB metadata 或兼容清理表 |
 | `agent_runs` | move / telemetry | 统一执行追踪摘要，前端证据引用 `agent_runs.metadata` | 执行 trace 和 provenance 迁到 Telemetry DB / Projection DB；Product DB 不承接 runtime trace |
 | `a2ui_forms` | projection / move-candidate | 依赖 `message_id` / `session_id`，靠近 runtime message UI 状态 | 随 `agent_messages` 兼容退场一起迁出或改为 projection；message-only 旧壳可在 backfill cleanup 时清 rows，但表结构 drop 仍需等 current timeline 退出 |
 
@@ -91,7 +91,8 @@
 | `core/src/database/dao/agent_thread_incident.rs` | `INSERT/UPDATE agent_thread_incidents` | projection writer | 目标 Projection DB |
 | `core/src/database/dao/automation_job.rs` | `INSERT/UPDATE automation_jobs` | keep writer | 保留 job metadata；执行 trace 不进主库 |
 | `core/src/database/dao/agent_run.rs` | `INSERT/UPDATE agent_runs` | telemetry/projection writer | 迁出 runtime trace |
-| `core/src/database/managed_objective_repository.rs` | `INSERT/UPDATE managed_objectives` | product/projection mixed | objective metadata 可保留；audit/evidence refs 需和 evidence export 对齐 |
+| `core/src/database/dao/video_generation_task_dao.rs` | 已删除 | dead / forbidden-to-restore | 视频任务持久化只归 workspace task artifact；执行只归 `media-runtime` |
+| `core/src/database/managed_objective_repository.rs` | 已删除 | dead / forbidden-to-restore | Goal persistence 只归 canonical ThreadStore |
 | `infra/src/telemetry/logger.rs` | request log 文件 | move writer | 目标 Telemetry DB |
 
 ## 4. App Server read / bridge 依赖
@@ -147,11 +148,9 @@ lime-rs/src/services
 
 1. Electron App Server sidecar 是否已经通过 release manifest 间接配置 data dir？
    - 已收口：release manifest、env binary、dev binary 三条 sidecar 路径都通过 `SidecarLaunchConfig.dataDir` 接收 Electron `userData/app-server` 并组装 `--data-dir`。
-2. `managed_objectives` 是否保留在 Product DB？
-   - metadata 可以保留；audit summary、evidence refs、artifact refs 更像 projection，需要和 managed-objective 路线图对齐。
-3. `agent_runs` 是 Telemetry DB 还是 Projection DB？
+2. `agent_runs` 是 Telemetry DB 还是 Projection DB？
    - 如果服务 GUI runtime evidence，则可进入 Projection DB；如果用于全局统计，则更适合 Telemetry DB。P0 先标 move。
-4. `model_usage_stats` 与 `usage_statistics_service` 的最终 owner 是 Product DB 还是 Telemetry DB？
+3. `model_usage_stats` 与 `usage_statistics_service` 的最终 owner 是 Product DB 还是 Telemetry DB？
    - P4 最小骨架先覆盖 request log owner；usage/model 已退出 `agent_messages` fallback，模型使用聚合是否整体迁入 Telemetry DB 是后续细化项。
 
 ## 8. 下一刀

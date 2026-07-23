@@ -226,7 +226,6 @@ export const ALLOWED_EXTERNAL_BACKEND_LAUNCH_FILES = new Set([
   "scripts/plugin/runtime-electron-sdk-fixture-smoke.test.mjs",
   "scripts/plugin/runtime-electron-task-fixture-smoke.mjs",
   "scripts/plugin/runtime-electron-task-fixture-smoke.test.mjs",
-  "scripts/plugin/runtime-sdk-electron-fixture-smoke.mjs",
   "scripts/smoke/agent-session-messages-electron-fixture-smoke.mjs",
   "scripts/smoke/agent-session-messages-electron-fixture-smoke.test.mjs",
 ]);

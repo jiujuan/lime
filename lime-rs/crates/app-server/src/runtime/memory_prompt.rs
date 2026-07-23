@@ -811,7 +811,7 @@ mod tests {
         assert!(prompt.contains("No greeting, opening turn, self-introduction"));
         assert!(prompt.contains("pivot from this turn"));
         assert!(prompt.contains("Call out weak assumptions."));
-        assert!(!prompt.contains("SOUL.md"));
+        assert!(prompt.contains("不要尝试读取 `memory.soul` 或 `SOUL.md`"));
     }
 
     #[test]

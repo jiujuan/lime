@@ -16,7 +16,7 @@ function readSource(relativePath: string): string {
 }
 
 describe("automation current owner boundary", () => {
-  it("自动化策略与目标审计不得回绕 agentRuntime compat 根 barrel", () => {
+  it("自动化策略不得回绕 agentRuntime compat 根 barrel", () => {
     for (const relativePath of AUTOMATION_CURRENT_OWNER_SOURCES) {
       const source = readSource(relativePath);
 
@@ -29,7 +29,7 @@ describe("automation current owner boundary", () => {
     }
   });
 
-  it("自动化策略类型和目标审计必须使用各自 current owner", () => {
+  it("自动化策略类型必须使用 current owner，旧目标客户端不得恢复", () => {
     expect(readSource("src/lib/api/automation.ts")).toContain(
       'from "@/lib/api/agentExecutionRuntime"',
     );
@@ -40,6 +40,6 @@ describe("automation current owner boundary", () => {
     ).toContain('from "@/lib/api/agentExecutionRuntime"');
     expect(
       readSource("src/components/settings-v2/system/automation/index.tsx"),
-    ).toContain('from "@/lib/api/agentRuntime/objectiveClient"');
+    ).not.toContain("objectiveClient");
   });
 });

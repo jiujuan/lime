@@ -452,7 +452,19 @@ driver 继续挂在现有 Tokio runtime，Completed 后重新进入 idle gate。
 Turn 的 `thread/resume` 可直接启动；set 路径必须先完成 response 与 `thread/goal/updated`
 listener publish，resume 路径复用 barrier 保证 `response -> Goal snapshot -> continuation live events`。
 Plan mode 跳过但不丢 Goal；普通 failed 先把 Goal 推进
-`blocked|usage_limited`，显式 canceled 不立即续跑。public `thread/fork` 的 current owner 是
+`blocked|usage_limited`，显式 canceled 不立即续跑。
+
+Renderer 的唯一 Goal owner 是 `useAgentSessionThreadGoal -> ThreadGoalPanel`，只接受 canonical
+`thread_id + ThreadGoal`。Harness detail、Inputbar inline 和 TaskRail 共用同一 thread identity
+规则；identity 不匹配时 fail closed，不从 session/workspace id 猜测 Goal，也不读取
+`threadRead.managed_objective`。聊天旧 `ManagedObjectivePanel`、inline wrapper、criteria/audit/
+continue UI、Automation Objective summary/details/audit、v0 `agentSession/objective/*`、
+`managed_objectives` repository/table 和 `agentChat.managedObjective.*` 文案均为
+`dead / deleted / forbidden-to-restore`。不得恢复 owner kind、criteria、evidence audit 或手动
+Objective continue wrapper。Automation 只负责按 schedule 向 persisted Thread 提交 Turn；Goal
+identity、状态、预算、用量和 idle continuation 仍由该 Thread 的 canonical `ThreadGoal` 唯一拥有。
+
+public `thread/fork` 的 current owner 是
 `protocol/v2::ThreadForkParams -> processor/thread_fork.rs -> RuntimeCore::thread_fork ->
 canonical ThreadStore`，与 AgentControl child topology fork 完全独立。它从 canonical
 Thread/Turn/Item 复制 full、`lastTurnId` 或 `beforeTurnId` 的 terminal prefix，并只改 target
@@ -711,7 +723,7 @@ JSON-RPC turn/start
   -> immediate inProgress response
   -> owned completion driver
   -> RuntimeCore state/event-log/ProjectionStore append
-  -> managed-objective owned continuation worker (when guard allows)
+  -> canonical ThreadGoal idle continuation (when active and idle)
   -> RuntimeEventHub
   -> one App Server v2 notification projector
   -> transport/GUI
@@ -722,9 +734,10 @@ the completed result. v2 `processor/turn.rs` uses `start_turn_admitted`; it retu
 turn identity after the session actor accepts the task and never captures the request's borrowed
 event callback in the background task. Completion, failure and terminal events are appended by
 the same RuntimeCore sink and forwarded through `RuntimeEventHub`. After a terminal completion,
-the background driver schedules managed-objective continuation through the existing objective
-guard, budget and audit owner. The continuation worker owns its callback and publishes through the
-same hub; it never captures the request callback or creates a second turn queue.
+the background driver re-enters the canonical ThreadGoal idle gate. The ThreadGoal owner applies
+its status, budget, usage and pending-work guards before admitting a new Turn. The continuation
+worker owns its callback and publishes through the same hub; it never captures the request callback
+or creates a second turn queue.
 
 Turn admission is actor-first and intentionally two-phase. RuntimeCore may submit steer only to an
 already existing session actor. If that actor accepts the input, RuntimeCore resolves the canonical
@@ -754,9 +767,9 @@ Responsible developer confirmation: root, 2026-07-19.
 
 Confirmation: the admission boundary, owned completion task, state/event-log append path,
 RuntimeEventHub, single v2 projector and transport fan-out were checked against the Codex
-`turn_processor`/session listener split. Admitted managed-objective continuation is connected to
-the same RuntimeCore and event hub owners; its focused integration test must pass before this slice
-is used as release evidence.
+`turn_processor`/session listener split. Admitted ThreadGoal continuation is connected to the same
+RuntimeCore and event hub owners; its focused integration test must pass before this slice is used
+as release evidence. The retired v0 ManagedObjective worker is not part of this architecture.
 
 ## 14. v2 Thread Resume Cold-Recovery Boundary
 

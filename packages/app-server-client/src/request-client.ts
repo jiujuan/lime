@@ -50,24 +50,6 @@ export interface AppServerClient {
     params: protocol.AgentSessionUpdateParams,
   ): protocol.JsonRpcRequest;
   deleteThread(params: protocol.ThreadDeleteParams): protocol.JsonRpcRequest;
-  readAgentSessionObjective(
-    params: protocol.AgentSessionObjectiveReadParams,
-  ): protocol.JsonRpcRequest;
-  setAgentSessionObjective(
-    params: protocol.AgentSessionObjectiveSetParams,
-  ): protocol.JsonRpcRequest;
-  updateAgentSessionObjectiveStatus(
-    params: protocol.AgentSessionObjectiveStatusUpdateParams,
-  ): protocol.JsonRpcRequest;
-  clearAgentSessionObjective(
-    params: protocol.AgentSessionObjectiveClearParams,
-  ): protocol.JsonRpcRequest;
-  continueAgentSessionObjective(
-    params: protocol.AgentSessionObjectiveContinueParams,
-  ): protocol.JsonRpcRequest;
-  auditAgentSessionObjective(
-    params: protocol.AgentSessionObjectiveAuditParams,
-  ): protocol.JsonRpcRequest;
   compactAgentSession(
     params: protocol.AgentSessionCompactParams,
   ): protocol.JsonRpcRequest;
@@ -730,15 +712,6 @@ export interface AppServerClient {
   ): protocol.JsonRpcRequest;
   deleteModelProviderKey(
     params: protocol.ModelProviderKeyDeleteParams,
-  ): protocol.JsonRpcRequest;
-  readNextModelProviderKey(
-    params: protocol.ModelProviderKeyNextParams,
-  ): protocol.JsonRpcRequest;
-  recordModelProviderKeyUsage(
-    params: protocol.ModelProviderKeyEventParams,
-  ): protocol.JsonRpcRequest;
-  recordModelProviderKeyError(
-    params: protocol.ModelProviderKeyEventParams,
   ): protocol.JsonRpcRequest;
   readModelProviderUiState(
     params: protocol.ModelProviderUiStateReadParams,

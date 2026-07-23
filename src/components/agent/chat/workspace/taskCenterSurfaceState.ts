@@ -202,10 +202,17 @@ export function resolveTaskCenterHomeChromeState({
     !draftSurfaceActive &&
     !draftTabActive &&
     !shouldSuppressDraftContent;
+  const isTaskCenterDraftSendPending = isTaskCenterDraftSendPendingForLayout({
+    hasDraftSendRequest: Boolean(draftSendRequest),
+    hasDisplayMessages: displayMessageCount > 0 || threadItemCount > 0,
+    isSending,
+    queuedTurnCount,
+  });
   const shouldTreatCurrentSessionAsBackground =
     isHomeSessionBackgroundRecovery &&
     !hasInitialSessionRoute &&
-    !hasForegroundLocalSession;
+    !hasForegroundLocalSession &&
+    !isTaskCenterDraftSendPending;
   const hasCurrentSessionActivity =
     !shouldTreatCurrentSessionAsBackground &&
     !draftTabActive &&
@@ -236,12 +243,6 @@ export function resolveTaskCenterHomeChromeState({
     isAutoRestoringSession,
     isSessionHydrating,
     isHomeSessionBackgroundRecovery: shouldTreatCurrentSessionAsBackground,
-  });
-  const isTaskCenterDraftSendPending = isTaskCenterDraftSendPendingForLayout({
-    hasDraftSendRequest: Boolean(draftSendRequest),
-    hasDisplayMessages: displayMessageCount > 0 || threadItemCount > 0,
-    isSending,
-    queuedTurnCount,
   });
   const shouldRenderTaskCenterEmbeddedHome =
     taskCenterHomeSurfaceState.shouldRenderEmbeddedHome;

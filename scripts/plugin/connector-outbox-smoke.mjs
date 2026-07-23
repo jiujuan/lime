@@ -12,7 +12,7 @@ import {
   createAgentSessionCurrent,
   readAgentRuntimeThreadCurrent,
   startAgentSessionTurnCurrent,
-} from "../lib/managed-objective-continuation-smoke-core.mjs";
+} from "../lib/agent-runtime-smoke-core.mjs";
 
 const DEFAULTS = {
   mode: "replay",
@@ -85,9 +85,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith("--") && next !== undefined && !next.startsWith("--")) {
-      const key = arg.slice(2).replace(/-([a-z])/g, (_, value) =>
-        value.toUpperCase(),
-      );
+      const key = arg
+        .slice(2)
+        .replace(/-([a-z])/g, (_, value) => value.toUpperCase());
       if (key in options) {
         options[key] = next;
         index += 1;
@@ -138,7 +138,8 @@ function parseArgs(argv) {
   }
   if (options.mode === "live") {
     const expectsExternalDelivery =
-      options.externalDeliveryLocalWebhook || options.externalDeliveryWebhookUrl;
+      options.externalDeliveryLocalWebhook ||
+      options.externalDeliveryWebhookUrl;
     options.expectAdapterReadiness ||=
       "host_managed_secret_delivery_adapter_ready";
     options.expectExternalStatus ||= expectsExternalDelivery
@@ -173,7 +174,10 @@ function parseArgs(argv) {
     throw new Error("--mode replay requires --session-id and --task-id");
   }
   if (!options.output) {
-    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "");
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\..+/, "");
     options.output = path.join(
       process.cwd(),
       ".lime",
@@ -252,7 +256,8 @@ function assert(condition, message) {
 
 function resolveExternalDeliveryWebhookUrl(options) {
   if (options.externalDeliveryWebhookUrl) {
-    options.externalDeliveryWebhookUrl = options.externalDeliveryWebhookUrl.trim();
+    options.externalDeliveryWebhookUrl =
+      options.externalDeliveryWebhookUrl.trim();
     options.externalDeliveryWebhookSource = "cli";
     return;
   }
@@ -290,8 +295,7 @@ function isSupportedExternalDeliveryWebhookUrl(value) {
 function isLocalExternalDeliveryWebhookUrl(value) {
   const url = value.trim();
   return (
-    url.startsWith("http://127.0.0.1:") ||
-    url.startsWith("http://localhost:")
+    url.startsWith("http://127.0.0.1:") || url.startsWith("http://localhost:")
   );
 }
 
@@ -357,7 +361,9 @@ async function waitForHealth(options) {
     }
     await sleep(options.intervalMs);
   }
-  throw new Error(`DevBridge health unavailable: ${lastError?.message || "timeout"}`);
+  throw new Error(
+    `DevBridge health unavailable: ${lastError?.message || "timeout"}`,
+  );
 }
 
 async function invoke(options, cmd, args, timeoutMs = 30_000) {
@@ -381,7 +387,12 @@ async function invoke(options, cmd, args, timeoutMs = 30_000) {
 
 let appServerRequestId = 1;
 
-async function invokeAppServerMethod(options, method, params, timeoutMs = 30_000) {
+async function invokeAppServerMethod(
+  options,
+  method,
+  params,
+  timeoutMs = 30_000,
+) {
   const id = `connector-outbox-${appServerRequestId++}`;
   const request =
     params === undefined ? { id, method } : { id, method, params };
@@ -417,11 +428,14 @@ async function invokeAppServerMethod(options, method, params, timeoutMs = 30_000
 }
 
 function uniqueStrings(values) {
-  return [...new Set(values.filter((value) => typeof value === "string" && value))];
+  return [
+    ...new Set(values.filter((value) => typeof value === "string" && value)),
+  ];
 }
 
 function getEvidenceSummaryRefs(threadRead) {
-  const summary = threadRead?.evidence_summary || threadRead?.evidenceSummary || {};
+  const summary =
+    threadRead?.evidence_summary || threadRead?.evidenceSummary || {};
   return summary.evidence_refs || summary.evidenceRefs || [];
 }
 
@@ -444,11 +458,15 @@ function collectTaskEvidenceRefs(events) {
 }
 
 function collectOutboxRefs(...groups) {
-  return uniqueStrings(groups.flat().filter((value) => value.startsWith("outbox://")));
+  return uniqueStrings(
+    groups.flat().filter((value) => value.startsWith("outbox://")),
+  );
 }
 
 function collectDeliveryRefs(...groups) {
-  return uniqueStrings(groups.flat().filter((value) => value.startsWith("delivery://")));
+  return uniqueStrings(
+    groups.flat().filter((value) => value.startsWith("delivery://")),
+  );
 }
 
 function getToolEvidenceRefs(toolCall) {
@@ -456,13 +474,20 @@ function getToolEvidenceRefs(toolCall) {
 }
 
 function toolOutput(toolCall) {
-  return String(toolCall?.output || toolCall?.output_preview || toolCall?.outputPreview || "");
+  return String(
+    toolCall?.output ||
+      toolCall?.output_preview ||
+      toolCall?.outputPreview ||
+      "",
+  );
 }
 
 function parseJsonObject(text) {
   try {
     const value = JSON.parse(text);
-    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : null;
   } catch {
     return null;
   }
@@ -470,7 +495,9 @@ function parseJsonObject(text) {
 
 function parseToolOutputPayload(output) {
   const markerIndex = output.indexOf(TOOL_METADATA_BEGIN);
-  const prefix = (markerIndex >= 0 ? output.slice(0, markerIndex) : output).trim();
+  const prefix = (
+    markerIndex >= 0 ? output.slice(0, markerIndex) : output
+  ).trim();
   const prefixPayload = prefix ? parseJsonObject(prefix) : null;
   if (prefixPayload) {
     return prefixPayload;
@@ -491,7 +518,9 @@ function parseToolOutputPayload(output) {
 }
 
 function isTrustedConnectorOutputPayload(payload) {
-  const source = String(payload?.source || payload?.result?.source || "").trim();
+  const source = String(
+    payload?.source || payload?.result?.source || "",
+  ).trim();
   return [
     "plugin_connector_cloud_overlay_outbox_adapter",
     "plugin_connector_fixture_adapter",
@@ -510,7 +539,9 @@ function buildExpectedRef(options, refs) {
 }
 
 function normalizeExpectation(value) {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 function addExpectedAssertion(assertions, expectations, key, actual, expected) {
@@ -522,13 +553,21 @@ function addExpectedAssertion(assertions, expectations, key, actual, expected) {
   assertions[key] = normalizeExpectation(actual) === normalizedExpected;
 }
 
-function addExpectedPrefixAssertion(assertions, expectations, key, actual, expectedPrefix) {
+function addExpectedPrefixAssertion(
+  assertions,
+  expectations,
+  key,
+  actual,
+  expectedPrefix,
+) {
   const normalizedPrefix = String(expectedPrefix ?? "").trim();
   if (!normalizedPrefix) {
     return;
   }
   expectations[key] = expectedPrefix;
-  assertions[key] = String(actual ?? "").trim().startsWith(normalizedPrefix);
+  assertions[key] = String(actual ?? "")
+    .trim()
+    .startsWith(normalizedPrefix);
 }
 
 async function readProjection(options, sessionId, taskId) {
@@ -579,14 +618,19 @@ async function getWorkspaceId(options) {
   if (options.workspaceId) {
     return options.workspaceId;
   }
-  const workspace = await invoke(options, "get_or_create_default_project", undefined);
+  const workspace = await invoke(
+    options,
+    "get_or_create_default_project",
+    undefined,
+  );
   assert(workspace?.id, "get_or_create_default_project returned no id");
   return workspace.id;
 }
 
 function normalizeProviderId(provider) {
-  return String(provider?.id || provider?.provider_id || provider?.providerId || "")
-    .trim();
+  return String(
+    provider?.id || provider?.provider_id || provider?.providerId || "",
+  ).trim();
 }
 
 function providerEnabled(provider) {
@@ -617,8 +661,12 @@ function pickProvider(providers, preferredProviderId) {
   const enabled = providers.filter((provider) => providerEnabled(provider));
   if (preferredProviderId) {
     return (
-      enabled.find((provider) => normalizeProviderId(provider) === preferredProviderId) ||
-      providers.find((provider) => normalizeProviderId(provider) === preferredProviderId) ||
+      enabled.find(
+        (provider) => normalizeProviderId(provider) === preferredProviderId,
+      ) ||
+      providers.find(
+        (provider) => normalizeProviderId(provider) === preferredProviderId,
+      ) ||
       null
     );
   }
@@ -666,13 +714,14 @@ async function resolveProviderPreference(options) {
   let providerDetail = selected;
   try {
     providerDetail =
-      (await invokeAppServerMethod(
-        options,
-        APP_SERVER_METHOD_MODEL_PROVIDER_READ,
-        { providerId },
-        30_000,
-      ))?.provider ||
-      selected;
+      (
+        await invokeAppServerMethod(
+          options,
+          APP_SERVER_METHOD_MODEL_PROVIDER_READ,
+          { providerId },
+          30_000,
+        )
+      )?.provider || selected;
   } catch (error) {
     console.warn(
       `[plugin-connector-outbox-smoke] provider detail unavailable, using list summary: ${
@@ -690,7 +739,10 @@ async function resolveProviderPreference(options) {
   return {
     providerPreference: providerId,
     modelPreference,
-    source: explicitProvider || explicitModel ? "partial-explicit" : "auto-enabled-provider",
+    source:
+      explicitProvider || explicitModel
+        ? "partial-explicit"
+        : "auto-enabled-provider",
   };
 }
 
@@ -844,7 +896,12 @@ async function runLive(options) {
     skipPreSubmitResume: true,
   });
 
-  const projection = await waitForProjection(options, sessionId, taskId, expectedToolName);
+  const projection = await waitForProjection(
+    options,
+    sessionId,
+    taskId,
+    expectedToolName,
+  );
   return {
     mode: "live",
     workspaceId,
@@ -859,7 +916,11 @@ async function runLive(options) {
 
 async function runReplay(options) {
   const expectedToolName = toolNameFor(options.connectorId, options.action);
-  const projection = await readProjection(options, options.sessionId, options.taskId);
+  const projection = await readProjection(
+    options,
+    options.sessionId,
+    options.taskId,
+  );
   return {
     mode: "replay",
     sessionId: options.sessionId,
@@ -873,8 +934,12 @@ function buildSummary(options, health, result, localWebhook = null) {
   const { threadRead, task } = result.projection;
   const toolCalls = getToolCalls(threadRead);
   const events = getTaskEvents(task);
-  const toolEvents = events.filter((event) => eventType(event).includes("toolCall"));
-  const evidenceEvents = events.filter((event) => eventType(event).includes("evidence"));
+  const toolEvents = events.filter((event) =>
+    eventType(event).includes("toolCall"),
+  );
+  const evidenceEvents = events.filter((event) =>
+    eventType(event).includes("evidence"),
+  );
   const namedToolCalls = toolCalls.filter(
     (toolCall) =>
       (toolCall.tool_name || toolCall.toolName) === result.expectedToolName,
@@ -889,10 +954,13 @@ function buildSummary(options, health, result, localWebhook = null) {
     "";
   const matchingToolCall =
     namedToolCalls.find((toolCall) =>
-      expectedRefHint ? getToolEvidenceRefs(toolCall).includes(expectedRefHint) : false,
+      expectedRefHint
+        ? getToolEvidenceRefs(toolCall).includes(expectedRefHint)
+        : false,
     ) ||
     namedToolCalls.find(
-      (toolCall) => toolCall.status === "completed" && toolCall.success !== false,
+      (toolCall) =>
+        toolCall.status === "completed" && toolCall.success !== false,
     ) ||
     namedToolCalls[0] ||
     toolCalls[0] ||
@@ -1045,7 +1113,10 @@ function buildSummary(options, health, result, localWebhook = null) {
     productionDelivery?.productionPlatformDelivered,
     options.expectProductionPlatformDelivered,
   );
-  if (options.expectDeliveryStatus || options.expectDeliveryExternalPlatformDelivered) {
+  if (
+    options.expectDeliveryStatus ||
+    options.expectDeliveryExternalPlatformDelivered
+  ) {
     assertions.deliveryReceiptRefObserved =
       deliveryReceiptRef.startsWith("delivery://");
     assertions.deliveryToolCallEvidenceProjected = deliveryReceiptRef
@@ -1088,9 +1159,11 @@ function buildSummary(options, health, result, localWebhook = null) {
     providerPreference: result.providerPreference || null,
     threadRead: {
       status: threadRead?.status || null,
-      profileStatus: threadRead?.profile_status || threadRead?.profileStatus || null,
+      profileStatus:
+        threadRead?.profile_status || threadRead?.profileStatus || null,
       toolCallCount: toolCalls.length,
-      firstToolName: matchingToolCall?.tool_name || matchingToolCall?.toolName || null,
+      firstToolName:
+        matchingToolCall?.tool_name || matchingToolCall?.toolName || null,
       toolEvidenceRefs,
       evidenceSummaryRefs: threadEvidenceRefs,
       outputContainsBoundedMetadata,
@@ -1117,15 +1190,13 @@ function buildSummary(options, health, result, localWebhook = null) {
         delivery?.externalPlatformDelivered ?? null,
       productionDeliveryStatus: productionDelivery?.status || null,
       productionDeliveryProofLevel: productionDelivery?.proofLevel || null,
-      productionDeliveryNextRequired:
-        productionDelivery?.nextRequired || null,
+      productionDeliveryNextRequired: productionDelivery?.nextRequired || null,
       productionPlatformDelivered:
         productionDelivery?.productionPlatformDelivered ?? null,
       externalDeliveryChannel: externalDelivery?.channel || null,
       externalDeliveryTargetHash: externalDelivery?.targetHash || null,
       externalDeliveryTargetLabel: externalDelivery?.targetLabel || null,
-      externalDeliveryTargetExposed:
-        externalDelivery?.targetExposed ?? null,
+      externalDeliveryTargetExposed: externalDelivery?.targetExposed ?? null,
       externalDeliveryProofLevel: externalDelivery?.proofLevel || null,
       externalDeliveryProductionPlatformDelivered:
         externalDelivery?.productionPlatformDelivered ?? null,
@@ -1182,13 +1253,16 @@ async function main() {
   if (localWebhook) {
     options.externalDeliveryWebhookUrl = localWebhook.url;
     options.externalDeliveryWebhookSource = "local";
-    options.externalDeliveryWebhookLabel ||= "local-connector-outbox-smoke-webhook";
+    options.externalDeliveryWebhookLabel ||=
+      "local-connector-outbox-smoke-webhook";
   }
   let summary;
   try {
     const health = await waitForHealth(options);
     const result =
-      options.mode === "live" ? await runLive(options) : await runReplay(options);
+      options.mode === "live"
+        ? await runLive(options)
+        : await runReplay(options);
     summary = buildSummary(options, health, result, localWebhook);
     writeSummary(options.output, summary);
   } finally {
@@ -1207,7 +1281,9 @@ async function main() {
     ),
   );
 
-  const failed = Object.entries(summary.assertions).filter(([, value]) => !value);
+  const failed = Object.entries(summary.assertions).filter(
+    ([, value]) => !value,
+  );
   if (failed.length > 0) {
     throw new Error(
       `connector outbox smoke assertions failed: ${failed

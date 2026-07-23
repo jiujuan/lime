@@ -48,11 +48,7 @@ describe("vitest-layer-classifier unit boundary", () => {
     expect(
       classifyVitestTestFile({
         filePath: "src/components/Foo.test.ts",
-        source: sample(
-          "expect(win",
-          "dow.local",
-          "Storage).toBeDefined();",
-        ),
+        source: sample("expect(win", "dow.local", "Storage).toBeDefined();"),
       }),
     ).toMatchObject({
       layer: "component",
@@ -94,7 +90,8 @@ describe("vitest-layer-classifier unit boundary", () => {
       },
       {
         filePath: "src/components/Foo.test.ts",
-        source: "it('matches media', () => expect(matchMedia('(dark)')).toBeDefined());",
+        source:
+          "it('matches media', () => expect(matchMedia('(dark)')).toBeDefined());",
       },
       {
         filePath: "src/components/Foo.test.ts",
@@ -146,14 +143,12 @@ describe("vitest-layer-classifier unit boundary", () => {
 
   it("组件测试可标记适合继续抽 VM 的候选信号", () => {
     const source = [
-      sample(
-        "import { render, screen } from '@testing-library",
-        "/react';",
-      ),
+      sample("import { render, screen } from '@testing-library", "/react';"),
       "describe('heavy component', () => {",
       ...Array.from(
         { length: 20 },
-        (_, index) => `it('case ${index}', () => { expect(screen).toBeDefined(); });`,
+        (_, index) =>
+          `it('case ${index}', () => { expect(screen).toBeDefined(); });`,
       ),
       "it('covers business projection', () => {",
       "expect('filter group sort formatter request builder runtime metadata reducer selector').toBeTruthy();",
@@ -168,10 +163,7 @@ describe("vitest-layer-classifier unit boundary", () => {
       }),
     ).toMatchObject({
       layer: "component",
-      unitMigrationHints: [
-        "large-component-suite",
-        "business-logic-keywords",
-      ],
+      unitMigrationHints: ["large-component-suite", "business-logic-keywords"],
     });
   });
 
@@ -222,9 +214,7 @@ describe("vitest-layer-classifier unit boundary", () => {
     expect(
       classifyVitestTestFile({
         filePath: "src/lib/legacy-host/adapter.test.ts",
-        source: sample(
-          `import { invoke } from '${legacyHostPackage}';`,
-        ),
+        source: sample(`import { invoke } from '${legacyHostPackage}';`),
       }),
     ).toMatchObject({
       layer: "contract",
@@ -384,7 +374,7 @@ describe("vitest-layer-classifier unit boundary", () => {
   it("smoke helper 和 Playwright 文本引用不应误归为 e2e", () => {
     expect(
       classifyVitestTestFile({
-        filePath: "scripts/lib/managed-objective-automation-smoke-support.test.mjs",
+        filePath: "scripts/lib/openai-compatible-fixture-server.test.mjs",
         source: "import { describe, expect, it } from 'vitest';",
       }),
     ).toMatchObject({
@@ -393,7 +383,8 @@ describe("vitest-layer-classifier unit boundary", () => {
 
     expect(
       classifyVitestTestFile({
-        filePath: "src/components/agent/chat/utils/toolSearchResultSummary.test.ts",
+        filePath:
+          "src/components/agent/chat/utils/toolSearchResultSummary.test.ts",
         source:
           "expect(resolveLabel('mcp__playwright__browser_click')).toBe('扩展工具');",
       }),

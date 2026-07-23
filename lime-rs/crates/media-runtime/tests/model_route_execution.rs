@@ -112,7 +112,7 @@ async fn image_worker_uses_resolved_route_provider_and_model() {
             .payload
             .pointer("/modelRouteExecution/executor/kind")
             .and_then(Value::as_str),
-        Some("local_lime_service")
+        Some("media_task_worker")
     );
     assert_eq!(
         migrated
@@ -158,12 +158,12 @@ async fn image_worker_uses_nested_route_execution_without_route_only_migration()
                 },
                 "routeExecution": {
                     "executor": {
-                        "kind": "local_lime_service",
-                        "bindingKey": "local_lime_service:/v1/images/generations",
-                        "endpointSource": "runner_config"
+                        "kind": "media_task_worker",
+                        "bindingKey": "mediaTaskArtifact/image/create",
+                        "endpointSource": "resolved_route"
                     },
                     "credentialResolver": {
-                        "owner": "local_lime_service",
+                        "owner": "media_task_worker",
                         "secretMaterialStatus": "not_embedded"
                     },
                     "route": {
@@ -254,7 +254,7 @@ async fn image_worker_uses_nested_route_execution_without_route_only_migration()
             .payload
             .pointer("/modelRouteAssessment/routeExecution/executor/kind")
             .and_then(Value::as_str),
-        Some("local_lime_service")
+        Some("media_task_worker")
     );
 
     server.abort();
@@ -364,7 +364,7 @@ async fn video_worker_uses_resolved_route_provider_and_model() {
             .payload
             .pointer("/modelRouteExecution/executor/bindingKey")
             .and_then(Value::as_str),
-        Some("local_lime_service:/v1/videos/generations")
+        Some("mediaTaskArtifact/video/create")
     );
     assert_route_runtime_evidence(
         &migrated.record.payload,
@@ -424,7 +424,7 @@ fn assert_route_runtime_evidence(
             payload
                 .pointer(&format!("{diagnostics_root}/transport"))
                 .and_then(Value::as_str),
-            Some("local_lime_service")
+            Some("provider_http")
         );
         assert_eq!(
             payload

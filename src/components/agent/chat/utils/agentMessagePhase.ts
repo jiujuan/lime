@@ -35,7 +35,7 @@ export interface AgentMessagePhaseSelectionCandidate {
   sequence?: number | null;
   phase?: string | null;
   text?: string | null;
-  content?: string | null;
+  content?: unknown;
   message?: string | null;
   contentParts?: unknown[] | null;
   content_parts?: unknown[] | null;
@@ -71,7 +71,9 @@ export function resolveFinalAgentMessageItemIds<
     if (item.type !== "agent_message") {
       continue;
     }
-    const text = item.text ?? item.content ?? item.message;
+    const contentText =
+      typeof item.content === "string" ? item.content : undefined;
+    const text = item.text ?? contentText ?? item.message;
     const hasText = typeof text === "string" && Boolean(text.trim());
     const contentParts = item.contentParts ?? item.content_parts;
     if (!hasText && !(Array.isArray(contentParts) && contentParts.length > 0)) {

@@ -4,7 +4,7 @@ use super::fields::{
 };
 use super::lifecycle::{approval_decision, is_action_resolution_event};
 use agent_protocol::{
-    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChange,
+    AgentInput, ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChange,
     FileChangeKind, FileChangeStatus, MessageContentPart, PlanStep, PlanStepStatus,
     SubAgentActivityKind, ThreadId, ThreadItemPayload, ToolOutput,
 };
@@ -188,7 +188,7 @@ pub(super) fn typed_payload(
 ) -> Option<ThreadItemPayload> {
     Some(match family {
         ItemFamily::UserMessage => ThreadItemPayload::UserMessage {
-            content: message_text(payload),
+            content: user_message_content(payload)?,
             client_id: map_string(payload, &["clientId", "client_id"]),
         },
         ItemFamily::AgentMessage => ThreadItemPayload::AgentMessage {
@@ -357,6 +357,16 @@ pub(super) fn typed_payload(
             window_id: map_string(payload, &["windowId", "window_id", "contextWindowId"]),
         },
     })
+}
+
+fn user_message_content(payload: &Map<String, Value>) -> Option<Vec<AgentInput>> {
+    let content = match payload.get("input") {
+        Some(input) => serde_json::from_value::<Vec<AgentInput>>(input.clone()).ok()?,
+        None => vec![AgentInput::text(message_text(payload))],
+    };
+    super::super::super::turn_start::validate_user_input(&content)
+        .is_ok()
+        .then_some(content)
 }
 
 fn message_content_parts(payload: &Map<String, Value>) -> Option<Vec<MessageContentPart>> {

@@ -1,11 +1,13 @@
 use super::{
     AgentMessageDeltaNotification, CommandExecutionRequestApprovalParams,
     FileChangeRequestApprovalParams, ItemCompletedNotification, ItemStartedNotification,
-    McpServerElicitationRequestParams, Method, ServerRequestResolvedNotification,
-    ThreadArchiveParams, ThreadArchiveResponse, ThreadArchivedNotification, ThreadDeleteParams,
-    ThreadDeleteResponse, ThreadDeletedNotification, ThreadForkParams, ThreadForkResponse,
-    ThreadGoalClearParams, ThreadGoalClearResponse, ThreadGoalClearedNotification,
-    ThreadGoalGetParams, ThreadGoalGetResponse, ThreadGoalSetParams, ThreadGoalSetResponse,
+    McpServerElicitationRequestParams, Method, ReasoningSummaryPartAddedNotification,
+    ReasoningSummaryTextDeltaNotification, ReasoningTextDeltaNotification,
+    ServerRequestResolvedNotification, ThreadArchiveParams, ThreadArchiveResponse,
+    ThreadArchivedNotification, ThreadDeleteParams, ThreadDeleteResponse,
+    ThreadDeletedNotification, ThreadForkParams, ThreadForkResponse, ThreadGoalClearParams,
+    ThreadGoalClearResponse, ThreadGoalClearedNotification, ThreadGoalGetParams,
+    ThreadGoalGetResponse, ThreadGoalSetParams, ThreadGoalSetResponse,
     ThreadGoalUpdatedNotification, ThreadItemsListParams, ThreadItemsListResponse,
     ThreadListParams, ThreadListResponse, ThreadMemoryModeSetParams, ThreadMemoryModeSetResponse,
     ThreadReadParams, ThreadReadResponse, ThreadResumeParams, ThreadResumeResponse,
@@ -18,8 +20,9 @@ use super::{
     TurnStartedNotification, TurnSteerParams, TurnSteerResponse,
     METHOD_ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL, METHOD_ITEM_FILE_CHANGE_REQUEST_APPROVAL,
     METHOD_ITEM_TOOL_REQUEST_USER_INPUT, METHOD_MCP_SERVER_ELICITATION_REQUEST,
-    METHOD_SERVER_REQUEST_RESOLVED, METHOD_THREAD_GOAL_CLEARED, METHOD_THREAD_GOAL_UPDATED,
-    METHOD_THREAD_TOKEN_USAGE_UPDATED,
+    METHOD_REASONING_SUMMARY_PART_ADDED, METHOD_REASONING_SUMMARY_TEXT_DELTA,
+    METHOD_REASONING_TEXT_DELTA, METHOD_SERVER_REQUEST_RESOLVED, METHOD_THREAD_GOAL_CLEARED,
+    METHOD_THREAD_GOAL_UPDATED, METHOD_THREAD_TOKEN_USAGE_UPDATED,
 };
 use crate::{JsonRpcNotification, JsonRpcRequest, RequestId};
 use schemars::JsonSchema;
@@ -407,6 +410,12 @@ pub enum ServerNotification {
     ItemCompleted(ItemCompletedNotification),
     #[serde(rename = "item/agentMessage/delta")]
     AgentMessageDelta(AgentMessageDeltaNotification),
+    #[serde(rename = "item/reasoning/summaryTextDelta")]
+    ReasoningSummaryTextDelta(ReasoningSummaryTextDeltaNotification),
+    #[serde(rename = "item/reasoning/summaryPartAdded")]
+    ReasoningSummaryPartAdded(ReasoningSummaryPartAddedNotification),
+    #[serde(rename = "item/reasoning/textDelta")]
+    ReasoningTextDelta(ReasoningTextDeltaNotification),
     #[serde(rename = "thread/settings/updated")]
     ThreadSettingsUpdated(ThreadSettingsUpdatedNotification),
     #[serde(rename = "thread/tokenUsage/updated")]
@@ -431,6 +440,9 @@ impl ServerNotification {
             Self::ItemStarted(_) => "item/started",
             Self::ItemCompleted(_) => "item/completed",
             Self::AgentMessageDelta(_) => "item/agentMessage/delta",
+            Self::ReasoningSummaryTextDelta(_) => METHOD_REASONING_SUMMARY_TEXT_DELTA,
+            Self::ReasoningSummaryPartAdded(_) => METHOD_REASONING_SUMMARY_PART_ADDED,
+            Self::ReasoningTextDelta(_) => METHOD_REASONING_TEXT_DELTA,
             Self::ThreadSettingsUpdated(_) => "thread/settings/updated",
             Self::ThreadTokenUsageUpdated(_) => METHOD_THREAD_TOKEN_USAGE_UPDATED,
             Self::ThreadGoalUpdated(_) => METHOD_THREAD_GOAL_UPDATED,
@@ -472,6 +484,15 @@ impl TryFrom<JsonRpcNotification> for ServerNotification {
                 .map_err(|error| error.to_string()),
             "item/agentMessage/delta" => serde_json::from_value(params)
                 .map(Self::AgentMessageDelta)
+                .map_err(|error| error.to_string()),
+            METHOD_REASONING_SUMMARY_TEXT_DELTA => serde_json::from_value(params)
+                .map(Self::ReasoningSummaryTextDelta)
+                .map_err(|error| error.to_string()),
+            METHOD_REASONING_SUMMARY_PART_ADDED => serde_json::from_value(params)
+                .map(Self::ReasoningSummaryPartAdded)
+                .map_err(|error| error.to_string()),
+            METHOD_REASONING_TEXT_DELTA => serde_json::from_value(params)
+                .map(Self::ReasoningTextDelta)
                 .map_err(|error| error.to_string()),
             "thread/settings/updated" => serde_json::from_value(params)
                 .map(Self::ThreadSettingsUpdated)
@@ -518,6 +539,15 @@ impl From<ServerNotification> for JsonRpcNotification {
             }
             ServerNotification::AgentMessageDelta(params) => {
                 jsonrpc_notification("item/agentMessage/delta", params)
+            }
+            ServerNotification::ReasoningSummaryTextDelta(params) => {
+                jsonrpc_notification(METHOD_REASONING_SUMMARY_TEXT_DELTA, params)
+            }
+            ServerNotification::ReasoningSummaryPartAdded(params) => {
+                jsonrpc_notification(METHOD_REASONING_SUMMARY_PART_ADDED, params)
+            }
+            ServerNotification::ReasoningTextDelta(params) => {
+                jsonrpc_notification(METHOD_REASONING_TEXT_DELTA, params)
             }
             ServerNotification::ThreadSettingsUpdated(params) => {
                 jsonrpc_notification("thread/settings/updated", params)

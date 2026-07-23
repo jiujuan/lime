@@ -291,6 +291,7 @@ const retiredAgentRuntimeObjectiveContinuationGatewayCommands = new Set([
   "agent_runtime_continue_objective",
   "agent_runtime_audit_objective",
 ]);
+const retiredAgentSessionObjectiveMethodPrefix = "agentSession/objective/";
 const retiredAgentRuntimeProcessRustCommands = new Set([
   "agent_start_process",
   "agent_stop_process",
@@ -4569,6 +4570,24 @@ function collectRetiredTauriCommandModuleFailures() {
   return failures;
 }
 
+function collectRetiredAgentSessionObjectiveBridgeSourceFailures() {
+  const failures = [];
+  for (const root of productionRuntimeRoots) {
+    for (const relativePath of walkDirectory(path.join(repoRoot, root))) {
+      const sourceCode = readSourceIfExists(relativePath);
+      if (sourceCode?.includes(retiredAgentSessionObjectiveMethodPrefix)) {
+        failures.push({
+          file: relativePath,
+          message:
+            "Managed Objective 已整体删除，agentSession/objective/* 不得恢复到 Renderer、Electron Host 或 App Server client",
+          token: retiredAgentSessionObjectiveMethodPrefix,
+        });
+      }
+    }
+  }
+  return failures;
+}
+
 function printGuardFailures(title, failures) {
   console.error(`\n## ${title}`);
   for (const failure of failures) {
@@ -4645,6 +4664,8 @@ function main() {
     collectCurrentLayeredDesignDesktopHostShellSourceFailures();
   const retiredAgentRuntimeRustSourceFailures =
     collectRetiredAgentRuntimeRustSourceFailures();
+  const retiredAgentSessionObjectiveBridgeSourceFailures =
+    collectRetiredAgentSessionObjectiveBridgeSourceFailures();
   const retiredSkillExecutionFacadeSourceFailures =
     collectRetiredSkillExecutionFacadeSourceFailures();
   const retiredSkillRevealFacadeSourceFailures =
@@ -5382,7 +5403,7 @@ function main() {
   if (retiredAgentRuntimeObjectiveCrudGatewayLeaks.size > 0) {
     hasError = true;
     printCommandGroup(
-      "已迁到 App Server agentSession/objective/* 的旧 objective CRUD 命令不能回到 Electron Host / DevBridge / mock / runtime catalog",
+      "Managed Objective 已整体删除，旧 objective CRUD 命令不能回到 Electron Host / DevBridge / mock / runtime catalog",
       retiredAgentRuntimeObjectiveCrudGatewayLeaks,
     );
   }
@@ -5390,8 +5411,16 @@ function main() {
   if (retiredAgentRuntimeObjectiveContinuationGatewayLeaks.size > 0) {
     hasError = true;
     printCommandGroup(
-      "已迁到 App Server agentSession/objective/continue|audit 的旧 objective continue/audit 命令不能回到 Electron Host / DevBridge / mock / runtime catalog",
+      "Managed Objective 已整体删除，旧 objective continue/audit 命令不能回到 Electron Host / DevBridge / mock / runtime catalog",
       retiredAgentRuntimeObjectiveContinuationGatewayLeaks,
+    );
+  }
+
+  if (retiredAgentSessionObjectiveBridgeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "agentSession/objective/* 已 dead / deleted / forbidden-to-restore",
+      retiredAgentSessionObjectiveBridgeSourceFailures,
     );
   }
 

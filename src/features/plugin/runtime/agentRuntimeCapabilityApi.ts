@@ -7,7 +7,7 @@ import type {
   PluginRuntimeSubmitHostResponseRequest,
   PluginRuntimeSubmitHostResponseResult,
   PluginRuntimeTaskSnapshot,
-} from "@/lib/api/pluginRuntime";
+} from "@/lib/api/agentRuntime/pluginTaskTypes";
 
 export interface PluginRuntimeCapabilityApi {
   startTask(
